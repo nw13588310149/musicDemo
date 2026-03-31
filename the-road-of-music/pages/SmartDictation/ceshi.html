@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>环形进度条动态径向渐变</title>
+<style>
+    .progress-ring {
+        width: 200px;
+        height: 200px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transform: rotate(-90deg);
+    }
+    .progress-ring__circle {
+        stroke-width: 10;
+        fill: none;
+        r: 80;
+        cx: 100;
+        cy: 100;
+    }
+</style>
+</head>
+<body>
+<svg class="progress-ring" width="200" height="200">
+    <defs>
+        <radialGradient id="gradient" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+            <stop offset="40%" stop-color="#8BC34A" stop-opacity="1"/>
+            <stop offset="100%" stop-color="#8BC34A" stop-opacity="0.2"/>
+        </radialGradient>
+    </defs>
+    <circle class="progress-ring__circle" stroke="url(#gradient)"/>
+</svg>
+
+<script>
+    const circle = document.querySelector('.progress-ring__circle');
+    const radius = circle.r.baseVal.value;
+    const circumference = 2 * Math.PI * radius;
+
+    circle.style.strokeDasharray = `${circumference} ${circumference}`;
+    circle.style.strokeDashoffset = circumference;
+
+    function setProgress(percent) {
+        const offset = circumference - percent / 100 * circumference;
+        circle.style.strokeDashoffset = offset;
+
+        // Calculate gradient focus point based on progress
+        const gradient = document.getElementById('gradient');
+        const angle = percent / 100 * 360;
+        const fx = 50 + Math.cos(angle * Math.PI / 180) * 50;
+        const fy = 50 + Math.sin(angle * Math.PI / 180) * 50;
+        
+        gradient.setAttribute('fx', `${fx}%`);
+        gradient.setAttribute('fy', `${fy}%`);
+    }
+
+    // 示例：设置进度为70%
+    setProgress(70);
+</script>
+</body>
+</html>

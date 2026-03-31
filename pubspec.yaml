@@ -1,0 +1,37 @@
+# 音乐艺考性能验证 Demo — 依赖与资源配置
+# 说明：首次拉取后请在项目根目录执行 `flutter pub get`
+name: music_exam_perf_demo
+description: 极限音频与 PDF 性能验证（flutter_soloud + pdfrx），预留鸿蒙等平台通道扩展。
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  # flutter_soloud 3.x 要求 Dart >= 3.4；与 Flutter 3.22+ 对齐
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # 音频：SoLoud C++ 引擎封装，支持多 Voice 并发（多音轨 / Polyphony）
+  flutter_soloud: ^3.5.4
+
+  # PDF：PDFium 后端，支持按需分页/瓦片与多线程渲染（具体 API 在后续阶段接入）
+  pdfrx: ^2.2.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+
+  # 静态资源：请将实际文件放入对应目录（见项目说明）
+  assets:
+    - assets/audio/
+    - assets/audio/piano/
+    - assets/images/piano/
+    - assets/pdfs/

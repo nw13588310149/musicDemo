@@ -1,0 +1,130 @@
+{
+  "hash": "ff951ef9",
+  "configHash": "8be0f370",
+  "lockfileHash": "59c4440f",
+  "browserHash": "8c065ea0",
+  "optimized": {
+    "vant": {
+      "src": "../../../../../node_modules/vant/es/index.mjs",
+      "file": "vant.js",
+      "fileHash": "cac691ba",
+      "needsInterop": false
+    },
+    "emoji-box": {
+      "src": "../../../../../node_modules/emoji-box/dist/emoji.es.js",
+      "file": "emoji-box.js",
+      "fileHash": "c83e2964",
+      "needsInterop": false
+    },
+    "dayjs": {
+      "src": "../../../../../node_modules/dayjs/dayjs.min.js",
+      "file": "dayjs.js",
+      "fileHash": "d940beb5",
+      "needsInterop": true
+    },
+    "dayjs/plugin/customParseFormat": {
+      "src": "../../../../../node_modules/dayjs/plugin/customParseFormat.js",
+      "file": "dayjs_plugin_customParseFormat.js",
+      "fileHash": "3353ad21",
+      "needsInterop": true
+    },
+    "dayjs/plugin/utc": {
+      "src": "../../../../../node_modules/dayjs/plugin/utc.js",
+      "file": "dayjs_plugin_utc.js",
+      "fileHash": "ace3cebd",
+      "needsInterop": true
+    },
+    "hls.js": {
+      "src": "../../../../../node_modules/hls.js/dist/hls.mjs",
+      "file": "hls__js.js",
+      "fileHash": "9c8033a7",
+      "needsInterop": false
+    },
+    "dplayer": {
+      "src": "../../../../../node_modules/dplayer/dist/DPlayer.min.js",
+      "file": "dplayer.js",
+      "fileHash": "7d87f4f7",
+      "needsInterop": true
+    },
+    "tone": {
+      "src": "../../../../../node_modules/tone/build/esm/index.js",
+      "file": "tone.js",
+      "fileHash": "e5d8ff1e",
+      "needsInterop": false
+    },
+    "lodash": {
+      "src": "../../../../../node_modules/lodash/lodash.js",
+      "file": "lodash.js",
+      "fileHash": "d05ab28a",
+      "needsInterop": true
+    },
+    "howler": {
+      "src": "../../../../../node_modules/howler/dist/howler.js",
+      "file": "howler.js",
+      "fileHash": "dc9d4253",
+      "needsInterop": true
+    },
+    "idb": {
+      "src": "../../../../../node_modules/idb/build/index.js",
+      "file": "idb.js",
+      "fileHash": "78936826",
+      "needsInterop": false
+    },
+    "pdfjs-dist": {
+      "src": "../../../../../node_modules/pdfjs-dist/build/pdf.mjs",
+      "file": "pdfjs-dist.js",
+      "fileHash": "a3cd84cf",
+      "needsInterop": false
+    },
+    "pdfjs-dist/build/pdf.worker.mjs": {
+      "src": "../../../../../node_modules/pdfjs-dist/build/pdf.worker.mjs",
+      "file": "pdfjs-dist_build_pdf__worker__mjs.js",
+      "fileHash": "8d7655ab",
+      "needsInterop": false
+    },
+    "axios": {
+      "src": "../../../../../node_modules/axios/index.js",
+      "file": "axios.js",
+      "fileHash": "a463428f",
+      "needsInterop": false
+    },
+    "wavesurfer.js": {
+      "src": "../../../../../node_modules/wavesurfer.js/dist/wavesurfer.esm.js",
+      "file": "wavesurfer__js.js",
+      "fileHash": "0fe5532d",
+      "needsInterop": false
+    },
+    "wavesurfer.js/dist/plugins/regions.esm.js": {
+      "src": "../../../../../node_modules/wavesurfer.js/dist/plugins/regions.esm.js",
+      "file": "wavesurfer__js_dist_plugins_regions__esm__js.js",
+      "fileHash": "da77fcd4",
+      "needsInterop": false
+    },
+    "tone/build/esm/core/Tone": {
+      "src": "../../../../../node_modules/tone/build/esm/core/Tone.js",
+      "file": "tone_build_esm_core_Tone.js",
+      "fileHash": "6bb03886",
+      "needsInterop": false
+    },
+    "mitt": {
+      "src": "../../../../../node_modules/mitt/dist/mitt.mjs",
+      "file": "mitt.js",
+      "fileHash": "d2492092",
+      "needsInterop": false
+    },
+    "html5-qrcode": {
+      "src": "../../../../../node_modules/html5-qrcode/esm/index.js",
+      "file": "html5-qrcode.js",
+      "fileHash": "57dcdbf3",
+      "needsInterop": false
+    }
+  },
+  "chunks": {
+    "chunk-JIJXXMRL": {
+      "file": "chunk-JIJXXMRL.js"
+    },
+    "chunk-TXPGJST7": {
+      "file": "chunk-TXPGJST7.js"
+    }
+  }
+}

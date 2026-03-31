@@ -1,0 +1,16 @@
+# Flutter / Dart
+.dart_tool/
+.packages
+build/
+.flutter-plugins-dependencies
+*.iml
+.idea/
+.vscode/
+
+# 本地密钥与构建产物
+*.jks
+*.keystore
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
