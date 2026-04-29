@@ -16,6 +16,7 @@ import '../../features/music_companion/ui/music_companion_page.dart';
 import '../../features/music_play/ui/music_play_page.dart';
 import '../../features/consultation/ui/consultation_detail_page.dart';
 import '../../features/consultation/ui/consultation_page.dart';
+import '../../features/personal_center/ui/info_page.dart';
 import '../../features/personal_center/ui/personal_center_page.dart';
 import '../../features/primary/ui/primary_pages.dart' as primary_pages;
 import '../../features/circle/ui/circle_page.dart';
@@ -102,6 +103,8 @@ class AppRouter {
         return const my_collection.MyCollectionPage();
       case RoutePaths.personalCenter:
         return const PersonalCenterPage();
+      case RoutePaths.info:
+        return const InfoPage();
       case RoutePaths.fankui:
       case RoutePaths.helpFeedback:
         return const primary_pages.FeedbackPage();

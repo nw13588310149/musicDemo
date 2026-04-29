@@ -255,6 +255,117 @@ Future<String?> showTextInputDialog({
   return result;
 }
 
+/// 单选弹窗（性别 / 省份 / 身份等）：列表中点击即关闭并返回所选项；
+/// 取消按钮返回 null。样式与上传课件 / 修改资料弹窗保持一致。
+Future<String?> showOptionsDialog({
+  required BuildContext context,
+  required String title,
+  required List<String> options,
+  String? selected,
+  String cancelLabel = '取消',
+}) async {
+  return showScaledDialog<String>(
+    context: context,
+    barrierColor: Colors.black.withValues(alpha: 0.18),
+    builder: (dialogContext) {
+      final ui = DashboardScaleScope.of(dialogContext).ui;
+      return Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: EdgeInsets.symmetric(
+          horizontal: ui(32),
+          vertical: ui(24),
+        ),
+        child: Container(
+          width: ui(420),
+          padding: EdgeInsets.fromLTRB(ui(24), ui(28), ui(24), ui(20)),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(ui(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: ui(18),
+                  color: const Color(0xFF0B081A),
+                  fontFamily: 'PingFang SC',
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              SizedBox(height: ui(16)),
+              ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: ui(360)),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: options.length,
+                  separatorBuilder: (_, _) => const Divider(
+                    height: 1,
+                    thickness: 1,
+                    color: Color(0xFFF3F2F3),
+                  ),
+                  itemBuilder: (context, index) {
+                    final value = options[index];
+                    final isActive = value == selected;
+                    return InkWell(
+                      onTap: () =>
+                          Navigator.of(dialogContext).pop(value),
+                      child: Container(
+                        height: ui(46),
+                        padding: EdgeInsets.symmetric(horizontal: ui(8)),
+                        child: Row(
+                          children: <Widget>[
+                            Expanded(
+                              child: Text(
+                                value,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: ui(14),
+                                  color: isActive
+                                      ? const Color(0xFF8741FF)
+                                      : const Color(0xFF0B081A),
+                                  fontFamily: 'PingFang SC',
+                                  fontWeight: isActive
+                                      ? FontWeight.w600
+                                      : FontWeight.w400,
+                                ),
+                              ),
+                            ),
+                            if (isActive)
+                              Icon(
+                                Icons.check_rounded,
+                                size: ui(18),
+                                color: const Color(0xFF8741FF),
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              SizedBox(height: ui(16)),
+              Center(
+                child: SizedBox(
+                  width: ui(180),
+                  child: _AppDialogButton(
+                    label: cancelLabel,
+                    onTap: () => Navigator.of(dialogContext).pop(),
+                    isPrimary: false,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
 /// 弹出一个二次确认对话框（带说明文本），返回 `true` 表示用户点击确认。
 Future<bool> showConfirmDialog({
   required BuildContext context,

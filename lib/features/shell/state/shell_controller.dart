@@ -35,6 +35,8 @@ class ShellController extends StateNotifier<ShellState> {
   Timer? _logoTimer;
   Timer? _noticeTimer;
 
+  List<String> _cachedProvinces = const <String>[];
+
   void toggleCollapse() {
     state = state.copyWith(collapsed: !state.collapsed);
   }
@@ -124,6 +126,44 @@ class ShellController extends StateNotifier<ShellState> {
       );
       _syncCampusBadge(state.unreadCount);
     }
+  }
+
+  /// 拉取省份列表（懒加载缓存），与 1.0 `getCity` 行为一致。
+  Future<List<String>> loadProvinces() async {
+    if (_cachedProvinces.isNotEmpty) {
+      return _cachedProvinces;
+    }
+    final response = await _repository.provinceCityList();
+    if (response.code != 0) {
+      return const <String>[];
+    }
+    final raw = response.data;
+    if (raw is! List<dynamic>) {
+      return const <String>[];
+    }
+    final names = <String>[];
+    for (final item in raw) {
+      if (item is Map) {
+        final name = item['name']?.toString();
+        if (name != null && name.isNotEmpty) {
+          names.add(name);
+        }
+      }
+    }
+    _cachedProvinces = names;
+    return names;
+  }
+
+  /// 切换所在地区；成功返回 null，失败返回错误信息。
+  /// 与 1.0 `TopNav.vue` 中的 `onConfirmRegion` 一致：
+  /// 调用 `editMyInfo({province})` 后立即刷新当前用户信息。
+  Future<String?> updateProvince(String province) async {
+    final response = await _repository.updateProvince(province);
+    if (response.code != 0) {
+      return response.msg.isEmpty ? '修改失败' : response.msg;
+    }
+    await refreshUserAndSchool();
+    return null;
   }
 
   @override

@@ -46,4 +46,16 @@ class ShellRepository {
   Future<ApiResponse> logout() {
     return client.post('/app/user/logout');
   }
+
+  /// 省份地区列表（对齐 1.0 `getCity`）。
+  Future<ApiResponse> provinceCityList() => client.post(
+    '/app/common/provinceCityList',
+    data: const <String, dynamic>{},
+  );
+
+  /// 仅更新「所在地区」字段，对应 1.0 顶部下拉中的省份切换。
+  Future<ApiResponse> updateProvince(String province) => client.post(
+    '/app/user/userinfoUpdate',
+    data: <String, dynamic>{'province': province},
+  );
 }

@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/app_providers.dart';
@@ -7,8 +9,9 @@ import 'personal_center_state.dart';
 
 final personalCenterControllerProvider =
     StateNotifierProvider.autoDispose<
-        PersonalCenterController,
-        PersonalCenterState>((ref) {
+      PersonalCenterController,
+      PersonalCenterState
+    >((ref) {
       final repository = ref.watch(personalCenterRepositoryProvider);
       final storage = ref.watch(appStorageProvider);
       return PersonalCenterController(
@@ -21,13 +24,13 @@ class PersonalCenterController extends StateNotifier<PersonalCenterState> {
   PersonalCenterController({
     required PersonalCenterRepository repository,
     required AppStorage storage,
-  })  : _repository = repository,
-        _storage = storage,
-        super(
-          PersonalCenterState(
-            checkStatusEnabled: storage.hasCheckStatus,
-          ),
-        ) {
+  }) : _repository = repository,
+       _storage = storage,
+       super(
+         PersonalCenterState(
+           checkStatusEnabled: storage.hasCheckStatus,
+         ),
+       ) {
     refresh();
   }
 
@@ -51,11 +54,26 @@ class PersonalCenterController extends StateNotifier<PersonalCenterState> {
     final vipRes = await _repository.vipList();
     final packages = _parseVipList(vipRes.data);
 
-    state = PersonalCenterState(
+    state = state.copyWith(
       loading: false,
+      clearError: true,
       user: userMap,
       vipPackages: packages,
       checkStatusEnabled: _storage.hasCheckStatus,
+      walletText: _walletFromUser(userMap),
+      pointsText: _pointsFromUser(userMap),
+    );
+  }
+
+  /// 仅刷新用户资料（不重新拉取 VIP 套餐），用于个人信息页编辑后回写。
+  Future<void> refreshUserOnly() async {
+    final info = await _repository.getMyInfo();
+    if (info.code != 0) {
+      return;
+    }
+    final userMap = _parseUserMap(info.data);
+    state = state.copyWith(
+      user: userMap,
       walletText: _walletFromUser(userMap),
       pointsText: _pointsFromUser(userMap),
     );
@@ -149,6 +167,78 @@ class PersonalCenterController extends StateNotifier<PersonalCenterState> {
       return r.msg;
     }
     await refresh();
+    return null;
+  }
+
+  // ────────────────── 个人信息页编辑相关 ──────────────────
+
+  /// 通用：更新若干字段；成功返回 null，失败返回错误信息。
+  Future<String?> updateProfileFields(Map<String, dynamic> changes) async {
+    if (changes.isEmpty) {
+      return null;
+    }
+    final r = await _repository.editMyInfo(changes);
+    if (r.code != 0) {
+      return r.msg.isEmpty ? '修改失败' : r.msg;
+    }
+    await refreshUserOnly();
+    return null;
+  }
+
+  /// 上传头像图片，成功返回远端 URL，失败返回 (null, err)。
+  Future<({String? url, String? error})> uploadAvatar({
+    required Uint8List bytes,
+    required String filename,
+  }) async {
+    final r = await _repository.uploadFile(bytes: bytes, filename: filename);
+    if (r.code != 0) {
+      return (url: null, error: r.msg.isEmpty ? '上传失败' : r.msg);
+    }
+    final url = r.data?.toString() ?? '';
+    if (url.isEmpty) {
+      return (url: null, error: '上传失败');
+    }
+    return (url: url, error: null);
+  }
+
+  /// 拉取省份列表；只在首次需要时调用。
+  Future<List<String>> ensureProvinces() async {
+    if (state.provinces.isNotEmpty) {
+      return state.provinces;
+    }
+    final r = await _repository.provinceCityList();
+    if (r.code != 0) {
+      return const <String>[];
+    }
+    final raw = r.data;
+    if (raw is! List<dynamic>) {
+      return const <String>[];
+    }
+    final names = <String>[];
+    for (final item in raw) {
+      if (item is Map) {
+        final name = item['name']?.toString();
+        if (name != null && name.isNotEmpty) {
+          names.add(name);
+        }
+      }
+    }
+    state = state.copyWith(provinces: names);
+    return names;
+  }
+
+  /// 修改密码，成功返回 null，失败返回错误信息。
+  Future<String?> changePassword({
+    required String oldPassword,
+    required String newPassword,
+  }) async {
+    final r = await _repository.updatePassword(
+      oldPassword: oldPassword,
+      newPassword: newPassword,
+    );
+    if (r.code != 0) {
+      return r.msg.isEmpty ? '修改失败' : r.msg;
+    }
     return null;
   }
 }

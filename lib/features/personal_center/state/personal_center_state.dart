@@ -23,6 +23,7 @@ class PersonalCenterState {
     this.checkStatusEnabled = false,
     this.walletText = '0.00',
     this.pointsText = '100',
+    this.provinces = const <String>[],
   });
 
   final bool loading;
@@ -33,6 +34,9 @@ class PersonalCenterState {
   final String walletText;
   final String pointsText;
 
+  /// 省份列表（懒加载，仅在首次打开「所在地区」时拉取）。
+  final List<String> provinces;
+
   PersonalCenterState copyWith({
     bool? loading,
     String? errorMessage,
@@ -42,6 +46,7 @@ class PersonalCenterState {
     bool? checkStatusEnabled,
     String? walletText,
     String? pointsText,
+    List<String>? provinces,
   }) {
     return PersonalCenterState(
       loading: loading ?? this.loading,
@@ -51,6 +56,7 @@ class PersonalCenterState {
       checkStatusEnabled: checkStatusEnabled ?? this.checkStatusEnabled,
       walletText: walletText ?? this.walletText,
       pointsText: pointsText ?? this.pointsText,
+      provinces: provinces ?? this.provinces,
     );
   }
 }

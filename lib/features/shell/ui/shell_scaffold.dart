@@ -39,6 +39,8 @@ class ShellScaffold extends ConsumerWidget {
         onNavigate: (route) => _navigate(context, route),
         onLogout: controller.logout,
         onMarkAllRead: controller.markAllNoticeRead,
+        onLoadProvinces: controller.loadProvinces,
+        onUpdateProvince: controller.updateProvince,
       ),
       child: RepaintBoundary(child: child),
     );

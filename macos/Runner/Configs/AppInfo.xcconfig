@@ -8,7 +8,7 @@
 PRODUCT_NAME = the_road_of_music_flutter
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.yyzl.theRoadOfMusicFlutter
+PRODUCT_BUNDLE_IDENTIFIER = com.uniapp.music
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2026 com.yyzl. All rights reserved.
