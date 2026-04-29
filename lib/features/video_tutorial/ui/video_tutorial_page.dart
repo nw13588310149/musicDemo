@@ -897,12 +897,11 @@ class _ProfessionalPlayerState extends State<_ProfessionalPlayer> {
       ),
     );
 
-    await SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
+    await SystemChrome.setPreferredOrientations(const [
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
     ]);
-    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     if (!mounted) return;
     // 全屏 Video widget 卸载后，渲染纹理已被释放；
     // 递增 key 强制主播放器的 Video widget 重新挂载，重新绑定纹理，消除黑屏。

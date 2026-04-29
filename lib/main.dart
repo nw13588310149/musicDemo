@@ -14,6 +14,11 @@ Future<void> main() async {
     DeviceOrientation.landscapeLeft,
     DeviceOrientation.landscapeRight,
   ]);
+  // 与 iOS Info.plist / Android sensorLandscape 一致；请勿在其他页面恢复 portrait。
+  // 沉浸式：隐藏系统状态栏和导航栏。
+  // - Android：immersiveSticky 模式下用户从屏幕边缘下拉时系统栏会临时显示，几秒后自动隐藏。
+  // - iOS：状态栏由 Info.plist + RootFlutterViewController 控制；这里调用是无副作用的兜底。
+  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
   final storage = await AppStorage.create();
   final cid = Uri.base.queryParameters['cid'];
