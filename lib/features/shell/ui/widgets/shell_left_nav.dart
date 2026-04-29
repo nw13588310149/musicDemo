@@ -1,0 +1,395 @@
+import 'dart:math' as math;
+
+import 'package:flutter/material.dart';
+
+import '../../../../core/constants/app_assets.dart';
+import '../../../../core/widgets/app_asset_graphic.dart';
+import '../../state/shell_state.dart';
+import '../shell_layout.dart';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 动画常量
+// ─────────────────────────────────────────────────────────────────────────────
+const _kDuration = Duration(milliseconds: 280);
+const _kCurve = Curves.easeInOutCubic;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ShellLeftNav — 持有 AnimationController 以驱动所有子动画
+// ─────────────────────────────────────────────────────────────────────────────
+class ShellLeftNav extends StatefulWidget {
+  const ShellLeftNav({
+    required this.state,
+    required this.currentRoute,
+    required this.onToggleCollapse,
+    required this.onNavigate,
+    super.key,
+  });
+
+  final ShellState state;
+  final String currentRoute;
+  final VoidCallback onToggleCollapse;
+  final ValueChanged<String> onNavigate;
+
+  @override
+  State<ShellLeftNav> createState() => _ShellLeftNavState();
+}
+
+class _ShellLeftNavState extends State<ShellLeftNav>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  // 0.0 = 展开, 1.0 = 折叠
+  late final Animation<double> _progress;
+
+  // Logo: 前 40% 完成淡出
+  late final Animation<double> _logoOpacity;
+
+  // 文字: 前 55% 完成淡出, 0→100% 完成宽度收缩
+  late final Animation<double> _labelOpacity;
+  late final Animation<double> _labelWidth; // 1→0
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: _kDuration,
+      value: widget.state.collapsed ? 1.0 : 0.0,
+    );
+    _progress = CurvedAnimation(parent: _ctrl, curve: _kCurve);
+
+    _logoOpacity = Tween<double>(begin: 1, end: 0).animate(
+      CurvedAnimation(
+        parent: _ctrl,
+        curve: const Interval(0, 0.4, curve: Curves.easeIn),
+      ),
+    );
+    _labelOpacity = Tween<double>(begin: 1, end: 0).animate(
+      CurvedAnimation(
+        parent: _ctrl,
+        curve: const Interval(0, 0.55, curve: Curves.easeIn),
+      ),
+    );
+    _labelWidth = Tween<double>(begin: 1, end: 0).animate(_progress);
+  }
+
+  @override
+  void didUpdateWidget(ShellLeftNav old) {
+    super.didUpdateWidget(old);
+    if (old.state.collapsed != widget.state.collapsed) {
+      widget.state.collapsed ? _ctrl.forward() : _ctrl.reverse();
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  bool _isActive(String navRoute) {
+    final current = widget.currentRoute;
+    if (navRoute == '/') return current == '/';
+    if (current == navRoute) return true;
+    return current.startsWith('$navRoute/');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, _) {
+        final scale = DashboardScaleScope.of(context);
+        final ui = scale.ui;
+        final t = _progress.value; // 0=展开, 1=折叠
+
+        // 列表两侧内边距: 展开时 16, 折叠时 8（使 icon 精确居中于 40px 内容宽度）
+        final hPad = ui(16.0 - 8.0 * t); // lerp(16, 8, t)
+
+        // 按钮内左边距: 展开 16 → 折叠 0
+        final tilePadLeft = ui(16.0 * (1.0 - t));
+        // 按钮内右边距: 展开 10 → 折叠 0
+        final tilePadRight = ui(10.0 * (1.0 - t));
+
+        return ColoredBox(
+          color: Colors.white,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              // ── 主体列（logo + 导航列表）──────────────────────────────────
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(height: ui(31.5)),
+
+                  // Logo：透明度由动画驱动，高度固定保持空间
+                  Opacity(
+                    opacity: _logoOpacity.value,
+                    child: SizedBox(
+                      height: ui(36),
+                      child: Center(
+                        child: Image.asset(
+                          AppAssets.shellLogo,
+                          width: ui(132),
+                          height: ui(36),
+                          fit: BoxFit.contain,
+                          filterQuality: FilterQuality.high,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  SizedBox(height: ui(18)),
+
+                  // 导航列表
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: hPad),
+                      child: ListView.separated(
+                        padding: EdgeInsets.zero,
+                        physics: const ClampingScrollPhysics(),
+                        itemCount: widget.state.navItems.length,
+                        separatorBuilder: (context, index) => SizedBox(height: ui(4)),
+                        itemBuilder: (context, index) {
+                          final item = widget.state.navItems[index];
+                          return _NavTile(
+                            item: item,
+                            progress: t,
+                            labelOpacity: _labelOpacity.value,
+                            labelWidthFactor: _labelWidth.value,
+                            tilePadLeft: tilePadLeft,
+                            tilePadRight: tilePadRight,
+                            active: _isActive(item.route),
+                            onTap: () => widget.onNavigate(item.route),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+
+                  SizedBox(height: ui(57)),
+                ],
+              ),
+
+              // ── 缩放切换按钮（右下角）─────────────────────────────────────
+              Positioned(
+                right: 0,
+                bottom: ui(57),
+                child: GestureDetector(
+                  onTap: widget.onToggleCollapse,
+                  behavior: HitTestBehavior.opaque,
+                  child: Container(
+                    width: ui(27),
+                    height: ui(36),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF5F6FA),
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(ui(12)),
+                        bottomLeft: Radius.circular(ui(12)),
+                      ),
+                    ),
+                    child: Center(
+                      child: Transform.rotate(
+                        // 展开=0°, 折叠=180°（指向右侧，表示"展开"方向）
+                        angle: t * math.pi,
+                        child: AppAssetGraphic(
+                          AppAssets.leftNavScale,
+                          width: ui(21),
+                          height: ui(13),
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _NavTile — 单个导航项，接收插值后的动画参数
+// ─────────────────────────────────────────────────────────────────────────────
+class _NavTile extends StatelessWidget {
+  const _NavTile({
+    required this.item,
+    required this.progress,
+    required this.labelOpacity,
+    required this.labelWidthFactor,
+    required this.tilePadLeft,
+    required this.tilePadRight,
+    required this.active,
+    required this.onTap,
+  });
+
+  final ShellNavItem item;
+  final double progress; // 0=展开, 1=折叠
+  final double labelOpacity;
+  final double labelWidthFactor; // 1→0
+  final double tilePadLeft;
+  final double tilePadRight;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scale = DashboardScaleScope.of(context);
+    final ui = scale.ui;
+
+    final bgColor = active ? const Color(0xFF202020) : Colors.transparent;
+    final textColor = active
+        ? Colors.white
+        : const Color(0xFF0B081A).withValues(alpha: 0.7);
+
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(ui(12)),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(ui(12)),
+        child: Container(
+          height: ui(48),
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(ui(12)),
+          ),
+          padding: EdgeInsets.only(
+            left: tilePadLeft,
+            right: tilePadRight,
+          ),
+          child: Row(
+            // 折叠时居中，展开时左对齐
+            mainAxisAlignment: progress > 0.5
+                ? MainAxisAlignment.center
+                : MainAxisAlignment.start,
+            children: [
+              // ── icon + badge ─────────────────────────────────────────────
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  _buildIcon(context),
+                  if (item.badge > 0)
+                    Positioned(
+                      // 折叠时 badge 变为小圆点，展开时为胶囊
+                      right: progress > 0.5 ? ui(-2) : ui(-12),
+                      top: ui(1),
+                      child: progress > 0.5
+                          ? _BadgeDot(badgeColor: item.badgeColor)
+                          : _BadgeChip(
+                              badge: item.badge,
+                              badgeColor: item.badgeColor,
+                            ),
+                    ),
+                ],
+              ),
+
+              // ── 文字区域：宽度平滑收缩 + 同步淡出 ───────────────────────
+              ClipRect(
+                child: Align(
+                  widthFactor: labelWidthFactor,
+                  alignment: Alignment.centerLeft,
+                  child: Opacity(
+                    opacity: labelOpacity,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(width: ui(8)),
+                        ConstrainedBox(
+                          constraints: BoxConstraints(maxWidth: ui(90)),
+                          child: Text(
+                            item.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: ui(15),
+                              fontFamily: 'PingFang SC',
+                              fontWeight: FontWeight.w500,
+                              color: textColor,
+                              height: 1.0,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildIcon(BuildContext context) {
+    final scale = DashboardScaleScope.of(context);
+    final ui = scale.ui;
+    return AppAssetGraphic(
+      active ? item.activeIcon : item.icon,
+      width: ui(24),
+      height: ui(24),
+      fit: BoxFit.contain,
+      colorFilter: active
+          ? const ColorFilter.mode(Colors.white, BlendMode.srcIn)
+          : null,
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Badge 组件
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// 折叠态：小圆点
+class _BadgeDot extends StatelessWidget {
+  const _BadgeDot({required this.badgeColor});
+  final int badgeColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      width: ui(8),
+      height: ui(8),
+      decoration: BoxDecoration(
+        color: Color(badgeColor),
+        shape: BoxShape.circle,
+      ),
+    );
+  }
+}
+
+/// 展开态：数字胶囊
+class _BadgeChip extends StatelessWidget {
+  const _BadgeChip({required this.badge, required this.badgeColor});
+  final int badge;
+  final int badgeColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      constraints: BoxConstraints(minWidth: ui(22)),
+      height: ui(12),
+      padding: EdgeInsets.symmetric(horizontal: ui(3)),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: Color(badgeColor),
+        borderRadius: BorderRadius.circular(ui(20)),
+      ),
+      child: Text(
+        badge > 99 ? '99+' : (badge > 9 ? '$badge+' : '$badge'),
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: ui(9),
+          height: 1,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
+}

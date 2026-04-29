@@ -1,0 +1,96 @@
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/network/api_client.dart';
+import '../../../core/network/api_response.dart';
+import '../../../core/providers/app_providers.dart';
+
+final myNotesRepositoryProvider = Provider<MyNotesRepository>((ref) {
+  final client = ref.watch(apiClientProvider);
+  return MyNotesRepository(client: client);
+});
+
+class MyNotesRepository {
+  MyNotesRepository({required this.client});
+
+  final ApiClient client;
+
+  Future<ApiResponse> getCategories() {
+    return client.post('/app/user/noteCategoryList');
+  }
+
+  Future<ApiResponse> getNoteCount() {
+    return client.post('/app/user/noteCount');
+  }
+
+  Future<ApiResponse> getNotes({
+    required int categoryId,
+    int current = 1,
+    int size = 200,
+  }) {
+    return client.post(
+      '/app/user/noteList',
+      data: <String, dynamic>{
+        'categoryId': categoryId,
+        'current': current,
+        'size': size,
+      },
+    );
+  }
+
+  Future<ApiResponse> addCategory(String name) {
+    return client.post(
+      '/app/user/noteCategorySave',
+      data: <String, dynamic>{'id': 0, 'name': name},
+    );
+  }
+
+  Future<ApiResponse> deleteCategory(int id) {
+    return client.post(
+      '/app/user/noteCategoryDelete',
+      data: <String, dynamic>{'id': id},
+    );
+  }
+
+  Future<ApiResponse> deleteNote(int id) {
+    return client.post(
+      '/app/user/noteDelete',
+      data: <String, dynamic>{'id': id},
+    );
+  }
+
+  Future<ApiResponse> uploadNoteImage({
+    required Uint8List bytes,
+    required String filename,
+  }) {
+    return client.postFormData(
+      '/app/user/fileUpload',
+      data: FormData.fromMap(<String, dynamic>{
+        'file': MultipartFile.fromBytes(bytes, filename: filename),
+      }),
+    );
+  }
+
+  Future<ApiResponse> saveNote({
+    required int categoryId,
+    required int paperType,
+    required String title,
+    required String imageUrl,
+  }) {
+    return client.post(
+      '/app/user/noteSave',
+      data: <String, dynamic>{
+        'categoryId': categoryId,
+        'paperType': paperType,
+        'param1': imageUrl,
+        'param2': 'string',
+        'param3': 'string',
+        'param4': 'string',
+        'param5': 'string',
+        'title': title,
+      },
+    );
+  }
+}
