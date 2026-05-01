@@ -7,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/router/route_paths.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/network/media_url.dart';
-import '../../../core/widgets/app_asset_graphic.dart';
 import '../state/home_dashboard_controller.dart';
 import '../state/home_dashboard_state.dart';
 import '../../shell/ui/shell_layout.dart';
@@ -45,6 +44,7 @@ class _HomePageViewState extends State<_HomePageView> {
   // 内部已实现"末→首"无缝向前过渡，无需手动维护 PageController/Timer/虚拟索引
   int _bannerIndex = 0;
   bool _bannerImagesPrecached = false;
+  bool _bannerImagesReady = false;
 
   @override
   void didChangeDependencies() {
@@ -60,6 +60,7 @@ class _HomePageViewState extends State<_HomePageView> {
       _effectiveBannerImages(widget.state.bannerItems),
     )) {
       _bannerImagesPrecached = false;
+      _bannerImagesReady = false;
       _bannerIndex = 0;
       _precacheBannerImages();
     }
@@ -71,14 +72,22 @@ class _HomePageViewState extends State<_HomePageView> {
   void _precacheBannerImages() {
     if (_bannerImagesPrecached) return;
     final images = _effectiveBannerImages(widget.state.bannerItems);
-    if (images.isEmpty) return;
+    if (images.isEmpty) {
+      _bannerImagesReady = true;
+      return;
+    }
     _bannerImagesPrecached = true;
+    final futures = <Future<void>>[];
     for (final url in images) {
       final provider = url.startsWith('http')
           ? CachedNetworkImageProvider(url) as ImageProvider
           : AssetImage(url);
-      precacheImage(provider, context).catchError((_) {});
+      futures.add(precacheImage(provider, context).catchError((_) {}));
     }
+    Future.wait(futures).whenComplete(() {
+      if (!mounted) return;
+      setState(() => _bannerImagesReady = true);
+    });
   }
 
   @override
@@ -194,8 +203,7 @@ class _HomePageViewState extends State<_HomePageView> {
       borderRadius: BorderRadius.circular(16),
       child: Stack(
         children: [
-          // 永远绘制深色兜底色，避免图片切换瞬间穿帮成"白屏"
-          const Positioned.fill(child: ColoredBox(color: Color(0xFF2D1C77))),
+          const Positioned.fill(child: ColoredBox(color: Color(0xFFF5F6FA))),
           if (images.isEmpty)
             Positioned.fill(child: _buildBannerFallbackBackground())
           else
@@ -208,7 +216,7 @@ class _HomePageViewState extends State<_HomePageView> {
                   height: height,
                   viewportFraction: 1.0,
                   enableInfiniteScroll: images.length > 1,
-                  autoPlay: images.length > 1,
+                  autoPlay: images.length > 1 && _bannerImagesReady,
                   autoPlayInterval: const Duration(seconds: 4),
                   autoPlayAnimationDuration: const Duration(milliseconds: 420),
                   autoPlayCurve: Curves.easeInOutCubic,
@@ -256,31 +264,7 @@ class _HomePageViewState extends State<_HomePageView> {
   String _normalizeImage(String raw) => MediaUrl.resolve(raw);
 
   Widget _buildBannerFallbackBackground() {
-    return Stack(
-      children: [
-        Container(color: const Color(0xFF2D1C77)),
-        Positioned(
-          left: -37,
-          top: -119,
-          child: AppAssetGraphic(
-            AppAssets.homeV2BannerGlow,
-            width: 263,
-            height: 318,
-            fit: BoxFit.contain,
-          ),
-        ),
-        Positioned(
-          right: 48.65,
-          top: -30.94,
-          child: AppAssetGraphic(
-            AppAssets.homeV2BannerGuitar,
-            width: 373.35,
-            height: 250.87,
-            fit: BoxFit.contain,
-          ),
-        ),
-      ],
-    );
+    return Stack(children: [Container(color: const Color(0xFFF5F6FA))]);
   }
 
   Widget _buildActionBoard(List<HomeQuickAction> quickActions) {
@@ -589,11 +573,12 @@ class _BannerSlide extends StatelessWidget {
       height: double.infinity,
       fit: BoxFit.cover,
       filterQuality: FilterQuality.high,
-      fadeInDuration: const Duration(milliseconds: 220),
+      fadeInDuration: Duration.zero,
       fadeOutDuration: Duration.zero,
-      // 加载中保持透明，外层有深色兜底色，不会闪白
-      placeholder: (context, _) => const SizedBox.shrink(),
-      errorWidget: (context, _, _) => const SizedBox.shrink(),
+      useOldImageOnUrlChange: true,
+      placeholder: (context, _) => const ColoredBox(color: Color(0xFFF5F6FA)),
+      errorWidget: (context, _, _) =>
+          const ColoredBox(color: Color(0xFFF5F6FA)),
     );
   }
 }

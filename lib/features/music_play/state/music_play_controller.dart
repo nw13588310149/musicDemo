@@ -772,7 +772,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   List<MusicPlayTrack> _parseTracks(dynamic raw) {
     final values = _normalizeToList(raw);
     if (values.isEmpty) {
-      final fallbackUrl = _resolveMediaUrl(raw?.toString() ?? '');
+      final fallbackUrl = _extractUrl(raw);
       return fallbackUrl.isEmpty
           ? const <MusicPlayTrack>[]
           : <MusicPlayTrack>[MusicPlayTrack(url: fallbackUrl, title: '主音频')];
@@ -781,44 +781,15 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     final tracks = <MusicPlayTrack>[];
     for (var i = 0; i < values.length; i++) {
       final entry = values[i];
-      if (entry is Map<String, dynamic>) {
-        final url = _resolveMediaUrl(
-          entry['url']?.toString() ?? entry['fileUrl']?.toString() ?? '',
-        );
-        final title = entry['filename']?.toString().split('.').first.trim();
-        if (url.isEmpty) {
-          continue;
-        }
-        tracks.add(
-          MusicPlayTrack(
-            url: url,
-            title: title == null || title.isEmpty ? '音频 ${i + 1}' : title,
-          ),
-        );
-        continue;
-      }
-
-      final candidate = _decodeJsonLike(entry);
-      if (candidate is Map<String, dynamic>) {
-        final url = _resolveMediaUrl(candidate['url']?.toString() ?? '');
-        final title = candidate['filename']?.toString().split('.').first.trim();
-        if (url.isEmpty) {
-          continue;
-        }
-        tracks.add(
-          MusicPlayTrack(
-            url: url,
-            title: title == null || title.isEmpty ? '音频 ${i + 1}' : title,
-          ),
-        );
-        continue;
-      }
-
-      final url = _resolveMediaUrl(entry?.toString() ?? '');
-      if (url.isEmpty) {
-        continue;
-      }
-      tracks.add(MusicPlayTrack(url: url, title: '音频 ${i + 1}'));
+      final url = _extractUrl(entry);
+      if (url.isEmpty) continue;
+      final title = _extractTitle(entry);
+      tracks.add(
+        MusicPlayTrack(
+          url: url,
+          title: (title == null || title.isEmpty) ? '音频 ${i + 1}' : title,
+        ),
+      );
     }
     return tracks;
   }
@@ -827,31 +798,77 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     final values = _normalizeToList(raw);
     final result = <String>[];
     for (final entry in values) {
-      if (entry is Map<String, dynamic>) {
-        final url = _resolveMediaUrl(
-          entry['url']?.toString() ?? entry['img']?.toString() ?? '',
-        );
-        if (url.isNotEmpty) {
-          result.add(url);
-        }
-        continue;
-      }
-
-      final candidate = _decodeJsonLike(entry);
-      if (candidate is Map<String, dynamic>) {
-        final url = _resolveMediaUrl(candidate['url']?.toString() ?? '');
-        if (url.isNotEmpty) {
-          result.add(url);
-        }
-        continue;
-      }
-
-      final url = _resolveMediaUrl(entry?.toString() ?? '');
+      final url = _extractUrl(entry);
       if (url.isNotEmpty) {
         result.add(url);
       }
     }
     return result;
+  }
+
+  /// 解析 `filename` 字段（用于音轨标题），与 [_extractUrl] 对应。
+  String? _extractTitle(dynamic entry) {
+    if (entry is Map) {
+      final raw = entry['filename']?.toString();
+      return raw?.split('.').first.trim();
+    }
+    return null;
+  }
+
+  /// 从一项资源中提取一个完整的可访问 URL。
+  ///
+  /// 兼容三类后端返回：
+  ///  - 标准 JSON：`{"url":"https://...","path":"app/upload/..."}`
+  ///  - 后端 `Map.toString()` 序列化（key/value 都没有引号）：
+  ///    `{path: app/upload/..., url: https://...}`
+  ///  - 纯字符串（绝对 URL 或相对 path）。
+  ///
+  /// 优先取已经带域名的 `url`，否则把 `path` 等字段交给 [MediaUrl.resolve]
+  /// 拼接 fileServerUrl，避免在域名后再拼一段 Map 调试字符串。
+  String _extractUrl(dynamic entry) {
+    if (entry == null) return '';
+
+    if (entry is Map) {
+      final url = (entry['url'] ?? entry['fileUrl'])?.toString().trim() ?? '';
+      if (url.isNotEmpty) return _resolveMediaUrl(url);
+      final path =
+          (entry['path'] ?? entry['img'] ?? entry['filePath'])
+                  ?.toString()
+                  .trim() ??
+              '';
+      if (path.isNotEmpty) return _resolveMediaUrl(path);
+      return '';
+    }
+
+    final text = entry.toString().trim();
+    if (text.isEmpty) return '';
+
+    if ((text.startsWith('{') && text.endsWith('}')) ||
+        (text.startsWith('[') && text.endsWith(']'))) {
+      try {
+        final decoded = jsonDecode(text);
+        if (decoded is Map) return _extractUrl(decoded);
+        if (decoded is List && decoded.isNotEmpty) {
+          return _extractUrl(decoded.first);
+        }
+      } catch (_) {
+        // 落到下面的 Dart 风格解析。
+      }
+    }
+
+    if (text.startsWith('{') && text.endsWith('}')) {
+      final urlMatch = RegExp(r'url:\s*([^,}\s][^,}]*)').firstMatch(text);
+      if (urlMatch != null) {
+        return _resolveMediaUrl(urlMatch.group(1)!.trim());
+      }
+      final pathMatch = RegExp(r'path:\s*([^,}\s][^,}]*)').firstMatch(text);
+      if (pathMatch != null) {
+        return _resolveMediaUrl(pathMatch.group(1)!.trim());
+      }
+      return '';
+    }
+
+    return _resolveMediaUrl(text);
   }
 
   List<dynamic> _normalizeToList(dynamic raw) {
@@ -865,7 +882,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       }
       return List<dynamic>.from(decoded);
     }
-    if (decoded is Map<String, dynamic>) {
+    if (decoded is Map) {
       return <dynamic>[decoded];
     }
     final text = raw.toString().trim();
@@ -876,11 +893,14 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   }
 
   dynamic _decodeJsonLike(dynamic value) {
-    if (value is List || value is Map<String, dynamic>) {
+    if (value is List || value is Map) {
       return value;
     }
     final text = value?.toString().trim() ?? '';
     if (text.isEmpty) {
+      return value;
+    }
+    if (!(text.startsWith('{') || text.startsWith('['))) {
       return value;
     }
     try {

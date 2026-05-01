@@ -240,24 +240,13 @@ class TheoryController extends StateNotifier<TheoryState> {
   String _firstPdfFromRaw(dynamic raw) {
     final values = _normalizeToList(raw);
     if (values.isEmpty) {
-      final url = _resolveMediaUrl(raw?.toString() ?? '');
+      final url = _extractUrl(raw);
       return _isPdfUrl(url) ? url : '';
     }
     for (final entry in values) {
-      String? candidate;
-      if (entry is Map<String, dynamic>) {
-        candidate = entry['url']?.toString() ?? entry['fileUrl']?.toString();
-      } else {
-        final decoded = _decodeJsonLike(entry);
-        if (decoded is Map<String, dynamic>) {
-          candidate = decoded['url']?.toString();
-        } else {
-          candidate = entry?.toString();
-        }
-      }
-      final resolved = _resolveMediaUrl(candidate ?? '');
-      if (_isPdfUrl(resolved)) {
-        return resolved;
+      final url = _extractUrl(entry);
+      if (_isPdfUrl(url)) {
+        return url;
       }
     }
     return '';
@@ -275,29 +264,79 @@ class TheoryController extends StateNotifier<TheoryState> {
     final values = _normalizeToList(raw);
     final result = <String>[];
     for (final entry in values) {
-      if (entry is Map<String, dynamic>) {
-        final url = _resolveMediaUrl(
-          entry['url']?.toString() ?? entry['img']?.toString() ?? '',
-        );
-        if (url.isNotEmpty) {
-          result.add(url);
-        }
-        continue;
-      }
-      final decoded = _decodeJsonLike(entry);
-      if (decoded is Map<String, dynamic>) {
-        final url = _resolveMediaUrl(decoded['url']?.toString() ?? '');
-        if (url.isNotEmpty) {
-          result.add(url);
-        }
-        continue;
-      }
-      final url = _resolveMediaUrl(entry?.toString() ?? '');
+      final url = _extractUrl(entry);
       if (url.isNotEmpty) {
         result.add(url);
       }
     }
     return result;
+  }
+
+  /// 从一项资源（Map / JSON 字符串 / Dart 风格 Map 字符串 / 纯 url）中提取
+  /// 一个完整的可访问 URL。优先取已经带域名的 `url` 字段，否则回退到 `path`
+  /// / `img` / `fileUrl` 等并交给 [MediaUrl.resolve] 做域名拼接。
+  ///
+  /// 兼容三类后端返回：
+  ///  - 标准 JSON：`{"url":"https://...","path":"app/upload/..."}`
+  ///  - 后端 `Map.toString()` 序列化（key 无引号、value 也无引号）：
+  ///    `{path: app/upload/..., url: https://...}`
+  ///  - 纯字符串（绝对 URL 或相对 path）。
+  String _extractUrl(dynamic entry) {
+    if (entry == null) return '';
+
+    // 1) 任意 Map（包括 Map<dynamic,dynamic> 等）。
+    if (entry is Map) {
+      final url = (entry['url'] ?? entry['fileUrl'])?.toString().trim() ?? '';
+      if (url.isNotEmpty) {
+        // url 字段一般已经是绝对地址；MediaUrl.resolve 会原样返回。
+        return _resolveMediaUrl(url);
+      }
+      final path =
+          (entry['path'] ?? entry['img'] ?? entry['filePath'])
+                  ?.toString()
+                  .trim() ??
+              '';
+      if (path.isNotEmpty) {
+        return _resolveMediaUrl(path);
+      }
+      return '';
+    }
+
+    final text = entry.toString().trim();
+    if (text.isEmpty) return '';
+
+    // 2) 标准 JSON 字符串。
+    if ((text.startsWith('{') && text.endsWith('}')) ||
+        (text.startsWith('[') && text.endsWith(']'))) {
+      try {
+        final decoded = jsonDecode(text);
+        if (decoded is Map) {
+          return _extractUrl(decoded);
+        }
+        if (decoded is List && decoded.isNotEmpty) {
+          return _extractUrl(decoded.first);
+        }
+      } catch (_) {
+        // 落到下面的 Dart 风格解析。
+      }
+    }
+
+    // 3) Dart 风格的 Map.toString()：`{path: xxx, url: https://yyy}`。
+    if (text.startsWith('{') && text.endsWith('}')) {
+      final urlMatch = RegExp(r'url:\s*([^,}\s][^,}]*)').firstMatch(text);
+      if (urlMatch != null) {
+        return _resolveMediaUrl(urlMatch.group(1)!.trim());
+      }
+      final pathMatch = RegExp(r'path:\s*([^,}\s][^,}]*)').firstMatch(text);
+      if (pathMatch != null) {
+        return _resolveMediaUrl(pathMatch.group(1)!.trim());
+      }
+      // 看起来像 Map 但识别不出 url/path：放弃，避免把整段 Map 拼到域名后。
+      return '';
+    }
+
+    // 4) 普通字符串：当作绝对/相对 URL 处理。
+    return _resolveMediaUrl(text);
   }
 
   List<dynamic> _normalizeToList(dynamic raw) {
@@ -311,7 +350,7 @@ class TheoryController extends StateNotifier<TheoryState> {
       }
       return List<dynamic>.from(decoded);
     }
-    if (decoded is Map<String, dynamic>) {
+    if (decoded is Map) {
       return <dynamic>[decoded];
     }
     final text = raw.toString().trim();
@@ -322,11 +361,15 @@ class TheoryController extends StateNotifier<TheoryState> {
   }
 
   dynamic _decodeJsonLike(dynamic value) {
-    if (value is List || value is Map<String, dynamic>) {
+    if (value is List || value is Map) {
       return value;
     }
     final text = value?.toString().trim() ?? '';
     if (text.isEmpty) {
+      return value;
+    }
+    // 仅在看起来像 JSON 时才解析；普通字符串原样返回，避免被异常吞噬。
+    if (!(text.startsWith('{') || text.startsWith('['))) {
       return value;
     }
     try {

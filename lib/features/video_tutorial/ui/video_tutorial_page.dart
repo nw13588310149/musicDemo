@@ -35,11 +35,16 @@ class VideoTutorialV2Page extends ConsumerStatefulWidget {
 }
 
 class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
+  static const int _initialBannerPage = 10000;
+
   final ScrollController _scrollController = ScrollController();
-  final PageController _bannerController = PageController();
+  final PageController _bannerController = PageController(
+    initialPage: _initialBannerPage,
+  );
   Timer? _bannerTimer;
   int _bannerIndex = 0;
   int _bannerCount = 0;
+  int _bannerPage = _initialBannerPage;
   bool _isDetailOpening = false;
   final Set<String> _preloadedImageUrls = <String>{};
 
@@ -70,15 +75,23 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
     if (_bannerCount == count) return;
     _bannerCount = count;
     _bannerIndex = 0;
+    _bannerPage = _initialBannerPage;
     _bannerTimer?.cancel();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_bannerController.hasClients) return;
+      _bannerController.jumpToPage(_initialBannerPage);
+    });
     if (count <= 1) return;
     _bannerTimer = Timer.periodic(const Duration(seconds: 4), (_) {
       if (!mounted || !_bannerController.hasClients || _bannerCount <= 1) {
         return;
       }
-      _bannerIndex = (_bannerIndex + 1) % _bannerCount;
+      final currentPage = _bannerController.page?.round() ?? _bannerPage;
+      final nextPage = currentPage + 1;
+      _bannerPage = nextPage;
+      _bannerIndex = nextPage % _bannerCount;
       _bannerController.animateToPage(
-        _bannerIndex,
+        nextPage,
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeOutCubic,
       );
@@ -3589,10 +3602,12 @@ class _BannerAndLatestSection extends StatelessWidget {
                     child: hasBanner
                         ? PageView.builder(
                             controller: pageController,
-                            itemCount: banners.length,
-                            onPageChanged: onBannerChanged,
+                            onPageChanged: (index) =>
+                                onBannerChanged(index % banners.length),
                             itemBuilder: (context, index) => _VideoCachedImage(
-                              url: resolveUrl(banners[index].imageUrl),
+                              url: resolveUrl(
+                                banners[index % banners.length].imageUrl,
+                              ),
                               fit: BoxFit.cover,
                               fallback: Image.asset(
                                 AppAssets.videoBanner,
