@@ -162,7 +162,7 @@ class _HomePageViewState extends State<_HomePageView> {
               animationDuration: const Duration(milliseconds: 420),
               animationCurve: Curves.easeInOutCubic,
               onPageChanged: (index) {
-                if (!mounted) return;
+                if (!mounted || _bannerIndex == index) return;
                 setState(() => _bannerIndex = index);
               },
             ),

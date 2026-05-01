@@ -193,8 +193,10 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
                         loading: state.loading,
                         latestVideos: state.videoList.take(3).toList(),
                         resolveUrl: _resolveUrl,
-                        onBannerChanged: (i) =>
-                            setState(() => _bannerIndex = i),
+                        onBannerChanged: (i) {
+                          if (!mounted || _bannerIndex == i) return;
+                          setState(() => _bannerIndex = i);
+                        },
                         onOpenVideo: _openVideoDetail,
                       ),
                     ),

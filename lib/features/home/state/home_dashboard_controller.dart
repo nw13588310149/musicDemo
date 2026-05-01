@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/network/api_response.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/storage/app_storage.dart';
 import '../data/home_repository.dart';
@@ -39,45 +40,59 @@ class HomeDashboardController extends StateNotifier<HomeDashboardState> {
   final AppStorage _storage;
 
   Future<void> refresh() async {
-    state = state.copyWith(
-      loading: true,
-      quickActions: buildQuickActions(_storage.hasCheckStatus),
-      errorMessage: '',
-    );
+    try {
+      state = state.copyWith(
+        loading: true,
+        quickActions: buildQuickActions(_storage.hasCheckStatus),
+        errorMessage: '',
+      );
 
-    final responses = await Future.wait([
-      _repository.getMyInfo(),
-      _repository.getBannerList(),
-      _repository.getLatestInfo(),
-      _repository.getNextSchoolCourse(),
-    ]);
+      final responses = await Future.wait<ApiResponse>([
+        _safeRequest(_repository.getMyInfo),
+        _safeRequest(_repository.getBannerList),
+        _safeRequest(_repository.getLatestInfo),
+        _safeRequest(_repository.getNextSchoolCourse),
+      ]);
 
-    final myInfoResponse = responses[0];
-    final bannerResponse = responses[1];
-    final latestResponse = responses[2];
-    final nextCourseResponse = responses[3];
+      final myInfoResponse = responses[0];
+      final bannerResponse = responses[1];
+      final latestResponse = responses[2];
+      final nextCourseResponse = responses[3];
 
-    final weekItems = await _buildWeekItems(myInfoResponse.data);
-    final banners = _parseBanners(bannerResponse.data);
-    final newsItems = _parseNews(latestResponse.data);
-    final notices = _parseCourseNotices(nextCourseResponse.data);
+      final weekItems = await _buildWeekItems(myInfoResponse.data);
+      final banners = _parseBanners(bannerResponse.data);
+      final newsItems = _parseNews(latestResponse.data);
+      final notices = _parseCourseNotices(nextCourseResponse.data);
 
-    final hasAnyData =
-        banners.isNotEmpty ||
-        newsItems.isNotEmpty ||
-        weekItems.isNotEmpty ||
-        notices.isNotEmpty;
+      final hasAnyData =
+          banners.isNotEmpty ||
+          newsItems.isNotEmpty ||
+          weekItems.isNotEmpty ||
+          notices.isNotEmpty;
 
-    state = state.copyWith(
-      loading: false,
-      bannerItems: banners,
-      newsItems: newsItems,
-      weekItems: weekItems,
-      courseNotices: notices,
-      errorMessage: hasAnyData
-          ? ''
-          : '\u6682\u65e0\u6570\u636e\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5',
-    );
+      state = state.copyWith(
+        loading: false,
+        bannerItems: banners,
+        newsItems: newsItems,
+        weekItems: weekItems,
+        courseNotices: notices,
+        errorMessage: hasAnyData ? '' : '暂无数据，请稍后重试',
+      );
+    } catch (_) {
+      state = state.copyWith(
+        loading: false,
+        weekItems: state.weekItems.isEmpty
+            ? _emptyWeekItems()
+            : state.weekItems,
+        errorMessage: '首页加载失败，请稍后重试',
+      );
+    }
+  }
+
+  Future<ApiResponse> _safeRequest(Future<ApiResponse> Function() request) {
+    return request()
+        .timeout(const Duration(seconds: 8))
+        .catchError((_) => const ApiResponse(code: -1, msg: '', data: null));
   }
 
   void setComingSoonVisible(bool visible) {
@@ -248,7 +263,7 @@ class HomeDashboardController extends StateNotifier<HomeDashboardState> {
 
     int classOrTeacherId = userId;
     if (!isTeacher) {
-      final classResponse = await _repository.getClassList();
+      final classResponse = await _safeRequest(_repository.getClassList);
       if (classResponse.code == 0 && classResponse.data is List) {
         final classList = classResponse.data as List;
         if (classList.isNotEmpty && classList.first is Map<String, dynamic>) {
@@ -269,11 +284,13 @@ class HomeDashboardController extends StateNotifier<HomeDashboardState> {
     final beginDate = _formatDate(monday);
     final endDate = _formatDate(sunday);
 
-    final courseResponse = await _repository.getCourseList(
-      beginDate: beginDate,
-      endDate: endDate,
-      id: classOrTeacherId,
-      isTeacher: isTeacher,
+    final courseResponse = await _safeRequest(
+      () => _repository.getCourseList(
+        beginDate: beginDate,
+        endDate: endDate,
+        id: classOrTeacherId,
+        isTeacher: isTeacher,
+      ),
     );
 
     if (courseResponse.code != 0 ||

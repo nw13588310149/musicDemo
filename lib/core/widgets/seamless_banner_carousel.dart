@@ -92,7 +92,7 @@ class _SeamlessBannerCarouselState extends State<SeamlessBannerCarousel> {
         _loading = false;
         _slides = const <_BannerSlideData>[];
       });
-      widget.onPageChanged?.call(0);
+      _notifyPageChanged(0);
       return;
     }
 
@@ -115,8 +115,17 @@ class _SeamlessBannerCarouselState extends State<SeamlessBannerCarousel> {
         _slides = loadedSlides;
         _loading = false;
       });
-      widget.onPageChanged?.call(0);
+      _notifyPageChanged(0);
       _restartTimer();
+    });
+  }
+
+  void _notifyPageChanged(int index) {
+    final callback = widget.onPageChanged;
+    if (callback == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      callback(index);
     });
   }
 
@@ -182,7 +191,7 @@ class _SeamlessBannerCarouselState extends State<SeamlessBannerCarousel> {
       physics: const ClampingScrollPhysics(),
       onPageChanged: (page) {
         _currentPage = page;
-        widget.onPageChanged?.call(page % _slides.length);
+        _notifyPageChanged(page % _slides.length);
       },
       itemBuilder: (context, page) {
         final slide = _slides[page % _slides.length];
