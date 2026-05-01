@@ -129,6 +129,14 @@ class SchoolPageController extends StateNotifier<SchoolPageState> {
     if (value is Map<String, dynamic>) {
       return value;
     }
+    if (value is Map) {
+      return value.map((k, v) => MapEntry(k.toString(), v));
+    }
+    // v2 `schoolList` 接口返回学校数组：取首项作为「当前学校」即可，
+    // 与旧版 `mySchool`（单 Map）行为对齐。
+    if (value is List && value.isNotEmpty) {
+      return _asMap(value.first);
+    }
     return const {};
   }
 

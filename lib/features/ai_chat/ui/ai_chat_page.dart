@@ -3,7 +3,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_assets.dart';
+import '../../../core/providers/app_providers.dart';
 import '../../../core/widgets/app_asset_graphic.dart';
+import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/image_gallery_viewer.dart';
+import '../../theory/ui/widgets/theory_pdf_view.dart';
+import '../data/ai_chat_attachment_picker.dart';
 import '../state/ai_chat_controller.dart';
 import '../state/ai_chat_state.dart';
 
@@ -708,6 +713,11 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
     required double userBubbleMaxWidth,
     required double aiBubbleMaxWidth,
   }) {
+    final showWaitingAssistant =
+        state.waitingAssistant &&
+        !state.messages.any(
+          (item) => item.type == AiChatMessageType.ai && item.streaming,
+        );
     return Column(
       children: [
         Container(
@@ -740,7 +750,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                     20,
                   ),
                   itemCount:
-                      state.messages.length + (state.waitingAssistant ? 1 : 0),
+                      state.messages.length + (showWaitingAssistant ? 1 : 0),
                   itemBuilder: (context, index) {
                     if (index == state.messages.length) {
                       return const Padding(
@@ -822,6 +832,22 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                 ),
               ),
             ),
+            if (message.attachments.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final attachment in message.attachments)
+                    _AttachmentChip(
+                      attachment: attachment,
+                      compact: true,
+                      onTap: () => _previewAttachment(attachment),
+                    ),
+                ],
+              ),
+            ],
             const SizedBox(height: 4),
             Row(
               mainAxisSize: MainAxisSize.min,
@@ -861,6 +887,9 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
     required AiChatController controller,
     required double maxWidth,
   }) {
+    final showAnswer = message.text.isNotEmpty || !message.reasoningStreaming;
+    final answerStreaming = message.streaming && !message.reasoningStreaming;
+
     return Align(
       alignment: Alignment.centerLeft,
       child: ConstrainedBox(
@@ -868,7 +897,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (message.reasoning.isNotEmpty) ...[
+            if (message.reasoning.isNotEmpty || message.reasoningStreaming) ...[
               InkWell(
                 borderRadius: BorderRadius.circular(14),
                 onTap: () => controller.toggleReasoningExpanded(message.id),
@@ -887,9 +916,15 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        message.reasoningExpanded ? '已思考（点击收起）' : '已思考（点击展开）',
-                        style: const TextStyle(
-                          color: _textPrimary,
+                        message.reasoningStreaming
+                            ? '深度思考中'
+                            : message.reasoningExpanded
+                            ? '思考过程（点击收起）'
+                            : '思考过程（点击展开）',
+                        style: TextStyle(
+                          color: message.reasoningStreaming
+                              ? _purple
+                              : _textPrimary,
                           fontSize: 13,
                           fontFamily: 'PingFang SC',
                           fontWeight: FontWeight.w500,
@@ -901,41 +936,69 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
               ),
               if (message.reasoningExpanded) ...[
                 const SizedBox(height: 6),
-                DecoratedBox(
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
                   decoration: BoxDecoration(
                     color: _panelFill,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: _border),
+                    border: Border.all(
+                      color: message.reasoningStreaming
+                          ? const Color(0x338741FF)
+                          : _border,
+                    ),
                   ),
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(12, 9, 12, 9),
-                    child: _MessageText(message.reasoning),
+                    child: _MessageText(
+                      message.reasoning,
+                      streaming: message.reasoningStreaming,
+                      placeholder: '正在思考',
+                      muted: true,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),
               ],
             ],
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: _border),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-                child: _MessageText(message.text),
-              ),
-            ),
-            const SizedBox(height: 4),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _actionIcon(
-                  icon: Icons.content_copy_outlined,
-                  onTap: () => _copyText(message.text),
+            if (showAnswer)
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: answerStreaming ? const Color(0x338741FF) : _border,
+                  ),
+                  boxShadow: answerStreaming
+                      ? const [
+                          BoxShadow(
+                            color: Color(0x0F8741FF),
+                            blurRadius: 18,
+                            offset: Offset(0, 8),
+                          ),
+                        ]
+                      : null,
                 ),
-              ],
-            ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                  child: _MessageText(
+                    message.text,
+                    streaming: answerStreaming,
+                    placeholder: '正在回复',
+                  ),
+                ),
+              ),
+            const SizedBox(height: 4),
+            if (message.text.isNotEmpty && !message.streaming)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _actionIcon(
+                    icon: Icons.content_copy_outlined,
+                    onTap: () => _copyText(message.text),
+                  ),
+                ],
+              ),
           ],
         ),
       ),
@@ -962,11 +1025,17 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
     AiChatController controller,
     double width,
   ) {
+    final canSend =
+        !state.sending &&
+        !state.uploadingAttachment &&
+        (_inputCtrl.text.trim().isNotEmpty ||
+            state.pendingAttachments.isNotEmpty);
+    final composerHeight = state.pendingAttachments.isEmpty ? 104.0 : 154.0;
     return ConstrainedBox(
       constraints: BoxConstraints(maxWidth: width),
       child: Container(
         width: double.infinity,
-        height: 104,
+        height: composerHeight,
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
@@ -981,6 +1050,11 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
         ),
         child: Column(
           children: [
+            if (state.pendingAttachments.isNotEmpty)
+              SizedBox(
+                height: 50,
+                child: _buildAttachmentTray(state, controller),
+              ),
             SizedBox(
               height: 56,
               child: Padding(
@@ -1011,6 +1085,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                     ),
                     textInputAction: TextInputAction.send,
                     onSubmitted: (_) => _handleSend(controller),
+                    onChanged: (_) => setState(() {}),
                   ),
                 ),
               ),
@@ -1045,20 +1120,17 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                     const Spacer(),
                     _iconButton(
                       iconAsset: AppAssets.aiChatAttach,
-                      onTap: () => _showInfo('附件上传功能开发中'),
+                      onTap: state.uploadingAttachment
+                          ? null
+                          : () => _pickAndUploadAttachment(controller),
                       background: Colors.transparent,
                       borderColor: _border,
+                      loading: state.uploadingAttachment,
                     ),
                     const SizedBox(width: 8),
-                    _iconButton(
-                      iconAsset: AppAssets.aiChatSend,
-                      onTap: state.sending
-                          ? null
-                          : () => _handleSend(controller),
-                      background: state.sending
-                          ? const Color(0xFFE6E9F1)
-                          : const Color(0xFFCBD2E1),
-                      borderColor: Colors.transparent,
+                    _sendButton(
+                      enabled: canSend,
+                      onTap: canSend ? () => _handleSend(controller) : null,
                     ),
                   ],
                 ),
@@ -1067,6 +1139,23 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildAttachmentTray(AiChatState state, AiChatController controller) {
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+      scrollDirection: Axis.horizontal,
+      itemCount: state.pendingAttachments.length,
+      separatorBuilder: (context, index) => const SizedBox(width: 8),
+      itemBuilder: (context, index) {
+        final attachment = state.pendingAttachments[index];
+        return _AttachmentChip(
+          attachment: attachment,
+          onTap: () => _previewAttachment(attachment),
+          onRemove: () => controller.removePendingAttachment(attachment),
+        );
+      },
     );
   }
 
@@ -1122,6 +1211,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
     required VoidCallback? onTap,
     required Color background,
     required Color borderColor,
+    bool loading = false,
   }) {
     return Material(
       color: background,
@@ -1137,10 +1227,30 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
             border: Border.all(color: borderColor),
           ),
           child: Center(
-            child: AppAssetGraphic(iconAsset, width: 20, height: 20),
+            child: loading
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: _purple,
+                    ),
+                  )
+                : AppAssetGraphic(iconAsset, width: 20, height: 20),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _sendButton({required bool enabled, required VoidCallback? onTap}) {
+    final asset = enabled
+        ? AppAssets.homeSendButtonEnabled
+        : AppAssets.homeSendButtonDisabled;
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: onTap,
+      child: AppAssetGraphic(asset, width: 32, height: 32),
     );
   }
 
@@ -1184,7 +1294,8 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
 
   Future<void> _handleSend(AiChatController controller) async {
     final text = _inputCtrl.text.trim();
-    if (text.isEmpty) {
+    final state = ref.read(aiChatControllerProvider);
+    if (text.isEmpty && state.pendingAttachments.isEmpty) {
       return;
     }
     _inputCtrl.clear();
@@ -1194,6 +1305,75 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
     if (error != null && mounted) {
       _showInfo(error);
     }
+  }
+
+  Future<void> _pickAndUploadAttachment(AiChatController controller) async {
+    final picked = await pickAiChatAttachmentFile();
+    if (!mounted || picked == null) {
+      return;
+    }
+    final error = await controller.uploadAttachment(
+      bytes: picked.bytes,
+      filename: picked.filename,
+      size: picked.size,
+    );
+    if (!mounted) {
+      return;
+    }
+    if (error != null) {
+      _showInfo(error);
+    }
+  }
+
+  void _previewAttachment(AiChatAttachment attachment) {
+    if (attachment.url.trim().isEmpty) {
+      _showInfo('附件地址为空');
+      return;
+    }
+    if (_isImageAttachment(attachment)) {
+      showImageGallery(
+        context,
+        images: [attachment.url],
+        heroTagPrefix: 'ai_chat_attachment',
+      );
+      return;
+    }
+
+    final token = ref.read(appStorageProvider).token;
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.22),
+      builder: (context) {
+        return _AttachmentPreviewDialog(
+          attachment: attachment,
+          authToken: token,
+        );
+      },
+    );
+  }
+
+  bool _isImageAttachment(AiChatAttachment attachment) {
+    final ext = _attachmentExtension(attachment);
+    return const <String>{
+      'jpg',
+      'jpeg',
+      'png',
+      'gif',
+      'webp',
+      'bmp',
+    }.contains(ext);
+  }
+
+  String _attachmentExtension(AiChatAttachment attachment) {
+    final source = attachment.name.trim().isNotEmpty
+        ? attachment.name
+        : Uri.tryParse(attachment.url)?.path ?? attachment.url;
+    final normalized = source.split('?').first.split('#').first;
+    final dot = normalized.lastIndexOf('.');
+    if (dot < 0 || dot == normalized.length - 1) {
+      return '';
+    }
+    return normalized.substring(dot + 1).toLowerCase();
   }
 
   Future<void> _copyText(String text) async {
@@ -1247,32 +1427,48 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
   }
 
   void _showInfo(String message) {
-    ScaffoldMessenger.of(context)
-      ..clearSnackBars()
-      ..showSnackBar(SnackBar(content: Text(message)));
+    AppToast.show(context, message);
   }
 
   void _scheduleScrollIfNeeded(AiChatState state) {
     final latest = state.messages.isEmpty
         ? ''
-        : '${state.messages.last.id}-${state.messages.last.status.name}';
+        : '${state.messages.last.id}-${state.messages.last.status.name}'
+              '-${state.messages.last.text.length}'
+              '-${state.messages.last.reasoning.length}'
+              '-${state.messages.last.streaming}';
     final signature =
-        '${state.messages.length}-${state.waitingAssistant}-$latest';
+        '${state.activeSessionId}-${state.messages.length}'
+        '-${state.waitingAssistant}-${state.messagesLoading}-$latest';
     if (_messageSignature == signature) {
       return;
     }
     _messageSignature = signature;
 
+    _scheduleBottomScroll();
+  }
+
+  void _scheduleBottomScroll({int attempt = 0}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scrollCtrl.hasClients) {
         return;
       }
       final max = _scrollCtrl.position.maxScrollExtent;
-      _scrollCtrl.animateTo(
-        max,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOut,
-      );
+      if (attempt == 0) {
+        _scrollCtrl.jumpTo(max);
+      } else {
+        _scrollCtrl.animateTo(
+          max,
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOut,
+        );
+      }
+      if (attempt < 4) {
+        Future<void>.delayed(
+          Duration(milliseconds: attempt == 0 ? 24 : 80),
+          () => _scheduleBottomScroll(attempt: attempt + 1),
+        );
+      }
     });
   }
 }
@@ -1283,6 +1479,306 @@ class _AiPromptQuestion {
   final String indexLabel;
   final String text;
   final Color indexColor;
+}
+
+class _AttachmentChip extends StatelessWidget {
+  const _AttachmentChip({
+    required this.attachment,
+    this.onTap,
+    this.onRemove,
+    this.compact = false,
+  });
+
+  final AiChatAttachment attachment;
+  final VoidCallback? onTap;
+  final VoidCallback? onRemove;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final content = Container(
+      constraints: BoxConstraints(maxWidth: compact ? 220 : 260),
+      padding: EdgeInsets.fromLTRB(10, compact ? 5 : 5, 8, compact ? 5 : 5),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 22,
+            height: 22,
+            decoration: const BoxDecoration(
+              color: Color(0x1A8741FF),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.insert_drive_file_outlined,
+              size: 14,
+              color: _purple,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  attachment.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: _textPrimary,
+                    fontSize: 11,
+                    fontFamily: 'PingFang SC',
+                    fontWeight: FontWeight.w500,
+                    height: 1.1,
+                  ),
+                ),
+                if (!compact && attachment.size > 0)
+                  Text(
+                    _formatFileSize(attachment.size),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: _textHint,
+                      fontSize: 9,
+                      fontFamily: 'PingFang SC',
+                      height: 1.1,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          if (onRemove != null) ...[
+            const SizedBox(width: 6),
+            InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: onRemove,
+              child: const Padding(
+                padding: EdgeInsets.all(2),
+                child: Icon(Icons.close_rounded, size: 14, color: _textHint),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+
+    return Material(
+      color: compact ? Colors.white : const Color(0xFFF8F7FF),
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: onTap,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFE8E4FF)),
+          ),
+          child: content,
+        ),
+      ),
+    );
+  }
+
+  static String _formatFileSize(int bytes) {
+    if (bytes < 1024) {
+      return '$bytes B';
+    }
+    final kb = bytes / 1024;
+    if (kb < 1024) {
+      return '${kb.toStringAsFixed(kb >= 100 ? 0 : 1)} KB';
+    }
+    final mb = kb / 1024;
+    return '${mb.toStringAsFixed(mb >= 100 ? 0 : 1)} MB';
+  }
+}
+
+class _AttachmentPreviewDialog extends StatelessWidget {
+  const _AttachmentPreviewDialog({
+    required this.attachment,
+    required this.authToken,
+  });
+
+  final AiChatAttachment attachment;
+  final String authToken;
+
+  @override
+  Widget build(BuildContext context) {
+    final ext = _extension(attachment);
+    final canPreviewPdf = ext == 'pdf';
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 56, vertical: 40),
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(
+          maxWidth: 760,
+          maxHeight: 620,
+          minHeight: 420,
+        ),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 14, 12, 12),
+              child: Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: const BoxDecoration(
+                      color: Color(0x1A8741FF),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      canPreviewPdf
+                          ? Icons.picture_as_pdf_outlined
+                          : Icons.insert_drive_file_outlined,
+                      color: _purple,
+                      size: 18,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          attachment.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: _textPrimary,
+                            fontSize: 14,
+                            fontFamily: 'PingFang SC',
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        if (attachment.size > 0)
+                          Text(
+                            _AttachmentChip._formatFileSize(attachment.size),
+                            style: const TextStyle(
+                              color: _textHint,
+                              fontSize: 11,
+                              fontFamily: 'PingFang SC',
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: '关闭',
+                    onPressed: () => Navigator.of(context).maybePop(),
+                    icon: const Icon(Icons.close_rounded, size: 20),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1, color: _border),
+            Expanded(
+              child: canPreviewPdf
+                  ? ClipRRect(
+                      borderRadius: const BorderRadius.vertical(
+                        bottom: Radius.circular(14),
+                      ),
+                      child: TheoryPdfView(
+                        url: attachment.url,
+                        authToken: authToken,
+                      ),
+                    )
+                  : _UnsupportedAttachmentPreview(attachment: attachment),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _extension(AiChatAttachment attachment) {
+    final source = attachment.name.trim().isNotEmpty
+        ? attachment.name
+        : Uri.tryParse(attachment.url)?.path ?? attachment.url;
+    final normalized = source.split('?').first.split('#').first;
+    final dot = normalized.lastIndexOf('.');
+    if (dot < 0 || dot == normalized.length - 1) {
+      return '';
+    }
+    return normalized.substring(dot + 1).toLowerCase();
+  }
+}
+
+class _UnsupportedAttachmentPreview extends StatelessWidget {
+  const _UnsupportedAttachmentPreview({required this.attachment});
+
+  final AiChatAttachment attachment;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 68,
+              height: 68,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8F7FF),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: const Color(0xFFE8E4FF)),
+              ),
+              child: const Icon(
+                Icons.insert_drive_file_outlined,
+                color: _purple,
+                size: 34,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              attachment.name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: _textPrimary,
+                fontSize: 15,
+                fontFamily: 'PingFang SC',
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              '当前文件类型暂不支持在线预览',
+              style: TextStyle(
+                color: _textSecondary,
+                fontSize: 13,
+                fontFamily: 'PingFang SC',
+              ),
+            ),
+            const SizedBox(height: 14),
+            SelectableText(
+              attachment.url,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: _purple,
+                fontSize: 11,
+                fontFamily: 'Manrope',
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: () =>
+                  Clipboard.setData(ClipboardData(text: attachment.url)),
+              icon: const Icon(Icons.content_copy_outlined, size: 16),
+              label: const Text('复制文件地址'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _AiToolShortcut {
@@ -1299,23 +1795,265 @@ class _AiToolShortcut {
   final String? asset;
 }
 
+enum _MessageBlockKind { paragraph, heading, list, quote }
+
+class _MessageBlock {
+  const _MessageBlock._({
+    required this.kind,
+    this.text = '',
+    this.items = const [],
+  });
+
+  const _MessageBlock.paragraph(String text)
+    : this._(kind: _MessageBlockKind.paragraph, text: text);
+
+  const _MessageBlock.heading(String text)
+    : this._(kind: _MessageBlockKind.heading, text: text);
+
+  const _MessageBlock.list(List<_MessageListItem> items)
+    : this._(kind: _MessageBlockKind.list, items: items);
+
+  const _MessageBlock.quote(String text)
+    : this._(kind: _MessageBlockKind.quote, text: text);
+
+  final _MessageBlockKind kind;
+  final String text;
+  final List<_MessageListItem> items;
+}
+
+class _MessageListItem {
+  const _MessageListItem({required this.marker, required this.text});
+
+  final String marker;
+  final String text;
+}
+
 class _MessageText extends StatelessWidget {
-  const _MessageText(this.text);
+  const _MessageText(
+    this.text, {
+    this.streaming = false,
+    this.placeholder = '正在回复',
+    this.muted = false,
+  });
 
   final String text;
+  final bool streaming;
+  final String placeholder;
+  final bool muted;
 
   @override
   Widget build(BuildContext context) {
-    final spans = _buildInlineSpans(text);
+    final blocks = _parseBlocks(text);
+    final baseStyle = TextStyle(
+      color: muted ? _textSecondary : _textPrimary,
+      fontSize: 14,
+      fontFamily: 'PingFang SC',
+      fontWeight: FontWeight.w400,
+      height: 1.7,
+    );
+
+    if (blocks.isEmpty) {
+      if (!streaming) {
+        return const SizedBox.shrink();
+      }
+      return _TypingPlaceholder(label: placeholder, muted: muted);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var index = 0; index < blocks.length; index++)
+          Padding(
+            padding: EdgeInsets.only(
+              bottom: index == blocks.length - 1 ? 0 : 8,
+            ),
+            child: _buildBlock(
+              blocks[index],
+              baseStyle,
+              streaming && index == blocks.length - 1,
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildBlock(
+    _MessageBlock block,
+    TextStyle baseStyle,
+    bool showCursor,
+  ) {
+    switch (block.kind) {
+      case _MessageBlockKind.heading:
+        return _InlineMessageText(
+          block.text,
+          style: baseStyle.copyWith(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            height: 1.55,
+          ),
+          streaming: showCursor,
+        );
+      case _MessageBlockKind.list:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var index = 0; index < block.items.length; index++)
+              Padding(
+                padding: EdgeInsets.only(top: index == 0 ? 0 : 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 22,
+                      child: Text(
+                        block.items[index].marker,
+                        style: baseStyle.copyWith(
+                          color: _purple,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: _InlineMessageText(
+                        block.items[index].text,
+                        style: baseStyle,
+                        streaming:
+                            showCursor && index == block.items.length - 1,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        );
+      case _MessageBlockKind.quote:
+        return Container(
+          padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
+          decoration: const BoxDecoration(
+            border: Border(
+              left: BorderSide(color: Color(0x338741FF), width: 3),
+            ),
+          ),
+          child: _InlineMessageText(
+            block.text,
+            style: baseStyle.copyWith(color: _textSecondary),
+            streaming: showCursor,
+          ),
+        );
+      case _MessageBlockKind.paragraph:
+        return _InlineMessageText(
+          block.text,
+          style: baseStyle,
+          streaming: showCursor,
+        );
+    }
+  }
+
+  List<_MessageBlock> _parseBlocks(String source) {
+    final normalized = source.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    final lines = normalized.split('\n');
+    final blocks = <_MessageBlock>[];
+    final paragraph = <String>[];
+    final listItems = <_MessageListItem>[];
+    final listRegExp = RegExp(r'^((?:[-*•])|(?:\d+[.)]))\s+(.+)$');
+    final headingRegExp = RegExp(r'^(#{1,3})\s+(.+)$');
+
+    void flushParagraph() {
+      if (paragraph.isEmpty) {
+        return;
+      }
+      final text = paragraph.join('\n').trim();
+      if (text.isNotEmpty) {
+        blocks.add(_MessageBlock.paragraph(text));
+      }
+      paragraph.clear();
+    }
+
+    void flushList() {
+      if (listItems.isEmpty) {
+        return;
+      }
+      blocks.add(_MessageBlock.list(List<_MessageListItem>.from(listItems)));
+      listItems.clear();
+    }
+
+    for (final rawLine in lines) {
+      final line = rawLine.trimRight();
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) {
+        flushParagraph();
+        flushList();
+        continue;
+      }
+
+      final heading = headingRegExp.firstMatch(trimmed);
+      if (heading != null) {
+        flushParagraph();
+        flushList();
+        blocks.add(_MessageBlock.heading((heading.group(2) ?? '').trim()));
+        continue;
+      }
+
+      final list = listRegExp.firstMatch(trimmed);
+      if (list != null) {
+        flushParagraph();
+        final marker = list.group(1) ?? '•';
+        final body = (list.group(2) ?? '').trim();
+        listItems.add(
+          _MessageListItem(
+            marker: marker == '-' || marker == '*' ? '•' : marker,
+            text: body,
+          ),
+        );
+        continue;
+      }
+
+      if (trimmed.startsWith('>')) {
+        flushParagraph();
+        flushList();
+        blocks.add(_MessageBlock.quote(trimmed.substring(1).trim()));
+        continue;
+      }
+
+      flushList();
+      paragraph.add(line.trimLeft());
+    }
+
+    flushParagraph();
+    flushList();
+    return blocks;
+  }
+}
+
+class _InlineMessageText extends StatelessWidget {
+  const _InlineMessageText(
+    this.text, {
+    required this.style,
+    this.streaming = false,
+  });
+
+  final String text;
+  final TextStyle style;
+  final bool streaming;
+
+  @override
+  Widget build(BuildContext context) {
     return Text.rich(
-      TextSpan(children: spans),
-      style: const TextStyle(
-        color: _textPrimary,
-        fontSize: 14,
-        fontFamily: 'PingFang SC',
-        fontWeight: FontWeight.w400,
-        height: 1.7,
+      TextSpan(
+        children: [
+          ..._buildInlineSpans(text),
+          if (streaming)
+            const WidgetSpan(
+              alignment: PlaceholderAlignment.middle,
+              child: Padding(
+                padding: EdgeInsets.only(left: 3),
+                child: _StreamingCursor(),
+              ),
+            ),
+        ],
       ),
+      softWrap: true,
+      style: style,
     );
   }
 
@@ -1351,5 +2089,144 @@ class _MessageText extends StatelessWidget {
       }
     }
     return spans;
+  }
+}
+
+class _TypingPlaceholder extends StatelessWidget {
+  const _TypingPlaceholder({required this.label, required this.muted});
+
+  final String label;
+  final bool muted;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: muted ? _textSecondary : _textPrimary,
+            fontSize: 14,
+            fontFamily: 'PingFang SC',
+            height: 1.7,
+          ),
+        ),
+        const SizedBox(width: 6),
+        const _TypingDots(),
+      ],
+    );
+  }
+}
+
+class _TypingDots extends StatefulWidget {
+  const _TypingDots();
+
+  @override
+  State<_TypingDots> createState() => _TypingDotsState();
+}
+
+class _TypingDotsState extends State<_TypingDots>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final value = _controller.value;
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var index = 0; index < 3; index++)
+              Opacity(
+                opacity: _dotOpacity(value, index),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 1.5),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: _purple,
+                      shape: BoxShape.circle,
+                    ),
+                    child: SizedBox(width: 4, height: 4),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  double _dotOpacity(double value, int index) {
+    final shifted = (value + index * 0.18) % 1;
+    if (shifted < 0.3) {
+      return 0.35 + shifted / 0.3 * 0.65;
+    }
+    if (shifted < 0.6) {
+      return 1 - (shifted - 0.3) / 0.3 * 0.55;
+    }
+    return 0.45;
+  }
+}
+
+class _StreamingCursor extends StatefulWidget {
+  const _StreamingCursor();
+
+  @override
+  State<_StreamingCursor> createState() => _StreamingCursorState();
+}
+
+class _StreamingCursorState extends State<_StreamingCursor>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 850),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: Tween<double>(
+        begin: 0.35,
+        end: 1,
+      ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut)),
+      child: Container(
+        width: 2,
+        height: 17,
+        decoration: BoxDecoration(
+          color: _purple,
+          borderRadius: BorderRadius.circular(2),
+        ),
+      ),
+    );
   }
 }

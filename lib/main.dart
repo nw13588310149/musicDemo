@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 
 import 'app/app.dart';
+import 'core/network/media_url.dart';
 import 'core/providers/app_providers.dart';
 import 'core/storage/app_storage.dart';
 
@@ -24,6 +25,12 @@ Future<void> main() async {
   final cid = Uri.base.queryParameters['cid'];
   if (cid != null && cid.isNotEmpty) {
     await storage.savePushId(cid);
+  }
+  // 启动时立即把上次缓存的「文件服务器域名」注入 MediaUrl，让首屏就能正常
+  // 解析图片/音频路径，登录后再通过 configList 异步刷新。
+  final cachedFileBase = storage.fileBaseUrl;
+  if (cachedFileBase.isNotEmpty) {
+    MediaUrl.setFileBaseUrl(cachedFileBase);
   }
 
   runApp(

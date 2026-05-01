@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/route_paths.dart';
+import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/avatar_picker.dart';
@@ -33,9 +34,7 @@ class InfoPage extends ConsumerWidget {
           SizedBox(height: ui(12)),
           Expanded(
             child: state.loading && state.user.isEmpty
-                ? const Center(
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
+                ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
                 : _InfoListCard(state: state, controller: controller),
           ),
         ],
@@ -344,8 +343,11 @@ class _AvatarImage extends StatelessWidget {
                 width: size,
                 height: size,
                 fit: BoxFit.cover,
-                errorBuilder: (_, _, _) =>
-                    Icon(Icons.person_rounded, size: size * 0.6, color: const Color(0xFF7E879C)),
+                errorBuilder: (_, _, _) => Icon(
+                  Icons.person_rounded,
+                  size: size * 0.6,
+                  color: const Color(0xFF7E879C),
+                ),
               )
             : Icon(
                 Icons.person_rounded,
@@ -478,8 +480,8 @@ Future<void> _editBirthday(
   PersonalCenterController controller,
   Map<String, dynamic> user,
 ) async {
-  final initial = _parseDate(user['birthday']?.toString()) ??
-      DateTime(2010, 1, 1);
+  final initial =
+      _parseDate(user['birthday']?.toString()) ?? DateTime(2010, 1, 1);
   final picked = await showDatePicker(
     context: context,
     initialDate: initial,
@@ -561,7 +563,10 @@ class _AvatarEditDialog extends StatefulWidget {
 }
 
 class _AvatarEditDialogState extends State<_AvatarEditDialog> {
-  String? _newUrl;
+  // Path is what we persist to the backend (`headUrl`).
+  // Url is what we render in the live preview before confirm.
+  String? _newPath;
+  String? _newPreviewUrl;
   bool _uploading = false;
 
   Future<void> _pickAndUpload() async {
@@ -584,19 +589,20 @@ class _AvatarEditDialogState extends State<_AvatarEditDialog> {
       return;
     }
     setState(() {
-      _newUrl = res.url;
+      _newPath = res.path;
+      _newPreviewUrl = res.url;
       _uploading = false;
     });
   }
 
   Future<void> _confirm() async {
-    final url = _newUrl;
-    if (url == null || url.isEmpty) {
+    final path = _newPath;
+    if (path == null || path.isEmpty) {
       Navigator.of(context).pop();
       return;
     }
     final err = await widget.controller.updateProfileFields(<String, dynamic>{
-      'headUrl': url,
+      'headUrl': path,
     });
     if (!mounted) return;
     Navigator.of(context).pop();
@@ -606,13 +612,10 @@ class _AvatarEditDialogState extends State<_AvatarEditDialog> {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final previewUrl = _newUrl ?? widget.currentUrl;
+    final previewUrl = _newPreviewUrl ?? widget.currentUrl;
     return Dialog(
       backgroundColor: Colors.transparent,
-      insetPadding: EdgeInsets.symmetric(
-        horizontal: ui(32),
-        vertical: ui(24),
-      ),
+      insetPadding: EdgeInsets.symmetric(horizontal: ui(32), vertical: ui(24)),
       child: Container(
         width: ui(420),
         padding: EdgeInsets.fromLTRB(ui(24), ui(28), ui(24), ui(20)),
@@ -635,10 +638,7 @@ class _AvatarEditDialogState extends State<_AvatarEditDialog> {
             SizedBox(height: ui(20)),
             _AvatarImage(url: previewUrl, size: ui(160)),
             SizedBox(height: ui(20)),
-            _UploadButton(
-              uploading: _uploading,
-              onTap: _pickAndUpload,
-            ),
+            _UploadButton(uploading: _uploading, onTap: _pickAndUpload),
             SizedBox(height: ui(20)),
             AppDialogActionBar(
               cancelLabel: '取消',
@@ -687,8 +687,11 @@ class _UploadButton extends StatelessWidget {
                 ),
               )
             else
-              Icon(Icons.add_a_photo_outlined,
-                  size: ui(16), color: const Color(0xFF8741FF)),
+              Icon(
+                Icons.add_a_photo_outlined,
+                size: ui(16),
+                color: const Color(0xFF8741FF),
+              ),
             SizedBox(width: ui(6)),
             Text(
               uploading ? '上传中...' : '上传新头像',
@@ -782,10 +785,7 @@ class _PasswordEditDialogState extends State<_PasswordEditDialog> {
     final ui = DashboardScaleScope.of(context).ui;
     return Dialog(
       backgroundColor: Colors.transparent,
-      insetPadding: EdgeInsets.symmetric(
-        horizontal: ui(32),
-        vertical: ui(24),
-      ),
+      insetPadding: EdgeInsets.symmetric(horizontal: ui(32), vertical: ui(24)),
       child: Container(
         width: ui(420),
         padding: EdgeInsets.fromLTRB(ui(24), ui(28), ui(24), ui(20)),
@@ -889,7 +889,5 @@ class _PasswordField extends StatelessWidget {
 
 void _toast(BuildContext context, String message) {
   if (!context.mounted) return;
-  ScaffoldMessenger.of(context)
-    ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(content: Text(message)));
+  AppToast.show(context, message);
 }

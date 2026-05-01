@@ -1,11 +1,12 @@
-import 'dart:async';
-
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:carousel_slider/carousel_slider.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/route_paths.dart';
-import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/app_assets.dart';
+import '../../../core/network/media_url.dart';
 import '../../../core/widgets/app_asset_graphic.dart';
 import '../state/home_dashboard_controller.dart';
 import '../state/home_dashboard_state.dart';
@@ -40,40 +41,44 @@ class _HomePageView extends StatefulWidget {
 }
 
 class _HomePageViewState extends State<_HomePageView> {
-  final PageController _bannerController = PageController();
-  Timer? _bannerTimer;
+  // ── 轮播图：使用 carousel_slider 包，autoPlay + enableInfiniteScroll
+  // 内部已实现"末→首"无缝向前过渡，无需手动维护 PageController/Timer/虚拟索引
   int _bannerIndex = 0;
+  bool _bannerImagesPrecached = false;
 
   @override
-  void initState() {
-    super.initState();
-    _restartBannerAutoPlay();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _precacheBannerImages();
   }
 
   @override
   void didUpdateWidget(covariant _HomePageView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _restartBannerAutoPlay();
-
-    final total = _effectiveBannerImages(widget.state.bannerItems).length;
-    if (total == 0) {
+    if (!listEquals(
+      _effectiveBannerImages(oldWidget.state.bannerItems),
+      _effectiveBannerImages(widget.state.bannerItems),
+    )) {
+      _bannerImagesPrecached = false;
       _bannerIndex = 0;
-      return;
-    }
-    if (_bannerIndex < total) {
-      return;
-    }
-    _bannerIndex = total - 1;
-    if (_bannerController.hasClients) {
-      _bannerController.jumpToPage(_bannerIndex);
+      _precacheBannerImages();
     }
   }
 
-  @override
-  void dispose() {
-    _bannerTimer?.cancel();
-    _bannerController.dispose();
-    super.dispose();
+  /// 进入首页时一次性把所有轮播图下载到本地磁盘 + 内存：
+  /// - 网络图：`CachedNetworkImageProvider`（disk + memory，跨启动可用）
+  /// - 本地图：`AssetImage`（precache 到 ImageCache）
+  void _precacheBannerImages() {
+    if (_bannerImagesPrecached) return;
+    final images = _effectiveBannerImages(widget.state.bannerItems);
+    if (images.isEmpty) return;
+    _bannerImagesPrecached = true;
+    for (final url in images) {
+      final provider = url.startsWith('http')
+          ? CachedNetworkImageProvider(url) as ImageProvider
+          : AssetImage(url);
+      precacheImage(provider, context).catchError((_) {});
+    }
   }
 
   @override
@@ -90,128 +95,131 @@ class _HomePageViewState extends State<_HomePageView> {
         final bannerH = leftW * 190.0 / 647.0;
         final rightH = bannerH + mainGap + actionH;
 
-        return Stack(
-          children: [
-            SingleChildScrollView(
-              physics: const ClampingScrollPhysics(),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // ── 主内容行：左侧内容 + 右侧课表通知 ─────────────────
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // 左侧：Banner + 功能矩阵+声乐器乐
-                        SizedBox(
-                          width: leftW,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              // Banner：精确高度 = leftW * 190/647
-                              SizedBox(
-                                height: bannerH,
-                                child: _buildBanner(state.bannerItems),
-                              ),
-                              const SizedBox(height: mainGap),
-                              // 功能矩阵 + 声乐/器乐 横排，固定高度 313
-                              SizedBox(
-                                height: actionH,
-                                child: Row(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.stretch,
-                                  children: [
-                                    Expanded(
-                                      child: _buildActionBoard(
-                                        state.quickActions,
-                                      ),
-                                    ),
-                                    const SizedBox(width: mainGap),
-                                    const _VoiceInstrumentColumn(),
-                                  ],
+        return DefaultTextStyle.merge(
+          style: const TextStyle(fontFamily: 'PingFang SC'),
+          child: Stack(
+            children: [
+              SingleChildScrollView(
+                physics: const ClampingScrollPhysics(),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // ── 主内容行：左侧内容 + 右侧课表通知 ─────────────────
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // 左侧：Banner + 功能矩阵+声乐器乐
+                          SizedBox(
+                            width: leftW,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                // Banner：精确高度 = leftW * 190/647
+                                SizedBox(
+                                  height: bannerH,
+                                  child: _buildBanner(
+                                    state.bannerItems,
+                                    bannerH,
+                                  ),
                                 ),
-                              ),
-                            ],
+                                const SizedBox(height: mainGap),
+                                // 功能矩阵 + 声乐/器乐 横排，固定高度 313
+                                SizedBox(
+                                  height: actionH,
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      Expanded(
+                                        child: _buildActionBoard(
+                                          state.quickActions,
+                                        ),
+                                      ),
+                                      const SizedBox(width: mainGap),
+                                      const _VoiceInstrumentColumn(),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: mainGap),
-                        // 右侧：高度精确匹配左侧，使底部与器乐卡底部齐平
-                        SizedBox(
-                          width: rightW,
-                          height: rightH,
-                          child: _buildRightPanel(state),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    _buildLatestHeader(),
-                    const SizedBox(height: 10),
-                    _buildNewsRow(state.newsItems),
-                  ],
-                ),
-              ),
-            ),
-            if (state.loading)
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: Container(
-                    color: Colors.white.withValues(alpha: 0.35),
-                    alignment: Alignment.center,
-                    child: const SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
+                          const SizedBox(width: mainGap),
+                          // 右侧：高度精确匹配左侧，使底部与器乐卡底部齐平
+                          SizedBox(
+                            width: rightW,
+                            height: rightH,
+                            child: _buildRightPanel(state),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      _buildLatestHeader(),
+                      const SizedBox(height: 10),
+                      _buildNewsRow(state.newsItems),
+                    ],
                   ),
                 ),
               ),
-            if (state.showComingSoon)
-              _ComingSoonDialog(
-                onClose: () => widget.onSetComingSoonVisible(false),
-              ),
-          ],
+              if (state.loading)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: Container(
+                      color: Colors.white.withValues(alpha: 0.35),
+                      alignment: Alignment.center,
+                      child: const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  ),
+                ),
+              if (state.showComingSoon)
+                _ComingSoonDialog(
+                  onClose: () => widget.onSetComingSoonVisible(false),
+                ),
+            ],
+          ),
         );
       },
     );
   }
 
-  Widget _buildBanner(List<HomeBannerItem> bannerItems) {
+  Widget _buildBanner(List<HomeBannerItem> bannerItems, double height) {
     final images = _effectiveBannerImages(bannerItems);
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
       child: Stack(
         children: [
-          Positioned.fill(
-            child: images.isEmpty
-                ? _buildBannerFallbackBackground()
-                : PageView.builder(
-                    controller: _bannerController,
-                    itemCount: images.length,
-                    onPageChanged: (index) {
-                      if (!mounted) return;
-                      setState(() => _bannerIndex = index);
-                    },
-                    itemBuilder: (context, index) {
-                      final image = images[index];
-                      if (!image.startsWith('http')) {
-                        return Image.asset(
-                          image,
-                          fit: BoxFit.cover,
-                          filterQuality: FilterQuality.high,
-                        );
-                      }
-                      return Image.network(
-                        image,
-                        fit: BoxFit.cover,
-                        filterQuality: FilterQuality.high,
-                        errorBuilder: (context, error, stackTrace) =>
-                            _buildBannerFallbackBackground(),
-                      );
-                    },
-                  ),
-          ),
+          // 永远绘制深色兜底色，避免图片切换瞬间穿帮成"白屏"
+          const Positioned.fill(child: ColoredBox(color: Color(0xFF2D1C77))),
+          if (images.isEmpty)
+            Positioned.fill(child: _buildBannerFallbackBackground())
+          else
+            Positioned.fill(
+              child: CarouselSlider.builder(
+                itemCount: images.length,
+                itemBuilder: (context, index, realIndex) =>
+                    _BannerSlide(url: images[index]),
+                options: CarouselOptions(
+                  height: height,
+                  viewportFraction: 1.0,
+                  enableInfiniteScroll: images.length > 1,
+                  autoPlay: images.length > 1,
+                  autoPlayInterval: const Duration(seconds: 4),
+                  autoPlayAnimationDuration: const Duration(milliseconds: 420),
+                  autoPlayCurve: Curves.easeInOutCubic,
+                  scrollPhysics: const ClampingScrollPhysics(),
+                  onPageChanged: (index, reason) {
+                    if (!mounted) return;
+                    setState(() => _bannerIndex = index);
+                  },
+                ),
+              ),
+            ),
           // 分页指示器
           Positioned(
             right: 36,
@@ -245,36 +253,7 @@ class _HomePageViewState extends State<_HomePageView> {
         .toList();
   }
 
-  String _normalizeImage(String raw) {
-    final value = raw.trim();
-    if (value.isEmpty) {
-      return '';
-    }
-    if (value.startsWith('http://') || value.startsWith('https://')) {
-      return value;
-    }
-    final sanitized = value.startsWith('/') ? value.substring(1) : value;
-    return '${AppConstants.apiBaseUrl}$sanitized';
-  }
-
-  void _restartBannerAutoPlay() {
-    _bannerTimer?.cancel();
-    final total = _effectiveBannerImages(widget.state.bannerItems).length;
-    if (total <= 1) {
-      return;
-    }
-    _bannerTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
-      if (!mounted || !_bannerController.hasClients) {
-        return;
-      }
-      final next = (_bannerIndex + 1) % total;
-      _bannerController.animateToPage(
-        next,
-        duration: const Duration(milliseconds: 360),
-        curve: Curves.easeOutCubic,
-      );
-    });
-  }
+  String _normalizeImage(String raw) => MediaUrl.resolve(raw);
 
   Widget _buildBannerFallbackBackground() {
     return Stack(
@@ -342,9 +321,7 @@ class _HomePageViewState extends State<_HomePageView> {
   }
 
   Widget _buildRightPanel(HomeDashboardState state) {
-    final notices = state.courseNotices.isEmpty
-        ? buildDefaultCourseNotices()
-        : state.courseNotices;
+    final notices = state.courseNotices;
     // 始终展示完整 7 天
     final weekItems = state.weekItems;
 
@@ -405,18 +382,23 @@ class _HomePageViewState extends State<_HomePageView> {
           ),
           const SizedBox(height: 10),
           Expanded(
-            child: ListView.separated(
-              physics: const ClampingScrollPhysics(),
-              itemCount: notices.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 8),
-              itemBuilder: (context, index) {
-                return GestureDetector(
-                  onTap: () =>
-                      Navigator.pushNamed(context, RoutePaths.smartCampus),
-                  child: _CourseNoticeCard(notice: notices[index]),
-                );
-              },
-            ),
+            child: notices.isEmpty
+                ? const _NoticeEmptyState()
+                : ListView.separated(
+                    physics: const ClampingScrollPhysics(),
+                    itemCount: notices.length,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      return GestureDetector(
+                        onTap: () => Navigator.pushNamed(
+                          context,
+                          RoutePaths.smartCampus,
+                        ),
+                        child: _CourseNoticeCard(notice: notices[index]),
+                      );
+                    },
+                  ),
           ),
         ],
       ),
@@ -466,6 +448,25 @@ class _HomePageViewState extends State<_HomePageView> {
       arguments: action.firstMenu == null
           ? null
           : <String, dynamic>{'firstMenu': action.firstMenu.toString()},
+    );
+  }
+}
+
+class _NoticeEmptyState extends StatelessWidget {
+  const _NoticeEmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Text(
+        '暂无通知',
+        style: TextStyle(
+          fontSize: 14,
+          color: Color(0xFFB6B5BB),
+          fontWeight: FontWeight.w400,
+          fontFamily: 'PingFang SC',
+        ),
+      ),
     );
   }
 }
@@ -561,6 +562,42 @@ class _VoiceCard extends StatelessWidget {
   }
 }
 
+/// 单张轮播图：
+/// - 网络图：`CachedNetworkImage`（disk + memory 双缓存，每张图全生命周期只下载一次）
+/// - 本地图：`Image.asset`
+/// - 用 `width/height: infinity + BoxFit.cover` 铺满 PageView 单页
+class _BannerSlide extends StatelessWidget {
+  const _BannerSlide({required this.url});
+
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!url.startsWith('http')) {
+      return Image.asset(
+        url,
+        width: double.infinity,
+        height: double.infinity,
+        fit: BoxFit.cover,
+        filterQuality: FilterQuality.high,
+        gaplessPlayback: true,
+      );
+    }
+    return CachedNetworkImage(
+      imageUrl: url,
+      width: double.infinity,
+      height: double.infinity,
+      fit: BoxFit.cover,
+      filterQuality: FilterQuality.high,
+      fadeInDuration: const Duration(milliseconds: 220),
+      fadeOutDuration: Duration.zero,
+      // 加载中保持透明，外层有深色兜底色，不会闪白
+      placeholder: (context, _) => const SizedBox.shrink(),
+      errorWidget: (context, _, _) => const SizedBox.shrink(),
+    );
+  }
+}
+
 class _BannerIndicator extends StatelessWidget {
   const _BannerIndicator({required this.width, this.opacity = 1});
 
@@ -648,7 +685,7 @@ class _WeekCard extends StatelessWidget {
                 color: active ? Colors.white : const Color(0xFF1A1A1A),
                 fontWeight: FontWeight.w500,
                 height: 1.35,
-                fontFamily: 'Manrope',
+                fontFamily: 'PingFang SC',
               ),
             ),
           ),
@@ -698,7 +735,6 @@ class _CourseNoticeCard extends StatelessWidget {
     final timeTextColor = notice.status == HomeCourseStatus.upcoming
         ? const Color(0xFF0B081A)
         : const Color(0xFF1A1A1A);
-    final courseStyle = _courseStyle(notice.subjectName);
 
     return Container(
       width: double.infinity,
@@ -710,28 +746,40 @@ class _CourseNoticeCard extends StatelessWidget {
       ),
       child: Stack(
         children: [
+          // 时间 + 科目标签：单行排列，CrossAxis center 中线对齐，6px 间距
+          // 给状态标签留出 76px 右侧空间（68w + 8 间距）
           Positioned(
             left: 16,
-            top: 16,
-            child: RichText(
-              text: TextSpan(
-                style: TextStyle(
-                  fontSize: 16,
-                  color: timeTextColor,
-                  fontFamily: 'Barlow',
-                  fontWeight: FontWeight.w600,
-                ),
-                children: [
-                  TextSpan(text: '${notice.startTime} '),
-                  const TextSpan(
-                    text: '- ',
-                    style: TextStyle(color: Color(0xFFB6B5BB)),
+            top: 14,
+            right: 76,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                RichText(
+                  text: TextSpan(
+                    style: TextStyle(
+                      fontSize: 18,
+                      color: timeTextColor,
+                      fontFamily: 'Barlow',
+                      fontWeight: FontWeight.w600,
+                      height: 1,
+                    ),
+                    children: [
+                      TextSpan(text: '${notice.startTime} '),
+                      const TextSpan(
+                        text: '- ',
+                        style: TextStyle(color: Color(0xFFB6B5BB)),
+                      ),
+                      TextSpan(text: notice.endTime),
+                    ],
                   ),
-                  TextSpan(text: notice.endTime),
-                ],
-              ),
+                ),
+                const SizedBox(width: 6),
+                _CourseSubjectTag(name: notice.subjectName),
+              ],
             ),
           ),
+          // 状态标签：68×22，左下/右上圆角 12
           Positioned(
             right: 0,
             top: 0,
@@ -752,42 +800,22 @@ class _CourseNoticeCard extends StatelessWidget {
                   fontSize: 12,
                   color: statusTextColor,
                   fontFamily: 'PingFang SC',
+                  fontWeight: FontWeight.w400,
                   height: 1,
                 ),
               ),
             ),
           ),
-          // 科目标签
-          Positioned(
-            left: 116,
-            top: 17,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: courseStyle.background,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                notice.subjectName,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: courseStyle.foreground,
-                  fontFamily: 'PingFang SC',
-                  height: 1,
-                ),
-              ),
-            ),
-          ),
-          // 教师头像
+          // 教师头像：40×40 圆形
           Positioned(
             left: 16,
-            top: 50,
-            child: _NoticeAvatar(primaryUrl: notice.teacherAvatar, size: 36),
+            top: 48,
+            child: _NoticeAvatar(primaryUrl: notice.teacherAvatar, size: 40),
           ),
           // 教师姓名 + 课时描述
           Positioned(
-            left: 60,
-            top: 51,
+            left: 64,
+            top: 50,
             right: 12,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -796,7 +824,7 @@ class _CourseNoticeCard extends StatelessWidget {
                   notice.teacherName,
                   style: const TextStyle(
                     fontSize: 14,
-                    height: 1.2,
+                    height: 22 / 14,
                     color: Color(0xFF0B081A),
                     fontWeight: FontWeight.w600,
                     fontFamily: 'PingFang SC',
@@ -804,13 +832,13 @@ class _CourseNoticeCard extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 2),
                 Text(
                   notice.description,
                   style: const TextStyle(
                     fontSize: 12,
                     color: Color(0xFFB6B5BB),
                     fontFamily: 'PingFang SC',
+                    fontWeight: FontWeight.w400,
                     height: 1,
                   ),
                   maxLines: 1,
@@ -823,23 +851,33 @@ class _CourseNoticeCard extends StatelessWidget {
       ),
     );
   }
+}
 
-  ({Color background, Color foreground}) _courseStyle(String name) {
-    if (name.contains('听')) {
-      return (
-        background: const Color(0xFFDFFCF0),
-        foreground: const Color(0xFF0CAC40),
-      );
-    }
-    if (name.contains('乐理')) {
-      return (
-        background: const Color(0xFFFEE4E8),
-        foreground: const Color(0xFFFF386B),
-      );
-    }
-    return (
-      background: const Color(0xFFF1EEFF),
-      foreground: const Color(0xFF8741FF),
+/// 课程科目标签：#EAE5FF 背景 + #8741FF 文字 PingFang SC 400 12px
+/// 设计稿不再按科目区分颜色，统一紫色
+class _CourseSubjectTag extends StatelessWidget {
+  const _CourseSubjectTag({required this.name});
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEAE5FF),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        name,
+        style: const TextStyle(
+          fontSize: 12,
+          color: Color(0xFF8741FF),
+          fontFamily: 'PingFang SC',
+          fontWeight: FontWeight.w400,
+          height: 15.24 / 12,
+        ),
+      ),
     );
   }
 }
@@ -891,8 +929,9 @@ class _NewsCard extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   fontSize: 14,
-                  color: Color(0xFF788698),
+                  color: Color(0xFF6D6B75),
                   fontFamily: 'PingFang SC',
+                  fontWeight: FontWeight.w400,
                   height: 1.43,
                 ),
               ),
@@ -918,9 +957,10 @@ class _NewsCard extends StatelessWidget {
                       child: Text(
                         tags[i],
                         style: const TextStyle(
-                          fontSize: 9,
-                          color: Color(0xFF788698),
-                          height: 1.2,
+                          fontSize: 9.52,
+                          color: Color(0xFF6D6B75),
+                          fontWeight: FontWeight.w400,
+                          height: 11.43 / 9.52,
                           fontFamily: 'PingFang SC',
                         ),
                       ),
@@ -931,14 +971,18 @@ class _NewsCard extends StatelessWidget {
             ),
             Positioned(
               left: 16,
-              top: 102.5,
-              child: Text(
-                _formatTime(item.createTime),
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: Color(0xFF788698),
-                  fontFamily: 'PingFang SC',
-                  height: 1.36,
+              top: 110.5,
+              child: Opacity(
+                opacity: 0.8,
+                child: Text(
+                  _formatTime(item.createTime),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF788698),
+                    fontFamily: 'PingFang SC',
+                    fontWeight: FontWeight.w400,
+                    height: 1.36,
+                  ),
                 ),
               ),
             ),
@@ -1014,7 +1058,11 @@ class _NoticeAvatar extends StatelessWidget {
   Widget _placeholder() => Container(
     color: const Color(0xFFEAE5FF),
     alignment: Alignment.center,
-    child: const Icon(Icons.person, color: Color(0xFF8741FF), size: 20),
+    child: Icon(
+      Icons.person,
+      color: const Color(0xFF8741FF),
+      size: size * 0.55,
+    ),
   );
 }
 

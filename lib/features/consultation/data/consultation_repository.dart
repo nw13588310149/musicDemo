@@ -4,9 +4,7 @@ import '../../../core/network/api_client.dart';
 import '../../../core/network/api_response.dart';
 import '../../../core/providers/app_providers.dart';
 
-final consultationRepositoryProvider = Provider<ConsultationRepository>((
-  ref,
-) {
+final consultationRepositoryProvider = Provider<ConsultationRepository>((ref) {
   final client = ref.watch(apiClientProvider);
   return ConsultationRepository(client: client);
 });
@@ -48,7 +46,7 @@ class ConsultationRepository {
 
   /// 我的班级群（用于分享课件抽屉）。
   Future<ApiResponse> getClassList() {
-    return client.post('/app/school/chat/classList');
+    return client.post('/app/school/v2/chat/classList');
   }
 
   /// 发送消息（分享）。1.0 中 type=3、param1='news'、content 为 JSON。
@@ -66,7 +64,7 @@ class ConsultationRepository {
     int type = 3,
   }) {
     return client.post(
-      '/app/school/chat/sendMsg',
+      '/app/school/v2/chat/sendMsg',
       data: <String, dynamic>{
         'classId': classId,
         'content': content,

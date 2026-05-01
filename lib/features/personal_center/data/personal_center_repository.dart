@@ -59,7 +59,7 @@ class PersonalCenterRepository {
     required String filename,
   }) {
     return _client.postFormData(
-      '/app/user/fileUpload',
+      '/app/common/v2/fileUpload',
       data: FormData.fromMap(<String, dynamic>{
         'file': MultipartFile.fromBytes(bytes, filename: filename),
       }),

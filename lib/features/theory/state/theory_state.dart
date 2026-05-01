@@ -2,10 +2,15 @@ import 'package:flutter/foundation.dart';
 
 @immutable
 class TheoryPageArgs {
-  const TheoryPageArgs({required this.id, this.type});
+  const TheoryPageArgs({
+    required this.id,
+    this.type,
+    this.answerEndMode = false,
+  });
 
   final int id;
   final String? type;
+  final bool answerEndMode;
 
   factory TheoryPageArgs.fromRaw(dynamic raw) {
     if (raw is TheoryPageArgs) {
@@ -15,18 +20,36 @@ class TheoryPageArgs {
       final id = int.tryParse(raw['id']?.toString() ?? '') ?? 0;
       final typeRaw = raw['type']?.toString();
       final type = (typeRaw == null || typeRaw.isEmpty) ? null : typeRaw;
-      return TheoryPageArgs(id: id, type: type);
+      return TheoryPageArgs(
+        id: id,
+        type: type,
+        answerEndMode:
+            _toBool(raw['answerEndMode']) ||
+            raw['mode']?.toString() == 'answerEnd' ||
+            raw['source']?.toString() == 'answerEnd',
+      );
     }
     return const TheoryPageArgs(id: 0);
   }
 
-  @override
-  bool operator ==(Object other) {
-    return other is TheoryPageArgs && other.id == id && other.type == type;
+  static bool _toBool(dynamic value) {
+    if (value is bool) {
+      return value;
+    }
+    final text = value?.toString().trim().toLowerCase() ?? '';
+    return text == 'true' || text == '1' || text == 'yes';
   }
 
   @override
-  int get hashCode => Object.hash(id, type);
+  bool operator ==(Object other) {
+    return other is TheoryPageArgs &&
+        other.id == id &&
+        other.type == type &&
+        other.answerEndMode == answerEndMode;
+  }
+
+  @override
+  int get hashCode => Object.hash(id, type, answerEndMode);
 }
 
 @immutable
@@ -59,18 +82,50 @@ class TheoryDetail {
 }
 
 @immutable
+class TheoryShareClass {
+  const TheoryShareClass({
+    required this.id,
+    required this.name,
+    required this.checked,
+  });
+
+  final String id;
+  final String name;
+  final bool checked;
+
+  TheoryShareClass copyWith({bool? checked}) =>
+      TheoryShareClass(id: id, name: name, checked: checked ?? this.checked);
+
+  factory TheoryShareClass.fromJson(Map raw) {
+    return TheoryShareClass(
+      id: raw['id']?.toString() ?? '',
+      name: raw['name']?.toString() ?? '',
+      checked: false,
+    );
+  }
+}
+
+@immutable
 class TheoryState {
   const TheoryState({
     required this.args,
     required this.loading,
     required this.detail,
     required this.errorMessage,
+    required this.shareDialogVisible,
+    required this.classLoading,
+    required this.sending,
+    required this.classList,
   });
 
   final TheoryPageArgs args;
   final bool loading;
   final TheoryDetail? detail;
   final String errorMessage;
+  final bool shareDialogVisible;
+  final bool classLoading;
+  final bool sending;
+  final List<TheoryShareClass> classList;
 
   bool get hasDetail => detail != null;
 
@@ -81,6 +136,10 @@ class TheoryState {
     bool clearDetail = false,
     String? errorMessage,
     bool clearErrorMessage = false,
+    bool? shareDialogVisible,
+    bool? classLoading,
+    bool? sending,
+    List<TheoryShareClass>? classList,
   }) {
     return TheoryState(
       args: args ?? this.args,
@@ -89,6 +148,10 @@ class TheoryState {
       errorMessage: clearErrorMessage
           ? ''
           : (errorMessage ?? this.errorMessage),
+      shareDialogVisible: shareDialogVisible ?? this.shareDialogVisible,
+      classLoading: classLoading ?? this.classLoading,
+      sending: sending ?? this.sending,
+      classList: classList ?? this.classList,
     );
   }
 
@@ -97,5 +160,9 @@ class TheoryState {
     loading: true,
     detail: null,
     errorMessage: '',
+    shareDialogVisible: false,
+    classLoading: false,
+    sending: false,
+    classList: const <TheoryShareClass>[],
   );
 }

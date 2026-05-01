@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_response.dart';
+import '../../../core/network/upload_result.dart';
 import '../data/my_notes_repository.dart';
 import 'my_notes_state.dart';
 
@@ -27,15 +28,12 @@ class MyNotesController extends StateNotifier<MyNotesState> {
     try {
       state = state.copyWith(loading: true, clearError: true);
 
-      final responses = await Future.wait<dynamic>(<Future<dynamic>>[
-        _repository.getCategories(),
-        _repository.getNoteCount(),
-      ]);
+      // `/app/user/noteCategoryList` 在 v2 数据里已经直接给每个分类带上了
+      // `count` 字段（左侧导航的「（数字）」就是用它），不再需要额外请求一次
+      // `/app/user/noteCount`，那是旧接口、且返回值在这里也不会被使用。
+      final categoriesResponse = await _repository.getCategories();
+      final categories = _parseCategories(categoriesResponse.data);
 
-      final categories = _parseCategories(
-        responses[0].data,
-        totalCount: _toInt(responses[1].data),
-      );
       final selectedCategoryId = _resolveInitialCategoryId(
         categories,
         state.selectedCategoryId,
@@ -147,7 +145,44 @@ class MyNotesController extends StateNotifier<MyNotesState> {
     if (!response.isSuccess) {
       return _fallbackMessage(response.msg, '删除笔记失败');
     }
-    await selectCategory(state.selectedCategoryId);
+    // `selectCategory(currentId)` short-circuits when the requested category
+    // matches the active one, so use `refresh()` instead to force a re-fetch
+    // (also keeps the sidebar's category counts up to date).
+    await refresh();
+    return null;
+  }
+
+  /// Renames an existing note in-place via `/app/user/noteUpdate`.
+  /// On success the current category's note list is refreshed so the new
+  /// title appears in the grid immediately.
+  Future<String?> renameNote(NoteEntry note, String newTitle) async {
+    final trimmed = newTitle.trim();
+    if (trimmed.isEmpty) {
+      return '请输入笔记名称';
+    }
+    if (trimmed == note.title) {
+      return null;
+    }
+    if (note.id <= 0) {
+      return '笔记 id 缺失，无法重命名';
+    }
+
+    state = state.copyWith(busy: true, clearError: true);
+    final response = await _repository.updateNote(
+      id: note.id,
+      categoryId: note.categoryId > 0 ? note.categoryId : _writeCategoryId,
+      paperType: note.paperType.value,
+      title: trimmed,
+      imageUrl: note.imageUrl,
+    );
+    state = state.copyWith(busy: false);
+    if (!response.isSuccess) {
+      return _fallbackMessage(response.msg, '重命名失败');
+    }
+    // Same as deleteNote: `selectCategory(currentId)` would early-return,
+    // so go through `refresh()` to actually re-pull the notes list and
+    // make the new title appear in the grid.
+    await refresh();
     return null;
   }
 
@@ -158,7 +193,7 @@ class MyNotesController extends StateNotifier<MyNotesState> {
     state = state.copyWith(
       view: MyNotesView.template,
       draftTitle: '笔记名称',
-      paperType: NotePaperType.blank,
+      paperType: NotePaperType.staff,
       strokes: const <NoteStroke>[],
       clearEditingNote: true,
       clearEditorBackgroundImageUrl: true,
@@ -260,32 +295,42 @@ class MyNotesController extends StateNotifier<MyNotesState> {
       return _fallbackMessage(uploadResponse.msg, '上传笔记失败');
     }
 
-    final imageUrl = uploadResponse.data?.toString() ?? '';
-    if (imageUrl.isEmpty) {
+    // 上传成功后保存的是相对 `path`（例如 `app/upload/.../xxx.png`），后端
+    // 持久化 path，读取时再拼装为可访问地址。
+    final imagePath = parseUploadResult(uploadResponse.data).savable;
+    if (imagePath.isEmpty) {
       state = state.copyWith(busy: false);
       return '上传结果异常，请稍后重试';
     }
 
-    final saveResponse = await _repository.saveNote(
-      categoryId: categoryId,
-      paperType: state.paperType.value,
-      title: state.draftTitle.trim().isEmpty
-          ? '笔记名称'
-          : state.draftTitle.trim(),
-      imageUrl: imageUrl,
-    );
+    final title = state.draftTitle.trim().isEmpty
+        ? '笔记名称'
+        : state.draftTitle.trim();
+    final editingId = state.editingNote?.id ?? 0;
+    final saveResponse = editingId > 0
+        ? await _repository.updateNote(
+            id: editingId,
+            categoryId: categoryId,
+            paperType: state.paperType.value,
+            title: title,
+            imageUrl: imagePath,
+          )
+        : await _repository.saveNote(
+            categoryId: categoryId,
+            paperType: state.paperType.value,
+            title: title,
+            imageUrl: imagePath,
+          );
     if (!saveResponse.isSuccess) {
       state = state.copyWith(busy: false);
       return _fallbackMessage(saveResponse.msg, '保存笔记失败');
     }
 
-    final editingId = state.editingNote?.id ?? 0;
-    if (editingId > 0) {
-      unawaited(_repository.deleteNote(editingId));
-    }
-
     state = state.copyWith(busy: false);
-    await selectCategory(state.selectedCategoryId);
+    // 走完整 refresh 而不是 selectCategory：后者只会重拉当前分类的笔记
+    // 列表，不会刷新左侧分类的 count；新建/更新笔记后必须把 sidebar 的
+    //「（数字）」一同同步，否则会一直停留在旧值。
+    await refresh();
     return null;
   }
 
@@ -297,20 +342,31 @@ class MyNotesController extends StateNotifier<MyNotesState> {
     return fallback?.id ?? 0;
   }
 
-  List<NoteCategoryItem> _parseCategories(
-    dynamic data, {
-    required int totalCount,
-  }) {
-    final result = <NoteCategoryItem>[
-      NoteCategoryItem(id: 0, name: '笔记', count: totalCount),
-    ];
+  /// Parse the categories list returned by `/app/user/noteCategoryList`.
+  ///
+  /// 接口实际返回示例：
+  /// ```json
+  /// {
+  ///   "id": "4259", "name": "D",
+  ///   "createTime": "2026-05-01 00:14:37",
+  ///   "userId": "...", "count": "0"
+  /// }
+  /// ```
+  /// `count` 是后端为该分类下笔记数预先聚合好的字符串，左侧导航的
+  /// 「（数字）」直接读取它，无需前端再算。
+  List<NoteCategoryItem> _parseCategories(dynamic data) {
+    final result = <NoteCategoryItem>[];
     if (data is! List) {
       return result;
     }
-    for (final item in data) {
-      if (item is! Map<String, dynamic>) {
+    for (final raw in data) {
+      if (raw is! Map) {
         continue;
       }
+      // 兼容 `Map<String, dynamic>` / `Map<dynamic, dynamic>`。
+      final item = raw.map<String, dynamic>(
+        (key, value) => MapEntry(key.toString(), value),
+      );
       final id = _toInt(item['id']);
       final name = item['name']?.toString().trim() ?? '';
       if (id <= 0 || name.isEmpty) {

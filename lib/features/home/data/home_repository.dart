@@ -19,7 +19,7 @@ class HomeRepository {
   }
 
   Future<ApiResponse> getClassList() {
-    return client.post('/app/school/chat/classList');
+    return client.post('/app/school/v2/chat/classList');
   }
 
   Future<ApiResponse> getCourseList({

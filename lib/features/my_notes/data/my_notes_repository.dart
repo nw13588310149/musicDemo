@@ -18,11 +18,9 @@ class MyNotesRepository {
   final ApiClient client;
 
   Future<ApiResponse> getCategories() {
+    // 返回结构：data: List<{ id, name, count, createTime, userId }>。
+    // `count` 字段已经聚合了该分类下的笔记数，前端直接展示即可。
     return client.post('/app/user/noteCategoryList');
-  }
-
-  Future<ApiResponse> getNoteCount() {
-    return client.post('/app/user/noteCount');
   }
 
   Future<ApiResponse> getNotes({
@@ -61,12 +59,39 @@ class MyNotesRepository {
     );
   }
 
+  Future<ApiResponse> updateNote({
+    required int id,
+    required int categoryId,
+    required int paperType,
+    required String title,
+    required String imageUrl,
+    String param2 = 'string',
+    String param3 = 'string',
+    String param4 = 'string',
+    String param5 = 'string',
+  }) {
+    return client.post(
+      '/app/user/noteUpdate',
+      data: <String, dynamic>{
+        'categoryId': categoryId,
+        'id': id,
+        'paperType': paperType,
+        'param1': imageUrl,
+        'param2': param2,
+        'param3': param3,
+        'param4': param4,
+        'param5': param5,
+        'title': title,
+      },
+    );
+  }
+
   Future<ApiResponse> uploadNoteImage({
     required Uint8List bytes,
     required String filename,
   }) {
     return client.postFormData(
-      '/app/user/fileUpload',
+      '/app/common/v2/fileUpload',
       data: FormData.fromMap(<String, dynamic>{
         'file': MultipartFile.fromBytes(bytes, filename: filename),
       }),

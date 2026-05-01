@@ -21,8 +21,10 @@ class ShellRepository {
     return client.post('/app/user/myInfo');
   }
 
+  /// v2: 同一用户可能绑定多所学校，返回的是 `List<Map>`，调用方按首项取用
+  /// 即可（旧版 `/app/user/mySchool` 返回单 Map，已停用）。
   Future<ApiResponse> getSchoolInfo() {
-    return client.post('/app/user/mySchool');
+    return client.post('/app/school/v2/user/schoolList');
   }
 
   Future<ApiResponse> getUnreadCount() {

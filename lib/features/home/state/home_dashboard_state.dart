@@ -79,9 +79,7 @@ class HomeCourseNotice {
   // 接口 `color` 字段，如 "#fed7aa"，用于卡片左侧彩色条
   final String? cardColorHex;
 
-  String get statusText => status == HomeCourseStatus.ended
-      ? '已结束'
-      : '即将开始';
+  String get statusText => status == HomeCourseStatus.ended ? '已结束' : '即将开始';
 }
 
 class HomeDashboardState {
@@ -131,46 +129,53 @@ class HomeDashboardState {
 /// 首页九宫格按钮列表，从左到右从上到下对应 home1.png ~ home9.png
 List<HomeQuickAction> buildQuickActions(bool _) {
   return const <HomeQuickAction>[
-    HomeQuickAction(name: '听写', icon: AppAssets.homeBtn1, route: RoutePaths.dictation, firstMenu: 8),
-    HomeQuickAction(name: '视唱', icon: AppAssets.homeBtn2, route: RoutePaths.sightSinging, firstMenu: 1),
-    HomeQuickAction(name: '乐理', icon: AppAssets.homeBtn3, route: RoutePaths.musicTheory, firstMenu: 5),
-    HomeQuickAction(name: '模考', icon: AppAssets.homeBtn4, route: RoutePaths.mock),
-    HomeQuickAction(name: '刷题', icon: AppAssets.homeBtn5, route: RoutePaths.camp),
-    HomeQuickAction(name: '试题', icon: AppAssets.homeBtn6, route: RoutePaths.answerQuestions),
-    HomeQuickAction(name: '资讯', icon: AppAssets.homeBtn7, route: RoutePaths.consultation),
-    HomeQuickAction(name: '商城', icon: AppAssets.homeBtn8, route: RoutePaths.aiSong),
-    HomeQuickAction(name: '校圈', icon: AppAssets.homeBtn9, route: RoutePaths.circle),
-  ];
-}
-
-List<HomeCourseNotice> buildDefaultCourseNotices() {
-  return const <HomeCourseNotice>[
-    HomeCourseNotice(
-      startTime: '07:00',
-      endTime: '07:45',
-      subjectName: '\u89c6\u5531\u8bfe',
-      teacherName: '\u6c5f\u6708\u6708',
-      teacherAvatar: '',
-      description: '45\u5206\u949f\u00b7\u97f3\u4e50\u4f53\u9a8c\u8bfe',
-      status: HomeCourseStatus.ended,
+    HomeQuickAction(
+      name: '听写',
+      icon: AppAssets.homeBtn1,
+      route: RoutePaths.dictation,
+      firstMenu: 8,
     ),
-    HomeCourseNotice(
-      startTime: '09:00',
-      endTime: '09:45',
-      subjectName: '\u542c\u97f3\u8bfe',
-      teacherName: '\u5f90\u660e\u654f',
-      teacherAvatar: '',
-      description: '45\u5206\u949f\u00b7\u97f3\u4e50\u4f53\u9a8c\u8bfe',
-      status: HomeCourseStatus.upcoming,
+    HomeQuickAction(
+      name: '视唱',
+      icon: AppAssets.homeBtn2,
+      route: RoutePaths.sightSinging,
+      firstMenu: 1,
     ),
-    HomeCourseNotice(
-      startTime: '19:00',
-      endTime: '20:00',
-      subjectName: '\u4e50\u7406\u8bfe',
-      teacherName: '\u674e\u8fbe\u626c',
-      teacherAvatar: '',
-      description: '60\u5206\u949f\u00b7\u97f3\u4e50\u4f53\u9a8c\u8bfe',
-      status: HomeCourseStatus.ended,
+    HomeQuickAction(
+      name: '乐理',
+      icon: AppAssets.homeBtn3,
+      route: RoutePaths.musicTheory,
+      firstMenu: 5,
+    ),
+    HomeQuickAction(
+      name: '模考',
+      icon: AppAssets.homeBtn4,
+      route: RoutePaths.mock,
+    ),
+    HomeQuickAction(
+      name: '刷题',
+      icon: AppAssets.homeBtn5,
+      route: RoutePaths.camp,
+    ),
+    HomeQuickAction(
+      name: '试题',
+      icon: AppAssets.homeBtn6,
+      route: RoutePaths.answerQuestions,
+    ),
+    HomeQuickAction(
+      name: '资讯',
+      icon: AppAssets.homeBtn7,
+      route: RoutePaths.consultation,
+    ),
+    HomeQuickAction(
+      name: '商城',
+      icon: AppAssets.homeBtn8,
+      route: RoutePaths.aiSong,
+    ),
+    HomeQuickAction(
+      name: '校圈',
+      icon: AppAssets.homeBtn9,
+      route: RoutePaths.circle,
     ),
   ];
 }

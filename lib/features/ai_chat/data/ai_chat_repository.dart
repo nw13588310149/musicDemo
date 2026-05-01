@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_client.dart';
@@ -60,7 +63,9 @@ class AiChatRepository {
     required bool isDeep,
     required String model,
     required String systemPrompt,
+    List<Map<String, dynamic>> attachments = const [],
   }) {
+    final firstAttachment = attachments.isEmpty ? null : attachments.first;
     return client.post(
       '/app/user/chat-gpt/send',
       data: <String, dynamic>{
@@ -70,7 +75,26 @@ class AiChatRepository {
         'model': model,
         'systemPrompt': systemPrompt,
         'system': systemPrompt,
+        if (attachments.isNotEmpty) ...<String, dynamic>{
+          'attachments': attachments,
+          'fileList': attachments,
+          'fileUrl': firstAttachment?['url'] ?? firstAttachment?['fileUrl'],
+          'fileName': firstAttachment?['name'] ?? firstAttachment?['fileName'],
+        },
       },
+      timeout: const Duration(seconds: 120),
+    );
+  }
+
+  Future<ApiResponse> uploadAttachment({
+    required Uint8List bytes,
+    required String filename,
+  }) {
+    return client.postFormData(
+      '/app/common/v2/fileUpload',
+      data: FormData.fromMap(<String, dynamic>{
+        'file': MultipartFile.fromBytes(bytes, filename: filename),
+      }),
       timeout: const Duration(seconds: 120),
     );
   }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/route_paths.dart';
+import '../../../core/widgets/app_toast.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../state/quiz_practice_state.dart';
 import '../state/quiz_session_controller.dart';
@@ -48,9 +49,7 @@ class _QuizSessionPageState extends ConsumerState<QuizSessionPage> {
       // 错误吐司
       final msg = next.errorMessage;
       if (msg.isNotEmpty && msg != previous?.errorMessage) {
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text(msg)));
+        AppToast.show(context, msg);
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) controller.clearError();
         });
@@ -146,9 +145,7 @@ class _SessionHeader extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: ui(20)),
       decoration: const BoxDecoration(
         color: Colors.white,
-        border: Border(
-          bottom: BorderSide(color: Color(0xFFF3F2F3), width: 1),
-        ),
+        border: Border(bottom: BorderSide(color: Color(0xFFF3F2F3), width: 1)),
       ),
       child: Row(
         children: [
@@ -449,10 +446,7 @@ class _OptionsGrid extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (trailing != null) ...[
-                  SizedBox(width: ui(8)),
-                  trailing,
-                ],
+                if (trailing != null) ...[SizedBox(width: ui(8)), trailing],
               ],
             ),
           ),
@@ -656,8 +650,7 @@ class _CompletionDialog extends ConsumerWidget {
     final notDone = summary?.notDoneCount ?? state.notDoneCount;
     final done = summary?.doneCount ?? state.answeredCount;
     final wrong = summary?.errorCount ?? state.errorCount;
-    final accuracyPercent =
-        summary?.accuracyPercent ?? state.accuracyPercent;
+    final accuracyPercent = summary?.accuracyPercent ?? state.accuracyPercent;
 
     final isExam = providerArgs.practiceType == QuizPracticeType.exam;
     final recommendedLabel = isExam ? '随机练习' : '考前密卷';
@@ -693,9 +686,7 @@ class _CompletionDialog extends ConsumerWidget {
                 final next = await controller.switchToRecommended();
                 if (next == null) {
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('暂无可切换的练习')),
-                    );
+                    AppToast.show(context, '暂无可切换的练习');
                   }
                   return;
                 }
@@ -715,9 +706,9 @@ class _CompletionDialog extends ConsumerWidget {
                   child: _GhostButton(
                     label: '退出',
                     onTap: () {
-                      Navigator.of(context).pop();
-                      Navigator.of(context)
-                          .popUntil((r) => r.settings.name == RoutePaths.camp);
+                      final navigator = Navigator.of(context);
+                      navigator.pop();
+                      navigator.pop(true);
                     },
                   ),
                 ),
@@ -860,10 +851,7 @@ class _RecommendedSwitchCard extends StatelessWidget {
               ),
             ),
             Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: ui(6),
-                vertical: ui(4),
-              ),
+              padding: EdgeInsets.symmetric(horizontal: ui(6), vertical: ui(4)),
               decoration: BoxDecoration(
                 color: const Color(0xFFA773FF),
                 borderRadius: BorderRadius.circular(ui(4)),

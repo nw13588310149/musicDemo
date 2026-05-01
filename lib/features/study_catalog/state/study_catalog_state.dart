@@ -330,7 +330,12 @@ Map<String, dynamic> _buildAnswerArgs(
   StudyCatalogState state,
   StudyCatalogLesson lesson,
 ) {
-  return <String, dynamic>{'id': lesson.id};
+  final usesAnswerEnd2 =
+      state.selectedMenuId == '63' || state.selectedMenuId == '64';
+  return <String, dynamic>{
+    'id': lesson.id,
+    if (!usesAnswerEnd2) 'answerEndMode': true,
+  };
 }
 
 Map<String, dynamic> _buildVoiceInstrumentArgs(

@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_assets.dart';
+import '../../../core/widgets/action_menu.dart';
+import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../state/recording_system_controller.dart';
@@ -178,19 +180,19 @@ class _RecordingListViewState extends ConsumerState<_RecordingListView> {
 
   Future<void> _handleCategoryAction(
     RecordingCategoryItem item,
-    _RecordingMenuAction action,
+    ItemMenuAction action,
   ) async {
     switch (action) {
-      case _RecordingMenuAction.rename:
+      case ItemMenuAction.rename:
         _showMessage(context, '分类重命名能力待接入');
         break;
-      case _RecordingMenuAction.share:
+      case ItemMenuAction.share:
         _showMessage(context, '分类分享能力待接入');
         break;
-      case _RecordingMenuAction.copy:
+      case ItemMenuAction.copy:
         _showMessage(context, '分类复制能力待接入');
         break;
-      case _RecordingMenuAction.delete:
+      case ItemMenuAction.delete:
         final confirmed = await showConfirmDialog(
           context: context,
           title: '删除分类',
@@ -266,7 +268,7 @@ class _RecordingSidebar extends StatelessWidget {
   final VoidCallback onAddCategory;
   final Future<void> Function(
     RecordingCategoryItem item,
-    _RecordingMenuAction action,
+    ItemMenuAction action,
   )
   onCategoryAction;
 
@@ -313,7 +315,7 @@ class _RecordingCategoryCard extends StatefulWidget {
   final RecordingCategoryItem item;
   final bool selected;
   final VoidCallback onTap;
-  final ValueChanged<_RecordingMenuAction> onAction;
+  final ValueChanged<ItemMenuAction> onAction;
 
   @override
   State<_RecordingCategoryCard> createState() => _RecordingCategoryCardState();
@@ -323,7 +325,7 @@ class _RecordingCategoryCardState extends State<_RecordingCategoryCard> {
   final GlobalKey _menuTriggerKey = GlobalKey();
 
   Future<void> _openActionMenu() async {
-    final action = await _showRecordingActionMenu(
+    final action = await showItemActionMenu(
       context: context,
       triggerKey: _menuTriggerKey,
     );
@@ -337,39 +339,32 @@ class _RecordingCategoryCardState extends State<_RecordingCategoryCard> {
     final ui = DashboardScaleScope.of(context).ui;
     final selected = widget.selected;
     final item = widget.item;
-    return InkWell(
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: widget.onTap,
-      borderRadius: BorderRadius.circular(ui(selected ? 8 : 16)),
       child: Container(
         height: ui(60),
         padding: EdgeInsets.fromLTRB(ui(12), ui(12), ui(8), ui(12)),
         decoration: BoxDecoration(
-          color: selected ? const Color(0xFFF4F4FF) : Colors.white,
+          // Selected: lavender card #EEEAFF with 8 radius (per CSS spec).
+          // Non-selected: white card with 16 radius (matches my_notes).
+          color: selected ? const Color(0xFFEEEAFF) : Colors.white,
           borderRadius: BorderRadius.circular(ui(selected ? 8 : 16)),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Container(
+            // 36×36 white circle with the yellow folder glyph from CSS.
+            SizedBox(
               width: ui(36),
               height: ui(36),
-              decoration: BoxDecoration(
-                color: selected ? Colors.white : const Color(0xFFF5F6FA),
-                borderRadius: BorderRadius.circular(ui(999)),
-              ),
-              child: Center(
-                child: Image.asset(
-                  AppAssets.cloudFolderIcon,
-                  width: ui(18),
-                  height: ui(16),
-                  fit: BoxFit.contain,
-                ),
-              ),
+              child: const _RecordingFolderGlyph(),
             ),
-            SizedBox(width: ui(10)),
+            SizedBox(width: ui(5)),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
                     item.name,
@@ -383,16 +378,14 @@ class _RecordingCategoryCardState extends State<_RecordingCategoryCard> {
                       height: 12 / 13,
                     ),
                   ),
-                  SizedBox(height: ui(4)),
+                  SizedBox(height: ui(3)),
                   Text(
-                    selected ? '已选中' : '点击查看',
+                    '已存储${item.count}个文件',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: ui(10),
-                      color: selected
-                          ? const Color(0xFF0B081A)
-                          : const Color(0xFF7F7F7F),
+                      color: const Color(0xFF0B081A),
                       fontFamily: 'PingFang SC',
                       fontWeight: FontWeight.w400,
                       height: 12 / 10,
@@ -405,16 +398,123 @@ class _RecordingCategoryCardState extends State<_RecordingCategoryCard> {
               key: _menuTriggerKey,
               behavior: HitTestBehavior.opaque,
               onTap: _openActionMenu,
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: ui(2)),
-                child: Image.asset(
-                  AppAssets.cloudActionMore,
-                  width: ui(24),
-                  height: ui(24),
-                  fit: BoxFit.contain,
-                ),
+              child: SizedBox(
+                width: ui(24),
+                height: ui(24),
+                child: const _RecordingDotsGlyph(),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Yellow folder glyph drawn from the Figma CSS spec
+/// (white round bg + yellow folder body, with a tab peeking above).
+class _RecordingFolderGlyph extends StatelessWidget {
+  const _RecordingFolderGlyph();
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return SizedBox(
+      width: ui(36),
+      height: ui(36),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            left: 0,
+            top: 0,
+            width: ui(36),
+            height: ui(36),
+            child: DecoratedBox(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+          // Folder tab (gradient yellow) sticking up behind the body.
+          Positioned(
+            left: ui(9),
+            top: ui(10),
+            width: ui(14),
+            height: ui(13),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFFFFB02C), Color(0xFFFFA000)],
+                ),
+                borderRadius: BorderRadius.circular(ui(1)),
+              ),
+            ),
+          ),
+          // Folder body (#FFCA28) covering most of the icon.
+          Positioned(
+            left: ui(9),
+            top: ui(13),
+            width: ui(18),
+            height: ui(13),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFCA28),
+                borderRadius: BorderRadius.circular(ui(1)),
+              ),
+            ),
+          ),
+          // Subtle white label strip near the top edge of the body.
+          Positioned(
+            left: ui(10),
+            top: ui(14),
+            width: ui(11),
+            height: ui(1.4),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(ui(0.5)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Three vertically-stacked grey dots (the menu trigger glyph).
+class _RecordingDotsGlyph extends StatelessWidget {
+  const _RecordingDotsGlyph();
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final dot = SizedBox(
+      width: ui(3.1),
+      height: ui(3.1),
+      child: const DecoratedBox(
+        decoration: BoxDecoration(
+          color: Color(0xFFB6B5BB),
+          shape: BoxShape.circle,
+        ),
+      ),
+    );
+    return SizedBox(
+      width: ui(24),
+      height: ui(24),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            dot,
+            SizedBox(height: ui(2)),
+            dot,
+            SizedBox(height: ui(2)),
+            dot,
           ],
         ),
       ),
@@ -430,30 +530,42 @@ class _AddCategoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return InkWell(
+    // 设计稿：163×60 的胶囊背景 (#F5F6FA, r=8)，中心向上排版：
+    // 18×18 灰色圆形加号 (在 y=13.84 起) + 4px 间距 + 13/12 标题 (在 y=35.84 起)。
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: onTap,
-      borderRadius: BorderRadius.circular(ui(16)),
       child: Container(
-        height: ui(56),
+        height: ui(60),
         decoration: BoxDecoration(
-          color: const Color(0xFFF8F7FF),
-          borderRadius: BorderRadius.circular(ui(16)),
-          border: Border.all(color: const Color(0xFFEBE6FF), width: ui(1)),
+          borderRadius: BorderRadius.circular(ui(8)),
+          color: const Color(0xFFF5F6FA),
         ),
-        child: Row(
+        alignment: Alignment.center,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.add_rounded,
-              size: ui(18),
-              color: const Color(0xFF8741FF),
+            Container(
+              width: ui(18),
+              height: ui(18),
+              alignment: Alignment.center,
+              decoration: const BoxDecoration(
+                color: Color(0xFFB6B5BB),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.add_rounded,
+                size: ui(12),
+                color: Colors.white,
+              ),
             ),
-            SizedBox(width: ui(6)),
+            SizedBox(height: ui(4)),
             Text(
               '添加分类',
               style: TextStyle(
                 fontSize: ui(13),
-                color: const Color(0xFF8741FF),
+                color: const Color(0xFF0B081A),
                 fontFamily: 'PingFang SC',
                 fontWeight: FontWeight.w500,
                 height: 12 / 13,
@@ -878,49 +990,45 @@ class _RecordingFab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(ui(16)),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0x33AD80FF),
-            blurRadius: ui(20),
-            offset: Offset(0, ui(10)),
-          ),
-        ],
-      ),
-      child: Material(
-        color: const Color(0xFF8B5CFF),
-        borderRadius: BorderRadius.circular(ui(16)),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(ui(16)),
-          child: Container(
-            height: ui(48),
-            padding: EdgeInsets.symmetric(horizontal: ui(18)),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Image.asset(
-                  AppAssets.soundFabIcon,
-                  width: ui(20),
-                  height: ui(20),
-                  fit: BoxFit.contain,
-                  color: Colors.white,
-                ),
-                SizedBox(width: ui(8)),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: ui(14),
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                    height: 1.2,
-                  ),
-                ),
-              ],
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        height: ui(40),
+        padding: EdgeInsets.symmetric(horizontal: ui(13), vertical: ui(8)),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(ui(8)),
+          border: Border.all(color: const Color(0xFFF3F2F3), width: ui(1)),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0x59B5B5B5),
+              blurRadius: ui(20),
+              offset: Offset(0, ui(16)),
             ),
-          ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Image.asset(
+              AppAssets.soundFabIcon,
+              width: ui(16),
+              height: ui(16),
+              fit: BoxFit.contain,
+            ),
+            SizedBox(width: ui(8)),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: ui(16),
+                color: const Color(0xFF0B081A),
+                fontFamily: 'PingFang SC',
+                fontWeight: FontWeight.w500,
+                height: 12 / 16,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -935,31 +1043,21 @@ class _RecordingEmpty extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     return Center(
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Image.asset(
-            AppAssets.soundFilePlaceholder,
-            width: ui(120),
-            height: ui(120),
+            'assets/images/404/ly.png',
+            width: ui(200),
+            height: ui(200),
             fit: BoxFit.contain,
           ),
-          SizedBox(height: ui(12)),
           Text(
-            '还没有录音作品',
+            '暂无录音',
             style: TextStyle(
               fontSize: ui(15),
               color: const Color(0xFF0B081A),
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          SizedBox(height: ui(6)),
-          Text(
-            '点击右下角"新建录音"，开始记录你的声音吧',
-            style: TextStyle(
-              fontSize: ui(12),
-              color: const Color(0xFF98A0B3),
-              fontFamily: 'PingFang SC',
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],
@@ -2497,166 +2595,9 @@ class _ShareRecordingDialog extends ConsumerWidget {
   }
 }
 
-// ===========================================================================
-// 分类右上角 ··· 弹出菜单
-// ===========================================================================
-
-enum _RecordingMenuAction { rename, share, copy, delete }
-
+// 录音文件卡的右上角 ··· 操作（保留，未走通用 ItemMenuAction，因为同时含
+// 「播放」等录音特有操作；如有需要可后续抽离）。
 enum _RecordingItemAction { preview, share, delete }
-
-Future<_RecordingMenuAction?> _showRecordingActionMenu({
-  required BuildContext context,
-  required GlobalKey triggerKey,
-}) async {
-  final overlay = Overlay.of(context, rootOverlay: true);
-  final triggerBox =
-      triggerKey.currentContext?.findRenderObject() as RenderBox?;
-  final overlayBox = overlay.context.findRenderObject() as RenderBox;
-  if (triggerBox == null) {
-    return null;
-  }
-  final triggerSize = triggerBox.size;
-  final triggerCenter = triggerBox.localToGlobal(
-    triggerSize.center(Offset.zero),
-    ancestor: overlayBox,
-  );
-  final ui = DashboardScaleScope.of(context).ui;
-  final menuWidth = ui(180);
-  final menuHeight = ui(206);
-  final overlaySize = overlayBox.size;
-  var dx = triggerCenter.dx - ui(8);
-  var dy = triggerCenter.dy - ui(6);
-  if (dx + menuWidth > overlaySize.width - ui(8)) {
-    dx = overlaySize.width - menuWidth - ui(8);
-  }
-  if (dy + menuHeight > overlaySize.height - ui(8)) {
-    dy = overlaySize.height - menuHeight - ui(8);
-  }
-  return showMenu<_RecordingMenuAction>(
-    context: context,
-    position: RelativeRect.fromLTRB(dx, dy, dx + menuWidth, dy + menuHeight),
-    color: Colors.transparent,
-    elevation: 0,
-    items: [
-      PopupMenuItem<_RecordingMenuAction>(
-        padding: EdgeInsets.zero,
-        enabled: false,
-        child: _RecordingActionMenuPanel(
-          width: menuWidth,
-          onSelect: (action) =>
-              Navigator.of(context, rootNavigator: true).pop(action),
-        ),
-      ),
-    ],
-  );
-}
-
-class _RecordingActionMenuPanel extends StatelessWidget {
-  const _RecordingActionMenuPanel({
-    required this.width,
-    required this.onSelect,
-  });
-
-  final double width;
-  final ValueChanged<_RecordingMenuAction> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      width: width,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(12)),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0x14000000),
-            blurRadius: ui(24),
-            offset: Offset(0, ui(8)),
-          ),
-          BoxShadow(
-            color: const Color(0x09000000),
-            blurRadius: ui(4),
-            offset: Offset(0, ui(2)),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _MenuRow(
-            icon: Icons.drive_file_rename_outline_rounded,
-            label: '重命名',
-            onTap: () => onSelect(_RecordingMenuAction.rename),
-          ),
-          _MenuRow(
-            icon: Icons.share_outlined,
-            label: '分享',
-            onTap: () => onSelect(_RecordingMenuAction.share),
-          ),
-          _MenuRow(
-            icon: Icons.copy_rounded,
-            label: '复制',
-            onTap: () => onSelect(_RecordingMenuAction.copy),
-          ),
-          Divider(
-            height: ui(1),
-            thickness: ui(1),
-            color: const Color(0xFFF5F6FA),
-          ),
-          _MenuRow(
-            icon: Icons.delete_outline_rounded,
-            label: '删除',
-            danger: true,
-            onTap: () => onSelect(_RecordingMenuAction.delete),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MenuRow extends StatelessWidget {
-  const _MenuRow({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.danger = false,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final bool danger;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    final color = danger ? const Color(0xFFFF323C) : const Color(0xFF0B081A);
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(12)),
-        child: Row(
-          children: [
-            Icon(icon, size: ui(18), color: color),
-            SizedBox(width: ui(10)),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: ui(14),
-                color: color,
-                fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 // ===========================================================================
 // 工具方法
@@ -2727,9 +2668,7 @@ String _formatSecondsClock(int milliseconds) {
 }
 
 void _showMessage(BuildContext context, String message) {
-  ScaffoldMessenger.of(context)
-    ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(content: Text(message)));
+  AppToast.show(context, message);
 }
 
 extension _ListFirstOrNull<T> on Iterable<T> {

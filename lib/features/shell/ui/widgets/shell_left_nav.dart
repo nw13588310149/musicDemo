@@ -149,7 +149,8 @@ class _ShellLeftNavState extends State<ShellLeftNav>
                         padding: EdgeInsets.zero,
                         physics: const ClampingScrollPhysics(),
                         itemCount: widget.state.navItems.length,
-                        separatorBuilder: (context, index) => SizedBox(height: ui(4)),
+                        separatorBuilder: (context, index) =>
+                            SizedBox(height: ui(4)),
                         itemBuilder: (context, index) {
                           final item = widget.state.navItems[index];
                           return _NavTile(
@@ -241,9 +242,13 @@ class _NavTile extends StatelessWidget {
     final ui = scale.ui;
 
     final bgColor = active ? const Color(0xFF202020) : Colors.transparent;
+    // 设计稿：未选中文案 opacity 0.70 + #0B081A；选中项白字
     final textColor = active
         ? Colors.white
         : const Color(0xFF0B081A).withValues(alpha: 0.7);
+
+    final collapsed = progress > 0.5;
+    final vPad = collapsed ? ui(6) : ui(12);
 
     return Material(
       color: Colors.transparent,
@@ -252,7 +257,7 @@ class _NavTile extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(ui(12)),
         child: Container(
-          height: ui(48),
+          constraints: BoxConstraints(minHeight: ui(48)),
           decoration: BoxDecoration(
             color: bgColor,
             borderRadius: BorderRadius.circular(ui(12)),
@@ -260,66 +265,72 @@ class _NavTile extends StatelessWidget {
           padding: EdgeInsets.only(
             left: tilePadLeft,
             right: tilePadRight,
+            top: vPad,
+            bottom: vPad,
           ),
-          child: Row(
-            // 折叠时居中，展开时左对齐
-            mainAxisAlignment: progress > 0.5
-                ? MainAxisAlignment.center
-                : MainAxisAlignment.start,
-            children: [
-              // ── icon + badge ─────────────────────────────────────────────
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  _buildIcon(context),
-                  if (item.badge > 0)
-                    Positioned(
-                      // 折叠时 badge 变为小圆点，展开时为胶囊
-                      right: progress > 0.5 ? ui(-2) : ui(-12),
-                      top: ui(1),
-                      child: progress > 0.5
-                          ? _BadgeDot(badgeColor: item.badgeColor)
-                          : _BadgeChip(
-                              badge: item.badge,
-                              badgeColor: item.badgeColor,
-                            ),
-                    ),
-                ],
-              ),
-
-              // ── 文字区域：宽度平滑收缩 + 同步淡出 ───────────────────────
-              ClipRect(
-                child: Align(
-                  widthFactor: labelWidthFactor,
-                  alignment: Alignment.centerLeft,
-                  child: Opacity(
-                    opacity: labelOpacity,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
+          child: collapsed
+              ? Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Stack(
+                      clipBehavior: Clip.none,
                       children: [
-                        SizedBox(width: ui(8)),
-                        ConstrainedBox(
-                          constraints: BoxConstraints(maxWidth: ui(90)),
-                          child: Text(
-                            item.label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: ui(15),
-                              fontFamily: 'PingFang SC',
-                              fontWeight: FontWeight.w500,
-                              color: textColor,
-                              height: 1.0,
+                        _buildIcon(context),
+                        if (item.badge > 0)
+                          Positioned(
+                            right: ui(-2),
+                            top: ui(1),
+                            child: const _BadgeDot(),
+                          ),
+                      ],
+                    ),
+                  ],
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    _buildIcon(context),
+                    Expanded(
+                      child: ClipRect(
+                        child: Align(
+                          widthFactor: labelWidthFactor,
+                          alignment: Alignment.centerLeft,
+                          child: Opacity(
+                            opacity: labelOpacity,
+                            // 设计稿：inline-flex，图标→文案→角标 按内容自然宽度紧凑排列
+                            // 角标紧贴文案（设计稿 4px 间隙），不挤占「智慧校园」
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                SizedBox(width: ui(8)),
+                                Flexible(
+                                  child: Text(
+                                    item.label,
+                                    maxLines: 1,
+                                    softWrap: false,
+                                    overflow: TextOverflow.clip,
+                                    style: TextStyle(
+                                      fontSize: ui(15),
+                                      height: 1,
+                                      fontFamily: 'PingFang SC',
+                                      fontWeight: FontWeight.w500,
+                                      color: textColor,
+                                    ),
+                                  ),
+                                ),
+                                if (item.badge > 0) ...[
+                                  SizedBox(width: ui(4)),
+                                  _NavUnreadCapsule(count: item.badge),
+                                ],
+                              ],
                             ),
                           ),
                         ),
-                      ],
+                      ),
                     ),
-                  ),
+                  ],
                 ),
-              ),
-            ],
-          ),
         ),
       ),
     );
@@ -341,13 +352,12 @@ class _NavTile extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Badge 组件
+// Badge（智慧校园未读等）：设计稿 #F04545 胶囊 + Manrope 800 数字
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// 折叠态：小圆点
+/// 折叠态：角标圆点（#F04545）
 class _BadgeDot extends StatelessWidget {
-  const _BadgeDot({required this.badgeColor});
-  final int badgeColor;
+  const _BadgeDot();
 
   @override
   Widget build(BuildContext context) {
@@ -355,39 +365,43 @@ class _BadgeDot extends StatelessWidget {
     return Container(
       width: ui(8),
       height: ui(8),
-      decoration: BoxDecoration(
-        color: Color(badgeColor),
+      decoration: const BoxDecoration(
+        color: Color(0xFFF04545),
         shape: BoxShape.circle,
       ),
     );
   }
 }
 
-/// 展开态：数字胶囊
-class _BadgeChip extends StatelessWidget {
-  const _BadgeChip({required this.badge, required this.badgeColor});
-  final int badge;
-  final int badgeColor;
+/// 展开态：圆角胶囊，宽度按数字内容自适应（"9"/"10+"/"99+" 各不相同）
+/// 设计稿"10+"≈22×15：文字 17w + 左右各 2.5px padding 自然撑出
+class _NavUnreadCapsule extends StatelessWidget {
+  const _NavUnreadCapsule({required this.count});
+
+  final int count;
+
+  String get _label => count > 99 ? '99+' : (count > 9 ? '$count+' : '$count');
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
-      constraints: BoxConstraints(minWidth: ui(22)),
-      height: ui(12),
-      padding: EdgeInsets.symmetric(horizontal: ui(3)),
+      height: ui(15),
+      padding: EdgeInsets.symmetric(horizontal: ui(2.5)),
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: Color(badgeColor),
+        color: const Color(0xFFF04545),
         borderRadius: BorderRadius.circular(ui(20)),
       ),
       child: Text(
-        badge > 99 ? '99+' : (badge > 9 ? '$badge+' : '$badge'),
+        _label,
+        textAlign: TextAlign.center,
         style: TextStyle(
+          fontFamily: 'Manrope',
+          fontSize: ui(10),
+          fontWeight: FontWeight.w800,
           color: Colors.white,
-          fontSize: ui(9),
           height: 1,
-          fontWeight: FontWeight.w500,
         ),
       ),
     );

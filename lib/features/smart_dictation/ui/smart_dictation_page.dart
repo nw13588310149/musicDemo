@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_assets.dart';
+import '../../../core/widgets/app_toast.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../audio/smart_dictation_audio_engine.dart';
 import '../state/smart_dictation_controller.dart';
@@ -127,18 +128,20 @@ class SmartDictationV2Page extends ConsumerWidget {
     ) {
       final error = next.errorMessage;
       if (error.isNotEmpty && error != prev?.errorMessage) {
-        _showSnack(context, error);
+        _showToast(context, error);
         controller.clearToast();
       }
       final notice = next.noticeMessage;
       if (notice.isNotEmpty && notice != prev?.noticeMessage) {
         // In practice mode, notices are rendered inside timer circle (1.0 behavior).
         if (next.session == null) {
-          _showSnack(context, notice);
+          _showToast(context, notice);
           controller.clearToast();
         }
       }
     });
+
+    final inSession = state.session != null;
 
     return Container(
       decoration: BoxDecoration(
@@ -148,31 +151,38 @@ class SmartDictationV2Page extends ConsumerWidget {
       padding: EdgeInsets.zero,
       child: Row(
         children: [
-          Container(
-            width: ui(180),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.horizontal(left: Radius.circular(ui(16))),
-              border: Border(
-                right: BorderSide(color: const Color(0xFFF3F2F3), width: ui(1)),
+          if (!inSession) ...[
+            Container(
+              width: ui(180),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.horizontal(
+                  left: Radius.circular(ui(16)),
+                ),
+                border: Border(
+                  right: BorderSide(
+                    color: const Color(0xFFF3F2F3),
+                    width: ui(1),
+                  ),
+                ),
+              ),
+              child: Padding(
+                padding: EdgeInsets.all(ui(8)),
+                child: _TrackRail(
+                  ui: ui,
+                  state: state,
+                  onSelect: (track, mode) {
+                    controller.setTrack(track);
+                    controller.setMode(mode);
+                  },
+                ),
               ),
             ),
-            child: Padding(
-              padding: EdgeInsets.all(ui(8)),
-              child: _TrackRail(
-                ui: ui,
-                state: state,
-                onSelect: (track, mode) {
-                  controller.setTrack(track);
-                  controller.setMode(mode);
-                },
-              ),
-            ),
-          ),
-          SizedBox(width: ui(12)),
+            SizedBox(width: ui(12)),
+          ],
           Expanded(
             child: Padding(
-              padding: EdgeInsets.only(right: ui(12)),
+              padding: EdgeInsets.only(right: inSession ? 0 : ui(12)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -206,7 +216,8 @@ class SmartDictationV2Page extends ConsumerWidget {
                             onLeaveRequest: controller.requestLeaveSession,
                             onLeaveCancel: controller.cancelLeaveSession,
                             onLeaveConfirm: controller.confirmLeaveSession,
-                            onRestartFinished: controller.restartFinishedSession,
+                            onRestartFinished:
+                                controller.restartFinishedSession,
                             onNextFinished: controller.nextAfterFinishedSession,
                             timeOptions: _timeOptions,
                             countOptions: _countOptions,
@@ -222,56 +233,12 @@ class SmartDictationV2Page extends ConsumerWidget {
     );
   }
 
-  static void _showSnack(BuildContext context, String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          margin: const EdgeInsets.fromLTRB(0, 0, 0, 20),
-          duration: const Duration(milliseconds: 1700),
-          content: Container(
-            constraints: const BoxConstraints(minHeight: 44),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              gradient: const LinearGradient(
-                begin: Alignment.centerRight,
-                end: Alignment.centerLeft,
-                colors: <Color>[Color(0xFFB68EFF), Color(0xFF8640FF)],
-              ),
-              boxShadow: const <BoxShadow>[
-                BoxShadow(
-                  color: Color(0x40AD80FF),
-                  offset: Offset(0, 8),
-                  blurRadius: 20,
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.info_outline_rounded, size: 18, color: Colors.white),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    message,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w500,
-                      color: Colors.white,
-                      height: 1.3,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
+  static void _showToast(BuildContext context, String message) {
+    AppToast.show(
+      context,
+      message,
+      duration: const Duration(milliseconds: 1700),
+    );
   }
 }
 
@@ -569,6 +536,7 @@ class _Content extends StatelessWidget {
     };
     final isAbsolute = state.activeTrack == SmartDictationTrack.absolute;
     final isInterval = state.activeTrack == SmartDictationTrack.interval;
+    final isChord = state.activeTrack == SmartDictationTrack.chord;
     final contentHorizontalPadding = ui(40);
     final optionSpacing = isAbsolute ? ui(12) : ui(20);
 
@@ -588,225 +556,239 @@ class _Content extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                // page title
-                SizedBox(
-                  width: double.infinity,
-                  child: Text(
-                    '$trackName-智能练习',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: ui(16),
-                      fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF0B081A),
+                  // page title
+                  SizedBox(
+                    width: double.infinity,
+                    child: Text(
+                      '$trackName-智能练习',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: ui(16),
+                        fontFamily: 'PingFang SC',
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF0B081A),
+                      ),
                     ),
                   ),
-                ),
-                SizedBox(height: ui(20)),
-                // option grid
-                if (isAbsolute)
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      const cols = 10;
-                      final chipWidth = ui(52);
-                      final maxGap = ui(20);
-                      final minRowWidth = chipWidth * cols;
-                      final available = constraints.maxWidth;
-                      final gap = available > minRowWidth
-                          ? ((available - minRowWidth) / (cols - 1))
-                                .clamp(0.0, maxGap)
-                          : 0.0;
-                      final rowWidth = minRowWidth + gap * (cols - 1);
+                  SizedBox(height: ui(20)),
+                  // option grid
+                  if (isAbsolute)
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        const cols = 10;
+                        final chipWidth = ui(52);
+                        final maxGap = ui(20);
+                        final minRowWidth = chipWidth * cols;
+                        final available = constraints.maxWidth;
+                        final gap = available > minRowWidth
+                            ? ((available - minRowWidth) / (cols - 1)).clamp(
+                                0.0,
+                                maxGap,
+                              )
+                            : 0.0;
+                        final rowWidth = minRowWidth + gap * (cols - 1);
 
-                      return Align(
-                        alignment: Alignment.centerLeft,
-                        child: SizedBox(
-                          width: rowWidth,
-                          child: Wrap(
-                            spacing: gap,
-                            runSpacing: ui(20),
-                            children: [
-                              for (final opt in config.optionPool)
-                                _SmartOptionChip(
-                                  ui: ui,
-                                  label: opt,
-                                  isNoteChip: true,
-                                  selected:
-                                      config.selectedOptions.contains(opt),
-                                  onTap: () => onToggleOption(opt),
-                                ),
-                            ],
+                        return Align(
+                          alignment: Alignment.centerLeft,
+                          child: SizedBox(
+                            width: rowWidth,
+                            child: Wrap(
+                              spacing: gap,
+                              runSpacing: ui(20),
+                              children: [
+                                for (final opt in config.optionPool)
+                                  _SmartOptionChip(
+                                    ui: ui,
+                                    label: opt,
+                                    isNoteChip: true,
+                                    selected: config.selectedOptions.contains(
+                                      opt,
+                                    ),
+                                    onTap: () => onToggleOption(opt),
+                                  ),
+                              ],
+                            ),
                           ),
-                        ),
-                      );
-                    },
-                  )
-                else
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      const cols = 6;
-                      final chipWidth = ui(98);
-                      final maxGap = optionSpacing;
-                      final minRowWidth = chipWidth * cols;
-                      final available = constraints.maxWidth;
-                      final gap = available > minRowWidth
-                          ? ((available - minRowWidth) / (cols - 1))
-                                .clamp(0.0, maxGap)
-                          : 0.0;
-                      final rowWidth = minRowWidth + gap * (cols - 1);
+                        );
+                      },
+                    )
+                  else
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        const cols = 6;
+                        final chipWidth = ui(98);
+                        final maxGap = optionSpacing;
+                        final minRowWidth = chipWidth * cols;
+                        final available = constraints.maxWidth;
+                        final gap = available > minRowWidth
+                            ? ((available - minRowWidth) / (cols - 1)).clamp(
+                                0.0,
+                                maxGap,
+                              )
+                            : 0.0;
+                        final rowWidth = minRowWidth + gap * (cols - 1);
 
-                      return Align(
-                        alignment: Alignment.centerLeft,
-                        child: SizedBox(
-                          width: rowWidth,
-                          child: Wrap(
-                            spacing: gap,
-                            runSpacing: ui(20),
-                            children: [
-                              for (final opt in config.optionPool)
-                                _SmartOptionChip(
-                                  ui: ui,
-                                  label: opt,
-                                  isNoteChip: false,
-                                  selected:
-                                      config.selectedOptions.contains(opt),
-                                  onTap: () => onToggleOption(opt),
-                                ),
-                            ],
+                        return Align(
+                          alignment: Alignment.centerLeft,
+                          child: SizedBox(
+                            width: rowWidth,
+                            child: Wrap(
+                              spacing: gap,
+                              runSpacing: ui(20),
+                              children: [
+                                for (final opt in config.optionPool)
+                                  _SmartOptionChip(
+                                    ui: ui,
+                                    label: opt,
+                                    isNoteChip: false,
+                                    selected: config.selectedOptions.contains(
+                                      opt,
+                                    ),
+                                    onTap: () => onToggleOption(opt),
+                                  ),
+                              ],
+                            ),
                           ),
-                        ),
-                      );
-                    },
-                  ),
-                SizedBox(height: ui(36)),
-                // 回答时间
-                _SmartSettingRow(
-                  ui: ui,
-                  title: '回答时间',
-                  children: [
-                    for (final s in timeOptions)
-                      _SmartRowChip(
-                        ui: ui,
-                        label: s == 0 ? '无限' : '${s}s',
-                        selected: config.answerSeconds == s,
-                        onTap: () => onSetTime(s),
-                      ),
-                  ],
-                ),
-                // absolute-only: 标准音 + 练习题数
-                if (isAbsolute) ...[
-                  SizedBox(height: ui(20)),
+                        );
+                      },
+                    ),
+                  SizedBox(height: ui(36)),
+                  // 回答时间
                   _SmartSettingRow(
                     ui: ui,
-                    title: '标准音',
-                    toggleValue: config.standardToneEnabled,
-                    onToggle: (_) => onToggleStandard(),
-                  ),
-                  SizedBox(height: ui(20)),
-                  _SmartSettingRow(
-                    ui: ui,
-                    title: '练习题数',
+                    title: '回答时间',
                     children: [
-                      for (final c in countOptions)
+                      for (final s in timeOptions)
                         _SmartRowChip(
                           ui: ui,
-                          label: '$c题',
-                          selected: config.questionCount == c,
-                          onTap: () => onSetCount(c),
+                          label: s == 0 ? '无限' : '${s}s',
+                          selected: config.answerSeconds == s,
+                          onTap: () => onSetTime(s),
                         ),
                     ],
                   ),
-                ],
-                // interval / chord: range + mode + count + toggles
-                if (!isAbsolute) ...[
-                  SizedBox(height: ui(20)),
-                  _SmartSettingRow(
-                    ui: ui,
-                    title: '最低音',
-                    children: [
-                      for (final note in _kMinRangeNotes)
-                        _SmartRowChip(
-                          ui: ui,
-                          label: note,
-                          isNote: true,
-                          selected: config.minNote == note,
-                          onTap: () =>
-                              onSetRange(minNote: note, maxNote: config.maxNote),
-                        ),
-                    ],
-                  ),
-                  SizedBox(height: ui(20)),
-                  _SmartSettingRow(
-                    ui: ui,
-                    title: '最高音',
-                    children: [
-                      for (final note in _kMaxRangeNotes)
-                        _SmartRowChip(
-                          ui: ui,
-                          label: note,
-                          isNote: true,
-                          selected: config.maxNote == note,
-                          onTap: () =>
-                              onSetRange(minNote: config.minNote, maxNote: note),
-                        ),
-                    ],
-                  ),
-                  if (isInterval) ...[
+                  // absolute-only: 标准音 + 练习题数
+                  if (isAbsolute) ...[
                     SizedBox(height: ui(20)),
                     _SmartSettingRow(
                       ui: ui,
-                      title: '音程方式',
+                      title: '标准音',
+                      toggleValue: config.standardToneEnabled,
+                      onToggle: (_) => onToggleStandard(),
+                    ),
+                    SizedBox(height: ui(20)),
+                    _SmartSettingRow(
+                      ui: ui,
+                      title: '练习题数',
                       children: [
-                        _SmartRowChip(
-                          ui: ui,
-                          label: '旋律音程',
-                          selected: config.intervalPlayMode ==
-                              SmartIntervalPlayMode.melodic,
-                          onTap: () =>
-                              onSetIntervalMode(SmartIntervalPlayMode.melodic),
-                        ),
-                        _SmartRowChip(
-                          ui: ui,
-                          label: '和声音程',
-                          selected: config.intervalPlayMode ==
-                              SmartIntervalPlayMode.harmonic,
-                          onTap: () =>
-                              onSetIntervalMode(SmartIntervalPlayMode.harmonic),
-                        ),
+                        for (final c in countOptions)
+                          _SmartRowChip(
+                            ui: ui,
+                            label: '$c题',
+                            selected: config.questionCount == c,
+                            onTap: () => onSetCount(c),
+                          ),
                       ],
                     ),
                   ],
-                  SizedBox(height: ui(20)),
-                  _SmartSettingRow(
-                    ui: ui,
-                    title: '练习题数',
-                    children: [
-                      for (final c in countOptions)
-                        _SmartRowChip(
-                          ui: ui,
-                          label: '$c题',
-                          selected: config.questionCount == c,
-                          onTap: () => onSetCount(c),
-                        ),
-                    ],
-                  ),
-                  SizedBox(height: ui(20)),
-                  _SmartSettingRow(
-                    ui: ui,
-                    title: '标准音',
-                    toggleValue: config.standardToneEnabled,
-                    onToggle: (_) => onToggleStandard(),
-                  ),
-                  if (isInterval) ...[
+                  // interval / chord: range + mode + count + toggles
+                  if (!isAbsolute) ...[
                     SizedBox(height: ui(20)),
                     _SmartSettingRow(
                       ui: ui,
-                      title: '只练基本音',
-                      toggleValue: config.basicOnly,
-                      onToggle: (_) => onToggleBasic(),
+                      title: '最低音',
+                      children: [
+                        for (final note in _kMinRangeNotes)
+                          _SmartRowChip(
+                            ui: ui,
+                            label: note,
+                            isNote: true,
+                            selected: config.minNote == note,
+                            onTap: () => onSetRange(
+                              minNote: note,
+                              maxNote: config.maxNote,
+                            ),
+                          ),
+                      ],
                     ),
+                    SizedBox(height: ui(20)),
+                    _SmartSettingRow(
+                      ui: ui,
+                      title: '最高音',
+                      children: [
+                        for (final note in _kMaxRangeNotes)
+                          _SmartRowChip(
+                            ui: ui,
+                            label: note,
+                            isNote: true,
+                            selected: config.maxNote == note,
+                            onTap: () => onSetRange(
+                              minNote: config.minNote,
+                              maxNote: note,
+                            ),
+                          ),
+                      ],
+                    ),
+                    if (isInterval) ...[
+                      SizedBox(height: ui(20)),
+                      _SmartSettingRow(
+                        ui: ui,
+                        title: '音程方式',
+                        children: [
+                          _SmartRowChip(
+                            ui: ui,
+                            label: '旋律音程',
+                            selected:
+                                config.intervalPlayMode ==
+                                SmartIntervalPlayMode.melodic,
+                            onTap: () => onSetIntervalMode(
+                              SmartIntervalPlayMode.melodic,
+                            ),
+                          ),
+                          _SmartRowChip(
+                            ui: ui,
+                            label: '和声音程',
+                            selected:
+                                config.intervalPlayMode ==
+                                SmartIntervalPlayMode.harmonic,
+                            onTap: () => onSetIntervalMode(
+                              SmartIntervalPlayMode.harmonic,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    SizedBox(height: ui(20)),
+                    _SmartSettingRow(
+                      ui: ui,
+                      title: '练习题数',
+                      children: [
+                        for (final c in countOptions)
+                          _SmartRowChip(
+                            ui: ui,
+                            label: '$c题',
+                            selected: config.questionCount == c,
+                            onTap: () => onSetCount(c),
+                          ),
+                      ],
+                    ),
+                    SizedBox(height: ui(20)),
+                    _SmartSettingRow(
+                      ui: ui,
+                      title: '标准音',
+                      toggleValue: config.standardToneEnabled,
+                      onToggle: (_) => onToggleStandard(),
+                    ),
+                    if (isInterval || isChord) ...[
+                      SizedBox(height: ui(20)),
+                      _SmartSettingRow(
+                        ui: ui,
+                        title: '只练基本音',
+                        toggleValue: config.basicOnly,
+                        onToggle: (_) => onToggleBasic(),
+                      ),
+                    ],
                   ],
-                ],
                 ],
               ),
             ),
@@ -923,7 +905,9 @@ class _PracticeViewState extends State<_PracticeView> {
       final running = widget.state.session?.running == true;
       setState(() {
         _bars = List.generate(52, (i) {
-          final base = running ? 0.05 + _rng.nextDouble() * 0.9 : 0.04 + _rng.nextDouble() * 0.12;
+          final base = running
+              ? 0.05 + _rng.nextDouble() * 0.9
+              : 0.04 + _rng.nextDouble() * 0.12;
           return (_bars[i] * 0.6 + base * 0.4).clamp(0.04, 1.0);
         });
       });
@@ -1047,115 +1031,118 @@ class _PracticeViewState extends State<_PracticeView> {
         borderRadius: BorderRadius.circular(ui(16)),
       ),
       child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // ── header (back + title) ────────────────────────────────
-              Padding(
-                padding: EdgeInsets.fromLTRB(ui(20), ui(20), ui(20), 0),
-                child: SizedBox(
-                  height: ui(32),
-                  child: Stack(
-                    children: [
-                      // back button
-                      GestureDetector(
-                        onTap: widget.onLeaveRequest,
-                        child: Container(
-                          width: ui(32),
-                          height: ui(32),
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            border: Border.all(
-                              color: const Color(0xFFF3F2F3),
-                              width: 1,
-                            ),
-                            borderRadius: BorderRadius.circular(ui(8)),
-                          ),
-                          child: Image.asset(
-                            AppAssets.smartDictationFigmaArrowLeft,
-                            width: ui(16),
-                            height: ui(16),
-                            fit: BoxFit.contain,
-                          ),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // ── header (back + title) ────────────────────────────────
+          Padding(
+            padding: EdgeInsets.fromLTRB(ui(20), ui(20), ui(20), 0),
+            child: SizedBox(
+              height: ui(32),
+              child: Stack(
+                children: [
+                  // back button
+                  GestureDetector(
+                    onTap: widget.onLeaveRequest,
+                    child: Container(
+                      width: ui(32),
+                      height: ui(32),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        border: Border.all(
+                          color: const Color(0xFFF3F2F3),
+                          width: 1,
                         ),
+                        borderRadius: BorderRadius.circular(ui(8)),
                       ),
-                      // title
-                      Center(
-                        child: Text(
-                          session.title,
-                          style: TextStyle(
-                            fontSize: ui(16),
-                            fontFamily: 'PingFang SC',
-                            fontWeight: FontWeight.w600,
-                            color: const Color(0xFF0B081A),
-                          ),
-                        ),
+                      child: Image.asset(
+                        AppAssets.smartDictationBack,
+                        width: ui(16),
+                        height: ui(16),
+                        fit: BoxFit.contain,
                       ),
-                    ],
-                  ),
-                ),
-              ),
-
-              // ── timer + waveform row ──────────────────────────────────
-              Padding(
-                padding: EdgeInsets.fromLTRB(ui(20), ui(12), ui(20), 0),
-                child: SizedBox(
-                  height: ui(160),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      // circular timer
-                      _TimerCircle(
-                        ui: ui,
-                        session: session,
-                        noticeMessage: widget.state.noticeMessage,
-                      ),
-                      SizedBox(width: ui(20)),
-                      // waveform
-                      Expanded(
-                        child: _WaveformBars(ui: ui, bars: _bars),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              // ── progress bar + badge ──────────────────────────────────
-              Padding(
-                padding: EdgeInsets.fromLTRB(ui(20), ui(18), ui(20), 0),
-                child: _PracticeProgressBar(
-                  ui: ui,
-                  progress: progressFrac,
-                  current: session.currentIndex + (session.finished ? 1 : 0),
-                  total: session.totalQuestions,
-                ),
-              ),
-
-              // ── option chips ──────────────────────────────────────────
-              if (!session.finished)
-                Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(ui(20), ui(20), ui(20), 0),
-                    child: _PracticeOptionGrid(
-                      ui: ui,
-                      state: widget.state,
-                      session: session,
-                      isAbsolute: isAbsolute,
-                      onSubmit: widget.onSubmit,
                     ),
                   ),
-                )
-              else
-                const Spacer(),
-
-              // ── bottom bar (replay / pause) ────────────────────────────
-              _PracticeBottomBar(
-                ui: ui,
-                session: session,
-                onPauseResume: widget.onPauseResume,
+                  // title
+                  Center(
+                    child: Text(
+                      session.title,
+                      style: TextStyle(
+                        fontSize: ui(16),
+                        fontFamily: 'PingFang SC',
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF0B081A),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
+
+          // ── timer + waveform row ──────────────────────────────────
+          Padding(
+            padding: EdgeInsets.fromLTRB(ui(135), ui(12), ui(135), 0),
+            child: SizedBox(
+              height: ui(174),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // circular timer
+                  _TimerCircle(
+                    ui: ui,
+                    session: session,
+                    noticeMessage: widget.state.noticeMessage,
+                  ),
+                  SizedBox(width: ui(28)),
+                  // waveform
+                  Expanded(
+                    child: _PracticeAudioVisualizer(
+                      ui: ui,
+                      frequencyBands: widget.state.frequencyBands,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // ── progress bar + badge ──────────────────────────────────
+          Padding(
+            padding: EdgeInsets.fromLTRB(ui(135), ui(18), ui(135), 0),
+            child: _PracticeProgressBar(
+              ui: ui,
+              progress: progressFrac,
+              current: session.currentIndex + (session.finished ? 1 : 0),
+              total: session.totalQuestions,
+            ),
+          ),
+
+          // ── option chips ──────────────────────────────────────────
+          if (!session.finished)
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(ui(135), ui(20), ui(135), 0),
+                child: _PracticeOptionGrid(
+                  ui: ui,
+                  state: widget.state,
+                  session: session,
+                  isAbsolute: isAbsolute,
+                  onSubmit: widget.onSubmit,
+                ),
+              ),
+            )
+          else
+            const Spacer(),
+
+          // ── bottom bar (replay / pause) ────────────────────────────
+          _PracticeBottomBar(
+            ui: ui,
+            session: session,
+            onPauseResume: widget.onPauseResume,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1207,15 +1194,17 @@ class _TimerCircleState extends State<_TimerCircle>
 
     final timedMode = session.timedMode;
     final remainFrac = (timedMode && session.answerSeconds > 0)
-        ? (session.remainingMillis / (session.answerSeconds * 1000))
-            .clamp(0.0, 1.0)
+        ? (session.remainingMillis / (session.answerSeconds * 1000)).clamp(
+            0.0,
+            1.0,
+          )
         : 1.0;
 
     final bool isTimeout =
         timedMode && session.remainingMillis <= 0 && !session.finished;
-    final bool isReady = !session.running &&
-        (session.remainingMillis >= session.answerSeconds * 1000 ||
-            !timedMode);
+    final bool isReady =
+        !session.running &&
+        (session.remainingMillis >= session.answerSeconds * 1000 || !timedMode);
 
     final feedbackText = switch (notice) {
       '回答正确' => '正确',
@@ -1225,7 +1214,8 @@ class _TimerCircleState extends State<_TimerCircle>
     };
     final hasFeedback = feedbackText.isNotEmpty;
 
-    final showProgressArc = !hasFeedback &&
+    final showProgressArc =
+        !hasFeedback &&
         timedMode &&
         !isTimeout &&
         !isReady &&
@@ -1235,8 +1225,8 @@ class _TimerCircleState extends State<_TimerCircle>
     final waterFrac = isTimeout
         ? 1.0
         : isReady
-            ? 0.0
-            : (1.0 - remainFrac).clamp(0.0, 1.0);
+        ? 0.0
+        : (1.0 - remainFrac).clamp(0.0, 1.0);
 
     String centerText;
     Color centerTextColor;
@@ -1278,12 +1268,14 @@ class _TimerCircleState extends State<_TimerCircle>
             child: Text(
               centerText,
               style: TextStyle(
-                fontSize: ui(centerText.length > 5 ? 13 : 22),
+                fontSize: ui(centerText.contains(':') ? 24 : 22),
                 fontFamily: 'PingFang SC',
                 fontWeight: FontWeight.w600,
                 color: centerTextColor,
                 letterSpacing:
-                    timedMode && !isTimeout && !isReady && !hasFeedback ? 2.4 : 0,
+                    timedMode && !isTimeout && !isReady && !hasFeedback
+                    ? 2.4
+                    : 0,
                 height: 26 / 22,
               ),
               textAlign: TextAlign.center,
@@ -1315,6 +1307,7 @@ class _WaterTimerPainter extends CustomPainter {
   final double waterFrac; // 0.0 = empty, 1.0 = fully filled
   final double phase; // wave animation phase in radians
   final bool isTimeout;
+
   /// Remaining time / total (1.0 = full time left).
   final double remainFrac;
   final bool showProgressArc;
@@ -1324,10 +1317,28 @@ class _WaterTimerPainter extends CustomPainter {
     final c = Offset(size.width / 2, size.height / 2);
     final r = size.width / 2;
 
-    // ── ① Neutral base ────────────────────────────────────────────────
     canvas.drawCircle(c, r, Paint()..color = const Color(0xFFF3F2FA));
 
-    // ── ② Inner background circle (148/174 ≈ 0.851 ratio) ────────────
+    canvas.drawCircle(
+      c,
+      r,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: <Color>[Color(0xFF8741FF), Color(0xFFF6F5FC)],
+        ).createShader(Rect.fromCircle(center: c, radius: r)),
+    );
+    canvas.drawCircle(
+      c,
+      r * 0.985,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = r * 0.06
+        ..color = const Color(0x70D7D2FF)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+    );
+
     final innerR = r * 0.851;
     final bgGrad = LinearGradient(
       begin: Alignment.topCenter,
@@ -1336,8 +1347,22 @@ class _WaterTimerPainter extends CustomPainter {
           ? const <Color>[Color(0xFF6248C8), Color(0xFF4830A8)]
           : const <Color>[Color(0xFFEDEBFC), Color(0xFFF6F5FC)],
     ).createShader(Rect.fromCircle(center: c, radius: innerR));
-    canvas.drawCircle(c, innerR, Paint()..shader = bgGrad);
-    // Secondary inner layer to match the dual-gradient glass depth in design.
+    canvas.drawCircle(
+      c,
+      innerR,
+      Paint()
+        ..shader = bgGrad
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 0),
+    );
+    canvas.drawCircle(
+      c,
+      innerR * 0.99,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = r * 0.10
+        ..color = const Color(0x88D7D2FF)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10),
+    );
     canvas.drawCircle(
       c,
       innerR * 0.994,
@@ -1358,7 +1383,6 @@ class _WaterTimerPainter extends CustomPainter {
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
     );
 
-    // ── ③ Water fill (clipped to inner circle, 138/174 ≈ 0.793) ──────
     if (waterFrac > 0.008) {
       canvas.save();
       canvas.clipPath(
@@ -1397,43 +1421,7 @@ class _WaterTimerPainter extends CustomPainter {
 
       canvas.restore();
     }
-    // soft highlight spot (top-left) for spherical gloss
-    canvas.save();
-    canvas.translate(size.width * 0.26, size.height * 0.24);
-    canvas.rotate(-0.56); // ~ -32deg
-    final hlRect = Rect.fromCenter(
-      center: Offset.zero,
-      width: size.width * 0.16,
-      height: size.height * 0.09,
-    );
-    canvas.drawOval(
-      hlRect,
-      Paint()
-        ..color = Colors.white.withValues(alpha: 0.88)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
-    );
-    canvas.restore();
 
-    // ── ④ Outer gradient ring: purple (top) → near-transparent (bottom) ─
-    final strokeW = r * 0.082;
-    canvas.drawCircle(
-      c,
-      r - strokeW / 2,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: <Color>[
-            const Color(0xFF5B4CFF)
-                .withValues(alpha: isTimeout ? 1.0 : 0.88),
-            const Color(0xFFF6F5FC).withValues(alpha: 0.12),
-          ],
-        ).createShader(Rect.fromCircle(center: c, radius: r))
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeW,
-    );
-
-    // ── ⑤ Inset glow (inner soft ring) ───────────────────────────────
     canvas.drawCircle(
       c,
       innerR * 0.96,
@@ -1444,7 +1432,6 @@ class _WaterTimerPainter extends CustomPainter {
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
     );
 
-    // ── ⑥ Remaining-time arc (on top; purple ring follows outer edge) ───────
     if (showProgressArc && remainFrac > 0.002) {
       final arcR = r * 0.925;
       final arcRect = Rect.fromCircle(center: c, radius: arcR);
@@ -1489,11 +1476,7 @@ class _WaterTimerPainter extends CustomPainter {
     for (var i = segments; i >= 0; i--) {
       final t = i / segments;
       final x = size.width * t;
-      final y = levelY +
-          amp *
-              math.sin(
-                t * math.pi * 5.2 + wavePhase,
-              );
+      final y = levelY + amp * math.sin(t * math.pi * 5.2 + wavePhase);
       path.lineTo(x, y);
     }
     return path..close();
@@ -1508,76 +1491,562 @@ class _WaterTimerPainter extends CustomPainter {
       old.showProgressArc != showProgressArc;
 }
 
-// ── Waveform bars ─────────────────────────────────────────────────────────────
+// ── Audio visualizer ─────────────────────────────────────────────────────────
+// Bars are styled to match music_play (purple gradient, mirrored fade), but
+// driven by the real frequencyBands stream from SmartDictationAudioEngine
+// (SoLoud FFT on native / Web Audio AnalyserNode on the web build).
+//
+// Two smart-dictation specific touches sit on top of the music_play style:
+//   • Active bands are re-centered horizontally so a single piano tone (whose
+//     energy is concentrated in the low-frequency bins) reads as a centered
+//     "swell" rather than a left-aligned cluster.
+//   • Decorative music-note / spark glyphs hover above and below the waveform
+//     and pulse together with playback, matching the original Figma design.
 
-class _WaveformBars extends StatelessWidget {
-  const _WaveformBars({required this.ui, required this.bars});
+class _PracticeAudioVisualizer extends StatelessWidget {
+  const _PracticeAudioVisualizer({
+    required this.ui,
+    required this.frequencyBands,
+  });
 
   final double Function(num) ui;
-  final List<double> bars;
+  final List<double> frequencyBands;
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final totalWidth = constraints.maxWidth;
-        final barCount = bars.length;
-        const minGap = 2.0;
-        final barW = ((totalWidth - minGap * (barCount - 1)) / barCount)
-            .clamp(2.0, 8.0);
-        final gap = (totalWidth - barW * barCount) / (barCount - 1);
-        final maxH = constraints.maxHeight * 0.6;
-
-        return CustomPaint(
-          painter: _WaveformPainter(
-            bars: bars,
-            barWidth: barW,
-            gap: gap,
-            maxHeight: maxH,
+    final height = ui(70);
+    final playing = frequencyBands.isNotEmpty;
+    return SizedBox(
+      height: height,
+      width: double.infinity,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned.fill(
+            child: RepaintBoundary(
+              child: playing
+                  ? CustomPaint(
+                      painter: _PracticeFrequencyPainter(
+                        frequencyBands: frequencyBands,
+                        time: 0,
+                        playing: true,
+                      ),
+                    )
+                  : CustomPaint(
+                      painter: _PracticeFrequencyPainter(
+                        frequencyBands: const <double>[],
+                        time: 0,
+                        playing: false,
+                      ),
+                    ),
+            ),
           ),
-        );
-      },
+          Positioned(
+            left: 0,
+            right: 0,
+            top: -ui(16),
+            height: ui(24),
+            child: const IgnorePointer(
+              child: _PracticeFrequencyDecorations(
+                position: _PracticeDecorationPosition.top,
+              ),
+            ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: -ui(14),
+            height: ui(22),
+            child: const IgnorePointer(
+              child: _PracticeFrequencyDecorations(
+                position: _PracticeDecorationPosition.bottom,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
-class _WaveformPainter extends CustomPainter {
-  const _WaveformPainter({
-    required this.bars,
-    required this.barWidth,
-    required this.gap,
-    required this.maxHeight,
+/// Re-centers a frequency-band list so its non-zero region sits in the middle
+/// of the output, padding the rest with zeros. Used to keep single-tone
+/// piano spectra visually centered instead of clinging to the left edge.
+List<double> _centerFrequencyBands(List<double> bands) {
+  const targetCount = 46;
+  if (bands.isEmpty) {
+    return const <double>[];
+  }
+  final source = bands.length == targetCount
+      ? bands
+      : List<double>.generate(
+          targetCount,
+          (i) =>
+              bands[(i * bands.length / targetCount).floor().clamp(
+                0,
+                bands.length - 1,
+              )],
+        );
+
+  var first = 0;
+  var last = source.length - 1;
+  while (first < source.length && source[first] <= 0.018) {
+    first++;
+  }
+  while (last >= first && source[last] <= 0.018) {
+    last--;
+  }
+  if (first > last) {
+    return List<double>.filled(targetCount, 0);
+  }
+
+  final active = source.sublist(first, last + 1);
+  final result = List<double>.filled(targetCount, 0);
+  final offset = ((targetCount - active.length) / 2).round().clamp(
+    0,
+    targetCount - 1,
+  );
+  for (var i = 0; i < active.length && offset + i < targetCount; i++) {
+    final envelope = math.sin((i + 1) / (active.length + 1) * math.pi);
+    result[offset + i] = math.max(
+      active[i],
+      active[i] * 0.72 + envelope * 0.08,
+    );
+  }
+  return result;
+}
+
+class _PracticeFrequencyPainter extends CustomPainter {
+  const _PracticeFrequencyPainter({
+    required this.frequencyBands,
+    required this.time,
+    required this.playing,
   });
 
-  final List<double> bars;
-  final double barWidth;
-  final double gap;
-  final double maxHeight;
+  final List<double> frequencyBands;
+  final double time;
+  final bool playing;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final midY = size.height / 2;
-    final paint = Paint()
-      ..shader = const LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: <Color>[Color(0xFF8741FF), Color(0xFFB68EFF)],
-      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height))
-      ..style = PaintingStyle.fill;
+    if (size.width <= 0 || size.height <= 0) {
+      return;
+    }
+    final centered = _centerFrequencyBands(frequencyBands);
+    final count = centered.isEmpty ? 46 : centered.length;
+    const gap = 3.0;
+    final barWidth = math.max(1.2, (size.width - gap * (count - 1)) / count);
+    final centerY = size.height * 0.62;
+    final maxUp = size.height * 0.58;
+    final maxDown = size.height * 0.30;
+    final radius = Radius.circular(barWidth / 2);
+    final idlePaint = Paint()..color = const Color(0xFFE4E1EC);
 
-    for (var i = 0; i < bars.length; i++) {
-      final halfH = (bars[i] * maxHeight / 2).clamp(2.0, maxHeight / 2);
+    for (var i = 0; i < count; i++) {
+      final raw = centered.isEmpty
+          ? (playing ? _fallbackLevel(i, count, time) : 0.0)
+          : centered[i];
+      final level = raw.clamp(0.0, 1.0);
       final x = i * (barWidth + gap);
-      final rect = RRect.fromRectAndRadius(
-        Rect.fromLTWH(x, midY - halfH, barWidth, halfH * 2),
-        Radius.circular(barWidth / 2),
+      final up = math.max(size.height * 0.08, maxUp * level);
+      final down = math.max(size.height * 0.03, maxDown * level);
+      final active = level > 0.015;
+
+      final topRect = Rect.fromLTRB(x, centerY - up, x + barWidth, centerY);
+      final topPaint = active
+          ? (Paint()
+              ..shader = const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: <Color>[Color(0xFF8741FF), Color(0xFFC8AEFF)],
+              ).createShader(topRect))
+          : idlePaint;
+      canvas.drawRRect(RRect.fromRectAndRadius(topRect, radius), topPaint);
+
+      final bottomRect = Rect.fromLTRB(
+        x,
+        centerY,
+        x + barWidth,
+        centerY + down,
       );
-      canvas.drawRRect(rect, paint);
+      final bottomPaint = active
+          ? (Paint()
+              ..shader = const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: <Color>[Color(0x668741FF), Color(0x00C8AEFF)],
+              ).createShader(bottomRect))
+          : idlePaint;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(bottomRect, radius),
+        bottomPaint,
+      );
     }
   }
 
+  double _fallbackLevel(int index, int count, double t) {
+    final phase = t * math.pi * 2;
+    final waveA = math.sin(phase * 1.4 + index * 0.52);
+    final waveB = math.sin(phase * 2.1 + index * 0.21);
+    final envelope = math.sin(index / (count - 1) * math.pi);
+    return (0.18 + (waveA * 0.18 + waveB * 0.12 + 0.30) * envelope).clamp(
+      0.04,
+      0.88,
+    );
+  }
+
   @override
-  bool shouldRepaint(_WaveformPainter old) => old.bars != bars;
+  bool shouldRepaint(covariant _PracticeFrequencyPainter oldDelegate) {
+    return oldDelegate.frequencyBands != frequencyBands ||
+        oldDelegate.time != time ||
+        oldDelegate.playing != playing;
+  }
+}
+
+enum _PracticeDecorationPosition { top, bottom }
+
+/// Decorative pulsing music-note / spark glyphs that surround the waveform.
+/// They always bob and twinkle at a constant intensity, regardless of whether
+/// audio is currently playing — the goal is a lively backdrop, not a status
+/// indicator.
+class _PracticeFrequencyDecorations extends StatefulWidget {
+  const _PracticeFrequencyDecorations({required this.position});
+
+  final _PracticeDecorationPosition position;
+
+  @override
+  State<_PracticeFrequencyDecorations> createState() =>
+      _PracticeFrequencyDecorationsState();
+}
+
+class _PracticeFrequencyDecorationsState
+    extends State<_PracticeFrequencyDecorations>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) {
+          return CustomPaint(
+            painter: _PracticeDecorationPainter(
+              position: widget.position,
+              time: _controller.value,
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _PracticeDecorationPainter extends CustomPainter {
+  const _PracticeDecorationPainter({
+    required this.position,
+    required this.time,
+  });
+
+  final _PracticeDecorationPosition position;
+  final double time;
+
+  // Sparse, intentionally irregular layout — the x positions, vertical
+  // offsets, sizes, motion phases and twinkle phases are all hand-chosen
+  // (not evenly spaced) so the glyphs feel scattered rather than gridded.
+  static const _topGlyphs = <_DecorationGlyph>[
+    _DecorationGlyph(
+      x: 0.13,
+      yBias: 0.55,
+      kind: _GlyphKind.eighthNote,
+      size: 11,
+      motionPhase: 0.0,
+      twinklePhase: 0.6,
+    ),
+    _DecorationGlyph(
+      x: 0.47,
+      yBias: 0.30,
+      kind: _GlyphKind.sparkle,
+      size: 5.0,
+      motionPhase: 1.3,
+      twinklePhase: 2.1,
+    ),
+    _DecorationGlyph(
+      x: 0.83,
+      yBias: 0.65,
+      kind: _GlyphKind.beamedNote,
+      size: 12,
+      motionPhase: 2.4,
+      twinklePhase: 0.0,
+    ),
+  ];
+
+  static const _bottomGlyphs = <_DecorationGlyph>[
+    _DecorationGlyph(
+      x: 0.27,
+      yBias: 0.55,
+      kind: _GlyphKind.sparkle,
+      size: 4.6,
+      motionPhase: 0.5,
+      twinklePhase: 1.4,
+    ),
+    _DecorationGlyph(
+      x: 0.69,
+      yBias: 0.40,
+      kind: _GlyphKind.eighthNote,
+      size: 10,
+      motionPhase: 1.9,
+      twinklePhase: 3.0,
+    ),
+    _DecorationGlyph(
+      x: 0.92,
+      yBias: 0.70,
+      kind: _GlyphKind.dot,
+      size: 2.0,
+      motionPhase: 3.1,
+      twinklePhase: 0.8,
+    ),
+  ];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.width <= 0 || size.height <= 0) {
+      return;
+    }
+    final glyphs = position == _PracticeDecorationPosition.top
+        ? _topGlyphs
+        : _bottomGlyphs;
+    final phase = time * math.pi * 2;
+
+    for (final glyph in glyphs) {
+      final wobble = math.sin(phase + glyph.motionPhase);
+      final twinkle =
+          (0.5 + 0.5 * math.sin(phase * 1.4 + glyph.twinklePhase))
+              .clamp(0.0, 1.0)
+              .toDouble();
+      final dy = wobble * size.height * 0.22;
+      final cx = size.width * glyph.x;
+      final cy = size.height * glyph.yBias + dy;
+      final alpha = (0.55 + 0.45 * twinkle).clamp(0.0, 1.0);
+      _paintGlyph(canvas, Offset(cx, cy), glyph, alpha);
+    }
+  }
+
+  void _paintGlyph(
+    Canvas canvas,
+    Offset center,
+    _DecorationGlyph glyph,
+    double alpha,
+  ) {
+    switch (glyph.kind) {
+      case _GlyphKind.dot:
+        final paint = Paint()
+          ..style = PaintingStyle.fill
+          ..color = const Color(0xFFB68EFF).withValues(alpha: alpha);
+        canvas.drawCircle(center, glyph.size, paint);
+        break;
+      case _GlyphKind.sparkle:
+        _paintSparkle(canvas, center, glyph.size, alpha);
+        break;
+      case _GlyphKind.eighthNote:
+        _paintEighthNote(canvas, center, glyph.size, alpha);
+        break;
+      case _GlyphKind.beamedNote:
+        _paintBeamedNote(canvas, center, glyph.size, alpha);
+        break;
+    }
+  }
+
+  void _paintSparkle(
+    Canvas canvas,
+    Offset center,
+    double size,
+    double alpha,
+  ) {
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 1.2
+      ..color = const Color(0xFFF5FF68).withValues(alpha: alpha);
+    final r = size;
+    canvas.drawLine(
+      Offset(center.dx - r, center.dy),
+      Offset(center.dx + r, center.dy),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(center.dx, center.dy - r),
+      Offset(center.dx, center.dy + r),
+      paint,
+    );
+    final glow = Paint()
+      ..style = PaintingStyle.fill
+      ..color = const Color(0xFF8741FF).withValues(alpha: alpha * 0.6);
+    canvas.drawCircle(center, math.max(1.0, size * 0.32), glow);
+  }
+
+  void _paintEighthNote(
+    Canvas canvas,
+    Offset center,
+    double size,
+    double alpha,
+  ) {
+    final color = const Color(0xFF8741FF).withValues(alpha: alpha);
+    final paint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = color;
+    final stroke = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = math.max(1.0, size * 0.14)
+      ..strokeCap = StrokeCap.round
+      ..color = color;
+
+    final headWidth = size * 0.55;
+    final headHeight = size * 0.42;
+    final headCenter = Offset(center.dx - size * 0.18, center.dy + size * 0.34);
+    canvas.save();
+    canvas.translate(headCenter.dx, headCenter.dy);
+    canvas.rotate(-0.32);
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset.zero,
+        width: headWidth,
+        height: headHeight,
+      ),
+      paint,
+    );
+    canvas.restore();
+
+    final stemTop = Offset(
+      center.dx + size * 0.04,
+      center.dy - size * 0.55,
+    );
+    final stemBottom = Offset(headCenter.dx + size * 0.20, headCenter.dy);
+    canvas.drawLine(stemTop, stemBottom, stroke);
+
+    final flag = Path()
+      ..moveTo(stemTop.dx, stemTop.dy)
+      ..quadraticBezierTo(
+        stemTop.dx + size * 0.55,
+        stemTop.dy + size * 0.05,
+        stemTop.dx + size * 0.32,
+        stemTop.dy + size * 0.46,
+      );
+    canvas.drawPath(flag, stroke);
+  }
+
+  void _paintBeamedNote(
+    Canvas canvas,
+    Offset center,
+    double size,
+    double alpha,
+  ) {
+    final color = const Color(0xFFB68EFF).withValues(alpha: alpha);
+    final paint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = color;
+    final stroke = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = math.max(1.0, size * 0.12)
+      ..strokeCap = StrokeCap.round
+      ..color = color;
+    final beam = Paint()
+      ..style = PaintingStyle.fill
+      ..color = color;
+
+    final headHeight = size * 0.36;
+    final headWidth = size * 0.46;
+    final leftHead = Offset(center.dx - size * 0.36, center.dy + size * 0.32);
+    final rightHead = Offset(center.dx + size * 0.20, center.dy + size * 0.32);
+
+    for (final head in <Offset>[leftHead, rightHead]) {
+      canvas.save();
+      canvas.translate(head.dx, head.dy);
+      canvas.rotate(-0.28);
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: Offset.zero,
+          width: headWidth,
+          height: headHeight,
+        ),
+        paint,
+      );
+      canvas.restore();
+    }
+
+    final leftStemTop = Offset(
+      leftHead.dx + size * 0.18,
+      center.dy - size * 0.50,
+    );
+    final leftStemBottom = Offset(leftHead.dx + size * 0.18, leftHead.dy);
+    final rightStemTop = Offset(
+      rightHead.dx + size * 0.18,
+      center.dy - size * 0.50,
+    );
+    final rightStemBottom = Offset(rightHead.dx + size * 0.18, rightHead.dy);
+    canvas.drawLine(leftStemTop, leftStemBottom, stroke);
+    canvas.drawLine(rightStemTop, rightStemBottom, stroke);
+
+    final beamRect = Rect.fromLTRB(
+      leftStemTop.dx,
+      leftStemTop.dy,
+      rightStemTop.dx,
+      leftStemTop.dy + size * 0.22,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(beamRect, Radius.circular(size * 0.08)),
+      beam,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _PracticeDecorationPainter oldDelegate) {
+    return oldDelegate.time != time || oldDelegate.position != position;
+  }
+}
+
+enum _GlyphKind { dot, sparkle, eighthNote, beamedNote }
+
+class _DecorationGlyph {
+  const _DecorationGlyph({
+    required this.x,
+    required this.yBias,
+    required this.kind,
+    required this.size,
+    required this.motionPhase,
+    required this.twinklePhase,
+  });
+
+  /// Horizontal position as a fraction of the available width (0..1).
+  final double x;
+
+  /// Vertical anchor as a fraction of the available height (0..1).
+  /// Each glyph picks a slightly different bias so they don't sit on a line.
+  final double yBias;
+
+  final _GlyphKind kind;
+  final double size;
+
+  /// Phase offset for the up/down bobbing motion.
+  final double motionPhase;
+
+  /// Phase offset for the twinkle / opacity oscillation.
+  final double twinklePhase;
 }
 
 // ── Progress bar ──────────────────────────────────────────────────────────────
@@ -1735,6 +2204,7 @@ class _PracticeOptionGrid extends StatelessWidget {
       config: state.activeConfig,
     );
     final playable = session.currentQuestion.optionPool.toSet();
+    final answerEnabled = session.started;
 
     if (isAbsolute) {
       // fixed 10-per-row layout (same logic as config screen)
@@ -1763,8 +2233,8 @@ class _PracticeOptionGrid extends StatelessWidget {
                       ui: ui,
                       label: opt,
                       isNoteChip: true,
-                      selected: false,
-                      enabled: playable.contains(opt),
+                      selected: playable.contains(opt),
+                      enabled: answerEnabled && playable.contains(opt),
                       onTap: () => onSubmit(opt),
                     ),
                 ],
@@ -1801,8 +2271,8 @@ class _PracticeOptionGrid extends StatelessWidget {
                     ui: ui,
                     label: opt,
                     isNoteChip: false,
-                    selected: false,
-                    enabled: playable.contains(opt),
+                    selected: playable.contains(opt),
+                    enabled: answerEnabled && playable.contains(opt),
                     onTap: () => onSubmit(opt),
                   ),
               ],
@@ -1829,6 +2299,13 @@ class _PracticeBottomBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isInitial = !session.started && !session.running;
+    final label = isInitial
+        ? '开始练习'
+        : session.running
+        ? '暂停'
+        : '继续';
+
     return Container(
       height: ui(94),
       color: Colors.white,
@@ -1837,36 +2314,46 @@ class _PracticeBottomBar extends StatelessWidget {
       child: GestureDetector(
         onTap: onPauseResume,
         child: Container(
-          width: 240,
-          height: 52,
+          width: ui(240),
+          height: ui(52),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
               begin: Alignment.centerRight,
               end: Alignment.centerLeft,
               colors: <Color>[Color(0xFFB68EFF), Color(0xFF8640FF)],
             ),
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: const <BoxShadow>[
+            borderRadius: BorderRadius.circular(ui(12)),
+            boxShadow: <BoxShadow>[
               BoxShadow(
-                color: Color(0x59AD80FF),
-                offset: Offset(0, 16),
-                blurRadius: 20,
+                color: const Color(0x59AD80FF),
+                offset: Offset(0, ui(16)),
+                blurRadius: ui(20),
               ),
             ],
           ),
-          padding: const EdgeInsets.all(10),
+          padding: EdgeInsets.all(ui(10)),
           alignment: Alignment.center,
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                session.running ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                size: 24,
-                color: Colors.white,
-              ),
-              const SizedBox(width: 8),
+              if (isInitial)
+                Image.asset(
+                  AppAssets.smartDictationStart,
+                  width: ui(24),
+                  height: ui(24),
+                  fit: BoxFit.contain,
+                )
+              else
+                Icon(
+                  session.running
+                      ? Icons.pause_rounded
+                      : Icons.play_arrow_rounded,
+                  size: ui(24),
+                  color: Colors.white,
+                ),
+              SizedBox(width: ui(8)),
               Text(
-                session.running ? '暂停' : '继续',
+                label,
                 style: const TextStyle(
                   fontSize: 16,
                   fontFamily: 'PingFang SC',
@@ -1906,10 +2393,10 @@ class _PracticeResultDialog extends StatelessWidget {
     final stars = session.correctCount >= total
         ? 3
         : session.correctCount >= (total * 2 / 3).ceil()
-            ? 2
-            : session.correctCount >= (total / 3).ceil()
-                ? 1
-                : 0;
+        ? 2
+        : session.correctCount >= (total / 3).ceil()
+        ? 1
+        : 0;
 
     // 设计稿 1180×820 画布中卡片 (459,247) 尺寸 428×260；以下坐标已换算为相对卡片左上角。
     const double kCardLeft = 459;
@@ -2050,7 +2537,11 @@ class _PracticeResultDialog extends StatelessWidget {
                   Positioned(
                     left: ui(rx(504.43)),
                     top: ui(ry(330)),
-                    child: _ResultStatCard(ui: ui, title: '答对数量', value: '${session.correctCount}个'),
+                    child: _ResultStatCard(
+                      ui: ui,
+                      title: '答对数量',
+                      value: '${session.correctCount}个',
+                    ),
                   ),
                   Positioned(
                     left: ui(rx(622.43)),
@@ -2065,7 +2556,11 @@ class _PracticeResultDialog extends StatelessWidget {
                   Positioned(
                     left: ui(rx(740.43)),
                     top: ui(ry(330)),
-                    child: _ResultStatCard(ui: ui, title: '正确率', value: '$rate%'),
+                    child: _ResultStatCard(
+                      ui: ui,
+                      title: '正确率',
+                      value: '$rate%',
+                    ),
                   ),
                   Positioned(
                     left: ui(rx(483.43)),
@@ -2340,76 +2835,76 @@ class _PracticeExitDialog extends StatelessWidget {
                   borderRadius: BorderRadius.circular(ui(24)),
                   child: Stack(
                     children: [
-                    Positioned(
-                      left: ui(168),
-                      top: -ui(11),
-                      child: ShaderMask(
-                        blendMode: BlendMode.dstIn,
-                        shaderCallback: (Rect rect) {
-                          return const LinearGradient(
-                            begin: Alignment(-0.85, -0.95),
-                            end: Alignment(0.95, 1.0),
-                            colors: <Color>[
-                              Color(0x00000000),
-                              Color(0x22000000),
-                              Color(0x70000000),
-                              Color(0xA0000000),
-                            ],
-                            stops: <double>[0.0, 0.28, 0.66, 1.0],
-                          ).createShader(rect);
-                        },
-                        child: Opacity(
-                          opacity: 0.56,
-                          child: Image.asset(
-                            AppAssets.smartDictationFigmaExitTopImage,
-                            width: ui(288),
-                            height: ui(164),
-                            fit: BoxFit.cover,
+                      Positioned(
+                        left: ui(168),
+                        top: -ui(11),
+                        child: ShaderMask(
+                          blendMode: BlendMode.dstIn,
+                          shaderCallback: (Rect rect) {
+                            return const LinearGradient(
+                              begin: Alignment(-0.85, -0.95),
+                              end: Alignment(0.95, 1.0),
+                              colors: <Color>[
+                                Color(0x00000000),
+                                Color(0x22000000),
+                                Color(0x70000000),
+                                Color(0xA0000000),
+                              ],
+                              stops: <double>[0.0, 0.28, 0.66, 1.0],
+                            ).createShader(rect);
+                          },
+                          child: Opacity(
+                            opacity: 0.56,
+                            child: Image.asset(
+                              AppAssets.smartDictationFigmaExitTopImage,
+                              width: ui(288),
+                              height: ui(164),
+                              fit: BoxFit.cover,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    Positioned(
-                      top: ui(62),
-                      left: 0,
-                      right: 0,
-                      child: Text(
-                        '是否退出当前练习',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: ui(24),
-                          fontFamily: 'PingFang SC',
-                          fontWeight: FontWeight.w500,
-                          color: const Color(0xFF0B081A),
-                          height: 12 / 24,
+                      Positioned(
+                        top: ui(62),
+                        left: 0,
+                        right: 0,
+                        child: Text(
+                          '是否退出当前练习',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: ui(24),
+                            fontFamily: 'PingFang SC',
+                            fontWeight: FontWeight.w500,
+                            color: const Color(0xFF0B081A),
+                            height: 12 / 24,
+                          ),
                         ),
                       ),
-                    ),
-                    Positioned(
-                      left: ui(20),
-                      top: ui(136),
-                      child: SizedBox(
-                        width: ui(182),
-                        child: _ExitDialogButton(
-                          ui: ui,
-                          label: '取消',
-                          onTap: onCancel,
+                      Positioned(
+                        left: ui(20),
+                        top: ui(136),
+                        child: SizedBox(
+                          width: ui(182),
+                          child: _ExitDialogButton(
+                            ui: ui,
+                            label: '取消',
+                            onTap: onCancel,
+                          ),
                         ),
                       ),
-                    ),
-                    Positioned(
-                      left: ui(218),
-                      top: ui(136),
-                      child: SizedBox(
-                        width: ui(182),
-                        child: _ExitDialogButton(
-                          ui: ui,
-                          label: '确认',
-                          primary: true,
-                          onTap: onConfirm,
+                      Positioned(
+                        left: ui(218),
+                        top: ui(136),
+                        child: SizedBox(
+                          width: ui(182),
+                          child: _ExitDialogButton(
+                            ui: ui,
+                            label: '确认',
+                            primary: true,
+                            onTap: onConfirm,
+                          ),
                         ),
                       ),
-                    ),
                     ],
                   ),
                 ),
@@ -2506,11 +3001,7 @@ class _LessonTile extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _LessonCover(
-                ui: ui,
-                track: track,
-                unlocked: lesson.unlocked,
-              ),
+              _LessonCover(ui: ui, track: track, unlocked: lesson.unlocked),
               SizedBox(width: ui(8)),
               Expanded(
                 child: SizedBox(
@@ -2554,7 +3045,8 @@ class _LessonTile extends StatelessWidget {
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: List<Widget>.generate(3, (index) {
-                                    final filled = index < lesson.stars.clamp(0, 3);
+                                    final filled =
+                                        index < lesson.stars.clamp(0, 3);
                                     return Padding(
                                       padding: EdgeInsets.only(
                                         right: index == 2 ? 0 : ui(4),
@@ -2564,8 +3056,10 @@ class _LessonTile extends StatelessWidget {
                                         height: ui(16),
                                         child: Image.asset(
                                           filled
-                                              ? AppAssets.smartDictationFigmaStarOn
-                                              : AppAssets.smartDictationFigmaStarOff,
+                                              ? AppAssets
+                                                    .smartDictationFigmaStarOn
+                                              : AppAssets
+                                                    .smartDictationFigmaStarOff,
                                           fit: BoxFit.contain,
                                         ),
                                       ),
@@ -2663,14 +3157,19 @@ class _LessonCover extends StatelessWidget {
       SmartDictationTrack.interval => '听选\n音程',
       SmartDictationTrack.chord => '听选\n和弦',
     };
-    final bgStart = unlocked ? const Color(0xFFDBCCF9) : const Color(0xFFD3D3DC);
+    final bgStart = unlocked
+        ? const Color(0xFFDBCCF9)
+        : const Color(0xFFD3D3DC);
     final bgMid = unlocked ? const Color(0xFFE1C6FC) : const Color(0xFFCCCCD6);
     final bgEnd = unlocked ? const Color(0xFFCBBFFF) : const Color(0xFFC2C2CC);
-    final textColor =
-        unlocked ? const Color(0xFFB16AFF) : Colors.white.withValues(alpha: 0.7);
+    final textColor = unlocked
+        ? const Color(0xFFB16AFF)
+        : Colors.white.withValues(alpha: 0.7);
     final strip = unlocked ? const Color(0xFFDAC6FF) : const Color(0xFFC7C6CE);
     final line = unlocked ? const Color(0xFFCBAFFA) : const Color(0xFFB9B8C3);
-    final noteColor = unlocked ? const Color(0xFFBA91FF) : const Color(0xFFB0AABB);
+    final noteColor = unlocked
+        ? const Color(0xFFBA91FF)
+        : const Color(0xFFB0AABB);
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(ui(8)),
@@ -2697,7 +3196,10 @@ class _LessonCover extends StatelessWidget {
               left: 0,
               top: 0,
               bottom: 0,
-              child: SizedBox(width: ui(6), child: ColoredBox(color: strip)),
+              child: SizedBox(
+                width: ui(6),
+                child: ColoredBox(color: strip),
+              ),
             ),
             // 2px gradient line
             Positioned(
@@ -2788,7 +3290,10 @@ TextSpan _buildNoteSpan(String note, TextStyle base) {
   if (s.startsWith('#')) {
     spans.add(TextSpan(text: '#', style: small));
     s = s.substring(1);
-  } else if (s.length > 1 && s[0] == 'b' && s[1].compareTo('a') >= 0 && s[1].compareTo('z') <= 0) {
+  } else if (s.length > 1 &&
+      s[0] == 'b' &&
+      s[1].compareTo('a') >= 0 &&
+      s[1].compareTo('z') <= 0) {
     // flat prefix: 'b' followed by a letter (e.g. 'bb', 'be1')
     spans.add(TextSpan(text: 'b', style: small));
     s = s.substring(1);
@@ -2803,6 +3308,67 @@ TextSpan _buildNoteSpan(String note, TextStyle base) {
   }
 
   return TextSpan(children: spans);
+}
+
+class _NoteNameText extends StatelessWidget {
+  const _NoteNameText({
+    required this.ui,
+    required this.note,
+    required this.style,
+  });
+
+  final double Function(num) ui;
+  final String note;
+  final TextStyle style;
+
+  @override
+  Widget build(BuildContext context) {
+    var s = note.trim();
+    String? prefix;
+    String? suffix;
+
+    if (s.startsWith('#')) {
+      prefix = '#';
+      s = s.substring(1);
+    } else if (s.length > 1 &&
+        s[0] == 'b' &&
+        s[1].compareTo('a') >= 0 &&
+        s[1].compareTo('z') <= 0) {
+      prefix = 'b';
+      s = s.substring(1);
+    }
+
+    if (s.isNotEmpty && RegExp(r'\d$').hasMatch(s)) {
+      suffix = s.substring(s.length - 1);
+      s = s.substring(0, s.length - 1);
+    }
+
+    return SizedBox(
+      width: ui(31),
+      height: ui(28),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Align(
+            alignment: Alignment.center,
+            child: Text(s, style: style, textAlign: TextAlign.center),
+          ),
+          if (prefix != null)
+            Positioned(
+              left: 0,
+              top: ui(-2),
+              child: Text(prefix, style: style, textAlign: TextAlign.center),
+            ),
+          if (suffix != null)
+            Positioned(
+              right: 0,
+              top: ui(-2),
+              child: Text(suffix, style: style, textAlign: TextAlign.center),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Large option chip used in the top selection grid of the smart practice view.
@@ -2828,16 +3394,13 @@ class _SmartOptionChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final w = isNoteChip ? ui(52) : ui(98);
     final h = isNoteChip ? ui(52) : ui(56);
-    final textColor = !enabled
-        ? const Color(0xFFB6B5BB)
-        : selected
-            ? Colors.white
-            : const Color(0xFF0B081A);
+    final textColor = selected ? Colors.white : const Color(0xFF0B081A);
     final textStyle = TextStyle(
       fontSize: ui(16),
       fontFamily: 'PingFang SC',
       fontWeight: FontWeight.w600,
       color: textColor,
+      height: 28 / 16,
     );
     final hasChinese = label.contains(RegExp(r'[\u4e00-\u9fff/]'));
 
@@ -2845,49 +3408,38 @@ class _SmartOptionChip extends StatelessWidget {
       width: w,
       height: h,
       decoration: BoxDecoration(
-        gradient: !enabled
-            ? null
-            : selected
-                ? const LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: <Color>[Color(0xFF6D6B75), Color(0xFF0B081A)],
-                  )
-                : const LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: <Color>[Color(0xFFF5F6FA), Color(0xFFEDEFF5)],
-                  ),
-        color: !enabled ? const Color(0xFFF7F8FB) : null,
         borderRadius: BorderRadius.circular(ui(8)),
-        border: Border.all(
-          color: !enabled
-              ? const Color(0xFFE8E9EE)
-              : const Color(0xFFEFF3FC),
-          width: ui(1.5),
-        ),
-        boxShadow: enabled && !selected
-            ? <BoxShadow>[
-                BoxShadow(
-                  color: const Color(0x140B081A),
-                  offset: Offset(0, ui(2)),
-                  blurRadius: ui(6),
-                ),
-              ]
-            : null,
+        border: Border.all(color: const Color(0xFFEFF3FC), width: ui(1)),
       ),
-      alignment: Alignment.center,
-      child: hasChinese
-          ? Text(label, style: textStyle, textAlign: TextAlign.center)
-          : Text.rich(_buildNoteSpan(label, textStyle)),
+      padding: EdgeInsets.all(ui(0.5)),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: selected
+              ? const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: <Color>[Color(0xFF6D6B75), Color(0xFF0B081A)],
+                )
+              : const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: <Color>[Color(0xFFF5F6FA), Color(0xFFEDEFF5)],
+                ),
+          borderRadius: BorderRadius.circular(ui(7.5)),
+          border: Border.all(color: Colors.white, width: ui(0.5)),
+        ),
+        alignment: Alignment.center,
+        child: hasChinese
+            ? Text(label, style: textStyle, textAlign: TextAlign.center)
+            : isNoteChip
+            ? _NoteNameText(ui: ui, note: label, style: textStyle)
+            : Text.rich(_buildNoteSpan(label, textStyle)),
+      ),
     );
 
     return IgnorePointer(
       ignoring: !enabled,
-      child: GestureDetector(
-        onTap: enabled ? onTap : null,
-        child: child,
-      ),
+      child: GestureDetector(onTap: enabled ? onTap : null, child: child),
     );
   }
 }

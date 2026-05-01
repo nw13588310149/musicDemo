@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/route_paths.dart';
 import '../../../core/constants/app_assets.dart';
+import '../../../core/widgets/app_toast.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../state/dictation_controller.dart';
 import '../state/dictation_state.dart';
@@ -145,7 +146,7 @@ class _ContentPanel extends StatelessWidget {
                 : state.lessonGroups.isEmpty
                 ? _EmptyState(
                     message: state.errorMessage.isEmpty
-                        ? '暂无教材内容'
+                        ? '暂无课程'
                         : state.errorMessage,
                     onRefresh: onRefresh,
                   )
@@ -175,9 +176,7 @@ class _ContentPanel extends StatelessWidget {
                                 lesson,
                               );
                               if (blockMessage != null) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text(blockMessage)),
-                                );
+                                AppToast.show(context, blockMessage);
                                 return;
                               }
                               Navigator.pushNamed(
@@ -365,9 +364,7 @@ class _ChildSegmentedItem extends StatelessWidget {
             softWrap: false,
             style: TextStyle(
               fontSize: ui(14),
-              color: active
-                  ? const Color(0xFF0B081A)
-                  : const Color(0xFF6D6B75),
+              color: active ? const Color(0xFF0B081A) : const Color(0xFF6D6B75),
               fontWeight: FontWeight.w500,
               fontFamily: 'PingFang SC',
               height: 1.4,

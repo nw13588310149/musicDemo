@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_client.dart';
@@ -45,5 +47,38 @@ class MusicPlayRepository {
       '/app/user/textbookRecordSave',
       data: <String, dynamic>{'textbookId': textbookId},
     );
+  }
+
+  Future<ApiResponse> getClassList() {
+    return client.post('/app/school/v2/chat/classList');
+  }
+
+  Future<ApiResponse> sendMsg({
+    required String classId,
+    required String content,
+    String param1 = 'book',
+    String param2 = '',
+    String param3 = '',
+    String param4 = '',
+    String param5 = '',
+    int type = 3,
+  }) {
+    return client.post(
+      '/app/school/v2/chat/sendMsg',
+      data: <String, dynamic>{
+        'classId': classId,
+        'content': content,
+        'param1': param1,
+        'param2': param2,
+        'param3': param3,
+        'param4': param4,
+        'param5': param5,
+        'type': type,
+      },
+    );
+  }
+
+  Future<Uint8List> downloadAudio(String url) {
+    return client.getBytes(url, timeout: const Duration(seconds: 60));
   }
 }

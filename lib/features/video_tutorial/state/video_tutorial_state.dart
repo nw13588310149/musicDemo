@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 class VideoBannerItem {
   const VideoBannerItem({required this.imageUrl});
 
@@ -116,12 +114,16 @@ class VideoDetail {
       'id': id,
       'name': name,
       'coverImg': coverImg,
+      'url': url,
       'duration': duration,
       'playCount': playCount,
       'vip': vip,
-      'url': url,
-      'param1': jsonEncode(scoreImages),
+      'isFavorite': isFavorite,
+      'param1': scoreImages,
       'param3': description,
+      'seriesVideoList': seriesVideoList
+          .map((item) => item.toShareMap())
+          .toList(),
     };
   }
 }

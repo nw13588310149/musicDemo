@@ -41,6 +41,8 @@ abstract final class RoutePaths {
   static const qrcode = '/qrcode';
   static const campAnswer = '/camp_answer';
   static const campOver = '/camp_over';
+  static const schoolCamp = '/school-camp';
+  static const schoolVideo = '/school-video';
   static const chat = '/chat';
   static const consultationDetail = '/consultationDetail';
   static const noteDetail = '/noteDetail';

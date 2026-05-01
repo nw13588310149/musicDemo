@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 
+import '../../../core/widgets/app_toast.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../state/consultation_detail_controller.dart';
 import '../state/consultation_detail_state.dart';
@@ -37,9 +38,7 @@ class _ConsultationDetailPageState
     ref.listen<ConsultationDetailState>(provider, (previous, next) {
       final msg = next.errorMessage;
       if (msg.isNotEmpty && msg != previous?.errorMessage) {
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text(msg)));
+        AppToast.show(context, msg);
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) controller.clearError();
         });
@@ -131,9 +130,7 @@ class _DetailHeader extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: ui(20)),
       decoration: const BoxDecoration(
         color: Colors.white,
-        border: Border(
-          bottom: BorderSide(color: Color(0xFFF3F2F3), width: 1),
-        ),
+        border: Border(bottom: BorderSide(color: Color(0xFFF3F2F3), width: 1)),
       ),
       child: Row(
         children: [
@@ -268,26 +265,9 @@ class _DetailBody extends StatelessWidget {
                   ),
                 ],
               ),
-              if (detail.coverUrl.isNotEmpty) ...[
-                SizedBox(height: ui(20)),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(ui(12)),
-                  child: Image.network(
-                    detail.coverUrl,
-                    fit: BoxFit.cover,
-                    width: double.infinity,
-                    errorBuilder: (context, error, stack) => SizedBox(
-                      height: ui(234),
-                      child: const ColoredBox(color: Color(0xFFF5F6FA)),
-                    ),
-                  ),
-                ),
-              ],
               SizedBox(height: ui(20)),
               HtmlWidget(
-                detail.htmlContent.isEmpty
-                    ? '<p>暂无内容</p>'
-                    : detail.htmlContent,
+                detail.htmlContent.isEmpty ? '<p>暂无内容</p>' : detail.htmlContent,
                 textStyle: TextStyle(
                   color: const Color(0xFF0B081A),
                   fontSize: ui(13),
@@ -389,8 +369,7 @@ class _ShareDrawer extends ConsumerWidget {
                       : ListView.separated(
                           padding: EdgeInsets.zero,
                           itemCount: state.classList.length,
-                          separatorBuilder: (_, _) =>
-                              SizedBox(height: ui(12)),
+                          separatorBuilder: (_, _) => SizedBox(height: ui(12)),
                           itemBuilder: (context, index) {
                             final cls = state.classList[index];
                             return _ClassRow(
@@ -407,9 +386,7 @@ class _ShareDrawer extends ConsumerWidget {
                     final success = await controller.send();
                     if (!context.mounted) return;
                     if (success) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('消息已成功发送')),
-                      );
+                      AppToast.show(context, '消息已成功发送');
                       Navigator.of(context).maybePop();
                     }
                   },
@@ -513,10 +490,7 @@ class _ShareTargetCard extends StatelessWidget {
               ),
               borderRadius: BorderRadius.circular(ui(6.82)),
             ),
-            child: const Icon(
-              Icons.feed_rounded,
-              color: Color(0xFFA773FF),
-            ),
+            child: const Icon(Icons.feed_rounded, color: Color(0xFFA773FF)),
           ),
         ],
       ),

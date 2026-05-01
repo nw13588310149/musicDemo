@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
@@ -15,9 +16,17 @@ class SmartDictationAudioEngine {
   final WebNoteAudioPlayer _webPlayer = createWebNoteAudioPlayer();
   final Map<String, AudioSource> _sourcesByCanonical = <String, AudioSource>{};
   final List<SoundHandle> _activeHandles = <SoundHandle>[];
+  final StreamController<List<double>> _frequencyController =
+      StreamController<List<double>>.broadcast();
+  AudioData? _audioData;
+  Timer? _visualTicker;
   Future<void>? _initTask;
 
-  bool get isReady => kIsWeb ? _webPlayer.isReady : _sourcesByCanonical.isNotEmpty;
+  bool get isReady =>
+      kIsWeb ? _webPlayer.isReady : _sourcesByCanonical.isNotEmpty;
+
+  Stream<List<double>> get frequencyBands =>
+      kIsWeb ? _webPlayer.frequencyBands : _frequencyController.stream;
 
   Future<void> ensureInitialized() {
     return _initTask ??= _initializeAndPreload();
@@ -29,8 +38,11 @@ class SmartDictationAudioEngine {
       return;
     }
     if (!_soLoud.isInitialized) {
-      await _soLoud.init();
+      await _soLoud.init(bufferSize: 1024, channels: Channels.mono);
     }
+    _soLoud.setVisualizationEnabled(true);
+    _soLoud.setFftSmoothing(0.82);
+    _audioData ??= AudioData(GetSamplesKind.linear);
 
     _soLoud.setMaxActiveVoiceCount(256);
 
@@ -68,6 +80,7 @@ class SmartDictationAudioEngine {
     }
     final handle = _soLoud.play(source, volume: volume);
     _activeHandles.add(handle);
+    _startVisualTicker();
   }
 
   /// Web compatibility: browsers require user-gesture-triggered audio unlock.
@@ -109,6 +122,7 @@ class SmartDictationAudioEngine {
       }
       final handle = _soLoud.play(source, volume: volume);
       _activeHandles.add(handle);
+      _startVisualTicker();
     }
   }
 
@@ -128,11 +142,12 @@ class SmartDictationAudioEngine {
             await _webPlayer.playAsset(asset, volume: volume);
           }
         } else {
-        final source = _sourcesByCanonical[canonical];
-        if (source != null) {
-          final handle = _soLoud.play(source, volume: volume);
-          _activeHandles.add(handle);
-        }
+          final source = _sourcesByCanonical[canonical];
+          if (source != null) {
+            final handle = _soLoud.play(source, volume: volume);
+            _activeHandles.add(handle);
+            _startVisualTicker();
+          }
         }
       }
       if (i < tokens.length - 1) {
@@ -155,6 +170,7 @@ class SmartDictationAudioEngine {
       } catch (_) {}
     }
     _activeHandles.clear();
+    _stopVisualTicker();
   }
 
   Future<void> dispose() async {
@@ -168,7 +184,78 @@ class SmartDictationAudioEngine {
     }
     _sourcesByCanonical.clear();
     _activeHandles.clear();
+    _stopVisualTicker();
+    _audioData?.dispose();
+    _audioData = null;
+    await _frequencyController.close();
     _initTask = null;
+  }
+
+  void _startVisualTicker() {
+    if (kIsWeb || _visualTicker != null) {
+      return;
+    }
+    _visualTicker = Timer.periodic(const Duration(milliseconds: 66), (_) {
+      if (!_soLoud.isInitialized) {
+        _stopVisualTicker();
+        return;
+      }
+      _activeHandles.removeWhere((handle) {
+        try {
+          return !_soLoud.getIsValidVoiceHandle(handle);
+        } catch (_) {
+          return true;
+        }
+      });
+      if (_activeHandles.isEmpty) {
+        _stopVisualTicker();
+        return;
+      }
+      _frequencyController.add(_readFrequencyBands());
+    });
+  }
+
+  void _stopVisualTicker() {
+    _visualTicker?.cancel();
+    _visualTicker = null;
+    if (!_frequencyController.isClosed) {
+      _frequencyController.add(const <double>[]);
+    }
+  }
+
+  List<double> _readFrequencyBands() {
+    final audioData = _audioData;
+    if (audioData == null) {
+      return const <double>[];
+    }
+    try {
+      audioData.updateSamples();
+      final samples = audioData.getAudioData(alwaysReturnData: false);
+      if (samples.length < 256) {
+        return const <double>[];
+      }
+      return _compressFft(samples.sublist(0, 256));
+    } catch (_) {
+      return const <double>[];
+    }
+  }
+
+  List<double> _compressFft(Float32List fft) {
+    const bands = 46;
+    final result = List<double>.filled(bands, 0);
+    for (var i = 0; i < bands; i++) {
+      final start = math.pow(i / bands, 1.55) * (fft.length - 1);
+      final end = math.pow((i + 1) / bands, 1.55) * (fft.length - 1);
+      final from = start.floor().clamp(0, fft.length - 1);
+      final to = math.max(from + 1, end.ceil().clamp(0, fft.length));
+      var sum = 0.0;
+      for (var j = from; j < to; j++) {
+        sum += fft[j].abs();
+      }
+      final average = sum / (to - from);
+      result[i] = math.pow((average * 7.5).clamp(0.0, 1.0), 0.55) as double;
+    }
+    return result;
   }
 
   static List<String> splitTokenGroup(String raw) {

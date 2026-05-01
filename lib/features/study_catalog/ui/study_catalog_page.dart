@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/route_paths.dart';
 import '../../../core/constants/app_assets.dart';
+import '../../../core/widgets/app_toast.dart';
 import '../../shell/ui/shell_layout.dart';
+import '../../voice/ui/voice_page.dart';
 import '../state/study_catalog_controller.dart';
 import '../state/study_catalog_state.dart';
 
@@ -116,23 +118,11 @@ class AnswerQuestionsPage extends StatelessWidget {
   );
 }
 
-class VoicePage extends StatelessWidget {
-  const VoicePage({super.key});
-
-  @override
-  Widget build(BuildContext context) => const StudyCatalogPage(
-    defaultArgs: StudyCatalogPageArgs(
-      config: StudyCatalogConfig.voice,
-      initialFirstMenuId: '16',
-    ),
-  );
-}
-
 class InstrumentalPage extends StatelessWidget {
   const InstrumentalPage({super.key});
 
   @override
-  Widget build(BuildContext context) => const StudyCatalogPage(
+  Widget build(BuildContext context) => const VoicePage(
     defaultArgs: StudyCatalogPageArgs(
       config: StudyCatalogConfig.instrumental,
       initialFirstMenuId: '20',
@@ -212,7 +202,7 @@ class _ContentPanel extends StatelessWidget {
                 : state.lessonGroups.isEmpty
                 ? _EmptyState(
                     message: state.errorMessage.isEmpty
-                        ? '暂无教材内容'
+                        ? '暂无课程'
                         : state.errorMessage,
                     onRefresh: onRefresh,
                   )
@@ -243,9 +233,7 @@ class _ContentPanel extends StatelessWidget {
                                 lesson,
                               );
                               if (blockMessage != null) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text(blockMessage)),
-                                );
+                                AppToast.show(context, blockMessage);
                                 return;
                               }
                               final route = _targetRoute(state);
@@ -449,9 +437,7 @@ class _ChildSegmentedItem extends StatelessWidget {
             softWrap: false,
             style: TextStyle(
               fontSize: ui(14),
-              color: active
-                  ? const Color(0xFF0B081A)
-                  : const Color(0xFF6D6B75),
+              color: active ? const Color(0xFF0B081A) : const Color(0xFF6D6B75),
               fontWeight: FontWeight.w500,
               fontFamily: 'PingFang SC',
               height: 1.4,

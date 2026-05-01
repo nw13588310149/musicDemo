@@ -146,7 +146,7 @@ class DictationController extends StateNotifier<DictationState> {
       bootstrapping: false,
       loading: false,
       lessonGroups: groups,
-      errorMessage: groups.isEmpty ? '暂无教材内容' : '',
+      errorMessage: groups.isEmpty ? '暂无课程' : '',
     );
   }
 

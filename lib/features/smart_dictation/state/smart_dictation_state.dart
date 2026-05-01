@@ -108,6 +108,7 @@ class SmartPracticeSession {
     required this.remainingMillis,
     required this.answerSeconds,
     required this.running,
+    required this.started,
     required this.finished,
     required this.showExitDialog,
     required this.linkedLessonId,
@@ -124,6 +125,7 @@ class SmartPracticeSession {
   final int remainingMillis;
   final int answerSeconds;
   final bool running;
+  final bool started;
   final bool finished;
   final bool showExitDialog;
   final int linkedLessonId;
@@ -146,6 +148,7 @@ class SmartPracticeSession {
     int? remainingMillis,
     int? answerSeconds,
     bool? running,
+    bool? started,
     bool? finished,
     bool? showExitDialog,
     int? linkedLessonId,
@@ -162,6 +165,7 @@ class SmartPracticeSession {
       remainingMillis: remainingMillis ?? this.remainingMillis,
       answerSeconds: answerSeconds ?? this.answerSeconds,
       running: running ?? this.running,
+      started: started ?? this.started,
       finished: finished ?? this.finished,
       showExitDialog: showExitDialog ?? this.showExitDialog,
       linkedLessonId: linkedLessonId ?? this.linkedLessonId,
@@ -186,6 +190,7 @@ class SmartDictationState {
     required this.intervalConfig,
     required this.chordConfig,
     required this.session,
+    required this.frequencyBands,
     required this.errorMessage,
     required this.noticeMessage,
     required this.vipExpireDateText,
@@ -204,6 +209,7 @@ class SmartDictationState {
   final SmartPracticeConfig intervalConfig;
   final SmartPracticeConfig chordConfig;
   final SmartPracticeSession? session;
+  final List<double> frequencyBands;
   final String errorMessage;
   final String noticeMessage;
   final String vipExpireDateText;
@@ -245,6 +251,7 @@ class SmartDictationState {
     SmartPracticeConfig? chordConfig,
     SmartPracticeSession? session,
     bool clearSession = false,
+    List<double>? frequencyBands,
     String? errorMessage,
     bool clearErrorMessage = false,
     String? noticeMessage,
@@ -265,6 +272,7 @@ class SmartDictationState {
       intervalConfig: intervalConfig ?? this.intervalConfig,
       chordConfig: chordConfig ?? this.chordConfig,
       session: clearSession ? null : (session ?? this.session),
+      frequencyBands: frequencyBands ?? this.frequencyBands,
       errorMessage: clearErrorMessage
           ? ''
           : (errorMessage ?? this.errorMessage),
@@ -349,7 +357,7 @@ class SmartDictationState {
       chordLessons: <SmartDictationLesson>[],
       absoluteConfig: SmartPracticeConfig(
         optionPool: absolutePool,
-        selectedOptions: <String>['g', 'a', 'c1', 'd1', 'e1'],
+        selectedOptions: <String>[],
         answerSeconds: 20,
         questionCount: 15,
         minNote: 'f',
@@ -358,7 +366,7 @@ class SmartDictationState {
       ),
       intervalConfig: SmartPracticeConfig(
         optionPool: intervalPool,
-        selectedOptions: <String>['纯四度', '小三度', '大三度', '纯五度'],
+        selectedOptions: <String>[],
         answerSeconds: 20,
         questionCount: 15,
         minNote: 'f',
@@ -367,7 +375,7 @@ class SmartDictationState {
       ),
       chordConfig: SmartPracticeConfig(
         optionPool: chordPool,
-        selectedOptions: <String>['大三和弦', '小三和弦', '大六和弦'],
+        selectedOptions: <String>[],
         answerSeconds: 20,
         questionCount: 15,
         minNote: 'f',
@@ -375,6 +383,7 @@ class SmartDictationState {
         intervalPlayMode: SmartIntervalPlayMode.harmonic,
       ),
       session: null,
+      frequencyBands: <double>[],
       errorMessage: '',
       noticeMessage: '',
       vipExpireDateText: '',

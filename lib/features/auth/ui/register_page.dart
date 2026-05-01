@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/route_paths.dart';
 import '../../../core/constants/app_assets.dart';
+import '../../../core/widgets/app_toast.dart';
 import '../state/auth_controller.dart';
 import '../state/auth_state.dart';
 import 'widgets/auth_background_art.dart';
@@ -21,7 +22,9 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(authControllerProvider(AuthScene.register));
-    final controller = ref.read(authControllerProvider(AuthScene.register).notifier);
+    final controller = ref.read(
+      authControllerProvider(AuthScene.register).notifier,
+    );
 
     return Scaffold(
       body: AuthDesignCanvas(
@@ -124,7 +127,8 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                       top: _s(scale, 288),
                       child: GestureDetector(
                         behavior: HitTestBehavior.opaque,
-                        onTap: () => Navigator.pushNamed(context, RoutePaths.forget),
+                        onTap: () =>
+                            Navigator.pushNamed(context, RoutePaths.forget),
                         child: Text(
                           '忘记密码？',
                           style: TextStyle(
@@ -211,7 +215,10 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     );
   }
 
-  Future<void> _onSendSms(BuildContext context, AuthController controller) async {
+  Future<void> _onSendSms(
+    BuildContext context,
+    AuthController controller,
+  ) async {
     final result = await controller.sendSms();
     if (!context.mounted) {
       return;
@@ -241,11 +248,8 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   }
 
   void _showMessage(BuildContext context, String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+    AppToast.show(context, message);
   }
 
   static double _s(double scale, double value) => value * scale;
 }
-

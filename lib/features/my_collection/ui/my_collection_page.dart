@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/constants/app_constants.dart';
+import '../../../core/network/media_url.dart';
+import '../../../core/widgets/app_toast.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../state/my_collection_controller.dart';
 import '../state/my_collection_state.dart';
@@ -189,9 +190,7 @@ class MyCollectionPage extends ConsumerWidget {
   }
 
   void _showMessage(BuildContext context, String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+    AppToast.show(context, message);
   }
 }
 
@@ -489,21 +488,8 @@ String? _resolveRemoteUrl(String? rawUrl) {
   if (value.isEmpty || value.toLowerCase() == 'string') {
     return null;
   }
-
-  if (value.startsWith('//')) {
-    return 'https:$value';
-  }
-
-  final uri = Uri.tryParse(value);
-  if (uri != null && uri.hasScheme) {
-    return value;
-  }
-
-  if (value.startsWith('/')) {
-    return Uri.parse(AppConstants.apiBaseUrl).resolve(value).toString();
-  }
-
-  return Uri.parse(AppConstants.apiBaseUrl).resolve(value).toString();
+  final resolved = MediaUrl.resolve(value);
+  return resolved.isEmpty ? null : resolved;
 }
 
 class _MiniActionButton extends StatelessWidget {

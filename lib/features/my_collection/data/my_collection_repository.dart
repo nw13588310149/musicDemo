@@ -42,7 +42,7 @@ class MyCollectionRepository {
   }
 
   Future<ApiResponse> getClassList() {
-    return client.post('/app/school/chat/classList');
+    return client.post('/app/school/v2/chat/classList');
   }
 
   Future<ApiResponse> shareToClass({
@@ -51,7 +51,7 @@ class MyCollectionRepository {
     required Map<String, dynamic> payload,
   }) {
     return client.post(
-      '/app/school/chat/sendMsg',
+      '/app/school/v2/chat/sendMsg',
       data: <String, dynamic>{
         'classId': classId,
         'content': jsonEncode(payload),

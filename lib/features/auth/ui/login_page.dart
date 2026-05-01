@@ -5,6 +5,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../app/router/route_paths.dart';
 import '../../../core/constants/app_assets.dart';
+import '../../../core/widgets/app_toast.dart';
 import '../../../features/shell/state/shell_controller.dart';
 import '../state/auth_controller.dart';
 import '../state/auth_state.dart';
@@ -23,7 +24,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(authControllerProvider(AuthScene.login));
-    final controller = ref.read(authControllerProvider(AuthScene.login).notifier);
+    final controller = ref.read(
+      authControllerProvider(AuthScene.login).notifier,
+    );
 
     return Scaffold(
       body: AuthDesignCanvas(
@@ -83,7 +86,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       top: _s(scale, 228),
                       child: GestureDetector(
                         behavior: HitTestBehavior.opaque,
-                        onTap: () => Navigator.pushNamed(context, RoutePaths.forget),
+                        onTap: () =>
+                            Navigator.pushNamed(context, RoutePaths.forget),
                         child: Text(
                           '忘记密码？',
                           style: TextStyle(
@@ -106,7 +110,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         scale: scale,
                         text: '立即登录',
                         loading: state.isSubmitting,
-                        onPressed: () => _onLogin(context, controller, state.agreeTerms),
+                        onPressed: () =>
+                            _onLogin(context, controller, state.agreeTerms),
                       ),
                     ),
                     Positioned(
@@ -160,8 +165,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           SizedBox(width: _s(scale, 4)),
                           GestureDetector(
                             behavior: HitTestBehavior.opaque,
-                            onTap: () =>
-                                Navigator.pushNamed(context, RoutePaths.register),
+                            onTap: () => Navigator.pushNamed(
+                              context,
+                              RoutePaths.register,
+                            ),
                             child: Text(
                               '立即注册！',
                               style: TextStyle(
@@ -212,11 +219,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   }
 
   void _showMessage(BuildContext context, String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+    AppToast.show(context, message);
   }
 
   static double _s(double scale, double value) => value * scale;
 }
-

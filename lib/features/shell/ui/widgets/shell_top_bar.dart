@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../app/router/route_paths.dart';
 import '../../../../core/constants/app_assets.dart';
 import '../../../../core/widgets/app_asset_graphic.dart';
+import '../../../../core/widgets/app_toast.dart';
 import '../../../../core/widgets/scaled_dialog.dart';
 import '../../state/shell_state.dart';
 import '../shell_layout.dart';
@@ -241,12 +242,7 @@ class ShellTopBar extends StatelessWidget {
 
     final action = await showMenu<_UserMenuAction>(
       context: context,
-      position: RelativeRect.fromLTRB(
-        dx,
-        dy,
-        dx + menuWidth,
-        dy + menuHeight,
-      ),
+      position: RelativeRect.fromLTRB(dx, dy, dx + menuWidth, dy + menuHeight),
       color: Colors.transparent,
       elevation: 0,
       shadowColor: Colors.transparent,
@@ -490,9 +486,7 @@ class ShellTopBar extends StatelessWidget {
   }
 
   void _showToast(BuildContext context, String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+    AppToast.show(context, message);
   }
 }
 
@@ -566,11 +560,7 @@ class _UserMenuDivider extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: ui(12)),
-      child: const Divider(
-        height: 1,
-        thickness: 1,
-        color: Color(0xFFF3F2F3),
-      ),
+      child: const Divider(height: 1, thickness: 1, color: Color(0xFFF3F2F3)),
     );
   }
 }

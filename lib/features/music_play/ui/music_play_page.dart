@@ -3,46 +3,114 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/image_gallery_viewer.dart';
 import '../../piano/ui/piano_keyboard.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../state/music_play_controller.dart';
 import '../state/music_play_state.dart';
 
-class MusicPlayPage extends ConsumerWidget {
+final Set<String> _musicPlayPrecachedImages = <String>{};
+
+class MusicPlayPage extends ConsumerStatefulWidget {
   const MusicPlayPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MusicPlayPage> createState() => _MusicPlayPageState();
+}
+
+class _MusicPlayPageState extends ConsumerState<MusicPlayPage> {
+  bool _shareDialogShowing = false;
+
+  @override
+  Widget build(BuildContext context) {
     final args = MusicPlayPageArgs.fromRaw(
       ModalRoute.of(context)?.settings.arguments,
     );
     final state = ref.watch(musicPlayControllerProvider(args));
     final controller = ref.read(musicPlayControllerProvider(args).notifier);
     final ui = DashboardScaleScope.of(context).ui;
+    _precacheMusicPlayImages(context, state);
 
     ref.listen<MusicPlayState>(musicPlayControllerProvider(args), (
       previous,
       next,
     ) {
       final message = next.errorMessage;
-      if (message.isEmpty || message == previous?.errorMessage) {
-        return;
+      if (message.isNotEmpty && message != previous?.errorMessage) {
+        AppToast.show(context, message);
+        controller.clearError();
       }
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(message)));
-      controller.clearError();
+
+      if (next.shareDialogVisible && !_shareDialogShowing) {
+        _shareDialogShowing = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _showShareDialog(context, args);
+        });
+      }
     });
 
+    // Padding is moved INSIDE each layout so that the bottom piano keyboard
+    // can sit flush against the surface edges (full-bleed) for a more
+    // immersive look. ClipRRect respects the panel's rounded corners so the
+    // piano's drop shadow does not bleed past them.
     return ShellPageSurface(
-      padding: EdgeInsets.fromLTRB(ui(12), ui(12), ui(12), ui(12)),
-      child: state.loading && !state.hasDetail
-          ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
-          : (state.isVocalOrInstrumental
-                ? _buildVocalLayout(context, state, controller)
-                : _buildDefaultLayout(context, state, controller)),
+      padding: EdgeInsets.zero,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(ui(ShellLayoutSpec.panelRadius)),
+        child: state.loading && !state.hasDetail
+            ? Padding(
+                padding: EdgeInsets.fromLTRB(ui(12), ui(12), ui(12), ui(12)),
+                child: const Center(
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              )
+            : (state.isVocalOrInstrumental
+                  ? Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        ui(12),
+                        ui(12),
+                        ui(12),
+                        ui(12),
+                      ),
+                      child: _buildVocalLayout(context, state, controller),
+                    )
+                  : _buildDefaultLayout(context, state, controller)),
+      ),
     );
+  }
+
+  void _precacheMusicPlayImages(BuildContext context, MusicPlayState state) {
+    final urls = <String>[
+      'assets/images/home/plyabj.png',
+      'assets/images/home/play1.png',
+      'assets/images/home/left.png',
+      'assets/images/home/right.png',
+      'assets/images/home/chevron-down.png',
+      'assets/images/home/feng.png',
+      'assets/images/home/dictation/8.png',
+      'assets/images/home/dictation/9.png',
+      'assets/images/home/dictation/10.png',
+      'assets/images/404/wx.png',
+      'assets/images/404/jp.png',
+      ...?state.detail?.questionImages,
+      ...?state.detail?.answerImages,
+      if (state.detail?.coverUrl.isNotEmpty == true) state.detail!.coverUrl,
+    ];
+
+    for (final url in urls) {
+      if (url.isEmpty || !_musicPlayPrecachedImages.add(url)) {
+        continue;
+      }
+      final provider = url.startsWith('http://') || url.startsWith('https://')
+          ? NetworkImage(url)
+          : AssetImage(url) as ImageProvider;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) {
+          precacheImage(provider, context);
+        }
+      });
+    }
   }
 
   Widget _buildDefaultLayout(
@@ -51,56 +119,65 @@ class MusicPlayPage extends ConsumerWidget {
     MusicPlayController controller,
   ) {
     final ui = DashboardScaleScope.of(context).ui;
+    // Top half (turntable + answer + playback bar) keeps the original page
+    // padding. The bottom half – the piano keyboard, when shown – is rendered
+    // edge-to-edge so it visually merges into the panel's bottom rounded
+    // corners. When the keyboard is hidden the long-text panel reapplies the
+    // standard padding so the original layout is preserved.
     return Column(
       children: [
-        SizedBox(
-          height: ui(332),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+        Padding(
+          padding: EdgeInsets.fromLTRB(ui(12), ui(12), ui(12), 0),
+          child: Column(
             children: [
               SizedBox(
-                width: ui(320),
-                child: _TurntablePanel(
-                  state: state,
-                  onBack: () => Navigator.of(context).maybePop(),
-                  onShare: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('分享功能稍后补齐')),
-                    );
-                  },
+                height: ui(332),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SizedBox(
+                      width: ui(320),
+                      child: _TurntablePanel(
+                        state: state,
+                        onBack: () => Navigator.of(context).maybePop(),
+                        onShare: controller.openShareDialog,
+                      ),
+                    ),
+                    Container(
+                      width: ui(1),
+                      margin: EdgeInsets.only(left: ui(12), right: ui(14)),
+                      color: const Color(0xFFF3F2F3),
+                    ),
+                    Expanded(
+                      child: _AnswerPanel(
+                        state: state,
+                        onToggleAnswer: controller.setShowAnswer,
+                        onImageChanged: controller.setImageIndex,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              Container(
-                width: ui(1),
-                margin: EdgeInsets.only(left: ui(12), right: ui(14)),
-                color: const Color(0xFFF3F2F3),
+              SizedBox(height: ui(18)),
+              _PlaybackBar(
+                state: state,
+                onSkipBackward: () => _skipSeconds(controller, state, -5),
+                onTogglePlay: controller.togglePlay,
+                onSkipForward: () => _skipSeconds(controller, state, 5),
+                onSeekRatio: (ratio) {
+                  final target = Duration(
+                    milliseconds: (state.duration.inMilliseconds * ratio)
+                        .round(),
+                  );
+                  controller.seek(target);
+                },
+                onSpeedChanged: controller.setPlaybackSpeed,
+                onToggleFavorite: controller.toggleFavorite,
               ),
-              Expanded(
-                child: _AnswerPanel(
-                  state: state,
-                  onToggleAnswer: controller.setShowAnswer,
-                  onImageChanged: controller.setImageIndex,
-                ),
-              ),
+              SizedBox(height: ui(12)),
             ],
           ),
         ),
-        SizedBox(height: ui(18)),
-        _PlaybackBar(
-          state: state,
-          onPrevious: controller.previous,
-          onTogglePlay: controller.togglePlay,
-          onNext: controller.next,
-          onSeekRatio: (ratio) {
-            final target = Duration(
-              milliseconds: (state.duration.inMilliseconds * ratio).round(),
-            );
-            controller.seek(target);
-          },
-          onSpeedChanged: controller.setPlaybackSpeed,
-          onToggleFavorite: controller.toggleFavorite,
-        ),
-        SizedBox(height: ui(12)),
         Expanded(
           child: state.showsKeyboard
               ? PianoKeyboard(
@@ -109,7 +186,12 @@ class MusicPlayPage extends ConsumerWidget {
                   onRelease: controller.releasePianoKey,
                   height: 220,
                 )
-              : _LongTextPanel(htmlText: state.detail?.longTextHtml ?? ''),
+              : Padding(
+                  padding: EdgeInsets.fromLTRB(ui(12), 0, ui(12), ui(12)),
+                  child: _LongTextPanel(
+                    htmlText: state.detail?.longTextHtml ?? '',
+                  ),
+                ),
         ),
       ],
     );
@@ -137,16 +219,11 @@ class MusicPlayPage extends ConsumerWidget {
                     _TurntablePanel(
                       state: state,
                       onBack: () => Navigator.of(context).maybePop(),
-                      onShare: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('分享功能稍后补齐')),
-                        );
-                      },
+                      onShare: controller.openShareDialog,
                     ),
                     SizedBox(height: ui(12)),
                     Expanded(
                       child: _DescriptionCard(
-                        title: state.detail?.title ?? '',
                         htmlText: state.detail?.longTextHtml ?? '',
                       ),
                     ),
@@ -165,9 +242,7 @@ class MusicPlayPage extends ConsumerWidget {
                   onImageChanged: controller.setImageIndex,
                   useStaffSimplifiedToggle: true,
                   onTranspose: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('升降调功能稍后补齐')),
-                    );
+                    AppToast.show(context, '升降调功能即将上线');
                   },
                 ),
               ),
@@ -177,9 +252,9 @@ class MusicPlayPage extends ConsumerWidget {
         SizedBox(height: ui(18)),
         _PlaybackBar(
           state: state,
-          onPrevious: controller.previous,
+          onSkipBackward: () => _skipSeconds(controller, state, -5),
           onTogglePlay: controller.togglePlay,
-          onNext: controller.next,
+          onSkipForward: () => _skipSeconds(controller, state, 5),
           onSeekRatio: (ratio) {
             final target = Duration(
               milliseconds: (state.duration.inMilliseconds * ratio).round(),
@@ -190,6 +265,380 @@ class MusicPlayPage extends ConsumerWidget {
           onToggleFavorite: controller.toggleFavorite,
         ),
       ],
+    );
+  }
+
+  Future<void> _skipSeconds(
+    MusicPlayController controller,
+    MusicPlayState state,
+    int deltaSeconds,
+  ) async {
+    final maxMs = state.duration.inMilliseconds;
+    final currentMs = state.position.inMilliseconds;
+    final targetMs = maxMs > 0
+        ? (currentMs + deltaSeconds * 1000).clamp(0, maxMs)
+        : math.max(0, currentMs + deltaSeconds * 1000);
+    await controller.seek(Duration(milliseconds: targetMs));
+  }
+
+  Future<void> _showShareDialog(
+    BuildContext context,
+    MusicPlayPageArgs args,
+  ) async {
+    if (!mounted) {
+      return;
+    }
+    final scale = DashboardScaleScope.of(context);
+    await showGeneralDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.20),
+      barrierDismissible: true,
+      barrierLabel: '关闭分享',
+      transitionDuration: const Duration(milliseconds: 240),
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        return DashboardScaleScope(
+          data: scale,
+          child: _ShareDrawer(args: args),
+        );
+      },
+      transitionBuilder: (context, animation, secondary, child) {
+        final offset = Tween<Offset>(
+          begin: const Offset(-1, 0),
+          end: Offset.zero,
+        ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOut));
+        return SlideTransition(position: offset, child: child);
+      },
+    );
+    _shareDialogShowing = false;
+    if (mounted) {
+      ref.read(musicPlayControllerProvider(args).notifier).closeShareDialog();
+    }
+  }
+}
+
+class _ShareDrawer extends ConsumerWidget {
+  const _ShareDrawer({required this.args});
+
+  final MusicPlayPageArgs args;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(musicPlayControllerProvider(args));
+    final controller = ref.read(musicPlayControllerProvider(args).notifier);
+    final ui = DashboardScaleScope.of(context).ui;
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Material(
+        color: Colors.white,
+        child: SizedBox(
+          width: ui(600),
+          height: double.infinity,
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: ui(20), vertical: ui(20)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const _DrawerTitle(title: '分享课件'),
+                SizedBox(height: ui(20)),
+                const Divider(height: 1, color: Color(0xFFF3F2F3)),
+                SizedBox(height: ui(24)),
+                _ShareTargetCard(detail: state.detail),
+                SizedBox(height: ui(28)),
+                Text(
+                  '您的班级群',
+                  style: TextStyle(
+                    color: const Color(0xFF0B081A),
+                    fontSize: ui(16),
+                    fontFamily: 'PingFang SC',
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                SizedBox(height: ui(16)),
+                Expanded(
+                  child: state.classLoading
+                      ? const Center(
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : state.classList.isEmpty
+                      ? const _ShareDrawerEmpty()
+                      : ListView.separated(
+                          padding: EdgeInsets.zero,
+                          itemCount: state.classList.length,
+                          separatorBuilder: (_, _) => SizedBox(height: ui(12)),
+                          itemBuilder: (context, index) {
+                            final cls = state.classList[index];
+                            return _ClassRow(
+                              cls: cls,
+                              onTap: () => controller.toggleClass(cls.id),
+                            );
+                          },
+                        ),
+                ),
+                SizedBox(height: ui(12)),
+                _SendButton(
+                  loading: state.sending,
+                  onTap: () async {
+                    final success = await controller.sendShare();
+                    if (!context.mounted) {
+                      return;
+                    }
+                    if (success) {
+                      Navigator.of(context).maybePop();
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DrawerTitle extends StatelessWidget {
+  const _DrawerTitle({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Row(
+      children: [
+        Container(
+          width: ui(3.25),
+          height: ui(14.85),
+          decoration: BoxDecoration(
+            color: const Color(0xFF8741FF),
+            borderRadius: BorderRadius.circular(ui(6)),
+          ),
+        ),
+        SizedBox(width: ui(4)),
+        Text(
+          title,
+          style: TextStyle(
+            color: const Color(0xFF0B081A),
+            fontSize: ui(16),
+            fontFamily: 'PingFang SC',
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ShareTargetCard extends StatelessWidget {
+  const _ShareTargetCard({required this.detail});
+
+  final MusicPlayDetail? detail;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final coverUrl = detail?.coverUrl ?? '';
+    final imageProvider =
+        coverUrl.startsWith('http://') || coverUrl.startsWith('https://')
+        ? NetworkImage(coverUrl)
+        : (coverUrl.isNotEmpty ? AssetImage(coverUrl) : null) as ImageProvider?;
+
+    return Container(
+      height: ui(106),
+      padding: EdgeInsets.symmetric(horizontal: ui(24), vertical: ui(20)),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F4FF),
+        borderRadius: BorderRadius.circular(ui(16)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  '您将分享的课件',
+                  style: TextStyle(
+                    color: const Color(0xFF0B081A),
+                    fontSize: ui(14),
+                    fontFamily: 'PingFang SC',
+                  ),
+                ),
+                SizedBox(height: ui(10)),
+                Text(
+                  detail?.title ?? '',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: const Color(0xFF0B081A),
+                    fontSize: ui(16),
+                    fontFamily: 'PingFang SC',
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(width: ui(16)),
+          Container(
+            width: ui(75.76),
+            height: ui(55.27),
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFFF1E8FD), Color(0xFFDDC4FF)],
+              ),
+              borderRadius: BorderRadius.circular(ui(6.82)),
+            ),
+            child: imageProvider == null
+                ? const Icon(
+                    Icons.library_music_rounded,
+                    color: Color(0xFFA773FF),
+                  )
+                : Image(
+                    image: imageProvider,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => const Icon(
+                      Icons.library_music_rounded,
+                      color: Color(0xFFA773FF),
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ClassRow extends StatelessWidget {
+  const _ClassRow({required this.cls, required this.onTap});
+
+  final MusicPlayShareClass cls;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final checked = cls.checked;
+    return Material(
+      color: const Color(0xFFF5F6FA),
+      borderRadius: BorderRadius.circular(ui(16)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(ui(16)),
+        onTap: onTap,
+        child: Container(
+          height: ui(80),
+          padding: EdgeInsets.symmetric(horizontal: ui(16)),
+          child: Row(
+            children: [
+              Container(
+                width: ui(24),
+                height: ui(24),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: checked
+                        ? const Color(0xFF8741FF)
+                        : const Color(0xFFCECED1),
+                    width: 1,
+                  ),
+                ),
+                child: checked
+                    ? Icon(
+                        Icons.check_rounded,
+                        size: ui(16),
+                        color: const Color(0xFF8741FF),
+                      )
+                    : null,
+              ),
+              SizedBox(width: ui(16)),
+              Expanded(
+                child: Text(
+                  cls.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.black,
+                    fontSize: ui(16),
+                    fontFamily: 'PingFang SC',
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ShareDrawerEmpty extends StatelessWidget {
+  const _ShareDrawerEmpty();
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Center(
+      child: Text(
+        '暂无班级群',
+        style: TextStyle(
+          color: const Color(0xFFB6B5BB),
+          fontSize: ui(14),
+          fontFamily: 'PingFang SC',
+        ),
+      ),
+    );
+  }
+}
+
+class _SendButton extends StatelessWidget {
+  const _SendButton({required this.loading, required this.onTap});
+
+  final bool loading;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return GestureDetector(
+      onTap: loading ? null : onTap,
+      child: Container(
+        height: ui(48),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.centerRight,
+            end: Alignment.centerLeft,
+            colors: [Color(0xFFB68EFF), Color(0xFF8640FF)],
+          ),
+          borderRadius: BorderRadius.circular(ui(12)),
+        ),
+        child: loading
+            ? SizedBox(
+                width: ui(20),
+                height: ui(20),
+                child: const CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              )
+            : Text(
+                '发送',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: ui(14),
+                  fontFamily: 'PingFang SC',
+                  fontWeight: FontWeight.w500,
+                  height: 24 / 14,
+                ),
+              ),
+      ),
     );
   }
 }
@@ -209,9 +658,6 @@ class _TurntablePanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final detail = state.detail;
-    final progress = state.duration.inMilliseconds == 0
-        ? 0.0
-        : state.position.inMilliseconds / state.duration.inMilliseconds;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -231,48 +677,179 @@ class _TurntablePanel extends StatelessWidget {
           ],
         ),
         SizedBox(height: ui(22)),
-        Center(
-          child: _TurntableDisc(
-            coverUrl: detail?.coverUrl ?? '',
-            playing: state.isPlaying,
-          ),
-        ),
+        Center(child: _TurntableDisc(playing: state.isPlaying)),
         SizedBox(height: ui(14)),
         Center(
           child: Container(
-            constraints: BoxConstraints(maxWidth: ui(160)),
-            height: ui(24),
-            padding: EdgeInsets.symmetric(horizontal: ui(18)),
+            width: ui(129),
+            height: ui(18),
             decoration: BoxDecoration(
-              color: const Color(0xFFF4F4FF),
-              borderRadius: BorderRadius.circular(ui(999)),
+              color: const Color(0xFFEDEDED),
+              borderRadius: BorderRadius.circular(ui(12)),
             ),
             alignment: Alignment.center,
-            child: Text(
-              detail?.title ?? '未命名听写',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: const Color(0xFF0B081A),
-                fontSize: ui(13),
-                fontFamily: 'Harmony',
-                fontWeight: FontWeight.w500,
-                height: 1,
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: ui(12)),
+              child: _MarqueeTitleText(
+                text: detail?.title ?? '未命名听写',
+                style: TextStyle(
+                  color: Colors.black,
+                  fontSize: ui(11),
+                  fontFamily: 'PingFang SC',
+                  fontWeight: FontWeight.w400,
+                  height: 18 / 11,
+                ),
               ),
             ),
           ),
         ),
         SizedBox(height: ui(16)),
-        _MiniWaveform(progress: progress),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: ui(22)),
+          child: RepaintBoundary(
+            child: _FrequencyVisualizer(
+              frequencyBands: state.frequencyBands,
+              playing: state.isPlaying,
+              height: ui(38),
+            ),
+          ),
+        ),
       ],
     );
   }
 }
 
-class _TurntableDisc extends StatelessWidget {
-  const _TurntableDisc({required this.coverUrl, required this.playing});
+class _MarqueeTitleText extends StatefulWidget {
+  const _MarqueeTitleText({required this.text, required this.style});
 
-  final String coverUrl;
+  final String text;
+  final TextStyle style;
+
+  @override
+  State<_MarqueeTitleText> createState() => _MarqueeTitleTextState();
+}
+
+class _MarqueeTitleTextState extends State<_MarqueeTitleText>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  int _durationMs = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this);
+  }
+
+  @override
+  void didUpdateWidget(covariant _MarqueeTitleText oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.text != widget.text || oldWidget.style != widget.style) {
+      _controller
+        ..stop()
+        ..value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final gap = ui(28);
+    final pixelsPerSecond = ui(40);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final painter = TextPainter(
+          text: TextSpan(text: widget.text, style: widget.style),
+          maxLines: 1,
+          textDirection: TextDirection.ltr,
+        )..layout(maxWidth: double.infinity);
+        final textWidth = painter.width;
+        final viewportWidth = constraints.maxWidth;
+
+        if (widget.text.isEmpty || viewportWidth <= 0) {
+          _controller.stop();
+          return Text(
+            widget.text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: widget.style,
+          );
+        }
+
+        final textSlotWidth = math.max(textWidth, viewportWidth);
+        final distance = textSlotWidth + gap;
+        final durationMs = math.max(
+          1800,
+          (distance / pixelsPerSecond * 1000).round(),
+        );
+        _ensureScrolling(durationMs);
+
+        return ClipRect(
+          child: AnimatedBuilder(
+            animation: _controller,
+            builder: (context, _) {
+              final left = -distance * _controller.value;
+              return Stack(
+                fit: StackFit.expand,
+                clipBehavior: Clip.hardEdge,
+                children: [
+                  _buildPositionedText(left, textSlotWidth),
+                  _buildPositionedText(left + distance, textSlotWidth),
+                  _buildPositionedText(left + distance * 2, textSlotWidth),
+                ],
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  void _ensureScrolling(int durationMs) {
+    if (_durationMs == durationMs && _controller.isAnimating) {
+      return;
+    }
+    _durationMs = durationMs;
+    _controller.duration = Duration(milliseconds: durationMs);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      if (!_controller.isAnimating) {
+        _controller.repeat();
+      }
+    });
+  }
+
+  Widget _buildPositionedText(double left, double width) {
+    return Positioned(
+      left: left,
+      top: 0,
+      bottom: 0,
+      width: width,
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          widget.text,
+          maxLines: 1,
+          overflow: TextOverflow.visible,
+          softWrap: false,
+          style: widget.style,
+        ),
+      ),
+    );
+  }
+}
+
+class _TurntableDisc extends StatelessWidget {
+  const _TurntableDisc({required this.playing});
+
   final bool playing;
 
   @override
@@ -282,184 +859,27 @@ class _TurntableDisc extends StatelessWidget {
       width: ui(180),
       height: ui(180),
       child: Stack(
+        clipBehavior: Clip.none,
         children: [
-          Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(ui(16)),
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFFD9DDE6), Color(0xFFC6CAD4)],
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0x24000000),
-                  blurRadius: ui(12),
-                  offset: Offset(0, ui(6)),
-                ),
-              ],
+          Positioned.fill(
+            child: Image.asset(
+              'assets/images/home/plyabj.png',
+              fit: BoxFit.contain,
             ),
           ),
           Positioned(
-            left: ui(18),
-            top: ui(18),
-            right: ui(18),
-            bottom: ui(18),
-            child: Container(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: const RadialGradient(
-                  colors: [Color(0xFF242833), Color(0xFF0B0E15)],
-                ),
-                border: Border.all(
-                  color: const Color(0xFF9499A7),
-                  width: ui(5),
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            left: ui(37),
-            top: ui(37),
-            right: ui(37),
-            bottom: ui(37),
+            left: ui(102),
+            top: ui(10),
             child: AnimatedRotation(
-              turns: playing ? 1 : 0,
-              duration: const Duration(seconds: 8),
-              curve: Curves.linear,
-              child: Container(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: const SweepGradient(
-                    colors: [
-                      Color(0xFF856FE2),
-                      Color(0x33201A20),
-                      Color(0xFF856FE2),
-                    ],
-                  ),
-                ),
-                child: Padding(
-                  padding: EdgeInsets.all(ui(22)),
-                  child: ClipOval(
-                    child: coverUrl.isEmpty
-                        ? Container(
-                            color: const Color(0xFF0A0D15),
-                            child: const Icon(
-                              Icons.music_note_rounded,
-                              color: Color(0xFFFFD84D),
-                              size: 40,
-                            ),
-                          )
-                        : Image.network(
-                            coverUrl,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Container(
-                                color: const Color(0xFF0A0D15),
-                                child: const Icon(
-                                  Icons.music_note_rounded,
-                                  color: Color(0xFFFFD84D),
-                                  size: 40,
-                                ),
-                              );
-                            },
-                          ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            right: ui(11),
-            top: ui(8),
-            child: Container(
-              width: ui(22),
-              height: ui(22),
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Color(0xFF7B7D84), Color(0xFF45474D)],
-                ),
-              ),
-              child: Center(
-                child: Container(
-                  width: ui(16),
-                  height: ui(16),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: const Color(0xFF1D2027),
-                    border: Border.all(
-                      color: const Color(0xFF626978),
-                      width: ui(0.3),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            right: ui(46),
-            top: ui(18),
-            child: Transform.rotate(
-              angle: math.pi / 11,
-              child: Container(
-                width: ui(8),
-                height: ui(124),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(ui(99)),
-                  gradient: const LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Color(0xFF9EA3AE), Color(0xFF2E3137)],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            right: ui(60),
-            bottom: ui(37),
-            child: Transform.rotate(
-              angle: -math.pi / 3.6,
-              child: Container(
-                width: ui(16),
-                height: ui(7),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(ui(4)),
-                  gradient: const LinearGradient(
-                    colors: [
-                      Color(0xFF303133),
-                      Color(0xFFA4A9B2),
-                      Color(0xFF303133),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            left: ui(10),
-            bottom: ui(10),
-            child: Container(
-              width: ui(28),
-              height: ui(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFB8BCCC),
-                borderRadius: BorderRadius.circular(ui(99)),
-              ),
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: Container(
-                  width: ui(7),
-                  margin: EdgeInsets.only(right: ui(3)),
-                  height: ui(3),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF856FE2),
-                    borderRadius: BorderRadius.circular(ui(99)),
-                  ),
-                ),
+              turns: playing ? 0 : -0.075,
+              duration: const Duration(milliseconds: 900),
+              curve: Curves.easeInOutCubic,
+              alignment: const Alignment(0.64, -0.79),
+              child: Image.asset(
+                'assets/images/home/play1.png',
+                width: ui(65),
+                height: ui(138),
+                fit: BoxFit.contain,
               ),
             ),
           ),
@@ -469,7 +889,7 @@ class _TurntableDisc extends StatelessWidget {
   }
 }
 
-class _AnswerPanel extends StatelessWidget {
+class _AnswerPanel extends StatefulWidget {
   const _AnswerPanel({
     required this.state,
     required this.onToggleAnswer,
@@ -489,9 +909,63 @@ class _AnswerPanel extends StatelessWidget {
   final VoidCallback? onTranspose;
 
   @override
+  State<_AnswerPanel> createState() => _AnswerPanelState();
+}
+
+class _AnswerPanelState extends State<_AnswerPanel> {
+  final Set<int> _failedImageIndexes = <int>{};
+  List<String> _lastImages = const <String>[];
+
+  @override
+  void didUpdateWidget(covariant _AnswerPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final images = widget.state.visibleImages;
+    if (!_listEquals(images, _lastImages)) {
+      _lastImages = List<String>.from(images);
+      _failedImageIndexes.clear();
+    }
+  }
+
+  bool _listEquals(List<String> a, List<String> b) {
+    if (a.length != b.length) {
+      return false;
+    }
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  void _markImageFailed(int index) {
+    if (_failedImageIndexes.contains(index)) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() {
+          _failedImageIndexes.add(index);
+        });
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final state = widget.state;
     final images = state.visibleImages;
+    if (!_listEquals(images, _lastImages)) {
+      _lastImages = List<String>.from(images);
+      _failedImageIndexes.clear();
+    }
+    final activeIndex = state.activeImageIndex.clamp(
+      0,
+      math.max(0, images.length - 1),
+    );
+    final showCounter =
+        images.isNotEmpty && !_failedImageIndexes.contains(activeIndex);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -499,11 +973,11 @@ class _AnswerPanel extends StatelessWidget {
         Row(
           children: [
             const Spacer(),
-            if (onTranspose != null) ...[
+            if (widget.onTranspose != null) ...[
               _OutlinedChipButton(
                 iconAsset: 'assets/images/home/dictation/9.png',
                 label: '升降调',
-                onTap: onTranspose!,
+                onTap: widget.onTranspose!,
               ),
               SizedBox(width: ui(10)),
             ],
@@ -515,31 +989,31 @@ class _AnswerPanel extends StatelessWidget {
                 borderRadius: BorderRadius.circular(ui(8)),
               ),
               child: Row(
-                children: useStaffSimplifiedToggle
+                children: widget.useStaffSimplifiedToggle
                     ? [
                         _TogglePill(
                           label: '五线谱',
                           active: state.showAnswer,
-                          onTap: () => onToggleAnswer(true),
+                          onTap: () => widget.onToggleAnswer(true),
                         ),
                         SizedBox(width: ui(4)),
                         _TogglePill(
                           label: '简谱',
                           active: !state.showAnswer,
-                          onTap: () => onToggleAnswer(false),
+                          onTap: () => widget.onToggleAnswer(false),
                         ),
                       ]
                     : [
                         _TogglePill(
                           label: '关闭',
                           active: !state.showAnswer,
-                          onTap: () => onToggleAnswer(false),
+                          onTap: () => widget.onToggleAnswer(false),
                         ),
                         SizedBox(width: ui(4)),
                         _TogglePill(
                           label: '答案',
                           active: state.showAnswer,
-                          onTap: () => onToggleAnswer(true),
+                          onTap: () => widget.onToggleAnswer(true),
                         ),
                       ],
               ),
@@ -549,16 +1023,27 @@ class _AnswerPanel extends StatelessWidget {
         SizedBox(height: ui(18)),
         Expanded(
           child: images.isEmpty
-              ? const _AnswerEmptyState()
+              ? _AnswerEmptyState(
+                  useStaffSimplifiedToggle: widget.useStaffSimplifiedToggle,
+                  showStaff: state.showAnswer,
+                )
               : Stack(
                   children: [
                     PageView.builder(
                       itemCount: images.length,
-                      onPageChanged: onImageChanged,
+                      onPageChanged: widget.onImageChanged,
                       itemBuilder: (context, index) {
                         final image = images[index];
+                        final failed = _failedImageIndexes.contains(index);
                         // 答案图保留原始细节：宽度铺满，超出高度允许上下滑动查看；
                         // 双击仍可调起全屏画廊（PhotoView）做缩放/拖拽。
+                        if (failed) {
+                          return _AnswerEmptyState(
+                            useStaffSimplifiedToggle:
+                                widget.useStaffSimplifiedToggle,
+                            showStaff: state.showAnswer,
+                          );
+                        }
                         return Padding(
                           padding: EdgeInsets.symmetric(horizontal: ui(16)),
                           child: GestureDetector(
@@ -581,9 +1066,13 @@ class _AnswerPanel extends StatelessWidget {
                                     width: double.infinity,
                                     fit: BoxFit.fitWidth,
                                     errorBuilder: (context, error, stackTrace) {
-                                      return SizedBox(
-                                        height: ui(260),
-                                        child: const _AnswerEmptyState(),
+                                      _markImageFailed(index);
+                                      return Center(
+                                        child: _AnswerEmptyState(
+                                          useStaffSimplifiedToggle:
+                                              widget.useStaffSimplifiedToggle,
+                                          showStaff: state.showAnswer,
+                                        ),
                                       );
                                     },
                                   ),
@@ -594,29 +1083,30 @@ class _AnswerPanel extends StatelessWidget {
                         );
                       },
                     ),
-                    Positioned(
-                      right: ui(10),
-                      bottom: ui(6),
-                      child: Container(
-                        height: ui(24),
-                        padding: EdgeInsets.symmetric(horizontal: ui(8)),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF3F2F3),
-                          borderRadius: BorderRadius.circular(ui(6)),
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          '${state.activeImageIndex + 1}/${images.length}',
-                          style: TextStyle(
-                            color: const Color(0xFF0B081A),
-                            fontSize: ui(12),
-                            fontFamily: 'PingFang SC',
-                            fontWeight: FontWeight.w500,
-                            height: 1,
+                    if (showCounter)
+                      Positioned(
+                        right: ui(10),
+                        bottom: ui(6),
+                        child: Container(
+                          height: ui(24),
+                          padding: EdgeInsets.symmetric(horizontal: ui(8)),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF3F2F3),
+                            borderRadius: BorderRadius.circular(ui(6)),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            '${activeIndex + 1}/${images.length}',
+                            style: TextStyle(
+                              color: const Color(0xFF0B081A),
+                              fontSize: ui(12),
+                              fontFamily: 'PingFang SC',
+                              fontWeight: FontWeight.w500,
+                              height: 1,
+                            ),
                           ),
                         ),
                       ),
-                    ),
                   ],
                 ),
         ),
@@ -626,31 +1116,55 @@ class _AnswerPanel extends StatelessWidget {
 }
 
 class _AnswerEmptyState extends StatelessWidget {
-  const _AnswerEmptyState();
+  const _AnswerEmptyState({
+    this.useStaffSimplifiedToggle = false,
+    this.showStaff = true,
+  });
+
+  final bool useStaffSimplifiedToggle;
+  final bool showStaff;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final asset = useStaffSimplifiedToggle
+        ? (showStaff ? 'assets/images/404/wx.png' : 'assets/images/404/jp.png')
+        : 'assets/images/home/dictation/8.png';
+    final isStaffMode = useStaffSimplifiedToggle;
+    final message = isStaffMode
+        ? (showStaff ? '暂无五线谱' : '暂无简谱')
+        : '同学加油！不看答案的样子真的很棒！';
+    final messageStyle = isStaffMode
+        ? TextStyle(
+            color: const Color.fromARGB(255, 22, 22, 22),
+            fontSize: ui(16),
+            fontFamily: 'PingFang SC',
+            fontWeight: FontWeight.w400,
+          )
+        : TextStyle(
+            color: const Color(0xFFB6B5BB),
+            fontSize: ui(13),
+            fontFamily: 'PingFang SC',
+            fontWeight: FontWeight.w400,
+            height: 2 / 13,
+          );
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Image.asset(
-            'assets/images/home/dictation/8.png',
+            asset,
             width: ui(200),
-            height: ui(86),
+            height: ui(200),
             fit: BoxFit.contain,
           ),
-          SizedBox(height: ui(10)),
-          Text(
-            '同学加油，不看答案的样子真的很棒！',
-            style: TextStyle(
-              color: const Color(0xFFC9C6D8),
-              fontSize: ui(12),
-              fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w400,
-            ),
-          ),
+          SizedBox(height: ui(0)),
+          isStaffMode
+              ? Text(message, style: messageStyle)
+              : Transform.translate(
+                  offset: Offset(0, -ui(25)),
+                  child: Text(message, style: messageStyle),
+                ),
         ],
       ),
     );
@@ -660,18 +1174,18 @@ class _AnswerEmptyState extends StatelessWidget {
 class _PlaybackBar extends StatelessWidget {
   const _PlaybackBar({
     required this.state,
-    required this.onPrevious,
+    required this.onSkipBackward,
     required this.onTogglePlay,
-    required this.onNext,
+    required this.onSkipForward,
     required this.onSeekRatio,
     required this.onSpeedChanged,
     required this.onToggleFavorite,
   });
 
   final MusicPlayState state;
-  final Future<void> Function() onPrevious;
+  final Future<void> Function() onSkipBackward;
   final Future<void> Function() onTogglePlay;
-  final Future<void> Function() onNext;
+  final Future<void> Function() onSkipForward;
   final ValueChanged<double> onSeekRatio;
   final ValueChanged<double> onSpeedChanged;
   final Future<void> Function() onToggleFavorite;
@@ -683,38 +1197,40 @@ class _PlaybackBar extends StatelessWidget {
     final track = state.activeTrack;
     final durationMs = math.max(state.duration.inMilliseconds, 1);
     final ratio = (state.position.inMilliseconds / durationMs).clamp(0.0, 1.0);
+    final favorite = detail?.favorite == true;
 
     return Container(
-      height: ui(56),
-      padding: EdgeInsets.symmetric(horizontal: ui(12)),
+      height: ui(72),
       decoration: BoxDecoration(
         color: const Color(0xFFF4F4FF),
         borderRadius: BorderRadius.circular(ui(8)),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          SizedBox(width: ui(12)),
           Container(
-            width: ui(36),
-            height: ui(36),
+            width: ui(48),
+            height: ui(48),
             decoration: BoxDecoration(
-              color: Colors.black,
-              borderRadius: BorderRadius.circular(ui(6)),
+              color: const Color(0xFFF5F6FA),
+              borderRadius: BorderRadius.circular(ui(4)),
             ),
             clipBehavior: Clip.antiAlias,
             child: detail?.coverUrl.isNotEmpty == true
                 ? Image.network(
                     detail!.coverUrl,
                     fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => const Icon(
-                      Icons.music_note_rounded,
-                      color: Colors.white,
+                    errorBuilder: (context, error, stackTrace) => Image.asset(
+                      'assets/images/home/feng.png',
+                      fit: BoxFit.cover,
                     ),
                   )
-                : const Icon(Icons.music_note_rounded, color: Colors.white),
+                : Image.asset('assets/images/home/feng.png', fit: BoxFit.cover),
           ),
-          SizedBox(width: ui(10)),
+          SizedBox(width: ui(12)),
           SizedBox(
-            width: ui(120),
+            width: ui(70),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -725,124 +1241,109 @@ class _PlaybackBar extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: const Color(0xFF0B081A),
-                    fontSize: ui(12),
+                    fontSize: ui(15),
                     fontFamily: 'PingFang SC',
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                SizedBox(height: ui(3)),
+                SizedBox(height: ui(6)),
                 Text(
                   track?.title ?? '听写',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: const Color(0xFFB6B5BB),
-                    fontSize: ui(10),
+                    fontSize: ui(12),
                     fontFamily: 'PingFang SC',
+                    fontWeight: FontWeight.w400,
+                    height: 12 / 12,
                   ),
                 ),
               ],
+            ),
+          ),
+          SizedBox(width: ui(67)),
+          _InlineImageIcon(
+            asset: 'assets/images/home/left.png',
+            onTap: onSkipBackward,
+            size: 24,
+          ),
+          SizedBox(width: ui(8)),
+          GestureDetector(
+            onTap: onTogglePlay,
+            behavior: HitTestBehavior.opaque,
+            child: SizedBox(
+              width: ui(44),
+              height: ui(44),
+              child: Center(
+                child: Container(
+                  width: ui(36.67),
+                  height: ui(36.67),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF8741FF),
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(
+                    state.isPlaying
+                        ? Icons.pause_rounded
+                        : Icons.play_arrow_rounded,
+                    color: Colors.white,
+                    size: ui(22),
+                  ),
+                ),
+              ),
             ),
           ),
           SizedBox(width: ui(8)),
-          _InlineIcon(icon: Icons.skip_previous_rounded, onTap: onPrevious),
-          SizedBox(width: ui(6)),
-          GestureDetector(
-            onTap: onTogglePlay,
-            child: Container(
-              width: ui(28),
-              height: ui(28),
-              decoration: BoxDecoration(
-                color: const Color(0xFF8741FF),
-                borderRadius: BorderRadius.circular(ui(999)),
-              ),
-              child: Icon(
-                state.isPlaying
-                    ? Icons.pause_rounded
-                    : Icons.play_arrow_rounded,
-                color: Colors.white,
-                size: ui(18),
-              ),
-            ),
-          ),
-          SizedBox(width: ui(6)),
-          _InlineIcon(icon: Icons.skip_next_rounded, onTap: onNext),
-          SizedBox(width: ui(10)),
-          PopupMenuButton<double>(
-            initialValue: state.speed,
-            padding: EdgeInsets.zero,
-            onSelected: onSpeedChanged,
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 0.75, child: Text('0.75x')),
-              PopupMenuItem(value: 1.0, child: Text('1.0x')),
-              PopupMenuItem(value: 1.25, child: Text('1.25x')),
-              PopupMenuItem(value: 1.5, child: Text('1.5x')),
-            ],
-            child: Text(
-              '${state.speed.toStringAsFixed(1)}×',
-              style: TextStyle(
-                color: const Color(0xFF6D6B75),
-                fontSize: ui(12),
-                fontFamily: 'PingFang SC',
-              ),
-            ),
-          ),
-          SizedBox(width: ui(10)),
-          Expanded(
-            child: SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                trackHeight: ui(3),
-                thumbShape: RoundSliderThumbShape(enabledThumbRadius: ui(4)),
-                overlayShape: SliderComponentShape.noOverlay,
-                activeTrackColor: const Color(0xFF9C6DFF),
-                inactiveTrackColor: const Color(0xFFD9D6E9),
-                thumbColor: const Color(0xFF8741FF),
-              ),
-              child: Slider(
-                value: ratio,
-                min: 0,
-                max: 1,
-                onChanged: onSeekRatio,
-              ),
-            ),
-          ),
-          SizedBox(width: ui(10)),
-          Text(
-            '${_formatDuration(state.position)}/${_formatDuration(state.duration)}',
-            style: TextStyle(
-              color: const Color(0xFF0B081A),
-              fontSize: ui(11),
-              fontFamily: 'Manrope',
-              fontWeight: FontWeight.w500,
-            ),
+          _InlineImageIcon(
+            asset: 'assets/images/home/right.png',
+            onTap: onSkipForward,
+            size: 24,
           ),
           SizedBox(width: ui(12)),
+          _SpeedChip(speed: state.speed, onSpeedChanged: onSpeedChanged),
+          SizedBox(width: ui(14)),
+          Expanded(
+            child: _ProgressTrack(
+              ratio: ratio,
+              durationLabel:
+                  '${_formatDuration(state.position)}/${_formatDuration(state.duration)}',
+              onSeekRatio: onSeekRatio,
+            ),
+          ),
+          SizedBox(width: ui(19)),
           GestureDetector(
             onTap: onToggleFavorite,
+            behavior: HitTestBehavior.opaque,
             child: Row(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Icon(
-                  detail?.favorite == true
-                      ? Icons.star_rounded
-                      : Icons.star_border_rounded,
-                  size: ui(18),
-                  color: detail?.favorite == true
+                  favorite ? Icons.star_rounded : Icons.star_border_rounded,
+                  size: ui(24),
+                  color: favorite
                       ? const Color(0xFF8741FF)
                       : const Color(0xFFB6B5BB),
                 ),
-                SizedBox(width: ui(3)),
+                SizedBox(width: ui(4)),
                 Text(
-                  detail?.favorite == true ? '已收藏' : '收藏',
+                  '收藏',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: const Color(0xFFB6B5BB),
-                    fontSize: ui(11),
+                    fontSize: ui(13),
                     fontFamily: 'PingFang SC',
+                    fontWeight: FontWeight.w500,
+                    height: 12 / 13,
                   ),
                 ),
               ],
             ),
           ),
+          SizedBox(width: ui(12)),
         ],
       ),
     );
@@ -855,6 +1356,136 @@ class _PlaybackBar extends StatelessWidget {
     final minutes = value.inMinutes.remainder(60).toString().padLeft(2, '0');
     final seconds = value.inSeconds.remainder(60).toString().padLeft(2, '0');
     return '$minutes:$seconds';
+  }
+}
+
+/// 进度条与时间标签：上方右对齐显示 `当前/总时长`，下方为带紫色渐变填充与圆形
+/// thumb 的轨道。相比一开始的版本去掉了左侧当前时间，并将右侧时间整体下移
+/// 约 10px（通过收紧时间行与滑块之间的间距实现）。
+class _ProgressTrack extends StatelessWidget {
+  const _ProgressTrack({
+    required this.ratio,
+    required this.durationLabel,
+    required this.onSeekRatio,
+  });
+
+  final double ratio;
+  final String durationLabel;
+  final ValueChanged<double> onSeekRatio;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: EdgeInsets.only(top: ui(0)),
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              durationLabel,
+              style: TextStyle(
+                color: const Color(0xFF0B081A),
+                fontSize: ui(12),
+                fontFamily: 'PingFang SC',
+                fontWeight: FontWeight.w500,
+                height: 3 / 8,
+              ),
+            ),
+          ),
+        ),
+        SizedBox(height: ui(4)),
+        _GradientSlider(ratio: ratio, onSeekRatio: onSeekRatio),
+      ],
+    );
+  }
+}
+
+/// 自绘的紫色渐变进度条（带阴影 thumb），不依赖 Material Slider，
+/// 以严格匹配设计稿中 #E2D0FF → #8741FF 的渐变填充与 12×12 thumb。
+class _GradientSlider extends StatelessWidget {
+  const _GradientSlider({required this.ratio, required this.onSeekRatio});
+
+  final double ratio;
+  final ValueChanged<double> onSeekRatio;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final trackHeight = ui(4);
+    final thumbSize = ui(12);
+    final hitHeight = ui(20);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final clamped = ratio.clamp(0.0, 1.0);
+        final fillWidth = width * clamped;
+        final thumbLeft = (width - thumbSize) * clamped;
+
+        void emit(Offset localPosition) {
+          if (width <= 0) return;
+          final r = (localPosition.dx / width).clamp(0.0, 1.0);
+          onSeekRatio(r);
+        }
+
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: (d) => emit(d.localPosition),
+          onHorizontalDragStart: (d) => emit(d.localPosition),
+          onHorizontalDragUpdate: (d) => emit(d.localPosition),
+          child: SizedBox(
+            height: hitHeight,
+            child: Stack(
+              alignment: Alignment.centerLeft,
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  height: trackHeight,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE1E2E5),
+                    borderRadius: BorderRadius.circular(ui(23)),
+                  ),
+                ),
+                Container(
+                  height: trackHeight,
+                  width: fillWidth,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [Color(0xFFE2D0FF), Color(0xFF8741FF)],
+                    ),
+                    borderRadius: BorderRadius.circular(ui(23)),
+                  ),
+                ),
+                Positioned(
+                  left: thumbLeft,
+                  child: Container(
+                    width: thumbSize,
+                    height: thumbSize,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF8741FF),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 1),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.12),
+                          offset: const Offset(0, 4),
+                          blurRadius: 4,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 
@@ -890,12 +1521,11 @@ class _LongTextPanel extends StatelessWidget {
   }
 }
 
-/// 声乐/器乐课程左侧使用的浅色简介卡片：标题 + 长文本。
+/// 声乐/器乐课程左侧使用的浅色简介卡片。
 /// 复用 detail.longTextHtml，剥离 HTML 标签后展示。
 class _DescriptionCard extends StatelessWidget {
-  const _DescriptionCard({required this.title, required this.htmlText});
+  const _DescriptionCard({required this.htmlText});
 
-  final String title;
   final String htmlText;
 
   @override
@@ -918,19 +1548,6 @@ class _DescriptionCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title.isEmpty ? '曲目简介' : title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: const Color(0xFF0B081A),
-              fontSize: ui(15),
-              fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w500,
-              height: 1.2,
-            ),
-          ),
-          SizedBox(height: ui(4)),
           Expanded(
             child: SingleChildScrollView(
               physics: const ClampingScrollPhysics(),
@@ -1125,93 +1742,487 @@ class _TogglePill extends StatelessWidget {
   }
 }
 
-class _InlineIcon extends StatelessWidget {
-  const _InlineIcon({required this.icon, required this.onTap});
+class _InlineImageIcon extends StatelessWidget {
+  const _InlineImageIcon({
+    required this.asset,
+    required this.onTap,
+    this.size = 19,
+  });
 
-  final IconData icon;
+  final String asset;
   final Future<void> Function() onTap;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return GestureDetector(
       onTap: onTap,
-      child: Icon(icon, size: ui(19), color: const Color(0xFF8741FF)),
+      behavior: HitTestBehavior.opaque,
+      child: Image.asset(
+        asset,
+        width: ui(size),
+        height: ui(size),
+        fit: BoxFit.contain,
+      ),
     );
   }
 }
 
-class _MiniWaveform extends StatelessWidget {
-  const _MiniWaveform({required this.progress});
+/// 倍速选择 chip。点击后唤起一个极简风格的下拉浮窗：
+/// - 白底、圆角 12、柔和阴影
+/// - 选项行高紧凑、文字居中
+/// - 当前倍速文字使用品牌紫并加粗
+class _SpeedChip extends StatefulWidget {
+  const _SpeedChip({required this.speed, required this.onSpeedChanged});
 
-  final double progress;
+  final double speed;
+  final ValueChanged<double> onSpeedChanged;
+
+  static const List<double> options = <double>[2.0, 1.5, 1.25, 1.0, 0.75, 0.5];
+
+  static String formatSpeed(double value) {
+    var text = value.toStringAsFixed(2);
+    if (text.contains('.')) {
+      text = text.replaceFirst(RegExp(r'0+$'), '');
+      if (text.endsWith('.')) {
+        text = '${text}0';
+      }
+    }
+    return '${text}x';
+  }
+
+  @override
+  State<_SpeedChip> createState() => _SpeedChipState();
+}
+
+class _SpeedChipState extends State<_SpeedChip> {
+  bool _open = false;
+
+  Future<void> _showMenu(BuildContext context) async {
+    final scale = DashboardScaleScope.of(context);
+    final ui = scale.ui;
+    final RenderBox box = context.findRenderObject() as RenderBox;
+    final Offset topLeft = box.localToGlobal(Offset.zero);
+    final Size size = box.size;
+    final double menuWidth = ui(96);
+    final double itemHeight = ui(34);
+    final double padding = ui(6);
+    final double menuHeight =
+        _SpeedChip.options.length * itemHeight + padding * 2;
+    final double gap = ui(8);
+
+    final overlay =
+        Overlay.of(context, rootOverlay: true).context.findRenderObject()
+            as RenderBox;
+    final Size overlaySize = overlay.size;
+
+    double left = topLeft.dx + (size.width - menuWidth) / 2;
+    left = left.clamp(ui(8), overlaySize.width - menuWidth - ui(8));
+    final double topAbove = topLeft.dy - menuHeight - gap;
+    final double topBelow = topLeft.dy + size.height + gap;
+    final bool above = topAbove >= ui(8);
+    final double top = above ? topAbove : topBelow;
+
+    setState(() => _open = true);
+
+    final selected = await showGeneralDialog<double>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'speed_menu',
+      barrierColor: Colors.transparent,
+      transitionDuration: const Duration(milliseconds: 180),
+      pageBuilder: (dialogContext, animation, secondary) {
+        return DashboardScaleScope(
+          data: scale,
+          child: Stack(
+            children: [
+              Positioned(
+                left: left,
+                top: top,
+                width: menuWidth,
+                child: _SpeedMenuCard(
+                  options: _SpeedChip.options,
+                  current: widget.speed,
+                  itemHeight: itemHeight,
+                  padding: padding,
+                  onPick: (value) => Navigator.of(dialogContext).pop(value),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondary, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+        );
+        final offsetTween = above
+            ? Tween<Offset>(begin: const Offset(0, 0.04), end: Offset.zero)
+            : Tween<Offset>(begin: const Offset(0, -0.04), end: Offset.zero);
+        return FadeTransition(
+          opacity: curved,
+          child: SlideTransition(
+            position: offsetTween.animate(curved),
+            child: child,
+          ),
+        );
+      },
+    );
+
+    if (!mounted) {
+      return;
+    }
+    setState(() => _open = false);
+    if (selected != null && selected != widget.speed) {
+      widget.onSpeedChanged(selected);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    const bars = <double>[
-      6,
-      9,
-      12,
-      16,
-      14,
-      8,
-      5,
-      4,
-      6,
-      8,
-      10,
-      12,
-      16,
-      10,
-      8,
-      6,
-      5,
-      4,
-      6,
-      8,
-      12,
-      14,
-      16,
-      12,
-      10,
-      8,
-      6,
-      5,
-      4,
-      7,
-      10,
-      12,
-      11,
-      8,
-      6,
-      5,
-    ];
-
-    return SizedBox(
-      height: ui(24),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          for (var i = 0; i < bars.length; i++)
-            Container(
-              width: ui(i == 0 ? 39 : 3),
-              height: ui(bars[i]),
-              margin: EdgeInsets.only(right: ui(3)),
-              decoration: BoxDecoration(
-                gradient: i == 0 || i / bars.length <= progress
-                    ? const LinearGradient(
-                        colors: [Color(0xFFE2D0FF), Color(0xFF8741FF)],
-                      )
-                    : null,
-                color: i != 0 && i / bars.length > progress
-                    ? const Color(0xFFD9D9D9)
-                    : null,
-                borderRadius: BorderRadius.circular(ui(9)),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _showMenu(context),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOut,
+        height: ui(28),
+        padding: EdgeInsets.symmetric(horizontal: ui(8)),
+        decoration: BoxDecoration(
+          color: _open ? const Color(0xFFF5F2FF) : Colors.white,
+          borderRadius: BorderRadius.circular(ui(6)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text(
+              _SpeedChip.formatSpeed(widget.speed),
+              style: TextStyle(
+                color: _open
+                    ? const Color(0xFF8741FF)
+                    : const Color(0xFF7F7F7F),
+                fontSize: ui(12),
+                fontFamily: 'PingFang SC',
+                fontWeight: FontWeight.w500,
+                height: 12 / 12,
               ),
             ),
-        ],
+            SizedBox(width: ui(2)),
+            AnimatedRotation(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut,
+              turns: _open ? 0.5 : 0,
+              child: Image.asset(
+                'assets/images/home/chevron-down.png',
+                width: ui(12),
+                height: ui(12),
+                fit: BoxFit.contain,
+              ),
+            ),
+          ],
+        ),
       ),
     );
+  }
+}
+
+class _SpeedMenuCard extends StatelessWidget {
+  const _SpeedMenuCard({
+    required this.options,
+    required this.current,
+    required this.itemHeight,
+    required this.padding,
+    required this.onPick,
+  });
+
+  final List<double> options;
+  final double current;
+  final double itemHeight;
+  final double padding;
+  final ValueChanged<double> onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        padding: EdgeInsets.symmetric(vertical: padding),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(ui(12)),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF8741FF).withValues(alpha: 0.10),
+              blurRadius: ui(20),
+              spreadRadius: 0,
+              offset: Offset(0, ui(8)),
+            ),
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: ui(8),
+              spreadRadius: 0,
+              offset: Offset(0, ui(2)),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final value in options)
+              _SpeedMenuItem(
+                label: _SpeedChip.formatSpeed(value),
+                height: itemHeight,
+                selected: value == current,
+                onTap: () => onPick(value),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SpeedMenuItem extends StatefulWidget {
+  const _SpeedMenuItem({
+    required this.label,
+    required this.height,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final double height;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  State<_SpeedMenuItem> createState() => _SpeedMenuItemState();
+}
+
+class _SpeedMenuItemState extends State<_SpeedMenuItem> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final selected = widget.selected;
+    final highlighted = selected || _hover;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          height: widget.height,
+          margin: EdgeInsets.symmetric(horizontal: ui(6)),
+          padding: EdgeInsets.symmetric(horizontal: ui(10)),
+          decoration: BoxDecoration(
+            color: highlighted ? const Color(0xFFF5F2FF) : Colors.transparent,
+            borderRadius: BorderRadius.circular(ui(8)),
+          ),
+          alignment: Alignment.center,
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  widget.label,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: selected
+                        ? const Color(0xFF8741FF)
+                        : const Color(0xFF0B081A),
+                    fontSize: ui(13),
+                    fontFamily: 'PingFang SC',
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                    height: 1,
+                  ),
+                ),
+              ),
+              if (selected)
+                Icon(
+                  Icons.check_rounded,
+                  size: ui(14),
+                  color: const Color(0xFF8741FF),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FrequencyVisualizer extends StatelessWidget {
+  const _FrequencyVisualizer({
+    required this.frequencyBands,
+    required this.playing,
+    required this.height,
+  });
+
+  final List<double> frequencyBands;
+  final bool playing;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    if (frequencyBands.isNotEmpty || !playing) {
+      return SizedBox(
+        height: height,
+        width: double.infinity,
+        child: CustomPaint(
+          painter: _FrequencyVisualizerPainter(
+            frequencyBands: frequencyBands,
+            time: 0,
+            playing: playing,
+          ),
+        ),
+      );
+    }
+    return _AnimatedFrequencyFallback(height: height);
+  }
+}
+
+class _AnimatedFrequencyFallback extends StatefulWidget {
+  const _AnimatedFrequencyFallback({required this.height});
+
+  final double height;
+
+  @override
+  State<_AnimatedFrequencyFallback> createState() =>
+      _AnimatedFrequencyFallbackState();
+}
+
+class _AnimatedFrequencyFallbackState extends State<_AnimatedFrequencyFallback>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: widget.height,
+      width: double.infinity,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) {
+          return CustomPaint(
+            painter: _FrequencyVisualizerPainter(
+              frequencyBands: const <double>[],
+              time: _controller.value,
+              playing: true,
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _FrequencyVisualizerPainter extends CustomPainter {
+  const _FrequencyVisualizerPainter({
+    required this.frequencyBands,
+    required this.time,
+    required this.playing,
+  });
+
+  final List<double> frequencyBands;
+  final double time;
+  final bool playing;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.width <= 0 || size.height <= 0) {
+      return;
+    }
+    final count = frequencyBands.isEmpty ? 46 : frequencyBands.length;
+    const gap = 3.0;
+    final barWidth = math.max(1.2, (size.width - gap * (count - 1)) / count);
+    final centerY = size.height * 0.62;
+    final maxUp = size.height * 0.58;
+    final maxDown = size.height * 0.30;
+    final radius = Radius.circular(barWidth / 2);
+    final idlePaint = Paint()..color = const Color(0xFFE4E1EC);
+
+    for (var i = 0; i < count; i++) {
+      final raw = frequencyBands.isEmpty
+          ? (playing ? _fallbackLevel(i, count, time) : 0.0)
+          : frequencyBands[i];
+      final level = raw.clamp(0.0, 1.0);
+      final x = i * (barWidth + gap);
+      final up = math.max(size.height * 0.08, maxUp * level);
+      final down = math.max(size.height * 0.03, maxDown * level);
+      final active = level > 0.015;
+
+      final topRect = Rect.fromLTRB(x, centerY - up, x + barWidth, centerY);
+      final topPaint = active
+          ? (Paint()
+              ..shader = const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: <Color>[Color(0xFF8741FF), Color(0xFFC8AEFF)],
+              ).createShader(topRect))
+          : idlePaint;
+      canvas.drawRRect(RRect.fromRectAndRadius(topRect, radius), topPaint);
+
+      final bottomRect = Rect.fromLTRB(
+        x,
+        centerY,
+        x + barWidth,
+        centerY + down,
+      );
+      final bottomPaint = active
+          ? (Paint()
+              ..shader = const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: <Color>[Color(0x668741FF), Color(0x00C8AEFF)],
+              ).createShader(bottomRect))
+          : idlePaint;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(bottomRect, radius),
+        bottomPaint,
+      );
+    }
+  }
+
+  double _fallbackLevel(int index, int count, double t) {
+    final phase = t * math.pi * 2;
+    final waveA = math.sin(phase * 1.4 + index * 0.52);
+    final waveB = math.sin(phase * 2.1 + index * 0.21);
+    final envelope = math.sin(index / (count - 1) * math.pi);
+    return (0.18 + (waveA * 0.18 + waveB * 0.12 + 0.30) * envelope).clamp(
+      0.04,
+      0.88,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _FrequencyVisualizerPainter oldDelegate) {
+    return oldDelegate.frequencyBands != frequencyBands ||
+        oldDelegate.time != time ||
+        oldDelegate.playing != playing;
   }
 }

@@ -40,11 +40,6 @@ class AppTheme {
           ),
         ),
       ),
-      snackBarTheme: const SnackBarThemeData(
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: Colors.black,
-        contentTextStyle: TextStyle(color: Colors.white),
-      ),
     );
   }
 }

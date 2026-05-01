@@ -8,10 +8,12 @@ class RecordingCategoryItem {
   const RecordingCategoryItem({
     required this.id,
     required this.name,
+    this.count = 0,
   });
 
   final int id;
   final String name;
+  final int count;
 }
 
 class RecordingEntry {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
 
@@ -23,7 +24,6 @@ Future<void> showImageGallery(
   return Navigator.of(context).push(
     PageRouteBuilder<void>(
       opaque: false,
-      barrierColor: Colors.black87,
       transitionDuration: const Duration(milliseconds: 220),
       reverseTransitionDuration: const Duration(milliseconds: 180),
       pageBuilder: (context, animation, secondaryAnimation) =>
@@ -75,95 +75,119 @@ class _ImageGalleryViewerState extends State<ImageGalleryViewer> {
   @override
   Widget build(BuildContext context) {
     final mediaPadding = MediaQuery.of(context).padding;
-    return Material(
-      color: Colors.transparent,
-      child: Stack(
-        children: <Widget>[
-          PhotoViewGallery.builder(
-            pageController: _controller,
-            itemCount: widget.images.length,
-            scrollPhysics: const BouncingScrollPhysics(),
-            backgroundDecoration: const BoxDecoration(color: Colors.transparent),
-            onPageChanged: (i) => setState(() => _currentIndex = i),
-            builder: (context, index) {
-              final image = widget.images[index];
-              return PhotoViewGalleryPageOptions(
-                imageProvider: NetworkImage(image),
-                minScale: PhotoViewComputedScale.contained,
-                maxScale: PhotoViewComputedScale.covered * 4,
-                initialScale: PhotoViewComputedScale.contained,
-                heroAttributes: PhotoViewHeroAttributes(
-                  tag: '${widget.heroTagPrefix}_${image}_$index',
-                ),
-                errorBuilder: (context, error, stackTrace) => const Center(
-                  child: Icon(
-                    Icons.broken_image_outlined,
-                    color: Colors.white54,
-                    size: 48,
+    return Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerSignal: (event) {
+        if (event is PointerScrollEvent) {
+          GestureBinding.instance.pointerSignalResolver.register(event, (_) {});
+        }
+      },
+      child: Material(
+        color: Colors.black87,
+        child: SizedBox.expand(
+          child: Stack(
+            children: <Widget>[
+              Positioned.fill(
+                child: ScrollConfiguration(
+                  behavior: const MaterialScrollBehavior().copyWith(
+                    dragDevices: <PointerDeviceKind>{
+                      PointerDeviceKind.touch,
+                      PointerDeviceKind.mouse,
+                      PointerDeviceKind.trackpad,
+                    },
                   ),
-                ),
-              );
-            },
-            loadingBuilder: (context, event) => const Center(
-              child: SizedBox(
-                width: 32,
-                height: 32,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            top: mediaPadding.top + 12,
-            right: 16,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => Navigator.of(context).maybePop(),
-              child: Container(
-                width: 36,
-                height: 36,
-                decoration: const BoxDecoration(
-                  color: Colors.black54,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.close_rounded,
-                  color: Colors.white,
-                  size: 20,
-                ),
-              ),
-            ),
-          ),
-          if (widget.images.length > 1)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: mediaPadding.bottom + 18,
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    '${_currentIndex + 1}/${widget.images.length}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontFamily: 'Manrope',
-                      fontWeight: FontWeight.w500,
+                  child: PhotoViewGallery.builder(
+                    pageController: _controller,
+                    itemCount: widget.images.length,
+                    scrollPhysics: const BouncingScrollPhysics(),
+                    backgroundDecoration: const BoxDecoration(
+                      color: Colors.transparent,
+                    ),
+                    onPageChanged: (i) => setState(() => _currentIndex = i),
+                    builder: (context, index) {
+                      final image = widget.images[index];
+                      return PhotoViewGalleryPageOptions(
+                        imageProvider: NetworkImage(image),
+                        minScale: PhotoViewComputedScale.contained,
+                        maxScale: PhotoViewComputedScale.covered * 4,
+                        initialScale: PhotoViewComputedScale.contained,
+                        heroAttributes: PhotoViewHeroAttributes(
+                          tag: '${widget.heroTagPrefix}_${image}_$index',
+                        ),
+                        errorBuilder: (context, error, stackTrace) =>
+                            const Center(
+                              child: Icon(
+                                Icons.broken_image_outlined,
+                                color: Colors.white54,
+                                size: 48,
+                              ),
+                            ),
+                      );
+                    },
+                    loadingBuilder: (context, event) => const Center(
+                      child: SizedBox(
+                        width: 32,
+                        height: 32,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-        ],
+              Positioned(
+                top: mediaPadding.top + 12,
+                right: 16,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => Navigator.of(context).maybePop(),
+                  child: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: const BoxDecoration(
+                      color: Colors.black54,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.close_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ),
+              if (widget.images.length > 1)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: mediaPadding.bottom + 18,
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '${_currentIndex + 1}/${widget.images.length}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontFamily: 'Manrope',
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }

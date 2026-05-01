@@ -1,11 +1,22 @@
+import 'dart:async';
+import 'dart:math' as math;
+import 'dart:typed_data';
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_assets.dart';
+import '../../../core/widgets/action_menu.dart';
+import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/class_share_drawer.dart';
+import '../../../core/widgets/image_gallery_viewer.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../state/cloud_drive_controller.dart';
 import '../state/cloud_drive_state.dart';
+import 'courseware_file_picker.dart';
+import 'courseware_inline_preview.dart';
 
 class MyCloudDrivePage extends ConsumerStatefulWidget {
   const MyCloudDrivePage({super.key});
@@ -49,6 +60,7 @@ class _MyCloudDrivePageState extends ConsumerState<MyCloudDrivePage> {
     final controller = ref.read(cloudDriveControllerProvider.notifier);
     final scale = DashboardScaleScope.of(context);
     final ui = scale.ui;
+    final previewing = state.previewingFile;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -61,56 +73,80 @@ class _MyCloudDrivePageState extends ConsumerState<MyCloudDrivePage> {
             height: constraints.maxHeight,
             child: Stack(
               children: [
-                Row(
-                  children: [
-                    Container(
-                      width: ui(180),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.horizontal(
-                          left: Radius.circular(ui(16)),
-                        ),
-                        border: Border(
-                          right: BorderSide(
-                            color: const Color(0xFFF3F2F3),
-                            width: ui(1),
-                          ),
-                        ),
-                      ),
-                      child: _CloudSidebar(
-                        state: state,
-                        onSelectCategory: controller.selectCategory,
-                        onAddCategory: _showAddCategoryDialog,
-                        onCategoryAction: _handleCategoryAction,
-                      ),
-                    ),
-                    Expanded(
-                      child: Container(
+                if (previewing == null)
+                  Row(
+                    children: [
+                      Container(
+                        width: ui(180),
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.horizontal(
-                            right: Radius.circular(ui(16)),
+                            left: Radius.circular(ui(16)),
+                          ),
+                          border: Border(
+                            right: BorderSide(
+                              color: const Color(0xFFF3F2F3),
+                              width: ui(1),
+                            ),
                           ),
                         ),
-                        child: _CloudContentArea(
+                        child: _CloudSidebar(
                           state: state,
-                          keyword: _keyword,
-                          searchController: _searchController,
-                          onRefresh: controller.refresh,
-                          onSortChanged: controller.setSortType,
-                          onBackToOverview: controller.backToOverview,
-                          onOpenFolder: controller.openFolder,
-                          onCreateFolder: _showCreateFolderDialog,
-                          onFolderAction: _handleFolderAction,
-                          onFileAction: _handleFileAction,
-                          onToggleSelectAll: controller.toggleSelectAllDisplayed,
-                          onToggleFileSelection: controller.toggleFileSelection,
-                          onUpload: _showUploadDialog,
+                          onSelectCategory: controller.selectCategory,
+                          onAddCategory: _showAddCategoryDialog,
+                          onCategoryAction: _handleCategoryAction,
                         ),
                       ),
+                      Expanded(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.horizontal(
+                              right: Radius.circular(ui(16)),
+                            ),
+                          ),
+                          child: _CloudContentArea(
+                            state: state,
+                            keyword: _keyword,
+                            searchController: _searchController,
+                            onRefresh: controller.refresh,
+                            onSortChanged: controller.setSortType,
+                            onBackToOverview: controller.backToOverview,
+                            onOpenFolder: controller.openFolder,
+                            onCreateFolder: _showCreateFolderDialog,
+                            onFolderAction: _handleFolderAction,
+                            onFileAction: _handleFileAction,
+                            onToggleSelectAll:
+                                controller.toggleSelectAllDisplayed,
+                            onToggleFileSelection:
+                                controller.toggleFileSelection,
+                            onUpload: _showUploadDialog,
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  _CoursewarePreviewPage(
+                    state: state,
+                    controller: controller,
+                    onClose: controller.closePreview,
+                    onRename: () => _handleFileAction(
+                      previewing,
+                      _CloudFileAction.rename,
                     ),
-                  ],
-                ),
+                    onShare: () => _handleFileAction(
+                      previewing,
+                      _CloudFileAction.share,
+                    ),
+                    onDelete: () async {
+                      await _handleFileAction(
+                        previewing,
+                        _CloudFileAction.delete,
+                      );
+                      if (mounted) controller.closePreview();
+                    },
+                  ),
                 if (state.busy)
                   Positioned.fill(
                     child: IgnorePointer(
@@ -159,6 +195,11 @@ class _MyCloudDrivePageState extends ConsumerState<MyCloudDrivePage> {
   }
 
   Future<void> _showCreateFolderDialog() async {
+    final state = ref.read(cloudDriveControllerProvider);
+    if (state.selectedCategoryId <= 0) {
+      _showMessage('请先选择或创建分类');
+      return;
+    }
     final name = await showTextInputDialog(
       context: context,
       title: '新建文件夹',
@@ -168,17 +209,22 @@ class _MyCloudDrivePageState extends ConsumerState<MyCloudDrivePage> {
     if (name == null || name.isEmpty) {
       return;
     }
-    ref.read(cloudDriveControllerProvider.notifier).createLocalFolder(name);
-    _showMessage('文件夹已创建');
+    final message = await ref
+        .read(cloudDriveControllerProvider.notifier)
+        .addFolder(name);
+    if (!mounted) {
+      return;
+    }
+    _showMessage(message ?? '文件夹已创建');
   }
 
   Future<void> _handleCategoryAction(
     CloudCategoryItem item,
-    _CloudMenuAction action,
+    ItemMenuAction action,
   ) async {
     final controller = ref.read(cloudDriveControllerProvider.notifier);
     switch (action) {
-      case _CloudMenuAction.rename:
+      case ItemMenuAction.rename:
         final nextName = await showTextInputDialog(
           context: context,
           title: '重命名分类',
@@ -186,20 +232,16 @@ class _MyCloudDrivePageState extends ConsumerState<MyCloudDrivePage> {
           initialValue: item.name,
           confirmLabel: '保存',
         );
-        if (nextName == null || nextName.isEmpty) {
+        if (nextName == null || nextName.isEmpty || nextName == item.name) {
           return;
         }
-        controller.renameCategoryLocal(item.id, nextName);
-        _showMessage('分类名称已更新');
+        final message = await controller.renameCategory(item.id, nextName);
+        if (!mounted) {
+          return;
+        }
+        _showMessage(message ?? '分类名称已更新');
         break;
-      case _CloudMenuAction.share:
-        _showMessage('分类分享能力待接入');
-        break;
-      case _CloudMenuAction.copy:
-        controller.duplicateCategoryLocal(item.id);
-        _showMessage('已复制分类');
-        break;
-      case _CloudMenuAction.delete:
+      case ItemMenuAction.delete:
         final confirmed = await showConfirmDialog(
           context: context,
           title: '删除分类',
@@ -215,16 +257,20 @@ class _MyCloudDrivePageState extends ConsumerState<MyCloudDrivePage> {
         }
         _showMessage(message ?? '分类已删除');
         break;
+      case ItemMenuAction.share:
+      case ItemMenuAction.copy:
+        // Categories never expose share/copy in this view; no-op.
+        break;
     }
   }
 
   Future<void> _handleFolderAction(
     CloudFolderItem item,
-    _CloudMenuAction action,
+    ItemMenuAction action,
   ) async {
     final controller = ref.read(cloudDriveControllerProvider.notifier);
     switch (action) {
-      case _CloudMenuAction.rename:
+      case ItemMenuAction.rename:
         final nextName = await showTextInputDialog(
           context: context,
           title: '重命名文件夹',
@@ -232,20 +278,16 @@ class _MyCloudDrivePageState extends ConsumerState<MyCloudDrivePage> {
           initialValue: item.title,
           confirmLabel: '保存',
         );
-        if (nextName == null || nextName.isEmpty) {
+        if (nextName == null || nextName.isEmpty || nextName == item.title) {
           return;
         }
-        controller.renameFolderLocal(item.id, nextName);
-        _showMessage('文件夹名称已更新');
+        final message = await controller.renameFolder(item.id, nextName);
+        if (!mounted) {
+          return;
+        }
+        _showMessage(message ?? '文件夹名称已更新');
         break;
-      case _CloudMenuAction.share:
-        _showMessage('文件夹分享能力待接入');
-        break;
-      case _CloudMenuAction.copy:
-        controller.duplicateFolderLocal(item.id);
-        _showMessage('已复制文件夹');
-        break;
-      case _CloudMenuAction.delete:
+      case ItemMenuAction.delete:
         final confirmed = await showConfirmDialog(
           context: context,
           title: '删除文件夹',
@@ -255,8 +297,15 @@ class _MyCloudDrivePageState extends ConsumerState<MyCloudDrivePage> {
         if (!confirmed) {
           return;
         }
-        controller.deleteFolderLocal(item.id);
-        _showMessage('文件夹已删除');
+        final message = await controller.deleteFolder(item.id);
+        if (!mounted) {
+          return;
+        }
+        _showMessage(message ?? '文件夹已删除');
+        break;
+      case ItemMenuAction.share:
+      case ItemMenuAction.copy:
+        // Folders never expose share/copy in this view; no-op.
         break;
     }
   }
@@ -268,29 +317,31 @@ class _MyCloudDrivePageState extends ConsumerState<MyCloudDrivePage> {
     final controller = ref.read(cloudDriveControllerProvider.notifier);
     switch (action) {
       case _CloudFileAction.preview:
-        await _showPreviewDialog(item);
+        controller.openPreview(item);
+        break;
+      case _CloudFileAction.rename:
+        final nextTitle = await showTextInputDialog(
+          context: context,
+          title: '重命名资料',
+          hintText: '请输入新的资料标题',
+          initialValue: item.title,
+          confirmLabel: '保存',
+        );
+        if (nextTitle == null || nextTitle.isEmpty || nextTitle == item.title) {
+          return;
+        }
+        final message = await controller.renameCourseware(item.id, nextTitle);
+        if (!mounted) {
+          return;
+        }
+        _showMessage(message ?? '资料标题已更新');
         break;
       case _CloudFileAction.share:
         final classes = await controller.fetchShareClasses();
         if (!mounted) {
           return;
         }
-        if (classes.isEmpty) {
-          _showMessage('暂无可分享的班级');
-          return;
-        }
-        final selectedIds = await _showShareDialog(classes);
-        if (selectedIds.isEmpty) {
-          return;
-        }
-        final message = await controller.shareCourseware(
-          file: item,
-          classIds: selectedIds,
-        );
-        if (!mounted) {
-          return;
-        }
-        _showMessage(message ?? '资料已分享');
+        await _showClassShareDrawer(item, classes);
         break;
       case _CloudFileAction.delete:
         final confirmed = await showConfirmDialog(
@@ -315,587 +366,86 @@ class _MyCloudDrivePageState extends ConsumerState<MyCloudDrivePage> {
   }
 
   Future<void> _showUploadDialog() async {
+    final state = ref.read(cloudDriveControllerProvider);
+    if (state.selectedCategoryId <= 0) {
+      _showMessage('请先选择或创建分类');
+      return;
+    }
     final controller = ref.read(cloudDriveControllerProvider.notifier);
-    final titleController = TextEditingController();
-    var kind = CloudUploadKind.image;
-    var uploadedUrl = '';
-
     await showScaledDialog<void>(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.18),
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (innerContext, setDialogState) {
-            final ui = DashboardScaleScope.of(innerContext).ui;
-            final uploadLabel = switch (kind) {
-              CloudUploadKind.image => '图片',
-              CloudUploadKind.score => '谱例',
-              CloudUploadKind.courseware => '文件',
-            };
-            final uploadHint = switch (kind) {
-              CloudUploadKind.image => '请输入图片链接',
-              CloudUploadKind.score => '请输入谱例文件链接',
-              CloudUploadKind.courseware => '请输入课件文件链接',
-            };
-            final uploadIcon = kind == CloudUploadKind.image
-                ? AppAssets.coursewareUploadImage
-                : AppAssets.coursewareUploadFile;
-
-            return Dialog(
-              backgroundColor: Colors.transparent,
-              insetPadding: EdgeInsets.symmetric(
-                horizontal: ui(32),
-                vertical: ui(24),
-              ),
-              child: Container(
-                width: ui(420),
-                clipBehavior: Clip.antiAlias,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: <Color>[
-                      Color(0xFFD2C6FF),
-                      Colors.white,
-                      Colors.white,
-                    ],
-                    stops: <double>[0, 0.21, 1],
-                  ),
-                  borderRadius: BorderRadius.circular(ui(24)),
-                ),
-                child: Stack(
-                  children: [
-                    // 顶部装饰大图：宽度铺满，居中
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      top: 0,
-                      child: Image.asset(
-                        AppAssets.coursewareUploadHeader,
-                        fit: BoxFit.fitWidth,
-                      ),
-                    ),
-                    Padding(
-                      padding: EdgeInsets.fromLTRB(
-                        ui(20),
-                        ui(22),
-                        ui(20),
-                        ui(20),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Center(
-                            child: Text(
-                              '上传课件',
-                              style: TextStyle(
-                                fontSize: ui(18),
-                                color: const Color(0xFF0B081A),
-                                fontFamily: 'PingFang SC',
-                                fontWeight: FontWeight.w600,
-                                height: 1.0,
-                              ),
-                            ),
-                          ),
-                          SizedBox(height: ui(30)),
-                          Text(
-                            '课件标题',
-                            style: TextStyle(
-                              fontSize: ui(14),
-                              color: const Color(0xFF0B081A),
-                              fontFamily: 'PingFang SC',
-                              fontWeight: FontWeight.w500,
-                              height: 12 / 14,
-                            ),
-                          ),
-                          SizedBox(height: ui(10)),
-                          SizedBox(
-                            height: ui(45),
-                            child: TextField(
-                              controller: titleController,
-                              style: TextStyle(
-                                fontSize: ui(14),
-                                color: const Color(0xFF0B081A),
-                                fontFamily: 'PingFang SC',
-                                fontWeight: FontWeight.w400,
-                              ),
-                              decoration: InputDecoration(
-                                hintText: '请输入课件标题',
-                                hintStyle: TextStyle(
-                                  fontSize: ui(14),
-                                  color: const Color(0xFFB6B5BB),
-                                  fontFamily: 'PingFang SC',
-                                  fontWeight: FontWeight.w400,
-                                  height: 12 / 14,
-                                ),
-                                contentPadding: EdgeInsets.symmetric(
-                                  horizontal: ui(13),
-                                  vertical: ui(12),
-                                ),
-                                filled: true,
-                                fillColor: Colors.white,
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(ui(12)),
-                                  borderSide: BorderSide(
-                                    color: const Color(0xFFF3F2F3),
-                                    width: ui(1),
-                                  ),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(ui(12)),
-                                  borderSide: BorderSide(
-                                    color: const Color(0xFFD9C7FF),
-                                    width: ui(1),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          SizedBox(height: ui(18)),
-                          Text(
-                            '选择分类',
-                            style: TextStyle(
-                              fontSize: ui(14),
-                              color: const Color(0xFF0B081A),
-                              fontFamily: 'PingFang SC',
-                              fontWeight: FontWeight.w500,
-                              height: 12 / 14,
-                            ),
-                          ),
-                          SizedBox(height: ui(12)),
-                          Row(
-                            children: CloudUploadKind.values.map((item) {
-                              final selected = item == kind;
-                              final label = switch (item) {
-                                CloudUploadKind.image => '图片',
-                                CloudUploadKind.score => '谱例',
-                                CloudUploadKind.courseware => '课件',
-                              };
-                              return Padding(
-                                padding: EdgeInsets.only(
-                                  right: item == CloudUploadKind.courseware
-                                      ? 0
-                                      : ui(13),
-                                ),
-                                child: _UploadKindOption(
-                                  label: label,
-                                  selected: selected,
-                                  onTap: () => setDialogState(() {
-                                    kind = item;
-                                    uploadedUrl = '';
-                                  }),
-                                ),
-                              );
-                            }).toList(),
-                          ),
-                          SizedBox(height: ui(18)),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                '上传文件',
-                                style: TextStyle(
-                                  fontSize: ui(14),
-                                  color: const Color(0xFF0B081A),
-                                  fontFamily: 'PingFang SC',
-                                  fontWeight: FontWeight.w500,
-                                  height: 1.0,
-                                ),
-                              ),
-                              const Spacer(),
-                              Text(
-                                '*支持 PDF/Word/图片/HTML，图片支持15M以内',
-                                style: TextStyle(
-                                  fontSize: ui(12),
-                                  color: const Color(0xFFCECED1),
-                                  fontFamily: 'PingFang SC',
-                                  fontWeight: FontWeight.w400,
-                                  height: 1.0,
-                                ),
-                              ),
-                            ],
-                          ),
-                          SizedBox(height: ui(10)),
-                          InkWell(
-                            onTap: () async {
-                              final value = await showTextInputDialog(
-                                context: innerContext,
-                                title: '上传$uploadLabel',
-                                hintText: uploadHint,
-                                confirmLabel: '确认',
-                                initialValue: uploadedUrl,
-                              );
-                              if (value == null || value.isEmpty) {
-                                return;
-                              }
-                              setDialogState(() => uploadedUrl = value);
-                            },
-                            borderRadius: BorderRadius.circular(ui(12)),
-                            child: Container(
-                              width: double.infinity,
-                              height: ui(140),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF4F4FF),
-                                borderRadius: BorderRadius.circular(ui(12)),
-                                border: Border.all(
-                                  color: const Color(0xFFF3F2F3),
-                                  width: ui(1),
-                                ),
-                              ),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Image.asset(
-                                    uploadIcon,
-                                    width: ui(56),
-                                    height: ui(56),
-                                    fit: BoxFit.contain,
-                                  ),
-                                  SizedBox(height: ui(8)),
-                                  RichText(
-                                    text: TextSpan(
-                                      style: TextStyle(
-                                        fontSize: ui(14),
-                                        fontFamily: 'PingFang SC',
-                                        fontWeight: FontWeight.w400,
-                                        height: 1.0,
-                                      ),
-                                      children: <InlineSpan>[
-                                        const TextSpan(
-                                          text: '点击将',
-                                          style: TextStyle(
-                                            color: Color(0xFFB6B5BB),
-                                          ),
-                                        ),
-                                        TextSpan(
-                                          text: uploadLabel,
-                                          style: const TextStyle(
-                                            color: Color(0xFF0B081A),
-                                          ),
-                                        ),
-                                        const TextSpan(
-                                          text: '在此处上传',
-                                          style: TextStyle(
-                                            color: Color(0xFFB6B5BB),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  if (uploadedUrl.isNotEmpty) ...[
-                                    SizedBox(height: ui(8)),
-                                    Padding(
-                                      padding: EdgeInsets.symmetric(
-                                        horizontal: ui(14),
-                                      ),
-                                      child: Text(
-                                        uploadedUrl,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          fontSize: ui(11),
-                                          color: const Color(0xFF8F86A8),
-                                          fontFamily: 'PingFang SC',
-                                          fontWeight: FontWeight.w400,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          ),
-                          SizedBox(height: ui(20)),
-                          AppDialogActionBar(
-                            onCancel: () => Navigator.of(dialogContext).pop(),
-                            onConfirm: () async {
-                              // 在 await 之前缓存 Navigator，避免 lint 警告
-                              final dialogNavigator = Navigator.of(
-                                dialogContext,
-                              );
-                              final message = await controller.addCourseware(
-                                title: titleController.text,
-                                type: kind == CloudUploadKind.courseware
-                                    ? CloudFileType.courseware
-                                    : CloudFileType.score,
-                                audioUrl: kind == CloudUploadKind.image
-                                    ? ''
-                                    : uploadedUrl,
-                                imageInput: kind == CloudUploadKind.image
-                                    ? uploadedUrl
-                                    : '',
-                              );
-                              if (!mounted) {
-                                return;
-                              }
-                              if (message != null) {
-                                _showMessage(message);
-                                return;
-                              }
-                              dialogNavigator.pop();
-                              _showMessage('资料已上传');
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-
-    titleController.dispose();
-  }
-
-  Future<void> _showPreviewDialog(CloudFileItem item) async {
-    await showScaledDialog<void>(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.18),
-      builder: (dialogContext) {
-        final ui = DashboardScaleScope.of(dialogContext).ui;
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: EdgeInsets.symmetric(
-            horizontal: ui(32),
-            vertical: ui(24),
-          ),
-          child: Container(
-            width: ui(360),
-            padding: EdgeInsets.fromLTRB(ui(24), ui(24), ui(24), ui(20)),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(ui(24)),
-              border: Border.all(color: const Color(0xFFF3F2F3)),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      '资料预览',
-                      style: TextStyle(
-                        fontSize: ui(20),
-                        color: const Color(0xFF1A1A1A),
-                        fontFamily: 'PingFang SC',
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      item.type.label,
-                      style: TextStyle(
-                        fontSize: ui(12),
-                        color: const Color(0xFF8741FF),
-                        fontFamily: 'PingFang SC',
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: ui(18)),
-                Center(
-                  child: SizedBox(
-                    width: ui(150),
-                    height: ui(112),
-                    child: _FileArtwork(item: item, compact: false),
-                  ),
-                ),
-                SizedBox(height: ui(18)),
-                Text(
-                  item.title,
-                  style: TextStyle(
-                    fontSize: ui(18),
-                    height: 1.3,
-                    color: const Color(0xFF1A1A1A),
-                    fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                SizedBox(height: ui(12)),
-                _InfoRow(label: '文件大小', value: item.sizeLabel),
-                _InfoRow(label: '上传时间', value: item.dateLabel),
-                if (item.audioUrl.isNotEmpty)
-                  _InfoRow(label: '资料链接', value: item.audioUrl),
-                SizedBox(height: ui(18)),
-                SizedBox(
-                  width: double.infinity,
-                  child: _DialogActionButton(
-                    label: '关闭',
-                    foregroundColor: Colors.white,
-                    gradient: const LinearGradient(
-                      colors: <Color>[Color(0xFFB68EFF), Color(0xFF8640FF)],
-                    ),
-                    onTap: () => Navigator.of(dialogContext).pop(),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+      builder: (dialogContext) => _UploadDialog(
+        controller: controller,
+        onSuccess: () => _showMessage('资料已上传'),
+      ),
     );
   }
 
-  Future<List<int>> _showShareDialog(List<CloudShareClassItem> classes) async {
-    final selected = <int>{};
-    final result = await showScaledDialog<List<int>>(
+  Future<void> _showClassShareDrawer(
+    CloudFileItem file,
+    List<CloudShareClassItem> classes,
+  ) async {
+    final selected = <String>{};
+    var sending = false;
+    await showClassShareDrawer<void>(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.18),
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (innerContext, setDialogState) {
-            final ui = DashboardScaleScope.of(innerContext).ui;
-            return Dialog(
-              backgroundColor: Colors.transparent,
-              insetPadding: EdgeInsets.symmetric(
-                horizontal: ui(32),
-                vertical: ui(24),
-              ),
-              child: Container(
-                width: ui(360),
-                padding: EdgeInsets.fromLTRB(ui(24), ui(24), ui(24), ui(20)),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(ui(24)),
-                  border: Border.all(color: const Color(0xFFF3F2F3)),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '分享至班级',
-                      style: TextStyle(
-                        fontSize: ui(20),
-                        color: const Color(0xFF1A1A1A),
-                        fontFamily: 'PingFang SC',
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    SizedBox(height: ui(16)),
-                    Container(
-                      constraints: BoxConstraints(maxHeight: ui(260)),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF8F9FD),
-                        borderRadius: BorderRadius.circular(ui(16)),
-                      ),
-                      child: ListView.separated(
-                        shrinkWrap: true,
-                        padding: EdgeInsets.all(ui(12)),
-                        itemCount: classes.length,
-                        separatorBuilder: (context, index) =>
-                            SizedBox(height: ui(8)),
-                        itemBuilder: (context, index) {
-                          final item = classes[index];
-                          final isSelected = selected.contains(item.id);
-                          return InkWell(
-                            onTap: () {
-                              setDialogState(() {
-                                if (isSelected) {
-                                  selected.remove(item.id);
-                                } else {
-                                  selected.add(item.id);
-                                }
-                              });
-                            },
-                            borderRadius: BorderRadius.circular(ui(12)),
-                            child: Container(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: ui(12),
-                                vertical: ui(12),
-                              ),
-                              decoration: BoxDecoration(
-                                color: isSelected
-                                    ? const Color(0xFFF4F0FF)
-                                    : Colors.white,
-                                borderRadius: BorderRadius.circular(ui(12)),
-                                border: Border.all(
-                                  color: isSelected
-                                      ? const Color(0xFFB68EFF)
-                                      : const Color(0xFFE8ECF5),
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  _SelectionBox(selected: isSelected),
-                                  SizedBox(width: ui(10)),
-                                  Expanded(
-                                    child: Text(
-                                      item.name,
-                                      style: TextStyle(
-                                        fontSize: ui(14),
-                                        color: const Color(0xFF1A1A1A),
-                                        fontFamily: 'PingFang SC',
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                    SizedBox(height: ui(18)),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _DialogActionButton(
-                            label: '取消',
-                            foregroundColor: const Color(0xFF788698),
-                            backgroundColor: const Color(0xFFF5F6FA),
-                            onTap: () =>
-                                Navigator.of(dialogContext).pop(const <int>[]),
-                          ),
-                        ),
-                        SizedBox(width: ui(12)),
-                        Expanded(
-                          child: _DialogActionButton(
-                            label: '确认分享',
-                            foregroundColor: Colors.white,
-                            gradient: const LinearGradient(
-                              colors: <Color>[
-                                Color(0xFFB68EFF),
-                                Color(0xFF8640FF),
-                              ],
-                            ),
-                            onTap: () => Navigator.of(
-                              dialogContext,
-                            ).pop(selected.toList()),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
+      child: StatefulBuilder(
+        builder: (drawerContext, setDrawerState) {
+          return ClassShareDrawer(
+            title: '分享课件',
+            targetCard: ShareTargetCard(
+              label: '您即将分享的资料',
+              title: file.title,
+              coverUrl: file.imageUrls.isEmpty ? '' : file.imageUrls.first,
+              placeholderIcon: Icons.insert_drive_file_rounded,
+            ),
+            classes: classes
+                .map(
+                  (item) => ClassShareItem(
+                    id: item.id,
+                    name: item.name,
+                    checked: selected.contains(item.id),
+                  ),
+                )
+                .toList(growable: false),
+            loading: false,
+            sending: sending,
+            onToggleClass: (id) {
+              setDrawerState(() {
+                if (selected.contains(id)) {
+                  selected.remove(id);
+                } else {
+                  selected.add(id);
+                }
+              });
+            },
+            onSend: () async {
+              if (selected.isEmpty) {
+                _showMessage('请先选择要分享的班级');
+                return;
+              }
+              setDrawerState(() => sending = true);
+              final message = await ref
+                  .read(cloudDriveControllerProvider.notifier)
+                  .shareCourseware(file: file, classIds: selected.toList());
+              if (!mounted) {
+                return;
+              }
+              setDrawerState(() => sending = false);
+              _showMessage(message ?? '资料已分享');
+              if (message == null && drawerContext.mounted) {
+                Navigator.of(drawerContext).maybePop();
+              }
+            },
+          );
+        },
+      ),
     );
-    return result ?? const <int>[];
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
-        ),
-      );
+    AppToast.show(context, message, duration: const Duration(seconds: 2));
   }
 }
 
@@ -910,22 +460,34 @@ class _CloudSidebar extends StatelessWidget {
   final CloudDriveState state;
   final ValueChanged<int> onSelectCategory;
   final VoidCallback onAddCategory;
-  final Future<void> Function(CloudCategoryItem item, _CloudMenuAction action)
+  final Future<void> Function(CloudCategoryItem item, ItemMenuAction action)
   onCategoryAction;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final totalFiles = state.categories.fold<int>(0, (sum, item) => sum + item.count);
-    final usedPercent = totalFiles == 0 ? 32 : totalFiles.clamp(12, 85);
-
     return Padding(
       padding: EdgeInsets.fromLTRB(ui(8), ui(8), ui(8), ui(10)),
       child: Column(
         children: [
           Expanded(
-            child: state.loading && state.categories.isEmpty
-                ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+            child: state.categories.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: ui(8)),
+                      child: Text(
+                        '暂无分类\n点击下方"添加分类"创建',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: ui(12),
+                          color: const Color(0xFFB6B5BB),
+                          fontFamily: 'PingFang SC',
+                          fontWeight: FontWeight.w400,
+                          height: 1.6,
+                        ),
+                      ),
+                    ),
+                  )
                 : ListView.separated(
                     itemCount: state.categories.length,
                     separatorBuilder: (context, index) =>
@@ -942,8 +504,11 @@ class _CloudSidebar extends StatelessWidget {
                   ),
           ),
           SizedBox(height: ui(12)),
-          _StorageUsageCard(percent: usedPercent.toDouble()),
-          SizedBox(height: ui(12)),
+          _StorageUsageCard(
+            percent: state.storageUsagePercent,
+            summaryText: state.storageAvailabilityLabel,
+          ),
+          SizedBox(height: ui(8)),
           _AddCategoryCard(onTap: onAddCategory),
         ],
       ),
@@ -976,7 +541,7 @@ class _CloudContentArea extends StatelessWidget {
   final VoidCallback onBackToOverview;
   final ValueChanged<CloudFolderItem> onOpenFolder;
   final VoidCallback onCreateFolder;
-  final Future<void> Function(CloudFolderItem item, _CloudMenuAction action)
+  final Future<void> Function(CloudFolderItem item, ItemMenuAction action)
   onFolderAction;
   final Future<void> Function(CloudFileItem item, _CloudFileAction action)
   onFileAction;
@@ -987,15 +552,13 @@ class _CloudContentArea extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final selectedCategoryName = state.selectedCategory?.name ?? '声乐教学';
+    final selectedCategoryName = state.selectedCategory?.name ?? '';
     final visibleFolders = state.folders
         .where((item) => keyword.isEmpty || item.title.contains(keyword))
         .toList();
     final visibleFiles = state.files
         .where((item) => keyword.isEmpty || item.title.contains(keyword))
         .toList();
-    final visibleFileIds = visibleFiles.map((item) => item.id).toList();
-    final selectedCount = state.selectedFileIds.length;
 
     return Padding(
       padding: EdgeInsets.fromLTRB(ui(30), ui(28), ui(20), ui(16)),
@@ -1014,7 +577,7 @@ class _CloudContentArea extends StatelessWidget {
               // _FolderBreadcrumb 内部已自动屏蔽末位条目的点击。
               onItemTap: (_) => onBackToOverview(),
             )
-          else
+          else if (selectedCategoryName.isNotEmpty)
             Text(
               selectedCategoryName,
               style: TextStyle(
@@ -1024,7 +587,10 @@ class _CloudContentArea extends StatelessWidget {
                 fontWeight: FontWeight.w500,
                 height: 12 / 15,
               ),
-            ),
+            )
+          else
+            // 无分类时占位，保持顶部高度与有标题时基本一致，避免布局抖动。
+            SizedBox(height: ui(15)),
           SizedBox(height: ui(16)),
           Row(
             children: [
@@ -1050,14 +616,7 @@ class _CloudContentArea extends StatelessWidget {
           ),
           SizedBox(height: ui(14)),
           if (state.isFolderView) ...[
-            _SelectionInfoBar(
-              selectedCount: selectedCount,
-              totalCount: visibleFiles.length,
-              allSelected:
-                  visibleFileIds.isNotEmpty &&
-                  visibleFileIds.every(state.selectedFileIds.contains),
-              onToggleAll: () => onToggleSelectAll(visibleFileIds),
-            ),
+            _SelectionInfoBar(totalCount: visibleFiles.length),
           ],
           SizedBox(height: ui(16)),
           Expanded(
@@ -1068,21 +627,26 @@ class _CloudContentArea extends StatelessWidget {
                       ? const Center(
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
+                      : state.categories.isEmpty
+                      ? const _CloudEmptyState(message: '暂无文件')
                       : state.isFolderView
                       ? _CloudFilesGrid(
                           items: visibleFiles,
                           onAction: onFileAction,
                         )
-                      : _CloudFoldersGrid(
-                          items: visibleFolders,
-                          onOpenFolder: (folder) {
-                            if (folder.isCreateShortcut) {
-                              onCreateFolder();
-                              return;
-                            }
-                            onOpenFolder(folder);
-                          },
-                        ),
+                      : (visibleFolders.isEmpty
+                            ? const _CloudEmptyState(message: '当前分类下还没有文件夹')
+                            : _CloudFoldersGrid(
+                                items: visibleFolders,
+                                onOpenFolder: (folder) {
+                                  if (folder.isCreateShortcut) {
+                                    onCreateFolder();
+                                    return;
+                                  }
+                                  onOpenFolder(folder);
+                                },
+                                onAction: onFolderAction,
+                              )),
                 ),
                 Positioned(
                   right: 0,
@@ -1127,7 +691,7 @@ class _CategoryCard extends StatefulWidget {
   final CloudCategoryItem item;
   final bool selected;
   final VoidCallback onTap;
-  final ValueChanged<_CloudMenuAction> onAction;
+  final ValueChanged<ItemMenuAction> onAction;
 
   @override
   State<_CategoryCard> createState() => _CategoryCardState();
@@ -1137,9 +701,10 @@ class _CategoryCardState extends State<_CategoryCard> {
   final GlobalKey _menuTriggerKey = GlobalKey();
 
   Future<void> _openActionMenu() async {
-    final action = await _showCloudActionMenu(
+    final action = await showItemActionMenu(
       context: context,
       triggerKey: _menuTriggerKey,
+      actions: const [ItemMenuAction.rename, ItemMenuAction.delete],
     );
     if (action != null) {
       widget.onAction(action);
@@ -1199,11 +764,9 @@ class _CategoryCardState extends State<_CategoryCard> {
                   ),
                   SizedBox(height: ui(4)),
                   Text(
-                    selected
-                        ? '已存储${item.count}个文件'
-                        : '已存储 ${item.count} 个文件',
+                    '已存储 ${item.count} 个',
                     maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    softWrap: false,
                     style: TextStyle(
                       fontSize: ui(10),
                       color: selected
@@ -1239,9 +802,10 @@ class _CategoryCardState extends State<_CategoryCard> {
 }
 
 class _StorageUsageCard extends StatelessWidget {
-  const _StorageUsageCard({required this.percent});
+  const _StorageUsageCard({required this.percent, required this.summaryText});
 
   final double percent;
+  final String summaryText;
 
   @override
   Widget build(BuildContext context) {
@@ -1256,32 +820,37 @@ class _StorageUsageCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text(
-                '云盘存储',
-                style: TextStyle(
-                  fontSize: ui(11),
-                  color: const Color(0xFF0B081A),
-                  fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w500,
-                  height: 12 / 11,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '云盘存储',
+                  style: TextStyle(
+                    fontSize: ui(11),
+                    color: const Color(0xFF0B081A),
+                    fontFamily: 'PingFang SC',
+                    fontWeight: FontWeight.w500,
+                    height: 12 / 11,
+                  ),
                 ),
-              ),
-              SizedBox(width: ui(8)),
-              Text(
-                '168GB可用/512GB',
-                style: TextStyle(
-                  fontSize: ui(10),
-                  color: const Color(0xFFB6B5BB),
-                  fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w400,
-                  height: 12 / 10,
+                SizedBox(width: ui(8)),
+                Text(
+                  summaryText,
+                  style: TextStyle(
+                    fontSize: ui(10),
+                    color: const Color(0xFFB6B5BB),
+                    fontFamily: 'PingFang SC',
+                    fontWeight: FontWeight.w400,
+                    height: 12 / 10,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-          SizedBox(height: ui(8)),
+          SizedBox(height: ui(4)),
           ClipRRect(
             borderRadius: BorderRadius.circular(ui(23)),
             child: SizedBox(
@@ -1317,37 +886,63 @@ class _AddCategoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return InkWell(
-      onTap: onTap,
+    return Material(
+      color: const Color(0xFFF5F6FA),
       borderRadius: BorderRadius.circular(ui(8)),
-      child: Ink(
-        height: ui(60),
-        padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(8)),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(ui(8)),
-          color: const Color(0xFFF5F6FA),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Image.asset(
-              AppAssets.cloudAddCategory,
-              width: ui(18),
-              height: ui(18),
-              fit: BoxFit.contain,
-            ),
-            SizedBox(width: ui(6)),
-            Text(
-              '添加分类',
-              style: TextStyle(
-                fontSize: ui(13),
-                color: const Color(0xFF0B081A),
-                fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
-                height: 12 / 13,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: SizedBox(
+          width: double.infinity,
+          height: ui(60),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              SizedBox(height: ui(13.84)),
+              Container(
+                width: ui(18),
+                height: ui(18),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFB6B5BB),
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Container(
+                      width: ui(10.29),
+                      height: ui(2.06),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(ui(21)),
+                      ),
+                    ),
+                    Container(
+                      width: ui(2.06),
+                      height: ui(10.29),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(ui(21)),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+              SizedBox(height: ui(4)),
+              Text(
+                '添加分类',
+                maxLines: 1,
+                style: TextStyle(
+                  fontSize: ui(13),
+                  color: const Color(0xFF0B081A),
+                  fontFamily: 'PingFang SC',
+                  fontWeight: FontWeight.w500,
+                  height: 12 / 13,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1355,10 +950,7 @@ class _AddCategoryCard extends StatelessWidget {
 }
 
 class _FolderBreadcrumb extends StatelessWidget {
-  const _FolderBreadcrumb({
-    required this.items,
-    required this.onItemTap,
-  });
+  const _FolderBreadcrumb({required this.items, required this.onItemTap});
 
   /// 自顶向下的层级文本，例如 ["我的云盘", "声乐教学", "谱例学习第三期汇总"]。
   final List<String> items;
@@ -1410,6 +1002,42 @@ class _FolderBreadcrumb extends StatelessWidget {
   }
 }
 
+// ── 右侧内容区缺省页（分类为空时显示）────────────────────────────────────────
+
+class _CloudEmptyState extends StatelessWidget {
+  const _CloudEmptyState({this.message = '暂无文件'});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Image.asset(
+            'assets/images/404/kj.png',
+            width: ui(165),
+            height: ui(165),
+            fit: BoxFit.contain,
+          ),
+          SizedBox(height: ui(12)),
+          Text(
+            message,
+            style: TextStyle(
+              fontSize: ui(14),
+              color: const Color(0xFFB6B5BB),
+              fontFamily: 'PingFang SC',
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _CloudSearchField extends StatelessWidget {
   const _CloudSearchField({required this.controller});
 
@@ -1445,15 +1073,24 @@ class _CloudSearchField extends StatelessWidget {
           contentPadding: EdgeInsets.zero,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(ui(12)),
-            borderSide: BorderSide(color: const Color(0xFFF3F2F3), width: ui(1)),
+            borderSide: BorderSide(
+              color: const Color(0xFFF3F2F3),
+              width: ui(1),
+            ),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(ui(12)),
-            borderSide: BorderSide(color: const Color(0xFFF3F2F3), width: ui(1)),
+            borderSide: BorderSide(
+              color: const Color(0xFFF3F2F3),
+              width: ui(1),
+            ),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(ui(12)),
-            borderSide: BorderSide(color: const Color(0xFFE3E3E3), width: ui(1)),
+            borderSide: BorderSide(
+              color: const Color(0xFFE3E3E3),
+              width: ui(1),
+            ),
           ),
         ),
       ),
@@ -1529,80 +1166,49 @@ class _ToolbarActionButton extends StatelessWidget {
   }
 }
 
+/// 文件数量提示条：左对齐显示「已存储 N 个文件」。
+/// 已移除全选与选中数量逻辑——文件多选/批量操作不再开放给用户。
 class _SelectionInfoBar extends StatelessWidget {
-  const _SelectionInfoBar({
-    required this.selectedCount,
-    required this.totalCount,
-    required this.allSelected,
-    required this.onToggleAll,
-  });
+  const _SelectionInfoBar({required this.totalCount});
 
-  final int selectedCount;
   final int totalCount;
-  final bool allSelected;
-  final VoidCallback onToggleAll;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      padding: EdgeInsets.zero,
-      child: Row(
-        children: [
-          GestureDetector(
-            onTap: onToggleAll,
-            child: Container(
-              width: ui(12),
-              height: ui(12),
-              decoration: BoxDecoration(
-                color: allSelected ? const Color(0xFF8741FF) : Colors.white,
-                borderRadius: BorderRadius.circular(ui(1)),
-                border: Border.all(color: const Color(0xFFD9D9D9), width: ui(1)),
-              ),
-            ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '已存储',
+          style: TextStyle(
+            fontSize: ui(12),
+            color: const Color(0xFFB6B5BB),
+            fontFamily: 'PingFang SC',
+            fontWeight: FontWeight.w500,
           ),
-          SizedBox(width: ui(10)),
-          Text(
-            '全选',
-            style: TextStyle(
-              fontSize: ui(12),
-              color: const Color(0xFFB6B5BB),
-              fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w500,
-            ),
+        ),
+        SizedBox(width: ui(6)),
+        Text(
+          '$totalCount',
+          style: TextStyle(
+            fontSize: ui(12),
+            color: const Color(0xFF8741FF),
+            fontFamily: 'Barlow',
+            fontWeight: FontWeight.w600,
           ),
-          const Spacer(),
-          Text(
-            '已全部加载',
-            style: TextStyle(
-              fontSize: ui(12),
-              color: const Color(0xFFB6B5BB),
-              fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w500,
-            ),
+        ),
+        SizedBox(width: ui(6)),
+        Text(
+          '个文件',
+          style: TextStyle(
+            fontSize: ui(12),
+            color: const Color(0xFFB6B5BB),
+            fontFamily: 'PingFang SC',
+            fontWeight: FontWeight.w500,
           ),
-          SizedBox(width: ui(6)),
-          Text(
-            '$totalCount',
-            style: TextStyle(
-              fontSize: ui(12),
-              color: const Color(0xFF0B081A),
-              fontFamily: 'Barlow',
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          SizedBox(width: ui(6)),
-          Text(
-            '项',
-            style: TextStyle(
-              fontSize: ui(12),
-              color: const Color(0xFFB6B5BB),
-              fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -1611,10 +1217,13 @@ class _CloudFoldersGrid extends StatelessWidget {
   const _CloudFoldersGrid({
     required this.items,
     required this.onOpenFolder,
+    required this.onAction,
   });
 
   final List<CloudFolderItem> items;
   final ValueChanged<CloudFolderItem> onOpenFolder;
+  final Future<void> Function(CloudFolderItem item, ItemMenuAction action)
+  onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -1637,6 +1246,7 @@ class _CloudFoldersGrid extends StatelessWidget {
           child: _FolderCard(
             item: item,
             onTap: () => onOpenFolder(item),
+            onAction: (action) => onAction(item, action),
           ),
         );
       },
@@ -1645,10 +1255,7 @@ class _CloudFoldersGrid extends StatelessWidget {
 }
 
 class _CloudFilesGrid extends StatelessWidget {
-  const _CloudFilesGrid({
-    required this.items,
-    required this.onAction,
-  });
+  const _CloudFilesGrid({required this.items, required this.onAction});
 
   final List<CloudFileItem> items;
   final Future<void> Function(CloudFileItem item, _CloudFileAction action)
@@ -1682,21 +1289,42 @@ class _CloudFilesGrid extends StatelessWidget {
   }
 }
 
-class _FolderCard extends StatelessWidget {
+class _FolderCard extends StatefulWidget {
   const _FolderCard({
     required this.item,
     required this.onTap,
+    required this.onAction,
   });
 
   final CloudFolderItem item;
   final VoidCallback onTap;
+  final ValueChanged<ItemMenuAction> onAction;
+
+  @override
+  State<_FolderCard> createState() => _FolderCardState();
+}
+
+class _FolderCardState extends State<_FolderCard> {
+  final GlobalKey _menuTriggerKey = GlobalKey();
+
+  Future<void> _openActionMenu() async {
+    final action = await showItemActionMenu(
+      context: context,
+      triggerKey: _menuTriggerKey,
+      actions: const [ItemMenuAction.rename, ItemMenuAction.delete],
+    );
+    if (action != null) {
+      widget.onAction(action);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final item = widget.item;
     final isCreate = item.isCreateShortcut || item.title.contains('新建文件夹');
     return InkWell(
-      onTap: onTap,
+      onTap: widget.onTap,
       borderRadius: BorderRadius.circular(ui(14)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1733,6 +1361,20 @@ class _FolderCard extends StatelessWidget {
                       ),
                     ),
                   ),
+                  // 右上角操作菜单（仅真实文件夹显示，新建快捷方式不显示）
+                  if (!isCreate)
+                    Positioned(
+                      // 覆盖背景图自带的三个点位置：不再显示代码实现的三点图标
+                      // 这里只放一个透明的点击热区
+                      top: ui(32),
+                      right: ui(12),
+                      child: GestureDetector(
+                        key: _menuTriggerKey,
+                        behavior: HitTestBehavior.opaque,
+                        onTap: _openActionMenu,
+                        child: SizedBox(width: ui(34), height: ui(34)),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -1758,29 +1400,69 @@ class _FolderCard extends StatelessWidget {
   }
 }
 
-class _FileCard extends StatelessWidget {
-  const _FileCard({
-    required this.item,
-    required this.onAction,
-  });
+class _FileCard extends StatefulWidget {
+  const _FileCard({required this.item, required this.onAction});
 
   final CloudFileItem item;
   final ValueChanged<_CloudFileAction> onAction;
 
   @override
+  State<_FileCard> createState() => _FileCardState();
+}
+
+class _FileCardState extends State<_FileCard> {
+  final GlobalKey _menuTriggerKey = GlobalKey();
+
+  CloudFileItem get _item => widget.item;
+
+  Future<void> _openActionMenu() async {
+    final action = await showItemActionMenu(
+      context: context,
+      triggerKey: _menuTriggerKey,
+      actions: const [
+        ItemMenuAction.rename,
+        ItemMenuAction.share,
+        ItemMenuAction.delete,
+      ],
+    );
+    if (action == null) return;
+    switch (action) {
+      case ItemMenuAction.rename:
+        widget.onAction(_CloudFileAction.rename);
+        break;
+      case ItemMenuAction.share:
+        widget.onAction(_CloudFileAction.share);
+        break;
+      case ItemMenuAction.delete:
+        widget.onAction(_CloudFileAction.delete);
+        break;
+      case ItemMenuAction.copy:
+        // Files don't expose copy in the menu; this case is unreachable
+        // for the current `actions` list above but kept for exhaustiveness.
+        break;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final item = _item;
     final visual = _resolveFileVisual(item);
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => widget.onAction(_CloudFileAction.preview),
         borderRadius: BorderRadius.circular(ui(12)),
-        border: Border.all(color: const Color(0xFFF5F6FA), width: ui(1)),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(ui(12)),
+            border: Border.all(color: const Color(0xFFF5F6FA), width: ui(1)),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
           Expanded(
             child: Stack(
               children: [
@@ -1793,87 +1475,29 @@ class _FileCard extends StatelessWidget {
                     fit: BoxFit.contain,
                   ),
                 ),
-                // 左上角：选择小方框
-                Positioned(
-                  left: ui(10),
-                  top: ui(13),
-                  child: Container(
-                    width: ui(12),
-                    height: ui(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(ui(1)),
-                      border: Border.all(
-                        color: const Color(0xFFD9D9D9),
-                        width: ui(1),
-                      ),
-                    ),
-                  ),
-                ),
-                // 右上角：类型徽标 + 操作菜单
+                // 右上角：类型徽标（操作菜单移到下方灰色信息条）。
                 Positioned(
                   top: ui(8),
                   right: ui(8),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: ui(6),
-                          vertical: ui(3),
-                        ),
-                        decoration: BoxDecoration(
-                          color: visual.badgeBg,
-                          borderRadius: BorderRadius.circular(ui(4)),
-                        ),
-                        child: Text(
-                          visual.badgeLabel,
-                          style: TextStyle(
-                            fontSize: ui(10),
-                            color: visual.badgeColor,
-                            fontFamily: 'PingFang SC',
-                            fontWeight: FontWeight.w500,
-                            height: 11.43 / 9.52,
-                          ),
-                        ),
+                  child: Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: ui(6),
+                      vertical: ui(3),
+                    ),
+                    decoration: BoxDecoration(
+                      color: visual.badgeBg,
+                      borderRadius: BorderRadius.circular(ui(4)),
+                    ),
+                    child: Text(
+                      visual.badgeLabel,
+                      style: TextStyle(
+                        fontSize: ui(10),
+                        color: visual.badgeColor,
+                        fontFamily: 'PingFang SC',
+                        fontWeight: FontWeight.w500,
+                        height: 11.43 / 9.52,
                       ),
-                      PopupMenuButton<_CloudFileAction>(
-                        padding: EdgeInsets.zero,
-                        iconSize: ui(20),
-                        color: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(ui(12)),
-                        ),
-                        onSelected: onAction,
-                        itemBuilder: (context) {
-                          final actions = <_CloudFileAction>[
-                            _CloudFileAction.preview,
-                            if (item.type == CloudFileType.audio)
-                              _CloudFileAction.play,
-                            _CloudFileAction.share,
-                            _CloudFileAction.delete,
-                          ];
-                          return actions
-                              .map(
-                                (action) => PopupMenuItem<_CloudFileAction>(
-                                  value: action,
-                                  child: Text(action.label(item.isPlaying)),
-                                ),
-                              )
-                              .toList();
-                        },
-                        child: SizedBox(
-                          width: ui(20),
-                          height: ui(20),
-                          child: Image.asset(
-                            AppAssets.cloudActionMore,
-                            width: ui(20),
-                            height: ui(20),
-                            fit: BoxFit.contain,
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
                 // 音频类型：右上角浮动播放按钮
@@ -1882,7 +1506,7 @@ class _FileCard extends StatelessWidget {
                     bottom: ui(10),
                     right: ui(10),
                     child: GestureDetector(
-                      onTap: () => onAction(_CloudFileAction.play),
+                      onTap: () => widget.onAction(_CloudFileAction.play),
                       child: Container(
                         width: ui(28),
                         height: ui(28),
@@ -1914,53 +1538,81 @@ class _FileCard extends StatelessWidget {
           Container(
             height: ui(58),
             color: const Color(0xFFF5F6FA),
-            padding: EdgeInsets.fromLTRB(ui(12), ui(8), ui(12), ui(10)),
+            padding: EdgeInsets.fromLTRB(ui(12), ui(8), ui(8), ui(10)),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  item.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: ui(13),
-                    color: const Color(0xFF0B081A),
-                    fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w500,
-                    height: 12 / 13,
-                  ),
-                ),
-                SizedBox(height: ui(8)),
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Text(
-                      item.sizeLabel,
-                      style: TextStyle(
-                        fontSize: ui(10),
-                        color: const Color(0xFFB6B5BB),
-                        fontFamily: 'Barlow',
-                        fontWeight: FontWeight.w500,
-                        height: 12 / 10,
+                    Expanded(
+                      child: Text(
+                        item.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: ui(13),
+                          color: const Color(0xFF0B081A),
+                          fontFamily: 'PingFang SC',
+                          fontWeight: FontWeight.w500,
+                          height: 12 / 13,
+                        ),
                       ),
                     ),
-                    Text(
-                      item.dateLabel,
-                      style: TextStyle(
-                        fontSize: ui(10),
-                        color: const Color(0xFFB6B5BB),
-                        fontFamily: 'Barlow',
-                        fontWeight: FontWeight.w500,
-                        height: 12 / 10,
+                    SizedBox(width: ui(4)),
+                    GestureDetector(
+                      key: _menuTriggerKey,
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _openActionMenu,
+                      child: SizedBox(
+                        width: ui(20),
+                        height: ui(20),
+                        child: Image.asset(
+                          AppAssets.cloudActionMore,
+                          width: ui(20),
+                          height: ui(20),
+                          fit: BoxFit.contain,
+                        ),
                       ),
                     ),
                   ],
+                ),
+                SizedBox(height: ui(6)),
+                Padding(
+                  padding: EdgeInsets.only(right: ui(4)),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        item.sizeLabel,
+                        style: TextStyle(
+                          fontSize: ui(10),
+                          color: const Color(0xFFB6B5BB),
+                          fontFamily: 'Barlow',
+                          fontWeight: FontWeight.w500,
+                          height: 12 / 10,
+                        ),
+                      ),
+                      Text(
+                        item.dateLabel,
+                        style: TextStyle(
+                          fontSize: ui(10),
+                          color: const Color(0xFFB6B5BB),
+                          fontFamily: 'Barlow',
+                          fontWeight: FontWeight.w500,
+                          height: 12 / 10,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
         ],
+      ),
+        ),
       ),
     );
   }
@@ -2025,32 +1677,6 @@ class _FloatingCreateButton extends StatelessWidget {
   }
 }
 
-class _SelectionBox extends StatelessWidget {
-  const _SelectionBox({required this.selected});
-
-  final bool selected;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      width: ui(18),
-      height: ui(18),
-      decoration: BoxDecoration(
-        color: selected ? const Color(0xFF8741FF) : Colors.white,
-        borderRadius: BorderRadius.circular(ui(5)),
-        border: Border.all(
-          color: selected ? const Color(0xFF8741FF) : const Color(0xFFD7DBE5),
-          width: ui(1.2),
-        ),
-      ),
-      child: selected
-          ? Icon(Icons.check_rounded, size: ui(12), color: Colors.white)
-          : null,
-    );
-  }
-}
-
 class _FolderArtwork extends StatelessWidget {
   const _FolderArtwork({required this.item});
 
@@ -2065,87 +1691,6 @@ class _FolderArtwork extends StatelessWidget {
   }
 }
 
-class _FileArtwork extends StatelessWidget {
-  const _FileArtwork({required this.item, this.compact = true});
-
-  final CloudFileItem item;
-  final bool compact;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    final style = _fileStyle(item.type);
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: <Color>[style.backgroundStart, style.backgroundEnd],
-        ),
-        borderRadius: BorderRadius.circular(ui(compact ? 16 : 22)),
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            right: -ui(10),
-            bottom: -ui(8),
-            child: Container(
-              width: ui(compact ? 60 : 78),
-              height: ui(compact ? 60 : 78),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withValues(alpha: 0.28),
-              ),
-            ),
-          ),
-          Center(
-            child: Container(
-              width: ui(compact ? 58 : 74),
-              height: ui(compact ? 58 : 74),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.78),
-                borderRadius: BorderRadius.circular(ui(compact ? 20 : 24)),
-                boxShadow: [
-                  BoxShadow(
-                    color: style.accent.withValues(alpha: 0.18),
-                    blurRadius: ui(20),
-                    offset: Offset(0, ui(10)),
-                  ),
-                ],
-              ),
-              child: Icon(
-                style.icon,
-                size: ui(compact ? 28 : 34),
-                color: style.accent,
-              ),
-            ),
-          ),
-          if (item.type == CloudFileType.audio)
-            Positioned(
-              right: ui(10),
-              top: ui(10),
-              child: Container(
-                width: ui(compact ? 28 : 32),
-                height: ui(compact ? 28 : 32),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.92),
-                  borderRadius: BorderRadius.circular(ui(999)),
-                ),
-                child: Icon(
-                  item.isPlaying
-                      ? Icons.pause_rounded
-                      : Icons.play_arrow_rounded,
-                  size: ui(compact ? 16 : 18),
-                  color: style.accent,
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
 class _EmptyCloudState extends StatelessWidget {
   const _EmptyCloudState({required this.message});
 
@@ -2153,37 +1698,8 @@ class _EmptyCloudState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: ui(72),
-            height: ui(72),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF5F6FA),
-              borderRadius: BorderRadius.circular(ui(24)),
-            ),
-            child: Icon(
-              Icons.cloud_queue_rounded,
-              size: ui(34),
-              color: const Color(0xFFB6B5BB),
-            ),
-          ),
-          SizedBox(height: ui(14)),
-          Text(
-            message,
-            style: TextStyle(
-              fontSize: ui(14),
-              color: const Color(0xFF788698),
-              fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w400,
-            ),
-          ),
-        ],
-      ),
-    );
+    // 与右侧内容区缺省页保持一致：使用 kj.png
+    return _CloudEmptyState(message: message);
   }
 }
 
@@ -2250,291 +1766,234 @@ class _UploadKindOption extends StatelessWidget {
   }
 }
 
-class _DialogActionButton extends StatelessWidget {
-  const _DialogActionButton({
-    required this.label,
-    required this.foregroundColor,
-    required this.onTap,
-    this.backgroundColor,
-    this.gradient,
+// ── Preview ────────────────────────────────────────────────────────────────
+
+/// 文件预览页：占据 courseware 页面整个内容区（左侧外壳侧栏依然由
+/// `ShellPageSurface` 负责显示）。根据 [CloudFileItem.type] 派发到三种正文：
+///  - 图片：头部条 + 主体（PageView 缩放）+ 右侧 160 缩略图栏
+///  - 谱例：复刻 music_play 的「声乐/器乐」布局（左转盘 + 右乐谱 + 底部播放条），
+///    去掉「升降调 / 五线谱-简谱」切换；保留分享按钮。
+///  - 课件：头部条 + 全宽主体（按文件后缀解析；图片直显，PDF/Doc 等显示
+///    「在新窗口打开」入口）。
+class _CoursewarePreviewPage extends StatelessWidget {
+  const _CoursewarePreviewPage({
+    required this.state,
+    required this.controller,
+    required this.onClose,
+    required this.onRename,
+    required this.onShare,
+    required this.onDelete,
   });
 
-  final String label;
-  final Color foregroundColor;
-  final Color? backgroundColor;
-  final Gradient? gradient;
-  final VoidCallback onTap;
+  final CloudDriveState state;
+  final CloudDriveController controller;
+  final VoidCallback onClose;
+  final Future<void> Function() onRename;
+  final Future<void> Function() onShare;
+  final Future<void> Function() onDelete;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(ui(14)),
-      child: Ink(
-        height: ui(44),
-        decoration: BoxDecoration(
-          color: gradient == null ? backgroundColor ?? Colors.white : null,
-          gradient: gradient,
-          borderRadius: BorderRadius.circular(ui(14)),
-        ),
-        child: Center(
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: ui(14),
-              color: foregroundColor,
-              fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
+    final item = state.previewingFile!;
+
+    // 业务上「图片」与「谱例」共用 `CloudFileType.score`：仅有 imageUrls
+    // 且没有 audioUrl 视为「图片」，应该走图片预览（带右侧缩略图列）；
+    // 否则才是真正的谱例预览。
+    final isImageOnlyScore = item.type == CloudFileType.score &&
+        item.audioUrl.trim().isEmpty &&
+        item.imageUrls.isNotEmpty;
+
+    final Widget body;
+    if (item.type == CloudFileType.courseware) {
+      body = _PreviewCoursewareBody(
+        state: state,
+        onClose: onClose,
+        onRename: onRename,
+        onShare: onShare,
+        onDelete: onDelete,
+      );
+    } else if (item.type == CloudFileType.score && !isImageOnlyScore) {
+      body = _PreviewScoreBody(
+        state: state,
+        controller: controller,
+        onClose: onClose,
+        onShare: onShare,
+      );
+    } else {
+      // 图片（score 但无 audio）以及兜底的 audio 类型 → 图片预览。
+      body = _PreviewImageBody(
+        state: state,
+        controller: controller,
+        onClose: onClose,
+        onRename: onRename,
+        onShare: onShare,
+        onDelete: onDelete,
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(ui(16)),
       ),
+      clipBehavior: Clip.antiAlias,
+      child: body,
     );
   }
 }
 
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.label, required this.value});
+// ──────────────────────────────────────────────────────────────────────────
+// Common header / button widgets used by image + courseware previews.
+// ──────────────────────────────────────────────────────────────────────────
 
-  final String label;
-  final String value;
+/// 统一的预览页顶部条：左侧返回 + 标题（可点编辑），右侧 分享 / 删除。
+class _PreviewHeaderBar extends StatelessWidget {
+  const _PreviewHeaderBar({
+    required this.title,
+    required this.onClose,
+    required this.onRename,
+    required this.onShare,
+    required this.onDelete,
+  });
 
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Padding(
-      padding: EdgeInsets.only(bottom: ui(8)),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: ui(62),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: ui(12),
-                color: const Color(0xFFB6B5BB),
-                fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w400,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: TextStyle(
-                fontSize: ui(12),
-                color: const Color(0xFF1A1A1A),
-                fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-enum _CloudMenuAction { rename, share, copy, delete }
-
-/// 显示左侧分类卡的省略号操作菜单。
-///
-/// [triggerKey] 必须挂在触发该菜单的 Widget（通常是省略号图标）上，
-/// 用于计算菜单的锚点位置（出现在按钮下方、右边缘对齐）。
-///
-/// 返回 `null` 表示用户点击了空白区域关闭菜单，未选择任何操作。
-Future<_CloudMenuAction?> _showCloudActionMenu({
-  required BuildContext context,
-  required GlobalKey triggerKey,
-}) {
-  // 解析触发器在屏幕上的几何位置
-  final triggerCtx = triggerKey.currentContext;
-  if (triggerCtx == null) {
-    return Future<_CloudMenuAction?>.value(null);
-  }
-  final renderBox = triggerCtx.findRenderObject() as RenderBox;
-  final overlayBox = Overlay.of(
-    context,
-    rootOverlay: true,
-  ).context.findRenderObject() as RenderBox;
-
-  final origin = renderBox.localToGlobal(Offset.zero, ancestor: overlayBox);
-  final size = renderBox.size;
-  final scale = DashboardScaleScope.of(context);
-  final menuWidth = scale.ui(142);
-  // 大约预估菜单总高度（8 + 36*3 + 2 + 1 + 3 + 36 + 8 = 166），仅用于
-  // 在底部空间不够时把菜单上挪，渲染时仍按内容自适应。
-  final approxMenuHeight = scale.ui(166);
-
-  // 让"点击点"(省略号图标的中心) ≈ 弹窗的左上角。
-  // 即菜单从触发按钮中心位置向右下方展开。
-  var left = origin.dx + size.width / 2;
-  var top = origin.dy + size.height / 2;
-
-  // 右侧空间不够：把菜单整体平移到按钮左侧（保持垂直锚点不变）
-  if (left + menuWidth > overlayBox.size.width - scale.ui(8)) {
-    left = origin.dx + size.width / 2 - menuWidth;
-  }
-  // 极端情况下两侧都摆不下，兜底：贴左 8px
-  if (left < scale.ui(8)) {
-    left = scale.ui(8);
-  }
-  // 底部空间不够：把菜单上挪
-  if (top + approxMenuHeight > overlayBox.size.height - scale.ui(8)) {
-    top = overlayBox.size.height - approxMenuHeight - scale.ui(8);
-  }
-  if (top < scale.ui(8)) {
-    top = scale.ui(8);
-  }
-
-  return showMenu<_CloudMenuAction>(
-    context: context,
-    elevation: 0,
-    color: Colors.transparent,
-    shadowColor: Colors.transparent,
-    surfaceTintColor: Colors.transparent,
-    constraints: BoxConstraints.tightFor(width: menuWidth),
-    position: RelativeRect.fromLTRB(
-      left,
-      top,
-      overlayBox.size.width - left - menuWidth,
-      overlayBox.size.height - top,
-    ),
-    items: <PopupMenuEntry<_CloudMenuAction>>[
-      PopupMenuItem<_CloudMenuAction>(
-        enabled: false,
-        padding: EdgeInsets.zero,
-        child: DashboardScaleScope(
-          data: scale,
-          child: Builder(
-            builder: (panelCtx) => _CloudActionMenuPanel(
-              onSelected: (action) => Navigator.of(panelCtx).pop(action),
-            ),
-          ),
-        ),
-      ),
-    ],
-  );
-}
-
-/// 142px 宽的操作菜单面板：白底 / 12 圆角 / 1.11px 浅边框 / 三段式柔和投影。
-class _CloudActionMenuPanel extends StatelessWidget {
-  const _CloudActionMenuPanel({required this.onSelected});
-
-  final ValueChanged<_CloudMenuAction> onSelected;
+  final String title;
+  final VoidCallback onClose;
+  final Future<void> Function() onRename;
+  final Future<void> Function() onShare;
+  final Future<void> Function() onDelete;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
-      width: ui(142),
-      decoration: BoxDecoration(
+      height: ui(56),
+      padding: EdgeInsets.symmetric(horizontal: ui(12)),
+      decoration: const BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(12)),
-        border: Border.all(color: const Color(0xFFF3F2F3), width: ui(1.11)),
-        boxShadow: [
-          // 0px 0px 1px rgba(11,8,26,0.02)
-          BoxShadow(
-            color: const Color(0x050B081A),
-            blurRadius: ui(1),
-          ),
-          // 0px 12px 40px rgba(11,8,26,0.06)
-          BoxShadow(
-            color: const Color(0x0F0B081A),
-            blurRadius: ui(40),
-            offset: Offset(0, ui(12)),
-          ),
-          // 0px 12px 24px -16px rgba(11,8,26,0.02)
-          BoxShadow(
-            color: const Color(0x050B081A),
-            blurRadius: ui(24),
-            offset: Offset(0, ui(12)),
-            spreadRadius: ui(-16),
-          ),
-        ],
+        border: Border(bottom: BorderSide(color: Color(0xFFF3F2F3), width: 1)),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Row(
         children: [
-          SizedBox(height: ui(8)),
-          _CloudActionMenuRow(
-            label: '重命名',
-            icon: AppAssets.coursewareActionRename,
-            onTap: () => onSelected(_CloudMenuAction.rename),
+          _PreviewBackButton(onTap: onClose),
+          SizedBox(width: ui(12)),
+          Expanded(
+            child: Center(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => onRename(),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: ui(15),
+                        color: const Color(0xFF0B081A),
+                        fontFamily: 'PingFang SC',
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    SizedBox(width: ui(6)),
+                    Icon(
+                      Icons.edit_outlined,
+                      size: ui(14),
+                      color: const Color(0xFF8741FF),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
-          _CloudActionMenuRow(
+          _PreviewActionPill(
+            iconAsset: AppAssets.coursewareActionShare,
             label: '分享',
-            icon: AppAssets.coursewareActionShare,
-            onTap: () => onSelected(_CloudMenuAction.share),
+            onTap: onShare,
           ),
-          _CloudActionMenuRow(
-            label: '复制',
-            icon: AppAssets.coursewareActionCopy,
-            onTap: () => onSelected(_CloudMenuAction.copy),
-          ),
-          SizedBox(height: ui(2)),
-          Container(
-            margin: EdgeInsets.symmetric(horizontal: ui(8)),
-            height: ui(1),
-            color: const Color(0xFFF3F4F6),
-          ),
-          SizedBox(height: ui(3)),
-          _CloudActionMenuRow(
+          SizedBox(width: ui(8)),
+          _PreviewActionPill(
+            iconAsset: AppAssets.coursewareActionDelete,
             label: '删除',
-            icon: AppAssets.coursewareActionDelete,
-            danger: true,
-            onTap: () => onSelected(_CloudMenuAction.delete),
+            onTap: onDelete,
           ),
-          SizedBox(height: ui(8)),
         ],
       ),
     );
   }
 }
 
-class _CloudActionMenuRow extends StatelessWidget {
-  const _CloudActionMenuRow({
-    required this.label,
-    required this.icon,
-    required this.onTap,
-    this.danger = false,
-  });
+class _PreviewBackButton extends StatelessWidget {
+  const _PreviewBackButton({required this.onTap});
 
-  final String label;
-  final String icon;
   final VoidCallback onTap;
-  final bool danger;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return InkWell(
+    return GestureDetector(
       onTap: onTap,
-      child: SizedBox(
-        height: ui(36),
+      child: Container(
+        width: ui(32),
+        height: ui(32),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(ui(8)),
+          border: Border.all(color: const Color(0xFFF3F2F3), width: ui(1)),
+        ),
+        child: Icon(
+          Icons.chevron_left_rounded,
+          size: ui(18),
+          color: const Color(0xFF1C274C),
+        ),
+      ),
+    );
+  }
+}
+
+class _PreviewActionPill extends StatelessWidget {
+  const _PreviewActionPill({
+    required this.iconAsset,
+    required this.label,
+    required this.onTap,
+  });
+
+  final String iconAsset;
+  final String label;
+  final Future<void> Function() onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return GestureDetector(
+      onTap: () => onTap(),
+      child: Container(
+        height: ui(32),
+        padding: EdgeInsets.symmetric(horizontal: ui(12)),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(ui(8)),
+          border: Border.all(color: const Color(0xFFF3F2F3), width: ui(1)),
+        ),
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            SizedBox(width: ui(14)),
             Image.asset(
-              icon,
-              width: ui(20),
-              height: ui(20),
+              iconAsset,
+              width: ui(16),
+              height: ui(16),
               fit: BoxFit.contain,
             ),
-            SizedBox(width: ui(10)),
+            SizedBox(width: ui(4)),
             Text(
               label,
               style: TextStyle(
-                fontSize: ui(13),
-                color: danger
-                    ? const Color(0xFFFF323C)
-                    : const Color(0xFF0B081A),
+                fontSize: ui(12),
+                color: Colors.black,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w400,
-                height: 20 / 13,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ],
@@ -2544,60 +2003,2390 @@ class _CloudActionMenuRow extends StatelessWidget {
   }
 }
 
-enum _CloudFileAction { preview, play, share, delete }
+// ──────────────────────────────────────────────────────────────────────────
+// Image preview: header + main pager + right thumbnail rail
+// ──────────────────────────────────────────────────────────────────────────
 
-extension _CloudFileActionLabel on _CloudFileAction {
-  String label(bool isPlaying) {
-    return switch (this) {
-      _CloudFileAction.preview => '预览',
-      _CloudFileAction.play => isPlaying ? '暂停播放' : '播放音频',
-      _CloudFileAction.share => '分享',
-      _CloudFileAction.delete => '删除',
-    };
+class _PreviewImageBody extends StatefulWidget {
+  const _PreviewImageBody({
+    required this.state,
+    required this.controller,
+    required this.onClose,
+    required this.onRename,
+    required this.onShare,
+    required this.onDelete,
+  });
+
+  final CloudDriveState state;
+  final CloudDriveController controller;
+  final VoidCallback onClose;
+  final Future<void> Function() onRename;
+  final Future<void> Function() onShare;
+  final Future<void> Function() onDelete;
+
+  @override
+  State<_PreviewImageBody> createState() => _PreviewImageBodyState();
+}
+
+class _PreviewImageBodyState extends State<_PreviewImageBody> {
+  late final PageController _pageController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(
+      initialPage: widget.state.previewActiveImageIndex,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _PreviewImageBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final target = widget.state.previewActiveImageIndex;
+    if (_pageController.hasClients &&
+        _pageController.page?.round() != target) {
+      _pageController.animateToPage(
+        target,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final item = widget.state.previewingFile!;
+    final showRail = item.imageUrls.length > 1;
+    return Column(
+      children: [
+        _PreviewHeaderBar(
+          title: item.title,
+          onClose: widget.onClose,
+          onRename: widget.onRename,
+          onShare: widget.onShare,
+          onDelete: widget.onDelete,
+        ),
+        Expanded(
+          child: Row(
+            children: [
+              Expanded(
+                child: _PreviewImagePager(
+                  urls: item.imageUrls,
+                  pageController: _pageController,
+                  heroPrefix: 'cloud_preview_${item.id}',
+                  onPageChanged: widget.controller.previewSetImageIndex,
+                ),
+              ),
+              if (showRail)
+                _PreviewThumbnailRail(
+                  urls: item.imageUrls,
+                  currentIndex: widget.state.previewActiveImageIndex,
+                  onSelect: widget.controller.previewSetImageIndex,
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 }
 
-class _CloudFileVisualStyle {
-  const _CloudFileVisualStyle({
-    required this.backgroundStart,
-    required this.backgroundEnd,
-    required this.badgeBackground,
-    required this.accent,
-    required this.icon,
+class _PreviewImagePager extends StatelessWidget {
+  const _PreviewImagePager({
+    required this.urls,
+    required this.pageController,
+    required this.heroPrefix,
+    required this.onPageChanged,
   });
 
-  final Color backgroundStart;
-  final Color backgroundEnd;
-  final Color badgeBackground;
-  final Color accent;
-  final IconData icon;
+  final List<String> urls;
+  final PageController pageController;
+  final String heroPrefix;
+  final ValueChanged<int> onPageChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    if (urls.isEmpty) {
+      return Container(
+        color: const Color(0xFFFAFAFD),
+        alignment: Alignment.center,
+        child: Text(
+          '该资料暂无可预览图片',
+          style: TextStyle(
+            color: const Color(0xFF8F86A8),
+            fontSize: ui(12),
+            fontFamily: 'PingFang SC',
+          ),
+        ),
+      );
+    }
+    return Padding(
+      padding: EdgeInsets.all(ui(16)),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(ui(7)),
+        child: Container(
+          color: const Color(0xFFFAFAFD),
+          child: PageView.builder(
+            controller: pageController,
+            itemCount: urls.length,
+            onPageChanged: onPageChanged,
+            itemBuilder: (context, index) {
+              final resolved = CloudDriveController.resolveMediaUrl(
+                urls[index],
+              );
+              return GestureDetector(
+                onDoubleTap: () => showImageGallery(
+                  context,
+                  images: urls
+                      .map(CloudDriveController.resolveMediaUrl)
+                      .toList(),
+                  initialIndex: index,
+                  heroTagPrefix: heroPrefix,
+                ),
+                child: InteractiveViewer(
+                  minScale: 1,
+                  maxScale: 4,
+                  child: Center(
+                    child: CachedNetworkImage(
+                      imageUrl: resolved,
+                      fit: BoxFit.contain,
+                      placeholder: (_, _) => SizedBox(
+                        width: ui(28),
+                        height: ui(28),
+                        child: CircularProgressIndicator(
+                          strokeWidth: ui(2),
+                          color: const Color(0xFF8741FF),
+                        ),
+                      ),
+                      errorWidget: (_, _, _) => Icon(
+                        Icons.broken_image_outlined,
+                        size: ui(48),
+                        color: const Color(0xFFB6B5BB),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
 }
 
-_CloudFileVisualStyle _fileStyle(CloudFileType type) {
-  return switch (type) {
-    CloudFileType.audio => const _CloudFileVisualStyle(
-      backgroundStart: Color(0xFFE9FBF5),
-      backgroundEnd: Color(0xFFD8FFF2),
-      badgeBackground: Color(0xFFE7FFF5),
-      accent: Color(0xFF18C9A5),
-      icon: Icons.headphones_rounded,
-    ),
-    CloudFileType.score => const _CloudFileVisualStyle(
-      backgroundStart: Color(0xFFF0EBFF),
-      backgroundEnd: Color(0xFFE3DAFF),
-      badgeBackground: Color(0xFFF1EBFF),
-      accent: Color(0xFF8B66F8),
-      icon: Icons.music_note_rounded,
-    ),
-    CloudFileType.courseware => const _CloudFileVisualStyle(
-      backgroundStart: Color(0xFFFFF4E6),
-      backgroundEnd: Color(0xFFFFECD2),
-      badgeBackground: Color(0xFFFFF4E8),
-      accent: Color(0xFFFFAA21),
-      icon: Icons.insert_drive_file_rounded,
-    ),
-  };
+class _PreviewThumbnailRail extends StatelessWidget {
+  const _PreviewThumbnailRail({
+    required this.urls,
+    required this.currentIndex,
+    required this.onSelect,
+  });
+
+  final List<String> urls;
+  final int currentIndex;
+  final ValueChanged<int> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      width: ui(160),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(left: BorderSide(color: Color(0xFFF3F2F3), width: 1)),
+      ),
+      child: ListView.separated(
+        padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(16)),
+        itemCount: urls.length,
+        separatorBuilder: (_, _) => SizedBox(height: ui(8)),
+        itemBuilder: (context, index) {
+          final isCurrent = index == currentIndex;
+          return GestureDetector(
+            onTap: () => onSelect(index),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '第${index + 1}页',
+                  style: TextStyle(
+                    fontSize: ui(12),
+                    color: isCurrent
+                        ? const Color(0xFF8741FF)
+                        : const Color(0xFF0B081A),
+                    fontFamily: 'PingFang SC',
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+                SizedBox(height: ui(4)),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(ui(8)),
+                  child: Container(
+                    width: ui(128),
+                    height: ui(170),
+                    decoration: BoxDecoration(
+                      color: isCurrent
+                          ? const Color(0xFFEAE5FF)
+                          : const Color(0xFFF5F6FA),
+                      border: Border.all(
+                        color: const Color(0xFFF3F2F3),
+                        width: ui(1),
+                      ),
+                    ),
+                    child: CachedNetworkImage(
+                      imageUrl: CloudDriveController.resolveMediaUrl(
+                        urls[index],
+                      ),
+                      fit: BoxFit.cover,
+                      width: ui(128),
+                      height: ui(170),
+                      placeholder: (_, _) => const SizedBox.shrink(),
+                      errorWidget: (_, _, _) => Icon(
+                        Icons.broken_image_outlined,
+                        size: ui(28),
+                        color: const Color(0xFFB6B5BB),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
 }
+
+// ──────────────────────────────────────────────────────────────────────────
+// Courseware preview: header + full-width body (no thumbnail rail).
+// 按后缀分发到图片显示 / 「在新窗口打开」按钮。
+// ──────────────────────────────────────────────────────────────────────────
+
+class _PreviewCoursewareBody extends StatelessWidget {
+  const _PreviewCoursewareBody({
+    required this.state,
+    required this.onClose,
+    required this.onRename,
+    required this.onShare,
+    required this.onDelete,
+  });
+
+  final CloudDriveState state;
+  final VoidCallback onClose;
+  final Future<void> Function() onRename;
+  final Future<void> Function() onShare;
+  final Future<void> Function() onDelete;
+
+  String _primaryUrl() {
+    final item = state.previewingFile!;
+    if (item.audioUrl.trim().isNotEmpty) return item.audioUrl;
+    if (item.imageUrls.isNotEmpty) return item.imageUrls.first;
+    return '';
+  }
+
+  bool _isImageUrl(String url) {
+    return _hasExt(url, [
+      'png',
+      'jpg',
+      'jpeg',
+      'webp',
+      'gif',
+      'bmp',
+      'svg',
+    ]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final item = state.previewingFile!;
+    final raw = _primaryUrl();
+    final resolved = CloudDriveController.resolveMediaUrl(raw);
+
+    return Column(
+      children: [
+        _PreviewHeaderBar(
+          title: item.title,
+          onClose: onClose,
+          onRename: onRename,
+          onShare: onShare,
+          onDelete: onDelete,
+        ),
+        Expanded(
+          child: _isImageUrl(raw)
+              ? _PreviewImagePager(
+                  urls: <String>[raw],
+                  pageController: PageController(),
+                  heroPrefix: 'cloud_preview_${item.id}',
+                  onPageChanged: (_) {},
+                )
+              : resolved.isEmpty
+                  ? _CoursewareEmptyPreview(ui: ui)
+                  : Padding(
+                      padding: EdgeInsets.all(ui(16)),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(ui(7)),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFAFAFD),
+                            border: Border.all(
+                              color: const Color(0xFFF3F2F3),
+                              width: ui(1),
+                            ),
+                          ),
+                          // 直接把文件嵌入到本页面里：Web 端使用 iframe /
+                          // <img> / <audio> / <video> / Office Online；
+                          // 其它平台展示占位提示。不再跳新标签页。
+                          child: CoursewareInlinePreview(
+                            url: resolved,
+                            placeholder: _CoursewareEmptyPreview(ui: ui),
+                          ),
+                        ),
+                      ),
+                    ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 课件预览空状态（无可解析的文件链接时）。
+class _CoursewareEmptyPreview extends StatelessWidget {
+  const _CoursewareEmptyPreview({required this.ui});
+
+  final double Function(num) ui;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.all(ui(16)),
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFFFAFAFD),
+          borderRadius: BorderRadius.circular(ui(7)),
+          border: Border.all(
+            color: const Color(0xFFF3F2F3),
+            width: ui(1),
+          ),
+        ),
+        alignment: Alignment.center,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Image.asset(
+              AppAssets.coursewareUploadFile,
+              width: ui(96),
+              height: ui(96),
+              fit: BoxFit.contain,
+            ),
+            SizedBox(height: ui(14)),
+            Text(
+              '该资料暂无可预览内容',
+              style: TextStyle(
+                fontSize: ui(12),
+                color: const Color(0xFF8F86A8),
+                fontFamily: 'PingFang SC',
+                fontWeight: FontWeight.w400,
+                height: 1.5,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Score preview: replicates music_play "vocal/instrumental" layout.
+// 左侧：返回 + 分享 + 转盘 + 标题滚动 + 简介；右侧：乐谱（PageView）；底部：播放条。
+// 没有「升降调」与「五线谱/简谱」切换。
+// ──────────────────────────────────────────────────────────────────────────
+
+class _PreviewScoreBody extends StatelessWidget {
+  const _PreviewScoreBody({
+    required this.state,
+    required this.controller,
+    required this.onClose,
+    required this.onShare,
+  });
+
+  final CloudDriveState state;
+  final CloudDriveController controller;
+  final VoidCallback onClose;
+  final Future<void> Function() onShare;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final item = state.previewingFile!;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(ui(12), ui(12), ui(12), ui(12)),
+      child: Column(
+        children: [
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(
+                  width: ui(320),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _PreviewScoreTurntable(
+                        title: item.title,
+                        isPlaying: state.previewIsPlaying,
+                        onBack: onClose,
+                        onShare: onShare,
+                      ),
+                      SizedBox(height: ui(12)),
+                      Expanded(
+                        child: _PreviewDescriptionCard(
+                          text: item.title,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  width: ui(1),
+                  margin: EdgeInsets.only(left: ui(12), right: ui(14)),
+                  color: const Color(0xFFF3F2F3),
+                ),
+                Expanded(
+                  child: _PreviewScoreSheet(
+                    images: item.imageUrls,
+                    activeIndex: state.previewActiveImageIndex,
+                    onPageChanged: controller.previewSetImageIndex,
+                    heroPrefix: 'cloud_preview_score_${item.id}',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(height: ui(18)),
+          _PreviewPlaybackBar(state: state, controller: controller),
+        ],
+      ),
+    );
+  }
+}
+
+/// 谱例预览左上角的转盘面板：返回 / 分享 + 转盘 + 标题胶囊（跑马灯）+ 频谱。
+class _PreviewScoreTurntable extends StatelessWidget {
+  const _PreviewScoreTurntable({
+    required this.title,
+    required this.isPlaying,
+    required this.onBack,
+    required this.onShare,
+  });
+
+  final String title;
+  final bool isPlaying;
+  final VoidCallback onBack;
+  final Future<void> Function() onShare;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            _PreviewBackButton(onTap: onBack),
+            const Spacer(),
+            GestureDetector(
+              onTap: () => onShare(),
+              child: Container(
+                height: ui(28),
+                padding: EdgeInsets.symmetric(horizontal: ui(10)),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF4F4FF),
+                  borderRadius: BorderRadius.circular(ui(8)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Image.asset(
+                      'assets/images/home/dictation/10.png',
+                      width: ui(20),
+                      height: ui(20),
+                      fit: BoxFit.contain,
+                    ),
+                    SizedBox(width: ui(4)),
+                    Text(
+                      '分享',
+                      style: TextStyle(
+                        color: const Color(0xFF0B081A),
+                        fontSize: ui(12),
+                        fontFamily: 'PingFang SC',
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: ui(22)),
+        Center(child: _PreviewTurntableDisc(playing: isPlaying)),
+        SizedBox(height: ui(14)),
+        Center(
+          child: Container(
+            width: ui(129),
+            height: ui(18),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEDEDED),
+              borderRadius: BorderRadius.circular(ui(12)),
+            ),
+            alignment: Alignment.center,
+            padding: EdgeInsets.symmetric(horizontal: ui(12)),
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.black,
+                fontSize: ui(11),
+                fontFamily: 'PingFang SC',
+                fontWeight: FontWeight.w400,
+                height: 18 / 11,
+              ),
+            ),
+          ),
+        ),
+        SizedBox(height: ui(16)),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: ui(22)),
+          child: SizedBox(
+            height: ui(38),
+            child: _PreviewWaveformVisualizer(playing: isPlaying),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PreviewTurntableDisc extends StatelessWidget {
+  const _PreviewTurntableDisc({required this.playing});
+
+  final bool playing;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return SizedBox(
+      width: ui(180),
+      height: ui(180),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned.fill(
+            child: Image.asset(
+              'assets/images/home/plyabj.png',
+              fit: BoxFit.contain,
+            ),
+          ),
+          Positioned(
+            left: ui(102),
+            top: ui(10),
+            child: AnimatedRotation(
+              turns: playing ? 0 : -0.075,
+              duration: const Duration(milliseconds: 900),
+              curve: Curves.easeInOutCubic,
+              alignment: const Alignment(0.64, -0.79),
+              child: Image.asset(
+                'assets/images/home/play1.png',
+                width: ui(65),
+                height: ui(138),
+                fit: BoxFit.contain,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 简化频谱：播放时柱状高度做随机弹跳，不依赖真实采样。
+class _PreviewWaveformVisualizer extends StatefulWidget {
+  const _PreviewWaveformVisualizer({required this.playing});
+
+  final bool playing;
+
+  @override
+  State<_PreviewWaveformVisualizer> createState() =>
+      _PreviewWaveformVisualizerState();
+}
+
+class _PreviewWaveformVisualizerState
+    extends State<_PreviewWaveformVisualizer>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final List<double> _phases;
+  static const int _bars = 30;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat();
+    final rng = math.Random();
+    _phases = List<double>.generate(
+      _bars,
+      (_) => rng.nextDouble() * 2 * math.pi,
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, _) {
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
+            final height = constraints.maxHeight;
+            final barWidth = width / (_bars * 1.6);
+            final gap = (width - barWidth * _bars) / (_bars - 1);
+            return Stack(
+              children: [
+                for (int i = 0; i < _bars; i++)
+                  Positioned(
+                    left: i * (barWidth + gap),
+                    bottom: 0,
+                    child: _bar(barWidth, height, i),
+                  ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _bar(double w, double maxHeight, int index) {
+    final phase = _phases[index];
+    final t = _ctrl.value * 2 * math.pi + phase;
+    final amp = widget.playing ? 0.6 + 0.4 * math.sin(t) : 0.18;
+    final h = maxHeight * amp.clamp(0.1, 1.0);
+    return Container(
+      width: w,
+      height: h,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.bottomCenter,
+          end: Alignment.topCenter,
+          colors: <Color>[Color(0xFF8741FF), Color(0xFFD2C6FF)],
+        ),
+        borderRadius: BorderRadius.circular(2),
+      ),
+    );
+  }
+}
+
+class _PreviewDescriptionCard extends StatelessWidget {
+  const _PreviewDescriptionCard({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: ui(20), vertical: ui(16)),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F6FA).withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(ui(8)),
+      ),
+      child: SingleChildScrollView(
+        child: Text(
+          text.isEmpty ? '暂无简介' : text,
+          style: TextStyle(
+            color: const Color(0xFF0B081A),
+            fontSize: ui(13),
+            fontFamily: 'PingFang SC',
+            fontWeight: FontWeight.w400,
+            height: 26 / 13,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 谱例右侧乐谱区：PageView + 当前页/总页计数。无切换 toggle，无 "升降调"。
+class _PreviewScoreSheet extends StatefulWidget {
+  const _PreviewScoreSheet({
+    required this.images,
+    required this.activeIndex,
+    required this.onPageChanged,
+    required this.heroPrefix,
+  });
+
+  final List<String> images;
+  final int activeIndex;
+  final ValueChanged<int> onPageChanged;
+  final String heroPrefix;
+
+  @override
+  State<_PreviewScoreSheet> createState() => _PreviewScoreSheetState();
+}
+
+class _PreviewScoreSheetState extends State<_PreviewScoreSheet> {
+  late final PageController _pageController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(initialPage: widget.activeIndex);
+  }
+
+  @override
+  void didUpdateWidget(covariant _PreviewScoreSheet oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_pageController.hasClients &&
+        _pageController.page?.round() != widget.activeIndex) {
+      _pageController.animateToPage(
+        widget.activeIndex,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final images = widget.images;
+    if (images.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Image.asset(
+              'assets/images/404/wx.png',
+              width: ui(200),
+              height: ui(200),
+              fit: BoxFit.contain,
+            ),
+            Text(
+              '暂无乐谱',
+              style: TextStyle(
+                color: const Color.fromARGB(255, 22, 22, 22),
+                fontSize: ui(16),
+                fontFamily: 'PingFang SC',
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    final activeIndex = widget.activeIndex.clamp(0, images.length - 1);
+    return Stack(
+      children: [
+        PageView.builder(
+          controller: _pageController,
+          itemCount: images.length,
+          onPageChanged: widget.onPageChanged,
+          itemBuilder: (context, index) {
+            final url = CloudDriveController.resolveMediaUrl(images[index]);
+            return Padding(
+              padding: EdgeInsets.symmetric(horizontal: ui(16)),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onDoubleTap: () => showImageGallery(
+                  context,
+                  images: images
+                      .map(CloudDriveController.resolveMediaUrl)
+                      .toList(),
+                  initialIndex: index,
+                  heroTagPrefix: widget.heroPrefix,
+                ),
+                child: SingleChildScrollView(
+                  physics: const ClampingScrollPhysics(),
+                  padding: EdgeInsets.only(bottom: ui(36)),
+                  child: CachedNetworkImage(
+                    imageUrl: url,
+                    width: double.infinity,
+                    fit: BoxFit.fitWidth,
+                    placeholder: (_, _) => SizedBox(
+                      height: ui(120),
+                      child: Center(
+                        child: SizedBox(
+                          width: ui(28),
+                          height: ui(28),
+                          child: CircularProgressIndicator(
+                            strokeWidth: ui(2),
+                            color: const Color(0xFF8741FF),
+                          ),
+                        ),
+                      ),
+                    ),
+                    errorWidget: (_, _, _) => Icon(
+                      Icons.broken_image_outlined,
+                      size: ui(48),
+                      color: const Color(0xFFB6B5BB),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+        Positioned(
+          right: ui(10),
+          bottom: ui(6),
+          child: Container(
+            height: ui(24),
+            padding: EdgeInsets.symmetric(horizontal: ui(8)),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF3F2F3),
+              borderRadius: BorderRadius.circular(ui(6)),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              '${activeIndex + 1}/${images.length}',
+              style: TextStyle(
+                color: const Color(0xFF0B081A),
+                fontSize: ui(12),
+                fontFamily: 'PingFang SC',
+                fontWeight: FontWeight.w500,
+                height: 1,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 底部播放条（与 music_play 视觉一致）：封面 + 标题 + 跳转/播放 + 倍速 + 进度 + 收藏。
+class _PreviewPlaybackBar extends StatelessWidget {
+  const _PreviewPlaybackBar({required this.state, required this.controller});
+
+  final CloudDriveState state;
+  final CloudDriveController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final item = state.previewingFile!;
+    final durationMs = math.max(state.previewDuration.inMilliseconds, 1);
+    final ratio = (state.previewPosition.inMilliseconds / durationMs).clamp(
+      0.0,
+      1.0,
+    );
+    final favorite = state.previewFavorite;
+    final cover = item.imageUrls.isNotEmpty ? item.imageUrls.first : '';
+    final coverUrl = CloudDriveController.resolveMediaUrl(cover);
+
+    return Container(
+      height: ui(72),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F4FF),
+        borderRadius: BorderRadius.circular(ui(8)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(width: ui(12)),
+          Container(
+            width: ui(48),
+            height: ui(48),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF5F6FA),
+              borderRadius: BorderRadius.circular(ui(4)),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: coverUrl.isNotEmpty
+                ? CachedNetworkImage(
+                    imageUrl: coverUrl,
+                    fit: BoxFit.cover,
+                    errorWidget: (_, _, _) => Image.asset(
+                      'assets/images/home/feng.png',
+                      fit: BoxFit.cover,
+                    ),
+                  )
+                : Image.asset(
+                    'assets/images/home/feng.png',
+                    fit: BoxFit.cover,
+                  ),
+          ),
+          SizedBox(width: ui(12)),
+          SizedBox(
+            width: ui(70),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: const Color(0xFF0B081A),
+                    fontSize: ui(15),
+                    fontFamily: 'PingFang SC',
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                SizedBox(height: ui(6)),
+                Text(
+                  '谱例',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: const Color(0xFFB6B5BB),
+                    fontSize: ui(12),
+                    fontFamily: 'PingFang SC',
+                    fontWeight: FontWeight.w400,
+                    height: 12 / 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(width: ui(67)),
+          _PreviewSkipIcon(
+            asset: 'assets/images/home/left.png',
+            onTap: () => controller.previewSkipSeconds(-5),
+          ),
+          SizedBox(width: ui(8)),
+          GestureDetector(
+            onTap: controller.previewTogglePlay,
+            behavior: HitTestBehavior.opaque,
+            child: SizedBox(
+              width: ui(44),
+              height: ui(44),
+              child: Center(
+                child: Container(
+                  width: ui(36.67),
+                  height: ui(36.67),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF8741FF),
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(
+                    state.previewIsPlaying
+                        ? Icons.pause_rounded
+                        : Icons.play_arrow_rounded,
+                    color: Colors.white,
+                    size: ui(22),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          SizedBox(width: ui(8)),
+          _PreviewSkipIcon(
+            asset: 'assets/images/home/right.png',
+            onTap: () => controller.previewSkipSeconds(5),
+          ),
+          SizedBox(width: ui(12)),
+          _PreviewSpeedChip(
+            speed: state.previewSpeed,
+            onChanged: controller.previewSetSpeed,
+          ),
+          SizedBox(width: ui(14)),
+          Expanded(
+            child: _PreviewProgressTrack(
+              ratio: ratio,
+              durationLabel:
+                  '${_formatDuration(state.previewPosition)}/${_formatDuration(state.previewDuration)}',
+              onSeekRatio: (r) => controller.previewSeekRatio(r),
+            ),
+          ),
+          SizedBox(width: ui(19)),
+          GestureDetector(
+            onTap: controller.previewToggleFavorite,
+            behavior: HitTestBehavior.opaque,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  favorite ? Icons.star_rounded : Icons.star_border_rounded,
+                  size: ui(24),
+                  color: favorite
+                      ? const Color(0xFF8741FF)
+                      : const Color(0xFFB6B5BB),
+                ),
+                SizedBox(width: ui(4)),
+                Text(
+                  favorite ? '已收藏' : '收藏',
+                  style: TextStyle(
+                    color: const Color(0xFFB6B5BB),
+                    fontSize: ui(13),
+                    fontFamily: 'PingFang SC',
+                    fontWeight: FontWeight.w500,
+                    height: 12 / 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(width: ui(12)),
+        ],
+      ),
+    );
+  }
+
+  String _formatDuration(Duration value) {
+    if (value == Duration.zero) return '00:00';
+    final m = value.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = value.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+}
+
+class _PreviewSkipIcon extends StatelessWidget {
+  const _PreviewSkipIcon({required this.asset, required this.onTap});
+
+  final String asset;
+  final Future<void> Function() onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return GestureDetector(
+      onTap: () => onTap(),
+      behavior: HitTestBehavior.opaque,
+      child: Image.asset(
+        asset,
+        width: ui(24),
+        height: ui(24),
+        fit: BoxFit.contain,
+      ),
+    );
+  }
+}
+
+class _PreviewProgressTrack extends StatelessWidget {
+  const _PreviewProgressTrack({
+    required this.ratio,
+    required this.durationLabel,
+    required this.onSeekRatio,
+  });
+
+  final double ratio;
+  final String durationLabel;
+  final ValueChanged<double> onSeekRatio;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final trackHeight = ui(4);
+    final thumbSize = ui(12);
+    final hitHeight = ui(20);
+
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Align(
+          alignment: Alignment.centerRight,
+          child: Text(
+            durationLabel,
+            style: TextStyle(
+              color: const Color(0xFF0B081A),
+              fontSize: ui(12),
+              fontFamily: 'PingFang SC',
+              fontWeight: FontWeight.w500,
+              height: 3 / 8,
+            ),
+          ),
+        ),
+        SizedBox(height: ui(4)),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
+            final clamped = ratio.clamp(0.0, 1.0);
+            final fillWidth = width * clamped;
+            final thumbLeft = (width - thumbSize) * clamped;
+            void emit(Offset p) {
+              if (width <= 0) return;
+              onSeekRatio((p.dx / width).clamp(0.0, 1.0));
+            }
+
+            return GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapDown: (d) => emit(d.localPosition),
+              onHorizontalDragStart: (d) => emit(d.localPosition),
+              onHorizontalDragUpdate: (d) => emit(d.localPosition),
+              child: SizedBox(
+                height: hitHeight,
+                child: Stack(
+                  alignment: Alignment.centerLeft,
+                  clipBehavior: Clip.none,
+                  children: [
+                    Container(
+                      height: trackHeight,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE1E2E5),
+                        borderRadius: BorderRadius.circular(ui(23)),
+                      ),
+                    ),
+                    Container(
+                      height: trackHeight,
+                      width: fillWidth,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: <Color>[
+                            Color(0xFFE2D0FF),
+                            Color(0xFF8741FF),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(ui(23)),
+                      ),
+                    ),
+                    Positioned(
+                      left: thumbLeft,
+                      child: Container(
+                        width: thumbSize,
+                        height: thumbSize,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF8741FF),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 1),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.12),
+                              offset: const Offset(0, 4),
+                              blurRadius: 4,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _PreviewSpeedChip extends StatefulWidget {
+  const _PreviewSpeedChip({required this.speed, required this.onChanged});
+
+  final double speed;
+  final ValueChanged<double> onChanged;
+
+  static const List<double> options = <double>[2.0, 1.5, 1.25, 1.0, 0.75, 0.5];
+
+  static String formatSpeed(double v) {
+    var t = v.toStringAsFixed(2);
+    if (t.contains('.')) {
+      t = t.replaceFirst(RegExp(r'0+$'), '');
+      if (t.endsWith('.')) t = '${t}0';
+    }
+    return '${t}x';
+  }
+
+  @override
+  State<_PreviewSpeedChip> createState() => _PreviewSpeedChipState();
+}
+
+class _PreviewSpeedChipState extends State<_PreviewSpeedChip> {
+  bool _open = false;
+
+  Future<void> _showMenu() async {
+    final scale = DashboardScaleScope.of(context);
+    final ui = scale.ui;
+    final box = context.findRenderObject() as RenderBox;
+    final tl = box.localToGlobal(Offset.zero);
+    final size = box.size;
+    final menuWidth = ui(96);
+    final itemHeight = ui(34);
+    final padding = ui(6);
+    final menuHeight =
+        _PreviewSpeedChip.options.length * itemHeight + padding * 2;
+    final gap = ui(8);
+
+    final overlay =
+        Overlay.of(context, rootOverlay: true).context.findRenderObject()
+            as RenderBox;
+    final overlaySize = overlay.size;
+
+    var left = tl.dx + (size.width - menuWidth) / 2;
+    left = left.clamp(ui(8), overlaySize.width - menuWidth - ui(8));
+    final topAbove = tl.dy - menuHeight - gap;
+    final topBelow = tl.dy + size.height + gap;
+    final above = topAbove >= ui(8);
+    final top = above ? topAbove : topBelow;
+
+    setState(() => _open = true);
+    final selected = await showGeneralDialog<double>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'preview_speed_menu',
+      barrierColor: Colors.transparent,
+      transitionDuration: const Duration(milliseconds: 180),
+      pageBuilder: (dialogContext, animation, secondary) {
+        return DashboardScaleScope(
+          data: scale,
+          child: Stack(
+            children: [
+              Positioned(
+                left: left,
+                top: top,
+                width: menuWidth,
+                child: Material(
+                  color: Colors.transparent,
+                  child: Container(
+                    padding: EdgeInsets.symmetric(vertical: padding),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(ui(12)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF8741FF).withValues(
+                            alpha: 0.10,
+                          ),
+                          blurRadius: ui(20),
+                          offset: Offset(0, ui(8)),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (final v in _PreviewSpeedChip.options)
+                          GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () =>
+                                Navigator.of(dialogContext).pop(v),
+                            child: Container(
+                              height: itemHeight,
+                              alignment: Alignment.center,
+                              child: Text(
+                                _PreviewSpeedChip.formatSpeed(v),
+                                style: TextStyle(
+                                  color: v == widget.speed
+                                      ? const Color(0xFF8741FF)
+                                      : const Color(0xFF7F7F7F),
+                                  fontSize: ui(13),
+                                  fontFamily: 'PingFang SC',
+                                  fontWeight: v == widget.speed
+                                      ? FontWeight.w600
+                                      : FontWeight.w400,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (!mounted) return;
+    setState(() => _open = false);
+    if (selected != null && selected != widget.speed) {
+      widget.onChanged(selected);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _showMenu,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        height: ui(28),
+        padding: EdgeInsets.symmetric(horizontal: ui(8)),
+        decoration: BoxDecoration(
+          color: _open ? const Color(0xFFF5F2FF) : Colors.white,
+          borderRadius: BorderRadius.circular(ui(6)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _PreviewSpeedChip.formatSpeed(widget.speed),
+              style: TextStyle(
+                color: _open
+                    ? const Color(0xFF8741FF)
+                    : const Color(0xFF7F7F7F),
+                fontSize: ui(12),
+                fontFamily: 'PingFang SC',
+                fontWeight: FontWeight.w500,
+                height: 12 / 12,
+              ),
+            ),
+            SizedBox(width: ui(2)),
+            Image.asset(
+              'assets/images/home/chevron-down.png',
+              width: ui(12),
+              height: ui(12),
+              fit: BoxFit.contain,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Upload Dialog ──────────────────────────────────────────────────────────
+
+/// 描述上传对话框内单个待上传/已上传文件的全部状态。
+class _UploadSlot {
+  _UploadSlot({required this.name, required this.bytes});
+
+  final String name;
+  final Uint8List bytes;
+
+  /// 上传进度 0.0–1.0（进行中时 < 1.0；完成后被设为 1.0）
+  double progress = 0.0;
+
+  /// 成功后由服务器返回的完整 URL
+  String? uploadedUrl;
+
+  /// 失败时的错误文案；null 表示无错误
+  String? error;
+
+  bool get isDone => uploadedUrl != null;
+  bool get hasError => error != null;
+  bool get isUploading => !isDone && !hasError;
+
+  /// 根据文件名后缀判断是否为图片，用于显示内存缩略图
+  bool get looksLikeImage {
+    final ext = name.toLowerCase().split('.').last;
+    return const ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(ext);
+  }
+}
+
+/// 上传课件对话框。保持原有视觉风格，增加：
+/// - 每个文件独立的实时上传进度（LinearProgressIndicator / CircularProgressIndicator）
+/// - 图片文件用内存字节显示缩略图
+/// - 每个文件独立的删除/重试按钮
+/// - 图片类型可连续追加多张
+/// - 确认按钮在上传未完成时禁用
+class _UploadDialog extends StatefulWidget {
+  const _UploadDialog({required this.controller, required this.onSuccess});
+
+  final CloudDriveController controller;
+  final VoidCallback onSuccess;
+
+  @override
+  State<_UploadDialog> createState() => _UploadDialogState();
+}
+
+class _UploadDialogState extends State<_UploadDialog> {
+  final _titleCtrl = TextEditingController();
+  CloudUploadKind _kind = CloudUploadKind.image;
+
+  /// `_slots` 在 image / score 时承载图片列表（多选追加），在 courseware
+  /// 时承载唯一的课件文件。
+  final List<_UploadSlot> _slots = [];
+
+  /// 仅在 score 类型下使用：与图片并列的「音频」上传槽。
+  /// `_slots` + `_scoreAudio` 一起完成 1.0 谱例「音频 + 图片」的上传。
+  _UploadSlot? _scoreAudio;
+
+  bool _confirming = false;
+
+  @override
+  void dispose() {
+    _titleCtrl.dispose();
+    super.dispose();
+  }
+
+  bool get _isScore => _kind == CloudUploadKind.score;
+
+  bool get _anyUploading {
+    if (_slots.any((s) => s.isUploading)) return true;
+    if (_isScore && (_scoreAudio?.isUploading ?? false)) return true;
+    return false;
+  }
+
+  List<_UploadSlot> get _doneSlots => _slots.where((s) => s.isDone).toList();
+
+  bool get _canConfirm {
+    if (_confirming || _anyUploading) return false;
+    switch (_kind) {
+      case CloudUploadKind.image:
+        return _doneSlots.isNotEmpty;
+      case CloudUploadKind.score:
+        // 谱例必须同时具备音频与至少一张图片
+        return _doneSlots.isNotEmpty && (_scoreAudio?.isDone ?? false);
+      case CloudUploadKind.courseware:
+        return _doneSlots.isNotEmpty;
+    }
+  }
+
+  // ── file picking ──────────────────────────────────────────────────────────
+
+  /// 主选取（image / score 多选追加图片；courseware 单文件覆盖）。
+  Future<void> _pick() async {
+    final allowMultiple =
+        _kind == CloudUploadKind.image || _kind == CloudUploadKind.score;
+    final files = await pickCoursewareFiles(allowMultiple: allowMultiple);
+    if (files.isEmpty || !mounted) return;
+
+    final newSlots = files
+        .map(
+          (f) => _UploadSlot(name: f.name, bytes: Uint8List.fromList(f.bytes)),
+        )
+        .toList();
+
+    setState(() {
+      if (_kind == CloudUploadKind.courseware) {
+        _slots
+          ..clear()
+          ..addAll(newSlots.take(1));
+      } else {
+        _slots.addAll(newSlots);
+      }
+    });
+
+    for (final slot in newSlots) {
+      unawaited(_startUpload(slot));
+    }
+  }
+
+  /// 谱例专用：选取单个音频文件。
+  Future<void> _pickScoreAudio() async {
+    final files = await pickCoursewareFiles(allowMultiple: false);
+    if (files.isEmpty || !mounted) return;
+    final f = files.first;
+    final slot = _UploadSlot(name: f.name, bytes: Uint8List.fromList(f.bytes));
+    setState(() => _scoreAudio = slot);
+    unawaited(_startUpload(slot));
+  }
+
+  Future<void> _startUpload(_UploadSlot slot) async {
+    final url = await widget.controller.uploadFileRaw(
+      bytes: slot.bytes,
+      filename: slot.name,
+      onProgress: (p) {
+        if (!mounted) return;
+        setState(() => slot.progress = p.clamp(0.0, 0.99));
+      },
+    );
+    if (!mounted) return;
+    setState(() {
+      if (url != null && url.isNotEmpty) {
+        slot.uploadedUrl = url;
+        slot.progress = 1.0;
+        slot.error = null;
+      } else {
+        slot.error = '上传失败，点击重试';
+        slot.progress = 0.0;
+      }
+    });
+  }
+
+  void _removeSlot(_UploadSlot slot) => setState(() {
+    if (identical(slot, _scoreAudio)) {
+      _scoreAudio = null;
+    } else {
+      _slots.remove(slot);
+    }
+  });
+
+  void _retrySlot(_UploadSlot slot) {
+    setState(() {
+      slot.error = null;
+      slot.progress = 0.0;
+      slot.uploadedUrl = null;
+    });
+    unawaited(_startUpload(slot));
+  }
+
+  // ── confirm ───────────────────────────────────────────────────────────────
+
+  Future<void> _confirm() async {
+    final done = _doneSlots;
+    if (done.isEmpty) return;
+
+    final rawTitle = _titleCtrl.text.trim();
+    final fallbackBaseName = done.first.name;
+    final fallbackTitle = fallbackBaseName.contains('.')
+        ? fallbackBaseName.substring(0, fallbackBaseName.lastIndexOf('.'))
+        : fallbackBaseName;
+    final title = rawTitle.isNotEmpty ? rawTitle : fallbackTitle;
+    if (title.isEmpty) return;
+
+    setState(() => _confirming = true);
+
+    final String audioUrl;
+    final String imageInput;
+    final CloudFileType fileType;
+    switch (_kind) {
+      case CloudUploadKind.image:
+        // 图片类：保存为 score 类型，仅有图片，没有音频。
+        fileType = CloudFileType.score;
+        imageInput = done.map((s) => s.uploadedUrl!).join('\n');
+        audioUrl = '';
+        break;
+      case CloudUploadKind.score:
+        // 谱例：必须同时携带音频 + 图片。
+        fileType = CloudFileType.score;
+        imageInput = done.map((s) => s.uploadedUrl!).join('\n');
+        audioUrl = _scoreAudio?.uploadedUrl ?? '';
+        break;
+      case CloudUploadKind.courseware:
+        fileType = CloudFileType.courseware;
+        audioUrl = done.first.uploadedUrl ?? '';
+        imageInput = '';
+        break;
+    }
+
+    final message = await widget.controller.addCourseware(
+      title: title,
+      type: fileType,
+      audioUrl: audioUrl,
+      imageInput: imageInput,
+    );
+
+    if (!mounted) return;
+    setState(() => _confirming = false);
+
+    if (message != null) {
+      AppToast.show(context, message, duration: const Duration(seconds: 2));
+      return;
+    }
+    Navigator.of(context).pop();
+    widget.onSuccess();
+  }
+
+  // ── build ─────────────────────────────────────────────────────────────────
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+
+    final canConfirm = _canConfirm;
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: EdgeInsets.symmetric(horizontal: ui(32), vertical: ui(24)),
+      child: Container(
+        width: ui(420),
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: <Color>[Color(0xFFD2C6FF), Colors.white, Colors.white],
+            stops: <double>[0, 0.21, 1],
+          ),
+          borderRadius: BorderRadius.circular(ui(24)),
+        ),
+        child: Stack(
+          children: [
+            Positioned(
+              left: 0,
+              right: 0,
+              top: 0,
+              child: Image.asset(
+                AppAssets.coursewareUploadHeader,
+                fit: BoxFit.fitWidth,
+              ),
+            ),
+            SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(ui(20), ui(22), ui(20), ui(20)),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ── title ──
+                  Center(
+                    child: Text(
+                      '上传课件',
+                      style: TextStyle(
+                        fontSize: ui(18),
+                        color: const Color(0xFF0B081A),
+                        fontFamily: 'PingFang SC',
+                        fontWeight: FontWeight.w600,
+                        height: 1.0,
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: ui(30)),
+
+                  // ── courseware title input ──
+                  Text(
+                    '课件标题',
+                    style: TextStyle(
+                      fontSize: ui(14),
+                      color: const Color(0xFF0B081A),
+                      fontFamily: 'PingFang SC',
+                      fontWeight: FontWeight.w500,
+                      height: 12 / 14,
+                    ),
+                  ),
+                  SizedBox(height: ui(10)),
+                  SizedBox(
+                    height: ui(45),
+                    child: TextField(
+                      controller: _titleCtrl,
+                      style: TextStyle(
+                        fontSize: ui(14),
+                        color: const Color(0xFF0B081A),
+                        fontFamily: 'PingFang SC',
+                        fontWeight: FontWeight.w400,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: '请输入课件标题',
+                        hintStyle: TextStyle(
+                          fontSize: ui(14),
+                          color: const Color(0xFFB6B5BB),
+                          fontFamily: 'PingFang SC',
+                          fontWeight: FontWeight.w400,
+                          height: 12 / 14,
+                        ),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: ui(13),
+                          vertical: ui(12),
+                        ),
+                        filled: true,
+                        fillColor: Colors.white,
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(ui(12)),
+                          borderSide: BorderSide(
+                            color: const Color(0xFFF3F2F3),
+                            width: ui(1),
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(ui(12)),
+                          borderSide: BorderSide(
+                            color: const Color(0xFFD9C7FF),
+                            width: ui(1),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: ui(18)),
+
+                  // ── kind selector ──
+                  Text(
+                    '选择分类',
+                    style: TextStyle(
+                      fontSize: ui(14),
+                      color: const Color(0xFF0B081A),
+                      fontFamily: 'PingFang SC',
+                      fontWeight: FontWeight.w500,
+                      height: 12 / 14,
+                    ),
+                  ),
+                  SizedBox(height: ui(12)),
+                  Row(
+                    children: CloudUploadKind.values.map((item) {
+                      final label = switch (item) {
+                        CloudUploadKind.image => '图片',
+                        CloudUploadKind.score => '谱例',
+                        CloudUploadKind.courseware => '课件',
+                      };
+                      return Padding(
+                        padding: EdgeInsets.only(
+                          right: item == CloudUploadKind.courseware
+                              ? 0
+                              : ui(13),
+                        ),
+                        child: _UploadKindOption(
+                          label: label,
+                          selected: item == _kind,
+                          onTap: () => setState(() {
+                            _kind = item;
+                            _slots.clear();
+                            _scoreAudio = null;
+                          }),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  SizedBox(height: ui(18)),
+
+                  // ── upload zone header ──
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        '上传文件',
+                        style: TextStyle(
+                          fontSize: ui(14),
+                          color: const Color(0xFF0B081A),
+                          fontFamily: 'PingFang SC',
+                          fontWeight: FontWeight.w500,
+                          height: 1.0,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '*支持 PDF/Word/图片/HTML，图片支持15M以内',
+                        style: TextStyle(
+                          fontSize: ui(12),
+                          color: const Color(0xFFCECED1),
+                          fontFamily: 'PingFang SC',
+                          fontWeight: FontWeight.w400,
+                          height: 1.0,
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: ui(10)),
+
+                  // ── upload zone ──
+                  switch (_kind) {
+                    CloudUploadKind.image => _buildImageZone(ui),
+                    CloudUploadKind.score => _buildScoreZone(ui),
+                    CloudUploadKind.courseware => _buildFileZone(ui),
+                  },
+
+                  SizedBox(height: ui(20)),
+                  AppDialogActionBar(
+                    onCancel: () => Navigator.of(context).pop(),
+                    onConfirm: _confirm,
+                    confirmEnabled: canConfirm,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── image grid zone ───────────────────────────────────────────────────────
+
+  Widget _buildImageZone(double Function(double) ui) {
+    final tileSize = ui(76);
+    final radius = BorderRadius.circular(ui(8));
+
+    final tiles = <Widget>[
+      // existing slots
+      ..._slots.map((slot) => _buildImageTile(slot, tileSize, radius, ui)),
+      // "add more" button
+      GestureDetector(
+        onTap: _anyUploading ? null : _pick,
+        child: Container(
+          width: tileSize,
+          height: tileSize,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: radius,
+            border: Border.all(color: const Color(0xFFD9C7FF), width: ui(1)),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.add_rounded,
+                color: const Color(0xFF8741FF),
+                size: ui(22),
+              ),
+              SizedBox(height: ui(2)),
+              Text(
+                '添加',
+                style: TextStyle(
+                  fontSize: ui(11),
+                  color: const Color(0xFF8741FF),
+                  fontFamily: 'PingFang SC',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ];
+
+    // If nothing uploaded yet, show original empty-state look inside the zone
+    if (_slots.isEmpty) {
+      return GestureDetector(
+        onTap: _pick,
+        child: Container(
+          width: double.infinity,
+          height: ui(140),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF4F4FF),
+            borderRadius: BorderRadius.circular(ui(12)),
+            border: Border.all(color: const Color(0xFFF3F2F3), width: ui(1)),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Image.asset(
+                AppAssets.coursewareUploadFile,
+                width: ui(56),
+                height: ui(56),
+                fit: BoxFit.contain,
+              ),
+              SizedBox(height: ui(8)),
+              _uploadHintText('图片', ui),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(ui(10)),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F4FF),
+        borderRadius: BorderRadius.circular(ui(12)),
+        border: Border.all(color: const Color(0xFFF3F2F3), width: ui(1)),
+      ),
+      child: Wrap(spacing: ui(8), runSpacing: ui(8), children: tiles),
+    );
+  }
+
+  Widget _buildImageTile(
+    _UploadSlot slot,
+    double size,
+    BorderRadius radius,
+    double Function(double) ui,
+  ) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Stack(
+        clipBehavior: Clip.antiAlias,
+        children: [
+          // background: real thumbnail or placeholder
+          ClipRRect(
+            borderRadius: radius,
+            child: slot.looksLikeImage
+                ? Image.memory(
+                    slot.bytes,
+                    fit: BoxFit.cover,
+                    width: size,
+                    height: size,
+                  )
+                : Container(
+                    width: size,
+                    height: size,
+                    color: const Color(0xFFF0EBFF),
+                    child: Center(
+                      child: Image.asset(
+                        AppAssets.coursewareUploadImage,
+                        width: ui(36),
+                        height: ui(36),
+                      ),
+                    ),
+                  ),
+          ),
+
+          // uploading overlay
+          if (slot.isUploading)
+            Positioned.fill(
+              child: ClipRRect(
+                borderRadius: radius,
+                child: Container(
+                  color: Colors.black.withValues(alpha: 0.45),
+                  child: Center(
+                    child: SizedBox(
+                      width: ui(28),
+                      height: ui(28),
+                      child: CircularProgressIndicator(
+                        value: slot.progress > 0 ? slot.progress : null,
+                        strokeWidth: ui(2.5),
+                        color: Colors.white,
+                        backgroundColor: Colors.white.withValues(alpha: 0.3),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+          // error overlay – tap to retry
+          if (slot.hasError)
+            Positioned.fill(
+              child: GestureDetector(
+                onTap: () => _retrySlot(slot),
+                child: ClipRRect(
+                  borderRadius: radius,
+                  child: Container(
+                    color: Colors.black.withValues(alpha: 0.55),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.refresh_rounded,
+                          color: Colors.white,
+                          size: ui(20),
+                        ),
+                        SizedBox(height: ui(2)),
+                        Text(
+                          '重试',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: ui(10),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+          // done badge (bottom-left)
+          if (slot.isDone)
+            Positioned(
+              left: ui(3),
+              bottom: ui(3),
+              child: Container(
+                width: ui(16),
+                height: ui(16),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF18C9A5),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.check_rounded,
+                  color: Colors.white,
+                  size: ui(10),
+                ),
+              ),
+            ),
+
+          // delete button (top-right, always)
+          Positioned(
+            right: ui(3),
+            top: ui(3),
+            child: GestureDetector(
+              onTap: () => _removeSlot(slot),
+              child: Container(
+                width: ui(18),
+                height: ui(18),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.55),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.close_rounded,
+                  color: Colors.white,
+                  size: ui(11),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── score (audio + images) zone ───────────────────────────────────────────
+
+  /// 谱例：左侧「点击将音频在此处上传」+ 右侧「点击将图片在此处上传」。
+  /// 与 1.0 的 `param2`（音频）+ `param3`（图片数组）保持一致：上传后
+  /// 音频走 `_scoreAudio`，图片走 `_slots`，提交时一并组装为 score 类型。
+  Widget _buildScoreZone(double Function(double) ui) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // 双区上传卡片：等宽两列。
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _ScoreUploadCell(
+                ui: ui,
+                label: '音频',
+                iconAsset: AppAssets.coursewareUploadFile,
+                onTap: _anyUploading ? null : _pickScoreAudio,
+              ),
+            ),
+            SizedBox(width: ui(16)),
+            Expanded(
+              child: _ScoreUploadCell(
+                ui: ui,
+                label: '图片',
+                iconAsset: AppAssets.coursewareUploadImage,
+                onTap: _anyUploading ? null : _pick,
+              ),
+            ),
+          ],
+        ),
+        // 已选音频文件：在卡片下方以单行槽样式展示进度/完成/重试。
+        if (_scoreAudio != null) ...[
+          SizedBox(height: ui(10)),
+          _buildFileSlot(_scoreAudio!, ui),
+        ],
+        // 已选图片：与 image 类型保持同一 76×76 网格 + “+” 加号瓦片样式。
+        if (_slots.isNotEmpty) ...[
+          SizedBox(height: ui(10)),
+          _buildScoreImageGrid(ui),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildScoreImageGrid(double Function(double) ui) {
+    final tileSize = ui(76);
+    final radius = BorderRadius.circular(ui(8));
+    final tiles = <Widget>[
+      ..._slots.map((slot) => _buildImageTile(slot, tileSize, radius, ui)),
+      GestureDetector(
+        onTap: _anyUploading ? null : _pick,
+        child: Container(
+          width: tileSize,
+          height: tileSize,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: radius,
+            border: Border.all(color: const Color(0xFFD9C7FF), width: ui(1)),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.add_rounded,
+                color: const Color(0xFF8741FF),
+                size: ui(22),
+              ),
+              SizedBox(height: ui(2)),
+              Text(
+                '添加',
+                style: TextStyle(
+                  fontSize: ui(11),
+                  color: const Color(0xFF8741FF),
+                  fontFamily: 'PingFang SC',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ];
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(ui(10)),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F4FF),
+        borderRadius: BorderRadius.circular(ui(12)),
+        border: Border.all(color: const Color(0xFFF3F2F3), width: ui(1)),
+      ),
+      child: Wrap(spacing: ui(8), runSpacing: ui(8), children: tiles),
+    );
+  }
+
+  // ── single-file zone ──────────────────────────────────────────────────────
+
+  Widget _buildFileZone(double Function(double) ui) {
+    final uploadLabel = switch (_kind) {
+      CloudUploadKind.image => '图片',
+      CloudUploadKind.score => '谱例',
+      CloudUploadKind.courseware => '文件',
+    };
+
+    if (_slots.isEmpty) {
+      return GestureDetector(
+        onTap: _pick,
+        child: Container(
+          width: double.infinity,
+          height: ui(140),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF4F4FF),
+            borderRadius: BorderRadius.circular(ui(12)),
+            border: Border.all(color: const Color(0xFFF3F2F3), width: ui(1)),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Image.asset(
+                AppAssets.coursewareUploadImage,
+                width: ui(56),
+                height: ui(56),
+                fit: BoxFit.contain,
+              ),
+              SizedBox(height: ui(8)),
+              _uploadHintText(uploadLabel, ui),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return _buildFileSlot(_slots.first, ui);
+  }
+
+  Widget _buildFileSlot(_UploadSlot slot, double Function(double) ui) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(12)),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F4FF),
+        borderRadius: BorderRadius.circular(ui(12)),
+        border: Border.all(
+          color: slot.hasError
+              ? const Color(0xFFFF386B)
+              : const Color(0xFFD9C7FF),
+          width: ui(1),
+        ),
+      ),
+      child: Row(
+        children: [
+          // file icon
+          Image.asset(
+            AppAssets.coursewareUploadImage,
+            width: ui(40),
+            height: ui(40),
+            fit: BoxFit.contain,
+          ),
+          SizedBox(width: ui(10)),
+
+          // name + progress/status
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  slot.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: ui(13),
+                    color: const Color(0xFF0B081A),
+                    fontFamily: 'PingFang SC',
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                SizedBox(height: ui(6)),
+                if (slot.isUploading) ...[
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(ui(3)),
+                    child: LinearProgressIndicator(
+                      value: slot.progress > 0 ? slot.progress : null,
+                      backgroundColor: const Color(0xFFE1E2E5),
+                      valueColor: const AlwaysStoppedAnimation<Color>(
+                        Color(0xFF8741FF),
+                      ),
+                      minHeight: ui(4),
+                    ),
+                  ),
+                  SizedBox(height: ui(3)),
+                  Text(
+                    slot.progress > 0
+                        ? '${(slot.progress * 100).toStringAsFixed(0)}%'
+                        : '准备上传...',
+                    style: TextStyle(
+                      fontSize: ui(10),
+                      color: const Color(0xFF8741FF),
+                      fontFamily: 'PingFang SC',
+                    ),
+                  ),
+                ] else if (slot.isDone)
+                  Text(
+                    '上传完成 ✓',
+                    style: TextStyle(
+                      fontSize: ui(11),
+                      color: const Color(0xFF18C9A5),
+                      fontFamily: 'PingFang SC',
+                    ),
+                  )
+                else if (slot.hasError)
+                  Text(
+                    slot.error ?? '上传失败',
+                    style: TextStyle(
+                      fontSize: ui(11),
+                      color: const Color(0xFFFF386B),
+                      fontFamily: 'PingFang SC',
+                    ),
+                  ),
+              ],
+            ),
+          ),
+
+          SizedBox(width: ui(8)),
+
+          // retry (only on error)
+          if (slot.hasError) ...[
+            GestureDetector(
+              onTap: () => _retrySlot(slot),
+              child: Container(
+                width: ui(28),
+                height: ui(28),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0EBFF),
+                  borderRadius: BorderRadius.circular(ui(6)),
+                ),
+                child: Icon(
+                  Icons.refresh_rounded,
+                  size: ui(16),
+                  color: const Color(0xFF8741FF),
+                ),
+              ),
+            ),
+            SizedBox(width: ui(6)),
+          ],
+
+          // delete
+          GestureDetector(
+            onTap: () => _removeSlot(slot),
+            child: Container(
+              width: ui(28),
+              height: ui(28),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF5F6FA),
+                borderRadius: BorderRadius.circular(ui(6)),
+              ),
+              child: Icon(
+                Icons.close_rounded,
+                size: ui(16),
+                color: const Color(0xFFB6B5BB),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── helpers ───────────────────────────────────────────────────────────────
+
+  static Widget _uploadHintText(String label, double Function(double) ui) {
+    return RichText(
+      text: TextSpan(
+        style: TextStyle(
+          fontSize: ui(14),
+          fontFamily: 'PingFang SC',
+          fontWeight: FontWeight.w400,
+          height: 1.0,
+        ),
+        children: <InlineSpan>[
+          const TextSpan(
+            text: '点击将',
+            style: TextStyle(color: Color(0xFFB6B5BB)),
+          ),
+          TextSpan(
+            text: label,
+            style: const TextStyle(color: Color(0xFF0B081A)),
+          ),
+          const TextSpan(
+            text: '在此处上传',
+            style: TextStyle(color: Color(0xFFB6B5BB)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 谱例上传对话框中的「点击将 X 在此处上传」单元格，固定 130 高度，#F4F4FF
+/// 背景 + 1px #F3F2F3 边框 + 12 圆角，提供顶部图标 + 富文本提示。
+class _ScoreUploadCell extends StatelessWidget {
+  const _ScoreUploadCell({
+    required this.ui,
+    required this.label,
+    required this.iconAsset,
+    required this.onTap,
+  });
+
+  final double Function(double) ui;
+  final String label;
+  final String iconAsset;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: ui(130),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF4F4FF),
+          borderRadius: BorderRadius.circular(ui(12)),
+          border: Border.all(color: const Color(0xFFF3F2F3), width: ui(1)),
+        ),
+        alignment: Alignment.center,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Opacity(
+              opacity: 0.66,
+              child: Image.asset(
+                iconAsset,
+                width: ui(42),
+                height: ui(42),
+                fit: BoxFit.contain,
+              ),
+            ),
+            SizedBox(height: ui(12)),
+            RichText(
+              textAlign: TextAlign.center,
+              text: TextSpan(
+                style: TextStyle(
+                  fontSize: ui(14),
+                  fontFamily: 'PingFang SC',
+                  fontWeight: FontWeight.w400,
+                  height: 12 / 14,
+                ),
+                children: <InlineSpan>[
+                  const TextSpan(
+                    text: '点击将',
+                    style: TextStyle(color: Color(0xFFB6B5BB)),
+                  ),
+                  TextSpan(
+                    text: label,
+                    style: const TextStyle(color: Color(0xFF0B081A)),
+                  ),
+                  const TextSpan(
+                    text: '在此处上传',
+                    style: TextStyle(color: Color(0xFFB6B5BB)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 文件卡片可触发的动作。`preview` / `play` 由卡片本体的点击与底部音频
+/// 控件触发；`rename` / `share` / `delete` 由共享操作菜单
+/// (`showItemActionMenu`) 派发。菜单项的文案由共享组件本身负责，无需在此
+/// 重复定义。
+enum _CloudFileAction { preview, play, rename, share, delete }
 
 /// 文件卡片的视觉数据：图标资源 + 类型徽标背景/文字色 + 徽标文案。
 /// 由文件后缀名 + [CloudFileType] 共同决定。
@@ -2615,36 +4404,14 @@ class _FileVisual {
   final Color badgeColor;
 }
 
-const _FileVisual _kBadgeKj = _FileVisual(
-  iconAsset: AppAssets.coursewareFileTypeKj,
-  badgeLabel: '课件',
-  badgeBg: Color(0xFFDFFCF0),
-  badgeColor: Color(0xFF0CAC40),
-);
-const _FileVisual _kBadgeAudio = _FileVisual(
-  iconAsset: AppAssets.coursewareFileTypeKj,
-  badgeLabel: '音频',
-  badgeBg: Color(0xFFDFFCF0),
-  badgeColor: Color(0xFF0CAC40),
-);
-const _FileVisual _kBadgeImage = _FileVisual(
-  iconAsset: AppAssets.coursewareFileTypeImage,
-  badgeLabel: '图片',
-  badgeBg: Color(0x0D8741FF),
-  badgeColor: Color(0xFF8741FF),
-);
-const _FileVisual _kBadgePdf = _FileVisual(
-  iconAsset: AppAssets.coursewareFileTypePdf,
-  badgeLabel: '文件',
-  badgeBg: Color(0xFFFEE4E8),
-  badgeColor: Color(0xFFFF386B),
-);
-const _FileVisual _kBadgeDoc = _FileVisual(
-  iconAsset: AppAssets.coursewareFileTypeDoc,
-  badgeLabel: '文档',
-  badgeBg: Color(0xFFE6F2FF),
-  badgeColor: Color(0xFF1E73FF),
-);
+// 文件徽标只保留三种业务分类：图片 / 谱例 / 课件。
+// 文件主体图标仍然按后缀自动选择（PDF / DOC / 图片 / 课件占位图）。
+const Color _kBadgeBgImage = Color(0x1A8741FF);
+const Color _kBadgeFgImage = Color(0xFF8741FF);
+const Color _kBadgeBgScore = Color(0xFFE6F2FF);
+const Color _kBadgeFgScore = Color(0xFF1E73FF);
+const Color _kBadgeBgCourseware = Color(0xFFDFFCF0);
+const Color _kBadgeFgCourseware = Color(0xFF0CAC40);
 
 bool _hasExt(String url, List<String> exts) {
   final lower = url.toLowerCase();
@@ -2654,6 +4421,18 @@ bool _hasExt(String url, List<String> exts) {
   return false;
 }
 
+/// 根据 url 后缀挑选缩略图素材；找不到匹配时回退到课件占位图。
+String _resolveFileIcon(String url) {
+  if (_hasExt(url, ['pdf'])) return AppAssets.coursewareFileTypePdf;
+  if (_hasExt(url, ['doc', 'docx', 'txt', 'rtf'])) {
+    return AppAssets.coursewareFileTypeDoc;
+  }
+  if (_hasExt(url, ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg'])) {
+    return AppAssets.coursewareFileTypeImage;
+  }
+  return AppAssets.coursewareFileTypeKj;
+}
+
 _FileVisual _resolveFileVisual(CloudFileItem item) {
   // 选取最具代表性的 url 用于嗅探后缀。
   String url = item.audioUrl;
@@ -2661,19 +4440,36 @@ _FileVisual _resolveFileVisual(CloudFileItem item) {
     url = item.imageUrls.first;
   }
 
-  if (_hasExt(url, ['pdf'])) return _kBadgePdf;
-  if (_hasExt(url, ['doc', 'docx', 'txt', 'rtf'])) return _kBadgeDoc;
-  if (_hasExt(url, ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg'])) {
-    return _kBadgeImage;
+  // ── 主体图标：保留各种文件类型缩略图（PDF/DOC/图片/课件）。
+  final iconAsset = _resolveFileIcon(url);
+
+  // ── 类型徽标：仅区分 图片 / 谱例 / 课件。
+  // 判定规则：
+  //  · 仅有图片资源（imageUrls 非空且 audioUrl 为空）→ 图片
+  //  · CloudFileType.score                          → 谱例
+  //  · 其它（courseware / audio）                   → 课件
+  final hasOnlyImages =
+      item.imageUrls.isNotEmpty && item.audioUrl.trim().isEmpty;
+  if (hasOnlyImages) {
+    return _FileVisual(
+      iconAsset: iconAsset,
+      badgeLabel: '图片',
+      badgeBg: _kBadgeBgImage,
+      badgeColor: _kBadgeFgImage,
+    );
   }
-  if (_hasExt(url, ['mp3', 'wav', 'flac', 'm4a', 'aac', 'ogg'])) {
-    return _kBadgeAudio;
-  }
-  // 没有从 url 推断出类型时回退到 CloudFileType。
   return switch (item.type) {
-    CloudFileType.audio => item.imageUrls.isNotEmpty ? _kBadgeImage : _kBadgeAudio,
-    CloudFileType.score => item.imageUrls.isNotEmpty ? _kBadgeImage : _kBadgeKj,
-    CloudFileType.courseware => _kBadgeKj,
+    CloudFileType.score => _FileVisual(
+      iconAsset: iconAsset,
+      badgeLabel: '谱例',
+      badgeBg: _kBadgeBgScore,
+      badgeColor: _kBadgeFgScore,
+    ),
+    CloudFileType.courseware || CloudFileType.audio => _FileVisual(
+      iconAsset: iconAsset,
+      badgeLabel: '课件',
+      badgeBg: _kBadgeBgCourseware,
+      badgeColor: _kBadgeFgCourseware,
+    ),
   };
 }
-

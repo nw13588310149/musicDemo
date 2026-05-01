@@ -124,7 +124,7 @@ List<SchoolQuickAction> buildSchoolQuickActions() {
       route: RoutePaths.sightSinging,
       firstMenu: 1,
     ),
-    SchoolQuickAction(name: '刷题', icon: AppAssets.homeBtn5, route: RoutePaths.camp),
+    SchoolQuickAction(name: '刷题', icon: AppAssets.homeBtn5, route: RoutePaths.schoolCamp),
     SchoolQuickAction(
       name: '试题',
       icon: AppAssets.homeBtn6,
@@ -133,7 +133,7 @@ List<SchoolQuickAction> buildSchoolQuickActions() {
     SchoolQuickAction(
       name: '视频',
       icon: AppAssets.schoolV2QuickVideo,
-      route: RoutePaths.videoTutorial,
+      route: RoutePaths.schoolVideo,
     ),
   ];
 }

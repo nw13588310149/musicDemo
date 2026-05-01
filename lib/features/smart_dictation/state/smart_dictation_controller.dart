@@ -25,6 +25,11 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
     : _repository = repository,
       _audioEngine = SmartDictationAudioEngine(),
       super(SmartDictationState.initial()) {
+    _audioBandsSub = _audioEngine.frequencyBands.listen((bands) {
+      if (!_disposed && mounted) {
+        state = state.copyWith(frequencyBands: bands);
+      }
+    });
     unawaited(bootstrap());
   }
 
@@ -33,6 +38,7 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
   final Random _random = Random();
 
   Timer? _timer;
+  StreamSubscription<List<double>>? _audioBandsSub;
   bool _disposed = false;
   int _questionElapsedMillis = 0;
   bool _playedFirstSecondCue = false;
@@ -210,6 +216,7 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
       count: state.activeConfig.questionCount,
       mode: SmartDictationMode.stage,
       intervalMode: state.activeConfig.intervalPlayMode,
+      basicOnly: state.activeConfig.basicOnly,
       minNote: state.activeConfig.minNote,
       maxNote: state.activeConfig.maxNote,
     );
@@ -233,7 +240,8 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
       wrongCount: 0,
       remainingMillis: state.activeConfig.answerSeconds * 1000,
       answerSeconds: state.activeConfig.answerSeconds,
-      running: true,
+      running: false,
+      started: false,
       finished: false,
       showExitDialog: false,
       linkedLessonId: lesson.id,
@@ -259,6 +267,7 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
       count: config.questionCount,
       mode: SmartDictationMode.smart,
       intervalMode: config.intervalPlayMode,
+      basicOnly: config.basicOnly,
       minNote: config.minNote,
       maxNote: config.maxNote,
     );
@@ -282,7 +291,8 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
       wrongCount: 0,
       remainingMillis: config.answerSeconds * 1000,
       answerSeconds: config.answerSeconds,
-      running: true,
+      running: false,
+      started: false,
       finished: false,
       showExitDialog: false,
       linkedLessonId: -1,
@@ -344,7 +354,9 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
     );
     await Future<void>.delayed(const Duration(milliseconds: 2000));
     final latest = state.session;
-    if (latest == null || latest.finished || latest.currentIndex != session.currentIndex) {
+    if (latest == null ||
+        latest.finished ||
+        latest.currentIndex != session.currentIndex) {
       return;
     }
     final advanced = latest.copyWith(
@@ -370,8 +382,11 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
     if (session == null || session.running || session.finished) {
       return;
     }
-    state = state.copyWith(session: session.copyWith(running: true));
-    _restartTimer(resetQuestionCue: false);
+    final firstStart = !session.started;
+    state = state.copyWith(
+      session: session.copyWith(running: true, started: true),
+    );
+    _restartTimer(resetQuestionCue: firstStart);
   }
 
   void requestLeaveSession() {
@@ -444,7 +459,9 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
     if (session.sourceMode == SmartDictationMode.stage &&
         session.linkedLessonId > 0) {
       final lessons = state.activeLessons;
-      final currentIndex = lessons.indexWhere((l) => l.id == session.linkedLessonId);
+      final currentIndex = lessons.indexWhere(
+        (l) => l.id == session.linkedLessonId,
+      );
       if (currentIndex >= 0 && currentIndex < lessons.length - 1) {
         final nextLesson = lessons[currentIndex + 1];
         if (nextLesson.unlocked) {
@@ -464,6 +481,7 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
 
   Future<void> _startSession(SmartPracticeSession session) async {
     _stopTimer();
+    _resetQuestionCueState();
     state = state.copyWith(
       session: session,
       clearErrorMessage: true,
@@ -556,7 +574,8 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
     if (_cueInFlight || session.finished) {
       return;
     }
-    final shouldPlayStandard = session.track == SmartDictationTrack.absolute &&
+    final shouldPlayStandard =
+        session.track == SmartDictationTrack.absolute &&
         state.activeConfig.standardToneEnabled;
 
     if (!_playedFirstSecondCue && _questionElapsedMillis >= 1000) {
@@ -624,7 +643,9 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
     );
     await Future<void>.delayed(const Duration(milliseconds: 1000));
     final latest = state.session;
-    if (latest == null || latest.finished || latest.currentIndex != session.currentIndex) {
+    if (latest == null ||
+        latest.finished ||
+        latest.currentIndex != session.currentIndex) {
       return;
     }
     final advanced = latest.copyWith(
@@ -778,7 +799,10 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
     }
 
     if (result.isEmpty) {
-      result.addAll(state.activeConfig.selectedOptions);
+      // Stage lessons must still be playable even when smart-practice has no
+      // default selected options. Fall back to the track's full pool instead
+      // of selectedOptions (which is intentionally empty on entry).
+      result.addAll(state.activeConfig.optionPool);
     }
 
     return result;
@@ -806,6 +830,7 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
     required int count,
     required SmartDictationMode mode,
     required SmartIntervalPlayMode intervalMode,
+    required bool basicOnly,
     required String minNote,
     required String maxNote,
   }) {
@@ -836,6 +861,7 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
           final semitone = _intervalSemitoneMap[intervalLabel] ?? 0;
           final pair = _buildIntervalPair(
             semitone: semitone,
+            basicOnly: basicOnly,
             minNote: minNote,
             maxNote: maxNote,
           );
@@ -858,6 +884,7 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
               _chordIntervalMap[chordLabel] ?? const <int>[0, 4, 7];
           final notes = _buildChordNotes(
             intervals: intervals,
+            basicOnly: basicOnly,
             minNote: minNote,
             maxNote: maxNote,
           );
@@ -882,10 +909,15 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
 
   List<String> _buildIntervalPair({
     required int semitone,
+    required bool basicOnly,
     required String minNote,
     required String maxNote,
   }) {
-    final range = _resolveCanonicalRange(minNote: minNote, maxNote: maxNote);
+    final range = _resolveCanonicalRange(
+      minNote: minNote,
+      maxNote: maxNote,
+      basicOnly: basicOnly,
+    );
     if (range.length < 2) {
       return const <String>[];
     }
@@ -903,10 +935,15 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
 
   List<String> _buildChordNotes({
     required List<int> intervals,
+    required bool basicOnly,
     required String minNote,
     required String maxNote,
   }) {
-    final range = _resolveCanonicalRange(minNote: minNote, maxNote: maxNote);
+    final range = _resolveCanonicalRange(
+      minNote: minNote,
+      maxNote: maxNote,
+      basicOnly: basicOnly,
+    );
     if (range.length < 3 || intervals.isEmpty) {
       return const <String>[];
     }
@@ -928,22 +965,28 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
   List<String> _resolveCanonicalRange({
     required String minNote,
     required String maxNote,
+    required bool basicOnly,
   }) {
     final minCanonical = SmartDictationAudioEngine.canonicalFromToken(minNote);
     final maxCanonical = SmartDictationAudioEngine.canonicalFromToken(maxNote);
 
     final all = _canonicalOrder;
     final start = minCanonical.isEmpty ? 0 : all.indexOf(minCanonical);
-    final end = maxCanonical.isEmpty
-        ? all.length - 1
-        : all.indexOf(maxCanonical);
+    final end =
+        maxCanonical.isEmpty ? all.length - 1 : all.indexOf(maxCanonical);
 
     final safeStart = start < 0 ? 0 : start;
     final safeEnd = end < 0 ? all.length - 1 : end;
     if (safeStart > safeEnd) {
-      return all;
+      return basicOnly
+          ? all.where((token) => !token.contains('#')).toList(growable: false)
+          : all;
     }
-    return all.sublist(safeStart, safeEnd + 1);
+    final sliced = all.sublist(safeStart, safeEnd + 1);
+    if (!basicOnly) {
+      return sliced;
+    }
+    return sliced.where((token) => !token.contains('#')).toList(growable: false);
   }
 
   String _canonicalToDisplayToken(String canonical) {
@@ -1025,6 +1068,7 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
     }
     _disposed = true;
     _stopTimer();
+    _audioBandsSub?.cancel();
     unawaited(_audioEngine.dispose());
     super.dispose();
   }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/route_paths.dart';
+import '../../../core/widgets/app_toast.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../state/quiz_practice_controller.dart';
 import '../state/quiz_practice_state.dart';
@@ -24,9 +25,7 @@ class QuizPracticePage extends ConsumerWidget {
     ) {
       final msg = next.errorMessage;
       if (msg.isEmpty || msg == previous?.errorMessage) return;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(msg)));
+      AppToast.show(context, msg);
     });
 
     // 1.0 布局：banner（240 高度）+ 12px 间距 + 白色卡片（剩余高度），
@@ -40,12 +39,11 @@ class QuizPracticePage extends ConsumerWidget {
           child: ShellPageSurface(
             padding: EdgeInsets.symmetric(horizontal: ui(25)),
             child: state.loading && state.summaries.isEmpty
-                ? const Center(
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
+                ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
                 : _PracticeRingRow(
                     summaries: state.summaries,
-                    onSelect: (summary) => _openSession(context, summary),
+                    onSelect: (summary) =>
+                        _openSession(context, controller, summary),
                     onRefresh: controller.refresh,
                   ),
           ),
@@ -54,11 +52,13 @@ class QuizPracticePage extends ConsumerWidget {
     );
   }
 
-  void _openSession(BuildContext context, QuizPracticeSummary summary) {
+  Future<void> _openSession(
+    BuildContext context,
+    QuizPracticeController controller,
+    QuizPracticeSummary summary,
+  ) async {
     if (summary.allCount <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('暂无可练习题目')),
-      );
+      AppToast.show(context, '暂无可练习题目');
       return;
     }
     final args = QuizSessionPageArgs(
@@ -67,7 +67,11 @@ class QuizPracticePage extends ConsumerWidget {
       startIndex: summary.doneCount,
       allCount: summary.allCount,
     );
-    Navigator.pushNamed(context, RoutePaths.campAnswer, arguments: args);
+    await Navigator.pushNamed(context, RoutePaths.campAnswer, arguments: args);
+    if (!context.mounted) {
+      return;
+    }
+    await controller.refresh();
   }
 }
 
@@ -168,10 +172,7 @@ class _PracticeRingRow extends StatelessWidget {
   Widget build(BuildContext context) {
     if (summaries.isEmpty) {
       return Center(
-        child: TextButton(
-          onPressed: onRefresh,
-          child: const Text('点击重试'),
-        ),
+        child: TextButton(onPressed: onRefresh, child: const Text('点击重试')),
       );
     }
     // 1.0：btn_box 高度 188px，内部 4 列居中，每列 25%。
@@ -181,10 +182,7 @@ class _PracticeRingRow extends StatelessWidget {
         children: [
           for (final s in summaries)
             Expanded(
-              child: _PracticeRingCard(
-                summary: s,
-                onTap: () => onSelect(s),
-              ),
+              child: _PracticeRingCard(summary: s, onTap: () => onSelect(s)),
             ),
         ],
       ),
@@ -331,7 +329,8 @@ class _RingPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final rect = Offset(strokeWidth / 2, strokeWidth / 2) &
+    final rect =
+        Offset(strokeWidth / 2, strokeWidth / 2) &
         Size(size.width - strokeWidth, size.height - strokeWidth);
 
     final track = Paint()
@@ -347,13 +346,7 @@ class _RingPainter extends CustomPainter {
       ..strokeWidth = strokeWidth
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
-    canvas.drawArc(
-      rect,
-      math.pi / 2,
-      math.pi * 2 * progress,
-      false,
-      fg,
-    );
+    canvas.drawArc(rect, math.pi / 2, math.pi * 2 * progress, false, fg);
   }
 
   @override

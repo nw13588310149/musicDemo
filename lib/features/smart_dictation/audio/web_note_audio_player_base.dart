@@ -3,6 +3,8 @@ import 'dart:async';
 abstract class WebNoteAudioPlayer {
   bool get isReady;
 
+  Stream<List<double>> get frequencyBands;
+
   Future<void> prepare(Iterable<String> assets);
 
   Future<void> activateByUserGesture();

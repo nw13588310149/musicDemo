@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_soloud/flutter_soloud.dart';
 import 'package:media_kit/media_kit.dart';
 
-import '../../../core/constants/app_constants.dart';
 import '../../../core/network/api_response.dart';
+import '../../../core/network/media_url.dart';
 import '../../music_companion/audio/music_companion_audio_engine.dart';
 import '../data/music_play_repository.dart';
 import 'music_play_state.dart';
@@ -34,12 +37,17 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
 
   final MusicPlayRepository repository;
   final MusicCompanionAudioEngine _pianoEngine;
+  final SoLoud _soLoud = SoLoud.instance;
 
-  Player? _player;
-  StreamSubscription<Duration>? _positionSub;
-  StreamSubscription<Duration>? _durationSub;
-  StreamSubscription<bool>? _playingSub;
-  StreamSubscription<bool>? _completedSub;
+  AudioSource? _source;
+  SoundHandle? _handle;
+  AudioData? _audioData;
+  Timer? _audioTicker;
+  Player? _webPlayer;
+  StreamSubscription<Duration>? _webPositionSub;
+  StreamSubscription<Duration>? _webDurationSub;
+  StreamSubscription<bool>? _webPlayingSub;
+  StreamSubscription<bool>? _webCompletedSub;
   bool _recordSaved = false;
 
   Future<void> _initialize() async {
@@ -81,6 +89,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       position: Duration.zero,
       duration: Duration.zero,
       isPlaying: false,
+      frequencyBands: const <double>[],
     );
 
     final responses = await Future.wait<ApiResponse>(<Future<ApiResponse>>[
@@ -132,21 +141,46 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   }
 
   Future<void> togglePlay() async {
-    final player = _ensurePlayer();
     final track = state.activeTrack;
-    if (player == null || track == null) {
+    if (track == null) {
       return;
     }
 
-    if (state.duration == Duration.zero) {
+    if (kIsWeb) {
+      final player = _ensureWebPlayer();
+      if (_webPlayer == null || state.duration == Duration.zero) {
+        await _openActiveTrack(play: true);
+        return;
+      }
+      if (state.isPlaying) {
+        await player.pause();
+      } else {
+        await player.play();
+      }
+      return;
+    }
+
+    if (_source == null) {
       await _openActiveTrack(play: true);
       return;
     }
 
+    final handle = _handle;
     if (state.isPlaying) {
-      await player.pause();
+      if (handle != null && _soLoud.getIsValidVoiceHandle(handle)) {
+        _soLoud.setPause(handle, true);
+      }
+      state = state.copyWith(
+        isPlaying: false,
+        frequencyBands: const <double>[],
+      );
     } else {
-      await player.play();
+      if (handle != null && _soLoud.getIsValidVoiceHandle(handle)) {
+        _soLoud.setPause(handle, false);
+        state = state.copyWith(isPlaying: true);
+      } else {
+        _startHandle();
+      }
     }
   }
 
@@ -168,6 +202,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       activeImageIndex: 0,
       position: Duration.zero,
       duration: Duration.zero,
+      frequencyBands: const <double>[],
     );
     await _openActiveTrack(play: true);
   }
@@ -190,17 +225,26 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       activeImageIndex: 0,
       position: Duration.zero,
       duration: Duration.zero,
+      frequencyBands: const <double>[],
     );
     await _openActiveTrack(play: true);
   }
 
   Future<void> setPlaybackSpeed(double speed) async {
-    final player = _ensurePlayer();
-    if (player == null) {
+    final nextSpeed = speed.clamp(0.5, 2.0);
+    if (kIsWeb) {
+      await _ensureWebPlayer().setRate(nextSpeed);
+      if (!mounted) {
+        return;
+      }
+      state = state.copyWith(speed: nextSpeed);
       return;
     }
-    final nextSpeed = speed.clamp(0.5, 2.0);
-    await player.setRate(nextSpeed);
+
+    final handle = _handle;
+    if (handle != null && _soLoud.getIsValidVoiceHandle(handle)) {
+      _soLoud.setRelativePlaySpeed(handle, nextSpeed);
+    }
     if (!mounted) {
       return;
     }
@@ -208,17 +252,25 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   }
 
   Future<void> seek(Duration position) async {
-    final player = _ensurePlayer();
-    if (player == null) {
-      return;
-    }
     final max = state.duration;
     final safe = max == Duration.zero
         ? position
         : Duration(
             milliseconds: position.inMilliseconds.clamp(0, max.inMilliseconds),
           );
-    await player.seek(safe);
+    if (kIsWeb) {
+      await _ensureWebPlayer().seek(safe);
+      if (!mounted) {
+        return;
+      }
+      state = state.copyWith(position: safe);
+      return;
+    }
+
+    final handle = _handle;
+    if (handle != null && _soLoud.getIsValidVoiceHandle(handle)) {
+      _soLoud.seek(handle, safe);
+    }
     if (!mounted) {
       return;
     }
@@ -304,6 +356,98 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     state = state.copyWith(clearErrorMessage: true);
   }
 
+  Future<void> openShareDialog() async {
+    state = state.copyWith(
+      shareDialogVisible: true,
+      classLoading: state.classList.isEmpty,
+      clearErrorMessage: true,
+    );
+    final response = await repository.getClassList();
+    if (!mounted) {
+      return;
+    }
+    if (!response.isSuccess) {
+      state = state.copyWith(
+        classLoading: false,
+        errorMessage: response.msg.isEmpty ? '获取班级群失败' : response.msg,
+      );
+      return;
+    }
+    final raw = response.data;
+    final list = <MusicPlayShareClass>[];
+    if (raw is List) {
+      for (final node in raw) {
+        if (node is Map) {
+          list.add(MusicPlayShareClass.fromJson(node));
+        }
+      }
+    }
+    state = state.copyWith(classList: list, classLoading: false);
+  }
+
+  void closeShareDialog() {
+    state = state.copyWith(shareDialogVisible: false);
+  }
+
+  void toggleClass(String classId) {
+    state = state.copyWith(
+      classList: <MusicPlayShareClass>[
+        for (final cls in state.classList)
+          if (cls.id == classId) cls.copyWith(checked: !cls.checked) else cls,
+      ],
+    );
+  }
+
+  Future<bool> sendShare() async {
+    final detail = state.detail;
+    if (detail == null) {
+      return false;
+    }
+    final selected = state.classList
+        .where((cls) => cls.checked && cls.id.isNotEmpty)
+        .toList();
+    if (selected.isEmpty) {
+      final hasChecked = state.classList.any((cls) => cls.checked);
+      state = state.copyWith(
+        errorMessage: hasChecked ? '所选班级数据异常，请刷新后重试' : '请先选择要分享的班级群',
+      );
+      return false;
+    }
+
+    state = state.copyWith(sending: true, clearErrorMessage: true);
+    final content = jsonEncode(<String, dynamic>{
+      'id': detail.id,
+      'title': detail.title,
+      'type': detail.type,
+      'shortText3': detail.coverUrl,
+      'subtitle': detail.subtitle,
+    });
+
+    for (final cls in selected) {
+      final response = await repository.sendMsg(
+        classId: cls.id,
+        content: content,
+      );
+      if (!mounted) {
+        return false;
+      }
+      if (!response.isSuccess) {
+        state = state.copyWith(
+          sending: false,
+          errorMessage: response.msg.isEmpty ? '发送失败' : response.msg,
+        );
+        return false;
+      }
+    }
+
+    state = state.copyWith(
+      sending: false,
+      shareDialogVisible: false,
+      errorMessage: '消息已成功发送',
+    );
+    return true;
+  }
+
   Future<void> _switchLesson(int delta) async {
     final ids = state.args.allLessonIds;
     if (ids.isEmpty) {
@@ -326,68 +470,210 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   }
 
   Future<void> _openActiveTrack({required bool play}) async {
-    final player = _ensurePlayer();
     final track = state.activeTrack;
-    if (player == null || track == null || track.url.isEmpty) {
+    if (track == null || track.url.isEmpty) {
       return;
     }
 
     try {
-      await player.open(Media(track.url), play: play);
-      await player.setRate(state.speed);
-    } catch (_) {
+      if (kIsWeb) {
+        await _openWebTrack(track.url, play: play);
+        return;
+      }
+      await _releaseCurrentSource();
+      final source = await _loadAudioSource(track.url);
+      _source = source;
+      final duration = _soLoud.getLength(source);
+      if (mounted) {
+        state = state.copyWith(duration: duration);
+      }
+      if (play) {
+        _startHandle();
+      }
+    } catch (error) {
       if (!mounted) {
         return;
       }
+      debugPrint('MusicPlay audio load failed: $error');
       state = state.copyWith(errorMessage: '音频加载失败，请稍后重试');
     }
   }
 
-  Player? _ensurePlayer() {
-    if (_player != null) {
-      return _player;
+  Future<void> _openWebTrack(String url, {required bool play}) async {
+    final player = _ensureWebPlayer();
+    await player.open(Media(url), play: play);
+    await player.setRate(state.speed);
+  }
+
+  Player _ensureWebPlayer() {
+    final current = _webPlayer;
+    if (current != null) {
+      return current;
     }
-    try {
-      final player = Player();
-      _player = player;
-      _bindPlayerStreams(player);
-      return player;
-    } catch (_) {
-      state = state.copyWith(errorMessage: '播放器初始化失败');
-      return null;
+    final player = Player();
+    _webPlayer = player;
+    _bindWebPlayerStreams(player);
+    return player;
+  }
+
+  void _bindWebPlayerStreams(Player player) {
+    _webPositionSub?.cancel();
+    _webDurationSub?.cancel();
+    _webPlayingSub?.cancel();
+    _webCompletedSub?.cancel();
+
+    _webPositionSub = player.stream.position.listen((position) {
+      if (mounted) {
+        state = state.copyWith(position: position);
+      }
+    });
+    _webDurationSub = player.stream.duration.listen((duration) {
+      if (mounted) {
+        state = state.copyWith(duration: duration);
+      }
+    });
+    _webPlayingSub = player.stream.playing.listen((playing) {
+      if (mounted) {
+        state = state.copyWith(
+          isPlaying: playing,
+          frequencyBands: const <double>[],
+        );
+      }
+    });
+    _webCompletedSub = player.stream.completed.listen((completed) async {
+      if (completed && mounted) {
+        await _handleTrackCompleted();
+      }
+    });
+  }
+
+  Future<AudioSource> _loadAudioSource(String url) async {
+    debugPrint('MusicPlay audio request: $url');
+    final bytes = await repository.downloadAudio(url);
+    await _ensureAudioEngine();
+    return _soLoud.loadMem(
+      _audioFileNameFromUrl(url),
+      bytes,
+      mode: LoadMode.memory,
+    );
+  }
+
+  String _audioFileNameFromUrl(String url) {
+    final uri = Uri.tryParse(url);
+    final name = uri == null || uri.pathSegments.isEmpty
+        ? ''
+        : uri.pathSegments.last;
+    if (name.contains('.') && !name.endsWith('.')) {
+      return name;
+    }
+    return 'music_play_audio.mp3';
+  }
+
+  Future<void> _ensureAudioEngine() async {
+    if (!_soLoud.isInitialized) {
+      await _soLoud.init(bufferSize: 1024, channels: Channels.mono);
+    }
+    _soLoud.setVisualizationEnabled(true);
+    _soLoud.setFftSmoothing(0.90);
+    _audioData ??= AudioData(GetSamplesKind.linear);
+    _startAudioTicker();
+  }
+
+  void _startHandle() {
+    final source = _source;
+    if (source == null) {
+      return;
+    }
+    final handle = _soLoud.play(source, paused: false);
+    _handle = handle;
+    _soLoud.setRelativePlaySpeed(handle, state.speed);
+    if (state.position > Duration.zero) {
+      _soLoud.seek(handle, state.position);
+    }
+    if (mounted) {
+      state = state.copyWith(isPlaying: true);
     }
   }
 
-  void _bindPlayerStreams(Player player) {
-    _positionSub?.cancel();
-    _durationSub?.cancel();
-    _playingSub?.cancel();
-    _completedSub?.cancel();
+  void _startAudioTicker() {
+    if (_audioTicker != null) {
+      return;
+    }
+    _audioTicker = Timer.periodic(const Duration(milliseconds: 66), (_) {
+      if (!mounted) {
+        return;
+      }
+      final handle = _handle;
+      final handleIsValid =
+          handle != null && _soLoud.getIsValidVoiceHandle(handle);
+      final playing = handleIsValid && !_soLoud.getPause(handle);
+      final nextPosition = handleIsValid
+          ? _soLoud.getPosition(handle)
+          : state.position;
+      final bands = playing ? _readFrequencyBands() : const <double>[];
 
-    _positionSub = player.stream.position.listen((position) {
-      if (!mounted) {
+      state = state.copyWith(
+        isPlaying: playing,
+        position: nextPosition,
+        frequencyBands: bands,
+      );
+
+      if (handleIsValid ||
+          state.duration == Duration.zero ||
+          nextPosition < state.duration - const Duration(milliseconds: 180)) {
         return;
       }
-      state = state.copyWith(position: position);
+      unawaited(_handleTrackCompleted());
     });
-    _durationSub = player.stream.duration.listen((duration) {
-      if (!mounted) {
-        return;
+  }
+
+  List<double> _readFrequencyBands() {
+    final audioData = _audioData;
+    if (audioData == null) {
+      return const <double>[];
+    }
+    try {
+      audioData.updateSamples();
+      final samples = audioData.getAudioData(alwaysReturnData: false);
+      if (samples.length < 256) {
+        return const <double>[];
       }
-      state = state.copyWith(duration: duration);
-    });
-    _playingSub = player.stream.playing.listen((playing) {
-      if (!mounted) {
-        return;
+      return _compressFft(samples.sublist(0, 256));
+    } catch (_) {
+      return const <double>[];
+    }
+  }
+
+  List<double> _compressFft(Float32List fft) {
+    const bands = 46;
+    final result = List<double>.filled(bands, 0);
+    for (var i = 0; i < bands; i++) {
+      final start = math.pow(i / bands, 1.55) * (fft.length - 1);
+      final end = math.pow((i + 1) / bands, 1.55) * (fft.length - 1);
+      final from = start.floor().clamp(0, fft.length - 1);
+      final to = math.max(from + 1, end.ceil().clamp(0, fft.length));
+      var sum = 0.0;
+      for (var j = from; j < to; j++) {
+        sum += fft[j].abs();
       }
-      state = state.copyWith(isPlaying: playing);
-    });
-    _completedSub = player.stream.completed.listen((completed) async {
-      if (!completed || !mounted) {
-        return;
-      }
-      await _handleTrackCompleted();
-    });
+      final average = sum / (to - from);
+      result[i] = math.pow((average * 7.5).clamp(0.0, 1.0), 0.55) as double;
+    }
+    return result;
+  }
+
+  Future<void> _releaseCurrentSource() async {
+    final handle = _handle;
+    if (handle != null && _soLoud.getIsValidVoiceHandle(handle)) {
+      await _soLoud.stop(handle);
+    }
+    _handle = null;
+
+    final source = _source;
+    if (source != null) {
+      await _soLoud.disposeSource(source);
+    }
+    _source = null;
   }
 
   Future<void> _handleTrackCompleted() async {
@@ -411,10 +697,22 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       return;
     }
 
-    final player = _player;
-    if (player != null) {
-      await player.seek(Duration.zero);
-      await player.pause();
+    final handle = _handle;
+    if (handle != null && _soLoud.getIsValidVoiceHandle(handle)) {
+      _soLoud.seek(handle, Duration.zero);
+      _soLoud.setPause(handle, true);
+    }
+    state = state.copyWith(
+      isPlaying: false,
+      position: Duration.zero,
+      frequencyBands: const <double>[],
+    );
+    if (kIsWeb) {
+      final player = _webPlayer;
+      if (player != null) {
+        await player.seek(Duration.zero);
+        await player.pause();
+      }
     }
   }
 
@@ -592,20 +890,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     }
   }
 
-  String _resolveMediaUrl(String raw) {
-    final value = raw.trim();
-    if (value.isEmpty) {
-      return '';
-    }
-    if (value.startsWith('http://') || value.startsWith('https://')) {
-      return value;
-    }
-    if (value.startsWith('//')) {
-      return 'https:$value';
-    }
-    final normalized = value.startsWith('/') ? value : '/$value';
-    return '${AppConstants.apiBaseUrl.replaceFirst(RegExp(r'/$'), '')}$normalized';
-  }
+  String _resolveMediaUrl(String raw) => MediaUrl.resolve(raw);
 
   bool _defaultShowAnswer(int? pageType, MusicPlayDetail detail) {
     if (pageType == 3) {
@@ -619,11 +904,14 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
 
   @override
   void dispose() {
-    _positionSub?.cancel();
-    _durationSub?.cancel();
-    _playingSub?.cancel();
-    _completedSub?.cancel();
-    unawaited(_player?.dispose());
+    _audioTicker?.cancel();
+    _audioData?.dispose();
+    unawaited(_releaseCurrentSource());
+    _webPositionSub?.cancel();
+    _webDurationSub?.cancel();
+    _webPlayingSub?.cancel();
+    _webCompletedSub?.cancel();
+    unawaited(_webPlayer?.dispose());
     unawaited(_pianoEngine.dispose());
     super.dispose();
   }

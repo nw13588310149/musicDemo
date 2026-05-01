@@ -1,27 +1,53 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/ai_chat_repository.dart';
+import '../data/ai_chat_socket_service.dart';
 import 'ai_chat_state.dart';
 
 final aiChatControllerProvider =
     StateNotifierProvider.autoDispose<AiChatController, AiChatState>((ref) {
       final repository = ref.watch(aiChatRepositoryProvider);
-      return AiChatController(repository: repository);
+      final socketService = ref.watch(aiChatSocketServiceProvider);
+      return AiChatController(
+        repository: repository,
+        socketService: socketService,
+      );
     });
 
 class AiChatController extends StateNotifier<AiChatState> {
-  AiChatController({required AiChatRepository repository})
-    : _repository = repository,
-      super(const AiChatState()) {
+  AiChatController({
+    required AiChatRepository repository,
+    required AiChatSocketService socketService,
+  }) : _socketService = socketService,
+       _repository = repository,
+       super(const AiChatState()) {
+    _socketService.connect();
+    _socketSubscription = _socketService.events.listen(_handleSocketEvent);
     unawaited(_loadInitial());
   }
 
+  final AiChatSocketService _socketService;
   final AiChatRepository _repository;
+  StreamSubscription<AiChatSocketEvent>? _socketSubscription;
+  Timer? _streamFallbackTimer;
+  Timer? _streamIdleTimer;
+  String? _streamingMessageId;
+  String? _streamTargetSessionId;
+  String? _streamCorrelationReplyId;
+  bool _streamUsesReasoningUi = false;
 
   static const String _chatRobot = 'deepseek';
+
+  @override
+  void dispose() {
+    _clearStreamTimers();
+    unawaited(_socketSubscription?.cancel());
+    super.dispose();
+  }
 
   Future<void> _loadInitial() async {
     await loadSessions(autoSelectFirst: false);
@@ -83,18 +109,76 @@ class AiChatController extends StateNotifier<AiChatState> {
   }
 
   Future<String?> selectSession(String sessionId) async {
-    state = state.copyWith(activeSessionId: sessionId, waitingAssistant: false);
+    _cancelAiStream(removeStreamingMessage: true);
+    state = state.copyWith(
+      activeSessionId: sessionId,
+      waitingAssistant: false,
+      pendingAttachments: const [],
+    );
     return _fetchMessages(sessionId, showLoading: true);
   }
 
   void startNewChat() {
+    _cancelAiStream(removeStreamingMessage: true);
     state = state.copyWith(
       clearActiveSessionId: true,
       messages: const [],
+      pendingAttachments: const [],
       isNewConversation: true,
       waitingAssistant: false,
       sending: false,
       messagesLoading: false,
+    );
+  }
+
+  Future<String?> uploadAttachment({
+    required List<int> bytes,
+    required String filename,
+    required int size,
+  }) async {
+    if (state.uploadingAttachment) {
+      return null;
+    }
+    if (state.pendingAttachments.length >= 3) {
+      return '最多添加 3 个附件';
+    }
+    const maxBytes = 30 * 1024 * 1024;
+    if (size > maxBytes) {
+      return '附件不能超过 30MB';
+    }
+
+    state = state.copyWith(uploadingAttachment: true);
+    try {
+      final response = await _repository.uploadAttachment(
+        bytes: bytes is Uint8List ? bytes : Uint8List.fromList(bytes),
+        filename: filename,
+      );
+      if (!response.isSuccess) {
+        state = state.copyWith(uploadingAttachment: false);
+        return response.msg.isEmpty ? '附件上传失败' : response.msg;
+      }
+      final url = _extractAttachmentUrl(response.data);
+      if (url.isEmpty) {
+        state = state.copyWith(uploadingAttachment: false);
+        return '附件上传结果异常';
+      }
+      final attachment = AiChatAttachment(name: filename, url: url, size: size);
+      state = state.copyWith(
+        uploadingAttachment: false,
+        pendingAttachments: [...state.pendingAttachments, attachment],
+      );
+      return null;
+    } catch (_) {
+      state = state.copyWith(uploadingAttachment: false);
+      return '附件上传失败，请稍后重试';
+    }
+  }
+
+  void removePendingAttachment(AiChatAttachment attachment) {
+    state = state.copyWith(
+      pendingAttachments: state.pendingAttachments
+          .where((item) => item.url != attachment.url)
+          .toList(),
     );
   }
 
@@ -114,6 +198,7 @@ class AiChatController extends StateNotifier<AiChatState> {
           sessions: nextSessions,
           clearActiveSessionId: true,
           messages: const [],
+          pendingAttachments: const [],
           isNewConversation: true,
           waitingAssistant: false,
           sending: false,
@@ -130,33 +215,37 @@ class AiChatController extends StateNotifier<AiChatState> {
 
   Future<String?> sendMessage(String rawText) async {
     final text = rawText.trim();
-    if (text.isEmpty || state.sending) {
+    final attachments = List<AiChatAttachment>.from(state.pendingAttachments);
+    if ((text.isEmpty && attachments.isEmpty) || state.sending) {
       return null;
     }
+    final visibleText = text.isEmpty ? '请根据附件内容进行分析。' : text;
+    final requestContent = _buildContentWithAttachments(
+      visibleText,
+      attachments,
+    );
 
     final pendingId = 'pending-${DateTime.now().microsecondsSinceEpoch}';
     final pendingMessage = AiChatMessage(
       id: pendingId,
       type: AiChatMessageType.user,
-      text: text,
+      text: visibleText,
       status: AiChatMessageStatus.sending,
+      attachments: attachments,
       sortTime: DateTime.now(),
     );
-    final previousAiCount = state.messages
-        .where((item) => item.type == AiChatMessageType.ai)
-        .length;
-
     state = state.copyWith(
       isNewConversation: false,
       waitingAssistant: true,
       sending: true,
+      pendingAttachments: const [],
       messages: [...state.messages, pendingMessage],
     );
 
     try {
       var sessionId = state.activeSessionId;
       if (sessionId == null) {
-        final title = _titleFromFirstUserMessage(text);
+        final title = _titleFromFirstUserMessage(visibleText);
         final createResponse = await _repository.createSession(
           title: title,
           robot: _chatRobot,
@@ -191,29 +280,32 @@ class AiChatController extends StateNotifier<AiChatState> {
         );
       }
 
+      _beginAiStream(
+        sessionId: sessionId,
+        useReasoningUi: state.isDeepThinking,
+      );
       final sendResponse = await _repository.sendMessage(
         sessionId: sessionId,
-        content: text,
+        content: requestContent,
         isDeep: state.isDeepThinking,
         model: state.effectiveChatModel,
         systemPrompt: _assistantSystemRule(),
+        attachments: attachments.map((item) => item.toJson()).toList(),
       );
 
       if (!sendResponse.isSuccess) {
         _setPendingMessageStatus(pendingId, AiChatMessageStatus.failed);
+        _cancelAiStream(removeStreamingMessage: true);
         state = state.copyWith(waitingAssistant: false, sending: false);
         return sendResponse.msg.isEmpty ? '发送失败' : sendResponse.msg;
       }
 
       _setPendingMessageStatus(pendingId, AiChatMessageStatus.sent);
-      await _pollMessagesAfterSend(
-        sessionId: sessionId,
-        previousAiCount: previousAiCount,
-      );
-      state = state.copyWith(waitingAssistant: false, sending: false);
+      state = state.copyWith(sending: false);
       return null;
     } catch (_) {
       _setPendingMessageStatus(pendingId, AiChatMessageStatus.failed);
+      _cancelAiStream(removeStreamingMessage: true);
       state = state.copyWith(waitingAssistant: false, sending: false);
       return '发送失败，请检查网络连接';
     }
@@ -228,13 +320,14 @@ class AiChatController extends StateNotifier<AiChatState> {
     }
 
     final text = message.text.trim();
-    if (text.isEmpty) {
+    final attachments = message.attachments;
+    if (text.isEmpty && attachments.isEmpty) {
       return null;
     }
-
-    final previousAiCount = state.messages
-        .where((item) => item.type == AiChatMessageType.ai)
-        .length;
+    final requestContent = _buildContentWithAttachments(
+      text.isEmpty ? '请根据附件内容进行分析。' : text,
+      attachments,
+    );
 
     _setPendingMessageStatus(message.id, AiChatMessageStatus.sending);
     state = state.copyWith(
@@ -244,50 +337,283 @@ class AiChatController extends StateNotifier<AiChatState> {
     );
 
     try {
+      _beginAiStream(
+        sessionId: state.activeSessionId!,
+        useReasoningUi: state.isDeepThinking,
+      );
       final sendResponse = await _repository.sendMessage(
         sessionId: state.activeSessionId!,
-        content: text,
+        content: requestContent,
         isDeep: state.isDeepThinking,
         model: state.effectiveChatModel,
         systemPrompt: _assistantSystemRule(),
+        attachments: attachments.map((item) => item.toJson()).toList(),
       );
       if (!sendResponse.isSuccess) {
         _setPendingMessageStatus(message.id, AiChatMessageStatus.failed);
+        _cancelAiStream(removeStreamingMessage: true);
         state = state.copyWith(waitingAssistant: false, sending: false);
         return sendResponse.msg.isEmpty ? '重新发送失败' : sendResponse.msg;
       }
 
       _setPendingMessageStatus(message.id, AiChatMessageStatus.sent);
-      await _pollMessagesAfterSend(
-        sessionId: state.activeSessionId!,
-        previousAiCount: previousAiCount,
-      );
-      state = state.copyWith(waitingAssistant: false, sending: false);
+      state = state.copyWith(sending: false);
       return null;
     } catch (_) {
       _setPendingMessageStatus(message.id, AiChatMessageStatus.failed);
+      _cancelAiStream(removeStreamingMessage: true);
       state = state.copyWith(waitingAssistant: false, sending: false);
       return '重新发送失败';
     }
   }
 
-  Future<void> _pollMessagesAfterSend({
+  void _beginAiStream({
     required String sessionId,
-    required int previousAiCount,
-  }) async {
-    for (var index = 0; index < 7; index++) {
-      await _fetchMessages(sessionId, showLoading: false);
-      final aiCount = state.messages
-          .where((item) => item.type == AiChatMessageType.ai)
-          .length;
-      if (aiCount > previousAiCount) {
+    required bool useReasoningUi,
+  }) {
+    _cancelAiStream(removeStreamingMessage: true);
+    final streamId = 'ai-stream-${DateTime.now().microsecondsSinceEpoch}';
+    _streamingMessageId = streamId;
+    _streamTargetSessionId = sessionId;
+    _streamCorrelationReplyId = null;
+    _streamUsesReasoningUi = useReasoningUi;
+    final streamMessage = AiChatMessage(
+      id: streamId,
+      type: AiChatMessageType.ai,
+      text: '',
+      reasoning: '',
+      reasoningExpanded: true,
+      streaming: true,
+      reasoningStreaming: useReasoningUi,
+      sortTime: DateTime.now(),
+    );
+    state = state.copyWith(
+      waitingAssistant: true,
+      messages: [...state.messages, streamMessage],
+    );
+    _resetStreamFallbackTimer();
+  }
+
+  void _handleSocketEvent(AiChatSocketEvent event) {
+    if (_streamingMessageId == null || !mounted) {
+      return;
+    }
+    if (event.type == AiChatSocketEventType.stream) {
+      _onWsChatGptStream(event.payload);
+    } else if (event.type == AiChatSocketEventType.full) {
+      _onWsChatGptFull(event.payload);
+    }
+  }
+
+  void _onWsChatGptStream(Map<String, dynamic> json) {
+    if (!_matchesStreamSession(json)) {
+      return;
+    }
+    final replyId = _readString(json['replyId']);
+    if (replyId.isNotEmpty && _streamCorrelationReplyId == null) {
+      _streamCorrelationReplyId = replyId;
+    }
+
+    var delta = _extractStreamDelta(json);
+    var reasoningDelta = _extractReasoningStreamDelta(json);
+    final type = _wsNumericType(json);
+    if (_streamUsesReasoningUi &&
+        (type == 1 || type == 10014) &&
+        delta.isNotEmpty &&
+        reasoningDelta.isEmpty) {
+      reasoningDelta = delta;
+      delta = '';
+    }
+    if (delta.isEmpty && reasoningDelta.isEmpty) {
+      return;
+    }
+    _applyStreamChunk(delta, reasoningDelta);
+    _resetStreamFallbackTimer();
+    _scheduleStreamIdleFinish();
+  }
+
+  void _onWsChatGptFull(Map<String, dynamic> json) {
+    if (!_matchesStreamSession(json)) {
+      return;
+    }
+    final envelope = _parseAssistantEnvelopeFromWs(json);
+    final fullReply = envelope?.text.trim().isNotEmpty == true
+        ? envelope!.text.trim()
+        : _extractFullReply(json);
+    final fullReasoning = envelope?.reasoning.trim().isNotEmpty == true
+        ? envelope!.reasoning.trim()
+        : _extractFullReasoning(json);
+
+    final streamId = _streamingMessageId;
+    if (streamId == null) {
+      return;
+    }
+    final index = state.messages.indexWhere((item) => item.id == streamId);
+    if (index == -1) {
+      _finishAiStream();
+      return;
+    }
+
+    final current = state.messages[index];
+    final text = _normalizeAssistantDisplayText(
+      fullReply.trim().isEmpty ? current.text : fullReply,
+    );
+    final reasoning = _normalizeAssistantDisplayText(
+      fullReasoning.trim().isEmpty ? current.reasoning : fullReasoning,
+    );
+    _replaceMessage(
+      current.copyWith(
+        text: text,
+        reasoning: reasoning,
+        reasoningExpanded: reasoning.isNotEmpty || current.reasoningExpanded,
+        streaming: false,
+        reasoningStreaming: false,
+      ),
+    );
+    _finishAiStream();
+  }
+
+  void _applyStreamChunk(String piece, String reasoningPiece) {
+    final streamId = _streamingMessageId;
+    if (streamId == null) {
+      return;
+    }
+    final rawText = _normalizeAssistantDisplayText(
+      _unwrapJsonStringContent(piece),
+    );
+    final rawReasoning = _normalizeAssistantDisplayText(reasoningPiece);
+    _updateMessageById(streamId, (current) {
+      var nextText = current.text;
+      if (rawText.isNotEmpty) {
+        nextText = nextText.isNotEmpty && rawText.startsWith(nextText)
+            ? rawText
+            : nextText + rawText;
+      }
+      final nextReasoning = current.reasoning + rawReasoning;
+      return current.copyWith(
+        text: nextText,
+        reasoning: nextReasoning,
+        reasoningExpanded:
+            current.reasoningExpanded ||
+            nextReasoning.isNotEmpty ||
+            _streamUsesReasoningUi,
+        streaming: true,
+        reasoningStreaming: _streamUsesReasoningUi && nextText.isEmpty,
+      );
+    });
+  }
+
+  void _finishAiStream() {
+    _clearStreamTimers();
+    final streamId = _streamingMessageId;
+    _streamingMessageId = null;
+    _streamTargetSessionId = null;
+    _streamCorrelationReplyId = null;
+    _streamUsesReasoningUi = false;
+    if (streamId != null) {
+      _updateMessageById(
+        streamId,
+        (current) =>
+            current.copyWith(streaming: false, reasoningStreaming: false),
+      );
+    }
+    state = state.copyWith(waitingAssistant: false, sending: false);
+    unawaited(loadSessions(autoSelectFirst: false));
+  }
+
+  void _cancelAiStream({required bool removeStreamingMessage}) {
+    _clearStreamTimers();
+    final streamId = _streamingMessageId;
+    _streamingMessageId = null;
+    _streamTargetSessionId = null;
+    _streamCorrelationReplyId = null;
+    _streamUsesReasoningUi = false;
+    if (removeStreamingMessage && streamId != null) {
+      state = state.copyWith(
+        messages: state.messages.where((item) => item.id != streamId).toList(),
+      );
+    }
+  }
+
+  void _resetStreamFallbackTimer() {
+    _streamFallbackTimer?.cancel();
+    _streamFallbackTimer = Timer(const Duration(seconds: 18), () {
+      final sessionId = _streamTargetSessionId;
+      _cancelAiStream(removeStreamingMessage: true);
+      state = state.copyWith(waitingAssistant: false, sending: false);
+      if (sessionId != null) {
+        unawaited(_fetchMessages(sessionId, showLoading: false));
+      }
+    });
+  }
+
+  void _scheduleStreamIdleFinish() {
+    _streamIdleTimer?.cancel();
+    _streamIdleTimer = Timer(const Duration(milliseconds: 2200), () {
+      final streamId = _streamingMessageId;
+      if (streamId == null) {
         return;
       }
-      if (index < 6) {
-        final delay = index < 2 ? 700 : 1200;
-        await Future<void>.delayed(Duration(milliseconds: delay));
+      final current = state.messages.where((item) => item.id == streamId);
+      final message = current.isEmpty ? null : current.first;
+      if (message != null &&
+          _streamUsesReasoningUi &&
+          message.text.isEmpty &&
+          message.reasoning.isNotEmpty) {
+        return;
       }
+      _finishAiStream();
+    });
+  }
+
+  void _clearStreamTimers() {
+    _streamFallbackTimer?.cancel();
+    _streamFallbackTimer = null;
+    _streamIdleTimer?.cancel();
+    _streamIdleTimer = null;
+  }
+
+  bool _matchesStreamSession(Map<String, dynamic> json) {
+    if (_streamingMessageId == null) {
+      return false;
     }
+    final sid = _extractWsSessionId(json);
+    if (sid != null && !_streamIdsEqual(sid, state.activeSessionId)) {
+      return false;
+    }
+    if (sid != null && _streamIdsEqual(sid, state.activeSessionId)) {
+      final replyId = json['replyId'];
+      if (replyId != null && _streamCorrelationReplyId != null) {
+        return _streamIdsEqual(replyId, _streamCorrelationReplyId);
+      }
+      return true;
+    }
+    final replyId = json['replyId'];
+    if (replyId != null) {
+      if (_streamCorrelationReplyId != null) {
+        return _streamIdsEqual(replyId, _streamCorrelationReplyId);
+      }
+      return _streamIdsEqual(_streamTargetSessionId, state.activeSessionId);
+    }
+    return _streamIdsEqual(_streamTargetSessionId, state.activeSessionId);
+  }
+
+  Object? _extractWsSessionId(Map<String, dynamic> json) {
+    final data = _toMap(json['data']);
+    return json['sessionId'] ??
+        json['chatSessionId'] ??
+        data?['sessionId'] ??
+        data?['chatSessionId'];
+  }
+
+  bool _streamIdsEqual(Object? a, Object? b) {
+    if (a == null && b == null) {
+      return true;
+    }
+    if (a == null || b == null) {
+      return false;
+    }
+    return '$a' == '$b';
   }
 
   Future<String?> _fetchMessages(
@@ -323,6 +649,23 @@ class AiChatController extends StateNotifier<AiChatState> {
         return message;
       }
       return message.copyWith(status: status);
+    }).toList();
+    state = state.copyWith(messages: next);
+  }
+
+  void _replaceMessage(AiChatMessage nextMessage) {
+    _updateMessageById(nextMessage.id, (_) => nextMessage);
+  }
+
+  void _updateMessageById(
+    String messageId,
+    AiChatMessage Function(AiChatMessage current) update,
+  ) {
+    final next = state.messages.map((message) {
+      if (message.id != messageId) {
+        return message;
+      }
+      return update(message);
     }).toList();
     state = state.copyWith(messages: next);
   }
@@ -441,17 +784,39 @@ class AiChatController extends StateNotifier<AiChatState> {
           map['msgId'] ??
           'msg-${DateTime.now().microsecondsSinceEpoch}-${map.hashCode}',
     );
-    final text = _normalizeAssistantDisplayText(_normalizeMessageText(map));
-    final reasoning = _normalizeAssistantDisplayText(
-      _readString(
-        map['reasoning_content'] ??
-            map['reasoningContent'] ??
-            map['reasoning'] ??
-            map['thinking'] ??
-            map['thinkContent'],
-      ),
-    );
     final type = _deduceMessageType(map);
+    final attachmentParts = _splitAttachmentsFromText(
+      _normalizeMessageText(map),
+    );
+    final rawText = attachmentParts.text;
+    final rawReasoning = _readString(
+      map['reasoning_content'] ??
+          map['reasoningContent'] ??
+          map['reasoning'] ??
+          map['thinking'] ??
+          map['think'] ??
+          map['thought'] ??
+          map['thinkContent'] ??
+          map['deepThink'] ??
+          map['deepThinking'],
+    );
+    final parts = type == AiChatMessageType.ai
+        ? _splitReasoningFromText(text: rawText, reasoning: rawReasoning)
+        : _MessageParts(text: rawText.trim(), reasoning: '');
+    final text = _normalizeAssistantDisplayText(parts.text);
+    final reasoning = _normalizeAssistantDisplayText(parts.reasoning);
+
+    final messageAttachments = <AiChatAttachment>[];
+    if (type == AiChatMessageType.user) {
+      for (final attachment in <AiChatAttachment>[
+        ...attachmentParts.attachments,
+        ..._attachmentsFromMessageMap(map),
+      ]) {
+        if (!messageAttachments.any((item) => item.url == attachment.url)) {
+          messageAttachments.add(attachment);
+        }
+      }
+    }
 
     return AiChatMessage(
       id: idValue,
@@ -459,9 +824,491 @@ class AiChatController extends StateNotifier<AiChatState> {
       text: text,
       status: AiChatMessageStatus.sent,
       reasoning: reasoning,
-      reasoningExpanded: false,
+      reasoningExpanded: type == AiChatMessageType.ai && reasoning.isNotEmpty,
+      attachments: messageAttachments,
       sortTime: _parseDateTime(map['createTime'] ?? map['timestamp']),
     );
+  }
+
+  String _buildContentWithAttachments(
+    String text,
+    List<AiChatAttachment> attachments,
+  ) {
+    final normalizedText = text.trim();
+    if (attachments.isEmpty) {
+      return normalizedText;
+    }
+    final buffer = StringBuffer(normalizedText);
+    buffer.writeln();
+    buffer.writeln();
+    buffer.writeln('[附件]');
+    for (var index = 0; index < attachments.length; index++) {
+      final attachment = attachments[index];
+      buffer.writeln('${index + 1}. ${attachment.name}: ${attachment.url}');
+    }
+    buffer.write('请结合以上附件内容回答。');
+    return buffer.toString();
+  }
+
+  String _extractAttachmentUrl(dynamic data) {
+    if (data == null) {
+      return '';
+    }
+    if (data is String || data is num) {
+      return data.toString();
+    }
+    final map = _toMap(data);
+    if (map != null) {
+      final direct = _readString(
+        map['url'] ?? map['fileUrl'] ?? map['path'] ?? map['src'],
+      );
+      if (direct.isNotEmpty) {
+        return direct;
+      }
+      return _extractAttachmentUrl(map['data']);
+    }
+    return '';
+  }
+
+  _AttachmentTextParts _splitAttachmentsFromText(String source) {
+    const marker = '[附件]';
+    final markerIndex = source.indexOf(marker);
+    if (markerIndex < 0) {
+      return _AttachmentTextParts(text: source.trim(), attachments: const []);
+    }
+
+    final visibleText = source.substring(0, markerIndex).trim();
+    final rawAttachmentText = source.substring(markerIndex + marker.length);
+    final attachments = <AiChatAttachment>[];
+    final lineRegExp = RegExp(
+      r'^\s*(?:[-*]|\d+[.)])?\s*(.*?):\s*(https?:\/\/\S+)\s*$',
+    );
+    for (final line in rawAttachmentText.split('\n')) {
+      final match = lineRegExp.firstMatch(line.trim());
+      if (match == null) {
+        continue;
+      }
+      final name = (match.group(1) ?? '').trim();
+      final url = (match.group(2) ?? '').trim();
+      if (url.isEmpty) {
+        continue;
+      }
+      attachments.add(
+        AiChatAttachment(name: name.isEmpty ? '附件' : name, url: url),
+      );
+    }
+    return _AttachmentTextParts(text: visibleText, attachments: attachments);
+  }
+
+  List<AiChatAttachment> _attachmentsFromMessageMap(Map<String, dynamic> map) {
+    final raw =
+        map['attachments'] ??
+        map['fileList'] ??
+        map['files'] ??
+        map['attachmentList'];
+    final result = <AiChatAttachment>[];
+    if (raw is List) {
+      for (final item in raw) {
+        final parsed = _attachmentFromRaw(item);
+        if (parsed != null &&
+            !result.any((attachment) => attachment.url == parsed.url)) {
+          result.add(parsed);
+        }
+      }
+    }
+
+    final singleUrl = _readString(map['fileUrl'] ?? map['url']);
+    if (singleUrl.isNotEmpty &&
+        !result.any((attachment) => attachment.url == singleUrl)) {
+      final name = _readString(map['fileName'] ?? map['name']);
+      result.add(
+        AiChatAttachment(name: name.isEmpty ? '附件' : name, url: singleUrl),
+      );
+    }
+    return result;
+  }
+
+  AiChatAttachment? _attachmentFromRaw(dynamic raw) {
+    if (raw is String) {
+      final value = raw.trim();
+      if (value.isEmpty) {
+        return null;
+      }
+      return AiChatAttachment(name: _filenameFromUrl(value), url: value);
+    }
+    final map = _toMap(raw);
+    if (map == null) {
+      return null;
+    }
+    final url = _readString(map['url'] ?? map['fileUrl'] ?? map['path']);
+    if (url.isEmpty) {
+      return null;
+    }
+    final name = _readString(map['name'] ?? map['fileName'] ?? map['title']);
+    final size = int.tryParse(_readString(map['size'])) ?? 0;
+    return AiChatAttachment(
+      name: name.isEmpty ? _filenameFromUrl(url) : name,
+      url: url,
+      size: size,
+    );
+  }
+
+  String _filenameFromUrl(String url) {
+    final path = Uri.tryParse(url)?.path ?? url;
+    final segments = path.split('/');
+    final last = segments.isEmpty ? '' : segments.last;
+    return last.isEmpty ? '附件' : Uri.decodeComponent(last);
+  }
+
+  _MessageParts _splitReasoningFromText({
+    required String text,
+    required String reasoning,
+  }) {
+    var visibleText = text.trim();
+    var visibleReasoning = reasoning.trim();
+    final thinkRegExp = RegExp(
+      r'<think>([\s\S]*?)<\/think>',
+      caseSensitive: false,
+    );
+    final matches = thinkRegExp.allMatches(visibleText).toList();
+    if (matches.isNotEmpty) {
+      final extracted = matches
+          .map((match) => (match.group(1) ?? '').trim())
+          .where((item) => item.isNotEmpty)
+          .join('\n\n');
+      visibleText = visibleText.replaceAll(thinkRegExp, '').trim();
+      if (extracted.isNotEmpty) {
+        visibleReasoning = visibleReasoning.isEmpty
+            ? extracted
+            : '$visibleReasoning\n\n$extracted';
+      }
+    }
+    return _MessageParts(text: visibleText, reasoning: visibleReasoning);
+  }
+
+  int? _wsNumericType(Map<String, dynamic> json) {
+    final value = json['type'] ?? json['msgType'] ?? json['messageType'];
+    if (value == null) {
+      return null;
+    }
+    if (value is num) {
+      return value.toInt();
+    }
+    return int.tryParse(value.toString());
+  }
+
+  _MessageParts _openAiStyleDeltasFromObject(dynamic value) {
+    final object = _toMap(value);
+    if (object == null) {
+      return const _MessageParts(text: '', reasoning: '');
+    }
+    var text = '';
+    var reasoning = '';
+    final choices = object['choices'];
+    if (choices is List && choices.isNotEmpty) {
+      final first = _toMap(choices.first);
+      final delta = _toMap(first?['delta'] ?? first?['message']);
+      if (delta != null) {
+        text += _readString(delta['content']);
+        reasoning += _readString(
+          delta['reasoning_content'] ??
+              delta['reasoningContent'] ??
+              delta['reasoning'] ??
+              delta['thinking'],
+        );
+      }
+    }
+
+    final delta = _toMap(object['delta']);
+    if (delta != null) {
+      text += _readString(delta['content']);
+      reasoning += _readString(
+        delta['reasoning_content'] ??
+            delta['reasoningContent'] ??
+            delta['reasoning'] ??
+            delta['thinking'],
+      );
+    }
+
+    reasoning += _readString(
+      object['reasoning_content'] ??
+          object['reasoningContent'] ??
+          object['reasoning'] ??
+          object['thinking'],
+    );
+    if (object['content'] is String && choices is! List) {
+      text += object['content'] as String;
+    }
+    return _MessageParts(text: text, reasoning: reasoning);
+  }
+
+  String _extractStreamDelta(Map<String, dynamic> json) {
+    final type = _wsNumericType(json);
+    if (_toMap(json['delta']) != null) {
+      final parts = _openAiStyleDeltasFromObject(json);
+      if (parts.text.isNotEmpty) {
+        return parts.text;
+      }
+    }
+
+    final content = json['content'];
+    if ((type == 0 || type == 1 || type == 10014) && content is String) {
+      final trimmed = content.trim();
+      if (trimmed.startsWith('{')) {
+        final parts = _openAiStyleDeltasFromObject(_toMapFromJson(trimmed));
+        if (parts.text.isNotEmpty || parts.reasoning.isNotEmpty) {
+          return parts.text;
+        }
+      }
+      return _unwrapJsonStringContent(content);
+    }
+    if ((type == 0 || type == 1 || type == 10014) && content is Map) {
+      final parts = _openAiStyleDeltasFromObject(content);
+      if (parts.text.isNotEmpty) {
+        return parts.text;
+      }
+    }
+    if ((type == 10004 || type == 10013) && content is String) {
+      return content;
+    }
+    if ((type == 10004 || type == 10013) && content is Map) {
+      final map = _toMap(content);
+      final nested =
+          map?['delta'] ??
+          map?['text'] ??
+          map?['message'] ??
+          map?['content'] ??
+          map?['chunk'];
+      if (nested != null) {
+        return '$nested';
+      }
+    }
+
+    final data = _parseJsonIfNeeded(json['data']);
+    if (data is String) {
+      return data;
+    }
+    final dataMap = _toMap(data);
+    if (dataMap != null) {
+      final parts = _openAiStyleDeltasFromObject(dataMap);
+      if (parts.text.isNotEmpty) {
+        return parts.text;
+      }
+      final nested =
+          dataMap['delta'] ??
+          dataMap['chunk'] ??
+          dataMap['text'] ??
+          dataMap['content'] ??
+          dataMap['message'] ??
+          dataMap['answer'];
+      if (nested is String) {
+        return nested;
+      }
+      final nestedParts = _openAiStyleDeltasFromObject(nested);
+      if (nestedParts.text.isNotEmpty) {
+        return nestedParts.text;
+      }
+    }
+
+    final pick =
+        json['delta'] ??
+        json['chunk'] ??
+        json['text'] ??
+        json['message'] ??
+        json['result'] ??
+        json['output'];
+    if (pick is String) {
+      return pick;
+    }
+    final parts = _openAiStyleDeltasFromObject(pick);
+    return parts.text;
+  }
+
+  String _extractReasoningStreamDelta(Map<String, dynamic> json) {
+    final type = _wsNumericType(json);
+    final top = _readString(
+      json['reasoning_content'] ??
+          json['reasoningContent'] ??
+          json['reasoning'] ??
+          json['thinking'],
+    );
+    if (top.isNotEmpty) {
+      return top;
+    }
+    if (_toMap(json['delta']) != null) {
+      final parts = _openAiStyleDeltasFromObject(json);
+      if (parts.reasoning.isNotEmpty) {
+        return parts.reasoning;
+      }
+    }
+    final content = json['content'];
+    if (content is Map) {
+      final parts = _openAiStyleDeltasFromObject(content);
+      if (parts.reasoning.isNotEmpty) {
+        return parts.reasoning;
+      }
+    }
+    final data = _parseJsonIfNeeded(json['data']);
+    final dataParts = _openAiStyleDeltasFromObject(data);
+    if (dataParts.reasoning.isNotEmpty) {
+      return dataParts.reasoning;
+    }
+    if ((type == 0 || type == 1 || type == 10014) && content is String) {
+      final trimmed = content.trim();
+      if (trimmed.startsWith('{')) {
+        final parts = _openAiStyleDeltasFromObject(_toMapFromJson(trimmed));
+        if (parts.reasoning.isNotEmpty) {
+          return parts.reasoning;
+        }
+      }
+    }
+    return '';
+  }
+
+  _MessageParts? _parseAssistantEnvelopeFromWs(Map<String, dynamic> json) {
+    final type = _wsNumericType(json);
+    if (type != 10005 && type != 10014) {
+      return null;
+    }
+    final content = json['content'];
+    final object = content is String
+        ? _toMapFromJson(content.trim())
+        : _toMap(content);
+    if (object == null) {
+      return null;
+    }
+    final reasoning = _readString(
+      object['reasoningContent'] ??
+          object['reasoning_content'] ??
+          object['reasoning'] ??
+          object['thinking'],
+    ).trim();
+    final reply = _readString(
+      object['content'] ??
+          object['answer'] ??
+          object['text'] ??
+          object['message'],
+    ).trim();
+    if (reply.isEmpty && reasoning.isEmpty) {
+      return null;
+    }
+    return _MessageParts(text: reply, reasoning: reasoning);
+  }
+
+  String _extractFullReply(Map<String, dynamic> json) {
+    final type = _wsNumericType(json);
+    final content = json['content'];
+    if ((json['role'] == 'assistant' || json['role'] == 'ai') &&
+        content is Map) {
+      final map = _toMap(content);
+      return _readString(
+        map?['content'] ?? map?['answer'] ?? map?['text'] ?? map?['message'],
+      );
+    }
+    if ((json['role'] == 'assistant' || json['role'] == 'ai') &&
+        content is String) {
+      return _unwrapJsonStringContent(content);
+    }
+    if ((type == 10005 || type == 10014) && content is Map) {
+      final map = _toMap(content);
+      return _readString(
+        map?['content'] ?? map?['answer'] ?? map?['text'] ?? map?['message'],
+      );
+    }
+    if ((type == 10005 || type == 10014) && content is String) {
+      final trimmed = content.trim();
+      if (trimmed.startsWith('{')) {
+        final map = _toMapFromJson(trimmed);
+        final main = _readString(
+          map?['content'] ?? map?['answer'] ?? map?['text'] ?? map?['message'],
+        );
+        if (main.isNotEmpty) {
+          return main;
+        }
+      }
+      return trimmed;
+    }
+    final data = _parseJsonIfNeeded(json['data']);
+    if (data is String) {
+      return data;
+    }
+    final dataMap = _toMap(data);
+    return _readString(
+      json['answer'] ??
+          json['full'] ??
+          json['text'] ??
+          json['message'] ??
+          dataMap?['content'] ??
+          dataMap?['answer'] ??
+          dataMap?['message'] ??
+          dataMap?['full'] ??
+          dataMap?['text'],
+    );
+  }
+
+  String _extractFullReasoning(Map<String, dynamic> json) {
+    final type = _wsNumericType(json);
+    final top = _readString(
+      json['reasoning_content'] ??
+          json['reasoningContent'] ??
+          json['reasoning'] ??
+          json['thinking'],
+    );
+    if (top.isNotEmpty) {
+      return top;
+    }
+    final content = json['content'];
+    if (content is Map) {
+      final map = _toMap(content);
+      final inner = _readString(
+        map?['reasoning_content'] ??
+            map?['reasoningContent'] ??
+            map?['reasoning'] ??
+            map?['thinking'],
+      );
+      if (inner.isNotEmpty) {
+        return inner;
+      }
+    }
+    if ((type == 10005 || type == 10014) && content is String) {
+      final map = _toMapFromJson(content.trim());
+      final inner = _readString(
+        map?['reasoning_content'] ??
+            map?['reasoningContent'] ??
+            map?['reasoning'] ??
+            map?['thinking'],
+      );
+      if (inner.isNotEmpty) {
+        return inner;
+      }
+    }
+    final data = _parseJsonIfNeeded(json['data']);
+    final parts = _openAiStyleDeltasFromObject(data);
+    if (parts.reasoning.isNotEmpty) {
+      return parts.reasoning;
+    }
+    final dataMap = _toMap(data);
+    return _readString(
+      dataMap?['reasoning_content'] ??
+          dataMap?['reasoningContent'] ??
+          dataMap?['reasoning'] ??
+          dataMap?['thinking'],
+    );
+  }
+
+  dynamic _parseJsonIfNeeded(dynamic value) {
+    if (value is! String) {
+      return value;
+    }
+    final trimmed = value.trim();
+    if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+      return value;
+    }
+    try {
+      return jsonDecode(trimmed);
+    } catch (_) {
+      return value;
+    }
   }
 
   AiChatMessageType _deduceMessageType(Map<String, dynamic> map) {
@@ -512,7 +1359,7 @@ class AiChatController extends StateNotifier<AiChatState> {
   String _unwrapJsonStringContent(String text) {
     final trimmed = text.trim();
     if (!trimmed.startsWith('{')) {
-      return trimmed;
+      return text;
     }
 
     try {
@@ -649,4 +1496,18 @@ class AiChatController extends StateNotifier<AiChatState> {
     text = text.replaceAll('深度求索', '小艺同学');
     return text;
   }
+}
+
+class _MessageParts {
+  const _MessageParts({required this.text, required this.reasoning});
+
+  final String text;
+  final String reasoning;
+}
+
+class _AttachmentTextParts {
+  const _AttachmentTextParts({required this.text, required this.attachments});
+
+  final String text;
+  final List<AiChatAttachment> attachments;
 }

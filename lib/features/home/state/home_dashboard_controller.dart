@@ -159,7 +159,7 @@ class HomeDashboardController extends StateNotifier<HomeDashboardState> {
 
   List<HomeCourseNotice> _parseCourseNotices(dynamic data) {
     if (data is! List || data.isEmpty) {
-      return buildDefaultCourseNotices();
+      return const [];
     }
 
     final result = <HomeCourseNotice>[];
@@ -183,9 +183,10 @@ class HomeDashboardController extends StateNotifier<HomeDashboardState> {
       }
 
       // 从 timeBegin/timeEnd 计算真实课时时长
-      final durationMinutes =
-          _calcDurationMinutes(item['timeBegin']?.toString() ?? '',
-              item['timeEnd']?.toString() ?? '');
+      final durationMinutes = _calcDurationMinutes(
+        item['timeBegin']?.toString() ?? '',
+        item['timeEnd']?.toString() ?? '',
+      );
       final durationText = durationMinutes > 0
           ? '$durationMinutes分钟·音乐体验课'
           : '45分钟·音乐体验课';
@@ -204,8 +205,11 @@ class HomeDashboardController extends StateNotifier<HomeDashboardState> {
           status: _isEnded(item)
               ? HomeCourseStatus.ended
               : HomeCourseStatus.upcoming,
-          cardColorHex: (colorHex != null && colorHex.isNotEmpty &&
-                  colorHex != '#ffffff' && colorHex != '#FFFFFF')
+          cardColorHex:
+              (colorHex != null &&
+                  colorHex.isNotEmpty &&
+                  colorHex != '#ffffff' &&
+                  colorHex != '#FFFFFF')
               ? colorHex
               : null,
         ),
@@ -213,7 +217,7 @@ class HomeDashboardController extends StateNotifier<HomeDashboardState> {
     }
 
     if (result.isEmpty) {
-      return buildDefaultCourseNotices();
+      return const [];
     }
 
     return result.take(3).toList();

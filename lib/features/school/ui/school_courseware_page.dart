@@ -1,11 +1,16 @@
 import 'dart:math' as math;
 
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:carousel_slider/carousel_slider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/route_paths.dart';
 import '../../../core/constants/app_assets.dart';
+import '../../../core/network/media_url.dart';
 import '../../../core/widgets/app_asset_graphic.dart';
+import '../../home/state/home_dashboard_controller.dart';
+import '../../home/state/home_dashboard_state.dart';
 import '../state/school_page_controller.dart';
 import '../state/school_page_state.dart';
 
@@ -77,12 +82,7 @@ class _SchoolView extends StatelessWidget {
                               // Banner 647:190
                               SizedBox(
                                 height: bannerH,
-                                child: _HeroBanner(
-                                  onExploreTap: () => Navigator.pushNamed(
-                                    ctx,
-                                    RoutePaths.consultation,
-                                  ),
-                                ),
+                                child: _HeroBanner(height: bannerH),
                               ),
                               const SizedBox(height: gap),
                               // Quick actions (高度与 actionBoardH 一致)
@@ -244,152 +244,110 @@ class _SchoolView extends StatelessWidget {
 }
 
 // ── Hero Banner ───────────────────────────────────────────────────────────────
-class _HeroBanner extends StatelessWidget {
-  const _HeroBanner({required this.onExploreTap});
+/// 校园页轮播 Banner。
+/// 暂时复用首页的 [homeDashboardControllerProvider] 接口，后续替换为校园专属接口。
+class _HeroBanner extends ConsumerStatefulWidget {
+  const _HeroBanner({required this.height});
 
-  final VoidCallback onExploreTap;
+  final double height;
+
+  @override
+  ConsumerState<_HeroBanner> createState() => _HeroBannerState();
+}
+
+class _HeroBannerState extends ConsumerState<_HeroBanner> {
+  int _currentIndex = 0;
+
+  List<String> _resolveImages(List<HomeBannerItem> items) {
+    return items
+        .map((e) => MediaUrl.resolve(e.imageUrl))
+        .where((url) => url.isNotEmpty)
+        .toList();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final bannerItems =
+        ref.watch(homeDashboardControllerProvider).bannerItems;
+    final images = _resolveImages(bannerItems);
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
       child: Stack(
-        fit: StackFit.expand,
         children: [
-          // Dark purple background
-          Container(color: const Color(0xFF2D1C77)),
-          // Glow
-          Positioned(
-            left: -37,
-            top: -119,
-            child: AppAssetGraphic(
-              AppAssets.homeV2BannerGlow,
-              width: 263,
-              height: 318,
-              fit: BoxFit.contain,
-            ),
-          ),
-          // Guitar
-          Positioned(
-            right: 48,
-            top: -30,
-            child: AppAssetGraphic(
-              AppAssets.homeV2BannerGuitar,
-              width: 373,
-              height: 251,
-              fit: BoxFit.contain,
-            ),
-          ),
-          // Left gradient overlay
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                  colors: [Color(0xFF16071C), Color(0x00110612)],
-                  stops: [0, 0.643],
-                ),
-              ),
-            ),
-          ),
-          // Right edge shadow
-          Positioned(
-            right: -13,
-            top: -6,
-            child: Container(
-              width: 92,
-              height: 205,
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.centerRight,
-                  end: Alignment.centerLeft,
-                  colors: [Color(0xFF16071C), Color(0x00110612)],
-                  stops: [0, 0.643],
-                ),
-              ),
-            ),
-          ),
-          // Title
-          const Positioned(
-            left: 42,
-            top: 22,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '音乐梦',
-                  style: TextStyle(
-                    fontSize: 28,
-                    color: Colors.white,
-                    height: 1.3,
-                    fontFamily: 'AlimamaFangYuanTiVF',
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                Text(
-                  '探索属于你的旋律',
-                  style: TextStyle(
-                    fontSize: 28,
-                    color: Colors.white,
-                    height: 1.3,
-                    fontFamily: 'AlimamaFangYuanTiVF',
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Explore button
-          Positioned(
-            left: 42,
-            bottom: 20,
-            child: GestureDetector(
-              onTap: onExploreTap,
-              child: Container(
-                width: 110,
-                height: 32,
-                padding: const EdgeInsets.symmetric(horizontal: 13),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.25),
-                  borderRadius: BorderRadius.circular(41),
-                ),
-                child: Row(
-                  children: [
-                    const Text(
-                      '立即探索',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.white,
-                        fontWeight: FontWeight.w500,
-                        fontFamily: 'AlimamaFangYuanTiVF',
-                        height: 1,
-                      ),
-                    ),
-                    const Spacer(),
-                    AppAssetGraphic(
-                      AppAssets.homeV2BannerArrow,
-                      width: 22,
-                      height: 22,
+          // 深色兜底，避免图片切换时白屏
+          const Positioned.fill(child: ColoredBox(color: Color(0xFF2D1C77))),
+          if (images.isEmpty)
+            // 无数据时显示原有静态背景
+            Positioned.fill(
+              child: Stack(
+                children: [
+                  Positioned(
+                    left: -37,
+                    top: -119,
+                    child: AppAssetGraphic(
+                      AppAssets.homeV2BannerGlow,
+                      width: 263,
+                      height: 318,
                       fit: BoxFit.contain,
                     ),
-                  ],
+                  ),
+                  Positioned(
+                    right: 48,
+                    top: -30,
+                    child: AppAssetGraphic(
+                      AppAssets.homeV2BannerGuitar,
+                      width: 373,
+                      height: 251,
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            Positioned.fill(
+              child: CarouselSlider.builder(
+                itemCount: images.length,
+                itemBuilder: (context, index, _) =>
+                    _BannerSlide(url: images[index]),
+                options: CarouselOptions(
+                  height: widget.height,
+                  viewportFraction: 1.0,
+                  enableInfiniteScroll: images.length > 1,
+                  autoPlay: images.length > 1,
+                  autoPlayInterval: const Duration(seconds: 4),
+                  autoPlayAnimationDuration:
+                      const Duration(milliseconds: 420),
+                  autoPlayCurve: Curves.easeInOutCubic,
+                  scrollPhysics: const ClampingScrollPhysics(),
+                  onPageChanged: (index, _) {
+                    if (!mounted) return;
+                    setState(() => _currentIndex = index);
+                  },
                 ),
               ),
             ),
-          ),
-          // Indicator dots
+          // 分页指示器
           Positioned(
             right: 20,
             bottom: 14,
             child: Row(
-              children: [
-                _Dot(width: 20, opacity: 1),
-                const SizedBox(width: 4),
-                _Dot(width: 4, opacity: 0.6),
-                const SizedBox(width: 4),
-                _Dot(width: 4, opacity: 0.6),
-              ],
+              children: List.generate(
+                images.isEmpty ? 3 : images.length,
+                (index) {
+                  final active = images.isEmpty
+                      ? index == 0
+                      : index == _currentIndex;
+                  return Padding(
+                    padding: EdgeInsets.only(left: index == 0 ? 0 : 4),
+                    child: _BannerDot(
+                      width: active ? 20 : 4,
+                      opacity: active ? 1.0 : 0.6,
+                    ),
+                  );
+                },
+              ),
             ),
           ),
         ],
@@ -398,8 +356,39 @@ class _HeroBanner extends StatelessWidget {
   }
 }
 
-class _Dot extends StatelessWidget {
-  const _Dot({required this.width, required this.opacity});
+class _BannerSlide extends StatelessWidget {
+  const _BannerSlide({required this.url});
+
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!url.startsWith('http')) {
+      return Image.asset(
+        url,
+        width: double.infinity,
+        height: double.infinity,
+        fit: BoxFit.cover,
+        filterQuality: FilterQuality.high,
+        gaplessPlayback: true,
+      );
+    }
+    return CachedNetworkImage(
+      imageUrl: url,
+      width: double.infinity,
+      height: double.infinity,
+      fit: BoxFit.cover,
+      filterQuality: FilterQuality.high,
+      fadeInDuration: const Duration(milliseconds: 220),
+      fadeOutDuration: Duration.zero,
+      placeholder: (_, _) => const SizedBox.shrink(),
+      errorWidget: (_, _, _) => const SizedBox.shrink(),
+    );
+  }
+}
+
+class _BannerDot extends StatelessWidget {
+  const _BannerDot({required this.width, required this.opacity});
 
   final double width;
   final double opacity;
@@ -819,11 +808,9 @@ class _ProgressCard extends StatelessWidget {
                 child: LayoutBuilder(
                   builder: (context, bc) {
                     final trackW = bc.maxWidth;
-                    final dotSize = 16.0;
-                    final barW = trackW - dotSize;
                     final fillW = math.max(
                       20.0,
-                      barW * meta.progress / 100,
+                      trackW * meta.progress / 100,
                     );
                     final chipW = 31.0;
                     final chipLeft = math.max(0.0, fillW - chipW / 2 - 2);
@@ -834,13 +821,11 @@ class _ProgressCard extends StatelessWidget {
                         clipBehavior: Clip.none,
                         alignment: Alignment.centerLeft,
                         children: [
-                          // Track
-                          Positioned(
-                            left: 0,
-                            right: dotSize,
+                          // Track (full width, no dot reserve)
+                          Positioned.fill(
                             top: 4,
+                            bottom: 4,
                             child: Container(
-                              height: 8,
                               decoration: BoxDecoration(
                                 color: const Color(0xFFF0EBFA),
                                 borderRadius: BorderRadius.circular(23),
@@ -862,19 +847,6 @@ class _ProgressCard extends StatelessWidget {
                                   ],
                                 ),
                                 borderRadius: BorderRadius.circular(23),
-                              ),
-                            ),
-                          ),
-                          // End dot
-                          Positioned(
-                            right: 0,
-                            top: 0,
-                            child: Container(
-                              width: dotSize,
-                              height: dotSize,
-                              decoration: BoxDecoration(
-                                color: meta.endDotColor,
-                                shape: BoxShape.circle,
                               ),
                             ),
                           ),
@@ -1202,7 +1174,6 @@ class _ProgressMeta {
     required this.progress,
     required this.gradientStart,
     required this.gradientEnd,
-    required this.endDotColor,
     this.tip = '',
   });
 
@@ -1212,7 +1183,6 @@ class _ProgressMeta {
   final double progress;
   final Color gradientStart;
   final Color gradientEnd;
-  final Color endDotColor;
   final String tip;
 
   factory _ProgressMeta.fromText(String text, int apiValue) {
@@ -1224,7 +1194,6 @@ class _ProgressMeta {
         progress: 100,
         gradientStart: Color(0xFFFFBECE),
         gradientEnd: Color(0xFFFF5681),
-        endDotColor: Color(0xFFFF89A5),
         tip: '恭喜你！ 你完成了乐理的全部课程。',
       );
     }
@@ -1236,7 +1205,6 @@ class _ProgressMeta {
         progress: apiValue == 0 ? 40.0 : apiValue.toDouble(),
         gradientStart: const Color(0xFF4DE6C8),
         gradientEnd: const Color(0xFF13E8BE),
-        endDotColor: const Color(0xFF28D9BE),
       );
     }
     return _ProgressMeta(
@@ -1246,7 +1214,6 @@ class _ProgressMeta {
       progress: apiValue == 0 ? 40.0 : apiValue.toDouble(),
       gradientStart: const Color(0xFFD4BFFF),
       gradientEnd: const Color(0xFFB184FF),
-      endDotColor: const Color(0xFFAB79FF),
     );
   }
 }

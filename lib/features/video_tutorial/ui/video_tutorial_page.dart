@@ -6,6 +6,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,8 +14,10 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../../core/constants/app_assets.dart';
-import '../../../core/constants/app_constants.dart';
+import '../../../core/network/media_url.dart';
 import '../../../core/widgets/app_asset_graphic.dart';
+import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/class_share_drawer.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../state/video_tutorial_controller.dart';
 import '../state/video_tutorial_state.dart';
@@ -38,6 +41,7 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
   int _bannerIndex = 0;
   int _bannerCount = 0;
   bool _isDetailOpening = false;
+  final Set<String> _preloadedImageUrls = <String>{};
 
   @override
   void initState() {
@@ -69,7 +73,9 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
     _bannerTimer?.cancel();
     if (count <= 1) return;
     _bannerTimer = Timer.periodic(const Duration(seconds: 4), (_) {
-      if (!mounted || !_bannerController.hasClients || _bannerCount <= 1) return;
+      if (!mounted || !_bannerController.hasClients || _bannerCount <= 1) {
+        return;
+      }
       _bannerIndex = (_bannerIndex + 1) % _bannerCount;
       _bannerController.animateToPage(
         _bannerIndex,
@@ -77,6 +83,30 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
         curve: Curves.easeOutCubic,
       );
       setState(() {});
+    });
+  }
+
+  void _preloadImages(VideoTutorialState state) {
+    final urls = <String>{
+      for (final item in state.banners) _resolveUrl(item.imageUrl),
+      for (final item in state.videoList.take(32)) _resolveUrl(item.coverImg),
+      for (final item
+          in state.detail?.seriesVideoList ?? const <VideoListItem>[])
+        _resolveUrl(item.coverImg),
+    }..removeWhere((url) => url.isEmpty || _preloadedImageUrls.contains(url));
+
+    if (urls.isEmpty) {
+      return;
+    }
+    _preloadedImageUrls.addAll(urls);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      for (final url in urls) {
+        precacheImage(
+          CachedNetworkImageProvider(url),
+          context,
+        ).catchError((_) {});
+      }
     });
   }
 
@@ -92,7 +122,7 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
       return;
     }
     if (message != null && message.isNotEmpty) {
-      _showSnackBar(message);
+      _showToast(message);
       _isDetailOpening = false;
       return;
     }
@@ -103,8 +133,9 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
       return;
     }
 
+    final scale = DashboardScaleScope.of(context);
     await Navigator.of(context, rootNavigator: true).push<void>(
-      _VideoDetailRoute(detail: detail, resolveUrl: _resolveUrl),
+      _VideoDetailRoute(detail: detail, resolveUrl: _resolveUrl, scale: scale),
     );
 
     _isDetailOpening = false;
@@ -113,25 +144,31 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
     }
   }
 
-  void _showSnackBar(String msg) {
+  void _showToast(String msg) {
     if (msg.isEmpty) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(msg)));
+    AppToast.show(context, msg);
+  }
+
+  Future<void> _selectMenu(String? id) async {
+    if (_scrollController.hasClients) {
+      _scrollController.jumpTo(0);
+    }
+    await ref.read(videoTutorialControllerProvider.notifier).selectMenu(id);
+  }
+
+  Future<void> _selectChildMenu(String? id) async {
+    if (_scrollController.hasClients) {
+      _scrollController.jumpTo(0);
+    }
+    await ref
+        .read(videoTutorialControllerProvider.notifier)
+        .selectChildMenu(id);
   }
 
   static String _resolveUrl(String raw) {
-    final v = raw.trim();
-    if (v.isEmpty || v == 'null') return '';
-    if (v.startsWith('http://') || v.startsWith('https://')) return v;
-    if (v.startsWith('//')) return 'https:$v';
-    final base = AppConstants.apiBaseUrl.endsWith('/')
-        ? AppConstants.apiBaseUrl.substring(
-            0,
-            AppConstants.apiBaseUrl.length - 1,
-          )
-        : AppConstants.apiBaseUrl;
-    return v.startsWith('/') ? '$base$v' : '$base/$v';
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty || trimmed == 'null') return '';
+    return MediaUrl.resolve(trimmed);
   }
 
   @override
@@ -140,49 +177,23 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
     final scale = DashboardScaleScope.of(context);
     final ui = scale.ui;
     _syncBannerAutoPlay(state.banners.length);
+    _preloadImages(state);
 
     return Container(
-      padding: EdgeInsets.only(bottom: ui(16)),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(ui(16)),
       ),
       child: Column(
         children: [
-          // ── 固定头部：分类 / Banner / 子分类（不随列表滚动）─────────────
+          // ── 固定头部：仅一级分类（不随列表滚动）─────────────
           Padding(
             padding: EdgeInsets.fromLTRB(ui(16), ui(16), ui(16), ui(12)),
-            child: Column(
-              children: [
-                _VideoCategoryHeader(
-                  scale: scale,
-                  menus: state.menus,
-                  selectedMenuId: state.selectedMenuId,
-                  onSelectMenu: (id) => ref
-                      .read(videoTutorialControllerProvider.notifier)
-                      .selectMenu(id),
-                ),
-                SizedBox(height: ui(16)),
-                _BannerAndLatestSection(
-                  scale: scale,
-                  banners: state.banners,
-                  activeIndex: _bannerIndex,
-                  pageController: _bannerController,
-                  latestVideos: state.videoList.take(3).toList(),
-                  resolveUrl: _resolveUrl,
-                  onBannerChanged: (i) => setState(() => _bannerIndex = i),
-                  onOpenVideo: _openVideoDetail,
-                ),
-                SizedBox(height: ui(16)),
-                _SubCategoryBar(
-                  scale: scale,
-                  items: state.selectedMenu?.children ?? const [],
-                  selectedId: state.selectedChildId,
-                  onSelect: (id) => ref
-                      .read(videoTutorialControllerProvider.notifier)
-                      .selectChildMenu(id),
-                ),
-              ],
+            child: _VideoCategoryHeader(
+              scale: scale,
+              menus: state.menus,
+              selectedMenuId: state.selectedMenuId,
+              onSelectMenu: _selectMenu,
             ),
           ),
           // ── 视频列表区：仅此区域可滚动 ──────────────────────────────────
@@ -191,9 +202,40 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
               onRefresh: () =>
                   ref.read(videoTutorialControllerProvider.notifier).refresh(),
               child: CustomScrollView(
+                key: const PageStorageKey<String>('video_tutorial_scroll'),
                 controller: _scrollController,
                 physics: const AlwaysScrollableScrollPhysics(),
+                cacheExtent: ui(900),
                 slivers: [
+                  // Banner + 最新视频：并入滚动区域
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(ui(16), 0, ui(16), ui(16)),
+                      child: _BannerAndLatestSection(
+                        scale: scale,
+                        banners: state.banners,
+                        activeIndex: _bannerIndex,
+                        pageController: _bannerController,
+                        latestVideos: state.videoList.take(3).toList(),
+                        resolveUrl: _resolveUrl,
+                        onBannerChanged: (i) =>
+                            setState(() => _bannerIndex = i),
+                        onOpenVideo: _openVideoDetail,
+                      ),
+                    ),
+                  ),
+                  // 二级目录：紧跟 banner 下方，一起滚动
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(ui(16), 0, ui(16), ui(12)),
+                      child: _SubCategoryBar(
+                        scale: scale,
+                        items: state.selectedMenu?.children ?? const [],
+                        selectedId: state.selectedChildId,
+                        onSelect: _selectChildMenu,
+                      ),
+                    ),
+                  ),
                   if (state.loading && state.videoList.isEmpty)
                     const SliverFillRemaining(
                       hasScrollBody: false,
@@ -216,7 +258,8 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
                     )
                   else
                     SliverPadding(
-                      padding: EdgeInsets.fromLTRB(ui(16), 0, ui(16), ui(16)),
+                      // 去除滚动容器底部 padding
+                      padding: EdgeInsets.fromLTRB(ui(16), 0, ui(16), 0),
                       sliver: SliverGrid(
                         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: 4,
@@ -225,20 +268,34 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
                           childAspectRatio: 220 / 180,
                         ),
                         delegate: SliverChildBuilderDelegate(
-                          (context, index) => _VideoGridCard(
-                            scale: scale,
-                            item: state.videoList[index],
-                            resolveUrl: _resolveUrl,
-                            onTap: () => _openVideoDetail(state.videoList[index]),
-                          ),
+                          (context, index) {
+                            final item = state.videoList[index];
+                            return _VideoGridCard(
+                              key: ValueKey<String>('video_grid_${item.id}'),
+                              scale: scale,
+                              item: item,
+                              resolveUrl: _resolveUrl,
+                              onTap: () => _openVideoDetail(item),
+                            );
+                          },
                           childCount: state.videoList.length,
+                          findChildIndexCallback: (key) {
+                            if (key is! ValueKey<String>) return null;
+                            final value = key.value;
+                            if (!value.startsWith('video_grid_')) return null;
+                            final id = value.substring('video_grid_'.length);
+                            final index = state.videoList.indexWhere(
+                              (item) => item.id == id,
+                            );
+                            return index < 0 ? null : index;
+                          },
                         ),
                       ),
                     ),
                   if (state.loadingMore)
                     SliverToBoxAdapter(
                       child: Padding(
-                        padding: EdgeInsets.only(bottom: ui(18)),
+                        padding: EdgeInsets.zero,
                         child: const Center(child: CircularProgressIndicator()),
                       ),
                     ),
@@ -247,7 +304,7 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
                       state.videoList.isNotEmpty)
                     SliverToBoxAdapter(
                       child: Padding(
-                        padding: EdgeInsets.only(bottom: ui(18)),
+                        padding: EdgeInsets.zero,
                         child: Center(
                           child: Text(
                             '没有更多了',
@@ -269,6 +326,34 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
   }
 }
 
+class _VideoCachedImage extends StatelessWidget {
+  const _VideoCachedImage({
+    required this.url,
+    required this.fit,
+    required this.fallback,
+  });
+
+  final String url;
+  final BoxFit fit;
+  final Widget fallback;
+
+  @override
+  Widget build(BuildContext context) {
+    if (url.isEmpty) {
+      return fallback;
+    }
+    return CachedNetworkImage(
+      imageUrl: url,
+      fit: fit,
+      fadeInDuration: Duration.zero,
+      fadeOutDuration: Duration.zero,
+      useOldImageOnUrlChange: true,
+      placeholder: (_, _) => fallback,
+      errorWidget: (_, _, _) => fallback,
+    );
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // B. 全局详情覆盖路由
 // ─────────────────────────────────────────────────────────────────────────────
@@ -277,25 +362,28 @@ class _VideoDetailRoute extends PageRouteBuilder<void> {
   _VideoDetailRoute({
     required this.detail,
     required this.resolveUrl,
+    required this.scale,
     this.handoffPlayer,
     this.handoffController,
   }) : super(
-          opaque: false,
-          barrierDismissible: false,
-          transitionDuration: const Duration(milliseconds: 320),
-          reverseTransitionDuration: const Duration(milliseconds: 240),
-          pageBuilder: (context, animation, secondary) => _VideoDetailOverlay(
-            detail: detail,
-            resolveUrl: resolveUrl,
-            animation: animation,
-            handoffPlayer: handoffPlayer,
-            handoffController: handoffController,
-          ),
-          transitionsBuilder: (context, animation, secondary, child) => child,
-        );
+         opaque: false,
+         barrierDismissible: false,
+         transitionDuration: const Duration(milliseconds: 320),
+         reverseTransitionDuration: const Duration(milliseconds: 240),
+         pageBuilder: (context, animation, secondary) => _VideoDetailOverlay(
+           detail: detail,
+           resolveUrl: resolveUrl,
+           scale: scale,
+           animation: animation,
+           handoffPlayer: handoffPlayer,
+           handoffController: handoffController,
+         ),
+         transitionsBuilder: (context, animation, secondary, child) => child,
+       );
 
   final VideoDetail detail;
   final String Function(String) resolveUrl;
+  final DashboardScaleData scale;
   // 从画中画展开时，直接接管已有播放器，避免重新加载
   final Player? handoffPlayer;
   final VideoController? handoffController;
@@ -305,6 +393,7 @@ class _VideoDetailOverlay extends StatelessWidget {
   const _VideoDetailOverlay({
     required this.detail,
     required this.resolveUrl,
+    required this.scale,
     required this.animation,
     this.handoffPlayer,
     this.handoffController,
@@ -312,6 +401,7 @@ class _VideoDetailOverlay extends StatelessWidget {
 
   final VideoDetail detail;
   final String Function(String) resolveUrl;
+  final DashboardScaleData scale;
   final Animation<double> animation;
   final Player? handoffPlayer;
   final VideoController? handoffController;
@@ -328,31 +418,23 @@ class _VideoDetailOverlay extends StatelessWidget {
           ),
         ),
         SlideTransition(
-          position: Tween<Offset>(
-            begin: const Offset(1, 0),
-            end: Offset.zero,
-          ).animate(
-            CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
-          ),
+          position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
+              .animate(
+                CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+              ),
           child: Align(
             alignment: Alignment.centerRight,
             child: FractionallySizedBox(
               widthFactor: 0.5,
-              child: Container(
-                decoration: const BoxDecoration(
-                  border: Border(
-                    left: BorderSide(color: Color(0xFFF3F2F3), width: 1),
-                  ),
-                ),
-                child: Material(
-                  elevation: 32,
-                  shadowColor: Colors.black.withValues(alpha: 0.4),
-                  child: _VideoDetailSheet(
-                    initialDetail: detail,
-                    resolveUrl: resolveUrl,
-                    handoffPlayer: handoffPlayer,
-                    handoffController: handoffController,
-                  ),
+              child: Material(
+                elevation: 32,
+                shadowColor: Colors.black.withValues(alpha: 0.4),
+                child: _VideoDetailSheet(
+                  initialDetail: detail,
+                  resolveUrl: resolveUrl,
+                  scale: scale,
+                  handoffPlayer: handoffPlayer,
+                  handoffController: handoffController,
                 ),
               ),
             ),
@@ -371,12 +453,14 @@ class _VideoDetailSheet extends ConsumerStatefulWidget {
   const _VideoDetailSheet({
     required this.initialDetail,
     required this.resolveUrl,
+    required this.scale,
     this.handoffPlayer,
     this.handoffController,
   });
 
   final VideoDetail initialDetail;
   final String Function(String) resolveUrl;
+  final DashboardScaleData scale;
   // 从画中画展开时传入已在播放的播放器，跳过重新加载
   final Player? handoffPlayer;
   final VideoController? handoffController;
@@ -445,7 +529,7 @@ class _VideoDetailSheetState extends ConsumerState<_VideoDetailSheet>
     try {
       final player = Player();
       final ctrl = VideoController(player);
-      await player.open(Media(resolved), play: true);
+      await player.open(Media(resolved), play: false);
       if (mounted) {
         setState(() {
           _player = player;
@@ -541,6 +625,7 @@ class _VideoDetailSheetState extends ConsumerState<_VideoDetailSheet>
       _VideoDetailRoute(
         detail: detail,
         resolveUrl: resolveUrl,
+        scale: widget.scale,
         handoffPlayer: player,
         handoffController: ctrl,
       ),
@@ -563,30 +648,14 @@ class _VideoDetailSheetState extends ConsumerState<_VideoDetailSheet>
 
   Future<void> _showShareSheet() async {
     final notifier = ref.read(videoTutorialControllerProvider.notifier);
-    final classes = await notifier.fetchShareClasses();
     if (!mounted) return;
-    if (classes.isEmpty) {
-      _showMsg('暂无可分享班级');
-      return;
-    }
-    final selected = <int>{};
-    await showModalBottomSheet<void>(
+    await showClassShareDrawer<void>(
       context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (ctx) => _ShareSheet(
-        classes: classes,
-        selected: selected,
-        onSubmit: () async {
-          final msg = await notifier.shareCurrentVideo(selected.toList());
-          if (!ctx.mounted) return;
-          if (msg != null && msg.isNotEmpty) {
-            _showMsg(msg);
-            return;
-          }
-          Navigator.of(ctx).pop();
-          _showMsg('发送成功');
-        },
+      scale: widget.scale,
+      child: _VideoShareDrawer(
+        controller: notifier,
+        detail: _currentDetail,
+        resolveUrl: widget.resolveUrl,
       ),
     );
   }
@@ -602,10 +671,10 @@ class _VideoDetailSheetState extends ConsumerState<_VideoDetailSheet>
           child: InteractiveViewer(
             minScale: 0.8,
             maxScale: 4,
-            child: Image.network(
-              widget.resolveUrl(url),
+            child: _VideoCachedImage(
+              url: widget.resolveUrl(url),
               fit: BoxFit.contain,
-              errorBuilder: (_, _, _) => const Padding(
+              fallback: const Padding(
                 padding: EdgeInsets.all(24),
                 child: Text('图片加载失败', style: TextStyle(color: Colors.white)),
               ),
@@ -618,9 +687,7 @@ class _VideoDetailSheetState extends ConsumerState<_VideoDetailSheet>
 
   void _showMsg(String msg) {
     if (msg.isEmpty) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(msg)));
+    AppToast.show(context, msg);
   }
 
   @override
@@ -654,7 +721,6 @@ class _VideoDetailSheetState extends ConsumerState<_VideoDetailSheet>
           onFavorite: _toggleFavorite,
           onShare: _showShareSheet,
         ),
-        const Divider(height: 1, color: Color(0xFFF3F2F3)),
         Expanded(
           child: TabBarView(
             controller: _tabController,
@@ -673,6 +739,93 @@ class _VideoDetailSheetState extends ConsumerState<_VideoDetailSheet>
           ),
         ),
       ],
+    );
+  }
+}
+
+class _VideoShareDrawer extends StatefulWidget {
+  const _VideoShareDrawer({
+    required this.controller,
+    required this.detail,
+    required this.resolveUrl,
+  });
+
+  final VideoTutorialController controller;
+  final VideoDetail detail;
+  final String Function(String) resolveUrl;
+
+  @override
+  State<_VideoShareDrawer> createState() => _VideoShareDrawerState();
+}
+
+class _VideoShareDrawerState extends State<_VideoShareDrawer> {
+  final Set<String> _selected = <String>{};
+  List<VideoShareClassItem> _classes = const <VideoShareClassItem>[];
+  bool _loading = true;
+  bool _sending = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadClasses());
+  }
+
+  Future<void> _loadClasses() async {
+    final classes = await widget.controller.fetchShareClasses();
+    if (!mounted) return;
+    setState(() {
+      _classes = classes;
+      _loading = false;
+    });
+  }
+
+  Future<void> _send() async {
+    if (_sending) return;
+    setState(() => _sending = true);
+    final message = await widget.controller.shareCurrentVideo(
+      _selected.toList(),
+    );
+    if (!mounted) return;
+    setState(() => _sending = false);
+    if (message != null && message.isNotEmpty) {
+      AppToast.show(context, message);
+      return;
+    }
+    Navigator.of(context).pop();
+    AppToast.show(context, '消息已成功发送');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ClassShareDrawer(
+      title: '分享视频',
+      targetCard: ShareTargetCard(
+        label: '您将分享的视频',
+        title: widget.detail.name,
+        coverUrl: widget.detail.coverImg,
+        resolveUrl: widget.resolveUrl,
+      ),
+      classes: _classes
+          .map(
+            (item) => ClassShareItem(
+              id: item.id,
+              name: item.name,
+              checked: _selected.contains(item.id),
+            ),
+          )
+          .toList(),
+      loading: _loading,
+      sending: _sending,
+      onToggleClass: (id) {
+        setState(() {
+          if (_selected.contains(id)) {
+            _selected.remove(id);
+          } else {
+            _selected.add(id);
+          }
+        });
+      },
+      onSend: _send,
     );
   }
 }
@@ -789,29 +942,43 @@ class _ProfessionalPlayerState extends State<_ProfessionalPlayer> {
   }
 
   void _subscribeToStreams(Player p) {
-    _subs.add(p.stream.position.listen((v) {
-      if (mounted) setState(() => _position = v);
-    }));
-    _subs.add(p.stream.duration.listen((v) {
-      if (mounted) setState(() => _duration = v);
-    }));
-    _subs.add(p.stream.playing.listen((v) {
-      if (mounted) setState(() => _isPlaying = v);
-    }));
-    _subs.add(p.stream.buffering.listen((v) {
-      if (mounted) setState(() => _isBuffering = v);
-    }));
-    _subs.add(p.stream.volume.listen((v) {
-      if (mounted) setState(() => _volume = v);
-    }));
-    _subs.add(p.stream.rate.listen((v) {
-      if (mounted) setState(() => _rate = v);
-    }));
-    _subs.add(p.stream.completed.listen((v) {
-      if (!mounted || !v) return;
-      setState(() => _isCompleted = true);
-      _startAutoplayCountdown();
-    }));
+    _subs.add(
+      p.stream.position.listen((v) {
+        if (mounted) setState(() => _position = v);
+      }),
+    );
+    _subs.add(
+      p.stream.duration.listen((v) {
+        if (mounted) setState(() => _duration = v);
+      }),
+    );
+    _subs.add(
+      p.stream.playing.listen((v) {
+        if (mounted) setState(() => _isPlaying = v);
+      }),
+    );
+    _subs.add(
+      p.stream.buffering.listen((v) {
+        if (mounted) setState(() => _isBuffering = v);
+      }),
+    );
+    _subs.add(
+      p.stream.volume.listen((v) {
+        if (mounted) setState(() => _volume = v);
+      }),
+    );
+    _subs.add(
+      p.stream.rate.listen((v) {
+        if (mounted) setState(() => _rate = v);
+      }),
+    );
+    _subs.add(
+      p.stream.completed.listen((v) {
+        if (!mounted || !v) return;
+        setState(() => _isCompleted = true);
+        _startAutoplayCountdown();
+      }),
+    );
   }
 
   @override
@@ -857,8 +1024,8 @@ class _ProfessionalPlayerState extends State<_ProfessionalPlayer> {
     final clamped = target.isNegative
         ? Duration.zero
         : (_duration > Duration.zero && target > _duration
-            ? _duration
-            : target);
+              ? _duration
+              : target);
     widget.player.seek(clamped);
     setState(() => _tapSeekHint = isLeft ? '← -10s' : '+10s →');
     _tapSeekHintTimer?.cancel();
@@ -964,26 +1131,31 @@ class _ProfessionalPlayerState extends State<_ProfessionalPlayer> {
       _activeGesture = dx.abs() > dy.abs()
           ? _GestureMode.seeking
           : (_panStartX < w / 2
-              ? _GestureMode.brightness
-              : _GestureMode.volume);
+                ? _GestureMode.brightness
+                : _GestureMode.volume);
     }
 
     switch (_activeGesture) {
       case _GestureMode.seeking:
-        final delta = (dx / w * _duration.inMilliseconds)
-            .clamp(-120000.0, 120000.0);
-        final target = (_panStartPosition.inMilliseconds + delta)
-            .clamp(0.0, _duration.inMilliseconds.toDouble());
+        final delta = (dx / w * _duration.inMilliseconds).clamp(
+          -120000.0,
+          120000.0,
+        );
+        final target = (_panStartPosition.inMilliseconds + delta).clamp(
+          0.0,
+          _duration.inMilliseconds.toDouble(),
+        );
         setState(() => _gestureSeekPreviewMs = target);
 
       case _GestureMode.volume:
-        final newVol =
-            (_panStartVolume + (-dy / h * 100)).clamp(0.0, 100.0);
+        final newVol = (_panStartVolume + (-dy / h * 100)).clamp(0.0, 100.0);
         widget.player.setVolume(newVol);
 
       case _GestureMode.brightness:
-        final newBrightness =
-            (_panStartBrightness + (dy / h * 0.7)).clamp(0.0, 0.7);
+        final newBrightness = (_panStartBrightness + (dy / h * 0.7)).clamp(
+          0.0,
+          0.7,
+        );
         setState(() => _brightnessOverlay = newBrightness);
 
       case _GestureMode.none:
@@ -993,9 +1165,7 @@ class _ProfessionalPlayerState extends State<_ProfessionalPlayer> {
 
   void _onPanEnd(DragEndDetails d) {
     if (_activeGesture == _GestureMode.seeking) {
-      widget.player.seek(
-        Duration(milliseconds: _gestureSeekPreviewMs.toInt()),
-      );
+      widget.player.seek(Duration(milliseconds: _gestureSeekPreviewMs.toInt()));
     }
     setState(() => _activeGesture = _GestureMode.none);
     _startAutoHide();
@@ -1012,10 +1182,11 @@ class _ProfessionalPlayerState extends State<_ProfessionalPlayer> {
   @override
   Widget build(BuildContext context) {
     final totalMs = math.max(_duration.inMilliseconds.toDouble(), 1.0);
-    final currentMs = (_isDraggingProgress
-            ? (_dragProgressMs ?? _position.inMilliseconds.toDouble())
-            : _position.inMilliseconds.toDouble())
-        .clamp(0.0, totalMs);
+    final currentMs =
+        (_isDraggingProgress
+                ? (_dragProgressMs ?? _position.inMilliseconds.toDouble())
+                : _position.inMilliseconds.toDouble())
+            .clamp(0.0, totalMs);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -1056,8 +1227,9 @@ class _ProfessionalPlayerState extends State<_ProfessionalPlayer> {
                   Positioned.fill(
                     child: IgnorePointer(
                       child: ColoredBox(
-                        color: Colors.black
-                            .withValues(alpha: _brightnessOverlay),
+                        color: Colors.black.withValues(
+                          alpha: _brightnessOverlay,
+                        ),
                       ),
                     ),
                   ),
@@ -1093,8 +1265,8 @@ class _ProfessionalPlayerState extends State<_ProfessionalPlayer> {
                         volume: _volume,
                         brightness: 1.0 - _brightnessOverlay / 0.7,
                         seekMs: _gestureSeekPreviewMs,
-                        seekStartMs:
-                            _panStartPosition.inMilliseconds.toDouble(),
+                        seekStartMs: _panStartPosition.inMilliseconds
+                            .toDouble(),
                         fmt: _fmt,
                       ),
                     ),
@@ -1112,9 +1284,7 @@ class _ProfessionalPlayerState extends State<_ProfessionalPlayer> {
                           top: 0,
                           left: 0,
                           right: 0,
-                          child: _PlayerTopBar(
-                            onClose: widget.onClose,
-                          ),
+                          child: _PlayerTopBar(onClose: widget.onClose),
                         ),
 
                         Positioned.fill(
@@ -1158,14 +1328,14 @@ class _ProfessionalPlayerState extends State<_ProfessionalPlayer> {
                               _showControlsTemporarily();
                             },
                             onSeekBack: () {
-                              final t = _position - const Duration(seconds: 10);
+                              final t = _position - const Duration(seconds: 15);
                               widget.player.seek(
                                 t.isNegative ? Duration.zero : t,
                               );
                               _showControlsTemporarily();
                             },
                             onSeekForward: () {
-                              final t = _position + const Duration(seconds: 10);
+                              final t = _position + const Duration(seconds: 15);
                               widget.player.seek(
                                 _duration > Duration.zero && t > _duration
                                     ? _duration
@@ -1190,8 +1360,8 @@ class _ProfessionalPlayerState extends State<_ProfessionalPlayer> {
                             onDragStart: () {
                               setState(() {
                                 _isDraggingProgress = true;
-                                _dragProgressMs =
-                                    _position.inMilliseconds.toDouble();
+                                _dragProgressMs = _position.inMilliseconds
+                                    .toDouble();
                               });
                               _hideTimer?.cancel();
                             },
@@ -1342,8 +1512,7 @@ class _GestureIndicator extends StatelessWidget {
         final sign = delta >= 0 ? '+' : '';
         return Center(
           child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             decoration: BoxDecoration(
               color: Colors.black.withValues(alpha: 0.72),
               borderRadius: BorderRadius.circular(14),
@@ -1434,9 +1603,7 @@ class _VerticalProgressBadge extends StatelessWidget {
 }
 
 class _PlayerTopBar extends StatelessWidget {
-  const _PlayerTopBar({
-    required this.onClose,
-  });
+  const _PlayerTopBar({required this.onClose});
 
   final VoidCallback onClose;
 
@@ -1488,7 +1655,9 @@ class _CenterPlayBtn extends StatelessWidget {
           shape: BoxShape.circle,
         ),
         child: Image.asset(
-          isPlaying ? AppAssets.videoV2CenterPause : AppAssets.videoV2CenterPlay,
+          isPlaying
+              ? AppAssets.videoV2CenterPause
+              : AppAssets.videoV2CenterPlay,
           width: 28,
           height: 28,
           fit: BoxFit.contain,
@@ -1543,10 +1712,7 @@ class _PlayerBottomBar extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [
-            Colors.transparent,
-            Colors.black.withValues(alpha: 0.88),
-          ],
+          colors: [Colors.transparent, Colors.black.withValues(alpha: 0.88)],
         ),
       ),
       padding: const EdgeInsets.fromLTRB(8, 16, 14, 8),
@@ -1634,14 +1800,13 @@ class _PlayerBottomBar extends StatelessWidget {
               IconButton(
                 onPressed: onSeekBack,
                 icon: Image.asset(
-                  AppAssets.videoV2SeekBack10,
+                  AppAssets.videoV2SeekBack15,
                   width: 16,
                   height: 16,
                   fit: BoxFit.contain,
                 ),
                 padding: EdgeInsets.zero,
-                constraints:
-                    const BoxConstraints(minWidth: 32, minHeight: 32),
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               ),
               GestureDetector(
                 onTap: onTogglePlay,
@@ -1651,7 +1816,7 @@ class _PlayerBottomBar extends StatelessWidget {
                   alignment: Alignment.center,
                   child: Image.asset(
                     isPlaying
-                        ? AppAssets.videoV2CenterPause
+                        ? AppAssets.videoV2SmallPause
                         : AppAssets.videoV2SmallPlay,
                     width: 16,
                     height: 16,
@@ -1662,14 +1827,13 @@ class _PlayerBottomBar extends StatelessWidget {
               IconButton(
                 onPressed: onSeekForward,
                 icon: Image.asset(
-                  AppAssets.videoV2SeekForward10,
+                  AppAssets.videoV2SeekForward15,
                   width: 16,
                   height: 16,
                   fit: BoxFit.contain,
                 ),
                 padding: EdgeInsets.zero,
-                constraints:
-                    const BoxConstraints(minWidth: 32, minHeight: 32),
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               ),
               const SizedBox(width: 6),
               Text(
@@ -1686,8 +1850,7 @@ class _PlayerBottomBar extends StatelessWidget {
                   fit: BoxFit.contain,
                 ),
                 padding: EdgeInsets.zero,
-                constraints:
-                    const BoxConstraints(minWidth: 32, minHeight: 32),
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               ),
               GestureDetector(
                 onTap: onShowSpeedPanel,
@@ -1712,8 +1875,7 @@ class _PlayerBottomBar extends StatelessWidget {
                   fit: BoxFit.contain,
                 ),
                 padding: EdgeInsets.zero,
-                constraints:
-                    const BoxConstraints(minWidth: 32, minHeight: 32),
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               ),
               const SizedBox(width: 6),
             ],
@@ -1804,8 +1966,9 @@ class _SpeedPanel extends StatelessWidget {
                             ? '1.0x  (正常)'
                             : '${rate.toStringAsFixed(2).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '')}x',
                         style: TextStyle(
-                          color:
-                              selected ? const Color(0xFF8741FF) : Colors.white,
+                          color: selected
+                              ? const Color(0xFF8741FF)
+                              : Colors.white,
                           fontSize: 13,
                           fontWeight: selected
                               ? FontWeight.w600
@@ -1863,10 +2026,7 @@ class _CompletedOverlay extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
-            '重播',
-            style: TextStyle(color: Colors.white, fontSize: 13),
-          ),
+          const Text('重播', style: TextStyle(color: Colors.white, fontSize: 13)),
           if (nextVideo != null) ...[
             const SizedBox(height: 24),
             const Divider(color: Colors.white24, indent: 40, endIndent: 40),
@@ -2031,24 +2191,36 @@ class _FullscreenPageState extends State<_FullscreenPage> {
 
   void _subscribe() {
     final p = widget.player;
-    _subs.add(p.stream.position.listen((v) {
-      if (mounted) setState(() => _position = v);
-    }));
-    _subs.add(p.stream.duration.listen((v) {
-      if (mounted) setState(() => _duration = v);
-    }));
-    _subs.add(p.stream.playing.listen((v) {
-      if (mounted) setState(() => _isPlaying = v);
-    }));
-    _subs.add(p.stream.buffering.listen((v) {
-      if (mounted) setState(() => _isBuffering = v);
-    }));
-    _subs.add(p.stream.volume.listen((v) {
-      if (mounted) setState(() => _volume = v);
-    }));
-    _subs.add(p.stream.rate.listen((v) {
-      if (mounted) setState(() => _rate = v);
-    }));
+    _subs.add(
+      p.stream.position.listen((v) {
+        if (mounted) setState(() => _position = v);
+      }),
+    );
+    _subs.add(
+      p.stream.duration.listen((v) {
+        if (mounted) setState(() => _duration = v);
+      }),
+    );
+    _subs.add(
+      p.stream.playing.listen((v) {
+        if (mounted) setState(() => _isPlaying = v);
+      }),
+    );
+    _subs.add(
+      p.stream.buffering.listen((v) {
+        if (mounted) setState(() => _isBuffering = v);
+      }),
+    );
+    _subs.add(
+      p.stream.volume.listen((v) {
+        if (mounted) setState(() => _volume = v);
+      }),
+    );
+    _subs.add(
+      p.stream.rate.listen((v) {
+        if (mounted) setState(() => _rate = v);
+      }),
+    );
   }
 
   void _autoHide() {
@@ -2070,7 +2242,9 @@ class _FullscreenPageState extends State<_FullscreenPage> {
     final target = _position + delta;
     final clamped = target.isNegative
         ? Duration.zero
-        : (_duration > Duration.zero && target > _duration ? _duration : target);
+        : (_duration > Duration.zero && target > _duration
+              ? _duration
+              : target);
     widget.player.seek(clamped);
     setState(() => _tapSeekHint = isLeft ? '← -10s' : '+10s →');
     _tapSeekHintTimer?.cancel();
@@ -2097,13 +2271,20 @@ class _FullscreenPageState extends State<_FullscreenPage> {
       if (dx.abs() < 8 && dy.abs() < 8) return;
       _activeGesture = dx.abs() > dy.abs()
           ? _GestureMode.seeking
-          : (_panStartX < w / 2 ? _GestureMode.brightness : _GestureMode.volume);
+          : (_panStartX < w / 2
+                ? _GestureMode.brightness
+                : _GestureMode.volume);
     }
     switch (_activeGesture) {
       case _GestureMode.seeking:
-        final delta = (dx / w * _duration.inMilliseconds).clamp(-120000.0, 120000.0);
-        final t = (_panStartPosition.inMilliseconds + delta)
-            .clamp(0.0, _duration.inMilliseconds.toDouble());
+        final delta = (dx / w * _duration.inMilliseconds).clamp(
+          -120000.0,
+          120000.0,
+        );
+        final t = (_panStartPosition.inMilliseconds + delta).clamp(
+          0.0,
+          _duration.inMilliseconds.toDouble(),
+        );
         setState(() => _gestureSeekMs = t);
       case _GestureMode.volume:
         final nv = (_panStartVolume + (-dy / h * 100)).clamp(0.0, 100.0);
@@ -2135,10 +2316,11 @@ class _FullscreenPageState extends State<_FullscreenPage> {
   @override
   Widget build(BuildContext context) {
     final totalMs = math.max(_duration.inMilliseconds.toDouble(), 1.0);
-    final currentMs = (_isDragging
-            ? (_dragMs ?? _position.inMilliseconds.toDouble())
-            : _position.inMilliseconds.toDouble())
-        .clamp(0.0, totalMs);
+    final currentMs =
+        (_isDragging
+                ? (_dragMs ?? _position.inMilliseconds.toDouble())
+                : _position.inMilliseconds.toDouble())
+            .clamp(0.0, totalMs);
 
     final mq = MediaQuery.of(context);
     final safeTop = mq.padding.top;
@@ -2185,7 +2367,9 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                   Positioned.fill(
                     child: IgnorePointer(
                       child: ColoredBox(
-                        color: Colors.black.withValues(alpha: _brightnessOverlay),
+                        color: Colors.black.withValues(
+                          alpha: _brightnessOverlay,
+                        ),
                       ),
                     ),
                   ),
@@ -2227,7 +2411,8 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                         volume: _volume,
                         brightness: 1.0 - _brightnessOverlay / 0.7,
                         seekMs: _gestureSeekMs,
-                        seekStartMs: _panStartPosition.inMilliseconds.toDouble(),
+                        seekStartMs: _panStartPosition.inMilliseconds
+                            .toDouble(),
                         fmt: _fmt,
                       ),
                     ),
@@ -2283,11 +2468,14 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                   ),
                                 ),
                                 // 倍速徽章
-                                if (((_rate - 1.0).abs() > 0.01) && !_isLongPressSpeed)
+                                if (((_rate - 1.0).abs() > 0.01) &&
+                                    !_isLongPressSpeed)
                                   Container(
                                     margin: const EdgeInsets.only(right: 8),
                                     padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 3),
+                                      horizontal: 8,
+                                      vertical: 3,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: const Color(0xFF8741FF),
                                       borderRadius: BorderRadius.circular(12),
@@ -2295,9 +2483,10 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                     child: Text(
                                       '${_rate.toStringAsFixed(2).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '')}x',
                                       style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600),
+                                        color: Colors.white,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
                                   ),
                               ],
@@ -2361,17 +2550,21 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                               children: [
                                 Padding(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 16),
+                                    horizontal: 16,
+                                  ),
                                   child: SliderTheme(
                                     data: SliderTheme.of(context).copyWith(
                                       trackHeight: 3,
                                       thumbShape: const RoundSliderThumbShape(
-                                          enabledThumbRadius: 6),
-                                      overlayShape: const RoundSliderOverlayShape(
-                                          overlayRadius: 12),
+                                        enabledThumbRadius: 6,
+                                      ),
+                                      overlayShape:
+                                          const RoundSliderOverlayShape(
+                                            overlayRadius: 12,
+                                          ),
                                       activeTrackColor: const Color(0xFF8741FF),
-                                      inactiveTrackColor:
-                                          Colors.white.withValues(alpha: 0.3),
+                                      inactiveTrackColor: Colors.white
+                                          .withValues(alpha: 0.3),
                                       thumbColor: Colors.white,
                                     ),
                                     child: Slider(
@@ -2399,27 +2592,35 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                   ),
                                 ),
                                 Padding(
-                                  padding:
-                                      const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                                  padding: const EdgeInsets.fromLTRB(
+                                    16,
+                                    0,
+                                    16,
+                                    12,
+                                  ),
                                   child: Row(
                                     children: [
                                       IconButton(
                                         onPressed: () {
-                                          final t = _position -
-                                              const Duration(seconds: 10);
+                                          final t =
+                                              _position -
+                                              const Duration(seconds: 15);
                                           widget.player.seek(
-                                              t.isNegative ? Duration.zero : t);
+                                            t.isNegative ? Duration.zero : t,
+                                          );
                                           _autoHide();
                                         },
                                         icon: Image.asset(
-                                          AppAssets.videoV2SeekBack10,
+                                          AppAssets.videoV2SeekBack15,
                                           width: 16,
                                           height: 16,
                                           fit: BoxFit.contain,
                                         ),
                                         padding: EdgeInsets.zero,
                                         constraints: const BoxConstraints(
-                                            minWidth: 36, minHeight: 36),
+                                          minWidth: 36,
+                                          minHeight: 36,
+                                        ),
                                       ),
                                       GestureDetector(
                                         onTap: () {
@@ -2432,7 +2633,7 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                         },
                                         child: Image.asset(
                                           _isPlaying
-                                              ? AppAssets.videoV2CenterPause
+                                              ? AppAssets.videoV2SmallPause
                                               : AppAssets.videoV2SmallPlay,
                                           width: 16,
                                           height: 16,
@@ -2441,8 +2642,9 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                       ),
                                       IconButton(
                                         onPressed: () {
-                                          final t = _position +
-                                              const Duration(seconds: 10);
+                                          final t =
+                                              _position +
+                                              const Duration(seconds: 15);
                                           widget.player.seek(
                                             _duration > Duration.zero &&
                                                     t > _duration
@@ -2452,27 +2654,30 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                           _autoHide();
                                         },
                                         icon: Image.asset(
-                                          AppAssets.videoV2SeekForward10,
+                                          AppAssets.videoV2SeekForward15,
                                           width: 16,
                                           height: 16,
                                           fit: BoxFit.contain,
                                         ),
                                         padding: EdgeInsets.zero,
                                         constraints: const BoxConstraints(
-                                            minWidth: 36, minHeight: 36),
+                                          minWidth: 36,
+                                          minHeight: 36,
+                                        ),
                                       ),
                                       const SizedBox(width: 4),
                                       Text(
                                         '${_fmt(_position)} / ${_fmt(_duration)}',
                                         style: const TextStyle(
-                                            color: Colors.white, fontSize: 13),
+                                          color: Colors.white,
+                                          fontSize: 13,
+                                        ),
                                       ),
                                       const Spacer(),
                                       // 音量静音
                                       IconButton(
-                                        onPressed: () =>
-                                            widget.player.setVolume(
-                                                _volume > 0 ? 0 : 100),
+                                        onPressed: () => widget.player
+                                            .setVolume(_volume > 0 ? 0 : 100),
                                         icon: Icon(
                                           _volume > 0
                                               ? Icons.volume_up_rounded
@@ -2482,7 +2687,9 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                         ),
                                         padding: EdgeInsets.zero,
                                         constraints: const BoxConstraints(
-                                            minWidth: 36, minHeight: 36),
+                                          minWidth: 36,
+                                          minHeight: 36,
+                                        ),
                                       ),
                                       // 退出全屏
                                       IconButton(
@@ -2497,7 +2704,9 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                         tooltip: '退出全屏',
                                         padding: EdgeInsets.zero,
                                         constraints: const BoxConstraints(
-                                            minWidth: 36, minHeight: 36),
+                                          minWidth: 36,
+                                          minHeight: 36,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -2753,14 +2962,11 @@ class _PlayerPlaceholder extends StatelessWidget {
     return Stack(
       children: [
         Positioned.fill(
-          child: coverUrl.isNotEmpty
-              ? Image.network(
-                  coverUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, _, _) =>
-                      const ColoredBox(color: Colors.black),
-                )
-              : const ColoredBox(color: Colors.black),
+          child: _VideoCachedImage(
+            url: coverUrl,
+            fit: BoxFit.cover,
+            fallback: const ColoredBox(color: Colors.black),
+          ),
         ),
         if (loading)
           const Positioned.fill(
@@ -2797,43 +3003,78 @@ class _DetailActionBar extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: TabBar(
-              controller: tabController,
-              indicatorColor: Colors.transparent,
-              overlayColor: WidgetStateProperty.all(Colors.transparent),
-              splashFactory: NoSplash.splashFactory,
-              labelColor: const Color(0xFF0B081A),
-              unselectedLabelColor: const Color(0xFF6D6B75),
-              labelPadding: const EdgeInsets.only(right: 24),
-              padding: EdgeInsets.zero,
-              isScrollable: true,
-              tabAlignment: TabAlignment.start,
-              labelStyle: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
+            child: AnimatedBuilder(
+              animation: tabController,
+              builder: (context, _) => Row(
+                children: [
+                  _DetailTabButton(
+                    text: '视频详情',
+                    selected: tabController.index == 0,
+                    onTap: () => tabController.index = 0,
+                  ),
+                  const SizedBox(width: 14),
+                  _DetailTabButton(
+                    text: '查看谱例',
+                    selected: tabController.index == 1,
+                    onTap: () => tabController.index = 1,
+                  ),
+                ],
               ),
-              unselectedLabelStyle: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w400,
-              ),
-              indicatorSize: TabBarIndicatorSize.label,
-              dividerColor: Colors.transparent,
-              tabs: const [Tab(text: '视频详情'), Tab(text: '查看谱例')],
             ),
           ),
-          _ActionBtn(
-            icon: AppAssets.videoV2Share,
-            label: '分享',
-            onTap: onShare,
-          ),
+          _ActionBtn(icon: AppAssets.videoV2Share, label: '分享', onTap: onShare),
           const SizedBox(width: 8),
           _ActionBtn(
-            icon: AppAssets.videoV2Star,
-            label: isFavorite ? '已收藏' : '收藏',
+            icon: isFavorite
+                ? AppAssets.videoV2StarFilled
+                : AppAssets.videoV2Star,
+            label: '收藏',
             highlighted: isFavorite,
             onTap: onFavorite,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _DetailTabButton extends StatelessWidget {
+  const _DetailTabButton({
+    required this.text,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String text;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      overlayColor: WidgetStateProperty.all(Colors.transparent),
+      splashFactory: NoSplash.splashFactory,
+      child: SizedBox(
+        width: 76,
+        height: 32,
+        child: Center(
+          child: Transform.scale(
+            scale: selected ? 1.18 : 1.0,
+            alignment: Alignment.center,
+            child: Text(
+              text,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: selected
+                    ? const Color(0xFF0B081A)
+                    : const Color(0xFF6D6B75),
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -2861,18 +3102,20 @@ class _ActionBtn extends StatelessWidget {
         height: 32,
         padding: const EdgeInsets.fromLTRB(12, 4, 13, 4),
         decoration: BoxDecoration(
-          color: const Color(0xFFF3F2F3),
+          color: const Color(0xFFF4F4FF),
           borderRadius: BorderRadius.circular(8),
-          border: highlighted
-              ? Border.all(
-                  color: const Color(0xFF8741FF).withValues(alpha: 0.4),
-                  width: 0.8,
-                )
-              : null,
         ),
         child: Row(
           children: [
-            Image.asset(icon, width: 20, height: 20, fit: BoxFit.contain),
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: highlighted ? 3 : 0),
+              child: Image.asset(
+                icon,
+                width: highlighted ? 14 : 20,
+                height: highlighted ? 14 : 20,
+                fit: BoxFit.contain,
+              ),
+            ),
             const SizedBox(width: 4),
             Text(
               label,
@@ -2891,7 +3134,7 @@ class _ActionBtn extends StatelessWidget {
   }
 }
 
-class _DetailInfoTab extends StatelessWidget {
+class _DetailInfoTab extends StatefulWidget {
   const _DetailInfoTab({
     required this.detail,
     required this.resolveUrl,
@@ -2903,53 +3146,85 @@ class _DetailInfoTab extends StatelessWidget {
   final ValueChanged<VideoListItem> onOpenSeriesVideo;
 
   @override
+  State<_DetailInfoTab> createState() => _DetailInfoTabState();
+}
+
+class _DetailInfoTabState extends State<_DetailInfoTab> {
+  bool _expanded = true;
+
+  @override
   Widget build(BuildContext context) {
+    final detail = widget.detail;
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(
-                  detail.name,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w400,
-                    color: Color(0xFF0B081A),
+          // 标题 + 收起/展开 切换
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    detail.name,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
+                      color: Color(0xFF0B081A),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              const Icon(
-                Icons.expand_less_rounded,
-                size: 24,
-                color: Color(0xFF333333),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            detail.description.isEmpty ? '暂无简介' : detail.description,
-            style: const TextStyle(
-              fontSize: 13,
-              height: 2.0,
-              color: Color(0xFF6D6B75),
+                const SizedBox(width: 8),
+                Transform.rotate(
+                  angle: _expanded ? 0 : math.pi,
+                  child: Image.asset(
+                    AppAssets.videoV2Collapse,
+                    width: 24,
+                    height: 24,
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 4),
-          Align(
-            alignment: Alignment.centerRight,
-            child: Text(
-              '视频来源用户上传，如有侵权，请立即联系删除。',
-              style: const TextStyle(
-                fontSize: 10,
-                height: 2.0,
-                color: Color(0xFFB6B5BB),
-              ),
-            ),
+          // 仅展开态展示：简介 / 版权说明；相关视频始终保留。
+          AnimatedSize(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topLeft,
+            child: _expanded
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 8),
+                      Text(
+                        detail.description.isEmpty
+                            ? '暂无简介'
+                            : detail.description,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          height: 2.0,
+                          color: Color(0xFF6D6B75),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      const Align(
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          '视频来源用户上传，如有侵权，请立即联系删除。',
+                          style: TextStyle(
+                            fontSize: 10,
+                            height: 2.0,
+                            color: Color(0xFFB6B5BB),
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : const SizedBox.shrink(),
           ),
           if (detail.seriesVideoList.isNotEmpty) ...[
             const SizedBox(height: 20),
@@ -2962,13 +3237,15 @@ class _DetailInfoTab extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            ...detail.seriesVideoList.take(6).map(
+            ...detail.seriesVideoList
+                .take(6)
+                .map(
                   (item) => Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: _SeriesCard(
                       item: item,
-                      resolveUrl: resolveUrl,
-                      onTap: () => onOpenSeriesVideo(item),
+                      resolveUrl: widget.resolveUrl,
+                      onTap: () => widget.onOpenSeriesVideo(item),
                     ),
                   ),
                 ),
@@ -3015,18 +3292,15 @@ class _ScoreTab extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
             ),
             padding: const EdgeInsets.all(8),
-            child: Image.network(
-              resolveUrl(url),
+            child: _VideoCachedImage(
+              url: resolveUrl(url),
               fit: BoxFit.contain,
-              errorBuilder: (_, _, _) => const SizedBox(
+              fallback: const SizedBox(
                 height: 120,
                 child: Center(
                   child: Text(
                     '图片加载失败',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFFB6B5BB),
-                    ),
+                    style: TextStyle(fontSize: 12, color: Color(0xFFB6B5BB)),
                   ),
                 ),
               ),
@@ -3070,10 +3344,10 @@ class _SeriesCard extends StatelessWidget {
                   SizedBox(
                     width: 148,
                     height: 80,
-                    child: Image.network(
-                      resolveUrl(item.coverImg),
+                    child: _VideoCachedImage(
+                      url: resolveUrl(item.coverImg),
                       fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => const ColoredBox(
+                      fallback: const ColoredBox(
                         color: Color(0xFFEDEDF2),
                         child: Center(
                           child: Icon(
@@ -3140,25 +3414,41 @@ class _SeriesCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
+            // 紫色渐变播放按钮：270° linear-gradient(#B68EFF → #8640FF)
             Container(
               height: 40,
               padding: const EdgeInsets.symmetric(horizontal: 24),
               decoration: BoxDecoration(
-                color: const Color(0xFF856FE2),
+                gradient: const LinearGradient(
+                  begin: Alignment.centerRight,
+                  end: Alignment.centerLeft,
+                  colors: [Color(0xFFB68EFF), Color(0xFF8640FF)],
+                ),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Row(
+              child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Image.asset(
-                    AppAssets.videoV2SeriesPlay,
+                  SizedBox(
                     width: 16,
                     height: 16,
-                    fit: BoxFit.contain,
+                    child: Center(
+                      child: Icon(
+                        Icons.play_arrow_rounded,
+                        size: 16,
+                        color: Colors.white,
+                      ),
+                    ),
                   ),
-                  const Text(
+                  SizedBox(width: 2),
+                  Text(
                     '播放',
-                    style: TextStyle(color: Colors.white, fontSize: 12, height: 1),
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      height: 1,
+                      fontWeight: FontWeight.w400,
+                    ),
                   ),
                 ],
               ),
@@ -3218,11 +3508,8 @@ class _VideoCategoryHeader extends StatelessWidget {
                       menu.name,
                       style: TextStyle(
                         fontSize: ui(15),
-                        color: active
-                            ? Colors.white
-                            : const Color(0xFF6D6B75),
-                        fontWeight:
-                            active ? FontWeight.w600 : FontWeight.w500,
+                        color: active ? Colors.white : const Color(0xFF6D6B75),
+                        fontWeight: active ? FontWeight.w600 : FontWeight.w500,
                       ),
                     ),
                   ),
@@ -3304,19 +3591,16 @@ class _BannerAndLatestSection extends StatelessWidget {
                             controller: pageController,
                             itemCount: banners.length,
                             onPageChanged: onBannerChanged,
-                            itemBuilder: (context, index) => Image.network(
-                              resolveUrl(banners[index].imageUrl),
+                            itemBuilder: (context, index) => _VideoCachedImage(
+                              url: resolveUrl(banners[index].imageUrl),
                               fit: BoxFit.cover,
-                              errorBuilder: (_, _, _) => Image.asset(
+                              fallback: Image.asset(
                                 AppAssets.videoBanner,
                                 fit: BoxFit.cover,
                               ),
                             ),
                           )
-                        : Image.asset(
-                            AppAssets.videoBanner,
-                            fit: BoxFit.cover,
-                          ),
+                        : Image.asset(AppAssets.videoBanner, fit: BoxFit.cover),
                   ),
                   Positioned(
                     left: 0,
@@ -3436,10 +3720,10 @@ class _LatestVideoListCard extends StatelessWidget {
                               child: SizedBox(
                                 width: ui(56),
                                 height: ui(44),
-                                child: Image.network(
-                                  resolveUrl(item.coverImg),
+                                child: _VideoCachedImage(
+                                  url: resolveUrl(item.coverImg),
                                   fit: BoxFit.cover,
-                                  errorBuilder: (_, _, _) => Container(
+                                  fallback: Container(
                                     color: const Color(0xFFEDEDF2),
                                     child: Icon(
                                       Icons.play_circle_fill_rounded,
@@ -3548,6 +3832,7 @@ class _SubCategoryBar extends StatelessWidget {
 // 封面: 220:124 比例；缩略图 52×70 叠放在封面左下角延伸至信息区
 class _VideoGridCard extends StatelessWidget {
   const _VideoGridCard({
+    super.key,
     required this.scale,
     required this.item,
     required this.resolveUrl,
@@ -3597,10 +3882,10 @@ class _VideoGridCard extends StatelessWidget {
                         child: Stack(
                           children: [
                             Positioned.fill(
-                              child: Image.network(
-                                resolveUrl(item.coverImg),
+                              child: _VideoCachedImage(
+                                url: resolveUrl(item.coverImg),
                                 fit: BoxFit.cover,
-                                errorBuilder: (_, _, _) => Container(
+                                fallback: Container(
                                   color: const Color(0xFFEDEDF2),
                                   child: Icon(
                                     Icons.ondemand_video_rounded,
@@ -3647,7 +3932,7 @@ class _VideoGridCard extends StatelessWidget {
                             infoLeft, // 左边为缩略图预留空间
                             4.0 * s,
                             10.0 * s,
-                            6.0 * s,
+                            15.0 * s,
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -3742,12 +4027,10 @@ class _VideoGridCard extends StatelessWidget {
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(4.0 * s),
-                      child: Image.network(
-                        resolveUrl(item.coverImg),
+                      child: _VideoCachedImage(
+                        url: resolveUrl(item.coverImg),
                         fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => Container(
-                          color: const Color(0xFFEDEDF2),
-                        ),
+                        fallback: Container(color: const Color(0xFFEDEDF2)),
                       ),
                     ),
                   ),
@@ -3757,129 +4040,6 @@ class _VideoGridCard extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// J. 分享弹窗
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _ShareSheet extends StatefulWidget {
-  const _ShareSheet({
-    required this.classes,
-    required this.selected,
-    required this.onSubmit,
-  });
-
-  final List<VideoShareClassItem> classes;
-  final Set<int> selected;
-  final Future<void> Function() onSubmit;
-
-  @override
-  State<_ShareSheet> createState() => _ShareSheetState();
-}
-
-class _ShareSheetState extends State<_ShareSheet> {
-  bool _submitting = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-      constraints: const BoxConstraints(maxWidth: 600, maxHeight: 480),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              '分享视频',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF0B081A),
-              ),
-            ),
-            const SizedBox(height: 14),
-            Expanded(
-              child: ListView.separated(
-                itemCount: widget.classes.length,
-                separatorBuilder: (_, _) =>
-                    const Divider(height: 1, color: Color(0xFFF3F2F3)),
-                itemBuilder: (context, index) {
-                  final item = widget.classes[index];
-                  final checked = widget.selected.contains(item.id);
-                  return InkWell(
-                    onTap: () => setState(() {
-                      if (checked) {
-                        widget.selected.remove(item.id);
-                      } else {
-                        widget.selected.add(item.id);
-                      }
-                    }),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              item.name,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                color: Color(0xFF0B081A),
-                              ),
-                            ),
-                          ),
-                          Checkbox(
-                            value: checked,
-                            activeColor: const Color(0xFF8741FF),
-                            onChanged: (_) => setState(() {
-                              if (checked) {
-                                widget.selected.remove(item.id);
-                              } else {
-                                widget.selected.add(item.id);
-                              }
-                            }),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size.fromHeight(44),
-                  backgroundColor: const Color(0xFF8741FF),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                onPressed: _submitting
-                    ? null
-                    : () async {
-                        setState(() => _submitting = true);
-                        await widget.onSubmit();
-                        if (mounted) setState(() => _submitting = false);
-                      },
-                child: Text(
-                  _submitting ? '发送中...' : '发送',
-                  style: const TextStyle(fontSize: 14, color: Colors.white),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

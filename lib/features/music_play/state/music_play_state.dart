@@ -84,6 +84,30 @@ class MusicPlayDetail {
 }
 
 @immutable
+class MusicPlayShareClass {
+  const MusicPlayShareClass({
+    required this.id,
+    required this.name,
+    required this.checked,
+  });
+
+  final String id;
+  final String name;
+  final bool checked;
+
+  MusicPlayShareClass copyWith({bool? checked}) =>
+      MusicPlayShareClass(id: id, name: name, checked: checked ?? this.checked);
+
+  factory MusicPlayShareClass.fromJson(Map raw) {
+    return MusicPlayShareClass(
+      id: raw['id']?.toString() ?? '',
+      name: raw['name']?.toString() ?? '',
+      checked: false,
+    );
+  }
+}
+
+@immutable
 class MusicPlayState {
   const MusicPlayState({
     required this.args,
@@ -99,6 +123,11 @@ class MusicPlayState {
     required this.duration,
     required this.speed,
     required this.activePianoNotes,
+    required this.frequencyBands,
+    required this.shareDialogVisible,
+    required this.classLoading,
+    required this.sending,
+    required this.classList,
   });
 
   final MusicPlayPageArgs args;
@@ -114,6 +143,11 @@ class MusicPlayState {
   final Duration duration;
   final double speed;
   final Set<String> activePianoNotes;
+  final List<double> frequencyBands;
+  final bool shareDialogVisible;
+  final bool classLoading;
+  final bool sending;
+  final List<MusicPlayShareClass> classList;
 
   bool get hasDetail => detail != null;
 
@@ -167,6 +201,11 @@ class MusicPlayState {
     Duration? duration,
     double? speed,
     Set<String>? activePianoNotes,
+    List<double>? frequencyBands,
+    bool? shareDialogVisible,
+    bool? classLoading,
+    bool? sending,
+    List<MusicPlayShareClass>? classList,
   }) {
     return MusicPlayState(
       args: args ?? this.args,
@@ -184,6 +223,11 @@ class MusicPlayState {
       duration: duration ?? this.duration,
       speed: speed ?? this.speed,
       activePianoNotes: activePianoNotes ?? this.activePianoNotes,
+      frequencyBands: frequencyBands ?? this.frequencyBands,
+      shareDialogVisible: shareDialogVisible ?? this.shareDialogVisible,
+      classLoading: classLoading ?? this.classLoading,
+      sending: sending ?? this.sending,
+      classList: classList ?? this.classList,
     );
   }
 
@@ -201,5 +245,10 @@ class MusicPlayState {
     duration: Duration.zero,
     speed: 1,
     activePianoNotes: const <String>{},
+    frequencyBands: const <double>[],
+    shareDialogVisible: false,
+    classLoading: false,
+    sending: false,
+    classList: const <MusicPlayShareClass>[],
   );
 }

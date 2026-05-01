@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/route_paths.dart';
+import '../../../core/widgets/app_toast.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../state/consultation_controller.dart';
 import '../state/consultation_detail_state.dart';
@@ -21,9 +22,7 @@ class ConsultationPage extends ConsumerWidget {
     ) {
       final msg = next.errorMessage;
       if (msg.isEmpty || msg == previous?.errorMessage) return;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(msg)));
+      AppToast.show(context, msg);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (controller.mounted) controller.clearError();
       });
@@ -38,9 +37,7 @@ class ConsultationPage extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _ConsultationHeader(
-              onBack: () => Navigator.of(context).maybePop(),
-            ),
+            _ConsultationHeader(onBack: () => Navigator.of(context).maybePop()),
             Expanded(
               child: state.loading && state.items.isEmpty
                   ? const Center(
@@ -74,9 +71,7 @@ class _ConsultationHeader extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: ui(20)),
       decoration: const BoxDecoration(
         color: Colors.white,
-        border: Border(
-          bottom: BorderSide(color: Color(0xFFF3F2F3), width: 1),
-        ),
+        border: Border(bottom: BorderSide(color: Color(0xFFF3F2F3), width: 1)),
       ),
       child: Row(
         children: [
@@ -265,10 +260,7 @@ class _ConsultationGrid extends StatelessWidget {
 }
 
 class _ConsultationCard extends StatelessWidget {
-  const _ConsultationCard({
-    required this.item,
-    required this.showLatestBadge,
-  });
+  const _ConsultationCard({required this.item, required this.showLatestBadge});
 
   final ConsultationItem item;
   final bool showLatestBadge;

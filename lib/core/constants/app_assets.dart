@@ -186,6 +186,9 @@ abstract final class AppAssets {
   static const homeDictationNavIcon = 'assets/images/home/dictation/1.png';
   static const homeDictationBookCover = 'assets/images/home/dictation/2.png';
   static const homeV2VoiceCardBg = 'assets/images/home/v2/voice_card_bg.png';
+  static const homeFmCover = 'assets/images/home/fm.png';
+  static const homeSearchIcon = 'assets/images/home/search.png';
+  static const emptyCoursePlaceholder = 'assets/images/404/kc.png';
   static const homeV2InstrumentCardBg =
       'assets/images/home/v2/instrument_card_bg.png';
   static const schoolV2QuickVideo = 'assets/images/home/schoolVideo.png';
@@ -193,6 +196,8 @@ abstract final class AppAssets {
   static const homeViews = 'assets/images/home/views.png';
   static const homeComingSoon = 'assets/images/home/sx.jpg';
   static const homeDialogClose = 'assets/images/home/bg_close.jpg';
+  static const homeSendButtonDisabled = 'assets/images/home/Button1.png';
+  static const homeSendButtonEnabled = 'assets/images/home/Button2.png';
 
   static const aiChatThink = 'assets/images/aichat/v2/ai_chip_think_idle.svg';
   static const aiChatThinkActive =
@@ -230,22 +235,22 @@ abstract final class AppAssets {
   static const videoViews = 'assets/images/video/play_num.jpg';
   static const videoLogo = 'assets/images/video/logo_radio.jpg';
   static const videoTopArrow = 'assets/images/video/right.png';
-  static const videoV2CardViews =
-      'assets/images/video/v2/video_v2_card_views.svg';
-  static const videoV2Back = 'assets/images/video/v2/video1.png';
-  static const videoV2CenterPlay = 'assets/images/video/v2/video2.png';
-  static const videoV2CenterPause = 'assets/images/video/v2/video2A.png';
-  static const videoV2SeekBack10 = 'assets/images/video/v2/video3.png';
-  static const videoV2SmallPlay = 'assets/images/video/v2/video4.png';
-  static const videoV2SeekForward10 = 'assets/images/video/v2/video5.png';
-  static const videoV2Pip = 'assets/images/video/v2/video6.png';
-  static const videoV2Lock = 'assets/images/video/v2/video7.png';
-  static const videoV2Setting = 'assets/images/video/v2/video8.png';
-  static const videoV2Fullscreen = 'assets/images/video/v2/video10.png';
-  static const videoV2FullscreenExit = 'assets/images/video/v2/video9.png';
-  static const videoV2Share = 'assets/images/video/v2/video11.png';
-  static const videoV2Star = 'assets/images/video/v2/video12.png';
-  static const videoV2SeriesPlay = 'assets/images/video/v2/video13.png';
+  static const videoV2CardViews = 'assets/images/video/1.png';
+  static const videoV2Back = 'assets/images/video/2.png';
+  static const videoV2CenterPlay = 'assets/images/video/3.png';
+  static const videoV2CenterPause = 'assets/images/video/4.png';
+  static const videoV2SeekBack15 = 'assets/images/video/5.png';
+  static const videoV2SmallPlay = 'assets/images/video/6.png';
+  static const videoV2SmallPause = 'assets/images/video/7.png';
+  static const videoV2Pip = 'assets/images/video/8.png';
+  static const videoV2Setting = 'assets/images/video/10.png';
+  static const videoV2FullscreenExit = 'assets/images/video/11.png';
+  static const videoV2Fullscreen = 'assets/images/video/12.png';
+  static const videoV2Share = 'assets/images/video/13.png';
+  static const videoV2Star = 'assets/images/video/14.png';
+  static const videoV2StarFilled = 'assets/images/video/15.png';
+  static const videoV2SeekForward15 = 'assets/images/video/16.png';
+  static const videoV2Collapse = 'assets/images/video/17.png';
 
   static const cloudFolderIcon = 'assets/images/yunpan/yp1.png';
   static const cloudActionMore = 'assets/images/yunpan/yp2.png';
@@ -294,6 +299,8 @@ abstract final class AppAssets {
       'assets/images/smart_dictation/figma/img1.png';
   static const smartDictationFigmaArrowLeft =
       'assets/images/smart_dictation/figma/arrow-left.png';
+  static const smartDictationBack = 'assets/images/smart_dictation/left.png';
+  static const smartDictationStart = 'assets/images/smart_dictation/1.png';
   static const smartDictationFigmaSingleUnlocked =
       'assets/images/smart_dictation/figma/img2.png';
   static const smartDictationFigmaSingleLocked =

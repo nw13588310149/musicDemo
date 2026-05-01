@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/app_toast.dart';
 import '../../piano/ui/piano_keyboard.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../state/music_companion_controller.dart';
@@ -28,9 +29,7 @@ class _MusicCompanionV2PageState extends ConsumerState<MusicCompanionV2Page> {
       if (message == null || message == previous?.errorMessage || !mounted) {
         return;
       }
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(message)));
+      AppToast.show(context, message);
       ref.read(musicCompanionControllerProvider.notifier).clearError();
     });
 
@@ -39,52 +38,72 @@ class _MusicCompanionV2PageState extends ConsumerState<MusicCompanionV2Page> {
     final scale = DashboardScaleScope.of(context);
     final ui = scale.ui;
 
+    // Outer padding is moved INSIDE each tab pane so the piano keyboard can
+    // sit flush with the surface edges (full-bleed) for a more immersive
+    // look. ClipRRect respects the panel's rounded corners so the piano's
+    // drop shadow never leaks past them. Metronome / Tuner panes get a
+    // wrapper Padding that reproduces the previous outer page padding.
     return ShellPageSurface(
-      padding: EdgeInsets.fromLTRB(ui(18), ui(18), ui(18), ui(16)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _CompanionTabBar(
-            activeTab: state.activeTab,
-            onTabSelected: controller.setTab,
-          ),
-          SizedBox(height: ui(18)),
-          Expanded(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 220),
-              switchInCurve: Curves.easeOutCubic,
-              switchOutCurve: Curves.easeInCubic,
-              child: switch (state.activeTab) {
-                MusicCompanionTab.piano => _VirtualPianoPane(
-                  key: const ValueKey<String>('music_piano'),
-                  activeNotes: state.activePianoNotes,
-                  onPressKey: controller.pressPianoKey,
-                  onReleaseKey: controller.releasePianoKey,
-                ),
-                MusicCompanionTab.metronome => _MetronomePane(
-                  key: const ValueKey<String>('music_metronome'),
-                  state: state,
-                  onToneSelected: controller.setMetronomeTone,
-                  onSignatureSelected: controller.setMetronomeSignature,
-                  onToggle: controller.toggleMetronome,
-                  onBpmChanged: controller.setMetronomeBpm,
-                  onDecreaseBpm: () => controller.nudgeMetronomeBpm(-1),
-                  onIncreaseBpm: () => controller.nudgeMetronomeBpm(1),
-                ),
-                MusicCompanionTab.tuner => _TunerPane(
-                  key: const ValueKey<String>('music_tuner'),
-                  state: state,
-                  onDecreaseFrequency: () =>
-                      controller.nudgeTunerReferenceFrequency(-1),
-                  onIncreaseFrequency: () =>
-                      controller.nudgeTunerReferenceFrequency(1),
-                  onUse442Hz: () => controller.setTunerReferenceFrequency(442),
-                  onRetryPermission: controller.retryTunerPermission,
-                ),
-              },
+      padding: EdgeInsets.zero,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(
+          ui(ShellLayoutSpec.panelRadius),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: EdgeInsets.fromLTRB(ui(18), ui(18), ui(18), 0),
+              child: _CompanionTabBar(
+                activeTab: state.activeTab,
+                onTabSelected: controller.setTab,
+              ),
             ),
-          ),
-        ],
+            SizedBox(height: ui(18)),
+            Expanded(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                child: switch (state.activeTab) {
+                  MusicCompanionTab.piano => _VirtualPianoPane(
+                    key: const ValueKey<String>('music_piano'),
+                    activeNotes: state.activePianoNotes,
+                    onPressKey: controller.pressPianoKey,
+                    onReleaseKey: controller.releasePianoKey,
+                  ),
+                  MusicCompanionTab.metronome => Padding(
+                    key: const ValueKey<String>('music_metronome'),
+                    padding: EdgeInsets.fromLTRB(ui(18), 0, ui(18), ui(16)),
+                    child: _MetronomePane(
+                      state: state,
+                      onToneSelected: controller.setMetronomeTone,
+                      onSignatureSelected: controller.setMetronomeSignature,
+                      onToggle: controller.toggleMetronome,
+                      onBpmChanged: controller.setMetronomeBpm,
+                      onDecreaseBpm: () => controller.nudgeMetronomeBpm(-1),
+                      onIncreaseBpm: () => controller.nudgeMetronomeBpm(1),
+                    ),
+                  ),
+                  MusicCompanionTab.tuner => Padding(
+                    key: const ValueKey<String>('music_tuner'),
+                    padding: EdgeInsets.fromLTRB(ui(18), 0, ui(18), ui(16)),
+                    child: _TunerPane(
+                      state: state,
+                      onDecreaseFrequency: () =>
+                          controller.nudgeTunerReferenceFrequency(-1),
+                      onIncreaseFrequency: () =>
+                          controller.nudgeTunerReferenceFrequency(1),
+                      onUse442Hz: () =>
+                          controller.setTunerReferenceFrequency(442),
+                      onRetryPermission: controller.retryTunerPermission,
+                    ),
+                  ),
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -179,9 +198,7 @@ class _CompanionTabItem extends StatelessWidget {
             height: 1,
             fontFamily: 'PingFang SC',
             fontWeight: FontWeight.w500,
-            color: active
-                ? const Color(0xFF0B081A)
-                : const Color(0xFF6D6B75),
+            color: active ? const Color(0xFF0B081A) : const Color(0xFF6D6B75),
           ),
         ),
       ),
@@ -204,11 +221,15 @@ class _VirtualPianoPane extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    // Visualizer keeps the original horizontal inset (page 18 + internal 24
+    // = 42) so its on-screen position is unchanged. The keyboard, in
+    // contrast, fills the full pane width and butts up against the panel
+    // bottom for the immersive look.
     return Column(
       children: <Widget>[
         Expanded(
           child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: ui(24)),
+            padding: EdgeInsets.symmetric(horizontal: ui(42)),
             child: RepaintBoundary(
               child: PianoVisualizer(activeNotes: activeNotes),
             ),
@@ -237,7 +258,6 @@ class _MetronomePane extends StatelessWidget {
     required this.onBpmChanged,
     required this.onDecreaseBpm,
     required this.onIncreaseBpm,
-    super.key,
   });
 
   final MusicCompanionState state;
@@ -252,20 +272,27 @@ class _MetronomePane extends StatelessWidget {
   Widget build(BuildContext context) {
     final scale = DashboardScaleScope.of(context);
     final ui = scale.ui;
+    // First row: 12 signatures laid out 6 per row by splitting in two halves.
+    final signatures = kMusicCompanionSignatures;
+    final half = (signatures.length / 2).ceil();
+    final firstRow = signatures.sublist(0, half);
+    final secondRow = signatures.sublist(half);
+
     return Padding(
-      padding: EdgeInsets.fromLTRB(ui(18), ui(18), ui(18), ui(12)),
+      padding: EdgeInsets.fromLTRB(ui(18), ui(18), ui(18), ui(16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _MetronomeHeaderCard(state: state, onToggle: onToggle),
-          SizedBox(height: ui(18)),
+          SizedBox(height: ui(20)),
           Text(
             '音色选择',
             style: TextStyle(
               fontSize: ui(16),
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w600,
-              color: const Color(0xFF1A1A1A),
+              fontWeight: FontWeight.w500,
+              height: 28 / 16,
+              color: Colors.black,
             ),
           ),
           SizedBox(height: ui(12)),
@@ -275,7 +302,6 @@ class _MetronomePane extends StatelessWidget {
                 _ChoiceChipButton(
                   label: kMusicCompanionToneOptions[i].label,
                   selected: i == state.metronomeToneIndex,
-                  width: ui(92),
                   onTap: () => onToneSelected(i),
                 ),
                 if (i != kMusicCompanionToneOptions.length - 1)
@@ -283,41 +309,74 @@ class _MetronomePane extends StatelessWidget {
               ],
             ],
           ),
-          SizedBox(height: ui(18)),
+          SizedBox(height: ui(20)),
           Text(
             '节拍选择',
             style: TextStyle(
               fontSize: ui(16),
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w600,
-              color: const Color(0xFF1A1A1A),
+              fontWeight: FontWeight.w500,
+              height: 28 / 16,
+              color: Colors.black,
             ),
           ),
           SizedBox(height: ui(12)),
-          Wrap(
-            spacing: ui(18),
-            runSpacing: ui(14),
-            children: [
-              for (var i = 0; i < kMusicCompanionSignatures.length; i++)
-                _ChoiceChipButton(
-                  label: kMusicCompanionSignatures[i].label,
-                  selected: i == state.metronomeSignatureIndex,
-                  width: ui(90),
-                  onTap: () => onSignatureSelected(i),
-                ),
-            ],
+          _SignatureRow(
+            signatures: firstRow,
+            offset: 0,
+            activeIndex: state.metronomeSignatureIndex,
+            onSelect: onSignatureSelected,
+          ),
+          SizedBox(height: ui(24)),
+          _SignatureRow(
+            signatures: secondRow,
+            offset: half,
+            activeIndex: state.metronomeSignatureIndex,
+            onSelect: onSignatureSelected,
           ),
           const Spacer(),
           _MetronomeTempoSlider(
             bpm: state.metronomeBpm,
-            playing: state.metronomePlaying,
             onChanged: onBpmChanged,
             onDecrease: onDecreaseBpm,
             onIncrease: onIncreaseBpm,
-            onToggle: onToggle,
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Horizontal row of signature chips with a fixed leading [offset] used to
+/// translate the chip's local index into the global signature index.
+class _SignatureRow extends StatelessWidget {
+  const _SignatureRow({
+    required this.signatures,
+    required this.offset,
+    required this.activeIndex,
+    required this.onSelect,
+  });
+
+  final List<MusicCompanionSignature> signatures;
+  final int offset;
+  final int activeIndex;
+  final ValueChanged<int> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Row(
+      children: [
+        for (var i = 0; i < signatures.length; i++) ...[
+          _ChoiceChipButton(
+            label: signatures[i].label,
+            selected: (offset + i) == activeIndex,
+            labelWidth: ui(32),
+            onTap: () => onSelect(offset + i),
+          ),
+          if (i != signatures.length - 1) SizedBox(width: ui(24)),
+        ],
+      ],
     );
   }
 }
@@ -337,27 +396,64 @@ class _MetronomeHeaderCard extends StatelessWidget {
         ? state.metronomeActiveBeat % beatCount
         : -1;
 
+    // BPM 15..300 → pointer angle -75°..+75° (pivot at the gauge bottom).
+    final fraction = ((state.metronomeBpm - 15) / 285).clamp(0.0, 1.0);
+    final pointerAngle =
+        (fraction * 2 - 1) * (75 * math.pi / 180);
+
     return Container(
       width: double.infinity,
-      height: ui(124),
-      padding: EdgeInsets.symmetric(horizontal: ui(32)),
+      height: ui(140),
+      // Right padding is bumped to 40 so the 72×72 play/pause button sits
+      // 40px in from the card's right border (per spec).
+      padding: EdgeInsets.fromLTRB(ui(16), ui(16), ui(40), ui(16)),
       decoration: BoxDecoration(
-        color: const Color(0xFFF4F5FD),
-        borderRadius: BorderRadius.circular(ui(16)),
+        color: const Color(0xFFF5F6FA),
+        borderRadius: BorderRadius.circular(ui(12)),
       ),
       child: Row(
         children: [
+          // ── gauge: 1.png background + 2.png rotating pointer ──
           SizedBox(
-            width: ui(186),
-            height: ui(88),
-            child: CustomPaint(
-              painter: _MetronomeGaugePainter(
-                progress: (state.metronomeBpm - 15) / 285,
-              ),
+            width: ui(198),
+            height: ui(108),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  child: Image.asset(
+                    'assets/images/music/1.png',
+                    width: ui(198),
+                    height: ui(99),
+                    fit: BoxFit.contain,
+                  ),
+                ),
+                // Pointer pivot is at the bottom-center of the 36x76 image,
+                // which sits horizontally centered inside the 198-wide gauge
+                // and bottom-aligns to the gauge's vertical center axis.
+                Positioned(
+                  left: ui(99) - ui(18),
+                  top: ui(99) - ui(76),
+                  width: ui(36),
+                  height: ui(76),
+                  child: Transform.rotate(
+                    angle: pointerAngle,
+                    alignment: Alignment.bottomCenter,
+                    child: Image.asset(
+                      'assets/images/music/2.png',
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           const Spacer(),
+          // ── beat dots ──
           Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               for (var i = 0; i < beatCount; i++) ...[
                 AnimatedContainer(
@@ -367,8 +463,8 @@ class _MetronomeHeaderCard extends StatelessWidget {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: i == activeDot
-                        ? const Color(0xFF7F46FF)
-                        : const Color(0xFFE2E6F2),
+                        ? const Color(0xFF8741FF)
+                        : const Color(0xFFE6E9F1),
                   ),
                 ),
                 if (i != beatCount - 1) SizedBox(width: ui(16)),
@@ -376,24 +472,30 @@ class _MetronomeHeaderCard extends StatelessWidget {
             ],
           ),
           const Spacer(),
+          // ── play / pause button ──
           GestureDetector(
             onTap: onToggle,
             child: Container(
-              width: ui(62),
-              height: ui(62),
-              decoration: const BoxDecoration(
+              width: ui(72),
+              height: ui(72),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: const Color(0xFF8741FF),
                 shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: <Color>[Color(0xFF9656FF), Color(0xFF7B3FFF)],
-                ),
+                border: Border.all(color: Colors.white, width: ui(1)),
+                boxShadow: <BoxShadow>[
+                  BoxShadow(
+                    color: const Color(0x33874BFF),
+                    blurRadius: ui(16),
+                    offset: Offset(0, ui(8)),
+                  ),
+                ],
               ),
               child: Icon(
                 state.metronomePlaying
                     ? Icons.pause_rounded
                     : Icons.play_arrow_rounded,
-                size: ui(34),
+                size: ui(32),
                 color: Colors.white,
               ),
             ),
@@ -408,48 +510,62 @@ class _ChoiceChipButton extends StatelessWidget {
   const _ChoiceChipButton({
     required this.label,
     required this.selected,
-    required this.width,
     required this.onTap,
+    this.labelWidth,
   });
 
   final String label;
   final bool selected;
-  final double width;
   final VoidCallback onTap;
+
+  /// When provided, the inner text is wrapped in a fixed-width box so signature
+  /// labels (`1/4` vs `12/8`) align in a predictable grid.
+  final double? labelWidth;
 
   @override
   Widget build(BuildContext context) {
     final scale = DashboardScaleScope.of(context);
     final ui = scale.ui;
+    final textStyle = TextStyle(
+      fontSize: ui(14),
+      fontFamily: 'PingFang SC',
+      fontWeight: FontWeight.w400,
+      color: selected ? Colors.white : const Color(0xFF0B081A),
+    );
+    // `softWrap: false` + `overflow: visible` keeps wider labels (`12/8`)
+    // on a single line even when the fixed `labelWidth` is too narrow for
+    // them; without it Flutter breaks the slash onto a second line.
+    final Widget labelWidget = labelWidth != null
+        ? SizedBox(
+            width: labelWidth,
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.visible,
+              style: textStyle,
+            ),
+          )
+        : Text(
+            label,
+            maxLines: 1,
+            softWrap: false,
+            style: textStyle,
+          );
+
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        width: width,
         height: ui(40),
+        padding: EdgeInsets.symmetric(horizontal: ui(36), vertical: ui(10)),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: selected ? const Color(0xFF141228) : const Color(0xFFF4F5FA),
+          color: selected ? const Color(0xFF0B081A) : const Color(0xFFF5F6FA),
           borderRadius: BorderRadius.circular(ui(8)),
-          boxShadow: selected
-              ? <BoxShadow>[
-                  BoxShadow(
-                    color: const Color(0x19141228),
-                    blurRadius: ui(8),
-                    offset: Offset(0, ui(3)),
-                  ),
-                ]
-              : null,
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: ui(14),
-            fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w400,
-            color: selected ? Colors.white : const Color(0xFF434A59),
-          ),
-        ),
+        child: labelWidget,
       ),
     );
   }
@@ -458,152 +574,199 @@ class _ChoiceChipButton extends StatelessWidget {
 class _MetronomeTempoSlider extends StatelessWidget {
   const _MetronomeTempoSlider({
     required this.bpm,
-    required this.playing,
     required this.onChanged,
     required this.onDecrease,
     required this.onIncrease,
-    required this.onToggle,
   });
 
   final int bpm;
-  final bool playing;
   final ValueChanged<double> onChanged;
   final VoidCallback onDecrease;
   final VoidCallback onIncrease;
-  final Future<void> Function() onToggle;
 
   @override
   Widget build(BuildContext context) {
     final scale = DashboardScaleScope.of(context);
     final ui = scale.ui;
+    // Card geometry mirrors the design spec (880×82 inside 920×72 reference).
     return Container(
-      height: ui(86),
-      padding: EdgeInsets.symmetric(horizontal: ui(18)),
+      height: ui(82),
+      padding: EdgeInsets.symmetric(horizontal: ui(32)),
       decoration: BoxDecoration(
-        color: const Color(0xFFF1EEFF),
-        borderRadius: BorderRadius.circular(ui(14)),
+        color: const Color(0xFFF4F4FF),
+        borderRadius: BorderRadius.circular(ui(12)),
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final trackLeft = ui(46);
-          final trackRight = ui(46);
-          final trackWidth = constraints.maxWidth - trackLeft - trackRight;
-          final fraction = ((bpm - 15) / 285).clamp(0.0, 1.0);
-          final knobX = trackLeft + trackWidth * fraction;
+          final width = constraints.maxWidth;
+          final height = constraints.maxHeight;
+          final trackY = height / 2;
 
-          void updatePosition(Offset localPosition) {
-            final normalized = ((localPosition.dx - trackLeft) / trackWidth)
-                .clamp(0.0, 1.0);
+          // Reserve room for the +/- buttons (48×48) at both ends and a small
+          // gap before the track itself starts.
+          final actionSize = ui(48);
+          final trackInset = actionSize + ui(16);
+          final trackLeft = trackInset;
+          final trackRight = width - trackInset;
+          final trackWidth = trackRight - trackLeft;
+          final fraction = ((bpm - 15) / 285).clamp(0.0, 1.0);
+          final thumbCenter = trackLeft + trackWidth * fraction;
+
+          void updateFromX(double localX) {
+            final normalized =
+                ((localX - trackLeft) / trackWidth).clamp(0.0, 1.0);
             onChanged(15 + normalized * 285);
           }
 
-          return GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTapDown: (details) => updatePosition(details.localPosition),
-            onPanUpdate: (details) => updatePosition(details.localPosition),
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Positioned(
-                  top: ui(12),
-                  left: knobX - ui(30),
+          // Drag/tap region spans the entire track row (including under
+          // the thumb image) so we can map the finger's absolute X position
+          // directly to a BPM. Using `localPosition.dx` avoids the lag of
+          // delta-based updates – every pointer event becomes a 1:1 jump
+          // to the touched coordinate, making the slider feel sticky to
+          // the finger even during fast drags.
+          void onPointerEventX(double localX) {
+            updateFromX(localX + trackLeft);
+          }
+
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              // Minus button (image-based, sits at left).
+              Positioned(
+                left: 0,
+                top: (height - actionSize) / 2,
+                child: _TempoIconButton(
+                  asset: 'assets/images/music/4.png',
+                  size: actionSize,
+                  onTap: onDecrease,
+                ),
+              ),
+              // Plus button.
+              Positioned(
+                right: 0,
+                top: (height - actionSize) / 2 ,
+                child: _TempoIconButton(
+                  asset: 'assets/images/music/5.png',
+                  size: actionSize,
+                  onTap: onIncrease,
+                ),
+              ),
+              // Background track (visual, ignores hits so the gesture layer
+              // below catches everything).
+              Positioned(
+                left: trackLeft,
+                right: trackInset,
+                top: trackY - ui(4),
+                child: IgnorePointer(
                   child: Container(
-                    width: ui(60),
-                    height: ui(28),
-                    alignment: Alignment.center,
+                    height: ui(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(ui(999)),
+                    ),
+                  ),
+                ),
+              ),
+              // Filled portion (purple gradient, also non-interactive).
+              Positioned(
+                left: trackLeft,
+                top: trackY - ui(4),
+                child: IgnorePointer(
+                  child: Container(
+                    width: math.max(thumbCenter - trackLeft, ui(8)),
+                    height: ui(8),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                        colors: <Color>[Color(0xFF8741FF), Color(0xFFE2D0FF)],
+                      ),
+                      borderRadius: BorderRadius.circular(ui(999)),
+                    ),
+                  ),
+                ),
+              ),
+              // Slider thumb (3.png) – purely visual; gesture is handled by
+              // the transparent layer above.
+              Positioned(
+                left: thumbCenter - ui(20),
+                top: trackY - ui(16),
+                child: IgnorePointer(
+                  child: Image.asset(
+                    'assets/images/music/3.png',
+                    width: ui(40),
+                    height: ui(32),
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ),
+              // Speed badge floats above the bar, centered horizontally on
+              // the thumb. `Stack(clipBehavior: Clip.none)` lets it overflow
+              // upward into the spacer above the slider card.
+              Positioned(
+                top: -ui(13),
+                left: thumbCenter - ui(44),
+                child: IgnorePointer(
+                  child: Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: ui(12),
+                      vertical: ui(6),
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(ui(8)),
+                      border: Border.all(
+                        color: const Color(0xFFF3F2F3),
+                        width: ui(1),
+                      ),
                       boxShadow: <BoxShadow>[
                         BoxShadow(
-                          color: const Color(0x16000000),
+                          color: const Color(0x14000000),
                           blurRadius: ui(8),
-                          offset: Offset(0, ui(3)),
+                          offset: Offset(0, ui(2)),
                         ),
                       ],
                     ),
-                    child: Text(
-                      '速度: $bpm',
-                      style: TextStyle(
-                        fontSize: ui(12),
-                        fontFamily: 'PingFang SC',
-                        fontWeight: FontWeight.w500,
-                        color: const Color(0xFF1A1A1A),
-                      ),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  left: 0,
-                  top: ui(22),
-                  child: _CircleActionButton(
-                    icon: Icons.remove_rounded,
-                    onTap: onDecrease,
-                  ),
-                ),
-                Positioned(
-                  right: 0,
-                  top: ui(22),
-                  child: _CircleActionButton(
-                    icon: Icons.add_rounded,
-                    onTap: onIncrease,
-                  ),
-                ),
-                Positioned(
-                  left: trackLeft,
-                  right: trackRight,
-                  top: ui(40),
-                  child: Container(
-                    height: ui(4),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(ui(999)),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  left: trackLeft,
-                  top: ui(40),
-                  child: Container(
-                    width: math.max(trackWidth * fraction, ui(8)),
-                    height: ui(4),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF7F46FF),
-                      borderRadius: BorderRadius.circular(ui(999)),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  left: knobX - ui(14),
-                  top: ui(30),
-                  child: GestureDetector(
-                    onTap: onToggle,
-                    child: Container(
-                      width: ui(28),
-                      height: ui(28),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF7F46FF),
-                        borderRadius: BorderRadius.circular(ui(9)),
-                        boxShadow: <BoxShadow>[
-                          BoxShadow(
-                            color: const Color(0x337F46FF),
-                            blurRadius: ui(12),
-                            offset: Offset(0, ui(4)),
-                          ),
+                    child: Text.rich(
+                      TextSpan(
+                        children: <InlineSpan>[
+                          const TextSpan(text: '速度：'),
+                          TextSpan(text: '$bpm'),
                         ],
                       ),
-                      child: Icon(
-                        playing
-                            ? Icons.pause_rounded
-                            : Icons.play_arrow_rounded,
-                        size: ui(16),
-                        color: Colors.white,
+                      style: TextStyle(
+                        fontSize: ui(14),
+                        fontFamily: 'PingFang SC',
+                        fontWeight: FontWeight.w500,
+                        color: Colors.black,
+                        height: 1,
                       ),
                     ),
                   ),
                 ),
-              ],
-            ),
+              ),
+              // ── Single gesture layer covering the whole track row. ──
+              // Sits last in the Stack so it receives every pointer event
+              // even when the finger is over the thumb / fill / track bg.
+              Positioned(
+                left: trackLeft,
+                right: trackInset,
+                top: 0,
+                bottom: 0,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapDown: (details) =>
+                      onPointerEventX(details.localPosition.dx),
+                  // Use the generic pan handlers (not horizontalDrag) so
+                  // there is no startup distance threshold – the thumb
+                  // begins moving on the very first frame of the gesture.
+                  onPanStart: (details) =>
+                      onPointerEventX(details.localPosition.dx),
+                  onPanUpdate: (details) =>
+                      onPointerEventX(details.localPosition.dx),
+                ),
+              ),
+            ],
           );
         },
       ),
@@ -611,26 +774,28 @@ class _MetronomeTempoSlider extends StatelessWidget {
   }
 }
 
-class _CircleActionButton extends StatelessWidget {
-  const _CircleActionButton({required this.icon, required this.onTap});
+class _TempoIconButton extends StatelessWidget {
+  const _TempoIconButton({
+    required this.asset,
+    required this.size,
+    required this.onTap,
+  });
 
-  final IconData icon;
+  final String asset;
+  final double size;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final scale = DashboardScaleScope.of(context);
-    final ui = scale.ui;
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        width: ui(28),
-        height: ui(28),
-        decoration: const BoxDecoration(
-          shape: BoxShape.circle,
-          color: Colors.white,
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: Center(
+          child: Image.asset(asset, fit: BoxFit.contain),
         ),
-        child: Icon(icon, size: ui(18), color: const Color(0xFF6C7080)),
       ),
     );
   }
@@ -643,7 +808,6 @@ class _TunerPane extends StatelessWidget {
     required this.onIncreaseFrequency,
     required this.onUse442Hz,
     required this.onRetryPermission,
-    super.key,
   });
 
   final MusicCompanionState state;
@@ -698,8 +862,10 @@ class _TunerPane extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              _CircleActionButton(
-                icon: Icons.remove_rounded,
+              // Tuner-specific ± stepper icons (6.png / 7.png) at 48×48.
+              _TempoIconButton(
+                asset: 'assets/images/music/6.png',
+                size: ui(48),
                 onTap: onDecreaseFrequency,
               ),
               SizedBox(width: ui(22)),
@@ -713,8 +879,9 @@ class _TunerPane extends StatelessWidget {
                 ),
               ),
               SizedBox(width: ui(22)),
-              _CircleActionButton(
-                icon: Icons.add_rounded,
+              _TempoIconButton(
+                asset: 'assets/images/music/7.png',
+                size: ui(48),
                 onTap: onIncreaseFrequency,
               ),
             ],
@@ -814,71 +981,6 @@ class _TunerPane extends StatelessWidget {
   }
 }
 
-class _MetronomeGaugePainter extends CustomPainter {
-  _MetronomeGaugePainter({required this.progress});
-
-  final double progress;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width * 0.3, size.height * 1.02);
-    final radius = math.min(size.width * 0.44, size.height * 1.05);
-    final background = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 18
-      ..strokeCap = StrokeCap.round
-      ..shader = const LinearGradient(
-        begin: Alignment.centerLeft,
-        end: Alignment.centerRight,
-        colors: <Color>[Color(0xFFE8EAF6), Color(0xFFD8DCF0)],
-      ).createShader(Rect.fromCircle(center: center, radius: radius));
-
-    final active = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 18
-      ..strokeCap = StrokeCap.round
-      ..shader = const LinearGradient(
-        begin: Alignment.centerLeft,
-        end: Alignment.centerRight,
-        colors: <Color>[Color(0xFFC48BFF), Color(0xFF7F46FF)],
-      ).createShader(Rect.fromCircle(center: center, radius: radius));
-
-    final startAngle = math.pi;
-    final sweepAngle = math.pi * 0.88;
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      startAngle,
-      sweepAngle,
-      false,
-      background,
-    );
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      startAngle,
-      sweepAngle * progress.clamp(0.0, 1.0),
-      false,
-      active,
-    );
-
-    final needleAngle = startAngle + sweepAngle * progress.clamp(0.0, 1.0);
-    final needleEnd = Offset(
-      center.dx + math.cos(needleAngle) * radius * 0.8,
-      center.dy + math.sin(needleAngle) * radius * 0.8,
-    );
-    final needlePaint = Paint()
-      ..color = const Color(0xFF9B6BFF)
-      ..strokeWidth = 4
-      ..strokeCap = StrokeCap.round;
-    canvas.drawLine(center, needleEnd, needlePaint);
-    canvas.drawCircle(center, 6, Paint()..color = const Color(0xFF9B6BFF));
-  }
-
-  @override
-  bool shouldRepaint(covariant _MetronomeGaugePainter oldDelegate) {
-    return oldDelegate.progress != progress;
-  }
-}
-
 class _TunerRulerPainter extends CustomPainter {
   _TunerRulerPainter({required this.cents});
 
@@ -965,4 +1067,3 @@ class _TunerRulerPainter extends CustomPainter {
     return oldDelegate.cents != cents;
   }
 }
-

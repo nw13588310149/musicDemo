@@ -30,6 +30,10 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
 
   final VideoTutorialRepository _repository;
   final AppStorage _storage;
+  final Map<String, _VideoListCacheEntry> _listCache =
+      <String, _VideoListCacheEntry>{};
+  final Set<String> _inFlightPageKeys = <String>{};
+  final Map<String, VideoDetail> _detailCache = <String, VideoDetail>{};
 
   static const int _pageSize = 20;
   static const List<String> _menuOrder = <String>[
@@ -43,6 +47,8 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
   ];
 
   Future<void> refresh() async {
+    _listCache.clear();
+    _inFlightPageKeys.clear();
     state = state.copyWith(
       loading: true,
       errorMessage: '',
@@ -88,15 +94,22 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
       return;
     }
 
+    final nextChildId = _resolveSelectedChildId(state.menus, menuId, null);
+    final cached = _listCache[_cacheKey(menuId, nextChildId)];
     state = state.copyWith(
       selectedMenuId: menuId,
       clearSelectedChildId: true,
-      videoList: const [],
-      currentPage: 1,
-      hasMore: true,
+      videoList: cached?.items ?? const [],
+      currentPage: cached?.currentPage ?? 1,
+      hasMore: cached?.hasMore ?? true,
+      loading: cached == null,
+      loadingMore: false,
+      errorMessage: '',
     );
 
-    await _loadVideoList(reset: true);
+    if (cached == null) {
+      await _loadVideoList(reset: true);
+    }
   }
 
   Future<void> selectChildMenu(String? childId) async {
@@ -104,14 +117,20 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
       return;
     }
 
+    final cached = _listCache[_cacheKey(state.selectedMenuId, childId)];
     state = state.copyWith(
       selectedChildId: childId,
-      videoList: const [],
-      currentPage: 1,
-      hasMore: true,
+      videoList: cached?.items ?? const [],
+      currentPage: cached?.currentPage ?? 1,
+      hasMore: cached?.hasMore ?? true,
+      loading: cached == null,
+      loadingMore: false,
+      errorMessage: '',
     );
 
-    await _loadVideoList(reset: true);
+    if (cached == null) {
+      await _loadVideoList(reset: true);
+    }
   }
 
   Future<void> loadMore() async {
@@ -125,6 +144,17 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
     final blockReason = _vipBlockReason(item.vip);
     if (blockReason != null) {
       return blockReason;
+    }
+
+    final cached = _detailCache[item.id];
+    if (cached != null) {
+      state = state.copyWith(
+        showDetailPanel: true,
+        detailLoading: false,
+        detailTabIndex: 0,
+        detail: cached,
+      );
+      return null;
     }
 
     state = state.copyWith(
@@ -146,6 +176,7 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
       return '视频详情数据异常';
     }
 
+    _detailCache[detail.id] = detail;
     state = state.copyWith(detailLoading: false, detail: detail);
     return null;
   }
@@ -182,6 +213,8 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
       }
       return item;
     }).toList();
+    _detailCache[updatedDetail.id] = updatedDetail;
+    _syncCachedListItem(updatedDetail.id, updatedDetail.isFavorite);
 
     state = state.copyWith(detail: updatedDetail, videoList: updatedList);
     return null;
@@ -198,9 +231,9 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
       if (item is! Map<String, dynamic>) {
         continue;
       }
-      final id = _toInt(item['id']);
+      final id = _toIdString(item['id']);
       final name = item['name']?.toString() ?? '';
-      if (id <= 0 || name.isEmpty) {
+      if (id.isEmpty || name.isEmpty) {
         continue;
       }
       result.add(VideoShareClassItem(id: id, name: name));
@@ -208,7 +241,7 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
     return result;
   }
 
-  Future<String?> shareCurrentVideo(List<int> classIds) async {
+  Future<String?> shareCurrentVideo(List<String> classIds) async {
     final detail = state.detail;
     if (detail == null) {
       return '请先打开要分享的视频';
@@ -236,19 +269,36 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
   }
 
   Future<void> _loadVideoList({required bool reset}) async {
+    final cacheKey = _cacheKey(state.selectedMenuId, state.selectedChildId);
+    final cached = _listCache[cacheKey];
+    final page = reset ? 1 : (cached?.currentPage ?? state.currentPage) + 1;
+    final pageKey = '$cacheKey#$page';
+    if (_inFlightPageKeys.contains(pageKey)) {
+      return;
+    }
+    if (!reset && cached?.requestedPages.contains(page) == true) {
+      state = state.copyWith(
+        videoList: cached!.items,
+        currentPage: cached.currentPage,
+        hasMore: cached.hasMore,
+      );
+      return;
+    }
+
+    _inFlightPageKeys.add(pageKey);
     state = state.copyWith(
       loading: reset,
       loadingMore: !reset,
       errorMessage: '',
     );
 
-    final page = reset ? 1 : state.currentPage + 1;
     final response = await _repository.getVideoList(
       current: page,
       size: _pageSize,
       firstMenu: state.selectedMenuId,
       secondMenu: state.selectedChildId,
     );
+    _inFlightPageKeys.remove(pageKey);
 
     if (!response.isSuccess) {
       state = state.copyWith(
@@ -260,16 +310,59 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
     }
 
     final list = _parseVideoList(response.data);
-    final merged = reset ? list : <VideoListItem>[...state.videoList, ...list];
+    final baseItems = reset
+        ? const <VideoListItem>[]
+        : (cached?.items ?? state.videoList);
+    final merged = _mergeUnique(baseItems, list);
+    final hasMore =
+        list.length >= _pageSize && merged.length > baseItems.length;
+    final requestedPages = <int>{...?cached?.requestedPages, page};
+    _listCache[cacheKey] = _VideoListCacheEntry(
+      items: merged,
+      currentPage: page,
+      hasMore: hasMore,
+      requestedPages: requestedPages,
+    );
 
     state = state.copyWith(
       loading: false,
       loadingMore: false,
       videoList: merged,
       currentPage: page,
-      hasMore: list.isNotEmpty,
+      hasMore: hasMore,
       errorMessage: merged.isEmpty ? '暂无视频数据' : '',
     );
+  }
+
+  String _cacheKey(String? firstMenu, String? secondMenu) {
+    return '${firstMenu ?? 'all'}|${secondMenu ?? 'all'}';
+  }
+
+  List<VideoListItem> _mergeUnique(
+    List<VideoListItem> base,
+    List<VideoListItem> incoming,
+  ) {
+    final result = <VideoListItem>[];
+    final seen = <String>{};
+    for (final item in <VideoListItem>[...base, ...incoming]) {
+      if (item.id.isEmpty || !seen.add(item.id)) {
+        continue;
+      }
+      result.add(item);
+    }
+    return result;
+  }
+
+  void _syncCachedListItem(String id, bool isFavorite) {
+    for (final entry in _listCache.entries.toList()) {
+      final nextItems = entry.value.items
+          .map(
+            (item) =>
+                item.id == id ? item.copyWith(isFavorite: isFavorite) : item,
+          )
+          .toList(growable: false);
+      _listCache[entry.key] = entry.value.copyWith(items: nextItems);
+    }
   }
 
   List<VideoBannerItem> _parseBanners(dynamic data) {
@@ -573,6 +666,34 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
 class VideoShareClassItem {
   const VideoShareClassItem({required this.id, required this.name});
 
-  final int id;
+  final String id;
   final String name;
+}
+
+class _VideoListCacheEntry {
+  const _VideoListCacheEntry({
+    required this.items,
+    required this.currentPage,
+    required this.hasMore,
+    required this.requestedPages,
+  });
+
+  final List<VideoListItem> items;
+  final int currentPage;
+  final bool hasMore;
+  final Set<int> requestedPages;
+
+  _VideoListCacheEntry copyWith({
+    List<VideoListItem>? items,
+    int? currentPage,
+    bool? hasMore,
+    Set<int>? requestedPages,
+  }) {
+    return _VideoListCacheEntry(
+      items: items ?? this.items,
+      currentPage: currentPage ?? this.currentPage,
+      hasMore: hasMore ?? this.hasMore,
+      requestedPages: requestedPages ?? this.requestedPages,
+    );
+  }
 }

@@ -10,6 +10,28 @@ class AiChatSession {
   final DateTime? sortTime;
 }
 
+class AiChatAttachment {
+  const AiChatAttachment({
+    required this.name,
+    required this.url,
+    this.size = 0,
+  });
+
+  final String name;
+  final String url;
+  final int size;
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'name': name,
+      'fileName': name,
+      'url': url,
+      'fileUrl': url,
+      'size': size,
+    };
+  }
+}
+
 class AiChatMessage {
   const AiChatMessage({
     required this.id,
@@ -18,6 +40,9 @@ class AiChatMessage {
     this.status = AiChatMessageStatus.sent,
     this.reasoning = '',
     this.reasoningExpanded = false,
+    this.streaming = false,
+    this.reasoningStreaming = false,
+    this.attachments = const [],
     this.sortTime,
   });
 
@@ -27,6 +52,9 @@ class AiChatMessage {
   final AiChatMessageStatus status;
   final String reasoning;
   final bool reasoningExpanded;
+  final bool streaming;
+  final bool reasoningStreaming;
+  final List<AiChatAttachment> attachments;
   final DateTime? sortTime;
 
   AiChatMessage copyWith({
@@ -36,6 +64,9 @@ class AiChatMessage {
     AiChatMessageStatus? status,
     String? reasoning,
     bool? reasoningExpanded,
+    bool? streaming,
+    bool? reasoningStreaming,
+    List<AiChatAttachment>? attachments,
     DateTime? sortTime,
   }) {
     return AiChatMessage(
@@ -45,6 +76,9 @@ class AiChatMessage {
       status: status ?? this.status,
       reasoning: reasoning ?? this.reasoning,
       reasoningExpanded: reasoningExpanded ?? this.reasoningExpanded,
+      streaming: streaming ?? this.streaming,
+      reasoningStreaming: reasoningStreaming ?? this.reasoningStreaming,
+      attachments: attachments ?? this.attachments,
       sortTime: sortTime ?? this.sortTime,
     );
   }
@@ -71,10 +105,12 @@ class AiChatState {
     this.messagesLoading = false,
     this.sending = false,
     this.waitingAssistant = false,
+    this.uploadingAttachment = false,
     this.isNewConversation = true,
     this.activeSessionId,
     this.sessions = const [],
     this.messages = const [],
+    this.pendingAttachments = const [],
   });
 
   final bool sidebarCollapsed;
@@ -84,10 +120,12 @@ class AiChatState {
   final bool messagesLoading;
   final bool sending;
   final bool waitingAssistant;
+  final bool uploadingAttachment;
   final bool isNewConversation;
   final String? activeSessionId;
   final List<AiChatSession> sessions;
   final List<AiChatMessage> messages;
+  final List<AiChatAttachment> pendingAttachments;
 
   String get effectiveChatModel {
     return isDeepThinking ? 'deepseek-reasoner' : 'deepseek-chat';
@@ -101,11 +139,13 @@ class AiChatState {
     bool? messagesLoading,
     bool? sending,
     bool? waitingAssistant,
+    bool? uploadingAttachment,
     bool? isNewConversation,
     String? activeSessionId,
     bool clearActiveSessionId = false,
     List<AiChatSession>? sessions,
     List<AiChatMessage>? messages,
+    List<AiChatAttachment>? pendingAttachments,
   }) {
     return AiChatState(
       sidebarCollapsed: sidebarCollapsed ?? this.sidebarCollapsed,
@@ -115,12 +155,14 @@ class AiChatState {
       messagesLoading: messagesLoading ?? this.messagesLoading,
       sending: sending ?? this.sending,
       waitingAssistant: waitingAssistant ?? this.waitingAssistant,
+      uploadingAttachment: uploadingAttachment ?? this.uploadingAttachment,
       isNewConversation: isNewConversation ?? this.isNewConversation,
       activeSessionId: clearActiveSessionId
           ? null
           : (activeSessionId ?? this.activeSessionId),
       sessions: sessions ?? this.sessions,
       messages: messages ?? this.messages,
+      pendingAttachments: pendingAttachments ?? this.pendingAttachments,
     );
   }
 }

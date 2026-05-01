@@ -52,6 +52,7 @@ class ShellController extends StateNotifier<ShellState> {
   Future<void> logout() async {
     await _repository.logout();
     await _storage.clearToken();
+    await _storage.clearSchoolId();
   }
 
   Future<void> markAllNoticeRead() async {
@@ -111,21 +112,45 @@ class ShellController extends StateNotifier<ShellState> {
       );
     }
 
-    if (schoolResponse.code == 0 &&
-        schoolResponse.data is Map<String, dynamic>) {
-      final data = schoolResponse.data as Map<String, dynamic>;
-      final logo = data['logo']?.toString() ?? '';
-      final switchFlag = data['coursewareSwitch'];
-      final schoolCoursewareEnabled = switchFlag == true || switchFlag == 1;
-      state = state.copyWith(
-        logoUrl: logo,
-        schoolCoursewareEnabled: schoolCoursewareEnabled,
-        navItems: buildDefaultNavItems(
+    if (schoolResponse.code == 0) {
+      // v2 接口返回的是学校列表，旧版接口返回单 Map；两种结构都兜住，
+      // 取首项作为「当前学校」用于顶部 logo 与导航开关判定。
+      final data = _firstSchool(schoolResponse.data);
+      await _storage.saveSchoolId(data['id']);
+      if (data.isNotEmpty) {
+        final logo = data['logo']?.toString() ?? '';
+        final switchFlag = data['coursewareSwitch'];
+        final schoolCoursewareEnabled = switchFlag == true || switchFlag == 1;
+        state = state.copyWith(
+          logoUrl: logo,
           schoolCoursewareEnabled: schoolCoursewareEnabled,
-        ),
-      );
-      _syncCampusBadge(state.unreadCount);
+          navItems: buildDefaultNavItems(
+            schoolCoursewareEnabled: schoolCoursewareEnabled,
+          ),
+        );
+        _syncCampusBadge(state.unreadCount);
+      }
+    } else {
+      await _storage.saveSchoolId(0);
     }
+  }
+
+  /// 把 v2 `schoolList` 响应（List）或旧版 `mySchool` 响应（Map）规整成
+  /// 同一种形态：当前学校信息的 Map（找不到时返回空 Map）。
+  Map<String, dynamic> _firstSchool(dynamic data) {
+    if (data is Map<String, dynamic>) {
+      return data;
+    }
+    if (data is List && data.isNotEmpty) {
+      final first = data.first;
+      if (first is Map<String, dynamic>) {
+        return first;
+      }
+      if (first is Map) {
+        return first.map((k, v) => MapEntry(k.toString(), v));
+      }
+    }
+    return const <String, dynamic>{};
   }
 
   /// 拉取省份列表（懒加载缓存），与 1.0 `getCity` 行为一致。

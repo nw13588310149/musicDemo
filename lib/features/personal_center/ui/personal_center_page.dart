@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/route_paths.dart';
 import '../../../core/constants/app_assets.dart';
+import '../../../core/widgets/app_toast.dart';
 import '../../shell/state/shell_controller.dart';
 import '../state/personal_center_controller.dart';
 import '../state/personal_center_state.dart';
@@ -87,9 +88,7 @@ class _PersonalCenterPageState extends ConsumerState<PersonalCenterPage> {
       return;
     }
     if (result.error != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(result.error!)));
+      AppToast.show(context, result.error!);
       return;
     }
     await showDialog<void>(
@@ -122,9 +121,7 @@ class _PersonalCenterPageState extends ConsumerState<PersonalCenterPage> {
                 );
                 if (ctx.mounted) {
                   Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('链接已复制，快去发给好友吧')),
-                  );
+                  AppToast.show(context, '链接已复制，快去发给好友吧');
                 }
               },
             ),
@@ -175,15 +172,13 @@ class _PersonalCenterPageState extends ConsumerState<PersonalCenterPage> {
       return;
     }
     if (msg != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      AppToast.show(context, msg);
     } else {
       await ref.read(shellControllerProvider.notifier).refreshUserAndSchool();
       if (!context.mounted) {
         return;
       }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('兑换成功')));
+      AppToast.show(context, '兑换成功');
     }
   }
 }

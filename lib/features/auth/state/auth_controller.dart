@@ -2,21 +2,32 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/config/app_config_repository.dart';
 import '../data/auth_repository.dart';
 import 'auth_state.dart';
 
 final authControllerProvider = StateNotifierProvider.autoDispose
     .family<AuthController, AuthState, AuthScene>((ref, scene) {
       final repository = ref.watch(authRepositoryProvider);
-      return AuthController(repository: repository, scene: scene);
+      final appConfigRepository = ref.watch(appConfigRepositoryProvider);
+      return AuthController(
+        repository: repository,
+        appConfigRepository: appConfigRepository,
+        scene: scene,
+      );
     });
 
 class AuthController extends StateNotifier<AuthState> {
-  AuthController({required AuthRepository repository, required this.scene})
-      : _repository = repository,
+  AuthController({
+    required AuthRepository repository,
+    required AppConfigRepository appConfigRepository,
+    required this.scene,
+  })  : _repository = repository,
+        _appConfigRepository = appConfigRepository,
         super(const AuthState());
 
   final AuthRepository _repository;
+  final AppConfigRepository _appConfigRepository;
   final AuthScene scene;
 
   Timer? _timer;
@@ -98,6 +109,7 @@ class AuthController extends StateNotifier<AuthState> {
 
       await checkFuture;
       unawaited(_reportCidIfNeeded());
+      unawaited(_appConfigRepository.refreshFileBaseUrl());
 
       return const AuthActionResult(success: true, message: '登录成功');
     } finally {
@@ -107,6 +119,7 @@ class AuthController extends StateNotifier<AuthState> {
 
   Future<AuthActionResult> submitGuestLogin() async {
     await _repository.persistToken('youke');
+    unawaited(_appConfigRepository.refreshFileBaseUrl());
     return const AuthActionResult(success: true, message: '已进入游客模式');
   }
 
@@ -140,6 +153,8 @@ class AuthController extends StateNotifier<AuthState> {
       if (token.isNotEmpty) {
         await _repository.persistToken(token);
       }
+
+      unawaited(_appConfigRepository.refreshFileBaseUrl());
 
       return const AuthActionResult(success: true, message: '注册成功');
     } finally {

@@ -5,7 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:record/record.dart';
 
-import '../../../core/constants/app_constants.dart';
+import '../../../core/network/media_url.dart';
+import '../../../core/network/upload_result.dart';
 import '../audio/recording_bytes_loader.dart';
 import '../data/recording_system_repository.dart';
 import 'recording_system_state.dart';
@@ -506,8 +507,10 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       state = state.copyWith(busy: false);
       return _fallbackMessage(uploadResponse.msg, '上传录音失败');
     }
-    final url = uploadResponse.data?.toString() ?? '';
-    if (url.isEmpty) {
+    // 上传成功后保存的是相对 `path`（例如 `app/upload/.../xxx.wav`），不再
+    // 写入完整 url；后端在读取时再根据 path 拼出可访问地址。
+    final filePath = parseUploadResult(uploadResponse.data).savable;
+    if (filePath.isEmpty) {
       state = state.copyWith(busy: false);
       return '上传结果异常，未拿到录音地址';
     }
@@ -516,7 +519,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       categoryId: categoryId,
       name: title,
       duration: _formatDurationLabel(state.previewDurationMs),
-      url: url,
+      url: filePath,
     );
     state = state.copyWith(busy: false);
     if (!saveResponse.isSuccess) {
@@ -717,7 +720,15 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       if (id <= 0 || name.isEmpty) {
         continue;
       }
-      result.add(RecordingCategoryItem(id: id, name: name));
+      // Count may be returned under several keys depending on backend version.
+      final count = _toInt(
+        raw['count'] ??
+            raw['recordingCount'] ??
+            raw['fileCount'] ??
+            raw['total'] ??
+            raw['num'],
+      );
+      result.add(RecordingCategoryItem(id: id, name: name, count: count));
     }
     return result;
   }
@@ -825,21 +836,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     return trimmed.isEmpty ? fallback : trimmed;
   }
 
-  String _resolveMediaUrl(String raw) {
-    final value = raw.trim();
-    if (value.isEmpty) {
-      return '';
-    }
-    final uri = Uri.tryParse(value);
-    if (uri != null && uri.hasScheme) {
-      return value;
-    }
-    if (value.startsWith('//')) {
-      return 'https:$value';
-    }
-    final base = Uri.parse(AppConstants.apiBaseUrl);
-    return base.resolve(value).toString();
-  }
+  String _resolveMediaUrl(String raw) => MediaUrl.resolve(raw);
 
   @override
   void dispose() {

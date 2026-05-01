@@ -1,4 +1,4 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -63,6 +63,12 @@ class DashboardScaleScope extends InheritedWidget {
         .dependOnInheritedWidgetOfExactType<DashboardScaleScope>();
     assert(scope != null, 'DashboardScaleScope not found in widget tree.');
     return scope!.data;
+  }
+
+  static DashboardScaleData? maybeOf(BuildContext context) {
+    return context
+        .dependOnInheritedWidgetOfExactType<DashboardScaleScope>()
+        ?.data;
   }
 
   static DashboardScaleData fromSize(Size size) {
@@ -234,4 +240,3 @@ class ShellSectionTitleBar extends StatelessWidget {
     );
   }
 }
-

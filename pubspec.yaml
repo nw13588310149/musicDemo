@@ -37,6 +37,7 @@ dependencies:
   flutter_riverpod: ^2.6.1
   flutter_svg: ^2.2.4
   dio: ^5.9.0
+  web_socket_channel: ^3.0.3
   shared_preferences: ^2.5.3
   media_kit: ^1.2.1
   media_kit_video: ^1.3.0
@@ -48,6 +49,9 @@ dependencies:
   photo_view: ^0.15.0
   pdfrx: ^2.2.24
   flutter_widget_from_html_core: ^0.17.2
+  carousel_slider: ^5.0.0
+  cached_network_image: ^3.4.1
+  file_picker: ^8.3.7
 
 dev_dependencies:
   flutter_test:
@@ -80,6 +84,7 @@ flutter:
     - assets/images/home/
     - assets/images/home/v2/
     - assets/images/home/dictation/
+    - assets/images/404/
     - assets/images/school/
     - assets/images/aichat/
     - assets/images/aichat/v2/
@@ -93,6 +98,8 @@ flutter:
     - assets/images/info/
     - assets/images/schoolA/
     - assets/images/sound/
+    - assets/images/music/
+    - assets/images/note/
     - assets/audio/music_companion/metronome/
     - assets/audio/music_companion/metronome/beat0/
     - assets/audio/music_companion/metronome/beat2/
@@ -111,3 +118,26 @@ flutter:
         - asset: assets/fonts/HarmonyOS_Sans_SC_Regular.ttf
         - asset: assets/fonts/HarmonyOS_Sans_SC_Medium.ttf
           weight: 500
+    # 与 assets/fonts/ttf/index.css 一致：500 → PingFangSC-Medium.ttf
+    - family: PingFang SC
+      fonts:
+        - asset: assets/fonts/ttf/PingFangSC-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/ttf/PingFangSC-Medium.ttf
+          weight: 500
+    # Manrope 变体字（设计稿角标 10+ 等数字使用 Manrope w800）
+    # 把变体字以静态 w800 注册，Flutter 通过 fontWeight: w800 即可命中
+    - family: Manrope
+      fonts:
+        - asset: assets/fonts/Manrope-Variable.ttf
+          weight: 800
+    # Barlow（设计稿数字时间 09:00 - 09:45 使用 Barlow w600）
+    - family: Barlow
+      fonts:
+        - asset: assets/fonts/Barlow-SemiBold.ttf
+          weight: 600
+    # 空白列表等提示文案（设计稿 Inter 16 / 400）
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Variable.ttf
+          weight: 400

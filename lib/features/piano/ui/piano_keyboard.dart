@@ -405,6 +405,7 @@ class _PianoKeyboardState extends State<PianoKeyboard> {
                         height: keysHeight,
                         child: _PianoWhiteKey(
                           spec: widget.whiteKeys[i],
+                          index: i,
                           isPressed: widget.activeNotes
                               .contains(widget.whiteKeys[i].token),
                           showLabel: _labelsVisible,
@@ -688,8 +689,12 @@ class _PianoMiniKeysStrip extends StatelessWidget {
   }
 }
 
-/// 显示 / 隐藏标签的 toggle：以 `5.png` 作长椭圆背景，`6.png` 作可滑动 thumb，
-/// 另一侧绘制带删除线的音符图标，表示当前的 on/off 状态。
+/// 显示 / 隐藏标签的 toggle。
+///
+/// - `active = false`（标签隐藏）→ 显示 `piano1.png`（暗色状态）
+/// - `active = true`（标签显示）→ 显示 `piano2.png`（紫色高亮 C4 状态）
+///
+/// 两张图片之间做 200ms 淡入淡出切换，逻辑对齐 VirtualPiano.vue 的 `isShow` 开关。
 class _PianoLabelToggle extends StatelessWidget {
   const _PianoLabelToggle({required this.active, required this.onTap});
 
@@ -699,12 +704,8 @@ class _PianoLabelToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final width = ui(78);
     final height = ui(26);
-    final thumbWidth = ui(40);
-    final thumbHeight = ui(22);
-    final padding = ui(2);
-    final iconSize = ui(14);
+    final width = ui(68);
 
     return GestureDetector(
       onTap: onTap,
@@ -713,49 +714,26 @@ class _PianoLabelToggle extends StatelessWidget {
         width: width,
         height: height,
         child: Stack(
-          alignment: Alignment.center,
+          fit: StackFit.expand,
           children: <Widget>[
-            // 5.png 椭圆背景
-            Positioned.fill(
+            // piano1.png — 标签隐藏状态（暗色）
+            AnimatedOpacity(
+              opacity: active ? 0.0 : 1.0,
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeInOut,
               child: Image.asset(
-                'assets/images/home/dictation/5.png',
-                fit: BoxFit.fill,
+                'assets/images/home/piano1.png',
+                fit: BoxFit.contain,
               ),
             ),
-            // 静态侧的“音符 + 斜线”图标，提示开关意义
-            AnimatedAlign(
-              alignment: active ? Alignment.centerRight : Alignment.centerLeft,
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeOutCubic,
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: ui(8)),
-                child: Icon(
-                  active
-                      ? Icons.music_note_rounded
-                      : Icons.music_off_rounded,
-                  size: iconSize,
-                  color: Colors.white.withValues(
-                    alpha: active ? 0.8 : 0.55,
-                  ),
-                ),
-              ),
-            ),
-            // 6.png thumb，根据 active 状态左右滑动
-            AnimatedAlign(
-              alignment:
-                  active ? Alignment.centerLeft : Alignment.centerRight,
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeOutCubic,
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: padding),
-                child: SizedBox(
-                  width: thumbWidth,
-                  height: thumbHeight,
-                  child: Image.asset(
-                    'assets/images/home/dictation/6.png',
-                    fit: BoxFit.fill,
-                  ),
-                ),
+            // piano2.png — 标签显示状态（紫色高亮）
+            AnimatedOpacity(
+              opacity: active ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeInOut,
+              child: Image.asset(
+                'assets/images/home/piano2.png',
+                fit: BoxFit.contain,
               ),
             ),
           ],
@@ -773,11 +751,15 @@ class _PianoLabelToggle extends StatelessWidget {
 class _PianoWhiteKey extends StatelessWidget {
   const _PianoWhiteKey({
     required this.spec,
+    required this.index,
     required this.isPressed,
     required this.showLabel,
   });
 
   final PianoKeySpec spec;
+
+  /// 白键在键盘中的下标（0 = C2，14 = C4 ……），用于 label 取颜色分组。
+  final int index;
   final bool isPressed;
   final bool showLabel;
 
@@ -832,11 +814,13 @@ class _PianoWhiteKey extends StatelessWidget {
                     faceRadius: faceRadius,
                     showLabel: showLabel,
                     spec: spec,
+                    index: index,
                   )
                 : _PianoWhiteKeyIdleFace(
                     faceRadius: faceRadius,
                     showLabel: showLabel,
                     spec: spec,
+                    index: index,
                   ),
           ),
         ],
@@ -851,11 +835,13 @@ class _PianoWhiteKeyIdleFace extends StatelessWidget {
     required this.faceRadius,
     required this.showLabel,
     required this.spec,
+    required this.index,
   });
 
   final BorderRadius faceRadius;
   final bool showLabel;
   final PianoKeySpec spec;
+  final int index;
 
   @override
   Widget build(BuildContext context) {
@@ -886,8 +872,8 @@ class _PianoWhiteKeyIdleFace extends StatelessWidget {
       ),
       child: showLabel
           ? Padding(
-              padding: EdgeInsets.only(bottom: ui(14)),
-              child: _PianoWhiteKeyLabel(spec: spec),
+              padding: EdgeInsets.only(bottom: ui(10)),
+              child: _PianoWhiteKeyLabel(spec: spec, index: index),
             )
           : null,
     );
@@ -900,11 +886,13 @@ class _PianoWhiteKeyPressedFace extends StatelessWidget {
     required this.faceRadius,
     required this.showLabel,
     required this.spec,
+    required this.index,
   });
 
   final BorderRadius faceRadius;
   final bool showLabel;
   final PianoKeySpec spec;
+  final int index;
 
   @override
   Widget build(BuildContext context) {
@@ -1006,8 +994,8 @@ class _PianoWhiteKeyPressedFace extends StatelessWidget {
             Positioned(
               left: 0,
               right: 0,
-              bottom: ui(14),
-              child: _PianoWhiteKeyLabel(spec: spec),
+              bottom: ui(10),
+              child: _PianoWhiteKeyLabel(spec: spec, index: index),
             ),
         ],
       ),
@@ -1015,25 +1003,111 @@ class _PianoWhiteKeyPressedFace extends StatelessWidget {
   }
 }
 
-/// 白键标签：上方简谱编号 + 上下八度点；下方音名小胶囊（中央 C 高亮红色）。
+/// 白键标签。布局严格对齐 1.0 Vue（VirtualPiano.vue + notes.js）：
+///
+/// ```
+///  ┌─────────────┐
+///  │   [c¹]      │  ← 顶部音名胶囊（colored pill，中央 C 特殊高亮）
+///  │     ⋅       │  ← 高八度点（octaveDots > 0，画在数字上方）
+///  │     1       │  ← 简谱 1..7
+///  │     ⋅       │  ← 低八度点（octaveDots < 0，画在数字下方）
+///  └─────────────┘
+/// ```
+///
+/// 音名规则（来自 Vue 的 name2/name3）：
+/// - 大字组（C2-B2）：大写字母 `C`/`D`/...
+/// - 小字组（C3-B3）：小写字母 `c`/`d`/...
+/// - 小字一/二/三组（C4+）：小写字母 + 上标数字（C4→`c¹`，C5→`c²`，C6→`c³`）。
+///
+/// 胶囊背景按白键下标分 5 组（与 `bgComputed` 一致），中央 C 单独使用高亮色。
 class _PianoWhiteKeyLabel extends StatelessWidget {
-  const _PianoWhiteKeyLabel({required this.spec});
+  const _PianoWhiteKeyLabel({required this.spec, required this.index});
 
   final PianoKeySpec spec;
+
+  /// 白键在键盘中的下标（0..34）。
+  final int index;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+
+    // ---- 解析 token "C4" / "F#3" → 字母 + 八度 ----
+    final octave =
+        int.tryParse(spec.token.substring(spec.token.length - 1)) ?? 4;
+    final rawLetter = spec.token
+        .substring(0, spec.token.length - 1)
+        .replaceAll('#', '');
+    // 大字组用大写，其余小写。
+    final mainText =
+        octave <= 2 ? rawLetter.toUpperCase() : rawLetter.toLowerCase();
+    // C4→1，C5→2，C6→3；C2/C3 不带上标。
+    final superscript = octave >= 4 ? '${octave - 3}' : '';
+
+    final bgColor = spec.isCenterC
+        ? const Color(0xFFC4F25E) // 中央 C：黄绿高亮
+        : _capsuleColor(index);
+    final textColor = spec.isCenterC
+        ? const Color(0xFF0B081A)
+        : const Color(0xFF1A1A1A);
+
     return Column(
       mainAxisAlignment: MainAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        // 上方点
-        if (spec.octaveDots < 0)
-          Padding(
-            padding: EdgeInsets.only(bottom: ui(2)),
-            child: _OctaveDots(count: -spec.octaveDots, color: const Color(0xFF6D6B75)),
+        // 顶部音名胶囊
+        Container(
+          padding:
+              EdgeInsets.symmetric(horizontal: ui(3), vertical: ui(1.5)),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(ui(2.5)),
+            color: bgColor,
           ),
-        // 简谱数字
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                mainText,
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: ui(11),
+                  fontFamily: 'Manrope',
+                  fontWeight: FontWeight.w600,
+                  height: 1,
+                ),
+              ),
+              if (superscript.isNotEmpty) ...<Widget>[
+                SizedBox(width: ui(0.5)),
+                Transform.translate(
+                  offset: Offset(0, -ui(2.0)),
+                  child: Text(
+                    superscript,
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: ui(7),
+                      fontFamily: 'Manrope',
+                      fontWeight: FontWeight.w700,
+                      height: 1,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        SizedBox(height: ui(3)),
+        // 高八度点（数字上方）
+        if (spec.octaveDots > 0)
+          Padding(
+            padding: EdgeInsets.only(bottom: ui(1.5)),
+            child: _OctaveDots(
+              count: spec.octaveDots,
+              color: const Color(0xFF6D6B75),
+            ),
+          ),
+        // 简谱 1..7
         Text(
           spec.solfege == 0 ? '' : '${spec.solfege}',
           style: TextStyle(
@@ -1044,38 +1118,38 @@ class _PianoWhiteKeyLabel extends StatelessWidget {
             height: 1,
           ),
         ),
-        // 下方点
-        if (spec.octaveDots > 0)
+        // 低八度点（数字下方）
+        if (spec.octaveDots < 0)
           Padding(
-            padding: EdgeInsets.only(top: ui(2)),
-            child: _OctaveDots(count: spec.octaveDots, color: const Color(0xFF6D6B75)),
-          ),
-        SizedBox(height: ui(4)),
-        // 音名胶囊
-        Container(
-          padding: EdgeInsets.symmetric(horizontal: ui(4), vertical: ui(1)),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(ui(4)),
-            color: spec.isCenterC
-                ? const Color(0xFF8741FF)
-                : const Color(0xFFE0E2EB),
-          ),
-          child: Text(
-            spec.label,
-            style: TextStyle(
-              color: spec.isCenterC ? Colors.white : const Color(0xFF1A1A1A),
-              fontSize: ui(9),
-              fontFamily: 'Manrope',
-              fontWeight: FontWeight.w600,
-              height: 1,
+            padding: EdgeInsets.only(top: ui(1.5)),
+            child: _OctaveDots(
+              count: -spec.octaveDots,
+              color: const Color(0xFF6D6B75),
             ),
           ),
-        ),
       ],
     );
   }
+
+  /// 与 Vue `bgComputed` 一致的 5 段分组配色（按白键下标）。
+  Color _capsuleColor(int idx) {
+    if (idx < 7) {
+      return const Color(0xCCFDBCD2); // 粉
+    }
+    if (idx < 14) {
+      return const Color(0xCCACAFFE); // 浅紫
+    }
+    if (idx < 21) {
+      return const Color(0xCCFEE5C6); // 米
+    }
+    if (idx < 28) {
+      return const Color(0xCCA6FFFB); // 浅青
+    }
+    return const Color(0xCCA4FEBE); // 浅绿
+  }
 }
 
+/// 简谱八度点：竖向堆叠，体现 Chinese 简谱"加点表示高低八度"的写法。
 class _OctaveDots extends StatelessWidget {
   const _OctaveDots({required this.count, required this.color});
 
@@ -1085,13 +1159,12 @@ class _OctaveDots extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+    return Column(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         for (var i = 0; i < count; i++)
           Padding(
-            padding: EdgeInsets.symmetric(horizontal: ui(1)),
+            padding: EdgeInsets.symmetric(vertical: ui(0.5)),
             child: Container(
               width: ui(3),
               height: ui(3),

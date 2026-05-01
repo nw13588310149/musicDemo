@@ -73,15 +73,18 @@ class VideoTutorialRepository {
   }
 
   Future<ApiResponse> getClassList() {
-    return client.post('/app/school/chat/classList');
+    return client.post(
+      '/app/school/v2/chat/classList',
+      data: const <String, dynamic>{},
+    );
   }
 
   Future<ApiResponse> shareVideo({
-    required int classId,
+    required String classId,
     required String content,
   }) {
     return client.post(
-      '/app/school/chat/sendMsg',
+      '/app/school/v2/chat/sendMsg',
       data: <String, dynamic>{
         'classId': classId,
         'content': content,

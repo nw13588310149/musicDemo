@@ -11,10 +11,12 @@ class TheoryPdfView extends StatefulWidget {
     super.key,
     required this.url,
     required this.authToken,
+    this.interactive = true,
   });
 
   final String url;
   final String authToken;
+  final bool interactive;
 
   @override
   State<TheoryPdfView> createState() => _TheoryPdfViewState();
@@ -23,6 +25,7 @@ class TheoryPdfView extends StatefulWidget {
 class _TheoryPdfViewState extends State<TheoryPdfView> {
   static int _seq = 0;
   late String _viewType;
+  web.HTMLIFrameElement? _iframe;
 
   @override
   void initState() {
@@ -36,6 +39,10 @@ class _TheoryPdfViewState extends State<TheoryPdfView> {
     // url 变化时重新注册一个新的 viewType，避免浏览器复用旧 iframe。
     if (oldWidget.url != widget.url) {
       setState(_registerView);
+      return;
+    }
+    if (oldWidget.interactive != widget.interactive) {
+      _applyInteractivity();
     }
   }
 
@@ -50,8 +57,14 @@ class _TheoryPdfViewState extends State<TheoryPdfView> {
         ..style.width = '100%'
         ..style.height = '100%'
         ..style.backgroundColor = '#FAFAFB';
+      _iframe = iframe;
+      _applyInteractivity();
       return iframe;
     });
+  }
+
+  void _applyInteractivity() {
+    _iframe?.style.pointerEvents = widget.interactive ? 'auto' : 'none';
   }
 
   @override

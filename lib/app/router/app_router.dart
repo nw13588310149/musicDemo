@@ -25,12 +25,15 @@ import '../../features/quiz_practice/ui/quiz_session_page.dart';
 import '../../features/recording_system/ui/recording_system_page.dart'
     as recording_system;
 import '../../features/school/ui/school_courseware_page.dart';
+import '../../features/school/ui/school_quiz_practice_page.dart';
+import '../../features/school/ui/school_video_tutorial_page.dart';
 import '../../features/shell/ui/shell_scaffold.dart';
 import '../../features/smart_campus/ui/smart_campus_page.dart';
 import '../../features/smart_dictation/ui/smart_dictation_page.dart';
 import '../../features/study_catalog/ui/study_catalog_page.dart';
 import '../../features/theory/ui/theory_page.dart';
 import '../../features/video_tutorial/ui/video_tutorial_page.dart';
+import '../../features/voice/ui/voice_page.dart';
 import 'route_paths.dart';
 
 class AppRouter {
@@ -119,6 +122,11 @@ class AppRouter {
         return const MockExamDefaultPage();
       case RoutePaths.camp:
         return const QuizPracticePage();
+      // 校园专属刷题 / 视频页（独立于公开资料，后续接入校园接口）。
+      case RoutePaths.schoolCamp:
+        return const SchoolQuizPracticePage();
+      case RoutePaths.schoolVideo:
+        return const SchoolVideoTutorialPage();
       // 刷题三级页：做题界面，由 /camp 入口跳入。
       case RoutePaths.campAnswer:
         return const QuizSessionPage();
@@ -139,8 +147,8 @@ class AppRouter {
         return const InstrumentalPage();
       case RoutePaths.musicPlay:
         return const MusicPlayPage();
-      // 试题三级页：1.0 的 answer_end / answer_end2 与 music_play 同源，直接复用 MusicPlayPage。
       case RoutePaths.answerEnd:
+        return const TheoryPage();
       case RoutePaths.answerEnd2:
         return const MusicPlayPage();
       case RoutePaths.theory:

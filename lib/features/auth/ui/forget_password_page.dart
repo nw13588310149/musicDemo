@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/route_paths.dart';
 import '../../../core/constants/app_assets.dart';
+import '../../../core/widgets/app_toast.dart';
 import '../state/auth_controller.dart';
 import '../state/auth_state.dart';
 import 'widgets/auth_background_art.dart';
@@ -52,23 +53,23 @@ class _ForgetPasswordPageState extends ConsumerState<ForgetPasswordPage> {
                   children: [
                     ...switch (_step) {
                       _ForgetStep.mobile => _buildMobileStep(
-                          context,
-                          scale,
-                          state,
-                          controller,
-                        ),
+                        context,
+                        scale,
+                        state,
+                        controller,
+                      ),
                       _ForgetStep.sms => _buildSmsStep(
-                          context,
-                          scale,
-                          state,
-                          controller,
-                        ),
+                        context,
+                        scale,
+                        state,
+                        controller,
+                      ),
                       _ForgetStep.password => _buildPasswordStep(
-                          context,
-                          scale,
-                          state,
-                          controller,
-                        ),
+                        context,
+                        scale,
+                        state,
+                        controller,
+                      ),
                     },
                   ],
                 ),
@@ -179,9 +180,7 @@ class _ForgetPasswordPageState extends ConsumerState<ForgetPasswordPage> {
         height: _s(scale, 45),
         child: AuthFigmaSmsButton(
           scale: scale,
-          text: state.isSendingSms
-              ? '重新获取(${state.smsCountDown})'
-              : '获取验证码',
+          text: state.isSendingSms ? '重新获取(${state.smsCountDown})' : '获取验证码',
           enabled: !state.isSendingSms,
           onTap: () => _onSendSms(context, controller),
         ),
@@ -317,7 +316,10 @@ class _ForgetPasswordPageState extends ConsumerState<ForgetPasswordPage> {
     }
   }
 
-  Future<void> _onSendSms(BuildContext context, AuthController controller) async {
+  Future<void> _onSendSms(
+    BuildContext context,
+    AuthController controller,
+  ) async {
     final result = await controller.sendSms();
     if (!context.mounted) {
       return;
@@ -344,11 +346,8 @@ class _ForgetPasswordPageState extends ConsumerState<ForgetPasswordPage> {
   }
 
   void _showMessage(BuildContext context, String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+    AppToast.show(context, message);
   }
 
   static double _s(double scale, double value) => value * scale;
 }
-

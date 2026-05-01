@@ -90,6 +90,7 @@ class AuthRepository {
 
   Future<void> persistToken(String token) async {
     await _storage.saveToken(token);
+    await _storage.saveSchoolId(0);
     await client.updateToken(token);
   }
 

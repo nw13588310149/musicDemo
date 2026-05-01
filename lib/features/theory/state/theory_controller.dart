@@ -3,8 +3,8 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/constants/app_constants.dart';
 import '../../../core/network/api_response.dart';
+import '../../../core/network/media_url.dart';
 import '../data/theory_repository.dart';
 import 'theory_state.dart';
 
@@ -15,10 +15,8 @@ final theoryControllerProvider = StateNotifierProvider.autoDispose
     });
 
 class TheoryController extends StateNotifier<TheoryState> {
-  TheoryController({
-    required this.repository,
-    required TheoryPageArgs args,
-  }) : super(TheoryState.initial(args)) {
+  TheoryController({required this.repository, required TheoryPageArgs args})
+    : super(TheoryState.initial(args)) {
     unawaited(_initialize());
   }
 
@@ -32,19 +30,13 @@ class TheoryController extends StateNotifier<TheoryState> {
       if (!mounted) {
         return;
       }
-      state = state.copyWith(
-        loading: false,
-        errorMessage: '页面初始化失败，请稍后重试',
-      );
+      state = state.copyWith(loading: false, errorMessage: '页面初始化失败，请稍后重试');
     }
   }
 
   Future<void> loadDetail(int id) async {
     if (id <= 0) {
-      state = state.copyWith(
-        loading: false,
-        errorMessage: '教材参数无效，无法打开乐理页面',
-      );
+      state = state.copyWith(loading: false, errorMessage: '教材参数无效，无法打开乐理页面');
       return;
     }
 
@@ -108,6 +100,98 @@ class TheoryController extends StateNotifier<TheoryState> {
     state = state.copyWith(clearErrorMessage: true);
   }
 
+  Future<void> openShareDialog() async {
+    state = state.copyWith(
+      shareDialogVisible: true,
+      classLoading: state.classList.isEmpty,
+      clearErrorMessage: true,
+    );
+    final response = await repository.getClassList();
+    if (!mounted) {
+      return;
+    }
+    if (!response.isSuccess) {
+      state = state.copyWith(
+        classLoading: false,
+        errorMessage: response.msg.isEmpty ? '获取班级群失败' : response.msg,
+      );
+      return;
+    }
+    final raw = response.data;
+    final list = <TheoryShareClass>[];
+    if (raw is List) {
+      for (final node in raw) {
+        if (node is Map) {
+          list.add(TheoryShareClass.fromJson(node));
+        }
+      }
+    }
+    state = state.copyWith(classList: list, classLoading: false);
+  }
+
+  void closeShareDialog() {
+    state = state.copyWith(shareDialogVisible: false);
+  }
+
+  void toggleClass(String classId) {
+    state = state.copyWith(
+      classList: <TheoryShareClass>[
+        for (final cls in state.classList)
+          if (cls.id == classId) cls.copyWith(checked: !cls.checked) else cls,
+      ],
+    );
+  }
+
+  Future<bool> sendShare() async {
+    final detail = state.detail;
+    if (detail == null) {
+      return false;
+    }
+    final selected = state.classList
+        .where((cls) => cls.checked && cls.id.isNotEmpty)
+        .toList();
+    if (selected.isEmpty) {
+      final hasChecked = state.classList.any((cls) => cls.checked);
+      state = state.copyWith(
+        errorMessage: hasChecked ? '所选班级数据异常，请刷新后重试' : '请先选择要分享的班级群',
+      );
+      return false;
+    }
+
+    state = state.copyWith(sending: true, clearErrorMessage: true);
+    final content = jsonEncode(<String, dynamic>{
+      'id': detail.id,
+      'title': detail.title,
+      'type': state.args.type,
+      'shortText3': '',
+      'subtitle': '',
+    });
+
+    for (final cls in selected) {
+      final response = await repository.sendMsg(
+        classId: cls.id,
+        content: content,
+      );
+      if (!mounted) {
+        return false;
+      }
+      if (!response.isSuccess) {
+        state = state.copyWith(
+          sending: false,
+          errorMessage: response.msg.isEmpty ? '发送失败' : response.msg,
+        );
+        return false;
+      }
+    }
+
+    state = state.copyWith(
+      sending: false,
+      shareDialogVisible: false,
+      errorMessage: '消息已成功发送',
+    );
+    return true;
+  }
+
   TheoryDetail _parseDetail(Map<String, dynamic> raw) {
     final id = int.tryParse(raw['id']?.toString() ?? '') ?? 0;
     final firstMenu = int.tryParse(raw['firstMenu']?.toString() ?? '') ?? 0;
@@ -116,6 +200,13 @@ class TheoryController extends StateNotifier<TheoryState> {
         : '未命名教材';
 
     final pdfUrl = _resolvePdfUrl(raw);
+    final assignmentImages = _parseImageList(raw['img1']);
+    final answerImages = _parseImageList(raw['img2']);
+    final answerEndImages = state.args.answerEndMode
+        ? (assignmentImages.isEmpty
+              ? const <String>[]
+              : <String>[assignmentImages.first])
+        : answerImages;
 
     return TheoryDetail(
       id: id,
@@ -124,8 +215,10 @@ class TheoryController extends StateNotifier<TheoryState> {
       vipOnly: raw['vip']?.toString() == '1',
       htmlContent: raw['longText1']?.toString() ?? '',
       pdfUrl: pdfUrl,
-      assignmentImages: _parseImageList(raw['img1']),
-      answerImages: _parseImageList(raw['img2']),
+      assignmentImages: state.args.answerEndMode
+          ? const <String>[]
+          : assignmentImages,
+      answerImages: answerEndImages,
     );
   }
 
@@ -243,20 +336,7 @@ class TheoryController extends StateNotifier<TheoryState> {
     }
   }
 
-  String _resolveMediaUrl(String raw) {
-    final value = raw.trim();
-    if (value.isEmpty) {
-      return '';
-    }
-    if (value.startsWith('http://') || value.startsWith('https://')) {
-      return value;
-    }
-    if (value.startsWith('//')) {
-      return 'https:$value';
-    }
-    final normalized = value.startsWith('/') ? value : '/$value';
-    return '${AppConstants.apiBaseUrl.replaceFirst(RegExp(r'/$'), '')}$normalized';
-  }
+  String _resolveMediaUrl(String raw) => MediaUrl.resolve(raw);
 
   bool _hasVipAccess(dynamic data) {
     if (data is! Map<String, dynamic>) {

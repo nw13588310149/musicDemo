@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/network/upload_result.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/storage/app_storage.dart';
 import '../data/personal_center_repository.dart';
@@ -185,20 +186,23 @@ class PersonalCenterController extends StateNotifier<PersonalCenterState> {
     return null;
   }
 
-  /// 上传头像图片，成功返回远端 URL，失败返回 (null, err)。
-  Future<({String? url, String? error})> uploadAvatar({
+  /// 上传头像图片。成功时同时返回：
+  ///   - `path`：写入个人资料 (`headUrl`) 时使用的相对路径；
+  ///   - `url` ：用于本地即时预览的可访问地址。
+  /// 失败返回错误信息。
+  Future<({String? path, String? url, String? error})> uploadAvatar({
     required Uint8List bytes,
     required String filename,
   }) async {
     final r = await _repository.uploadFile(bytes: bytes, filename: filename);
     if (r.code != 0) {
-      return (url: null, error: r.msg.isEmpty ? '上传失败' : r.msg);
+      return (path: null, url: null, error: r.msg.isEmpty ? '上传失败' : r.msg);
     }
-    final url = r.data?.toString() ?? '';
-    if (url.isEmpty) {
-      return (url: null, error: '上传失败');
+    final result = parseUploadResult(r.data);
+    if (result.isEmpty) {
+      return (path: null, url: null, error: '上传失败');
     }
-    return (url: url, error: null);
+    return (path: result.savable, url: result.displayable, error: null);
   }
 
   /// 拉取省份列表；只在首次需要时调用。

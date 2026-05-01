@@ -159,7 +159,7 @@ class StudyCatalogController extends StateNotifier<StudyCatalogState> {
         bootstrapping: false,
         loading: false,
         lessonGroups: groups,
-        errorMessage: groups.isEmpty ? '暂无教材内容' : '',
+        errorMessage: groups.isEmpty ? '暂无课程' : '',
       );
     } catch (_) {
       if (!mounted) {

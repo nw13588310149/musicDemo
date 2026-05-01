@@ -6,10 +6,12 @@ class TheoryPdfView extends StatelessWidget {
     super.key,
     required this.url,
     required this.authToken,
+    this.interactive = true,
   });
 
   final String url;
   final String authToken;
+  final bool interactive;
 
   @override
   Widget build(BuildContext context) {
