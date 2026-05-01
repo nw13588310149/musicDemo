@@ -18,6 +18,7 @@ import '../../../core/network/media_url.dart';
 import '../../../core/widgets/app_asset_graphic.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/class_share_drawer.dart';
+import '../../../core/widgets/seamless_banner_carousel.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../state/video_tutorial_controller.dart';
 import '../state/video_tutorial_state.dart';
@@ -35,16 +36,8 @@ class VideoTutorialV2Page extends ConsumerStatefulWidget {
 }
 
 class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
-  static const int _initialBannerPage = 10000;
-
   final ScrollController _scrollController = ScrollController();
-  final PageController _bannerController = PageController(
-    initialPage: _initialBannerPage,
-  );
-  Timer? _bannerTimer;
   int _bannerIndex = 0;
-  int _bannerCount = 0;
-  int _bannerPage = _initialBannerPage;
   bool _isDetailOpening = false;
   final Set<String> _preloadedImageUrls = <String>{};
 
@@ -59,8 +52,6 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
   void dispose() {
     _scrollController.removeListener(_handleScroll);
     _scrollController.dispose();
-    _bannerTimer?.cancel();
-    _bannerController.dispose();
     super.dispose();
   }
 
@@ -69,34 +60,6 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
     if (_scrollController.position.extentAfter < 360) {
       ref.read(videoTutorialControllerProvider.notifier).loadMore();
     }
-  }
-
-  void _syncBannerAutoPlay(int count) {
-    if (_bannerCount == count) return;
-    _bannerCount = count;
-    _bannerIndex = 0;
-    _bannerPage = _initialBannerPage;
-    _bannerTimer?.cancel();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_bannerController.hasClients) return;
-      _bannerController.jumpToPage(_initialBannerPage);
-    });
-    if (count <= 1) return;
-    _bannerTimer = Timer.periodic(const Duration(seconds: 4), (_) {
-      if (!mounted || !_bannerController.hasClients || _bannerCount <= 1) {
-        return;
-      }
-      final currentPage = _bannerController.page?.round() ?? _bannerPage;
-      final nextPage = currentPage + 1;
-      _bannerPage = nextPage;
-      _bannerIndex = nextPage % _bannerCount;
-      _bannerController.animateToPage(
-        nextPage,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOutCubic,
-      );
-      setState(() {});
-    });
   }
 
   void _preloadImages(VideoTutorialState state) {
@@ -189,7 +152,6 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
     final state = ref.watch(videoTutorialControllerProvider);
     final scale = DashboardScaleScope.of(context);
     final ui = scale.ui;
-    _syncBannerAutoPlay(state.banners.length);
     _preloadImages(state);
 
     return Container(
@@ -228,7 +190,7 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
                         scale: scale,
                         banners: state.banners,
                         activeIndex: _bannerIndex,
-                        pageController: _bannerController,
+                        loading: state.loading,
                         latestVideos: state.videoList.take(3).toList(),
                         resolveUrl: _resolveUrl,
                         onBannerChanged: (i) =>
@@ -3569,7 +3531,7 @@ class _BannerAndLatestSection extends StatelessWidget {
     required this.scale,
     required this.banners,
     required this.activeIndex,
-    required this.pageController,
+    required this.loading,
     required this.latestVideos,
     required this.resolveUrl,
     required this.onBannerChanged,
@@ -3579,7 +3541,7 @@ class _BannerAndLatestSection extends StatelessWidget {
   final DashboardScaleData scale;
   final List<VideoBannerItem> banners;
   final int activeIndex;
-  final PageController pageController;
+  final bool loading;
   final List<VideoListItem> latestVideos;
   final String Function(String) resolveUrl;
   final ValueChanged<int> onBannerChanged;
@@ -3588,7 +3550,11 @@ class _BannerAndLatestSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = scale.ui;
-    final hasBanner = banners.isNotEmpty;
+    final bannerUrls = banners
+        .map((item) => resolveUrl(item.imageUrl))
+        .where((url) => url.isNotEmpty)
+        .toList();
+    final hasBanner = bannerUrls.isNotEmpty;
     return SizedBox(
       height: ui(264),
       child: Row(
@@ -3600,21 +3566,19 @@ class _BannerAndLatestSection extends StatelessWidget {
                 children: [
                   Positioned.fill(
                     child: hasBanner
-                        ? PageView.builder(
-                            controller: pageController,
-                            onPageChanged: (index) =>
-                                onBannerChanged(index % banners.length),
-                            itemBuilder: (context, index) => _VideoCachedImage(
-                              url: resolveUrl(
-                                banners[index % banners.length].imageUrl,
-                              ),
-                              fit: BoxFit.cover,
-                              fallback: Image.asset(
-                                AppAssets.videoBanner,
-                                fit: BoxFit.cover,
-                              ),
+                        ? SeamlessBannerCarousel(
+                            imageUrls: bannerUrls,
+                            placeholder: const ColoredBox(
+                              color: Color(0xFFF5F6FA),
                             ),
+                            animationDuration: const Duration(
+                              milliseconds: 300,
+                            ),
+                            animationCurve: Curves.easeOutCubic,
+                            onPageChanged: onBannerChanged,
                           )
+                        : loading
+                        ? const ColoredBox(color: Color(0xFFF5F6FA))
                         : Image.asset(AppAssets.videoBanner, fit: BoxFit.cover),
                   ),
                   Positioned(
@@ -3635,12 +3599,12 @@ class _BannerAndLatestSection extends StatelessWidget {
                       ),
                     ),
                   ),
-                  if (hasBanner && banners.length > 1)
+                  if (hasBanner && bannerUrls.length > 1)
                     Positioned(
                       right: ui(16),
                       bottom: ui(12),
                       child: Row(
-                        children: List.generate(banners.length, (index) {
+                        children: List.generate(bannerUrls.length, (index) {
                           final active = index == activeIndex;
                           return Container(
                             width: active ? ui(20) : ui(8),

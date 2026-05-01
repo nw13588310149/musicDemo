@@ -1,12 +1,10 @@
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:carousel_slider/carousel_slider.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/route_paths.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/network/media_url.dart';
+import '../../../core/widgets/seamless_banner_carousel.dart';
 import '../state/home_dashboard_controller.dart';
 import '../state/home_dashboard_state.dart';
 import '../../shell/ui/shell_layout.dart';
@@ -40,55 +38,7 @@ class _HomePageView extends StatefulWidget {
 }
 
 class _HomePageViewState extends State<_HomePageView> {
-  // ── 轮播图：使用 carousel_slider 包，autoPlay + enableInfiniteScroll
-  // 内部已实现"末→首"无缝向前过渡，无需手动维护 PageController/Timer/虚拟索引
   int _bannerIndex = 0;
-  bool _bannerImagesPrecached = false;
-  bool _bannerImagesReady = false;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _precacheBannerImages();
-  }
-
-  @override
-  void didUpdateWidget(covariant _HomePageView oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (!listEquals(
-      _effectiveBannerImages(oldWidget.state.bannerItems),
-      _effectiveBannerImages(widget.state.bannerItems),
-    )) {
-      _bannerImagesPrecached = false;
-      _bannerImagesReady = false;
-      _bannerIndex = 0;
-      _precacheBannerImages();
-    }
-  }
-
-  /// 进入首页时一次性把所有轮播图下载到本地磁盘 + 内存：
-  /// - 网络图：`CachedNetworkImageProvider`（disk + memory，跨启动可用）
-  /// - 本地图：`AssetImage`（precache 到 ImageCache）
-  void _precacheBannerImages() {
-    if (_bannerImagesPrecached) return;
-    final images = _effectiveBannerImages(widget.state.bannerItems);
-    if (images.isEmpty) {
-      _bannerImagesReady = true;
-      return;
-    }
-    _bannerImagesPrecached = true;
-    final futures = <Future<void>>[];
-    for (final url in images) {
-      final provider = url.startsWith('http')
-          ? CachedNetworkImageProvider(url) as ImageProvider
-          : AssetImage(url);
-      futures.add(precacheImage(provider, context).catchError((_) {}));
-    }
-    Future.wait(futures).whenComplete(() {
-      if (!mounted) return;
-      setState(() => _bannerImagesReady = true);
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -204,30 +154,19 @@ class _HomePageViewState extends State<_HomePageView> {
       child: Stack(
         children: [
           const Positioned.fill(child: ColoredBox(color: Color(0xFFF5F6FA))),
-          if (images.isEmpty)
-            Positioned.fill(child: _buildBannerFallbackBackground())
-          else
-            Positioned.fill(
-              child: CarouselSlider.builder(
-                itemCount: images.length,
-                itemBuilder: (context, index, realIndex) =>
-                    _BannerSlide(url: images[index]),
-                options: CarouselOptions(
-                  height: height,
-                  viewportFraction: 1.0,
-                  enableInfiniteScroll: images.length > 1,
-                  autoPlay: images.length > 1 && _bannerImagesReady,
-                  autoPlayInterval: const Duration(seconds: 4),
-                  autoPlayAnimationDuration: const Duration(milliseconds: 420),
-                  autoPlayCurve: Curves.easeInOutCubic,
-                  scrollPhysics: const ClampingScrollPhysics(),
-                  onPageChanged: (index, reason) {
-                    if (!mounted) return;
-                    setState(() => _bannerIndex = index);
-                  },
-                ),
-              ),
+          Positioned.fill(
+            child: SeamlessBannerCarousel(
+              imageUrls: images,
+              placeholder: const ColoredBox(color: Color(0xFFF5F6FA)),
+              empty: _buildBannerFallbackBackground(),
+              animationDuration: const Duration(milliseconds: 420),
+              animationCurve: Curves.easeInOutCubic,
+              onPageChanged: (index) {
+                if (!mounted) return;
+                setState(() => _bannerIndex = index);
+              },
             ),
+          ),
           // 分页指示器
           Positioned(
             right: 36,
@@ -542,43 +481,6 @@ class _VoiceCard extends StatelessWidget {
           filterQuality: FilterQuality.high,
         ),
       ),
-    );
-  }
-}
-
-/// 单张轮播图：
-/// - 网络图：`CachedNetworkImage`（disk + memory 双缓存，每张图全生命周期只下载一次）
-/// - 本地图：`Image.asset`
-/// - 用 `width/height: infinity + BoxFit.cover` 铺满 PageView 单页
-class _BannerSlide extends StatelessWidget {
-  const _BannerSlide({required this.url});
-
-  final String url;
-
-  @override
-  Widget build(BuildContext context) {
-    if (!url.startsWith('http')) {
-      return Image.asset(
-        url,
-        width: double.infinity,
-        height: double.infinity,
-        fit: BoxFit.cover,
-        filterQuality: FilterQuality.high,
-        gaplessPlayback: true,
-      );
-    }
-    return CachedNetworkImage(
-      imageUrl: url,
-      width: double.infinity,
-      height: double.infinity,
-      fit: BoxFit.cover,
-      filterQuality: FilterQuality.high,
-      fadeInDuration: Duration.zero,
-      fadeOutDuration: Duration.zero,
-      useOldImageOnUrlChange: true,
-      placeholder: (context, _) => const ColoredBox(color: Color(0xFFF5F6FA)),
-      errorWidget: (context, _, _) =>
-          const ColoredBox(color: Color(0xFFF5F6FA)),
     );
   }
 }
