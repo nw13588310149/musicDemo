@@ -24,16 +24,19 @@ const _greenSoft = Color(0x0D0CAC40);
 
 const _historyPaneWidth = 230.0;
 const _mainHorizontalPadding = 64.0;
-const _mainTopPadding = 40.0;
 const _mainBottomPadding = 12.0;
+
+// Figma 题项编号配色：1/2 红 #EB2F2F；3 橙 #FE7B3F；4/5/6 浅灰 #CECED1
+// 注意：4/5/6 用的是 #CECED1（更淡），不是 #B6B5BB（_textHint），肉眼能看出差别。
+const Color _theoryRankDim = Color(0xFFCECED1);
 
 const _theoryPrompts = <_AiPromptQuestion>[
   _AiPromptQuestion('1', '大小调怎么快速区分？', Color(0xFFEB2F2F)),
   _AiPromptQuestion('2', '增四度和减五度为什么是三全音？', Color(0xFFEB2F2F)),
   _AiPromptQuestion('3', '属七为什么必须解决？', Color(0xFFFE7B3F)),
-  _AiPromptQuestion('4', '4/4 和 6/8 区别在哪？', _textHint),
-  _AiPromptQuestion('5', '同主音大小调区别？', _textHint),
-  _AiPromptQuestion('6', '常用音乐术语（中英对照）', _textHint),
+  _AiPromptQuestion('4', '4/4 和 6/8 区别在哪？', _theoryRankDim),
+  _AiPromptQuestion('5', '同主音大小调区别？', _theoryRankDim),
+  _AiPromptQuestion('6', '常用音乐术语（中英对照）', _theoryRankDim),
 ];
 
 const _toolShortcuts = <_AiToolShortcut>[
@@ -86,11 +89,12 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
         border: Border.all(color: _border),
         borderRadius: BorderRadius.circular(16),
         color: state.isNewConversation ? null : Colors.white,
+        // Figma: linear-gradient(180deg, #EFEEFD 0%, white 34%, white 100%)
         gradient: state.isNewConversation
             ? const LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Color(0xFFEFEFFD), Colors.white, Colors.white],
+                colors: [Color(0xFFEFEEFD), Colors.white, Colors.white],
                 stops: [0, 0.34, 1],
               )
             : null,
@@ -155,51 +159,56 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
           const SizedBox(height: 24),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: SizedBox(
-              width: 199,
-              height: 36,
-              child: Material(
-                color: _panelFill,
-                borderRadius: BorderRadius.circular(24),
-                child: InkWell(
+            // 取消左侧栏所有点击效果：用 GestureDetector + Container 替代
+            // Material + InkWell，避免水波纹/高亮覆盖按钮原有视觉。
+            child: GestureDetector(
+              onTap: () {
+                controller.startNewChat();
+                _inputCtrl.clear();
+                setState(() {});
+              },
+              behavior: HitTestBehavior.opaque,
+              child: Container(
+                width: 199,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: _panelFill,
                   borderRadius: BorderRadius.circular(24),
-                  onTap: () {
-                    controller.startNewChat();
-                    _inputCtrl.clear();
-                    setState(() {});
-                  },
-                  child: const Center(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        AppAssetGraphic(
-                          AppAssets.aiChatV2NewChatPlus,
-                          width: 16,
-                          height: 16,
+                ),
+                child: const Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      AppAssetGraphic(
+                        AppAssets.aiChatV2NewChatPlus,
+                        width: 16,
+                        height: 16,
+                      ),
+                      SizedBox(width: 8),
+                      // Figma: 14/500 / line-height 20 / #8741FF
+                      Text(
+                        '开启新对话',
+                        style: TextStyle(
+                          color: _purple,
+                          fontSize: 14,
+                          fontFamily: 'PingFang SC',
+                          fontWeight: FontWeight.w500,
+                          height: 20 / 14,
                         ),
-                        SizedBox(width: 8),
-                        Text(
-                          '开启新对话',
-                          style: TextStyle(
-                            color: _purple,
-                            fontSize: 14,
-                            fontFamily: 'PingFang SC',
-                            fontWeight: FontWeight.w500,
-                            height: 1.42,
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
           ),
-          const SizedBox(height: 14),
+          // Figma: 开启新对话(36 高, top 24.74) → "全部"(top 76.74) = 16px gap
+          const SizedBox(height: 16),
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
+                // Figma: 14/500 / line-height 20 / #0B081A
                 Text(
                   '全部',
                   style: TextStyle(
@@ -207,6 +216,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                     fontSize: 14,
                     fontFamily: 'PingFang SC',
                     fontWeight: FontWeight.w500,
+                    height: 20 / 14,
                   ),
                 ),
                 Spacer(),
@@ -218,7 +228,10 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
               ],
             ),
           ),
-          const SizedBox(height: 10),
+          // Figma: "全部" 文字底(96.74) → "历史对话" group 顶(184.74) ≈ 88px。
+          // 这里实际上 88 ≈ 16(gap) + 72(顶部空) 或者拆分。当前显示就保持 16，
+          // 后续历史对话 label 与列表内部的间距由 ListView 内部 SizedBox 决定。
+          const SizedBox(height: 16),
           Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -233,6 +246,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                   : ListView(
                       padding: EdgeInsets.zero,
                       children: [
+                        // Figma: 历史对话 label  12/500 / line-height 18 / #B6B5BB
                         const Text(
                           '历史对话',
                           style: TextStyle(
@@ -240,9 +254,10 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                             fontSize: 12,
                             fontFamily: 'PingFang SC',
                             fontWeight: FontWeight.w500,
-                            height: 1.5,
+                            height: 18 / 12,
                           ),
                         ),
+                        // Figma: label → 第一个 tile gap = 6
                         const SizedBox(height: 6),
                         if (state.isNewConversation) ...[
                           _historyTile(
@@ -255,12 +270,17 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                               setState(() {});
                             },
                           ),
-                          const SizedBox(height: 6),
+                          // Figma: tile 之间 gap ≈ 2（sub-group 内紧排）
+                          const SizedBox(height: 2),
                         ],
                         for (final group in groups)
                           if (group.items.isNotEmpty) ...[
+                            // Figma: 上一组结束 → 下一组 group label gap = 6
+                            const SizedBox(height: 6),
                             Padding(
-                              padding: const EdgeInsets.fromLTRB(12, 6, 0, 6),
+                              // Figma: group label 在 group 内 left:12（相对 group 的 left:0）
+                              padding: const EdgeInsets.only(left: 12),
+                              // Figma: 12/500 / line-height 18 / #CECED1
                               child: Text(
                                 group.label,
                                 style: const TextStyle(
@@ -268,31 +288,34 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                                   fontSize: 12,
                                   fontFamily: 'PingFang SC',
                                   fontWeight: FontWeight.w500,
-                                  height: 1.5,
+                                  height: 18 / 12,
                                 ),
                               ),
                             ),
-                            for (final session in group.items) ...[
+                            const SizedBox(height: 6),
+                            for (var i = 0; i < group.items.length; i++) ...[
+                              if (i > 0) const SizedBox(height: 2),
                               _historyTile(
-                                title: session.title,
+                                title: group.items[i].title,
                                 active:
                                     !state.isNewConversation &&
-                                    state.activeSessionId == session.id,
+                                    state.activeSessionId == group.items[i].id,
                                 showMore:
                                     !state.isNewConversation &&
-                                    state.activeSessionId == session.id,
+                                    state.activeSessionId == group.items[i].id,
                                 onTap: () async {
                                   final error = await controller.selectSession(
-                                    session.id,
+                                    group.items[i].id,
                                   );
                                   if (error != null && mounted) {
                                     _showInfo(error);
                                   }
                                 },
-                                onMoreTap: () =>
-                                    _confirmDeleteSession(controller, session),
+                                onMoreTap: () => _confirmDeleteSession(
+                                  controller,
+                                  group.items[i],
+                                ),
                               ),
-                              const SizedBox(height: 4),
                             ],
                           ],
                         const SizedBox(height: 8),
@@ -312,48 +335,51 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
     bool showMore = false,
     VoidCallback? onMoreTap,
   }) {
-    return SizedBox(
-      width: 198,
-      height: 40,
-      child: Material(
-        color: active ? _panelFill : Colors.transparent,
-        borderRadius: BorderRadius.circular(10),
-        child: InkWell(
+    // 历史会话条目同样去掉点击水波纹/高亮：
+    // 用 GestureDetector + Container 替代 Material + InkWell。
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: 198,
+        height: 40,
+        decoration: BoxDecoration(
+          color: active ? _panelFill : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: _textPrimary,
-                      fontSize: 14,
-                      fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w400,
-                      height: 1.42,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            children: [
+              Expanded(
+                // Figma: 14/400 / line-height 20 / #0B081A
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: _textPrimary,
+                    fontSize: 14,
+                    fontFamily: 'PingFang SC',
+                    fontWeight: FontWeight.w400,
+                    height: 20 / 14,
+                  ),
+                ),
+              ),
+              if (showMore)
+                GestureDetector(
+                  onTap: onMoreTap,
+                  behavior: HitTestBehavior.opaque,
+                  child: const Padding(
+                    padding: EdgeInsets.all(4),
+                    child: AppAssetGraphic(
+                      AppAssets.aiChatV2HistoryMore,
+                      width: 13.3,
+                      height: 3.1,
                     ),
                   ),
                 ),
-                if (showMore)
-                  InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: onMoreTap,
-                    child: const Padding(
-                      padding: EdgeInsets.all(4),
-                      child: AppAssetGraphic(
-                        AppAssets.aiChatV2HistoryMore,
-                        width: 13.3,
-                        height: 3.1,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+            ],
           ),
         ),
       ),
@@ -365,110 +391,133 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
     required AiChatController controller,
     required double composerWidth,
   }) {
-    return Column(
-      children: [
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(
-              _mainHorizontalPadding,
-              _mainTopPadding,
-              _mainHorizontalPadding,
-              20,
+    // 严格对齐 Figma（content 区高 730，相对坐标）：
+    //   top  94      LOGO 顶
+    //   +    76      welcome row（LOGO 52 / 副标题 2 行 22*2 + 标题 28 + gap 4 = 76）
+    //   +    11      welcome → cards
+    //   +   265      cards 区
+    //   +   110      cards → composer（Figma 实测，硬编码精准还原）
+    //   +   104      composer
+    //   +    13      composer → disclaimer
+    //   +    16      disclaimer line-height
+    //   +    41      bottom padding
+    //   = 730       ✓
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        _mainHorizontalPadding,
+        94,
+        _mainHorizontalPadding,
+        41,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildWelcomeSection(),
+          const SizedBox(height: 11),
+          SizedBox(
+            height: 265,
+            child: Row(
+              children: [
+                Expanded(child: _buildTheoryCard()),
+                const SizedBox(width: 16),
+                Expanded(child: _buildToolCard()),
+              ],
             ),
+          ),
+          // Figma: cards 底(content 446) → composer 顶(content 556) = 110
+          const SizedBox(height: 110),
+          _buildComposer(state, controller, composerWidth),
+          const SizedBox(height: 13),
+          _buildDisclaimer(),
+        ],
+      ),
+    );
+  }
+
+  // Welcome 头像视觉调节：
+  // - logoSlot：布局占位尺寸，严格等于 Figma 的 52，保证周围排版不受影响。
+  // - logoVisualSize：图片实际渲染尺寸。icon.png 自带阴影留白，
+  //   主体在图内只占 ~60-75%，按 52 渲染时视觉 LOGO 偏小。
+  //   把它放大到 logoVisualSize，靠 OverflowBox 让多出来的部分
+  //   在 4 个方向均匀溢出而不撑大 Row 的布局空间。
+  // - logoVerticalNudge：图片自带的阴影并非上下对称（阴影偏下方），
+  //   居中渲染会让 LOGO 主体视觉偏上；用 Transform.translate 把图片单独
+  //   下移指定像素，仅改变绘制位置，不影响布局占位。
+  // 调整顺序：先调 _logoVisualSize 让 LOGO 大小满意，再调 _logoVerticalNudge
+  // 让 LOGO 视觉中心对齐文字基线。
+  static const double _logoSlot = 52;
+  static const double _logoVisualSize = 90;
+  static const double _logoVerticalNudge = 9;
+
+  Widget _buildWelcomeSection() {
+    // Figma: 整个 welcome row 高度 76（设计稿副标题 2 行 → 76）。
+    // 由于副标题被强制单行（用户偏好），文字组实际只有 54 高；
+    // 用 SizedBox 把 row 锁死到 76，副标题贴顶部显示、下方自然留 22 空隙，
+    // 保证 cards 顶部位置仍然严格落在 Figma 设计的 content top:181。
+    return SizedBox(
+      height: 76,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 布局占位 52×52（与 Figma 一致），但允许图片实际渲染尺寸大于占位、
+          // 让 PNG 自带的阴影留白被"溢出"到布局之外，从而把 LOGO 主体视觉补回到 52；
+          // 再用 Transform.translate 单独把图片下移 _logoVerticalNudge 像素，
+          // 抵消 PNG 阴影偏下导致的视觉上移，但不影响 Row 的布局占位。
+          SizedBox(
+            width: _logoSlot,
+            height: _logoSlot,
+            child: OverflowBox(
+              maxWidth: double.infinity,
+              maxHeight: double.infinity,
+              child: Transform.translate(
+                offset: const Offset(0, _logoVerticalNudge),
+                child: Image.asset(
+                  AppAssets.aiChatXiaoYiIcon,
+                  width: _logoVisualSize,
+                  height: _logoVisualSize,
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          const Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildWelcomeSection(),
-                const SizedBox(height: 28),
-                SizedBox(
-                  height: 265,
-                  child: Row(
-                    children: [
-                      Expanded(child: _buildTheoryCard()),
-                      const SizedBox(width: 16),
-                      Expanded(child: _buildToolCard()),
-                    ],
+                // Figma: 20/500 / line-height 28 / #0B081A
+                Text(
+                  '我是小艺同学，很高兴见到你！',
+                  style: TextStyle(
+                    color: _textPrimary,
+                    fontSize: 20,
+                    fontFamily: 'PingFang SC',
+                    fontWeight: FontWeight.w500,
+                    height: 28 / 20,
+                  ),
+                ),
+                SizedBox(height: 4),
+                // Figma: 13/400 / line-height 22 / #707790；强制单行不换行。
+                // 41 个字符 × 13px ≈ 533px，与 Expanded 宽度 ~544px 是临界点，
+                // PingFang OTF 字宽稍大就会换行；softWrap:false 直接禁止换行。
+                Text(
+                  '专属音乐AI问答助手，秒解专业疑问，梳理艺考考点，全程陪伴学习，让音乐备考更轻松高效。',
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.visible,
+                  style: TextStyle(
+                    color: _textSecondary,
+                    fontSize: 13,
+                    fontFamily: 'PingFang SC',
+                    fontWeight: FontWeight.w400,
+                    height: 22 / 13,
                   ),
                 ),
               ],
             ),
           ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            _mainHorizontalPadding,
-            0,
-            _mainHorizontalPadding,
-            _mainBottomPadding,
-          ),
-          child: _buildComposer(state, controller, composerWidth),
-        ),
-        _buildDisclaimer(),
-        const SizedBox(height: 8),
-      ],
-    );
-  }
-
-  Widget _buildWelcomeSection() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 52,
-          height: 52,
-          decoration: const BoxDecoration(
-            borderRadius: BorderRadius.all(Radius.circular(16)),
-            gradient: LinearGradient(
-              begin: Alignment.bottomCenter,
-              end: Alignment.topCenter,
-              colors: [Color(0xFFB68EFF), Color(0xFF8640FF)],
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Color(0x1A8A47FF),
-                blurRadius: 20,
-                offset: Offset(0, 10),
-              ),
-            ],
-          ),
-          child: const Center(
-            child: AppAssetGraphic(
-              AppAssets.aiChatV2IntroLogo,
-              width: 32,
-              height: 32,
-            ),
-          ),
-        ),
-        const SizedBox(width: 16),
-        const Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '我是小艺同学，很高兴见到你！',
-                style: TextStyle(
-                  color: _textPrimary,
-                  fontSize: 20,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w500,
-                  height: 1.4,
-                ),
-              ),
-              SizedBox(height: 4),
-              Text(
-                '专属音乐AI问答助手，秒解专业疑问，梳理艺考考点，全程陪伴学习，让音乐备考更轻松高效。',
-                style: TextStyle(
-                  color: _textSecondary,
-                  fontSize: 13,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w400,
-                  height: 1.7,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -484,6 +533,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Figma: 16/500 / line-height 22 / #0B081A
             const Text(
               '音乐理论问题',
               style: TextStyle(
@@ -491,10 +541,12 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                 fontSize: 16,
                 fontFamily: 'PingFang SC',
                 fontWeight: FontWeight.w500,
-                height: 1.35,
+                height: 22 / 16,
               ),
             ),
-            const SizedBox(height: 2),
+            // Figma: 副标题紧跟标题（line-height 内紧排），不再额外间距
+            const SizedBox(height: 0),
+            // Figma: 12/400 / line-height 22 / #B6B5BB
             const Text(
               '让你的艺考之路更加顺畅~',
               style: TextStyle(
@@ -502,54 +554,57 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                 fontSize: 12,
                 fontFamily: 'PingFang SC',
                 fontWeight: FontWeight.w400,
-                height: 1.6,
+                height: 22 / 12,
               ),
             ),
-            const SizedBox(height: 14),
+            // Figma: 副标题底（top:295 + 22 line-height = 317） → 列表起点 326，差 ~9
+            const SizedBox(height: 13),
             Expanded(
               child: ListView.separated(
                 physics: const NeverScrollableScrollPhysics(),
                 padding: EdgeInsets.zero,
                 itemCount: _theoryPrompts.length,
-                separatorBuilder: (context, index) => const SizedBox(height: 6),
+                // 题项之间间距：Figma 6 → 改为 10 让上下两题之间更通透
+                separatorBuilder: (context, index) => const SizedBox(height: 8),
                 itemBuilder: (context, index) {
                   final item = _theoryPrompts[index];
                   return InkWell(
                     onTap: () => _handlePromptTap(item.text),
                     borderRadius: BorderRadius.circular(8),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 2),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            item.indexLabel,
-                            style: TextStyle(
-                              color: item.indexColor,
-                              fontSize: 16,
-                              fontFamily: 'Barlow',
-                              fontWeight: FontWeight.w600,
-                              fontStyle: FontStyle.italic,
-                              height: 1.2,
+                    child: Row(
+                      // 数字（16/Barlow italic）与文字（12/PingFang）字号不同，
+                      // 顶部对齐时视觉上偏离基线；改为中线对齐让两者垂直居中。
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        // Figma: 16/600 italic / Barlow / line-height 22
+                        Text(
+                          item.indexLabel,
+                          style: TextStyle(
+                            color: item.indexColor,
+                            fontSize: 16,
+                            fontFamily: 'Barlow',
+                            fontWeight: FontWeight.w600,
+                            fontStyle: FontStyle.italic,
+                            height: 22 / 16,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        // Figma: 12/400 / PingFang / line-height 22
+                        Expanded(
+                          child: Text(
+                            item.text,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: _textPrimary,
+                              fontSize: 12,
+                              fontFamily: 'PingFang SC',
+                              fontWeight: FontWeight.w400,
+                              height: 22 / 12,
                             ),
                           ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              item.text,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: _textPrimary,
-                                fontSize: 12,
-                                fontFamily: 'PingFang SC',
-                                fontWeight: FontWeight.w400,
-                                height: 1.55,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   );
                 },
@@ -562,103 +617,117 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
   }
 
   Widget _buildToolCard() {
-    return Container(
-      height: 265,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        gradient: const LinearGradient(
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-          colors: [Color(0xFFD4D2FF), Color(0xFFF3F3FF)],
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    // 效率工具卡使用背景图 aibg.png（已自带与原渐变一致的色调），
+    // 用 ClipRRect 裁出 16px 圆角，再用 Image 作为底层 + 内容叠在上方。
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: SizedBox(
+        height: 265,
+        child: Stack(
+          fit: StackFit.expand,
           children: [
-            const Text(
-              '效率工具',
-              style: TextStyle(
-                color: _textPrimary,
-                fontSize: 16,
-                fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
-                height: 1.35,
-              ),
-            ),
-            const SizedBox(height: 2),
-            const Text(
-              '音乐学习就用艺同学',
-              style: TextStyle(
-                color: _textHint,
-                fontSize: 12,
-                fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w400,
-                height: 1.6,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: ListView.separated(
-                padding: EdgeInsets.zero,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: _toolShortcuts.length,
-                separatorBuilder: (context, index) => const SizedBox(height: 8),
-                itemBuilder: (context, index) {
-                  final tool = _toolShortcuts[index];
-                  return Material(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(8),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(8),
-                      onTap: () => _handlePromptTap(tool.prompt),
-                      child: SizedBox(
-                        height: 50,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          child: Row(
-                            children: [
-                              _buildToolIcon(tool),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+            Image.asset(AppAssets.aiChatToolCardBg, fit: BoxFit.cover),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 标题/副标题间距与左侧"音乐理论问题"卡保持一致，
+                  // 确保第一行内容（"分析乐谱"按钮顶）与左卡第一题项顶严格对齐。
+                  // Figma: 16/500 / line-height 22 / #0B081A
+                  const Text(
+                    '效率工具',
+                    style: TextStyle(
+                      color: _textPrimary,
+                      fontSize: 16,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: FontWeight.w500,
+                      height: 22 / 16,
+                    ),
+                  ),
+                  // 与左卡一致：标题与副标题不额外加间距（line-height 内紧排）
+                  const SizedBox(height: 0),
+                  // Figma: 12/400 / line-height 22 / #B6B5BB
+                  const Text(
+                    '音乐学习就用艺同学',
+                    style: TextStyle(
+                      color: _textHint,
+                      fontSize: 12,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: FontWeight.w400,
+                      height: 22 / 12,
+                    ),
+                  ),
+                  // 与左卡一致：副标题底 → 第一行内容 = 9
+                  const SizedBox(height: 13),
+                  Expanded(
+                    child: ListView.separated(
+                      padding: EdgeInsets.zero,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: _toolShortcuts.length,
+                      separatorBuilder: (context, index) =>
+                          const SizedBox(height: 8),
+                      itemBuilder: (context, index) {
+                        final tool = _toolShortcuts[index];
+                        return Material(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(8),
+                            onTap: () => _handlePromptTap(tool.prompt),
+                            child: SizedBox(
+                              height: 50,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                ),
+                                child: Row(
                                   children: [
-                                    Text(
-                                      tool.title,
-                                      style: const TextStyle(
-                                        color: _textPrimary,
-                                        fontSize: 12,
-                                        fontFamily: 'PingFang SC',
-                                        fontWeight: FontWeight.w500,
-                                        height: 1.35,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 1),
-                                    Text(
-                                      tool.subtitle,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        color: _textHint,
-                                        fontSize: 10,
-                                        fontFamily: 'PingFang SC',
-                                        fontWeight: FontWeight.w400,
-                                        height: 1.35,
+                                    _buildToolIcon(tool),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            tool.title,
+                                            style: const TextStyle(
+                                              color: _textPrimary,
+                                              fontSize: 12,
+                                              fontFamily: 'PingFang SC',
+                                              fontWeight: FontWeight.w500,
+                                              height: 1.35,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 1),
+                                          Text(
+                                            tool.subtitle,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              color: _textHint,
+                                              fontSize: 10,
+                                              fontFamily: 'PingFang SC',
+                                              fontWeight: FontWeight.w400,
+                                              height: 1.35,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
-                            ],
+                            ),
                           ),
-                        ),
-                      ),
+                        );
+                      },
                     ),
-                  );
-                },
+                  ),
+                ],
               ),
             ),
           ],
@@ -1040,10 +1109,21 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: _border),
+          // Figma 复合阴影：
+          // 1) 0 0 1 rgba(11,8,26,0.02)         —— 最近的 1px 浮起
+          // 2) 0 12 40 rgba(11,8,26,0.06)       —— 主投影
+          // 3) 0 12 24 -16 rgba(11,8,26,0.02)   —— 收紧的轻阴影（Flutter 用 spread:-16 模拟）
           boxShadow: const [
+            BoxShadow(color: Color(0x050B081A), blurRadius: 1),
             BoxShadow(
-              color: Color(0x0A0B081A),
+              color: Color(0x0F0B081A),
+              blurRadius: 40,
+              offset: Offset(0, 12),
+            ),
+            BoxShadow(
+              color: Color(0x050B081A),
               blurRadius: 24,
+              spreadRadius: -16,
               offset: Offset(0, 12),
             ),
           ],
@@ -1055,43 +1135,48 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                 height: 50,
                 child: _buildAttachmentTray(state, controller),
               ),
-            SizedBox(
-              height: 56,
+            // 输入区改为多行 textarea：占满输入框中剩余的纵向空间，
+            // 内容超出时内部可滚动。Enter 换行；通过右下角发送按钮提交。
+            // padding：左/右 16，顶部 12（首行文字距顶 12px），底部 8 留白。
+            Expanded(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextField(
-                    controller: _inputCtrl,
-                    maxLines: 1,
-                    style: const TextStyle(
-                      color: _textPrimary,
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: TextField(
+                  controller: _inputCtrl,
+                  maxLines: null,
+                  minLines: null,
+                  expands: true,
+                  keyboardType: TextInputType.multiline,
+                  textAlignVertical: TextAlignVertical.top,
+                  cursorColor: _purple,
+                  style: const TextStyle(
+                    color: _textPrimary,
+                    fontSize: 14,
+                    fontFamily: 'PingFang SC',
+                    fontWeight: FontWeight.w400,
+                    height: 1.6,
+                  ),
+                  decoration: const InputDecoration(
+                    isCollapsed: true,
+                    border: InputBorder.none,
+                    hintText: '流行音乐中常见的和弦进行有哪些？',
+                    hintStyle: TextStyle(
+                      color: Color(0x7326244C),
                       fontSize: 14,
                       fontFamily: 'PingFang SC',
                       fontWeight: FontWeight.w400,
                       height: 1.6,
                     ),
-                    decoration: const InputDecoration(
-                      isCollapsed: true,
-                      border: InputBorder.none,
-                      hintText: '流行音乐中常见的和弦进行有哪些？',
-                      hintStyle: TextStyle(
-                        color: Color(0x7326244C),
-                        fontSize: 14,
-                        fontFamily: 'PingFang SC',
-                        fontWeight: FontWeight.w400,
-                        height: 1.6,
-                      ),
-                    ),
-                    textInputAction: TextInputAction.send,
-                    onSubmitted: (_) => _handleSend(controller),
-                    onChanged: (_) => setState(() {}),
                   ),
+                  textInputAction: TextInputAction.newline,
+                  onChanged: (_) => setState(() {}),
                 ),
               ),
             ),
-            const Divider(height: 1, color: _border),
-            Expanded(
+            // 底部工具栏：固定 48 高度（padding 8+8 + 内容 32）。
+            // 不再需要中间分隔线；textarea 与工具栏视觉上合并为一个白底盒子。
+            SizedBox(
+              height: 48,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
                 child: Row(
@@ -1255,17 +1340,22 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
   }
 
   Widget _buildDisclaimer() {
-    return const Padding(
-      padding: EdgeInsets.symmetric(horizontal: _mainHorizontalPadding),
+    // Figma: 10/400 / line-height 16 / #99A1AF；single line。
+    // 用 Center 包裹让 Text 取自身内在宽度，并在父容器中水平居中显示，
+    // 避免 softWrap:false 时文字从左侧起绘导致视觉上不居中的问题。
+    return const Center(
       child: Text(
-        '服务生成的所有内容均由人工智能模型生成，其生成内容的准确性和完整性无法保证，不代表我们的态度或观点。',
+        '服务生成的所有内容均由人工智能模型生成，其生成内容的准确性和完整性无法保证，不代表我们的态度或观点',
         textAlign: TextAlign.center,
+        maxLines: 1,
+        softWrap: false,
+        overflow: TextOverflow.visible,
         style: TextStyle(
           color: Color(0xFF99A1AF),
           fontSize: 10,
           fontFamily: 'PingFang SC',
           fontWeight: FontWeight.w400,
-          height: 1.6,
+          height: 16 / 10,
         ),
       ),
     );

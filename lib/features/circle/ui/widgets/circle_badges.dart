@@ -60,9 +60,7 @@ class CircleBadgeRow extends StatelessWidget {
     return Wrap(
       spacing: ui(6),
       runSpacing: ui(4),
-      children: [
-        for (final b in badges) CircleBadgeChip(badge: b),
-      ],
+      children: [for (final b in badges) CircleBadgeChip(badge: b)],
     );
   }
 }

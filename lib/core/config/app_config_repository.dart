@@ -26,10 +26,8 @@ final appConfigRepositoryProvider = Provider<AppConfigRepository>((ref) {
 /// }
 /// ```
 class AppConfigRepository {
-  AppConfigRepository({
-    required this.client,
-    required AppStorage storage,
-  }) : _storage = storage;
+  AppConfigRepository({required this.client, required AppStorage storage})
+    : _storage = storage;
 
   final ApiClient client;
   final AppStorage _storage;

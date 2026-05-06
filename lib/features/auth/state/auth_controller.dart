@@ -22,9 +22,9 @@ class AuthController extends StateNotifier<AuthState> {
     required AuthRepository repository,
     required AppConfigRepository appConfigRepository,
     required this.scene,
-  })  : _repository = repository,
-        _appConfigRepository = appConfigRepository,
-        super(const AuthState());
+  }) : _repository = repository,
+       _appConfigRepository = appConfigRepository,
+       super(const AuthState());
 
   final AuthRepository _repository;
   final AppConfigRepository _appConfigRepository;
@@ -106,6 +106,9 @@ class AuthController extends StateNotifier<AuthState> {
       if (token.isNotEmpty) {
         await _repository.persistToken(token);
       }
+      // 持久化当前手机号，供 ShellController 在 refreshUserAndSchool 时
+      // 判定白名单管理员（如 13588310149）是否覆盖 user.role 为 admin。
+      await _repository.persistMobile(state.mobile);
 
       await checkFuture;
       unawaited(_reportCidIfNeeded());
@@ -124,7 +127,9 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   Future<AuthActionResult> submitRegister() async {
-    if (state.mobile.isEmpty || state.password.isEmpty || state.smsCode.isEmpty) {
+    if (state.mobile.isEmpty ||
+        state.password.isEmpty ||
+        state.smsCode.isEmpty) {
       return const AuthActionResult(success: false, message: '请完整填写注册信息');
     }
     if (!_mobileReg.hasMatch(state.mobile)) {
@@ -153,6 +158,8 @@ class AuthController extends StateNotifier<AuthState> {
       if (token.isNotEmpty) {
         await _repository.persistToken(token);
       }
+      // 注册成功也走自动登录流程，记下手机号供白名单管理员判定。
+      await _repository.persistMobile(state.mobile);
 
       unawaited(_appConfigRepository.refreshFileBaseUrl());
 
@@ -163,7 +170,9 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   Future<AuthActionResult> submitForgetPassword() async {
-    if (state.mobile.isEmpty || state.password.isEmpty || state.smsCode.isEmpty) {
+    if (state.mobile.isEmpty ||
+        state.password.isEmpty ||
+        state.smsCode.isEmpty) {
       return const AuthActionResult(success: false, message: '请完整填写找回信息');
     }
     if (!_mobileReg.hasMatch(state.mobile)) {
@@ -247,4 +256,3 @@ class AuthController extends StateNotifier<AuthState> {
     await _repository.reportCid(pushId);
   }
 }
-

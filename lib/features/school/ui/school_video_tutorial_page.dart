@@ -226,10 +226,7 @@ class _LatestVideosPlaceholder extends StatelessWidget {
       child: Center(
         child: Text(
           '最新视频',
-          style: TextStyle(
-            fontSize: ui(13),
-            color: const Color(0xFFB6B5BB),
-          ),
+          style: TextStyle(fontSize: ui(13), color: const Color(0xFFB6B5BB)),
         ),
       ),
     );

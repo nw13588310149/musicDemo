@@ -207,9 +207,9 @@ class AuthFigmaInputField extends StatelessWidget {
   }
 
   OutlineInputBorder get _border => OutlineInputBorder(
-        borderRadius: BorderRadius.circular(_s(12)),
-        borderSide: BorderSide(color: const Color(0xFFF3F2F3), width: _s(1)),
-      );
+    borderRadius: BorderRadius.circular(_s(12)),
+    borderSide: BorderSide(color: const Color(0xFFF3F2F3), width: _s(1)),
+  );
 
   double _s(double value) => value * scale;
 }
@@ -484,4 +484,3 @@ class AuthFigmaAgreementRow extends StatelessWidget {
 
   double _s(double value) => value * scale;
 }
-

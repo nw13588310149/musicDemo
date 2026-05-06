@@ -119,6 +119,26 @@ class CloudDriveController extends StateNotifier<CloudDriveState> {
   /// 内部委托给全局 `MediaUrl.resolve`，由 `/app/common/v2/configList`
   /// 拉到的文件服务器域名来做拼接（缓存于 `AppStorage.fileBaseUrl`，回退
   /// 到 `AppConstants.apiBaseUrl`）。
+  Future<String?> uploadFilePathRaw({
+    required String filePath,
+    required String filename,
+    void Function(double progress)? onProgress,
+  }) async {
+    if (filePath.trim().isEmpty) return null;
+    final response = await _repository.uploadFilePathWithProgress(
+      filePath: filePath,
+      filename: filename,
+      onSendProgress: onProgress != null
+          ? (sent, total) {
+              if (total > 0) onProgress((sent / total).clamp(0.0, 1.0));
+            }
+          : null,
+    );
+    if (!response.isSuccess) return null;
+    final result = parseUploadResult(response.data);
+    return result.isEmpty ? null : result.savable;
+  }
+
   static String resolveMediaUrl(String raw) => MediaUrl.resolve(raw);
 
   Future<void> refresh() async {
@@ -679,7 +699,9 @@ class CloudDriveController extends StateNotifier<CloudDriveState> {
   void previewSetImageIndex(int index) {
     final item = state.previewingFile;
     if (item == null) return;
-    final clamped = index.clamp(0, math.max(0, item.imageUrls.length - 1)).toInt();
+    final clamped = index
+        .clamp(0, math.max(0, item.imageUrls.length - 1))
+        .toInt();
     state = state.copyWith(previewActiveImageIndex: clamped);
   }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../features/shell/ui/shell_layout.dart';
+import '../constants/app_assets.dart';
 
 /// `showDialog` 的封装：在打开对话框前先从 [context] 中读取
 /// [DashboardScaleScope]，再把同一份 [DashboardScaleData] 重新注入到弹窗子树。
@@ -34,6 +35,149 @@ Future<T?> showScaledDialog<T>({
       );
     },
   );
+}
+
+/// 「渐变顶部装饰 + 居中标题 + 自定义内容 + 底部按钮」对话框容器。
+///
+/// 提取自 courseware「上传课件」弹窗的视觉系统，复用给所有需要：
+///   · 圆角 24 + 顶部 #D2C6FF→white 渐变（stops 0 / 0.21 / 1）
+///   · 顶部一张装饰位图（默认 `AppAssets.coursewareUploadHeader`）
+///   · 居中标题（默认 18/600，可通过 [titleFontSize] 覆盖；查寝补卡是 24px）
+///   · 自定义 [child] 表单内容
+///   · 可选底部 [actionBar]（推荐传入 [AppDialogActionBar]）
+/// 的弹窗。`width` 默认 420（设计基准 428，少 8 用作左右 inset 余量）。
+///
+/// 用法示例：
+/// ```dart
+/// showScaledDialog<void>(
+///   context: context,
+///   builder: (ctx) => GradientHeaderDialog(
+///     title: '申请查寝补卡',
+///     titleFontSize: 24,
+///     child: _MyForm(),
+///     actionBar: AppDialogActionBar(
+///       onCancel: () => Navigator.pop(ctx),
+///       onConfirm: () => Navigator.pop(ctx, true),
+///     ),
+///   ),
+/// );
+/// ```
+class GradientHeaderDialog extends StatelessWidget {
+  const GradientHeaderDialog({
+    super.key,
+    required this.title,
+    required this.child,
+    this.actionBar,
+    this.width = 420,
+    this.titleFontSize = 18,
+    this.titleFontWeight = FontWeight.w600,
+    this.titlePaddingTop = 22,
+    this.contentPadding,
+    this.headerAsset = AppAssets.coursewareUploadHeader,
+    this.headerHeight,
+  });
+
+  /// 标题文字（居中显示）。
+  final String title;
+
+  /// 标题与 actionBar 之间的主体内容。
+  final Widget child;
+
+  /// 底部按钮区。传入 null 时没有按钮（少数纯展示弹窗用）。
+  final Widget? actionBar;
+
+  /// 弹窗整体宽度（design 默认 420）。
+  final double width;
+
+  /// 标题字号（默认 18；查寝补卡用 24）。
+  final double titleFontSize;
+
+  final FontWeight titleFontWeight;
+
+  /// 标题距弹窗顶部的距离（默认 22，可与图片高度配合）。
+  final double titlePaddingTop;
+
+  /// content 内边距（默认左右 20、底部 20、顶部由 [titlePaddingTop] 决定）。
+  final EdgeInsets? contentPadding;
+
+  /// 顶部装饰位图资源；传 `null` 则不画装饰图。
+  final String? headerAsset;
+
+  /// 装饰图高度（默认 fitWidth 自适应）。
+  final double? headerHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: EdgeInsets.symmetric(horizontal: ui(32), vertical: ui(24)),
+      child: Container(
+        width: ui(width),
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: <Color>[Color(0xFFD2C6FF), Colors.white, Colors.white],
+            stops: <double>[0, 0.21, 1],
+          ),
+          borderRadius: BorderRadius.circular(ui(24)),
+        ),
+        child: Stack(
+          children: [
+            if (headerAsset != null)
+              Positioned(
+                left: 0,
+                right: 0,
+                top: 0,
+                child: headerHeight != null
+                    ? Image.asset(
+                        headerAsset!,
+                        height: ui(headerHeight!),
+                        fit: BoxFit.cover,
+                      )
+                    : Image.asset(headerAsset!, fit: BoxFit.fitWidth),
+              ),
+            Padding(
+              padding:
+                  contentPadding ??
+                  EdgeInsets.fromLTRB(
+                    ui(20),
+                    ui(titlePaddingTop),
+                    ui(20),
+                    ui(20),
+                  ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: ui(titleFontSize),
+                        color: const Color(0xFF0B081A),
+                        fontFamily: 'PingFang SC',
+                        fontWeight: titleFontWeight,
+                        height: 1.0,
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: ui(20)),
+                  Flexible(child: SingleChildScrollView(child: child)),
+                  if (actionBar != null) ...[
+                    SizedBox(height: ui(20)),
+                    actionBar!,
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// 通用底部按钮组（取消 / 确认），样式与上传课件弹窗一致：
@@ -241,9 +385,8 @@ Future<String?> showTextInputDialog({
                 cancelLabel: cancelLabel,
                 confirmLabel: confirmLabel,
                 onCancel: () => Navigator.of(dialogContext).pop(),
-                onConfirm: () => Navigator.of(dialogContext).pop(
-                  controller.text.trim(),
-                ),
+                onConfirm: () =>
+                    Navigator.of(dialogContext).pop(controller.text.trim()),
               ),
             ],
           ),
@@ -310,8 +453,7 @@ Future<String?> showOptionsDialog({
                     final value = options[index];
                     final isActive = value == selected;
                     return InkWell(
-                      onTap: () =>
-                          Navigator.of(dialogContext).pop(value),
+                      onTap: () => Navigator.of(dialogContext).pop(value),
                       child: Container(
                         height: ui(46),
                         padding: EdgeInsets.symmetric(horizontal: ui(8)),

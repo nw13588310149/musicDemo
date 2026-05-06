@@ -227,6 +227,8 @@ class _ContentPanel extends StatelessWidget {
                             title: group.title,
                             lessons: group.lessons,
                             artworkLabel: state.config.artworkLabel,
+                            // 把当前选中菜单名一路透传给封面，供根据 tab 动态展示
+                            currentMenuName: state.selectedMenu?.name ?? '',
                             onOpenLesson: (lesson) {
                               final blockMessage = _blockingMessage(
                                 state,
@@ -303,43 +305,45 @@ class _SidebarTile extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     final radius = active ? ui(8) : ui(16);
 
-    return Material(
-      color: active ? const Color(0xFFF4F4FF) : Colors.white,
-      borderRadius: BorderRadius.circular(radius),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(radius),
-        child: Container(
-          height: ui(60),
-          padding: EdgeInsets.symmetric(horizontal: ui(14)),
-          child: Row(
-            children: [
-              SizedBox(
-                width: ui(36),
-                height: ui(36),
-                child: Image.asset(
-                  AppAssets.homeDictationNavIcon,
-                  fit: BoxFit.contain,
+    // 设计要求：左侧 Tab 不展示任何点击/悬停动效（无水波纹、无按压高亮、无 hover）
+    // 因此用 GestureDetector + Container 直接接管点击，不走 Material InkWell
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        height: ui(60),
+        padding: EdgeInsets.symmetric(horizontal: ui(14)),
+        decoration: BoxDecoration(
+          color: active ? const Color(0xFFF4F4FF) : Colors.white,
+          borderRadius: BorderRadius.circular(radius),
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: ui(36),
+              height: ui(36),
+              child: Image.asset(
+                AppAssets.homeDictationNavIcon,
+                fit: BoxFit.contain,
+              ),
+            ),
+            SizedBox(width: ui(10)),
+            Expanded(
+              child: Text(
+                title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                softWrap: true,
+                style: TextStyle(
+                  fontSize: ui(13),
+                  fontWeight: FontWeight.w500,
+                  color: const Color(0xFF0B081A),
+                  fontFamily: 'PingFang SC',
+                  height: 1.3,
                 ),
               ),
-              SizedBox(width: ui(10)),
-              Expanded(
-                child: Text(
-                  title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  softWrap: true,
-                  style: TextStyle(
-                    fontSize: ui(13),
-                    fontWeight: FontWeight.w500,
-                    color: const Color(0xFF0B081A),
-                    fontFamily: 'PingFang SC',
-                    height: 1.3,
-                  ),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -454,12 +458,17 @@ class _LessonSection extends StatelessWidget {
     required this.title,
     required this.lessons,
     required this.artworkLabel,
+    required this.currentMenuName,
     required this.onOpenLesson,
   });
 
   final String title;
   final List<StudyCatalogLesson> lessons;
   final StudyCatalogArtworkLabel artworkLabel;
+
+  /// 当前选中的菜单名（如 "升号视唱" / "章节讲义" / "听写试题"），
+  /// 透传到封面用于根据 tab 切换显示文字。
+  final String currentMenuName;
   final ValueChanged<StudyCatalogLesson> onOpenLesson;
 
   @override
@@ -498,6 +507,7 @@ class _LessonSection extends StatelessWidget {
             return _LessonCard(
               lesson: lesson,
               artworkLabel: artworkLabel,
+              currentMenuName: currentMenuName,
               onTap: () => onOpenLesson(lesson),
             );
           },
@@ -511,16 +521,30 @@ class _LessonCard extends StatelessWidget {
   const _LessonCard({
     required this.lesson,
     required this.artworkLabel,
+    required this.currentMenuName,
     required this.onTap,
   });
 
   final StudyCatalogLesson lesson;
   final StudyCatalogArtworkLabel artworkLabel;
+
+  /// 当前选中的菜单名，用于副标题与封面文案的 fallback。
+  final String currentMenuName;
   final VoidCallback onTap;
+
+  /// 副标题文案：
+  ///   1) 优先使用接口返回的 lesson.subtitle
+  ///   2) 没有时退回到当前菜单名，避免不论选哪个 tab 都显示"标准课程内容"
+  ///   3) 完全没有信息时显示空字符串（不渲染该行）
+  String get _subtitle {
+    if (lesson.subtitle.isNotEmpty) return lesson.subtitle;
+    return currentMenuName;
+  }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final subtitle = _subtitle;
 
     return Container(
       padding: EdgeInsets.all(ui(10)),
@@ -531,7 +555,11 @@ class _LessonCard extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _LessonArtwork(label: artworkLabel, title: lesson.title),
+          _LessonArtwork(
+            label: artworkLabel,
+            title: lesson.title,
+            currentMenuName: currentMenuName,
+          ),
           SizedBox(width: ui(8)),
           Expanded(
             child: SizedBox(
@@ -557,18 +585,20 @@ class _LessonCard extends StatelessWidget {
                             height: 1.2,
                           ),
                         ),
-                        SizedBox(height: ui(6)),
-                        Text(
-                          lesson.subtitle.isEmpty ? '标准课程内容' : lesson.subtitle,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: ui(11),
-                            color: const Color(0xFFB6B5BB),
-                            fontFamily: 'PingFang SC',
-                            height: 1.3,
+                        if (subtitle.isNotEmpty) ...[
+                          SizedBox(height: ui(6)),
+                          Text(
+                            subtitle,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: ui(11),
+                              color: const Color(0xFFB6B5BB),
+                              fontFamily: 'PingFang SC',
+                              height: 1.3,
+                            ),
                           ),
-                        ),
+                        ],
                       ],
                     ),
                   ),
@@ -609,10 +639,19 @@ class _LessonCard extends StatelessWidget {
 }
 
 class _LessonArtwork extends StatelessWidget {
-  const _LessonArtwork({required this.label, required this.title});
+  const _LessonArtwork({
+    required this.label,
+    required this.title,
+    required this.currentMenuName,
+  });
 
   final StudyCatalogArtworkLabel label;
   final String title;
+
+  /// 当前选中菜单名（如 "升号视唱"、"章节讲义"）。
+  /// 当 lesson.title 不包含可识别关键词时，退回到 menu 名做匹配，
+  /// 让封面文字与左侧选中的 tab 同步（不再固定显示某一类）。
+  final String currentMenuName;
 
   @override
   Widget build(BuildContext context) {
@@ -637,7 +676,7 @@ class _LessonArtwork extends StatelessWidget {
               right: 0,
               top: ui(10),
               child: Text(
-                '${_headLabel()}\n${_artLabel(title)}',
+                _coverText(),
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: ui(12),
@@ -654,6 +693,28 @@ class _LessonArtwork extends StatelessWidget {
     );
   }
 
+  /// 封面最终展示文案。
+  /// - 大多数学科采用"头部\n下半行"两行排版；
+  /// - 乐理特殊：下半行本身已是完整词组（章节讲义 / 专项练习 / 音乐常识），
+  ///   不再叠加"乐理"前缀；为了与其他封面保持两行视觉，再按"前半\n后半"等长拆分
+  ///   （4 字 → 2+2，例如 "章节\n讲义"）。
+  String _coverText() {
+    final head = _headLabel();
+    final body = _artLabel();
+    if (head.isEmpty) {
+      return _splitToTwoLines(body);
+    }
+    return '$head\n$body';
+  }
+
+  /// 把单行词组按字数等分为两行，让封面整体仍呈现两行排版。
+  /// 偶数字数：均分；奇数字数：上行少一字，下行多一字（视觉更稳）。
+  static String _splitToTwoLines(String text) {
+    if (text.length < 2) return text;
+    final mid = text.length ~/ 2;
+    return '${text.substring(0, mid)}\n${text.substring(mid)}';
+  }
+
   String _headLabel() {
     switch (label) {
       case StudyCatalogArtworkLabel.dictation:
@@ -661,7 +722,7 @@ class _LessonArtwork extends StatelessWidget {
       case StudyCatalogArtworkLabel.sightSinging:
         return '视唱';
       case StudyCatalogArtworkLabel.musicTheory:
-        return '乐理';
+        return '';
       case StudyCatalogArtworkLabel.answer:
         return '试题';
       case StudyCatalogArtworkLabel.voice:
@@ -671,15 +732,54 @@ class _LessonArtwork extends StatelessWidget {
     }
   }
 
-  String _artLabel(String title) {
-    if (title.contains('音组')) return '音组';
-    if (title.contains('音程')) return '音程';
-    if (title.contains('和弦')) return '和弦';
-    if (title.contains('节奏')) return '节奏';
-    if (title.contains('旋律')) return '旋律';
-    if (title.contains('调式')) return '调式';
-    if (title.contains('乐句')) return '乐句';
-    return '单音';
+  /// 各学科封面下半行文字。
+  /// 匹配优先级：lesson.title → currentMenuName → 学科默认兜底。
+  String _artLabel() {
+    final keywords = _keywordsFor(label);
+    for (final source in <String>[title, currentMenuName]) {
+      if (source.isEmpty) continue;
+      for (final kw in keywords) {
+        if (source.contains(kw)) return kw;
+      }
+    }
+    return _fallbackFor(label);
+  }
+
+  /// 各学科关键词集合（顺序即匹配优先级，先具体后通用）。
+  static List<String> _keywordsFor(StudyCatalogArtworkLabel label) {
+    switch (label) {
+      case StudyCatalogArtworkLabel.dictation:
+        return const ['音组', '音程', '和弦', '节奏', '旋律', '调式', '乐句', '单音'];
+      case StudyCatalogArtworkLabel.sightSinging:
+        // "视唱基础 / 视唱无调 / 视唱升号 / 视唱降号"
+        return const ['基础', '无调', '升号', '降号'];
+      case StudyCatalogArtworkLabel.musicTheory:
+        // "乐理\n章节讲义 / 专项练习 / 音乐常识"
+        return const ['章节讲义', '专项练习', '音乐常识', '章节讲义', '专项练习', '音乐常识'];
+      case StudyCatalogArtworkLabel.answer:
+        // "试题听写 / 试题视唱 / 试题乐理"
+        return const ['听写', '视唱', '乐理'];
+      case StudyCatalogArtworkLabel.voice:
+      case StudyCatalogArtworkLabel.instrumental:
+        return const ['音组', '音程', '和弦', '节奏', '旋律', '调式', '乐句', '单音'];
+    }
+  }
+
+  /// 没有匹配到任何关键词时的兜底（极端兜底，正常不会走到）。
+  static String _fallbackFor(StudyCatalogArtworkLabel label) {
+    switch (label) {
+      case StudyCatalogArtworkLabel.dictation:
+        return '单音';
+      case StudyCatalogArtworkLabel.sightSinging:
+        return '基础';
+      case StudyCatalogArtworkLabel.musicTheory:
+        return '讲义';
+      case StudyCatalogArtworkLabel.answer:
+        return '听写';
+      case StudyCatalogArtworkLabel.voice:
+      case StudyCatalogArtworkLabel.instrumental:
+        return '单音';
+    }
   }
 }
 

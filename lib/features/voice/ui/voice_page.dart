@@ -319,7 +319,6 @@ class _VoiceSearchPill extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     final fontSize = ui(14);
     final iconSize = ui(15);
-    final lineBoxH = ui(22);
 
     final fieldStyle = TextStyle(
       fontFamily: 'PingFang SC',
@@ -335,16 +334,33 @@ class _VoiceSearchPill extends StatelessWidget {
       fontWeight: FontWeight.w400,
       color: const Color(0xFFD1D1D1),
     );
+    // PingFang OTF 在 Flutter 下行高 metrics 偏下，没有 forceStrutHeight 时
+    // 实际文本会比 strut 略高、视觉略偏下。锁住 strut 让文字 line-box 严格 = fontSize。
+    final fieldStrut = StrutStyle(
+      fontFamily: 'PingFang SC',
+      fontSize: fontSize,
+      height: 1.0,
+      leading: 0,
+      fontWeight: FontWeight.w400,
+      forceStrutHeight: true,
+    );
+
+    final pillH = ui(30);
 
     return Container(
       width: ui(254),
-      height: ui(36),
+      height: pillH,
       padding: EdgeInsets.symmetric(horizontal: ui(16)),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(ui(12)),
         border: Border.all(color: const Color(0xFFF3F2F3), width: 1),
       ),
+      // 关键：让 TextField 撑满整个胶囊高度（pillH），
+      // 再借助 textAlignVertical: center 让 Flutter 内部把文字垂直居中到这块盒子里。
+      // 之前直接由 Row(crossAxisAlignment: center) 居中 14px 高的 TextField，
+      // 因为 PingFang OTF 字形在 line-box 内偏上 + InputDecoration 仍有隐式 baseline padding，
+      // 视觉上会整体偏上 ~4px。让 field 自身有足够的纵向空间，textAlignVertical 才能真正起作用。
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -357,7 +373,7 @@ class _VoiceSearchPill extends StatelessWidget {
           SizedBox(width: ui(6)),
           Expanded(
             child: SizedBox(
-              height: lineBoxH,
+              height: pillH,
               child: TextField(
                 controller: controller,
                 onChanged: onChanged,
@@ -365,15 +381,8 @@ class _VoiceSearchPill extends StatelessWidget {
                 textAlignVertical: TextAlignVertical.center,
                 cursorColor: const Color(0xFF8741FF),
                 cursorWidth: 1.4,
-                cursorHeight: fontSize,
                 style: fieldStyle,
-                strutStyle: StrutStyle(
-                  fontFamily: 'PingFang SC',
-                  fontSize: fontSize,
-                  height: 1.0,
-                  leading: 0,
-                  fontWeight: FontWeight.w400,
-                ),
+                strutStyle: fieldStrut,
                 decoration: InputDecoration(
                   isCollapsed: true,
                   border: InputBorder.none,

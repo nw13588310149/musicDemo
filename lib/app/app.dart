@@ -42,6 +42,20 @@ class _MyAppState extends ConsumerState<MyApp> {
       theme: AppTheme.light,
       initialRoute: initialRoute,
       onGenerateRoute: AppRouter.onGenerateRoute,
+      // 让 Flutter 文本基线与 CSS/Figma 行为一致：
+      // - 首行不再应用 height leading（字形贴 box 顶部）
+      // - 末行不再应用 height leading（字形贴 box 底部）
+      // 解决"Flutter 文字比 Figma 偏下、上下间距偏宽"的全局问题，
+      // 使 `Positioned(top: x)` / `SizedBox(height: y)` 与 Figma 像素一致。
+      builder: (context, child) {
+        return DefaultTextHeightBehavior(
+          textHeightBehavior: const TextHeightBehavior(
+            applyHeightToFirstAscent: false,
+            applyHeightToLastDescent: false,
+          ),
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
     );
   }
 }

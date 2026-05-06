@@ -18,10 +18,7 @@ import '../../shell/ui/shell_layout.dart';
 // ── 校园刷题 state ──────────────────────────────────────────────────────────
 
 class _SchoolQuizState {
-  const _SchoolQuizState({
-    this.loading = false,
-    this.summaries = const [],
-  });
+  const _SchoolQuizState({this.loading = false, this.summaries = const []});
 
   final bool loading;
   final List<QuizPracticeSummary> summaries;
@@ -74,9 +71,7 @@ class SchoolQuizPracticePage extends ConsumerWidget {
           child: ShellPageSurface(
             padding: EdgeInsets.symmetric(horizontal: ui(25)),
             child: state.loading && state.summaries.isEmpty
-                ? const Center(
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
+                ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
                 : _PracticeRingRow(
                     summaries: state.summaries,
                     onSelect: (summary) =>
@@ -203,10 +198,7 @@ class _PracticeRingRow extends StatelessWidget {
   Widget build(BuildContext context) {
     if (summaries.isEmpty) {
       return Center(
-        child: TextButton(
-          onPressed: onRefresh,
-          child: const Text('点击重试'),
-        ),
+        child: TextButton(onPressed: onRefresh, child: const Text('点击重试')),
       );
     }
     return Center(
@@ -215,10 +207,7 @@ class _PracticeRingRow extends StatelessWidget {
         children: [
           for (final s in summaries)
             Expanded(
-              child: _PracticeRingCard(
-                summary: s,
-                onTap: () => onSelect(s),
-              ),
+              child: _PracticeRingCard(summary: s, onTap: () => onSelect(s)),
             ),
         ],
       ),

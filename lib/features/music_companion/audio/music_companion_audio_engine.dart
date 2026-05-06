@@ -25,6 +25,13 @@ class MusicCompanionAudioEngine {
   Future<void>? _pianoInitTask;
   Future<void>? _metronomeInitTask;
 
+  /// 设置为 true 后，本引擎会拒绝任何后续的 `playNote` / `playMetronomeCue`。
+  ///
+  /// 这是修复 iPad 上"退出 musicPlay 页面后还会响一声 ding"的关键：
+  /// `pressPianoKey` 的异步链可能在页面 dispose 之后才走到 `_soLoud.play(...)`，
+  /// 这里多一层守卫可以阻止那一声"漏播"。
+  bool _disposed = false;
+
   bool get isReady =>
       kIsWeb ? _webPlayer.isReady : _pianoSourcesByNote.isNotEmpty;
 
@@ -126,7 +133,9 @@ class MusicCompanionAudioEngine {
   }
 
   Future<void> playNote(String rawNote, {double volume = 1}) async {
+    if (_disposed) return;
     await ensurePianoInitialized();
+    if (_disposed) return;
     final note = _normalizeNote(rawNote);
     final asset = kMusicCompanionPianoAssetByNote[note];
     if (asset == null) {
@@ -134,19 +143,22 @@ class MusicCompanionAudioEngine {
     }
 
     if (kIsWeb) {
+      if (_disposed) return;
       await _webPlayer.playAsset(asset, volume: volume);
       return;
     }
 
     final source = _pianoSourcesByNote[note];
-    if (source == null) {
+    if (source == null || _disposed) {
       return;
     }
     _registerHandle(_soLoud.play(source, volume: volume));
   }
 
   Future<void> playNotes(Iterable<String> notes, {double volume = 1}) async {
+    if (_disposed) return;
     await ensurePianoInitialized();
+    if (_disposed) return;
     await Future.wait(notes.map((note) => playNote(note, volume: volume)));
   }
 
@@ -154,19 +166,22 @@ class MusicCompanionAudioEngine {
     MusicCompanionMetronomeCue cue, {
     double volume = 1,
   }) async {
+    if (_disposed) return;
     await ensureMetronomeInitialized();
+    if (_disposed) return;
     final asset = kMusicCompanionMetronomeAssetByCue[cue];
     if (asset == null) {
       return;
     }
 
     if (kIsWeb) {
+      if (_disposed) return;
       await _webPlayer.playAsset(asset, volume: volume);
       return;
     }
 
     final source = _metronomeSourcesByCue[cue];
-    if (source == null) {
+    if (source == null || _disposed) {
       return;
     }
     _registerHandle(_soLoud.play(source, volume: volume));
@@ -197,7 +212,41 @@ class MusicCompanionAudioEngine {
     _activeHandles.clear();
   }
 
+  /// 同步、尽力而为地停掉所有当前正在响的声音。
+  ///
+  /// 用于 [Disposable] 的 widget / controller 在 `dispose()` 中需要在 super
+  /// 之前立刻让声音消失的场景：[stopAll] 是 async 的，调用方一旦 unawaited
+  /// 它，声音会再延迟若干帧才停止，听感上就是"退出页面后还有 ding 一声"。
+  ///
+  /// 这里：
+  /// - `_soLoud.stop(handle)` 虽然返回 Future，但底层在被调用瞬间就把 stop
+  ///   命令推给 audio 线程，几乎是即刻静音；我们 fire-and-forget 即可。
+  /// - 同步把 `_activeHandles` 清空，避免后续异步 [stopAll] 重复 stop。
+  void stopAllImmediately() {
+    if (kIsWeb) {
+      unawaited(_webPlayer.stopAll());
+      return;
+    }
+    if (!_soLoud.isInitialized) {
+      _activeHandles.clear();
+      return;
+    }
+    for (final handle in List<SoundHandle>.from(_activeHandles)) {
+      try {
+        if (_soLoud.getIsValidVoiceHandle(handle)) {
+          unawaited(_soLoud.stop(handle));
+        }
+      } catch (_) {}
+    }
+    _activeHandles.clear();
+  }
+
   Future<void> dispose() async {
+    if (_disposed) return;
+    // 注意：`_disposed = true` 必须放在第一个 await 之前。
+    // 这样调用方即便用 `unawaited(engine.dispose())`，这一句也会同步执行，
+    // 之后任何还在 await 中的 [playNote] / [playMetronomeCue] 都会被 short-circuit。
+    _disposed = true;
     await stopAll();
 
     if (kIsWeb) {

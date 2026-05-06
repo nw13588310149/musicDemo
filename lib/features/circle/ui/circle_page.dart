@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/constants/app_assets.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../state/circle_controller.dart';
 import '../state/circle_state.dart';
 import 'widgets/circle_immersive_view.dart';
 import 'widgets/circle_list_view.dart';
+import 'widgets/circle_publish_dialog.dart';
 
 class CirclePage extends ConsumerWidget {
   const CirclePage({super.key});
@@ -29,7 +31,26 @@ class CirclePage extends ConsumerWidget {
         Expanded(
           child: ClipRRect(
             borderRadius: BorderRadius.circular(ui(16)),
-            child: _CircleBody(state: state, controller: controller),
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: _CircleBody(
+                    state: state,
+                    controller: controller,
+                    permissions: circlePermissionsFromShell(ref),
+                  ),
+                ),
+                // 沉浸模式下铺满全屏显示视频/图片，FAB 会挡视线，隐藏掉。
+                if (state.mode != CircleMode.immersive)
+                  Positioned(
+                    right: ui(20),
+                    bottom: ui(20),
+                    child: _PublishFab(
+                      onTap: () => showCirclePublishDialog(context),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ],
@@ -202,10 +223,15 @@ class _ModeChip extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────
 
 class _CircleBody extends StatelessWidget {
-  const _CircleBody({required this.state, required this.controller});
+  const _CircleBody({
+    required this.state,
+    required this.controller,
+    required this.permissions,
+  });
 
   final CircleState state;
   final CircleController controller;
+  final CirclePermissions permissions;
 
   @override
   Widget build(BuildContext context) {
@@ -218,12 +244,58 @@ class _CircleBody extends StatelessWidget {
               key: const ValueKey('immersive'),
               state: state,
               controller: controller,
+              permissions: permissions,
             )
           : CircleListView(
               key: const ValueKey('list'),
               state: state,
               controller: controller,
+              permissions: permissions,
             ),
+    );
+  }
+}
+
+/// 校圈右下角悬浮发布按钮：48×48 紫色 + 号，点击弹出发布动态对话框。
+class _PublishFab extends StatelessWidget {
+  const _PublishFab({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Material(
+      color: Colors.transparent,
+      shape: const CircleBorder(),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: Tooltip(
+          message: '发布动态',
+          child: Container(
+            width: ui(48),
+            height: ui(48),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0x40A07BFF),
+                  blurRadius: ui(16),
+                  offset: Offset(0, ui(6)),
+                ),
+              ],
+            ),
+            child: Image.asset(
+              AppAssets.schoolFabAdd,
+              width: ui(48),
+              height: ui(48),
+              fit: BoxFit.contain,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

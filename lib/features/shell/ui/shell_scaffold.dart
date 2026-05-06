@@ -52,5 +52,4 @@ class ShellScaffold extends ConsumerWidget {
     }
     Navigator.pushReplacementNamed(context, route);
   }
-
 }

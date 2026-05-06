@@ -139,10 +139,7 @@ class AuthBackgroundArt extends StatelessWidget {
               angle: -16.45 * math.pi / 180,
               alignment: Alignment.center,
               child: ImageFiltered(
-                imageFilter: ImageFilter.blur(
-                  sigmaX: _s(4.9),
-                  sigmaY: _s(4.9),
-                ),
+                imageFilter: ImageFilter.blur(sigmaX: _s(4.9), sigmaY: _s(4.9)),
                 child: SizedBox(
                   width: _s(107),
                   height: _s(169),
@@ -175,4 +172,3 @@ class AuthBackgroundArt extends StatelessWidget {
 
   double _s(double value) => value * scale;
 }
-

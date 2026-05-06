@@ -972,8 +972,9 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
 
     final all = _canonicalOrder;
     final start = minCanonical.isEmpty ? 0 : all.indexOf(minCanonical);
-    final end =
-        maxCanonical.isEmpty ? all.length - 1 : all.indexOf(maxCanonical);
+    final end = maxCanonical.isEmpty
+        ? all.length - 1
+        : all.indexOf(maxCanonical);
 
     final safeStart = start < 0 ? 0 : start;
     final safeEnd = end < 0 ? all.length - 1 : end;
@@ -986,7 +987,9 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
     if (!basicOnly) {
       return sliced;
     }
-    return sliced.where((token) => !token.contains('#')).toList(growable: false);
+    return sliced
+        .where((token) => !token.contains('#'))
+        .toList(growable: false);
   }
 
   String _canonicalToDisplayToken(String canonical) {

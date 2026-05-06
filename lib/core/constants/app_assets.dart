@@ -210,6 +210,10 @@ abstract final class AppAssets {
   static const aiChatMenu = 'assets/images/aichat/v2/ai_history_more.svg';
   static const aiChatMascot = 'assets/images/aichat/qiu.gif';
   static const aiChatV2IntroLogo = 'assets/images/aichat/v2/ai_intro_logo.png';
+  // 小艺同学欢迎区头像：单图自带渐变背景与阴影，直接铺成 52×52
+  static const aiChatXiaoYiIcon = 'assets/images/home/icon.png';
+  // 效率工具卡背景图（与原渐变同色调，直接平铺即可）
+  static const aiChatToolCardBg = 'assets/images/home/aibg.png';
   static const aiChatV2ToolAnalyze =
       'assets/images/aichat/v2/ai_tool_analyze.svg';
   static const aiChatV2ToolSuggest =
@@ -341,6 +345,9 @@ abstract final class AppAssets {
   static const schoolIconComment = 'assets/images/school/4.png';
   static const schoolIconFavorite = 'assets/images/school/5.png';
 
+  /// 校圈右下角悬浮发布按钮（48×48 紫色「+」）。
+  static const schoolFabAdd = 'assets/images/home/add.png';
+
   /// 录音系统 2.0 资产
   /// 1.png 列表页右下角 FAB（新建录音）图标
   /// 2.png 录音文件占位图（卡片中央 cassette/折角图）
@@ -351,10 +358,27 @@ abstract final class AppAssets {
   static const soundEffectExamHall = 'assets/images/sound/4.png';
   static const soundEffectStudio = 'assets/images/sound/5.png';
   static const soundEffectConcert = 'assets/images/sound/6.png';
+  static const soundRecordPauseButton = 'assets/images/sound/7.png';
+  static const soundSeekBack15 = 'assets/images/sound/8.png';
+  static const soundRecordingActive = 'assets/images/sound/9.png';
+  static const soundSeekForward15 = 'assets/images/sound/10.png';
+  static const soundFinishButton = 'assets/images/sound/11.png';
+  static const soundPlayCircle = 'assets/images/sound/12.png';
+  static const soundContinueButton = 'assets/images/sound/13.png';
+  static const soundPauseCircle = 'assets/images/sound/14.png';
+  static const soundRecordIdle = 'assets/images/sound/15.png';
+  static const soundRerecordButton = 'assets/images/sound/16.png';
+  static const soundMicDisc = 'assets/images/sound/17.png';
+  // 录音文件在文件夹列表里的占位卡片图（对齐我的云盘的占位风格）。
+  static const soundRecordingFile = 'assets/images/sound/18.png';
+  /// 收藏页声乐/器乐卡片右下角播放样式按钮（更多操作入口）。
+  static const soundPlay = 'assets/images/sound/play.png';
 
   /// 个人中心（设计资源）
   static const infoBg = 'assets/images/info/bg.png';
   static const infoVip = 'assets/images/info/vip.png';
+  /// 年卡会员卡片的背景图（淡紫渐变 + 右侧雪花装饰）。
+  static const infoCard = 'assets/images/info/card.png';
   static const infoPencilLine = 'assets/images/info/pencil-line.png';
   static const infoIconQr = 'assets/images/info/icon1.png';
   static const infoIconRecommend = 'assets/images/info/icon2.png';

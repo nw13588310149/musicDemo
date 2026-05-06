@@ -8,13 +8,14 @@ import 'consultation_state.dart';
 /// 资讯接口暂未联动用户省份，先按 1.0 默认值传「甘肃」。
 const String _kDefaultProvince = '甘肃';
 
-final consultationControllerProvider = StateNotifierProvider.autoDispose<
-  ConsultationController,
-  ConsultationState
->((ref) {
-  final repo = ref.watch(consultationRepositoryProvider);
-  return ConsultationController(repository: repo);
-});
+final consultationControllerProvider =
+    StateNotifierProvider.autoDispose<
+      ConsultationController,
+      ConsultationState
+    >((ref) {
+      final repo = ref.watch(consultationRepositoryProvider);
+      return ConsultationController(repository: repo);
+    });
 
 class ConsultationController extends StateNotifier<ConsultationState> {
   ConsultationController({required ConsultationRepository repository})
@@ -39,10 +40,7 @@ class ConsultationController extends StateNotifier<ConsultationState> {
     }
     final raw = response.data;
     if (raw is! List) {
-      state = state.copyWith(
-        loading: false,
-        items: const <ConsultationItem>[],
-      );
+      state = state.copyWith(loading: false, items: const <ConsultationItem>[]);
       return;
     }
     final items = <ConsultationItem>[];

@@ -138,6 +138,26 @@ class MyNotesController extends StateNotifier<MyNotesState> {
     return null;
   }
 
+  /// 重命名笔记分类。沿用 `noteCategorySave` 接口：传入既有 id + 新名称，
+  /// 后端按 id 更新分类名。成功后会重新拉取分类列表，让左侧导航即时刷新。
+  Future<String?> renameCategory(int id, String name) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      return '请输入笔记分类名称';
+    }
+    if (id <= 0) {
+      return '默认分类不能重命名';
+    }
+    state = state.copyWith(busy: true, clearError: true);
+    final response = await _repository.updateCategory(id: id, name: trimmed);
+    state = state.copyWith(busy: false);
+    if (!response.isSuccess) {
+      return _fallbackMessage(response.msg, '重命名分类失败');
+    }
+    await refresh();
+    return null;
+  }
+
   Future<String?> deleteNote(int id) async {
     state = state.copyWith(busy: true, clearError: true);
     final response = await _repository.deleteNote(id);
@@ -186,13 +206,25 @@ class MyNotesController extends StateNotifier<MyNotesState> {
     return null;
   }
 
-  String? beginCreateNote() {
+  /// 在弹出"新建笔记标题"输入框之前调用，用于校验当前是否存在可写入的
+  /// 分类。返回 `null` 表示可以继续，否则返回需要展示给用户的错误提示。
+  String? validateCanCreateNote() {
     if (_writeCategoryId <= 0) {
       return '请先新增笔记分类';
     }
+    return null;
+  }
+
+  /// 进入"选择笔记样式"页面。如果调用方提前收集了用户输入的标题，
+  /// 则通过 [title] 传入并写入草稿；为空时回落到默认占位文案。
+  String? beginCreateNote({String? title}) {
+    if (_writeCategoryId <= 0) {
+      return '请先新增笔记分类';
+    }
+    final trimmed = title?.trim() ?? '';
     state = state.copyWith(
       view: MyNotesView.template,
-      draftTitle: '笔记名称',
+      draftTitle: trimmed.isEmpty ? '笔记名称' : trimmed,
       paperType: NotePaperType.staff,
       strokes: const <NoteStroke>[],
       clearEditingNote: true,

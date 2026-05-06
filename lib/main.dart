@@ -10,6 +10,9 @@ import 'core/storage/app_storage.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final imageCache = PaintingBinding.instance.imageCache;
+  imageCache.maximumSize = 120;
+  imageCache.maximumSizeBytes = 80 << 20;
   MediaKit.ensureInitialized();
   await SystemChrome.setPreferredOrientations(const [
     DeviceOrientation.landscapeLeft,

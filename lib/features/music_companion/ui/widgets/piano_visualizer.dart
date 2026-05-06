@@ -46,33 +46,56 @@ class _PianoVisualizerState extends State<PianoVisualizer>
   double _now = 0;
   // 浮动音符的初始横向比例 + 上下振幅相位
   static const List<_FloatingNote> _floatingNotes = <_FloatingNote>[
-    _FloatingNote(symbol: '♪', xRatio: 0.10, yRatio: 0.18, phase: 0.0,
-        size: 18),
-    _FloatingNote(symbol: '♫', xRatio: 0.32, yRatio: 0.28, phase: 1.6,
-        size: 16),
-    _FloatingNote(symbol: '♩', xRatio: 0.55, yRatio: 0.22, phase: 0.8,
-        size: 14),
-    _FloatingNote(symbol: '♪', xRatio: 0.72, yRatio: 0.34, phase: 2.3,
-        size: 18),
-    _FloatingNote(symbol: '♫', xRatio: 0.88, yRatio: 0.20, phase: 0.4,
-        size: 16),
+    _FloatingNote(
+      symbol: '♪',
+      xRatio: 0.10,
+      yRatio: 0.18,
+      phase: 0.0,
+      size: 18,
+    ),
+    _FloatingNote(
+      symbol: '♫',
+      xRatio: 0.32,
+      yRatio: 0.28,
+      phase: 1.6,
+      size: 16,
+    ),
+    _FloatingNote(
+      symbol: '♩',
+      xRatio: 0.55,
+      yRatio: 0.22,
+      phase: 0.8,
+      size: 14,
+    ),
+    _FloatingNote(
+      symbol: '♪',
+      xRatio: 0.72,
+      yRatio: 0.34,
+      phase: 2.3,
+      size: 18,
+    ),
+    _FloatingNote(
+      symbol: '♫',
+      xRatio: 0.88,
+      yRatio: 0.20,
+      phase: 0.4,
+      size: 16,
+    ),
   ];
 
   @override
   void initState() {
     super.initState();
     _levels = List<double>.filled(widget.barCount, 0);
-    _ambientPhases = List<double>.generate(
-      widget.barCount,
-      (i) => i * 0.27,
-    );
-    _controller = AnimationController(
-      vsync: this,
-      // 任意非零时长，repeat 后会持续触发 listener；只把它当作 ticker。
-      duration: const Duration(seconds: 1),
-    )
-      ..addListener(_onTick)
-      ..repeat();
+    _ambientPhases = List<double>.generate(widget.barCount, (i) => i * 0.27);
+    _controller =
+        AnimationController(
+            vsync: this,
+            // 任意非零时长，repeat 后会持续触发 listener；只把它当作 ticker。
+            duration: const Duration(seconds: 1),
+          )
+          ..addListener(_onTick)
+          ..repeat();
   }
 
   @override
@@ -80,10 +103,7 @@ class _PianoVisualizerState extends State<PianoVisualizer>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.barCount != widget.barCount) {
       _levels = List<double>.filled(widget.barCount, 0);
-      _ambientPhases = List<double>.generate(
-        widget.barCount,
-        (i) => i * 0.27,
-      );
+      _ambientPhases = List<double>.generate(widget.barCount, (i) => i * 0.27);
     }
   }
 
@@ -255,7 +275,8 @@ class _VisualizerPainter extends CustomPainter {
 
     for (var i = 0; i < n; i++) {
       // 环境波：两段 sin 叠加 → 形成不规则但平滑的"呼吸"波形。
-      final ambient = 0.05 +
+      final ambient =
+          0.05 +
           0.06 *
               ((math.sin(time * 1.6 + ambientPhases[i]) +
                       math.sin(time * 0.9 + ambientPhases[i] * 0.6)) /
@@ -269,8 +290,7 @@ class _VisualizerPainter extends CustomPainter {
       final hDown = shaped * maxDown;
 
       // 上半部分主体
-      final topRect =
-          Rect.fromLTRB(x, centerY - hUp, x + barW, centerY);
+      final topRect = Rect.fromLTRB(x, centerY - hUp, x + barW, centerY);
       canvas.drawRRect(
         RRect.fromRectAndRadius(topRect, radius),
         Paint()
@@ -283,8 +303,7 @@ class _VisualizerPainter extends CustomPainter {
 
       // 下半部分镜像
       if (hDown > 0.5) {
-        final bottomRect =
-            Rect.fromLTRB(x, centerY, x + barW, centerY + hDown);
+        final bottomRect = Rect.fromLTRB(x, centerY, x + barW, centerY + hDown);
         canvas.drawRRect(
           RRect.fromRectAndRadius(bottomRect, radius),
           Paint()

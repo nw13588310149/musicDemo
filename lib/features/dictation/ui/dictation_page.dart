@@ -121,10 +121,28 @@ class _ContentPanel extends StatelessWidget {
   final ValueChanged<String?> onSelectChild;
   final Future<void> Function() onRefresh;
 
+  /// 根据当前选中菜单名（如 "听写单音" / "听写音组"），抽出"类别"短语。
+  /// 用于：
+  ///   1) 课程副标题为空时的兜底文案（如 "音组练习"）
+  ///   2) 课程封面小字（"听选\n音组" 等）
+  /// 这样切换 tab 时，右侧列表会随 tab 自动切换语义，而不是写死。
+  static String _resolveCategoryLabel(DictationState state) {
+    final menuName = state.selectedMenu?.name ?? '';
+    if (menuName.isEmpty) return '';
+    // 关键词优先级：先具体后通用
+    const keywords = <String>['音组', '音程', '和弦', '节奏', '旋律', '单音'];
+    for (final kw in keywords) {
+      if (menuName.contains(kw)) return kw;
+    }
+    // 兜底：去掉常见的"听写"/"听选"前缀，剩下的当作类别
+    return menuName.replaceAll('听写', '').replaceAll('听选', '').trim();
+  }
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final hasChildren = state.selectedChildren.isNotEmpty;
+    final category = _resolveCategoryLabel(state);
 
     return Container(
       color: Colors.white,
@@ -170,6 +188,7 @@ class _ContentPanel extends StatelessWidget {
                           return _LessonSection(
                             title: group.title,
                             lessons: group.lessons,
+                            category: category,
                             onOpenLesson: (lesson) {
                               final blockMessage = _blockingMessage(
                                 state,
@@ -230,43 +249,45 @@ class _SidebarTile extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     final radius = active ? ui(8) : ui(16);
 
-    return Material(
-      color: active ? const Color(0xFFF4F4FF) : Colors.white,
-      borderRadius: BorderRadius.circular(radius),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(radius),
-        child: Container(
-          height: ui(60),
-          padding: EdgeInsets.symmetric(horizontal: ui(14)),
-          child: Row(
-            children: [
-              SizedBox(
-                width: ui(36),
-                height: ui(36),
-                child: Image.asset(
-                  AppAssets.homeDictationNavIcon,
-                  fit: BoxFit.contain,
+    // 设计要求：左侧 Tab 不展示任何点击/悬停动效（无水波纹、无按压高亮、无 hover）
+    // 因此用 GestureDetector + Container 直接接管点击，不走 Material InkWell
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        height: ui(60),
+        padding: EdgeInsets.symmetric(horizontal: ui(14)),
+        decoration: BoxDecoration(
+          color: active ? const Color(0xFFF4F4FF) : Colors.white,
+          borderRadius: BorderRadius.circular(radius),
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: ui(36),
+              height: ui(36),
+              child: Image.asset(
+                AppAssets.homeDictationNavIcon,
+                fit: BoxFit.contain,
+              ),
+            ),
+            SizedBox(width: ui(10)),
+            Expanded(
+              child: Text(
+                title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                softWrap: true,
+                style: TextStyle(
+                  fontSize: ui(13),
+                  fontWeight: FontWeight.w500,
+                  color: const Color(0xFF0B081A),
+                  fontFamily: 'PingFang SC',
+                  height: 1.3,
                 ),
               ),
-              SizedBox(width: ui(10)),
-              Expanded(
-                child: Text(
-                  title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  softWrap: true,
-                  style: TextStyle(
-                    fontSize: ui(13),
-                    fontWeight: FontWeight.w500,
-                    color: const Color(0xFF0B081A),
-                    fontFamily: 'PingFang SC',
-                    height: 1.3,
-                  ),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -380,11 +401,16 @@ class _LessonSection extends StatelessWidget {
   const _LessonSection({
     required this.title,
     required this.lessons,
+    required this.category,
     required this.onOpenLesson,
   });
 
   final String title;
   final List<DictationLesson> lessons;
+
+  /// 当前选中菜单对应的语义类别（"单音"/"音组"/"音程" 等）。
+  /// 透传给课程卡片用于副标题与封面小字的 fallback。
+  final String category;
   final ValueChanged<DictationLesson> onOpenLesson;
 
   @override
@@ -422,6 +448,7 @@ class _LessonSection extends StatelessWidget {
             final lesson = lessons[index];
             return _LessonCard(
               lesson: lesson,
+              category: category,
               onTap: () => onOpenLesson(lesson),
             );
           },
@@ -432,14 +459,32 @@ class _LessonSection extends StatelessWidget {
 }
 
 class _LessonCard extends StatelessWidget {
-  const _LessonCard({required this.lesson, required this.onTap});
+  const _LessonCard({
+    required this.lesson,
+    required this.category,
+    required this.onTap,
+  });
 
   final DictationLesson lesson;
+
+  /// 当前选中菜单对应的语义类别，用于 subtitle/封面文案的 fallback。
+  final String category;
   final VoidCallback onTap;
+
+  /// 副标题文案：
+  ///   1) 优先使用接口返回的 lesson.subtitle
+  ///   2) 没有返回时，根据当前 tab 类别生成（如 "音组练习"），不再写死单音内容
+  ///   3) 没有 category 信息时退回到空字符串（不显示一行假数据）
+  String get _subtitle {
+    if (lesson.subtitle.isNotEmpty) return lesson.subtitle;
+    if (category.isEmpty) return '';
+    return '$category练习';
+  }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final subtitle = _subtitle;
 
     return Container(
       padding: EdgeInsets.all(ui(10)),
@@ -450,7 +495,7 @@ class _LessonCard extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _LessonArtwork(title: lesson.title),
+          _LessonArtwork(title: lesson.title, category: category),
           SizedBox(width: ui(8)),
           Expanded(
             child: SizedBox(
@@ -476,20 +521,20 @@ class _LessonCard extends StatelessWidget {
                             height: 1.2,
                           ),
                         ),
-                        SizedBox(height: ui(6)),
-                        Text(
-                          lesson.subtitle.isEmpty
-                              ? '标准音上下行二度'
-                              : lesson.subtitle,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: ui(11),
-                            color: const Color(0xFFB6B5BB),
-                            fontFamily: 'PingFang SC',
-                            height: 1.3,
+                        if (subtitle.isNotEmpty) ...[
+                          SizedBox(height: ui(6)),
+                          Text(
+                            subtitle,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: ui(11),
+                              color: const Color(0xFFB6B5BB),
+                              fontFamily: 'PingFang SC',
+                              height: 1.3,
+                            ),
                           ),
-                        ),
+                        ],
                       ],
                     ),
                   ),
@@ -530,9 +575,14 @@ class _LessonCard extends StatelessWidget {
 }
 
 class _LessonArtwork extends StatelessWidget {
-  const _LessonArtwork({required this.title});
+  const _LessonArtwork({required this.title, required this.category});
 
   final String title;
+
+  /// 当前选中菜单对应的语义类别（"单音"/"音组" 等）。
+  /// 当 lesson.title 不包含可识别关键词时，用 category 作为 fallback，
+  /// 避免不论选哪个 tab 封面都显示"单音"的写死行为。
+  final String category;
 
   @override
   Widget build(BuildContext context) {
@@ -557,7 +607,7 @@ class _LessonArtwork extends StatelessWidget {
               right: 0,
               top: ui(10),
               child: Text(
-                '听选\n${_artLabel(title)}',
+                '听写\n${_artLabel(title, category)}',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: ui(12),
@@ -574,12 +624,14 @@ class _LessonArtwork extends StatelessWidget {
     );
   }
 
-  String _artLabel(String title) {
-    if (title.contains('音组')) return '音组';
-    if (title.contains('音程')) return '音程';
-    if (title.contains('和弦')) return '和弦';
-    if (title.contains('节奏')) return '节奏';
-    if (title.contains('旋律')) return '旋律';
+  /// 优先级：lesson.title 关键词 > 当前菜单类别 > "单音"
+  /// 这样即使后端返回的 title 没规律，也能根据用户选择的 tab 给出合理标签。
+  String _artLabel(String title, String category) {
+    const keywords = <String>['音组', '音程', '和弦', '节奏', '旋律', '单音'];
+    for (final kw in keywords) {
+      if (title.contains(kw)) return kw;
+    }
+    if (category.isNotEmpty) return category;
     return '单音';
   }
 }

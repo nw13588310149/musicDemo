@@ -7,6 +7,10 @@ class AppStorage {
   static const _pushIdKey = 'pushId';
   static const _checkStatusKey = 'checkStatus';
   static const _schoolIdKey = 'schoolId';
+  // 登录成功后保存的当前账号（手机号）。供 ShellController 在 refreshUserAndSchool
+  // 时判定演示用「白名单管理员」(例如 13588310149) 是否需要覆盖 user.role
+  // 为 admin。logout 时会清空。
+  static const _mobileKey = 'mobile';
 
   /// 通过 `/app/common/v2/configList` 拉取的「文件服务器域名」。所有
   /// 后端返回的相对路径（如 `app/upload/.../foo.png`）需要拼接到这个域名
@@ -25,6 +29,8 @@ class AppStorage {
   String get pushId => _prefs.getString(_pushIdKey) ?? '';
 
   String get schoolId => _prefs.getString(_schoolIdKey) ?? '0';
+
+  String get mobile => _prefs.getString(_mobileKey) ?? '';
 
   String get fileBaseUrl => _prefs.getString(_fileBaseUrlKey) ?? '';
 
@@ -59,6 +65,14 @@ class AppStorage {
 
   Future<void> clearSchoolId() async {
     await _prefs.remove(_schoolIdKey);
+  }
+
+  Future<void> saveMobile(String mobile) async {
+    await _prefs.setString(_mobileKey, mobile);
+  }
+
+  Future<void> clearMobile() async {
+    await _prefs.remove(_mobileKey);
   }
 
   Future<void> savePushId(String pushId) async {

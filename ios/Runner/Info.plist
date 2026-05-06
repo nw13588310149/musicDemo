@@ -28,6 +28,12 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>音乐伴侣中的调音器需要访问麦克风来检测当前音高。</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>需要访问相册以选择并上传课件、图片和附件。</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>需要保存图片或文件到相册时使用。</string>
+	<key>NSCameraUsageDescription</key>
+	<string>需要访问相机以拍摄并上传图片附件。</string>
 	<key>UIStatusBarHidden</key>
 	<true/>
 	<key>UIStatusBarHidden~ipad</key>

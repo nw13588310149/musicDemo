@@ -97,9 +97,12 @@ flutter:
     - assets/images/smart_dictation/figma/
     - assets/images/info/
     - assets/images/schoolA/
+    - assets/images/adminHome/
+    - assets/images/face/
     - assets/images/sound/
     - assets/images/music/
     - assets/images/note/
+    - assets/images/avtor/
     - assets/audio/music_companion/metronome/
     - assets/audio/music_companion/metronome/beat0/
     - assets/audio/music_companion/metronome/beat2/
@@ -118,22 +121,36 @@ flutter:
         - asset: assets/fonts/HarmonyOS_Sans_SC_Regular.ttf
         - asset: assets/fonts/HarmonyOS_Sans_SC_Medium.ttf
           weight: 500
-    # 与 assets/fonts/ttf/index.css 一致：500 → PingFangSC-Medium.ttf
+    # PingFang SC 使用 OTF（CFF 轮廓，更接近 Apple 原版字面率与粗细）
+    # 同一字族内全部使用 OTF，避免 TTF/OTF 混用导致的渲染不一致
     - family: PingFang SC
       fonts:
-        - asset: assets/fonts/ttf/PingFangSC-Regular.ttf
+        - asset: assets/fonts/ttf/PingFangSC-Ultralight.otf
+          weight: 100
+        - asset: assets/fonts/ttf/PingFangSC-Thin.otf
+          weight: 200
+        - asset: assets/fonts/ttf/PingFangSC-Light.otf
+          weight: 300
+        - asset: assets/fonts/ttf/PingFangSC-Regular.otf
           weight: 400
-        - asset: assets/fonts/ttf/PingFangSC-Medium.ttf
+        - asset: assets/fonts/ttf/PingFangSC-Medium.otf
           weight: 500
+        - asset: assets/fonts/ttf/PingFangSC-Semibold.otf
+          weight: 600
     # Manrope 变体字（设计稿角标 10+ 等数字使用 Manrope w800）
     # 把变体字以静态 w800 注册，Flutter 通过 fontWeight: w800 即可命中
     - family: Manrope
       fonts:
         - asset: assets/fonts/Manrope-Variable.ttf
           weight: 800
-    # Barlow（设计稿数字时间 09:00 - 09:45 使用 Barlow w600）
+    # Barlow：
+    # • 通知卡时间 09:00-09:45 = w600（SemiBold）
+    # • 周卡日期数字 9/10/11... = w500（设计稿 Medium，但 Medium 字重缺失，
+    #   暂以 SemiBold 兼任 w500 槽位，避免落到系统默认字体；待补 Barlow-Medium.ttf）
     - family: Barlow
       fonts:
+        - asset: assets/fonts/Barlow-SemiBold.ttf
+          weight: 500
         - asset: assets/fonts/Barlow-SemiBold.ttf
           weight: 600
     # 空白列表等提示文案（设计稿 Inter 16 / 400）

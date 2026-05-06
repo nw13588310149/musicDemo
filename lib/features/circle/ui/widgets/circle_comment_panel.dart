@@ -14,12 +14,22 @@ class CircleCommentPanel extends StatefulWidget {
     required this.onClose,
     required this.onSubmit,
     required this.onCommentLikeTap,
+    required this.permissions,
+    this.commentsLoading = false,
+    this.onDeleteComment,
   });
 
   final CirclePost? post;
   final VoidCallback onClose;
   final ValueChanged<String> onSubmit;
   final ValueChanged<String> onCommentLikeTap;
+  final CirclePermissions permissions;
+
+  /// 正在为当前帖拉取评论列表时为 true。
+  final bool commentsLoading;
+
+  /// 删除评论（commentId）；由外层做二次确认与接口调用。
+  final ValueChanged<String>? onDeleteComment;
 
   @override
   State<CircleCommentPanel> createState() => _CircleCommentPanelState();
@@ -51,20 +61,38 @@ class _CircleCommentPanelState extends State<CircleCommentPanel> {
       color: Colors.white,
       child: Column(
         children: [
-          _PanelHeader(
-            count: post?.commentCount ?? 0,
-            onClose: widget.onClose,
-          ),
+          _PanelHeader(count: post?.commentCount ?? 0, onClose: widget.onClose),
           Container(height: 1, color: const Color(0xFFF3F2F3)),
           Expanded(
             child: post == null
                 ? const SizedBox.shrink()
-                : (post.comments.isEmpty
-                      ? const _CommentEmpty()
-                      : _CommentList(
-                          comments: post.comments,
-                          onLike: widget.onCommentLikeTap,
-                        )),
+                : Stack(
+                    children: [
+                      if (widget.commentsLoading)
+                        const Center(
+                          child: SizedBox(
+                            width: 28,
+                            height: 28,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.4,
+                              valueColor: AlwaysStoppedAnimation(
+                                Color(0xFF8741FF),
+                              ),
+                            ),
+                          ),
+                        ),
+                      if (!widget.commentsLoading)
+                        (post.comments.isEmpty
+                            ? const _CommentEmpty()
+                            : _CommentList(
+                                post: post,
+                                permissions: widget.permissions,
+                                comments: post.comments,
+                                onLike: widget.onCommentLikeTap,
+                                onDeleteComment: widget.onDeleteComment,
+                              )),
+                    ],
+                  ),
           ),
           Container(height: 1, color: const Color(0xFFF3F2F3)),
           _InputBar(
@@ -135,10 +163,19 @@ class _PanelHeader extends StatelessWidget {
 }
 
 class _CommentList extends StatelessWidget {
-  const _CommentList({required this.comments, required this.onLike});
+  const _CommentList({
+    required this.post,
+    required this.permissions,
+    required this.comments,
+    required this.onLike,
+    required this.onDeleteComment,
+  });
 
+  final CirclePost post;
+  final CirclePermissions permissions;
   final List<CircleComment> comments;
   final ValueChanged<String> onLike;
+  final ValueChanged<String>? onDeleteComment;
 
   @override
   Widget build(BuildContext context) {
@@ -149,17 +186,31 @@ class _CommentList extends StatelessWidget {
       separatorBuilder: (_, _) => SizedBox(height: ui(20)),
       itemBuilder: (context, index) {
         final c = comments[index];
-        return _CommentTile(comment: c, onLike: () => onLike(c.id));
+        final canDelete = onDeleteComment != null &&
+            permissions.canDeleteComment(post, c);
+        return _CommentTile(
+          comment: c,
+          showDelete: canDelete,
+          onLike: () => onLike(c.id),
+          onDelete: canDelete ? () => onDeleteComment!(c.id) : null,
+        );
       },
     );
   }
 }
 
 class _CommentTile extends StatelessWidget {
-  const _CommentTile({required this.comment, required this.onLike});
+  const _CommentTile({
+    required this.comment,
+    required this.onLike,
+    required this.showDelete,
+    this.onDelete,
+  });
 
   final CircleComment comment;
   final VoidCallback onLike;
+  final bool showDelete;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -235,7 +286,24 @@ class _CommentTile extends StatelessWidget {
             ],
           ),
         ),
-        SizedBox(width: ui(12)),
+        SizedBox(width: ui(8)),
+        if (showDelete && onDelete != null)
+          Padding(
+            padding: EdgeInsets.only(top: ui(2)),
+            child: InkWell(
+              onTap: onDelete,
+              borderRadius: BorderRadius.circular(ui(4)),
+              child: Padding(
+                padding: EdgeInsets.all(ui(4)),
+                child: Icon(
+                  Icons.delete_outline_rounded,
+                  size: ui(18),
+                  color: const Color(0xFFB6B5BB),
+                ),
+              ),
+            ),
+          ),
+        SizedBox(width: ui(4)),
         _CommentLike(comment: comment, onTap: onLike),
       ],
     );

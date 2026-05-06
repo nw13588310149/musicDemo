@@ -101,8 +101,10 @@ class SchoolPageController extends StateNotifier<SchoolPageState> {
         continue;
       }
 
-      final normalizedTags = (item['shortText2']?.toString() ?? '')
-          .replaceAll(RegExp(r'[、；;|，]'), ',');
+      final normalizedTags = (item['shortText2']?.toString() ?? '').replaceAll(
+        RegExp(r'[、；;|，]'),
+        ',',
+      );
 
       final tags = normalizedTags
           .split(RegExp(r'[,\s]+'))

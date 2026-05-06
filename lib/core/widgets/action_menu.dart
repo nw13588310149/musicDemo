@@ -21,25 +21,26 @@ class _ActionMeta {
   final bool danger;
 }
 
-const Map<ItemMenuAction, _ActionMeta> _actionMeta = <ItemMenuAction, _ActionMeta>{
-  ItemMenuAction.rename: _ActionMeta(
-    label: '重命名',
-    icon: AppAssets.coursewareActionRename,
-  ),
-  ItemMenuAction.share: _ActionMeta(
-    label: '分享',
-    icon: AppAssets.coursewareActionShare,
-  ),
-  ItemMenuAction.copy: _ActionMeta(
-    label: '复制',
-    icon: AppAssets.coursewareActionCopy,
-  ),
-  ItemMenuAction.delete: _ActionMeta(
-    label: '删除',
-    icon: AppAssets.coursewareActionDelete,
-    danger: true,
-  ),
-};
+const Map<ItemMenuAction, _ActionMeta> _actionMeta =
+    <ItemMenuAction, _ActionMeta>{
+      ItemMenuAction.rename: _ActionMeta(
+        label: '重命名',
+        icon: AppAssets.coursewareActionRename,
+      ),
+      ItemMenuAction.share: _ActionMeta(
+        label: '分享',
+        icon: AppAssets.coursewareActionShare,
+      ),
+      ItemMenuAction.copy: _ActionMeta(
+        label: '复制',
+        icon: AppAssets.coursewareActionCopy,
+      ),
+      ItemMenuAction.delete: _ActionMeta(
+        label: '删除',
+        icon: AppAssets.coursewareActionDelete,
+        danger: true,
+      ),
+    };
 
 /// Default action set for list/sidebar item menus: rename / share / copy / delete.
 const List<ItemMenuAction> kDefaultItemMenuActions = <ItemMenuAction>[
@@ -86,7 +87,9 @@ Future<ItemMenuAction?> showItemActionMenu({
   // is not the only entry + 8 bottom pad. Used only to nudge the menu up when
   // there isn't enough room below the trigger; rendering remains intrinsic.
   final hasDelete = actions.contains(ItemMenuAction.delete);
-  final nonDeleteCount = actions.where((a) => a != ItemMenuAction.delete).length;
+  final nonDeleteCount = actions
+      .where((a) => a != ItemMenuAction.delete)
+      .length;
   final approxMenuHeight = scale.ui(
     16 + nonDeleteCount * 36 + (hasDelete ? (nonDeleteCount > 0 ? 42 : 36) : 0),
   );
@@ -144,10 +147,7 @@ Future<ItemMenuAction?> showItemActionMenu({
 /// 142px-wide menu panel: white / 12 radius / 1.11px light border /
 /// soft three-layer shadow. Matches the cloud-disk left-sidebar popup style.
 class _ItemActionMenuPanel extends StatelessWidget {
-  const _ItemActionMenuPanel({
-    required this.actions,
-    required this.onSelected,
-  });
+  const _ItemActionMenuPanel({required this.actions, required this.onSelected});
 
   final List<ItemMenuAction> actions;
   final ValueChanged<ItemMenuAction> onSelected;

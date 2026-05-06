@@ -55,12 +55,20 @@ class CircleActionButton extends StatelessWidget {
     final body = dark
         ? Column(
             mainAxisSize: MainAxisSize.min,
-            children: [iconWidget, SizedBox(height: ui(4)), textWidget],
+            children: [
+              iconWidget,
+              SizedBox(height: ui(4)),
+              textWidget,
+            ],
           )
         : Row(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.center,
-            children: [iconWidget, SizedBox(width: ui(4)), textWidget],
+            children: [
+              iconWidget,
+              SizedBox(width: ui(4)),
+              textWidget,
+            ],
           );
 
     return GestureDetector(

@@ -59,8 +59,8 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
         categories,
         state.selectedCategoryId,
       );
-      final itemsResponse = selectedCategoryId > 0
-          ? await _repository.getRecordings(selectedCategoryId)
+      final folderResponse = selectedCategoryId > 0
+          ? await _repository.getFolderList(categoryId: selectedCategoryId)
           : null;
       if (!mounted) {
         return;
@@ -70,9 +70,13 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
         loading: false,
         categories: categories,
         selectedCategoryId: selectedCategoryId,
-        items: itemsResponse == null
-            ? const <RecordingEntry>[]
-            : _parseRecordings(itemsResponse.data, selectedCategoryId),
+        folders: folderResponse == null
+            ? const <RecordingFolderItem>[]
+            : _parseFolders(folderResponse.data, selectedCategoryId),
+        items: const <RecordingEntry>[],
+        currentFolderId: 0,
+        currentFolderName: '',
+        listView: RecordingListView.folders,
         viewMode: RecordingViewMode.list,
         recordingPhase: RecordingPhase.idle,
         elapsedMs: 0,
@@ -89,18 +93,15 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
         previewPlaybackRate: 1,
         selectedSaveCategoryId: selectedCategoryId,
         pendingTitle: '',
-        errorMessage: itemsResponse == null || itemsResponse.isSuccess
+        errorMessage: folderResponse == null || folderResponse.isSuccess
             ? null
-            : _fallbackMessage(itemsResponse.msg, '加载录音列表失败'),
+            : _fallbackMessage(folderResponse.msg, '加载文件夹列表失败'),
       );
     } catch (_) {
       if (!mounted) {
         return;
       }
-      state = state.copyWith(
-        loading: false,
-        errorMessage: '加载录音列表失败，请稍后重试',
-      );
+      state = state.copyWith(loading: false, errorMessage: '加载录音列表失败，请稍后重试');
     }
   }
 
@@ -115,15 +116,62 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
         loading: true,
         clearError: true,
         searchQuery: '',
+        listView: RecordingListView.folders,
+        currentFolderId: 0,
+        currentFolderName: '',
+        items: const <RecordingEntry>[],
       );
-      final response = await _repository.getRecordings(id);
+      final response = await _repository.getFolderList(categoryId: id);
       if (!mounted) {
         return;
       }
       state = state.copyWith(
         loading: false,
-        items: _parseRecordings(response.data, id),
+        folders: _parseFolders(response.data, id),
         viewMode: RecordingViewMode.list,
+        clearPreviewItem: true,
+        clearPreviewSource: true,
+        clearRecordedBytes: true,
+        showSaveDialog: false,
+        showShareDialog: false,
+        shareClasses: const <RecordingShareClass>[],
+        errorMessage: response.isSuccess
+            ? null
+            : _fallbackMessage(response.msg, '加载文件夹列表失败'),
+      );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      state = state.copyWith(loading: false, errorMessage: '加载文件夹列表失败，请稍后重试');
+    }
+  }
+
+  /// 进入某个文件夹，加载该文件夹下的录音列表。
+  Future<void> openFolder(RecordingFolderItem folder) async {
+    if (folder.id <= 0) {
+      return;
+    }
+    try {
+      _openedPreviewSource = null;
+      state = state.copyWith(
+        loading: true,
+        clearError: true,
+        searchQuery: '',
+        currentFolderId: folder.id,
+        currentFolderName: folder.name,
+        listView: RecordingListView.files,
+      );
+      final response = await _repository.getRecordings(
+        folder.categoryId,
+        folderId: folder.id,
+      );
+      if (!mounted) {
+        return;
+      }
+      state = state.copyWith(
+        loading: false,
+        items: _parseRecordings(response.data, folder.categoryId),
         clearPreviewItem: true,
         clearPreviewSource: true,
         clearRecordedBytes: true,
@@ -138,11 +186,67 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       if (!mounted) {
         return;
       }
+      state = state.copyWith(loading: false, errorMessage: '加载录音列表失败，请稍后重试');
+    }
+  }
+
+  /// 从文件视图返回到当前分类的文件夹列表视图。
+  Future<void> backToFolderOverview() async {
+    final categoryId = state.selectedCategoryId;
+    if (categoryId <= 0) {
+      state = state.copyWith(
+        listView: RecordingListView.folders,
+        currentFolderId: 0,
+        currentFolderName: '',
+        items: const <RecordingEntry>[],
+        searchQuery: '',
+      );
+      return;
+    }
+    try {
+      _openedPreviewSource = null;
+      state = state.copyWith(
+        loading: true,
+        clearError: true,
+        searchQuery: '',
+        listView: RecordingListView.folders,
+        currentFolderId: 0,
+        currentFolderName: '',
+        items: const <RecordingEntry>[],
+      );
+      final response = await _repository.getFolderList(categoryId: categoryId);
+      if (!mounted) {
+        return;
+      }
       state = state.copyWith(
         loading: false,
-        errorMessage: '加载录音列表失败，请稍后重试',
+        folders: _parseFolders(response.data, categoryId),
+        errorMessage: response.isSuccess
+            ? null
+            : _fallbackMessage(response.msg, '加载文件夹列表失败'),
       );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      state = state.copyWith(loading: false, errorMessage: '加载文件夹列表失败，请稍后重试');
     }
+  }
+
+  /// 刷新当前分类下的文件夹列表。
+  Future<void> _reloadFolders(int categoryId) async {
+    if (categoryId <= 0) {
+      return;
+    }
+    final response = await _repository.getFolderList(categoryId: categoryId);
+    if (!mounted) {
+      return;
+    }
+    state = state.copyWith(
+      folders: response.isSuccess
+          ? _parseFolders(response.data, categoryId)
+          : state.folders,
+    );
   }
 
   void updateSearchQuery(String value) {
@@ -172,6 +276,89 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       return _fallbackMessage(response.msg, '删除分类失败');
     }
     await refresh();
+    return null;
+  }
+
+  /// 重命名录音分类。沿用 `recordingCategorySave` 接口：传入既有 id +
+  /// 新名称，后端按 id 更新分类名。成功后刷新列表，让左侧导航即时显示。
+  Future<String?> renameCategory(int id, String name) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      return '请输入分类名称';
+    }
+    if (id <= 0) {
+      return '默认分类不能重命名';
+    }
+    state = state.copyWith(busy: true, clearError: true);
+    final response = await _repository.renameCategory(id, trimmed);
+    state = state.copyWith(busy: false);
+    if (!response.isSuccess) {
+      return _fallbackMessage(response.msg, '重命名分类失败');
+    }
+    await refresh();
+    return null;
+  }
+
+  // ── Folder CRUD ────────────────────────────────────────────────────────────
+
+  /// 在当前分类下新增文件夹。
+  Future<String?> addFolder(String name) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      return '请输入文件夹名称';
+    }
+    final categoryId = state.selectedCategoryId;
+    if (categoryId <= 0) {
+      return '请先选择一个分类';
+    }
+    state = state.copyWith(busy: true, clearError: true);
+    final response = await _repository.addFolder(
+      categoryId: categoryId,
+      name: trimmed,
+    );
+    state = state.copyWith(busy: false);
+    if (!response.isSuccess) {
+      return _fallbackMessage(response.msg, '新增文件夹失败');
+    }
+    await _reloadFolders(categoryId);
+    return null;
+  }
+
+  /// 重命名文件夹。沿用 `recordingFolderSave` 接口：传入既有 id + 新名称。
+  Future<String?> renameFolder(RecordingFolderItem folder, String name) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      return '请输入文件夹名称';
+    }
+    if (folder.id <= 0) {
+      return '该文件夹不可重命名';
+    }
+    state = state.copyWith(busy: true, clearError: true);
+    final response = await _repository.renameFolder(
+      categoryId: folder.categoryId,
+      id: folder.id,
+      name: trimmed,
+    );
+    state = state.copyWith(busy: false);
+    if (!response.isSuccess) {
+      return _fallbackMessage(response.msg, '重命名文件夹失败');
+    }
+    await _reloadFolders(folder.categoryId);
+    return null;
+  }
+
+  /// 删除文件夹（含其下录音文件，由后端处理）。
+  Future<String?> deleteFolder(RecordingFolderItem folder) async {
+    if (folder.id <= 0) {
+      return '该文件夹不可删除';
+    }
+    state = state.copyWith(busy: true, clearError: true);
+    final response = await _repository.deleteFolder(folder.id);
+    state = state.copyWith(busy: false);
+    if (!response.isSuccess) {
+      return _fallbackMessage(response.msg, '删除文件夹失败');
+    }
+    await _reloadFolders(folder.categoryId);
     return null;
   }
 
@@ -445,38 +632,12 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     state = state.copyWith(previewPositionMs: targetMs.toInt());
   }
 
-  Future<void> togglePlaybackRate() async {
-    const options = <double>[1, 1.5, 2];
-    final currentIndex = options.indexOf(state.previewPlaybackRate);
-    final next = options[(currentIndex + 1) % options.length];
-    state = state.copyWith(previewPlaybackRate: next);
-    final player = _ensurePlayer();
-    if (player != null) {
-      await player.setRate(next);
-    }
-  }
-
-  void toggleCollected() {
-    state = state.copyWith(previewCollected: !state.previewCollected);
-  }
-
-  void reopenSaveDialog() {
-    if (state.previewItem == null) {
-      return;
-    }
-    state = state.copyWith(showSaveDialog: true);
-  }
-
   void closeSaveDialog() {
     state = state.copyWith(showSaveDialog: false);
   }
 
   void updatePendingTitle(String value) {
     state = state.copyWith(pendingTitle: value);
-  }
-
-  void updateSelectedSaveCategory(int id) {
-    state = state.copyWith(selectedSaveCategoryId: id);
   }
 
   void selectEffect(int index) {
@@ -515,18 +676,31 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       return '上传结果异常，未拿到录音地址';
     }
 
+    final folderId = state.currentFolderId;
     final saveResponse = await _repository.saveRecording(
       categoryId: categoryId,
       name: title,
       duration: _formatDurationLabel(state.previewDurationMs),
-      url: filePath,
+      filePath: filePath,
+      folderId: folderId,
     );
     state = state.copyWith(busy: false);
     if (!saveResponse.isSuccess) {
       return _fallbackMessage(saveResponse.msg, '保存录音失败');
     }
 
-    await selectCategory(categoryId);
+    // 保存完成后回到该文件夹的文件列表，刷新一遍数据。
+    if (folderId > 0) {
+      await openFolder(
+        RecordingFolderItem(
+          id: folderId,
+          categoryId: categoryId,
+          name: state.currentFolderName,
+        ),
+      );
+    } else {
+      await selectCategory(categoryId);
+    }
     return null;
   }
 
@@ -551,6 +725,59 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     return null;
   }
 
+  /// 重命名录音作品。沿用 `recordingSave` 接口（id > 0 表示更新而非新增），
+  /// 把原始 payload 中的 filePath / duration / folderId / paramN 原样回传，
+  /// 只替换 name 字段。成功后刷新当前所在的文件夹列表。
+  Future<String?> renameRecording(RecordingEntry item, String name) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      return '请输入录音名称';
+    }
+    if (trimmed == item.name) {
+      return null;
+    }
+    if (item.id <= 0) {
+      return '该录音暂不支持重命名';
+    }
+    final payload = item.payload;
+    final filePath = (payload['filePath'] ?? payload['url'] ?? '').toString();
+    if (filePath.isEmpty) {
+      return '录音地址缺失，无法重命名';
+    }
+    final duration = (payload['duration'] ?? item.durationLabel).toString();
+    final folderId = _toInt(payload['folderId']);
+    state = state.copyWith(busy: true, clearError: true);
+    final response = await _repository.saveRecording(
+      id: item.id,
+      categoryId: item.categoryId,
+      name: trimmed,
+      duration: duration,
+      filePath: filePath,
+      folderId: folderId,
+      param1: (payload['param1'] ?? '').toString(),
+      param2: (payload['param2'] ?? '').toString(),
+      param3: (payload['param3'] ?? '').toString(),
+    );
+    state = state.copyWith(busy: false);
+    if (!response.isSuccess) {
+      return _fallbackMessage(response.msg, '重命名失败');
+    }
+    // 刷新当前所在视图（文件夹内 / 文件夹概览），让新名称即时显示。
+    final currentFolderId = state.currentFolderId;
+    if (currentFolderId > 0) {
+      await openFolder(
+        RecordingFolderItem(
+          id: currentFolderId,
+          categoryId: state.selectedCategoryId,
+          name: state.currentFolderName,
+        ),
+      );
+    } else if (state.selectedCategoryId > 0) {
+      await selectCategory(state.selectedCategoryId);
+    }
+    return null;
+  }
+
   Future<String?> openShare() async {
     final target = state.previewItem;
     if (target == null || target.isLocalDraft) {
@@ -567,9 +794,9 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       if (raw is! Map<String, dynamic>) {
         continue;
       }
-      final id = _toInt(raw['id']);
+      final id = _toIdString(raw['id']);
       final name = raw['name']?.toString().trim() ?? '';
-      if (id <= 0 || name.isEmpty) {
+      if (id.isEmpty || name.isEmpty) {
         continue;
       }
       classes.add(RecordingShareClass(id: id, name: name));
@@ -585,7 +812,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     );
   }
 
-  void toggleShareClass(int id) {
+  void toggleShareClass(String id) {
     state = state.copyWith(
       shareClasses: state.shareClasses.map((item) {
         if (item.id != id) {
@@ -733,6 +960,71 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     return result;
   }
 
+  /// `recordingFolderList` 后端返回的可能是 `List` 或分页对象 `{ records: [...] }`，
+  /// 兼容两种结构并对每一条记录做基础字段校验。
+  List<RecordingFolderItem> _parseFolders(dynamic data, int categoryId) {
+    final sourceList = switch (data) {
+      final List<dynamic> list => list,
+      final Map<String, dynamic> map when map['records'] is List<dynamic> =>
+        map['records'] as List<dynamic>,
+      _ => const <dynamic>[],
+    };
+    final result = <RecordingFolderItem>[];
+    for (final raw in sourceList) {
+      if (raw is! Map<String, dynamic>) {
+        continue;
+      }
+      final id = _toInt(raw['id']);
+      final name = raw['name']?.toString().trim() ?? '';
+      if (id <= 0 || name.isEmpty) {
+        continue;
+      }
+      final count = _toInt(
+        raw['count'] ??
+            raw['recordingCount'] ??
+            raw['fileCount'] ??
+            raw['total'] ??
+            raw['num'],
+      );
+      final size = raw['sizeLabel']?.toString() ?? raw['size']?.toString() ?? '';
+      final date =
+          raw['updateTime']?.toString() ??
+          raw['createTime']?.toString() ??
+          raw['date']?.toString() ??
+          '';
+      result.add(
+        RecordingFolderItem(
+          id: id,
+          categoryId: categoryId,
+          name: name,
+          count: count,
+          sizeLabel: size,
+          dateLabel: _formatFolderDate(date),
+        ),
+      );
+    }
+    return result;
+  }
+
+  /// 把后端时间字符串（如 `2026-04-07 12:34:56`）裁剪成 `2026.04.07`，
+  /// 与「我的云盘」的卡片日期格式保持一致。无法识别时原样返回。
+  String _formatFolderDate(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) {
+      return '';
+    }
+    final match = RegExp(r'^(\d{4})[-./](\d{1,2})[-./](\d{1,2})').firstMatch(
+      trimmed,
+    );
+    if (match == null) {
+      return trimmed;
+    }
+    final y = match.group(1)!;
+    final m = match.group(2)!.padLeft(2, '0');
+    final d = match.group(3)!.padLeft(2, '0');
+    return '$y.$m.$d';
+  }
+
   List<RecordingEntry> _parseRecordings(dynamic data, int categoryId) {
     final sourceList = switch (data) {
       final List<dynamic> list => list,
@@ -747,24 +1039,100 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       }
       final id = _toInt(raw['id']);
       final name = raw['name']?.toString().trim() ?? '';
-      final rawUrl = raw['url']?.toString() ?? '';
-      final url = _resolveMediaUrl(rawUrl);
+      // recordingList 实际返回字段是 `filePath`（相对路径，例如
+      // `app/upload/.../xxx.wav`）。`url` 仅作为旧版本回退兼容。
+      final rawPath = (raw['filePath'] ?? raw['url'] ?? '').toString();
+      final url = _resolveMediaUrl(rawPath);
       if (id <= 0 || name.isEmpty || url.isEmpty) {
         continue;
       }
+      // 后端可能在 record 里另带一个 `categoryId`，优先使用记录自身的，
+      // 兜底用调用方传入的当前分类 id。
+      final ownerCategoryId = _toInt(raw['categoryId']);
       result.add(
         RecordingEntry(
           id: id,
-          categoryId: categoryId,
+          categoryId: ownerCategoryId > 0 ? ownerCategoryId : categoryId,
           name: name,
           url: url,
           durationLabel: (raw['duration'] ?? '00:00.00').toString(),
           waveform: _fallbackWaveform(id),
           payload: Map<String, dynamic>.from(raw),
+          sizeLabel: _resolveSizeLabel(raw),
+          dateLabel: _resolveDateLabel(raw),
         ),
       );
     }
     return result;
+  }
+
+  /// 从原始 record 中找一个能展示的"大小"。
+  /// 兼容字符串字节数（如 "507914"）与已格式化字符串（如 "1.2MB"）。
+  String _resolveSizeLabel(Map<String, dynamic> item) {
+    final candidates = <dynamic>[
+      item['sizeLabel'],
+      item['size'],
+      item['fileSize'],
+      item['totalFileSize'],
+    ];
+    for (final candidate in candidates) {
+      final value = candidate?.toString().trim() ?? '';
+      if (value.isEmpty || value == 'null') {
+        continue;
+      }
+      final asNumber = double.tryParse(value);
+      if (asNumber != null && !value.contains(RegExp(r'[a-zA-Z]'))) {
+        return _formatBytesLabel(asNumber);
+      }
+      return value;
+    }
+    return '';
+  }
+
+  /// 从原始 record 中找一个能展示的"日期"，统一格式化成 `MM.dd.yyyy`，
+  /// 与「我的云盘」文件卡的右下角格式保持一致。
+  String _resolveDateLabel(Map<String, dynamic> item) {
+    final candidates = <dynamic>[
+      item['createTime'],
+      item['createDate'],
+      item['updateTime'],
+    ];
+    for (final candidate in candidates) {
+      final raw = candidate?.toString().trim() ?? '';
+      if (raw.isEmpty || raw == 'null') {
+        continue;
+      }
+      final normalized = raw.contains(' ') && !raw.contains('T')
+          ? raw.replaceFirst(' ', 'T')
+          : raw;
+      final parsed = DateTime.tryParse(normalized);
+      if (parsed != null) {
+        final month = parsed.month.toString().padLeft(2, '0');
+        final day = parsed.day.toString().padLeft(2, '0');
+        return '$month.$day.${parsed.year}';
+      }
+      return raw;
+    }
+    return '';
+  }
+
+  String _formatBytesLabel(double bytes) {
+    if (bytes <= 0) {
+      return '0KB';
+    }
+    const kb = 1024.0;
+    const mb = kb * 1024.0;
+    const gb = mb * 1024.0;
+    if (bytes >= gb) {
+      final value = bytes / gb;
+      return '${value.toStringAsFixed(value < 10 ? 1 : 0)}GB';
+    }
+    if (bytes >= mb) {
+      final value = bytes / mb;
+      return '${value.toStringAsFixed(value < 10 ? 1 : 0)}MB';
+    }
+    final value = bytes / kb;
+    return '${value.toStringAsFixed(value < 10 ? 1 : 0)}KB';
   }
 
   int _resolveSelectedCategory(
@@ -829,6 +1197,14 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       return value;
     }
     return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  String _toIdString(dynamic value) {
+    final text = value?.toString().trim() ?? '';
+    if (text.isEmpty || text == '0' || text.toLowerCase() == 'null') {
+      return '';
+    }
+    return text;
   }
 
   String _fallbackMessage(String raw, String fallback) {

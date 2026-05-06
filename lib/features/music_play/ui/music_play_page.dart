@@ -12,6 +12,12 @@ import '../state/music_play_state.dart';
 
 final Set<String> _musicPlayPrecachedImages = <String>{};
 
+int _musicPlayDecodeWidth(BuildContext context) {
+  final size = MediaQuery.sizeOf(context);
+  final dpr = MediaQuery.devicePixelRatioOf(context);
+  return (size.width * dpr).ceil().clamp(1, 2200).toInt();
+}
+
 class MusicPlayPage extends ConsumerStatefulWidget {
   const MusicPlayPage({super.key});
 
@@ -93,8 +99,6 @@ class _MusicPlayPageState extends ConsumerState<MusicPlayPage> {
       'assets/images/home/dictation/10.png',
       'assets/images/404/wx.png',
       'assets/images/404/jp.png',
-      ...?state.detail?.questionImages,
-      ...?state.detail?.answerImages,
       if (state.detail?.coverUrl.isNotEmpty == true) state.detail!.coverUrl,
     ];
 
@@ -103,7 +107,7 @@ class _MusicPlayPageState extends ConsumerState<MusicPlayPage> {
         continue;
       }
       final provider = url.startsWith('http://') || url.startsWith('https://')
-          ? NetworkImage(url)
+          ? ResizeImage(NetworkImage(url), width: 720)
           : AssetImage(url) as ImageProvider;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (context.mounted) {
@@ -1065,6 +1069,7 @@ class _AnswerPanelState extends State<_AnswerPanel> {
                                     image,
                                     width: double.infinity,
                                     fit: BoxFit.fitWidth,
+                                    cacheWidth: _musicPlayDecodeWidth(context),
                                     errorBuilder: (context, error, stackTrace) {
                                       _markImageFailed(index);
                                       return Center(

@@ -1,15 +1,28 @@
+import 'dart:typed_data';
+
 import 'courseware_file_picker_io.dart'
     if (dart.library.html) 'courseware_file_picker_web.dart';
 
-/// Picked file data (in-memory).
+/// Picked file data.
 class CoursewarePickedFile {
-  const CoursewarePickedFile({required this.name, required this.bytes});
+  const CoursewarePickedFile({
+    required this.name,
+    this.bytes,
+    this.path,
+    this.size,
+  });
 
   final String name;
-  final List<int> bytes;
+  final Uint8List? bytes;
+  final String? path;
+  final int? size;
+
+  bool get hasBytes => bytes != null && bytes!.isNotEmpty;
+  bool get hasPath => path != null && path!.isNotEmpty;
+  bool get canUpload => hasBytes || hasPath;
 }
 
-/// Picks files and returns bytes + filename.
+/// Picks files and returns filename + either bytes (web) or a local path (native).
 ///
 /// - `allowMultiple`: only meaningful on web/image selection.
 Future<List<CoursewarePickedFile>> pickCoursewareFiles({
@@ -17,4 +30,3 @@ Future<List<CoursewarePickedFile>> pickCoursewareFiles({
 }) {
   return pickCoursewareFilesImpl(allowMultiple: allowMultiple);
 }
-

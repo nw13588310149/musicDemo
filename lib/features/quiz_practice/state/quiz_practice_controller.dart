@@ -5,13 +5,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/quiz_practice_repository.dart';
 import 'quiz_practice_state.dart';
 
-final quizPracticeControllerProvider = StateNotifierProvider.autoDispose<
-  QuizPracticeController,
-  QuizPracticeState
->((ref) {
-  final repo = ref.watch(quizPracticeRepositoryProvider);
-  return QuizPracticeController(repository: repo);
-});
+final quizPracticeControllerProvider =
+    StateNotifierProvider.autoDispose<
+      QuizPracticeController,
+      QuizPracticeState
+    >((ref) {
+      final repo = ref.watch(quizPracticeRepositoryProvider);
+      return QuizPracticeController(repository: repo);
+    });
 
 class QuizPracticeController extends StateNotifier<QuizPracticeState> {
   QuizPracticeController({required QuizPracticeRepository repository})
@@ -40,9 +41,7 @@ class QuizPracticeController extends StateNotifier<QuizPracticeState> {
 
     // 1.0 行为：status==null 的练习立刻调用 create 初始化（只针对 sequence/random/exam）。
     final missing = summaries
-        .where(
-          (s) => !s.statusInitialized && s.type != QuizPracticeType.error,
-        )
+        .where((s) => !s.statusInitialized && s.type != QuizPracticeType.error)
         .toList(growable: false);
     if (missing.isEmpty) return;
     await Future.wait(

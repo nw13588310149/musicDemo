@@ -107,7 +107,10 @@ class _ImageGalleryViewerState extends State<ImageGalleryViewer> {
                     builder: (context, index) {
                       final image = widget.images[index];
                       return PhotoViewGalleryPageOptions(
-                        imageProvider: NetworkImage(image),
+                        imageProvider: ResizeImage(
+                          NetworkImage(image),
+                          width: _galleryDecodeWidth(context),
+                        ),
                         minScale: PhotoViewComputedScale.contained,
                         maxScale: PhotoViewComputedScale.covered * 4,
                         initialScale: PhotoViewComputedScale.contained,
@@ -191,4 +194,10 @@ class _ImageGalleryViewerState extends State<ImageGalleryViewer> {
       ),
     );
   }
+}
+
+int _galleryDecodeWidth(BuildContext context) {
+  final size = MediaQuery.sizeOf(context);
+  final dpr = MediaQuery.devicePixelRatioOf(context);
+  return (size.width * dpr * 2).ceil().clamp(1, 2600).toInt();
 }

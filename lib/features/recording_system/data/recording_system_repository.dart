@@ -146,11 +146,27 @@ class RecordingSystemRepository {
     );
   }
 
+  /// 新增 / 修改录音作品。后端约定同一个 `recordingSave` 接口：
+  /// `id == 0` 时表示新增、`id > 0` 时按 id 更新。请求体形如：
+  /// ```json
+  /// {
+  ///   "categoryId": 2,
+  ///   "duration": "01:02:03",
+  ///   "filePath": "app/upload/.../xxx.png",
+  ///   "folderId": 0,
+  ///   "id": 0,
+  ///   "name": "作品名称",
+  ///   "param1": "string",
+  ///   "param2": "string",
+  ///   "param3": "string"
+  /// }
+  /// ```
   Future<ApiResponse> saveRecording({
     required int categoryId,
     required String name,
     required String duration,
-    required String url,
+    required String filePath,
+    int id = 0,
     int folderId = 0,
     String param1 = '',
     String param2 = '',
@@ -160,25 +176,15 @@ class RecordingSystemRepository {
       '$_kRecordingBase/app/recording/v2/recordingSave',
       data: <String, dynamic>{
         'categoryId': categoryId,
-        'folderId': folderId,
         'duration': duration,
-        'id': 0,
+        'filePath': filePath,
+        'folderId': folderId,
+        'id': id,
         'name': name,
         'param1': param1,
         'param2': param2,
         'param3': param3,
-        'url': url,
       },
-    );
-  }
-
-  Future<ApiResponse> updateRecordingName({
-    required int id,
-    required String name,
-  }) {
-    return client.post(
-      '$_kRecordingBase/app/recording/v2/recordingUpdateName',
-      data: <String, dynamic>{'id': id, 'name': name},
     );
   }
 
@@ -196,7 +202,7 @@ class RecordingSystemRepository {
   }
 
   Future<ApiResponse> shareRecording({
-    required int classId,
+    required String classId,
     required Map<String, dynamic> payload,
   }) {
     return client.post(

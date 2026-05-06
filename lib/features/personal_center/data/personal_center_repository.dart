@@ -50,8 +50,10 @@ class PersonalCenterRepository {
   );
 
   /// 省份地区列表（对齐 1.0 `getCity`）。
-  Future<ApiResponse> provinceCityList() =>
-      _client.post('/app/common/provinceCityList', data: const <String, dynamic>{});
+  Future<ApiResponse> provinceCityList() => _client.post(
+    '/app/common/provinceCityList',
+    data: const <String, dynamic>{},
+  );
 
   /// 头像 / 文件上传（对齐 1.0 `fileUpload`）。
   Future<ApiResponse> uploadFile({

@@ -6,11 +6,37 @@ enum SmartCampusMainView {
   myClass,
   mySchedule,
   classWorkbench,
+  checkIn,
+  myHomework,
+  myGrades,
+  groupChat,
+  leaveManagement,
+  leaveApproval,
+  dormCheck,
+  dormDynamic,
+  dormHistory,
+  homeSchool,
+  classAttendance,
+  studentRoster,
+  homeworkReview,
+  examReview,
+  studentManagement,
+  teacherManagement,
+  classManagement,
+  scheduleManagement,
+  dormLeaveApproval,
+  faceLibrary,
+  notificationManagement,
 }
 
 enum TeacherScheduleMode { view, edit }
 
 enum PrincipalMailboxMessageType { report, suggestion, other }
+
+/// 进入「校长信箱」时的默认分段：
+/// - `compose`  写信（默认）
+/// - `feedback` 需求反馈（个人中心「意见反馈」直达入口）
+enum PrincipalMailboxInitialMode { compose, feedback }
 
 extension SmartCampusRoleX on SmartCampusRole {
   String get label {
@@ -123,10 +149,12 @@ extension PrincipalMailboxMessageTypeX on PrincipalMailboxMessageType {
 class SmartCampusState {
   const SmartCampusState({
     this.selectedRole = SmartCampusRole.student,
+    this.hasUserSelectedRole = false,
     this.mainView = SmartCampusMainView.dashboard,
     this.selectedMailboxMessageType = PrincipalMailboxMessageType.suggestion,
     this.isMailboxAnonymous = true,
     this.teacherScheduleMode = TeacherScheduleMode.view,
+    this.principalMailboxInitialMode = PrincipalMailboxInitialMode.compose,
     this.availableRoles = const [
       SmartCampusRole.student,
       SmartCampusRole.teacher,
@@ -137,27 +165,45 @@ class SmartCampusState {
   });
 
   final SmartCampusRole selectedRole;
+
+  /// 用户是否手动通过 `selectRole` 切换过身份。
+  ///
+  /// - `false`：仅由后端 `applyBackendRole` 推下来的自动值。管理员重新进入
+  ///   智慧校园时，每次都根据后端 `mapped` 角色（即 admin）作为默认视图。
+  /// - `true`：用户已经在 dashboard 上选过身份（例如 admin 切到「班主任」）。
+  ///   这之后 `applyBackendRole` 不会再覆盖 `selectedRole`，避免进入「班级
+  ///   工作台 / 学生名册 / 作业批改 / 考评管理」等子页再返回时被打回默认。
+  final bool hasUserSelectedRole;
   final SmartCampusMainView mainView;
   final PrincipalMailboxMessageType selectedMailboxMessageType;
   final bool isMailboxAnonymous;
   final TeacherScheduleMode teacherScheduleMode;
+
+  /// 一次性配置：[PrincipalMailboxView] `initState` 时读取并立刻消费，
+  /// 用于支持「个人中心 - 意见反馈」直接落到「需求反馈」分段。
+  final PrincipalMailboxInitialMode principalMailboxInitialMode;
   final List<SmartCampusRole> availableRoles;
 
   SmartCampusState copyWith({
     SmartCampusRole? selectedRole,
+    bool? hasUserSelectedRole,
     SmartCampusMainView? mainView,
     PrincipalMailboxMessageType? selectedMailboxMessageType,
     bool? isMailboxAnonymous,
     TeacherScheduleMode? teacherScheduleMode,
+    PrincipalMailboxInitialMode? principalMailboxInitialMode,
     List<SmartCampusRole>? availableRoles,
   }) {
     return SmartCampusState(
       selectedRole: selectedRole ?? this.selectedRole,
+      hasUserSelectedRole: hasUserSelectedRole ?? this.hasUserSelectedRole,
       mainView: mainView ?? this.mainView,
       selectedMailboxMessageType:
           selectedMailboxMessageType ?? this.selectedMailboxMessageType,
       isMailboxAnonymous: isMailboxAnonymous ?? this.isMailboxAnonymous,
       teacherScheduleMode: teacherScheduleMode ?? this.teacherScheduleMode,
+      principalMailboxInitialMode:
+          principalMailboxInitialMode ?? this.principalMailboxInitialMode,
       availableRoles: availableRoles ?? this.availableRoles,
     );
   }

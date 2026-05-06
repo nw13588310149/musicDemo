@@ -6,16 +6,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/consultation_repository.dart';
 import 'consultation_detail_state.dart';
 
-final consultationDetailControllerProvider =
-    StateNotifierProvider.autoDispose
-        .family<
-          ConsultationDetailController,
-          ConsultationDetailState,
-          ConsultationDetailArgs
-        >((ref, args) {
-          final repo = ref.watch(consultationRepositoryProvider);
-          return ConsultationDetailController(repository: repo, args: args);
-        });
+final consultationDetailControllerProvider = StateNotifierProvider.autoDispose
+    .family<
+      ConsultationDetailController,
+      ConsultationDetailState,
+      ConsultationDetailArgs
+    >((ref, args) {
+      final repo = ref.watch(consultationRepositoryProvider);
+      return ConsultationDetailController(repository: repo, args: args);
+    });
 
 class ConsultationDetailController
     extends StateNotifier<ConsultationDetailState> {

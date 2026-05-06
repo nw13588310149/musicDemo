@@ -122,10 +122,28 @@ class _RecordingListViewState extends ConsumerState<_RecordingListView> {
                           sortAscending: _sortAscending,
                           onToggleSort: () =>
                               setState(() => _sortAscending = !_sortAscending),
-                          onRefresh: controller.refresh,
+                          onRefresh: () async {
+                            // 文件视图下"刷新"重新拉取该文件夹下的录音；
+                            // 文件夹视图下刷新整个列表（含分类）。
+                            if (state.isInsideFolder) {
+                              await controller.openFolder(
+                                RecordingFolderItem(
+                                  id: state.currentFolderId,
+                                  categoryId: state.selectedCategoryId,
+                                  name: state.currentFolderName,
+                                ),
+                              );
+                            } else {
+                              await controller.refresh();
+                            }
+                          },
                           onOpenItem: controller.openPreview,
                           onItemAction: _handleItemAction,
-                          onCreate: controller.openNewRecording,
+                          onOpenFolder: controller.openFolder,
+                          onBackToOverview: controller.backToFolderOverview,
+                          onFolderAction: _handleFolderAction,
+                          onCreateFolder: _showAddFolderDialog,
+                          onCreateRecording: controller.openNewRecording,
                         ),
                       ),
                     ),
@@ -182,15 +200,32 @@ class _RecordingListViewState extends ConsumerState<_RecordingListView> {
     RecordingCategoryItem item,
     ItemMenuAction action,
   ) async {
+    final controller = ref.read(recordingSystemControllerProvider.notifier);
     switch (action) {
       case ItemMenuAction.rename:
-        _showMessage(context, '分类重命名能力待接入');
+        final nextName = await showTextInputDialog(
+          context: context,
+          title: '重命名分类',
+          hintText: '请输入新的分类名称',
+          initialValue: item.name,
+          confirmLabel: '保存',
+        );
+        if (nextName == null || nextName.isEmpty || nextName == item.name) {
+          return;
+        }
+        if (!mounted) {
+          return;
+        }
+        final message = await controller.renameCategory(item.id, nextName);
+        if (!mounted) {
+          return;
+        }
+        _showMessage(context, message ?? '分类名称已更新');
         break;
       case ItemMenuAction.share:
-        _showMessage(context, '分类分享能力待接入');
-        break;
       case ItemMenuAction.copy:
-        _showMessage(context, '分类复制能力待接入');
+        // 侧边栏菜单已通过 `showItemActionMenu(actions: ...)` 过滤掉
+        // 分享 / 复制项，这里仅为满足 switch 穷举校验的兜底分支。
         break;
       case ItemMenuAction.delete:
         final confirmed = await showConfirmDialog(
@@ -202,13 +237,82 @@ class _RecordingListViewState extends ConsumerState<_RecordingListView> {
         if (!confirmed || !mounted) {
           return;
         }
-        final message = await ref
-            .read(recordingSystemControllerProvider.notifier)
-            .deleteCategory(item.id);
+        final message = await controller.deleteCategory(item.id);
         if (!mounted) {
           return;
         }
         _showMessage(context, message ?? '分类已删除');
+        break;
+    }
+  }
+
+  Future<void> _showAddFolderDialog() async {
+    final controller = ref.read(recordingSystemControllerProvider.notifier);
+    if (widget.state.selectedCategoryId <= 0) {
+      _showMessage(context, '请先选择一个分类');
+      return;
+    }
+    final name = await showTextInputDialog(
+      context: context,
+      title: '新建文件夹',
+      hintText: '请输入文件夹名称',
+      confirmLabel: '确认',
+    );
+    if (name == null || name.isEmpty || !mounted) {
+      return;
+    }
+    final message = await controller.addFolder(name);
+    if (!mounted) {
+      return;
+    }
+    _showMessage(context, message ?? '文件夹已新建');
+  }
+
+  Future<void> _handleFolderAction(
+    RecordingFolderItem item,
+    ItemMenuAction action,
+  ) async {
+    final controller = ref.read(recordingSystemControllerProvider.notifier);
+    switch (action) {
+      case ItemMenuAction.rename:
+        final nextName = await showTextInputDialog(
+          context: context,
+          title: '重命名文件夹',
+          hintText: '请输入新的文件夹名称',
+          initialValue: item.name,
+          confirmLabel: '保存',
+        );
+        if (nextName == null || nextName.isEmpty || nextName == item.name) {
+          return;
+        }
+        if (!mounted) {
+          return;
+        }
+        final message = await controller.renameFolder(item, nextName);
+        if (!mounted) {
+          return;
+        }
+        _showMessage(context, message ?? '文件夹已重命名');
+        break;
+      case ItemMenuAction.share:
+      case ItemMenuAction.copy:
+        // 文件夹菜单已在 `showItemActionMenu` 中过滤；此分支仅为穷举兜底。
+        break;
+      case ItemMenuAction.delete:
+        final confirmed = await showConfirmDialog(
+          context: context,
+          title: '删除文件夹',
+          content: '删除"${item.name}"后，文件夹内的录音也会一并移除，确认继续吗？',
+          confirmLabel: '删除',
+        );
+        if (!confirmed || !mounted) {
+          return;
+        }
+        final message = await controller.deleteFolder(item);
+        if (!mounted) {
+          return;
+        }
+        _showMessage(context, message ?? '文件夹已删除');
         break;
     }
   }
@@ -221,6 +325,28 @@ class _RecordingListViewState extends ConsumerState<_RecordingListView> {
     switch (action) {
       case _RecordingItemAction.preview:
         await controller.openPreview(item);
+        break;
+      case _RecordingItemAction.rename:
+        // 弹出标题输入框（沿用公共组件），确认后调 controller 走
+        // recordingSave 接口（id > 0 触发"按 id 更新"）。
+        final nextName = await showTextInputDialog(
+          context: context,
+          title: '重命名录音',
+          hintText: '请输入新的录音名称',
+          initialValue: item.name,
+          confirmLabel: '保存',
+        );
+        if (nextName == null || nextName.isEmpty || nextName == item.name) {
+          return;
+        }
+        if (!mounted) {
+          return;
+        }
+        final message = await controller.renameRecording(item, nextName);
+        if (!mounted) {
+          return;
+        }
+        _showMessage(context, message ?? '录音已重命名');
         break;
       case _RecordingItemAction.share:
         await controller.openPreview(item);
@@ -266,10 +392,7 @@ class _RecordingSidebar extends StatelessWidget {
   final RecordingSystemState state;
   final ValueChanged<int> onSelectCategory;
   final VoidCallback onAddCategory;
-  final Future<void> Function(
-    RecordingCategoryItem item,
-    ItemMenuAction action,
-  )
+  final Future<void> Function(RecordingCategoryItem item, ItemMenuAction action)
   onCategoryAction;
 
   @override
@@ -280,8 +403,28 @@ class _RecordingSidebar extends StatelessWidget {
       child: Column(
         children: [
           Expanded(
-            child: state.loading && state.categories.isEmpty
-                ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+            // 刚进入页面（loading 中且尚未拿到数据）时，侧栏保持空白，
+            // 不展示 loading 转圈，避免与右侧 loading 同时出现造成视觉干扰。
+            // 加载完成后若仍无数据则提示"暂无分类"，否则展示分类列表。
+            child: state.categories.isEmpty
+                ? (state.loading
+                      ? const SizedBox.shrink()
+                      : Center(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(horizontal: ui(8)),
+                            child: Text(
+                              '暂无分类\n点击下方"添加分类"创建',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: ui(12),
+                                color: const Color(0xFFB6B5BB),
+                                fontFamily: 'PingFang SC',
+                                fontWeight: FontWeight.w400,
+                                height: 1.6,
+                              ),
+                            ),
+                          ),
+                        ))
                 : ListView.separated(
                     itemCount: state.categories.length,
                     separatorBuilder: (_, _) => SizedBox(height: ui(8)),
@@ -325,9 +468,15 @@ class _RecordingCategoryCardState extends State<_RecordingCategoryCard> {
   final GlobalKey _menuTriggerKey = GlobalKey();
 
   Future<void> _openActionMenu() async {
+    // 录音系统侧边栏与「我的笔记」/「我的云盘」分类菜单一致：
+    // 只保留「重命名 / 删除」，不暴露分享与复制。
     final action = await showItemActionMenu(
       context: context,
       triggerKey: _menuTriggerKey,
+      actions: const <ItemMenuAction>[
+        ItemMenuAction.rename,
+        ItemMenuAction.delete,
+      ],
     );
     if (action != null) {
       widget.onAction(action);
@@ -554,11 +703,7 @@ class _AddCategoryCard extends StatelessWidget {
                 color: Color(0xFFB6B5BB),
                 shape: BoxShape.circle,
               ),
-              child: Icon(
-                Icons.add_rounded,
-                size: ui(12),
-                color: Colors.white,
-              ),
+              child: Icon(Icons.add_rounded, size: ui(12), color: Colors.white),
             ),
             SizedBox(height: ui(4)),
             Text(
@@ -588,7 +733,11 @@ class _RecordingContentArea extends StatelessWidget {
     required this.onRefresh,
     required this.onOpenItem,
     required this.onItemAction,
-    required this.onCreate,
+    required this.onOpenFolder,
+    required this.onBackToOverview,
+    required this.onFolderAction,
+    required this.onCreateFolder,
+    required this.onCreateRecording,
   });
 
   final RecordingSystemState state;
@@ -600,33 +749,56 @@ class _RecordingContentArea extends StatelessWidget {
   final ValueChanged<RecordingEntry> onOpenItem;
   final Future<void> Function(RecordingEntry item, _RecordingItemAction action)
   onItemAction;
-  final VoidCallback onCreate;
+  final ValueChanged<RecordingFolderItem> onOpenFolder;
+  final Future<void> Function() onBackToOverview;
+  final Future<void> Function(RecordingFolderItem item, ItemMenuAction action)
+  onFolderAction;
+  final VoidCallback onCreateFolder;
+  final VoidCallback onCreateRecording;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final selectedCategoryName = state.categories
-        .where((item) => item.id == state.selectedCategoryId)
-        .map((item) => item.name)
-        .firstOrNull;
-    final headerName = selectedCategoryName ?? '我的录音';
-    final visible = _sorted(_filter(state.items, keyword), sortAscending);
+    final selectedCategoryName = state.selectedCategory?.name ?? '';
+    final isInsideFolder = state.isInsideFolder;
+    final visibleFolders = _sortedFolders(
+      _filterFolders(state.folders, keyword),
+      sortAscending,
+    );
+    final visibleFiles = _sortedFiles(
+      _filterFiles(state.items, keyword),
+      sortAscending,
+    );
 
     return Padding(
       padding: EdgeInsets.fromLTRB(ui(30), ui(28), ui(20), ui(16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            headerName,
-            style: TextStyle(
-              fontSize: ui(15),
-              color: const Color(0xFF0B081A),
-              fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w500,
-              height: 12 / 15,
-            ),
-          ),
+          // 顶部：进入文件夹后展示面包屑（录音系统 > 分类 > 文件夹），
+          // 否则只显示当前选中的分类名（无分类时空占位避免布局抖动）。
+          if (isInsideFolder)
+            _FolderBreadcrumb(
+              items: <String>[
+                '录音系统',
+                selectedCategoryName,
+                state.currentFolderName,
+              ],
+              onItemTap: (_) => onBackToOverview(),
+            )
+          else if (selectedCategoryName.isNotEmpty)
+            Text(
+              selectedCategoryName,
+              style: TextStyle(
+                fontSize: ui(15),
+                color: const Color(0xFF0B081A),
+                fontFamily: 'PingFang SC',
+                fontWeight: FontWeight.w500,
+                height: 12 / 15,
+              ),
+            )
+          else
+            SizedBox(height: ui(15)),
           SizedBox(height: ui(16)),
           Row(
             children: [
@@ -657,18 +829,36 @@ class _RecordingContentArea extends StatelessWidget {
                       ? const Center(
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : visible.isEmpty
-                      ? const _RecordingEmpty()
-                      : _RecordingFilesGrid(
-                          items: visible,
-                          onOpen: onOpenItem,
-                          onAction: onItemAction,
-                        ),
+                      : state.categories.isEmpty
+                      ? const _RecordingEmpty(message: '暂无分类')
+                      : isInsideFolder
+                      ? (visibleFiles.isEmpty
+                            ? const _RecordingEmpty(message: '当前文件夹下还没有录音')
+                            : _RecordingFilesGrid(
+                                items: visibleFiles,
+                                onOpen: onOpenItem,
+                                onAction: onItemAction,
+                              ))
+                      : (visibleFolders.isEmpty
+                            ? const _RecordingEmpty(message: '当前分类下还没有文件夹')
+                            : _RecordingFoldersGrid(
+                                items: visibleFolders,
+                                onOpen: onOpenFolder,
+                                onAction: onFolderAction,
+                              )),
                 ),
                 Positioned(
                   right: 0,
                   bottom: ui(8),
-                  child: _RecordingFab(label: '新建录音', onTap: onCreate),
+                  child: _RecordingFab(
+                    // 文件夹概览：新建文件夹（与「我的云盘」一致的图标）；
+                    // 进入文件夹后：新建录音（保留麦克风图标以示区别）。
+                    label: isInsideFolder ? '新建录音' : '新建文件夹',
+                    iconAsset: isInsideFolder
+                        ? AppAssets.soundFabIcon
+                        : AppAssets.coursewareNewFolder,
+                    onTap: isInsideFolder ? onCreateRecording : onCreateFolder,
+                  ),
                 ),
               ],
             ),
@@ -690,7 +880,10 @@ class _RecordingContentArea extends StatelessWidget {
     );
   }
 
-  List<RecordingEntry> _filter(List<RecordingEntry> items, String keyword) {
+  List<RecordingEntry> _filterFiles(
+    List<RecordingEntry> items,
+    String keyword,
+  ) {
     final query = keyword.trim();
     if (query.isEmpty) {
       return items;
@@ -700,13 +893,93 @@ class _RecordingContentArea extends StatelessWidget {
         .toList(growable: false);
   }
 
-  List<RecordingEntry> _sorted(List<RecordingEntry> items, bool ascending) {
+  List<RecordingEntry> _sortedFiles(
+    List<RecordingEntry> items,
+    bool ascending,
+  ) {
     final list = [...items];
     list.sort((left, right) {
       final byName = left.name.compareTo(right.name);
       return ascending ? byName : -byName;
     });
     return list;
+  }
+
+  List<RecordingFolderItem> _filterFolders(
+    List<RecordingFolderItem> items,
+    String keyword,
+  ) {
+    final query = keyword.trim();
+    if (query.isEmpty) {
+      return items;
+    }
+    return items
+        .where((item) => item.name.contains(query))
+        .toList(growable: false);
+  }
+
+  List<RecordingFolderItem> _sortedFolders(
+    List<RecordingFolderItem> items,
+    bool ascending,
+  ) {
+    final list = [...items];
+    list.sort((left, right) {
+      final byName = left.name.compareTo(right.name);
+      return ascending ? byName : -byName;
+    });
+    return list;
+  }
+}
+
+/// 与「我的云盘」一致的面包屑：自顶向下显示层级文本，最末位为当前层级（不可点）。
+class _FolderBreadcrumb extends StatelessWidget {
+  const _FolderBreadcrumb({required this.items, required this.onItemTap});
+
+  final List<String> items;
+
+  /// 点击非末位条目时触发，传入条目索引。
+  final ValueChanged<int> onItemTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: ui(6),
+      runSpacing: ui(6),
+      children: List<Widget>.generate(items.length * 2 - 1, (index) {
+        if (index.isOdd) {
+          return Icon(
+            Icons.chevron_right_rounded,
+            size: ui(14),
+            color: const Color(0xFFB6B5BB),
+          );
+        }
+        final itemIndex = index ~/ 2;
+        final label = items[itemIndex];
+        final isLast = itemIndex == items.length - 1;
+        final text = Text(
+          label,
+          style: TextStyle(
+            fontSize: ui(14),
+            color: isLast ? const Color(0xFF1A1A1A) : const Color(0xFF788698),
+            fontFamily: 'PingFang SC',
+            fontWeight: isLast ? FontWeight.w600 : FontWeight.w400,
+          ),
+        );
+        if (isLast) {
+          return text;
+        }
+        return MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => onItemTap(itemIndex),
+            child: text,
+          ),
+        );
+      }),
+    );
   }
 }
 
@@ -821,6 +1094,158 @@ class _ToolbarChip extends StatelessWidget {
   }
 }
 
+class _RecordingFoldersGrid extends StatelessWidget {
+  const _RecordingFoldersGrid({
+    required this.items,
+    required this.onOpen,
+    required this.onAction,
+  });
+
+  final List<RecordingFolderItem> items;
+  final ValueChanged<RecordingFolderItem> onOpen;
+  final Future<void> Function(RecordingFolderItem item, ItemMenuAction action)
+  onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return GridView.builder(
+      padding: EdgeInsets.zero,
+      itemCount: items.length,
+      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: ui(220),
+        mainAxisSpacing: ui(20),
+        crossAxisSpacing: ui(16),
+        mainAxisExtent: ui(196),
+      ),
+      itemBuilder: (context, index) {
+        final item = items[index];
+        return _RecordingFolderCard(
+          item: item,
+          onTap: () => onOpen(item),
+          onAction: (action) => onAction(item, action),
+        );
+      },
+    );
+  }
+}
+
+class _RecordingFolderCard extends StatefulWidget {
+  const _RecordingFolderCard({
+    required this.item,
+    required this.onTap,
+    required this.onAction,
+  });
+
+  final RecordingFolderItem item;
+  final VoidCallback onTap;
+  final ValueChanged<ItemMenuAction> onAction;
+
+  @override
+  State<_RecordingFolderCard> createState() => _RecordingFolderCardState();
+}
+
+class _RecordingFolderCardState extends State<_RecordingFolderCard> {
+  final GlobalKey _menuTriggerKey = GlobalKey();
+
+  Future<void> _openActionMenu() async {
+    final action = await showItemActionMenu(
+      context: context,
+      triggerKey: _menuTriggerKey,
+      actions: const [ItemMenuAction.rename, ItemMenuAction.delete],
+    );
+    if (action != null) {
+      widget.onAction(action);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final item = widget.item;
+    return InkWell(
+      onTap: widget.onTap,
+      borderRadius: BorderRadius.circular(ui(14)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(ui(14)),
+              child: Stack(
+                children: [
+                  // 与「我的云盘」相同的文件夹底图（已含日期/大小占位区位置）。
+                  Positioned.fill(
+                    child: Image.asset(
+                      AppAssets.cloudFolderFilledBg,
+                      fit: BoxFit.fill,
+                    ),
+                  ),
+                  if (item.dateLabel.isNotEmpty)
+                    Positioned(
+                      left: ui(10),
+                      bottom: ui(28),
+                      child: Text(
+                        item.dateLabel,
+                        style: TextStyle(
+                          fontSize: ui(11),
+                          color: const Color(0xFF9C91BE),
+                          fontFamily: 'Barlow',
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                    ),
+                  Positioned(
+                    left: ui(10),
+                    bottom: ui(8),
+                    child: Text(
+                      item.sizeLabel.isEmpty
+                          ? '${item.count} 个录音'
+                          : item.sizeLabel,
+                      style: TextStyle(
+                        fontSize: ui(11),
+                        color: const Color(0xFF7F70A8),
+                        fontFamily: 'Barlow',
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  // 右上角操作菜单热区（覆盖底图自带的三点位置）。
+                  Positioned(
+                    top: ui(32),
+                    right: ui(12),
+                    child: GestureDetector(
+                      key: _menuTriggerKey,
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _openActionMenu,
+                      child: SizedBox(width: ui(34), height: ui(34)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          SizedBox(height: ui(10)),
+          Center(
+            child: Text(
+              item.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: ui(15),
+                color: const Color(0xFF0B081A),
+                fontFamily: 'PingFang SC',
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _RecordingFilesGrid extends StatelessWidget {
   const _RecordingFilesGrid({
     required this.items,
@@ -857,7 +1282,7 @@ class _RecordingFilesGrid extends StatelessWidget {
   }
 }
 
-class _RecordingFileCard extends StatelessWidget {
+class _RecordingFileCard extends StatefulWidget {
   const _RecordingFileCard({
     required this.item,
     required this.onTap,
@@ -869,12 +1294,49 @@ class _RecordingFileCard extends StatelessWidget {
   final ValueChanged<_RecordingItemAction> onAction;
 
   @override
+  State<_RecordingFileCard> createState() => _RecordingFileCardState();
+}
+
+class _RecordingFileCardState extends State<_RecordingFileCard> {
+  final GlobalKey _menuTriggerKey = GlobalKey();
+
+  Future<void> _openActionMenu() async {
+    final action = await showItemActionMenu(
+      context: context,
+      triggerKey: _menuTriggerKey,
+      actions: const [
+        ItemMenuAction.rename,
+        ItemMenuAction.share,
+        ItemMenuAction.delete,
+      ],
+    );
+    if (action == null) return;
+    switch (action) {
+      case ItemMenuAction.rename:
+        widget.onAction(_RecordingItemAction.rename);
+        break;
+      case ItemMenuAction.share:
+        widget.onAction(_RecordingItemAction.share);
+        break;
+      case ItemMenuAction.delete:
+        widget.onAction(_RecordingItemAction.delete);
+        break;
+      case ItemMenuAction.copy:
+        // 文件菜单不暴露"复制"，此分支仅为穷举兜底。
+        break;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final item = widget.item;
+    // 与「我的云盘」文件卡保持完全一致的结构：上半部分仅放占位图（不要类型徽标），
+    // 下半部分 58px 灰色信息条里放 [标题 | ⋯] 和 [大小 | 日期]。
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onTap,
+        onTap: widget.onTap,
         borderRadius: BorderRadius.circular(ui(12)),
         child: Container(
           decoration: BoxDecoration(
@@ -887,87 +1349,90 @@ class _RecordingFileCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
-                child: Stack(
-                  children: [
-                    Center(
-                      child: Image.asset(
-                        AppAssets.soundFilePlaceholder,
-                        width: ui(96),
-                        height: ui(96),
-                        fit: BoxFit.contain,
-                      ),
-                    ),
-                    Positioned(
-                      top: ui(8),
-                      right: ui(8),
-                      child: PopupMenuButton<_RecordingItemAction>(
-                        padding: EdgeInsets.zero,
-                        iconSize: ui(20),
-                        color: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(ui(12)),
-                        ),
-                        onSelected: onAction,
-                        itemBuilder: (_) => const [
-                          PopupMenuItem(
-                            value: _RecordingItemAction.preview,
-                            child: Text('查看'),
-                          ),
-                          PopupMenuItem(
-                            value: _RecordingItemAction.share,
-                            child: Text('分享'),
-                          ),
-                          PopupMenuItem(
-                            value: _RecordingItemAction.delete,
-                            child: Text('删除'),
-                          ),
-                        ],
-                        child: SizedBox(
-                          width: ui(24),
-                          height: ui(24),
-                          child: Image.asset(
-                            AppAssets.cloudActionMore,
-                            width: ui(24),
-                            height: ui(24),
-                            fit: BoxFit.contain,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                child: Center(
+                  // 录音文件占位图（sound/18.png：录音波形 + "录音"标签）。
+                  // 与云盘 88×88 的类型图标尺寸保持一致。
+                  child: Image.asset(
+                    AppAssets.soundRecordingFile,
+                    width: ui(88),
+                    height: ui(88),
+                    fit: BoxFit.contain,
+                  ),
                 ),
               ),
+              // 底部 58px 信息条 (#F5F6FA)：[标题 | ⋯] + [大小 | 日期]。
               Container(
                 height: ui(58),
                 color: const Color(0xFFF5F6FA),
-                padding: EdgeInsets.fromLTRB(ui(12), ui(8), ui(12), ui(10)),
+                padding: EdgeInsets.fromLTRB(ui(12), ui(8), ui(8), ui(10)),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(
-                      item.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: ui(13),
-                        color: const Color(0xFF0B081A),
-                        fontFamily: 'PingFang SC',
-                        fontWeight: FontWeight.w500,
-                        height: 12 / 13,
-                      ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            item.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: ui(13),
+                              color: const Color(0xFF0B081A),
+                              fontFamily: 'PingFang SC',
+                              fontWeight: FontWeight.w500,
+                              height: 12 / 13,
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: ui(4)),
+                        GestureDetector(
+                          key: _menuTriggerKey,
+                          behavior: HitTestBehavior.opaque,
+                          onTap: _openActionMenu,
+                          child: SizedBox(
+                            width: ui(20),
+                            height: ui(20),
+                            child: Image.asset(
+                              AppAssets.cloudActionMore,
+                              width: ui(20),
+                              height: ui(20),
+                              fit: BoxFit.contain,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    SizedBox(height: ui(4)),
-                    Text(
-                      item.durationLabel,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: ui(11),
-                        color: const Color(0xFF7F7F7F),
-                        fontFamily: 'PingFang SC',
-                        fontWeight: FontWeight.w400,
-                        height: 12 / 11,
+                    SizedBox(height: ui(6)),
+                    Padding(
+                      padding: EdgeInsets.only(right: ui(4)),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            item.sizeLabel.isEmpty
+                                ? item.durationLabel
+                                : item.sizeLabel,
+                            style: TextStyle(
+                              fontSize: ui(10),
+                              color: const Color(0xFFB6B5BB),
+                              fontFamily: 'Barlow',
+                              fontWeight: FontWeight.w500,
+                              height: 12 / 10,
+                            ),
+                          ),
+                          Text(
+                            item.dateLabel,
+                            style: TextStyle(
+                              fontSize: ui(10),
+                              color: const Color(0xFFB6B5BB),
+                              fontFamily: 'Barlow',
+                              fontWeight: FontWeight.w500,
+                              height: 12 / 10,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -982,9 +1447,14 @@ class _RecordingFileCard extends StatelessWidget {
 }
 
 class _RecordingFab extends StatelessWidget {
-  const _RecordingFab({required this.label, required this.onTap});
+  const _RecordingFab({
+    required this.label,
+    required this.iconAsset,
+    required this.onTap,
+  });
 
   final String label;
+  final String iconAsset;
   final VoidCallback onTap;
 
   @override
@@ -1012,9 +1482,9 @@ class _RecordingFab extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Image.asset(
-              AppAssets.soundFabIcon,
-              width: ui(16),
-              height: ui(16),
+              iconAsset,
+              width: ui(20),
+              height: ui(20),
               fit: BoxFit.contain,
             ),
             SizedBox(width: ui(8)),
@@ -1036,7 +1506,9 @@ class _RecordingFab extends StatelessWidget {
 }
 
 class _RecordingEmpty extends StatelessWidget {
-  const _RecordingEmpty();
+  const _RecordingEmpty({this.message = '暂无录音'});
+
+  final String message;
 
   @override
   Widget build(BuildContext context) {
@@ -1052,7 +1524,7 @@ class _RecordingEmpty extends StatelessWidget {
             fit: BoxFit.contain,
           ),
           Text(
-            '暂无录音',
+            message,
             style: TextStyle(
               fontSize: ui(15),
               color: const Color(0xFF0B081A),
@@ -1080,6 +1552,62 @@ class _RecordingEditorView extends ConsumerWidget {
     final controller = ref.read(recordingSystemControllerProvider.notifier);
     final phase = state.recordingPhase;
     final canFinish = state.elapsedMs >= 5000;
+    final displayDurationMs = math.max(state.elapsedMs, 8000);
+    final progressRatio = (state.elapsedMs / displayDurationMs)
+        .clamp(0.0, 1.0)
+        .toDouble();
+
+    // 左侧 pill：idle 状态展示「暂停」白底胶囊（视觉占位、不可点）；
+    // 录制 / 暂停状态展示「继续」红字胶囊（仅在 paused 时点击恢复）。
+    final Widget leftPill;
+    switch (phase) {
+      case RecordingPhase.idle:
+        leftPill = _SoundControlButton(
+          asset: AppAssets.soundRecordPauseButton,
+          onTap: null,
+        );
+        break;
+      case RecordingPhase.recording:
+        leftPill = _SoundControlButton(
+          asset: AppAssets.soundContinueButton,
+          onTap: null,
+        );
+        break;
+      case RecordingPhase.paused:
+        leftPill = _SoundControlButton(
+          asset: AppAssets.soundContinueButton,
+          onTap: () async {
+            final message = await controller.resumeRecording();
+            if (message != null && context.mounted) {
+              _showMessage(context, message);
+            }
+          },
+        );
+        break;
+    }
+
+    // 中间大圆形按钮：图标表示「当前状态」、点击切换到对应动作。
+    // - idle    → 待开始（空心紫圆，#15）→ 开始录制
+    // - recording → 录制中（紫圆+▶，#12，象征"在跑"）→ 暂停
+    // - paused   → 暂停中（紫圆+⏸，#14，象征"已停"）→ 继续
+    final centerAsset = switch (phase) {
+      RecordingPhase.idle => AppAssets.soundRecordIdle,
+      RecordingPhase.recording => AppAssets.soundPlayCircle,
+      RecordingPhase.paused => AppAssets.soundPauseCircle,
+    };
+    final centerControls = _RecordTransportControls(
+      centerAsset: centerAsset,
+      onCenterTap: () async {
+        final message = switch (phase) {
+          RecordingPhase.idle => await controller.startRecording(),
+          RecordingPhase.recording => await controller.pauseRecording(),
+          RecordingPhase.paused => await controller.resumeRecording(),
+        };
+        if (message != null && context.mounted) {
+          _showMessage(context, message);
+        }
+      },
+    );
 
     return _RecordingStage(
       title: '音频录制',
@@ -1089,31 +1617,16 @@ class _RecordingEditorView extends ConsumerWidget {
         bars: state.liveWaveform.isEmpty
             ? _buildFallbackBars(120, seed: 9)
             : _stretchBars(state.liveWaveform, 120),
-        progressRatio: 1,
-        durationMs: math.max(state.elapsedMs, 8000),
+        progressRatio: progressRatio,
+        cursorRatio: 0.5,
+        durationMs: displayDurationMs,
         elapsedClock: _formatClock(state.elapsedMs),
         progressClock: _formatSecondsClock(state.elapsedMs),
-        totalClock: _formatSecondsClock(math.max(state.elapsedMs, 8000)),
-        leftPill: _DarkRecordingPill(
-          icon: phase == RecordingPhase.recording
-              ? Icons.pause_rounded
-              : Icons.play_arrow_rounded,
-          tone: phase == RecordingPhase.recording
-              ? _PillTone.danger
-              : _PillTone.normal,
-          onTap: () async {
-            final message = switch (phase) {
-              RecordingPhase.idle => await controller.startRecording(),
-              RecordingPhase.recording => await controller.pauseRecording(),
-              RecordingPhase.paused => await controller.resumeRecording(),
-            };
-            if (message != null && context.mounted) {
-              _showMessage(context, message);
-            }
-          },
-        ),
-        rightPill: _DarkRecordingPill(
-          label: '完成',
+        totalClock: _formatSecondsClock(displayDurationMs),
+        leftPill: leftPill,
+        centerControls: centerControls,
+        rightPill: _SoundControlButton(
+          asset: AppAssets.soundFinishButton,
           onTap: canFinish
               ? () async {
                   final message = await controller.finishRecording();
@@ -1138,8 +1651,8 @@ class _RecordingPreviewView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final controller = ref.read(recordingSystemControllerProvider.notifier);
+    final ui = DashboardScaleScope.of(context).ui;
     final item = state.previewItem;
-    final isDraft = item?.isLocalDraft ?? false;
     final bars = item == null
         ? _buildFallbackBars(120, seed: 4)
         : _stretchBars(item.waveform, 120);
@@ -1151,69 +1664,88 @@ class _RecordingPreviewView extends ConsumerWidget {
         : (state.previewPositionMs / totalMs).clamp(0.0, 1.0);
     final clampedTotalMs = math.max(totalMs, 8000);
 
+    // 「音频录制」播放页：草稿试听与已保存回放共用同一套最小化布局。
+    // - 顶部 header：仅保留「分享 / 删除」两个轻量按钮（不要收藏）。
+    // - 底部一行：左侧 -15s、正中央大紫色播放/暂停、右侧 +15s。
+    // - 不再展示倍速、收藏、重录、完成等次要操作；
+    //   保存动作走 finishRecording 之后自动弹出的保存弹窗。
     return _RecordingStage(
       title: '音频录制',
       onBack: controller.backToList,
-      headerActions: isDraft
-          ? [
-              _LightHeaderButton(
-                icon: Icons.save_outlined,
-                label: '保存',
-                onTap: controller.reopenSaveDialog,
-              ),
-            ]
-          : [
-              _LightHeaderButton(
-                icon: Icons.share_outlined,
-                label: '分享',
-                onTap: () async {
-                  final message = await controller.openShare();
-                  if (message != null && context.mounted) {
-                    _showMessage(context, message);
-                  }
-                },
-              ),
-              _LightHeaderButton(
-                icon: Icons.delete_outline_rounded,
-                label: '删除',
-                onTap: () async {
-                  if (item == null) {
-                    return;
-                  }
-                  final confirmed = await showConfirmDialog(
-                    context: context,
-                    title: '删除录音',
-                    content: '删除后不可恢复，确认删除"${item.name}"吗？',
-                    confirmLabel: '删除',
-                  );
-                  if (!confirmed || !context.mounted) {
-                    return;
-                  }
-                  final message = await controller.deleteRecording(item);
-                  if (message != null && context.mounted) {
-                    _showMessage(context, message);
-                  }
-                },
-              ),
-            ],
+      headerActions: [
+        _LightHeaderButton(
+          iconAsset: AppAssets.coursewareActionShare,
+          label: '分享',
+          onTap: () async {
+            final message = await controller.openShare();
+            if (message != null && context.mounted) {
+              _showMessage(context, message);
+            }
+          },
+        ),
+        _LightHeaderButton(
+          iconAsset: AppAssets.coursewareActionDelete,
+          label: '删除',
+          onTap: () async {
+            if (item == null) {
+              return;
+            }
+            final confirmed = await showConfirmDialog(
+              context: context,
+              title: '删除录音',
+              content: '删除后不可恢复，确认删除"${item.name}"吗？',
+              confirmLabel: '删除',
+            );
+            if (!confirmed || !context.mounted) {
+              return;
+            }
+            final message = await controller.deleteRecording(item);
+            if (message != null && context.mounted) {
+              _showMessage(context, message);
+            }
+          },
+        ),
+      ],
       body: _RecordingStageBody(
         bars: bars,
         progressRatio: progressRatio,
+        cursorRatio: progressRatio,
         durationMs: clampedTotalMs,
         elapsedClock: _formatClock(state.previewPositionMs),
         progressClock: _formatSecondsClock(state.previewPositionMs),
         totalClock: _formatSecondsClock(clampedTotalMs),
-        leftPill: _DarkRecordingPill(
-          icon: state.previewPlaying
-              ? Icons.pause_rounded
-              : Icons.play_arrow_rounded,
-          onTap: controller.togglePreviewPlayback,
+        // 左/右 pill 留空：按设计稿三键 [-15 ▶ +15] 整体居中、互相间距 52。
+        leftPill: const SizedBox.shrink(),
+        rightPill: const SizedBox.shrink(),
+        centerControls: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: <Widget>[
+            // -15s 跳转：32×32
+            _SoundIconButton(
+              asset: AppAssets.soundSeekBack15,
+              size: ui(32),
+              onTap: () => controller.seekPreviewBy(-15000),
+            ),
+            SizedBox(width: ui(52)),
+            // 正中央：大紫色播放 / 暂停按钮（设计稿 72×72，#8741FF）。
+            _SoundIconButton(
+              asset: state.previewPlaying
+                  ? AppAssets.soundPauseCircle
+                  : AppAssets.soundPlayCircle,
+              size: ui(72),
+              onTap: controller.togglePreviewPlayback,
+            ),
+            SizedBox(width: ui(52)),
+            // +15s 跳转：32×32
+            _SoundIconButton(
+              asset: AppAssets.soundSeekForward15,
+              size: ui(32),
+              onTap: () => controller.seekPreviewBy(15000),
+            ),
+          ],
         ),
-        rightPill: _DarkRecordingPill(
-          label: '${state.previewPlaybackRate}x',
-          onTap: controller.togglePlaybackRate,
-        ),
-        bottomTip: isDraft ? '可先试听，再保存到分类中' : '支持分享、删除和倍速试听',
+        bottomTip: '录制不能低于5秒',
         errorMessage: state.errorMessage,
       ),
     );
@@ -1363,11 +1895,17 @@ class _RecordingStageState extends ConsumerState<_RecordingStage> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(ui(16)),
       ),
-      padding: EdgeInsets.fromLTRB(ui(20), ui(16), ui(20), ui(20)),
       child: Column(
         children: [
-          SizedBox(
-            height: ui(40),
+          Container(
+            height: ui(56),
+            padding: EdgeInsets.symmetric(horizontal: ui(12)),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              border: Border(
+                bottom: BorderSide(color: Color(0xFFF3F2F3), width: 1),
+              ),
+            ),
             child: Row(
               children: [
                 InkWell(
@@ -1385,8 +1923,8 @@ class _RecordingStageState extends ConsumerState<_RecordingStage> {
                       ),
                     ),
                     child: Icon(
-                      Icons.arrow_back_ios_new_rounded,
-                      size: ui(14),
+                      Icons.chevron_left_rounded,
+                      size: ui(18),
                       color: const Color(0xFF1C274C),
                     ),
                   ),
@@ -1407,12 +1945,16 @@ class _RecordingStageState extends ConsumerState<_RecordingStage> {
                 if (widget.headerActions.isEmpty)
                   SizedBox(width: ui(32))
                 else
-                  Wrap(spacing: ui(10), children: widget.headerActions),
+                  Wrap(spacing: ui(8), children: widget.headerActions),
               ],
             ),
           ),
-          SizedBox(height: ui(20)),
-          Expanded(child: widget.body),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(ui(20), ui(25), ui(20), ui(20)),
+              child: widget.body,
+            ),
+          ),
         ],
       ),
     );
@@ -1421,12 +1963,12 @@ class _RecordingStageState extends ConsumerState<_RecordingStage> {
 
 class _LightHeaderButton extends StatelessWidget {
   const _LightHeaderButton({
-    required this.icon,
+    required this.iconAsset,
     required this.label,
     required this.onTap,
   });
 
-  final IconData icon;
+  final String iconAsset;
   final String label;
   final VoidCallback onTap;
 
@@ -1437,37 +1979,30 @@ class _LightHeaderButton extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(ui(8)),
       child: Container(
-        height: ui(34),
+        height: ui(32),
         padding: EdgeInsets.symmetric(horizontal: ui(12)),
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: <Color>[Colors.white, Color(0xFFE6E6E6)],
-          ),
+          color: Colors.white,
           borderRadius: BorderRadius.circular(ui(8)),
-          border: Border.all(color: const Color(0xFFD7D7D7), width: ui(2)),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0x44FFFFFF),
-              blurRadius: ui(2.4),
-              offset: Offset(ui(1), ui(3)),
-            ),
-          ],
+          border: Border.all(color: const Color(0xFFF3F2F3), width: ui(1)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: ui(16), color: const Color(0xFF8741FF)),
-            SizedBox(width: ui(5)),
+            Image.asset(
+              iconAsset,
+              width: ui(16),
+              height: ui(16),
+              fit: BoxFit.contain,
+            ),
+            SizedBox(width: ui(4)),
             Text(
               label,
               style: TextStyle(
-                fontSize: ui(14),
-                color: const Color(0xFF0B081A),
+                fontSize: ui(12),
+                color: Colors.black,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
-                height: 1.0,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ],
@@ -1481,6 +2016,7 @@ class _RecordingStageBody extends StatelessWidget {
   const _RecordingStageBody({
     required this.bars,
     required this.progressRatio,
+    required this.cursorRatio,
     required this.durationMs,
     required this.elapsedClock,
     required this.progressClock,
@@ -1489,10 +2025,12 @@ class _RecordingStageBody extends StatelessWidget {
     required this.rightPill,
     required this.bottomTip,
     required this.errorMessage,
+    this.centerControls,
   });
 
   final List<double> bars;
   final double progressRatio;
+  final double cursorRatio;
   final int durationMs;
   final String elapsedClock;
   final String progressClock;
@@ -1501,52 +2039,95 @@ class _RecordingStageBody extends StatelessWidget {
   final Widget rightPill;
   final String bottomTip;
   final String? errorMessage;
+  // 可选的「中间控制组」：录制态的 -15/▶/+15 或大圆按钮等。传入后
+  // 底部会变成 [left | center | right] 三段式布局。
+  final Widget? centerControls;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (errorMessage != null && errorMessage!.isNotEmpty) ...[
-          _ErrorBanner(message: errorMessage!),
-          SizedBox(height: ui(12)),
-        ],
-        _DarkWavePanel(
-          bars: bars,
-          progressRatio: progressRatio,
-          durationMs: durationMs,
-        ),
-        SizedBox(height: ui(18)),
-        _DarkScrubberPanel(
-          progressRatio: progressRatio,
-          startLabel: progressClock,
-          endLabel: totalClock,
-        ),
-        SizedBox(height: ui(28)),
-        Center(child: _GraniteTimerCapsule(label: elapsedClock)),
-        SizedBox(height: ui(8)),
-        Center(
-          child: Text(
-            bottomTip,
-            style: TextStyle(
-              fontSize: ui(12),
-              color: const Color(0xFFB6B5BB),
-              fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w400,
+    final hasError = errorMessage != null && errorMessage!.isNotEmpty;
+    final topOffset = hasError ? ui(50) : 0.0;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxHeight < ui(560);
+        final waveTop = topOffset + ui(compact ? 0 : 8);
+        final scrubberTop = waveTop + ui(compact ? 200 : 208);
+        final timerTop = scrubberTop + ui(compact ? 104 : 116);
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            if (hasError)
+              Positioned(
+                left: 0,
+                right: 0,
+                top: 0,
+                child: _ErrorBanner(message: errorMessage!),
+              ),
+            Positioned(
+              left: ui(8),
+              right: ui(8),
+              top: waveTop,
+              height: ui(190),
+              child: _DarkWavePanel(
+                bars: bars,
+                progressRatio: progressRatio,
+                cursorRatio: cursorRatio,
+                durationMs: durationMs,
+              ),
             ),
-          ),
-        ),
-        const Spacer(),
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: ui(20)),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [leftPill, rightPill],
-          ),
-        ),
-        SizedBox(height: ui(8)),
-      ],
+            Positioned(
+              left: ui(8),
+              right: ui(8),
+              top: scrubberTop,
+              height: ui(80),
+              child: _DarkScrubberPanel(
+                progressRatio: progressRatio,
+                startLabel: progressClock,
+                endLabel: totalClock,
+              ),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              top: timerTop,
+              child: Center(child: _GraniteTimerCapsule(label: elapsedClock)),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              top: timerTop + ui(74),
+              child: Center(
+                child: Text(
+                  bottomTip,
+                  style: TextStyle(
+                    fontSize: ui(12),
+                    color: const Color(0xFFB6B5BB),
+                    fontFamily: 'PingFang SC',
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              left: ui(22),
+              right: ui(22),
+              bottom: ui(10),
+              child: Row(
+                children: <Widget>[
+                  leftPill,
+                  Expanded(
+                    child: Center(
+                      child: centerControls ?? const SizedBox.shrink(),
+                    ),
+                  ),
+                  rightPill,
+                ],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -1555,18 +2136,19 @@ class _DarkWavePanel extends StatelessWidget {
   const _DarkWavePanel({
     required this.bars,
     required this.progressRatio,
+    required this.cursorRatio,
     required this.durationMs,
   });
 
   final List<double> bars;
   final double progressRatio;
+  final double cursorRatio;
   final int durationMs;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
-      height: ui(180),
       padding: EdgeInsets.all(ui(3)),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(ui(20)),
@@ -1598,7 +2180,7 @@ class _DarkWavePanel extends StatelessWidget {
                   ),
                   _Cursor(
                     width: constraints.maxWidth,
-                    progressRatio: progressRatio,
+                    progressRatio: cursorRatio,
                   ),
                   Positioned(
                     left: ui(12),
@@ -1686,7 +2268,6 @@ class _DarkScrubberPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
-      height: ui(64),
       padding: EdgeInsets.all(ui(3)),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(ui(20)),
@@ -1884,97 +2465,80 @@ class _GraniteTimerCapsule extends StatelessWidget {
   }
 }
 
-enum _PillTone { normal, danger }
+/// 录制 / 试听界面底部两侧的横向胶囊按钮（重录 / 完成 / 继续 / 暂停 …）。
+/// 标准尺寸 108×56，资源图本身已经包含了文字与背景，所以这里只是个
+/// 等比缩放的 Image + Opacity 状态切换。
+class _SoundControlButton extends StatelessWidget {
+  const _SoundControlButton({required this.asset, required this.onTap});
 
-class _DarkRecordingPill extends StatelessWidget {
-  const _DarkRecordingPill({
-    this.label,
-    this.icon,
-    this.tone = _PillTone.normal,
-    this.onTap,
-  }) : assert(label != null || icon != null);
-
-  final String? label;
-  final IconData? icon;
-  final _PillTone tone;
+  final String asset;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final disabled = onTap == null;
     return Opacity(
-      opacity: disabled ? 0.55 : 1,
-      child: InkWell(
+      opacity: onTap == null ? 0.45 : 1,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        borderRadius: BorderRadius.circular(ui(12)),
-        child: Container(
+        child: SizedBox(
           width: ui(108),
           height: ui(56),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: <Color>[Colors.white, Color(0xFFE6E6E6)],
-            ),
-            borderRadius: BorderRadius.circular(ui(12)),
-            border: Border.all(color: const Color(0xFFD7D7D7), width: ui(3)),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0x55FFFFFF),
-                blurRadius: ui(2.4),
-                offset: Offset(ui(1), ui(3)),
-              ),
-            ],
-          ),
-          child: _buildContent(context, ui),
+          child: Image.asset(asset, fit: BoxFit.contain),
         ),
       ),
     );
   }
+}
 
-  Widget _buildContent(BuildContext context, double Function(num) ui) {
-    if (label != null) {
-      return Text(
-        label!,
-        style: TextStyle(
-          fontSize: ui(16),
-          color: const Color(0xFF0B081A),
-          fontFamily: 'PingFang SC',
-          fontWeight: FontWeight.w500,
-          height: 1.0,
-        ),
-      );
-    }
-    final color = tone == _PillTone.danger
-        ? const Color(0xFFFF323C)
-        : const Color(0xFF0B081A);
-    if (tone == _PillTone.danger) {
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: ui(5),
-            height: ui(20),
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(ui(1)),
-            ),
-          ),
-          SizedBox(width: ui(4)),
-          Container(
-            width: ui(5),
-            height: ui(20),
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(ui(1)),
-            ),
-          ),
-        ],
-      );
-    }
-    return Icon(icon, size: ui(22), color: color);
+/// 录制态中央按钮：单个大圆形（idle / recording / paused 三种状态）。
+/// 录制过程中并不允许时间跳转，所以这里**不**带 -15/+15 小图标——
+/// 那两个按钮只在播放音频的页面出现。
+class _RecordTransportControls extends StatelessWidget {
+  const _RecordTransportControls({
+    required this.centerAsset,
+    required this.onCenterTap,
+  });
+
+  final String centerAsset;
+  final Future<void> Function() onCenterTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => onCenterTap(),
+      child: SizedBox(
+        width: ui(64),
+        height: ui(64),
+        child: Image.asset(centerAsset, fit: BoxFit.contain),
+      ),
+    );
+  }
+}
+
+class _SoundIconButton extends StatelessWidget {
+  const _SoundIconButton({required this.asset, required this.onTap, this.size});
+
+  final String asset;
+  final Future<void> Function() onTap;
+  final double? size;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final buttonSize = size ?? ui(44);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => onTap(),
+      child: SizedBox(
+        width: buttonSize,
+        height: buttonSize,
+        child: Image.asset(asset, fit: BoxFit.contain),
+      ),
+    );
   }
 }
 
@@ -2124,23 +2688,6 @@ class _SaveRecordingDialog extends ConsumerWidget {
                 ),
                 SizedBox(height: ui(20)),
                 Text(
-                  '请选择文件夹',
-                  style: TextStyle(
-                    fontSize: ui(14),
-                    color: const Color(0xFF0B081A),
-                    fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w500,
-                    height: 20 / 14,
-                  ),
-                ),
-                SizedBox(height: ui(8)),
-                _CategoryDropdown(
-                  categories: state.categories,
-                  selectedId: state.selectedSaveCategoryId,
-                  onChanged: controller.updateSelectedSaveCategory,
-                ),
-                SizedBox(height: ui(16)),
-                Text(
                   '作品名称',
                   style: TextStyle(
                     fontSize: ui(14),
@@ -2220,77 +2767,6 @@ class _EffectThumb extends StatelessWidget {
           ),
           clipBehavior: Clip.antiAlias,
           child: Image.asset(imageAsset, fit: BoxFit.cover),
-        ),
-      ),
-    );
-  }
-}
-
-class _CategoryDropdown extends StatelessWidget {
-  const _CategoryDropdown({
-    required this.categories,
-    required this.selectedId,
-    required this.onChanged,
-  });
-
-  final List<RecordingCategoryItem> categories;
-  final int selectedId;
-  final ValueChanged<int> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      height: ui(48),
-      padding: EdgeInsets.symmetric(horizontal: ui(16)),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(8)),
-        border: Border.all(color: const Color(0xFFF3F2F3), width: ui(1)),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<int>(
-          isExpanded: true,
-          value:
-              selectedId > 0 && categories.any((item) => item.id == selectedId)
-              ? selectedId
-              : null,
-          hint: Text(
-            '请选择',
-            style: TextStyle(
-              fontSize: ui(14),
-              color: const Color(0xFFCECED1),
-              fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w400,
-              height: 20 / 14,
-            ),
-          ),
-          icon: Icon(
-            Icons.keyboard_arrow_down_rounded,
-            size: ui(20),
-            color: const Color(0xFF0B081A),
-          ),
-          items: categories
-              .map(
-                (item) => DropdownMenuItem<int>(
-                  value: item.id,
-                  child: Text(
-                    item.name,
-                    style: TextStyle(
-                      fontSize: ui(14),
-                      color: const Color(0xFF0B081A),
-                      fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
-                ),
-              )
-              .toList(),
-          onChanged: (value) {
-            if (value != null) {
-              onChanged(value);
-            }
-          },
         ),
       ),
     );
@@ -2597,7 +3073,7 @@ class _ShareRecordingDialog extends ConsumerWidget {
 
 // 录音文件卡的右上角 ··· 操作（保留，未走通用 ItemMenuAction，因为同时含
 // 「播放」等录音特有操作；如有需要可后续抽离）。
-enum _RecordingItemAction { preview, share, delete }
+enum _RecordingItemAction { preview, rename, share, delete }
 
 // ===========================================================================
 // 工具方法
@@ -2669,8 +3145,4 @@ String _formatSecondsClock(int milliseconds) {
 
 void _showMessage(BuildContext context, String message) {
   AppToast.show(context, message);
-}
-
-extension _ListFirstOrNull<T> on Iterable<T> {
-  T? get firstOrNull => isEmpty ? null : first;
 }

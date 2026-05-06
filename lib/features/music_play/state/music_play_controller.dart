@@ -50,6 +50,21 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   StreamSubscription<bool>? _webCompletedSub;
   bool _recordSaved = false;
 
+  /// 已经 dispose 的标志位。
+  ///
+  /// `dispose()` 中第一时间置位，让任何还在 await 的异步链（[togglePlay]、
+  /// [pressPianoKey]、[_openActiveTrack] 等）都能在拿到 `_soLoud.play(...)`
+  /// 之前 short-circuit 退出，避免页面消失之后还冒出一声 "ding"。
+  bool _disposed = false;
+
+  /// `_openActiveTrack` 并发自增票据。
+  ///
+  /// iPad 上动作较快时，用户连点 1 次播放或快速翻页，会让两次
+  /// `_openActiveTrack` 并发：两次都各自下载、各自 `_soLoud.play(...)`，
+  /// 出现"两个音频同时在响"。这里用最经典的 ticket 方案：每次进入
+  /// 自增 1，await 之后比对，落后的那次直接放弃（并清理已加载源）。
+  int _openTicket = 0;
+
   Future<void> _initialize() async {
     unawaited(_warmUpPiano());
     try {
@@ -141,6 +156,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   }
 
   Future<void> togglePlay() async {
+    if (_disposed) return;
     final track = state.activeTrack;
     if (track == null) {
       return;
@@ -185,6 +201,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   }
 
   Future<void> previous() async {
+    if (_disposed) return;
     if (state.args.allLessonIds.isNotEmpty) {
       await _switchLesson(-1);
       return;
@@ -208,6 +225,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   }
 
   Future<void> next() async {
+    if (_disposed) return;
     if (state.args.allLessonIds.isNotEmpty) {
       await _switchLesson(1);
       return;
@@ -331,11 +349,15 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   }
 
   Future<void> pressPianoKey(String note) async {
+    if (_disposed) return;
     final active = Set<String>.from(state.activePianoNotes)..add(note);
     state = state.copyWith(activePianoNotes: active);
     await _pianoEngine.ensurePianoInitialized();
+    if (!mounted || _disposed) {
+      return;
+    }
     await _pianoEngine.activateByUserGesture();
-    if (!mounted) {
+    if (!mounted || _disposed) {
       return;
     }
     if (!state.ready) {
@@ -475,25 +497,37 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       return;
     }
 
+    // 每次进入即抢占 ticket；之后任何一个 await 之后都比一下当前 ticket，
+    // 不一致就当成"自己已被新一次 open 取代"处理。
+    final ticket = ++_openTicket;
+    bool isStale() => _disposed || ticket != _openTicket;
+
     try {
       if (kIsWeb) {
+        if (isStale()) return;
         await _openWebTrack(track.url, play: play);
         return;
       }
       await _releaseCurrentSource();
+      if (isStale()) return;
       final source = await _loadAudioSource(track.url);
+      if (isStale()) {
+        // 自己已经过期：把多下载/loadMem 出来的 source 处理掉，避免内存泄漏。
+        try {
+          await _soLoud.disposeSource(source);
+        } catch (_) {}
+        return;
+      }
       _source = source;
       final duration = _soLoud.getLength(source);
-      if (mounted) {
+      if (mounted && !_disposed) {
         state = state.copyWith(duration: duration);
       }
-      if (play) {
+      if (play && !isStale()) {
         _startHandle();
       }
     } catch (error) {
-      if (!mounted) {
-        return;
-      }
+      if (isStale()) return;
       debugPrint('MusicPlay audio load failed: $error');
       state = state.copyWith(errorMessage: '音频加载失败，请稍后重试');
     }
@@ -580,9 +614,17 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   }
 
   void _startHandle() {
+    if (_disposed) return;
     final source = _source;
     if (source == null) {
       return;
+    }
+    // 防御：若上一个 handle 还活着，先停掉它，避免同一个 source 被叠播两次。
+    final prev = _handle;
+    if (prev != null && _soLoud.getIsValidVoiceHandle(prev)) {
+      try {
+        unawaited(_soLoud.stop(prev));
+      } catch (_) {}
     }
     final handle = _soLoud.play(source, paused: false);
     _handle = handle;
@@ -590,7 +632,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     if (state.position > Duration.zero) {
       _soLoud.seek(handle, state.position);
     }
-    if (mounted) {
+    if (mounted && !_disposed) {
       state = state.copyWith(isPlaying: true);
     }
   }
@@ -600,7 +642,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       return;
     }
     _audioTicker = Timer.periodic(const Duration(milliseconds: 66), (_) {
-      if (!mounted) {
+      if (!mounted || _disposed) {
         return;
       }
       final handle = _handle;
@@ -677,6 +719,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   }
 
   Future<void> _handleTrackCompleted() async {
+    if (_disposed) return;
     final detail = state.detail;
     if (detail == null) {
       return;
@@ -833,9 +876,9 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       if (url.isNotEmpty) return _resolveMediaUrl(url);
       final path =
           (entry['path'] ?? entry['img'] ?? entry['filePath'])
-                  ?.toString()
-                  .trim() ??
-              '';
+              ?.toString()
+              .trim() ??
+          '';
       if (path.isNotEmpty) return _resolveMediaUrl(path);
       return '';
     }
@@ -924,14 +967,53 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
 
   @override
   void dispose() {
+    // 关键：以下所有"同步停声"的动作必须在 super.dispose() 之前完成，
+    // 并且要在任何 await/unawaited 之前先把 _disposed 置位，让其它异步
+    // 链路（包括 piano 的 playNote）能立刻 short-circuit。
+    _disposed = true;
     _audioTicker?.cancel();
+    _audioTicker = null;
     _audioData?.dispose();
-    unawaited(_releaseCurrentSource());
+    _audioData = null;
+
+    // 同步停掉主音频 handle。`_soLoud.stop` 虽然返回 Future，但底层在被
+    // 调用瞬间就把 stop 命令推给 audio 线程，几乎是即刻静音；不 await，
+    // 避免 dispose 阻塞，但比 unawaited(_releaseCurrentSource()) 更早静音。
+    final handle = _handle;
+    if (handle != null) {
+      try {
+        if (_soLoud.getIsValidVoiceHandle(handle)) {
+          unawaited(_soLoud.stop(handle));
+        }
+      } catch (_) {}
+    }
+    _handle = null;
+
+    final source = _source;
+    if (source != null) {
+      try {
+        unawaited(_soLoud.disposeSource(source));
+      } catch (_) {}
+    }
+    _source = null;
+
     _webPositionSub?.cancel();
     _webDurationSub?.cancel();
     _webPlayingSub?.cancel();
     _webCompletedSub?.cancel();
-    unawaited(_webPlayer?.dispose());
+    final webPlayer = _webPlayer;
+    if (webPlayer != null) {
+      try {
+        unawaited(webPlayer.pause());
+      } catch (_) {}
+      unawaited(webPlayer.dispose());
+    }
+
+    // 同步把所有钢琴声 stop 掉，再 unawaited dispose。前者立刻静音，
+    // 后者负责释放资源；引擎内部的 _disposed 也已经在 .dispose() 调用瞬间
+    // 同步置位（见 MusicCompanionAudioEngine.dispose 头部），因此就算
+    // pressPianoKey 的异步链此时还在挂起，最终 _soLoud.play 也不会被调到。
+    _pianoEngine.stopAllImmediately();
     unawaited(_pianoEngine.dispose());
     super.dispose();
   }

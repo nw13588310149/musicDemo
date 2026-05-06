@@ -67,9 +67,23 @@ class _MyNotesPageState extends ConsumerState<MyNotesPage> {
   }
 
   Future<void> _handleCreate() async {
-    final message = ref
-        .read(myNotesControllerProvider.notifier)
-        .beginCreateNote();
+    final controller = ref.read(myNotesControllerProvider.notifier);
+    // 先做一次"是否存在可写入分类"的校验，避免让用户白填一次标题：
+    // 没有可写分类时直接提示并退出，不弹出输入框。
+    final validationError = controller.validateCanCreateNote();
+    if (validationError != null) {
+      if (mounted) {
+        _showMessage(validationError);
+      }
+      return;
+    }
+    // 先弹出"新建笔记"标题输入框（按 Figma 设计稿），确认后再带着
+    // 标题进入"选择笔记样式"页面。
+    final title = await _showCreateNoteTitleDialog(context);
+    if (!mounted || title == null || title.isEmpty) {
+      return;
+    }
+    final message = controller.beginCreateNote(title: title);
     if (message != null && mounted) {
       _showMessage(message);
     }
@@ -98,28 +112,45 @@ class _MyNotesPageState extends ConsumerState<MyNotesPage> {
     }
   }
 
-  /// Left-nav category menu only exposes 删除 — there is no rename endpoint.
+  /// Left-nav category menu — supports 重命名 + 删除.
+  /// 重命名复用 `noteCategorySave`（id > 0 即更新）；删除走 `noteCategoryDelete`。
   Future<void> _handleCategoryAction(
     NoteCategoryItem item,
     _NoteMenuAction action,
   ) async {
-    if (action != _NoteMenuAction.delete) {
-      return;
-    }
-    final confirmed = await showConfirmDialog(
-      context: context,
-      title: '删除分类',
-      content: '删除“${item.name}”后，该分类下的笔记也会一并移除。',
-      confirmLabel: '删除',
-    );
-    if (!confirmed || !mounted) {
-      return;
-    }
-    final message = await ref
-        .read(myNotesControllerProvider.notifier)
-        .deleteCategory(item.id);
-    if (mounted) {
-      _showMessage(message ?? '分类已删除');
+    final controller = ref.read(myNotesControllerProvider.notifier);
+    switch (action) {
+      case _NoteMenuAction.rename:
+        final nextName = await showTextInputDialog(
+          context: context,
+          title: '重命名分类',
+          hintText: '请输入新的分类名称',
+          initialValue: item.name,
+          confirmLabel: '保存',
+        );
+        if (nextName == null || nextName.isEmpty || nextName == item.name) {
+          return;
+        }
+        final message = await controller.renameCategory(item.id, nextName);
+        if (mounted) {
+          _showMessage(message ?? '分类名称已更新');
+        }
+        break;
+      case _NoteMenuAction.delete:
+        final confirmed = await showConfirmDialog(
+          context: context,
+          title: '删除分类',
+          content: '删除“${item.name}”后，该分类下的笔记也会一并移除。',
+          confirmLabel: '删除',
+        );
+        if (!confirmed || !mounted) {
+          return;
+        }
+        final message = await controller.deleteCategory(item.id);
+        if (mounted) {
+          _showMessage(message ?? '分类已删除');
+        }
+        break;
     }
   }
 
@@ -325,23 +356,27 @@ class _NotesSidebar extends StatelessWidget {
       child: Column(
         children: [
           Expanded(
+            // 刚进入页面正在拉取数据时，侧栏保持空白；不展示 loading 转圈，
+            // 也不闪一下"暂无分类"占位。加载完成确实无数据时才显示占位。
             child: state.categories.isEmpty
-                ? Center(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: ui(8)),
-                      child: Text(
-                        '暂无分类\n点击下方"添加分类"创建',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: ui(12),
-                          color: const Color(0xFFB6B5BB),
-                          fontFamily: 'PingFang SC',
-                          fontWeight: FontWeight.w400,
-                          height: 1.6,
-                        ),
-                      ),
-                    ),
-                  )
+                ? (state.loading
+                      ? const SizedBox.shrink()
+                      : Center(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(horizontal: ui(8)),
+                            child: Text(
+                              '暂无分类\n点击下方"添加分类"创建',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: ui(12),
+                                color: const Color(0xFFB6B5BB),
+                                fontFamily: 'PingFang SC',
+                                fontWeight: FontWeight.w400,
+                                height: 1.6,
+                              ),
+                            ),
+                          ),
+                        ))
                 : ListView.separated(
                     itemCount: state.categories.length,
                     separatorBuilder: (context, index) =>
@@ -386,14 +421,14 @@ class _NoteCategoryCardState extends State<_NoteCategoryCard> {
   final GlobalKey _menuTriggerKey = GlobalKey();
 
   Future<void> _openActionMenu() async {
-    // Default category (id == 0, "笔记") is non-deletable; suppress the menu.
+    // 默认分类（id == 0，名为"笔记"）不允许重命名 / 删除，因此不弹菜单。
     if (widget.item.id <= 0) {
       return;
     }
     final action = await _showNoteActionMenu(
       context: context,
       triggerKey: _menuTriggerKey,
-      includeRename: false,
+      includeRename: true,
     );
     if (action != null) {
       widget.onAction(action);
@@ -1612,6 +1647,153 @@ class _EmptyPanel extends StatelessWidget {
       ),
     );
   }
+}
+
+/// "新建笔记" 标题输入弹窗，按 Figma 设计稿 1:1 实现：
+/// - 容器 420×275，圆角 24，背景 `linear-gradient(180deg, #D2C6FF 0%,
+///   white 35%, white 100%)`
+/// - 顶部装饰使用 `assets/images/courseware/1.png`（与"上传课件"弹窗
+///   同源），按设计放在右上角并被容器圆角裁剪
+/// - 居中标题"新建笔记" 24/w500 #0B081A
+/// - 输入框 380×48，圆角 8，1px `#F5F6FA` 描边；占位 14/#B6B5BB
+/// - 底部"取消 / 确认"复用 [AppDialogActionBar]（视觉与 spec 完全一致）
+Future<String?> _showCreateNoteTitleDialog(BuildContext context) async {
+  final controller = TextEditingController();
+  final result = await showScaledDialog<String>(
+    context: context,
+    barrierColor: Colors.black.withValues(alpha: 0.18),
+    builder: (dialogContext) {
+      final scale = DashboardScaleScope.of(dialogContext);
+      final u = scale.ui;
+      return Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: EdgeInsets.symmetric(
+          horizontal: u(32),
+          vertical: u(24),
+        ),
+        child: Container(
+          width: u(420),
+          height: u(275),
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: <Color>[Color(0xFFD2C6FF), Colors.white, Colors.white],
+              stops: <double>[0, 0.35, 1],
+            ),
+            borderRadius: BorderRadius.circular(u(24)),
+          ),
+          child: Stack(
+            children: [
+              // 顶部装饰图：宽度铺满弹窗、高度 169，借助容器圆角自然裁剪。
+              Positioned(
+                left: 0,
+                right: 0,
+                top: 0,
+                child: SizedBox(
+                  height: u(169),
+                  child: Image.asset(
+                    AppAssets.coursewareUploadHeader,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+              // 标题"新建笔记"：水平居中（spec left:162 ↔ 容器宽 420 居中）
+              Positioned(
+                left: 0,
+                right: 0,
+                top: u(50),
+                child: Center(
+                  child: Text(
+                    '新建笔记',
+                    style: TextStyle(
+                      fontSize: u(24),
+                      fontFamily: 'PingFang SC',
+                      fontWeight: FontWeight.w500,
+                      color: const Color(0xFF0B081A),
+                      height: 1.0,
+                    ),
+                  ),
+                ),
+              ),
+              // 输入框：380×48，圆角 8，1px #F5F6FA 描边；spec 内边距 16/14
+              Positioned(
+                left: u(20),
+                right: u(20),
+                top: u(116),
+                child: SizedBox(
+                  height: u(48),
+                  child: TextField(
+                    controller: controller,
+                    autofocus: true,
+                    maxLength: 30,
+                    cursorColor: const Color(0xFF8640FF),
+                    style: TextStyle(
+                      fontSize: u(14),
+                      color: const Color(0xFF0B081A),
+                      fontFamily: 'PingFang SC',
+                      fontWeight: FontWeight.w400,
+                      height: 20 / 14,
+                    ),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      hintText: '请输入笔记标题',
+                      counterText: '',
+                      hintStyle: TextStyle(
+                        fontSize: u(14),
+                        color: const Color(0xFFB6B5BB),
+                        fontFamily: 'PingFang SC',
+                        fontWeight: FontWeight.w400,
+                        height: 20 / 14,
+                      ),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: u(16),
+                        vertical: u(14),
+                      ),
+                      filled: true,
+                      fillColor: Colors.white,
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(u(8)),
+                        borderSide: BorderSide(
+                          color: const Color(0xFFF5F6FA),
+                          width: u(1),
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(u(8)),
+                        borderSide: BorderSide(
+                          color: const Color(0xFFD9C7FF),
+                          width: u(1),
+                        ),
+                      ),
+                    ),
+                    onSubmitted: (value) =>
+                        Navigator.of(dialogContext).pop(value.trim()),
+                  ),
+                ),
+              ),
+              // 底部按钮组：高度 45、宽度 182、间距 16，复用公共 ActionBar。
+              Positioned(
+                left: u(20),
+                right: u(20),
+                top: u(194),
+                child: AppDialogActionBar(
+                  cancelLabel: '取消',
+                  confirmLabel: '确认',
+                  onCancel: () => Navigator.of(dialogContext).pop(),
+                  onConfirm: () =>
+                      Navigator.of(dialogContext).pop(controller.text.trim()),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+  controller.dispose();
+  return result;
 }
 
 Widget _buildOptionalRemoteImage(String? rawUrl, {BoxFit fit = BoxFit.cover}) {

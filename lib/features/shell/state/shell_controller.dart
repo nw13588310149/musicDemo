@@ -53,7 +53,13 @@ class ShellController extends StateNotifier<ShellState> {
     await _repository.logout();
     await _storage.clearToken();
     await _storage.clearSchoolId();
+    await _storage.clearMobile();
   }
+
+  /// 演示用「白名单管理员」手机号：使用此号登录后，无论后端 `/myInfo`
+  /// 返回的 `role` 是什么，都强制覆盖为 `admin`，以便测试管理员视角下
+  /// 的智慧校园（5 身份切换、班主任 / 任课老师等）。
+  static const _adminMobileWhitelist = <String>{'18888888888'};
 
   Future<void> markAllNoticeRead() async {
     final ids = state.noticeItems.map((e) => e.id).toList();
@@ -100,13 +106,21 @@ class ShellController extends StateNotifier<ShellState> {
 
     if (myInfoResponse.code == 0) {
       final userMap = _extractUser(myInfoResponse.data);
+      // 白名单管理员：强制把 role 覆盖为 'admin'，下游
+      // SmartCampusController.applyBackendRole → mapBackendRoleToCampus
+      // 会将其映射为 SmartCampusRole.admin 并解锁 5 身份切换。
+      var role = userMap['role']?.toString() ?? '';
+      if (_adminMobileWhitelist.contains(_storage.mobile)) {
+        role = 'admin';
+      }
       state = state.copyWith(
         user: ShellUser(
+          id: userMap['id']?.toString() ?? '',
           nickname: userMap['nickname']?.toString() ?? '',
           realname: userMap['realname']?.toString() ?? '',
           avatarUrl: userMap['headUrl']?.toString() ?? '',
           province: userMap['province']?.toString() ?? '',
-          role: userMap['role']?.toString() ?? '',
+          role: role,
           identity: userMap['identity']?.toString() ?? '',
         ),
       );

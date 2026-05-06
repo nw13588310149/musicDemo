@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,12 +9,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/router/route_paths.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/state/shell_controller.dart';
+import '../../smart_campus/state/smart_campus_controller.dart';
+import '../../smart_campus/state/smart_campus_state.dart';
+import '../data/qr_image_saver.dart';
 import '../state/personal_center_controller.dart';
 import '../state/personal_center_state.dart';
 
 /// 与 1.0 `pages/PersonalCenter/index.vue` 中 `APP_PROMO_URL` 一致。
 const _kAppPromoUrl = 'https://apps.apple.com/cn/app/音乐之路/id6504698046';
+
+/// 「联系客服」展示与 1.0 邮件入口一致的官方反馈邮箱。
+const _kSupportEmail = 'yinyuezhilu@gmail.com';
 
 class PersonalCenterPage extends ConsumerStatefulWidget {
   const PersonalCenterPage({super.key});
@@ -47,33 +56,30 @@ class _PersonalCenterPageState extends ConsumerState<PersonalCenterPage> {
       );
     }
 
-    return RefreshIndicator(
-      onRefresh: controller.refresh,
-      child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.only(bottom: 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _ProfileHero(
-              state: state,
-              controller: controller,
-              onEditProfile: () =>
-                  Navigator.pushNamed(context, RoutePaths.info),
-            ),
-            const SizedBox(height: 16),
-            _ActionListCard(
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _ProfileHero(
+            state: state,
+            controller: controller,
+            onEditProfile: () => Navigator.pushNamed(context, RoutePaths.info),
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: _ActionListCard(
               checkStatusEnabled: state.checkStatusEnabled,
               onQr: () => _onMyQr(context, controller, state),
               onRecommend: () => _onRecommend(context),
-              onFeedback: () => Navigator.pushNamed(context, RoutePaths.fankui),
-              onService: () => Navigator.pushNamed(context, RoutePaths.email),
+              onFeedback: () => _onFeedback(context, ref),
+              onService: () => _onContactService(context),
               onRedeem: state.checkStatusEnabled
                   ? () => _onRedeem(context, controller)
                   : null,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -91,43 +97,41 @@ class _PersonalCenterPageState extends ConsumerState<PersonalCenterPage> {
       AppToast.show(context, result.error!);
       return;
     }
-    await showDialog<void>(
+    await showScaledDialog<void>(
       context: context,
-      builder: (ctx) => _QrCodeDialog(
+      barrierColor: Colors.black.withValues(alpha: 0.8),
+      builder: (ctx) => _MyQrCodeDialog(
         nickname: state.user['nickname']?.toString() ?? '用户',
-        roleLabel: _roleLabel(state.user['role']?.toString()),
         mobile: state.user['mobile']?.toString() ?? '',
+        avatarUrl: state.user['headUrl']?.toString(),
         imageUrl: result.url!,
       ),
     );
   }
 
   void _onRecommend(BuildContext context) {
-    showModalBottomSheet<void>(
+    showScaledDialog<void>(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.link),
-              title: const Text('复制推广链接'),
-              onTap: () async {
-                await Clipboard.setData(
-                  const ClipboardData(text: _kAppPromoUrl),
-                );
-                if (ctx.mounted) {
-                  Navigator.pop(ctx);
-                  AppToast.show(context, '链接已复制，快去发给好友吧');
-                }
-              },
-            ),
-          ],
-        ),
-      ),
+      barrierColor: Colors.black.withValues(alpha: 0.8),
+      builder: (ctx) => const _RecommendDialog(),
+    );
+  }
+
+  /// 「意见反馈」入口：跳转到智慧校园并切换到「校长信箱」的需求反馈分段。
+  /// 复用智慧校园 `PrincipalMailboxView` 的「需求反馈」表单 + 列表，避免在
+  /// 个人中心再实现一套相同表单。
+  void _onFeedback(BuildContext context, WidgetRef ref) {
+    ref
+        .read(smartCampusControllerProvider.notifier)
+        .openPrincipalMailbox(initialMode: PrincipalMailboxInitialMode.feedback);
+    Navigator.pushReplacementNamed(context, RoutePaths.smartCampus);
+  }
+
+  void _onContactService(BuildContext context) {
+    showScaledDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.8),
+      builder: (ctx) => const _ContactServiceDialog(email: _kSupportEmail),
     );
   }
 
@@ -135,39 +139,15 @@ class _PersonalCenterPageState extends ConsumerState<PersonalCenterPage> {
     BuildContext context,
     PersonalCenterController controller,
   ) async {
-    final codeController = TextEditingController();
-    String? err;
-    try {
-      err = await showDialog<String?>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('VIP 兑换'),
-          content: TextField(
-            controller: codeController,
-            decoration: const InputDecoration(
-              hintText: '请输入兑换码',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, codeController.text),
-              child: const Text('确定'),
-            ),
-          ],
-        ),
-      );
-    } finally {
-      codeController.dispose();
-    }
-    if (!context.mounted || err == null) {
+    final code = await showScaledDialog<String>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.8),
+      builder: (ctx) => const _RedeemVipDialog(),
+    );
+    if (!context.mounted || code == null || code.isEmpty) {
       return;
     }
-    final msg = await controller.redeemVip(err);
+    final msg = await controller.redeemVip(code);
     if (!context.mounted) {
       return;
     }
@@ -180,17 +160,6 @@ class _PersonalCenterPageState extends ConsumerState<PersonalCenterPage> {
       }
       AppToast.show(context, '兑换成功');
     }
-  }
-}
-
-String _roleLabel(String? role) {
-  switch (role) {
-    case 'teacher':
-      return '老师';
-    case 'student':
-      return '学生';
-    default:
-      return '游客';
   }
 }
 
@@ -539,21 +508,6 @@ class _VipPriceCard extends StatelessWidget {
   final bool showPrice;
   final String? trailingLabel;
 
-  static final LinearGradient _annualGradient = LinearGradient(
-    transform: GradientRotation(146 * math.pi / 180),
-    begin: Alignment.centerLeft,
-    end: Alignment.centerRight,
-    colors: const [
-      Color(0xFFE8DCFF),
-      Color(0xFFF8F5FF),
-      Color(0xFFE8DCFF),
-      Color(0xFFE8DCFF),
-      Color(0xFFEBE1FF),
-      Color(0xFFD7C3FF),
-    ],
-    stops: const [0.0, 0.25, 0.38, 0.60, 0.69, 1.0],
-  );
-
   @override
   Widget build(BuildContext context) {
     if (annualLayout) {
@@ -564,91 +518,97 @@ class _VipPriceCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         child: SizedBox(
           height: 100,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: _annualGradient,
-              border: Border.all(color: Colors.white, width: 1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.asset(
+                AppAssets.infoCard,
+                fit: BoxFit.cover,
+                alignment: Alignment.center,
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 14,
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF170333),
+                              fontFamily: 'Alimama ShuHeiTi',
+                              height: 1.15,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            subtitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w400,
+                              color: Color(0xFF6D6B75),
+                              fontFamily: 'PingFang SC',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (showPrice)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 6),
+                        child: Text(
+                          priceText,
+                          textAlign: TextAlign.right,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            fontSize: 18,
+                            fontSize: 20,
                             fontWeight: FontWeight.w700,
                             color: Color(0xFF170333),
-                            fontFamily: 'Alimama ShuHeiTi',
-                            height: 1.15,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          subtitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w400,
-                            color: Color(0xFF6D6B75),
-                            fontFamily: 'PingFang SC',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (showPrice)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 6),
-                      child: Text(
-                        priceText,
-                        textAlign: TextAlign.right,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF170333),
-                          fontFamily: 'Barlow',
-                          height: 1,
-                        ),
-                      ),
-                    ),
-                  if (!showPrice && trailingLabel != null)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 6),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF8741FF),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          trailingLabel!,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontFamily: 'PingFang SC',
+                            fontFamily: 'Barlow',
+                            height: 1,
                           ),
                         ),
                       ),
-                    ),
-                ],
+                    if (!showPrice && trailingLabel != null)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 6),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF8741FF),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            trailingLabel!,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontFamily: 'PingFang SC',
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
-            ),
+            ],
           ),
         ),
       );
@@ -746,6 +706,10 @@ class _VipPriceCard extends StatelessWidget {
   }
 }
 
+/// 我的钱包 / 我的积分 卡片（设计稿绝对布局）：
+///   · 303×100、半透明白渐变 + 1px 白边 + 12 圆角
+///   · 左右两列居中：上方 22 Barlow 700 数字、下方 14 #6D6B75 标题
+///   · 中央 1×58、#E6E9F1（30% opacity）分隔竖线
 class _WalletPointsCard extends StatelessWidget {
   const _WalletPointsCard({required this.wallet, required this.points});
 
@@ -758,68 +722,62 @@ class _WalletPointsCard extends StatelessWidget {
       height: 100,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.85)),
+        border: Border.all(color: Colors.white, width: 1),
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Colors.white.withValues(alpha: 0.72), Colors.white],
+          colors: [Colors.white.withValues(alpha: 0.55), Colors.white],
         ),
       ),
       child: Row(
         children: [
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  wallet,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF8741FF),
-                    fontFamily: 'Barlow',
-                  ),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  '我的钱包',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF6D6B75),
-                    fontFamily: 'PingFang SC',
-                  ),
-                ),
-              ],
-            ),
+          Expanded(child: _WalletColumn(value: wallet, label: '我的钱包')),
+          const SizedBox(
+            width: 1,
+            height: 58,
+            child: ColoredBox(color: Color(0x4DE6E9F1)),
           ),
-          Container(width: 1, height: 40, color: const Color(0xFFE6E8EB)),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  points,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF8741FF),
-                    fontFamily: 'Barlow',
-                  ),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  '我的积分',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF6D6B75),
-                    fontFamily: 'PingFang SC',
-                  ),
-                ),
-              ],
-            ),
-          ),
+          Expanded(child: _WalletColumn(value: points, label: '我的积分')),
         ],
       ),
+    );
+  }
+}
+
+class _WalletColumn extends StatelessWidget {
+  const _WalletColumn({required this.value, required this.label});
+
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(
+          value,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF0B081A),
+            fontFamily: 'Barlow',
+            height: 1.15,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 14,
+            color: Color(0xFF6D6B75),
+            fontFamily: 'PingFang SC',
+            fontWeight: FontWeight.w400,
+            height: 1,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -847,41 +805,47 @@ class _ActionListCard extends StatelessWidget {
       color: Colors.white,
       borderRadius: BorderRadius.circular(10),
       clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: [
-          _ActionTile(
-            iconAsset: AppAssets.infoIconQr,
-            label: '我的二维码',
-            onTap: onQr,
-            showDivider: true,
+      child: SizedBox.expand(
+        child: SingleChildScrollView(
+          padding: EdgeInsets.zero,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _ActionTile(
+                iconAsset: AppAssets.infoIconQr,
+                label: '我的二维码',
+                onTap: onQr,
+                showDivider: true,
+              ),
+              if (checkStatusEnabled)
+                _ActionTile(
+                  iconAsset: AppAssets.infoIconRecommend,
+                  label: '推荐音乐之路给好友',
+                  onTap: onRecommend,
+                  showDivider: true,
+                ),
+              _ActionTile(
+                iconAsset: AppAssets.infoIconFeedback,
+                label: '意见反馈',
+                onTap: onFeedback,
+                showDivider: true,
+              ),
+              _ActionTile(
+                iconAsset: AppAssets.infoIconService,
+                label: '联系客服',
+                onTap: onService,
+                showDivider: checkStatusEnabled && onRedeem != null,
+              ),
+              if (checkStatusEnabled && onRedeem != null)
+                _ActionTile(
+                  iconAsset: AppAssets.infoIconRedeem,
+                  label: '兑换中心',
+                  onTap: onRedeem!,
+                  showDivider: false,
+                ),
+            ],
           ),
-          if (checkStatusEnabled)
-            _ActionTile(
-              iconAsset: AppAssets.infoIconRecommend,
-              label: '推荐音乐之路给好友',
-              onTap: onRecommend,
-              showDivider: true,
-            ),
-          _ActionTile(
-            iconAsset: AppAssets.infoIconFeedback,
-            label: '意见反馈',
-            onTap: onFeedback,
-            showDivider: true,
-          ),
-          _ActionTile(
-            iconAsset: AppAssets.infoIconService,
-            label: '联系客服',
-            onTap: onService,
-            showDivider: checkStatusEnabled && onRedeem != null,
-          ),
-          if (checkStatusEnabled && onRedeem != null)
-            _ActionTile(
-              iconAsset: AppAssets.infoIconRedeem,
-              label: '兑换中心',
-              onTap: onRedeem!,
-              showDivider: false,
-            ),
-        ],
+        ),
       ),
     );
   }
@@ -902,113 +866,704 @@ class _ActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: Column(
-          children: [
-            SizedBox(
-              height: 48,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    Image.asset(
-                      iconAsset,
-                      width: 20,
-                      height: 20,
-                      fit: BoxFit.contain,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        label,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          height: 22 / 14,
-                          color: Color(0xFF0B081A),
-                          fontFamily: 'PingFang SC',
-                        ),
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Column(
+        children: [
+          SizedBox(
+            height: 48,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  Image.asset(
+                    iconAsset,
+                    width: 20,
+                    height: 20,
+                    fit: BoxFit.contain,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        height: 22 / 14,
+                        color: Color(0xFF0B081A),
+                        fontFamily: 'PingFang SC',
                       ),
                     ),
-                    Image.asset(
-                      AppAssets.infoChevron,
-                      width: 24,
-                      height: 24,
-                      fit: BoxFit.contain,
-                    ),
-                  ],
-                ),
+                  ),
+                  Image.asset(
+                    AppAssets.infoChevron,
+                    width: 24,
+                    height: 24,
+                    fit: BoxFit.contain,
+                  ),
+                ],
               ),
             ),
-            if (showDivider)
-              const Divider(height: 1, thickness: 1, color: Color(0xFFE6E8EB)),
-          ],
+          ),
+          if (showDivider)
+            const Divider(height: 1, thickness: 1, color: Color(0xFFE6E8EB)),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// 我的二维码弹窗：紫白渐变头 + 头像/名称 + 浅紫框 二维码 + 双按钮（保存到相册 / 关闭）。
+// 完全对齐 Figma 428×××（高度由内容撑起）布局：
+//   · 顶部 180 高 D8CCFF→white 渐变（由 GradientHeaderDialog 提供）
+//   · 标题「我的二维码」24/500 居中
+//   · 380×294 #F5F6FA 二维码卡：上方 头像+名称+手机号 横排，中部紫渐变框 152×154
+//     包二维码 122×122，下方两行说明文字
+//   · 双按钮：取消（白）/ 主操作（紫渐变）
+//
+// 「保存到相册」走 `qr_image_saver`：
+//   · web → 浏览器下载 PNG；
+//   · 桌面 → 弹系统保存对话框写入文件；
+//   · 移动暂不支持，提示用户截屏保存。
+// =============================================================================
+class _MyQrCodeDialog extends StatefulWidget {
+  const _MyQrCodeDialog({
+    required this.nickname,
+    required this.mobile,
+    required this.avatarUrl,
+    required this.imageUrl,
+  });
+
+  final String nickname;
+  final String mobile;
+  final String? avatarUrl;
+  final String imageUrl;
+
+  @override
+  State<_MyQrCodeDialog> createState() => _MyQrCodeDialogState();
+}
+
+class _MyQrCodeDialogState extends State<_MyQrCodeDialog> {
+  late final Uint8List? _qrBytes;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _qrBytes = _QrImage.tryDecodeBase64(widget.imageUrl);
+  }
+
+  Future<void> _onSave() async {
+    if (_saving) return;
+    final bytes = _qrBytes;
+    if (bytes == null) {
+      AppToast.show(context, '二维码暂不支持保存，请截屏');
+      return;
+    }
+    setState(() => _saving = true);
+    final result = await saveQrImageBytes(
+      bytes: bytes,
+      suggestedName: _suggestedFileName(),
+    );
+    if (!mounted) return;
+    setState(() => _saving = false);
+    if (result.ok) {
+      Navigator.of(context).pop();
+      AppToast.show(context, kIsWeb ? '已开始下载二维码' : '已保存到 ${result.path}');
+      return;
+    }
+    if (result.cancelled) {
+      return;
+    }
+    AppToast.show(context, result.error ?? '保存失败');
+  }
+
+  String _suggestedFileName() {
+    final raw = widget.nickname.trim();
+    final safe = raw.replaceAll(RegExp(r'[\\/:*?"<>|\s]'), '_');
+    final name = safe.isEmpty ? 'qrcode' : '${safe}_qrcode';
+    return '$name.png';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GradientHeaderDialog(
+      title: '我的二维码',
+      titleFontSize: 24,
+      titleFontWeight: FontWeight.w500,
+      titlePaddingTop: 40,
+      width: 428,
+      contentPadding: const EdgeInsets.fromLTRB(24, 40, 24, 30),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _QrCodeCard(
+            nickname: widget.nickname,
+            mobile: widget.mobile,
+            avatarUrl: widget.avatarUrl,
+            imageUrl: widget.imageUrl,
+          ),
+          const SizedBox(height: 24),
+          AppDialogActionBar(
+            cancelLabel: '关闭',
+            confirmLabel: _saving ? '保存中…' : '保存到相册',
+            confirmEnabled: !_saving,
+            onCancel: () => Navigator.of(context).pop(),
+            onConfirm: _onSave,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QrCodeCard extends StatelessWidget {
+  const _QrCodeCard({
+    required this.nickname,
+    required this.mobile,
+    required this.avatarUrl,
+    required this.imageUrl,
+  });
+
+  final String nickname;
+  final String mobile;
+  final String? avatarUrl;
+  final String imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F6FA),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _MiniAvatar(url: avatarUrl, size: 44),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    nickname,
+                    style: const TextStyle(
+                      color: Color(0xFF0B081A),
+                      fontSize: 16,
+                      fontFamily: 'PingFang SC',
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    mobile,
+                    style: const TextStyle(
+                      color: Color(0xFF6D6B75),
+                      fontSize: 14,
+                      fontFamily: 'PingFang SC',
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            width: 152,
+            height: 154,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFFF2EAFF), Color(0x00F2EAFF)],
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            alignment: Alignment.topCenter,
+            padding: const EdgeInsets.only(top: 15),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: SizedBox(
+                width: 122,
+                height: 122,
+                child: _QrImage(url: imageUrl),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            '快来与我一起在音乐之路学习吧～',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Color(0xFF0B081A),
+              fontSize: 16,
+              fontFamily: 'PingFang SC',
+              height: 20 / 16,
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            '好友可直接通过扫描二维码下载音乐之路并添加你为好友',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Color(0xFFCECED1),
+              fontSize: 12,
+              fontFamily: 'PingFang SC',
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 我的二维码可能是普通 http(s) 链接，也可能是 `/app/user/myQrcode` 直接
+/// 返回的 `data:image/...;base64,xxx` 内联图。这里两种格式都兜住，再退化为
+/// 占位 / 错误图。
+class _QrImage extends StatelessWidget {
+  const _QrImage({required this.url});
+
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    final trimmed = url.trim();
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return Image.network(
+        trimmed,
+        fit: BoxFit.contain,
+        errorBuilder: (_, _, _) => _errorBox(),
+      );
+    }
+    final bytes = tryDecodeBase64(trimmed);
+    if (bytes != null) {
+      return Image.memory(
+        bytes,
+        fit: BoxFit.contain,
+        gaplessPlayback: true,
+        errorBuilder: (_, _, _) => _errorBox(),
+      );
+    }
+    return _placeholderBox();
+  }
+
+  static Widget _placeholderBox() {
+    return const ColoredBox(
+      color: Colors.white,
+      child: Center(
+        child: Icon(Icons.qr_code_2_rounded, color: Color(0xFF8741FF)),
+      ),
+    );
+  }
+
+  static Widget _errorBox() {
+    return const ColoredBox(
+      color: Colors.white,
+      child: Center(
+        child: Icon(Icons.broken_image_outlined, color: Color(0xFFCECED1)),
+      ),
+    );
+  }
+
+  /// 兼容两种返回：
+  /// - `data:image/png;base64,xxx` / `data:image/;base64,xxx`（接口实际格式）
+  /// - 纯 base64 串（兜底）
+  /// 解码失败时返回 null，由调用方退化到占位图。「保存到相册」会复用本方法
+  /// 把同一份 bytes 写入文件，避免再 decode 一次。
+  static Uint8List? tryDecodeBase64(String raw) {
+    if (raw.isEmpty) return null;
+    var payload = raw;
+    if (payload.startsWith('data:')) {
+      final commaIdx = payload.indexOf(',');
+      if (commaIdx < 0) return null;
+      payload = payload.substring(commaIdx + 1);
+    }
+    payload = payload.replaceAll(RegExp(r'\s'), '');
+    if (payload.isEmpty) return null;
+    try {
+      return base64Decode(payload);
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
+/// 圆形头像：先用 [ClipOval] + `antiAliasWithSaveLayer` 保证图片本身是真正的
+/// 圆（避免 `Container(shape: circle)` + `Border` 在小尺寸下渲染成多边形），
+/// 外面再叠一层 2px 白边圆环。
+class _MiniAvatar extends StatelessWidget {
+  const _MiniAvatar({required this.url, required this.size});
+
+  final String? url;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final trimmed = url?.trim() ?? '';
+    final network =
+        trimmed.startsWith('http://') || trimmed.startsWith('https://');
+    final inner = network
+        ? Image.network(
+            trimmed,
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+            filterQuality: FilterQuality.medium,
+            errorBuilder: (_, _, _) => const ColoredBox(
+              color: Color(0xFFEFEEF3),
+              child: Icon(Icons.person_rounded, color: Color(0xFF7E879C)),
+            ),
+          )
+        : const ColoredBox(
+            color: Color(0xFFEFEEF3),
+            child: Icon(Icons.person_rounded, color: Color(0xFF7E879C)),
+          );
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          ClipOval(clipBehavior: Clip.antiAliasWithSaveLayer, child: inner),
+          IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// 兑换会员弹窗：紫白渐变头 + 单行兑换码输入框 + 取消/确认按钮。
+// 点击「确认」后 pop(text) 由调用方走兑换接口；空字符串视为未输入。
+// =============================================================================
+class _RedeemVipDialog extends StatefulWidget {
+  const _RedeemVipDialog();
+
+  @override
+  State<_RedeemVipDialog> createState() => _RedeemVipDialogState();
+}
+
+class _RedeemVipDialogState extends State<_RedeemVipDialog> {
+  final _ctrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GradientHeaderDialog(
+      title: '兑换会员',
+      titleFontSize: 24,
+      titleFontWeight: FontWeight.w500,
+      titlePaddingTop: 40,
+      width: 428,
+      contentPadding: const EdgeInsets.fromLTRB(24, 40, 24, 30),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _DialogTextField(
+            controller: _ctrl,
+            hint: '请输入兑换码',
+          ),
+          const SizedBox(height: 24),
+          AppDialogActionBar(
+            cancelLabel: '取消',
+            confirmLabel: '确认',
+            onCancel: () => Navigator.of(context).pop(),
+            onConfirm: () => Navigator.of(context).pop(_ctrl.text.trim()),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// 联系客服弹窗：紫白渐变头 + 「联系邮箱」标签 + 只读邮箱框（带复制按钮）+ 关闭。
+// 复制成功后 toast 提示，关闭按钮居中走 Pop。
+// =============================================================================
+class _ContactServiceDialog extends StatelessWidget {
+  const _ContactServiceDialog({required this.email});
+
+  final String email;
+
+  @override
+  Widget build(BuildContext context) {
+    return GradientHeaderDialog(
+      title: '联系客服',
+      titleFontSize: 24,
+      titleFontWeight: FontWeight.w500,
+      titlePaddingTop: 40,
+      width: 428,
+      contentPadding: const EdgeInsets.fromLTRB(24, 40, 24, 30),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '联系邮箱',
+            style: TextStyle(
+              color: Color(0xFF0B081A),
+              fontSize: 14,
+              fontFamily: 'PingFang SC',
+              fontWeight: FontWeight.w500,
+              height: 20 / 14,
+            ),
+          ),
+          const SizedBox(height: 8),
+          _ReadonlyValueRow(
+            value: email,
+            onCopy: () async {
+              await Clipboard.setData(ClipboardData(text: email));
+              if (!context.mounted) return;
+              AppToast.show(context, '已复制邮箱');
+            },
+          ),
+          const SizedBox(height: 24),
+          Center(
+            child: SizedBox(
+              width: 380,
+              child: _OutlineActionButton(
+                label: '关闭',
+                onTap: () => Navigator.of(context).pop(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// 推荐给好友弹窗：紫白渐变头 + 推广链接展示 + 复制 / 关闭按钮。
+// 链接来自 1.0 `APP_PROMO_URL`；点击复制写入剪贴板并 toast 提示。
+// =============================================================================
+class _RecommendDialog extends StatelessWidget {
+  const _RecommendDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    return GradientHeaderDialog(
+      title: '推荐给好友',
+      titleFontSize: 24,
+      titleFontWeight: FontWeight.w500,
+      titlePaddingTop: 40,
+      width: 428,
+      contentPadding: const EdgeInsets.fromLTRB(24, 40, 24, 30),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '把音乐之路推荐给你的同学和朋友，一起在这里学习音乐～',
+            style: TextStyle(
+              color: Color(0xFF6D6B75),
+              fontSize: 14,
+              fontFamily: 'PingFang SC',
+              fontWeight: FontWeight.w400,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            '推广链接',
+            style: TextStyle(
+              color: Color(0xFF0B081A),
+              fontSize: 14,
+              fontFamily: 'PingFang SC',
+              fontWeight: FontWeight.w500,
+              height: 20 / 14,
+            ),
+          ),
+          const SizedBox(height: 8),
+          _ReadonlyValueRow(
+            value: _kAppPromoUrl,
+            onCopy: () async {
+              await Clipboard.setData(
+                const ClipboardData(text: _kAppPromoUrl),
+              );
+              if (!context.mounted) return;
+              AppToast.show(context, '链接已复制，快去发给好友吧');
+            },
+          ),
+          const SizedBox(height: 24),
+          AppDialogActionBar(
+            cancelLabel: '关闭',
+            confirmLabel: '复制链接',
+            onCancel: () => Navigator.of(context).pop(),
+            onConfirm: () async {
+              await Clipboard.setData(
+                const ClipboardData(text: _kAppPromoUrl),
+              );
+              if (!context.mounted) return;
+              Navigator.of(context).pop();
+              AppToast.show(context, '链接已复制，快去发给好友吧');
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// 通用：单行文本输入框（兑换码 / 其他短输入）。
+class _DialogTextField extends StatelessWidget {
+  const _DialogTextField({
+    required this.controller,
+    required this.hint,
+  });
+
+  final TextEditingController controller;
+  final String hint;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 48,
+      child: TextField(
+        controller: controller,
+        autofocus: true,
+        style: const TextStyle(
+          fontSize: 14,
+          color: Color(0xFF0B081A),
+          fontFamily: 'PingFang SC',
+          fontWeight: FontWeight.w400,
+        ),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: const TextStyle(
+            color: Color(0xFFCECED1),
+            fontSize: 14,
+            fontFamily: 'PingFang SC',
+            fontWeight: FontWeight.w400,
+            height: 20 / 14,
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 12,
+          ),
+          filled: true,
+          fillColor: Colors.white,
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: Color(0xFFF3F2F3)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: Color(0xFFD9C7FF)),
+          ),
         ),
       ),
     );
   }
 }
 
-class _QrCodeDialog extends StatelessWidget {
-  const _QrCodeDialog({
-    required this.nickname,
-    required this.roleLabel,
-    required this.mobile,
-    required this.imageUrl,
-  });
+// 通用：带复制按钮的只读行（用于显示邮箱 / 推广链接）。
+class _ReadonlyValueRow extends StatelessWidget {
+  const _ReadonlyValueRow({required this.value, required this.onCopy});
 
-  final String nickname;
-  final String roleLabel;
-  final String mobile;
-  final String imageUrl;
+  final String value;
+  final VoidCallback onCopy;
 
   @override
   Widget build(BuildContext context) {
-    final network =
-        imageUrl.startsWith('http://') || imageUrl.startsWith('https://');
-    return AlertDialog(
-      title: Text('$nickname的二维码'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0xFFDCF7F0),
-                borderRadius: BorderRadius.circular(50),
+    return Container(
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFF3F2F3)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Color(0xFF0B081A),
+                fontSize: 14,
+                fontFamily: 'PingFang SC',
+                fontWeight: FontWeight.w400,
+                height: 20 / 14,
               ),
-              child: Text(
-                '身份: $roleLabel',
-                style: const TextStyle(fontSize: 12),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: onCopy,
+            behavior: HitTestBehavior.opaque,
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4),
+              child: Icon(
+                Icons.copy_rounded,
+                size: 18,
+                color: Color(0xFF8741FF),
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              '手机号: $mobile',
-              style: const TextStyle(color: Color(0xFF888888)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// 通用：白底 outline 单按钮（联系客服弹窗的「关闭」用）。
+class _OutlineActionButton extends StatelessWidget {
+  const _OutlineActionButton({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        height: 45,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFF3F2F3)),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x59B5B5B5),
+              blurRadius: 20,
+              offset: Offset(0, 16),
             ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: 220,
-              height: 220,
-              child: network
-                  ? Image.network(imageUrl, fit: BoxFit.contain)
-                  : const Icon(Icons.error_outline),
-            ),
-            const SizedBox(height: 12),
-            TextButton(onPressed: () {}, child: const Text('保存到相册（即将支持）')),
           ],
         ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('关闭'),
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style: const TextStyle(
+            color: Color(0xFF0B081A),
+            fontSize: 16,
+            fontFamily: 'PingFang SC',
+            fontWeight: FontWeight.w400,
+            height: 12 / 16,
+          ),
         ),
-      ],
+      ),
     );
   }
 }

@@ -96,8 +96,11 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
 
     final nextChildId = _resolveSelectedChildId(state.menus, menuId, null);
     final cached = _listCache[_cacheKey(menuId, nextChildId)];
+    // ⚠️ "全部" tab 的 id 是 null，但 copyWith(selectedMenuId: null) 会被当成
+    // "未传"而保留旧值。必须用 clearSelectedMenuId 显式清空，UI 才能切回"全部"。
     state = state.copyWith(
       selectedMenuId: menuId,
+      clearSelectedMenuId: menuId == null,
       clearSelectedChildId: true,
       videoList: cached?.items ?? const [],
       currentPage: cached?.currentPage ?? 1,

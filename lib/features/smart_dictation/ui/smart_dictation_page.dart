@@ -1835,10 +1835,9 @@ class _PracticeDecorationPainter extends CustomPainter {
 
     for (final glyph in glyphs) {
       final wobble = math.sin(phase + glyph.motionPhase);
-      final twinkle =
-          (0.5 + 0.5 * math.sin(phase * 1.4 + glyph.twinklePhase))
-              .clamp(0.0, 1.0)
-              .toDouble();
+      final twinkle = (0.5 + 0.5 * math.sin(phase * 1.4 + glyph.twinklePhase))
+          .clamp(0.0, 1.0)
+          .toDouble();
       final dy = wobble * size.height * 0.22;
       final cx = size.width * glyph.x;
       final cy = size.height * glyph.yBias + dy;
@@ -1872,12 +1871,7 @@ class _PracticeDecorationPainter extends CustomPainter {
     }
   }
 
-  void _paintSparkle(
-    Canvas canvas,
-    Offset center,
-    double size,
-    double alpha,
-  ) {
+  void _paintSparkle(Canvas canvas, Offset center, double size, double alpha) {
     final paint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
@@ -1932,10 +1926,7 @@ class _PracticeDecorationPainter extends CustomPainter {
     );
     canvas.restore();
 
-    final stemTop = Offset(
-      center.dx + size * 0.04,
-      center.dy - size * 0.55,
-    );
+    final stemTop = Offset(center.dx + size * 0.04, center.dy - size * 0.55);
     final stemBottom = Offset(headCenter.dx + size * 0.20, headCenter.dy);
     canvas.drawLine(stemTop, stemBottom, stroke);
 

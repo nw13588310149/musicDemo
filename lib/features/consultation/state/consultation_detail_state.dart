@@ -89,11 +89,8 @@ class ConsultationClass {
   final String name;
   final bool checked;
 
-  ConsultationClass copyWith({bool? checked}) => ConsultationClass(
-    id: id,
-    name: name,
-    checked: checked ?? this.checked,
-  );
+  ConsultationClass copyWith({bool? checked}) =>
+      ConsultationClass(id: id, name: name, checked: checked ?? this.checked);
 
   factory ConsultationClass.fromJson(Map raw) {
     return ConsultationClass(

@@ -29,6 +29,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     );
 
     return Scaffold(
+      // 关键：登录页布局是按设计稿固定比例 (1180x820) 缩放的，键盘弹出后
+      // 不能让 Scaffold 压缩 body 高度（否则整页背景会跟着重新缩放）。
+      // 实际"输入框跟随键盘上移"的需求，由系统在键盘上方留出焦点空间即可。
+      resizeToAvoidBottomInset: false,
       body: AuthDesignCanvas(
         builder: (scale) => Stack(
           clipBehavior: Clip.none,

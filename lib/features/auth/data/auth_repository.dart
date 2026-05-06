@@ -94,6 +94,13 @@ class AuthRepository {
     await client.updateToken(token);
   }
 
+  /// 登录 / 注册成功后保存当前账号手机号，供 ShellController 在
+  /// `refreshUserAndSchool` 时判定演示用「白名单管理员」是否需要覆盖
+  /// user.role 为 admin。
+  Future<void> persistMobile(String mobile) async {
+    await _storage.saveMobile(mobile);
+  }
+
   Future<void> saveCheckStatus(dynamic value) async {
     await _storage.saveCheckStatus(value);
   }

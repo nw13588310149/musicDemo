@@ -57,10 +57,7 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
     }
 
     if (practiceId == null || practiceId <= 0) {
-      state = state.copyWith(
-        loading: false,
-        errorMessage: '初始化练习失败，请稍后重试',
-      );
+      state = state.copyWith(loading: false, errorMessage: '初始化练习失败，请稍后重试');
       return;
     }
 
@@ -204,9 +201,7 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
     final summaries = state.summaryAfter;
     if (summaries.isEmpty) return null;
     final isExam = state.args.practiceType == QuizPracticeType.exam;
-    final targetType = isExam
-        ? QuizPracticeType.random
-        : QuizPracticeType.exam;
+    final targetType = isExam ? QuizPracticeType.random : QuizPracticeType.exam;
     QuizPracticeSummary? target;
     for (final s in summaries) {
       if (s.type == targetType) {

@@ -17,7 +17,12 @@ final myCollectionControllerProvider =
 class MyCollectionController extends StateNotifier<MyCollectionState> {
   MyCollectionController({required MyCollectionRepository repository})
     : _repository = repository,
-      super(const MyCollectionState()) {
+      super(
+        const MyCollectionState(
+          loading: true,
+          tabs: kCollectionDefaultTabs,
+        ),
+      ) {
     unawaited(refresh());
   }
 
@@ -55,6 +60,7 @@ class MyCollectionController extends StateNotifier<MyCollectionState> {
         activeType: type,
         loading: true,
         clearError: true,
+        items: const <CollectionEntry>[],
         shareClasses: const <CollectionShareClass>[],
         clearShareTarget: true,
       );
@@ -92,7 +98,7 @@ class MyCollectionController extends StateNotifier<MyCollectionState> {
     final response = await _repository.getClassList();
     state = state.copyWith(busy: false);
     if (!response.isSuccess || response.data is! List) {
-      return _fallbackMessage(response.msg, fallback: '鍔犺浇鐝骇鍒楄〃澶辫触');
+      return _fallbackMessage(response.msg, fallback: '加载班级列表失败');
     }
     final classes = <CollectionShareClass>[];
     for (final raw in response.data as List) {
@@ -131,11 +137,11 @@ class MyCollectionController extends StateNotifier<MyCollectionState> {
   Future<String?> sendShare() async {
     final target = state.shareTarget;
     if (target == null) {
-      return '璇峰厛閫夋嫨瑕佸垎浜殑鏀惰棌';
+      return '请先选择要分享的收藏';
     }
     final selected = state.shareClasses.where((item) => item.selected).toList();
     if (selected.isEmpty) {
-      return '璇峰厛閫夋嫨瑕佸垎浜殑鐝骇';
+      return '请先选择要分享的班级';
     }
 
     state = state.copyWith(busy: true, clearError: true);
@@ -147,7 +153,7 @@ class MyCollectionController extends StateNotifier<MyCollectionState> {
       );
       if (!response.isSuccess) {
         state = state.copyWith(busy: false);
-        return _fallbackMessage(response.msg, fallback: '鍒嗕韩澶辫触');
+        return _fallbackMessage(response.msg, fallback: '分享失败');
       }
     }
     state = state.copyWith(
@@ -158,8 +164,10 @@ class MyCollectionController extends StateNotifier<MyCollectionState> {
     return null;
   }
 
+  /// 服务端返回的分类列表只是用来确认每个 Tab 是否启用，
+  /// 顺序统一以设计稿（声乐 → 器乐 → 听写 → 视唱 → 乐理 → 视频）为准。
   List<CollectionTabItem> _parseTabs(dynamic data) {
-    final result = <CollectionTabItem>[];
+    final allowed = <int>{};
     if (data is List) {
       for (final item in data) {
         if (item is! Map<String, dynamic>) {
@@ -167,19 +175,17 @@ class MyCollectionController extends StateNotifier<MyCollectionState> {
         }
         final label = item['name']?.toString().trim() ?? '';
         final type = kCollectionTypeByLabel[label];
-        if (type == null) {
-          continue;
+        if (type != null) {
+          allowed.add(type);
         }
-        result.add(CollectionTabItem(type: type, label: label));
       }
     }
-    if (result.isEmpty) {
-      return kCollectionTypeByLabel.entries
-          .map((item) => CollectionTabItem(type: item.value, label: item.key))
-          .toList();
+    if (allowed.isEmpty) {
+      return kCollectionDefaultTabs;
     }
-    result.sort((a, b) => a.type.compareTo(b.type));
-    return result;
+    return kCollectionDefaultTabs
+        .where((tab) => allowed.contains(tab.type))
+        .toList(growable: false);
   }
 
   List<CollectionEntry> _parseItems(dynamic data, int activeType) {
@@ -191,8 +197,8 @@ class MyCollectionController extends StateNotifier<MyCollectionState> {
       if (raw is! Map<String, dynamic>) {
         continue;
       }
-      final target = raw['target'];
-      if (target is! Map<String, dynamic>) {
+      final target = _resolveTarget(raw);
+      if (target == null) {
         continue;
       }
       final title = (target['title'] ?? target['name'] ?? '').toString().trim();
@@ -202,16 +208,17 @@ class MyCollectionController extends StateNotifier<MyCollectionState> {
       result.add(
         CollectionEntry(
           id: _toInt(raw['id']),
-          targetId: _toInt(raw['targetId']),
+          targetId: _toInt(raw['targetId']) > 0
+              ? _toInt(raw['targetId'])
+              : _toInt(target['id']),
           type: _toInt(raw['type']) == 0 ? activeType : _toInt(raw['type']),
           title: title,
           subtitle: _resolveSubtitle(target, activeType),
-          coverUrl: (target['coverImg'] ?? target['param1'] ?? '').toString(),
+          coverUrl: _resolveCover(target),
           authorName: _resolveAuthor(target),
-          avatarUrl: (target['avatarUrl'] ?? target['headImg'] ?? '')
-              .toString(),
+          avatarUrl: _resolveAvatar(target),
           metricText: _resolveMetric(target),
-          durationText: (target['duration'] ?? '5:32').toString(),
+          durationText: _resolveDuration(target),
           rawPayload: Map<String, dynamic>.from(target),
         ),
       );
@@ -219,28 +226,90 @@ class MyCollectionController extends StateNotifier<MyCollectionState> {
     return result;
   }
 
+  Map<String, dynamic>? _resolveTarget(Map<String, dynamic> raw) {
+    final target = raw['target'];
+    if (target is Map<String, dynamic>) {
+      return target;
+    }
+    if (target is Map) {
+      return Map<String, dynamic>.from(target);
+    }
+    // 部分接口直接把目标字段平铺在收藏记录上（兼容历史返回）。
+    if (raw.containsKey('title') || raw.containsKey('name')) {
+      return raw;
+    }
+    return null;
+  }
+
   int _resolveActiveType(List<CollectionTabItem> tabs, int current) {
     if (tabs.any((item) => item.type == current)) {
       return current;
     }
-    return tabs.firstOrNull?.type ?? 4;
+    return tabs.isNotEmpty ? tabs.first.type : 4;
   }
 
+  /// 副标题展示规则：
+  /// - 声乐/器乐：调号信息（如 1=bA），字段一般为 keySignature/musicKey/param2
+  /// - 听写/视唱/乐理：使用副标题或当前菜单名兜底
+  /// - 视频：「主分类·副标题·作者」式描述（fallback 为 subtitle）
   String _resolveSubtitle(Map<String, dynamic> target, int type) {
-    final raw = (target['subtitle'] ?? target['param2'] ?? '')
-        .toString()
-        .trim();
+    String pickFirstNonEmpty(List<String> keys) {
+      for (final key in keys) {
+        final value = target[key]?.toString().trim() ?? '';
+        if (value.isNotEmpty) {
+          return value;
+        }
+      }
+      return '';
+    }
+
+    if (type == 4 || type == 5) {
+      final key = pickFirstNonEmpty(<String>[
+        'keySignature',
+        'musicKey',
+        'tonality',
+        'param2',
+        'subtitle',
+      ]);
+      return key.isEmpty ? '1=bA' : key;
+    }
+
+    if (type == 6) {
+      final desc = pickFirstNonEmpty(<String>[
+        'subtitle',
+        'description',
+        'param2',
+        'category',
+      ]);
+      return desc;
+    }
+
+    final raw = pickFirstNonEmpty(<String>['subtitle', 'param2', 'param1']);
     if (raw.isNotEmpty) {
       return raw;
     }
     return switch (type) {
-      1 => '鏍囧噯闊充笂涓嬭浜屽害',
-      2 => '鍩虹涔愮悊鐭ヨ瘑姊崇悊',
-      3 => '鍚煶鍗曢煶涓撻」缁冧範',
-      4 => '澹颁箰璁粌閲嶇偣鏁寸悊',
-      5 => '鍣ㄤ箰瀛︿範缁冧範瑕佺偣',
+      1 => '标准音上下行二度',
+      2 => '基础乐理知识梳理',
+      3 => '听音单音专项练习',
       _ => '',
     };
+  }
+
+  String _resolveCover(Map<String, dynamic> target) {
+    for (final key in <String>[
+      'coverImg',
+      'cover',
+      'imgUrl',
+      'thumb',
+      'param1',
+    ]) {
+      final value = target[key]?.toString().trim() ?? '';
+      if (value.isNotEmpty && value.toLowerCase() != 'string') {
+        return value;
+      }
+    }
+    return '';
   }
 
   String _resolveAuthor(Map<String, dynamic> target) {
@@ -249,35 +318,57 @@ class MyCollectionController extends StateNotifier<MyCollectionState> {
       'realname',
       'teacherName',
       'author',
+      'userName',
     ]) {
       final value = target[key]?.toString().trim() ?? '';
       if (value.isNotEmpty) {
         return value;
       }
     }
-    return '闊充箰涔嬭矾';
+    return '音乐之路';
+  }
+
+  String _resolveAvatar(Map<String, dynamic> target) {
+    for (final key in <String>['avatarUrl', 'headImg', 'avatar', 'userAvatar']) {
+      final value = target[key]?.toString().trim() ?? '';
+      if (value.isNotEmpty && value.toLowerCase() != 'string') {
+        return value;
+      }
+    }
+    return '';
   }
 
   String _resolveMetric(Map<String, dynamic> target) {
-    final count = _toInt(target['playCount']);
-    if (count > 0) {
-      return '$count';
+    for (final key in <String>['playCount', 'viewCount', 'playNum']) {
+      final value = _toInt(target[key]);
+      if (value > 0) {
+        return '$value';
+      }
     }
-    return '723';
+    return '0';
+  }
+
+  String _resolveDuration(Map<String, dynamic> target) {
+    for (final key in <String>['duration', 'durationText', 'totalTime']) {
+      final value = target[key]?.toString().trim() ?? '';
+      if (value.isNotEmpty) {
+        return value;
+      }
+    }
+    return '00:00';
   }
 
   int _toInt(dynamic value) {
     if (value is int) {
       return value;
     }
+    if (value is num) {
+      return value.toInt();
+    }
     return int.tryParse(value?.toString() ?? '') ?? 0;
   }
 
-  String _fallbackMessage(String raw, {String fallback = '鎿嶄綔澶辫触锛岃绋嶅悗閲嶈瘯'}) {
+  String _fallbackMessage(String raw, {String fallback = '操作失败，请稍后重试'}) {
     return raw.trim().isEmpty ? fallback : raw.trim();
   }
-}
-
-extension _FirstOrNull<T> on Iterable<T> {
-  T? get firstOrNull => isEmpty ? null : first;
 }

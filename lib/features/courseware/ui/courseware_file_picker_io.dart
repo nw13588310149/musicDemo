@@ -7,15 +7,16 @@ Future<List<CoursewarePickedFile>> pickCoursewareFilesImpl({
 }) async {
   final result = await FilePicker.platform.pickFiles(
     allowMultiple: allowMultiple,
-    withData: true,
+    withData: false,
   );
   final files = result?.files ?? const <PlatformFile>[];
   if (files.isEmpty) {
     return const <CoursewarePickedFile>[];
   }
   return files
-      .where((f) => f.bytes != null && f.bytes!.isNotEmpty)
-      .map((f) => CoursewarePickedFile(name: f.name, bytes: f.bytes!))
+      .where((f) => f.path != null && f.path!.isNotEmpty)
+      .map(
+        (f) => CoursewarePickedFile(name: f.name, path: f.path, size: f.size),
+      )
       .toList();
 }
-

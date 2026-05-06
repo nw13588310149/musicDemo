@@ -35,9 +35,7 @@ class QuizSessionPageArgs {
         openCompletionDialog: raw['openCompletionDialog'] == true,
       );
     }
-    return const QuizSessionPageArgs(
-      practiceType: QuizPracticeType.sequence,
-    );
+    return const QuizSessionPageArgs(practiceType: QuizPracticeType.sequence);
   }
 
   @override
@@ -147,14 +145,11 @@ class QuizSessionState {
     return questions[i];
   }
 
-  int get answeredCount =>
-      questions.where((q) => q.status != 0).length;
+  int get answeredCount => questions.where((q) => q.status != 0).length;
 
-  int get errorCount =>
-      questions.where((q) => q.status == 2).length;
+  int get errorCount => questions.where((q) => q.status == 2).length;
 
-  int get notDoneCount =>
-      questions.where((q) => q.status == 0).length;
+  int get notDoneCount => questions.where((q) => q.status == 0).length;
 
   int get accuracyPercent {
     final done = answeredCount;

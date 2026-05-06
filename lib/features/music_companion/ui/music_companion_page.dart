@@ -46,9 +46,7 @@ class _MusicCompanionV2PageState extends ConsumerState<MusicCompanionV2Page> {
     return ShellPageSurface(
       padding: EdgeInsets.zero,
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(
-          ui(ShellLayoutSpec.panelRadius),
-        ),
+        borderRadius: BorderRadius.circular(ui(ShellLayoutSpec.panelRadius)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -124,9 +122,8 @@ class _CompanionTabBar extends StatelessWidget {
     final ui = scale.ui;
     final tabs = MusicCompanionTab.values;
     return Container(
-      // 高度 44，padding 4/4/3/4（左/上/右/下）按 Figma；
-      // 不再设固定 width，改由内容自适应，避免不同字体/dpr 下被裁。
-      height: ui(44),
+      // 用 minHeight 代替固定 height，确保中文字符在不同 DPI 下不被裁剪。
+      constraints: BoxConstraints(minHeight: ui(44)),
       padding: EdgeInsets.fromLTRB(ui(4), ui(4), ui(3), ui(4)),
       decoration: BoxDecoration(
         color: const Color(0xFFF5F6FA),
@@ -195,7 +192,7 @@ class _CompanionTabItem extends StatelessWidget {
           label,
           style: TextStyle(
             fontSize: ui(14),
-            height: 1,
+            height: 1.2,
             fontFamily: 'PingFang SC',
             fontWeight: FontWeight.w500,
             color: active ? const Color(0xFF0B081A) : const Color(0xFF6D6B75),
@@ -398,8 +395,7 @@ class _MetronomeHeaderCard extends StatelessWidget {
 
     // BPM 15..300 → pointer angle -75°..+75° (pivot at the gauge bottom).
     final fraction = ((state.metronomeBpm - 15) / 285).clamp(0.0, 1.0);
-    final pointerAngle =
-        (fraction * 2 - 1) * (75 * math.pi / 180);
+    final pointerAngle = (fraction * 2 - 1) * (75 * math.pi / 180);
 
     return Container(
       width: double.infinity,
@@ -547,12 +543,7 @@ class _ChoiceChipButton extends StatelessWidget {
               style: textStyle,
             ),
           )
-        : Text(
-            label,
-            maxLines: 1,
-            softWrap: false,
-            style: textStyle,
-          );
+        : Text(label, maxLines: 1, softWrap: false, style: textStyle);
 
     return GestureDetector(
       onTap: onTap,
@@ -613,8 +604,10 @@ class _MetronomeTempoSlider extends StatelessWidget {
           final thumbCenter = trackLeft + trackWidth * fraction;
 
           void updateFromX(double localX) {
-            final normalized =
-                ((localX - trackLeft) / trackWidth).clamp(0.0, 1.0);
+            final normalized = ((localX - trackLeft) / trackWidth).clamp(
+              0.0,
+              1.0,
+            );
             onChanged(15 + normalized * 285);
           }
 
@@ -644,7 +637,7 @@ class _MetronomeTempoSlider extends StatelessWidget {
               // Plus button.
               Positioned(
                 right: 0,
-                top: (height - actionSize) / 2 ,
+                top: (height - actionSize) / 2,
                 child: _TempoIconButton(
                   asset: 'assets/images/music/5.png',
                   size: actionSize,
@@ -793,9 +786,7 @@ class _TempoIconButton extends StatelessWidget {
       child: SizedBox(
         width: size,
         height: size,
-        child: Center(
-          child: Image.asset(asset, fit: BoxFit.contain),
-        ),
+        child: Center(child: Image.asset(asset, fit: BoxFit.contain)),
       ),
     );
   }

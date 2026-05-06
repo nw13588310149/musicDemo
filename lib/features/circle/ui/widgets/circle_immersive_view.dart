@@ -1,12 +1,17 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/material.dart';
 
 import '../../../../core/constants/app_assets.dart';
+import '../../../../core/widgets/app_toast.dart';
+import '../../../../core/widgets/scaled_dialog.dart';
 import '../../../shell/ui/shell_layout.dart';
 import '../../state/circle_controller.dart';
 import '../../state/circle_state.dart';
 import 'circle_action_buttons.dart';
 import 'circle_badges.dart';
 import 'circle_comment_panel.dart';
+import 'circle_media_player.dart';
 
 /// 沉浸模式：全屏单帖，纵向 PageView 翻页，右侧操作按钮，下方文字浮层；
 /// 评论面板从右侧滑入，覆盖在沉浸面板之上。
@@ -15,10 +20,12 @@ class CircleImmersiveView extends StatefulWidget {
     super.key,
     required this.state,
     required this.controller,
+    required this.permissions,
   });
 
   final CircleState state;
   final CircleController controller;
+  final CirclePermissions permissions;
 
   @override
   State<CircleImmersiveView> createState() => _CircleImmersiveViewState();
@@ -48,56 +55,144 @@ class _CircleImmersiveViewState extends State<CircleImmersiveView> {
     super.dispose();
   }
 
+  String? _activePostId() {
+    final s = widget.state;
+    if (s.commentTargetPostId.isNotEmpty) return s.commentTargetPostId;
+    return s.currentImmersivePost?.id;
+  }
+
+  Future<void> _togglePostLike(BuildContext context, String postId) async {
+    final ok = await widget.controller.toggleLike(postId);
+    if (!context.mounted) return;
+    if (!ok) AppToast.show(context, '操作失败，请稍后再试');
+  }
+
+  Future<void> _submitComment(
+    BuildContext context,
+    String postId,
+    String text,
+  ) async {
+    final ok = await widget.controller.addComment(postId, text);
+    if (!context.mounted) return;
+    if (!ok) AppToast.show(context, '发送失败');
+  }
+
+  Future<void> _toggleCommentLike(
+    BuildContext context,
+    String postId,
+    String commentId,
+  ) async {
+    final ok = await widget.controller.toggleCommentLike(postId, commentId);
+    if (!context.mounted) return;
+    if (!ok) AppToast.show(context, '操作失败，请稍后再试');
+  }
+
+  Future<void> _confirmDeletePost(BuildContext context, CirclePost post) async {
+    final ok = await showConfirmDialog(
+      context: context,
+      title: '删除帖子',
+      content: '确定删除这条动态吗？删除后不可恢复。',
+    );
+    if (!ok || !context.mounted) return;
+    final success = await widget.controller.deletePost(post.id);
+    if (!context.mounted) return;
+    if (!success) AppToast.show(context, '删除失败');
+  }
+
+  Future<void> _confirmDeleteComment(
+    BuildContext context,
+    String commentId,
+  ) async {
+    final ok = await showConfirmDialog(
+      context: context,
+      title: '删除评论',
+      content: '确定删除这条评论吗？',
+    );
+    if (!ok || !context.mounted) return;
+    final postId = _activePostId();
+    if (postId == null) return;
+    final success = await widget.controller.deleteComment(
+      postId: postId,
+      commentId: commentId,
+    );
+    if (!context.mounted) return;
+    if (!success) AppToast.show(context, '删除失败');
+  }
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final state = widget.state;
     final controller = widget.controller;
+    final posts = state.visiblePosts;
+
+    if (posts.isEmpty) {
+      return const ColoredBox(
+        color: Color(0xFF0B081A),
+        child: Center(
+          child: Text(
+            '暂无动态',
+            style: TextStyle(
+              color: Color(0xFFB6B5BB),
+              fontSize: 14,
+              fontFamily: 'PingFang SC',
+            ),
+          ),
+        ),
+      );
+    }
+
+    final commentsLoading = state.commentsLoadingPostId != null &&
+        state.commentsLoadingPostId == _activePostId();
 
     return Container(
       color: const Color(0xFF0B081A),
       child: Stack(
         children: [
-          // 主翻页区
           PageView.builder(
             controller: _pageController,
             scrollDirection: Axis.vertical,
-            itemCount: state.posts.length,
+            itemCount: posts.length,
             onPageChanged: controller.setImmersiveIndex,
             itemBuilder: (context, index) {
+              final post = posts[index];
               return _ImmersiveSlide(
-                post: state.posts[index],
-                onLike: () => controller.toggleLike(state.posts[index].id),
-                onComment: () =>
-                    controller.openCommentPanel(state.posts[index].id),
-                onFavorite: () =>
-                    controller.toggleFavorite(state.posts[index].id),
+                post: post,
+                canDeletePost: widget.permissions.canDeletePost(post),
+                onDeletePost: widget.permissions.canDeletePost(post)
+                    ? () => _confirmDeletePost(context, post)
+                    : null,
+                onLike: () => unawaited(_togglePostLike(context, post.id)),
+                onComment: () => unawaited(controller.openCommentPanel(post.id)),
+                onFavorite: () => controller.toggleFavorite(post.id),
               );
             },
           ),
 
-          // 右侧滑入评论面板
           _AnimatedCommentPanel(
             visible: state.commentPanelOpen,
             child: CircleCommentPanel(
               post: state.commentTargetPost ?? state.currentImmersivePost,
+              permissions: widget.permissions,
+              commentsLoading: commentsLoading,
               onClose: controller.closeCommentPanel,
               onSubmit: (text) {
-                final id = state.commentTargetPostId.isNotEmpty
-                    ? state.commentTargetPostId
-                    : state.currentImmersivePost?.id;
-                if (id != null) controller.addComment(id, text);
+                final id = _activePostId();
+                if (id != null) {
+                  unawaited(_submitComment(context, id, text));
+                }
               },
               onCommentLikeTap: (commentId) {
-                final id = state.commentTargetPostId.isNotEmpty
-                    ? state.commentTargetPostId
-                    : state.currentImmersivePost?.id;
-                if (id != null) controller.toggleCommentLike(id, commentId);
+                final id = _activePostId();
+                if (id != null) {
+                  unawaited(_toggleCommentLike(context, id, commentId));
+                }
               },
+              onDeleteComment: (commentId) =>
+                  unawaited(_confirmDeleteComment(context, commentId)),
             ),
           ),
 
-          // 评论面板打开时，左侧主区域加一层点击关闭的遮罩
           if (state.commentPanelOpen)
             Positioned.fill(
               right: ui(420),
@@ -120,12 +215,16 @@ class _ImmersiveSlide extends StatelessWidget {
     required this.onLike,
     required this.onComment,
     required this.onFavorite,
+    required this.canDeletePost,
+    this.onDeletePost,
   });
 
   final CirclePost post;
   final VoidCallback onLike;
   final VoidCallback onComment;
   final VoidCallback onFavorite;
+  final bool canDeletePost;
+  final VoidCallback? onDeletePost;
 
   @override
   Widget build(BuildContext context) {
@@ -133,21 +232,34 @@ class _ImmersiveSlide extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // 背景图
         Positioned.fill(
-          child: Image.network(
-            post.imageUrl,
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stack) =>
-                const ColoredBox(color: Color(0xFF1B1530)),
-            loadingBuilder: (context, child, progress) {
-              if (progress == null) return child;
-              return const ColoredBox(color: Color(0xFF1B1530));
-            },
-          ),
+          // 图片 / 视频 / 音频 三种形态由 CircleMediaPlayer 内部按
+          // post.mediaKind 自动分支；视频和音频会按需创建 / 释放 Player。
+          child: CircleMediaPlayer(post: post),
         ),
 
-        // 底部渐变遮罩
+        if (canDeletePost && onDeletePost != null)
+          Positioned(
+            top: ui(16),
+            right: ui(16),
+            child: Material(
+              color: Colors.black.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(ui(8)),
+              child: InkWell(
+                onTap: onDeletePost,
+                borderRadius: BorderRadius.circular(ui(8)),
+                child: Padding(
+                  padding: EdgeInsets.all(ui(8)),
+                  child: Icon(
+                    Icons.delete_outline_rounded,
+                    color: Colors.white,
+                    size: ui(22),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
         Positioned(
           left: 0,
           right: 0,
@@ -169,7 +281,6 @@ class _ImmersiveSlide extends StatelessWidget {
           ),
         ),
 
-        // 左下：作者 / 标签 / 文字 / 时间
         Positioned(
           left: ui(32),
           right: ui(160),
@@ -177,7 +288,6 @@ class _ImmersiveSlide extends StatelessWidget {
           child: _ImmersiveTextBlock(post: post),
         ),
 
-        // 右下：操作按钮列
         Positioned(
           right: ui(28),
           bottom: ui(32),
@@ -284,9 +394,7 @@ class _ImmersiveActions extends StatelessWidget {
           count: post.likeCount,
           onTap: onLike,
           dark: true,
-          coloredIcon: post.liked
-              ? const Color(0xFFFF323C)
-              : Colors.white,
+          coloredIcon: post.liked ? const Color(0xFFFF323C) : Colors.white,
         ),
         SizedBox(height: ui(16)),
         CircleActionButton(
@@ -302,9 +410,7 @@ class _ImmersiveActions extends StatelessWidget {
           count: post.favoriteCount,
           onTap: onFavorite,
           dark: true,
-          coloredIcon: post.favorited
-              ? const Color(0xFFFFB400)
-              : Colors.white,
+          coloredIcon: post.favorited ? const Color(0xFFFFB400) : Colors.white,
         ),
       ],
     );

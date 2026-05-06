@@ -19,8 +19,7 @@ class AuthState {
   final int smsCountDown;
   final bool agreeTerms;
 
-  String get smsButtonText =>
-      smsCountDown > 0 ? '$smsCountDown秒后重发' : '获取验证码';
+  String get smsButtonText => smsCountDown > 0 ? '$smsCountDown秒后重发' : '获取验证码';
 
   AuthState copyWith({
     String? mobile,

@@ -41,10 +41,7 @@ UploadResult parseUploadResult(dynamic data) {
         trimmed.startsWith('http://') ||
         trimmed.startsWith('https://') ||
         trimmed.startsWith('//');
-    return UploadResult(
-      path: isUrl ? '' : trimmed,
-      url: isUrl ? trimmed : '',
-    );
+    return UploadResult(path: isUrl ? '' : trimmed, url: isUrl ? trimmed : '');
   }
 
   if (data is num) {
@@ -52,10 +49,7 @@ UploadResult parseUploadResult(dynamic data) {
   }
 
   if (data is Map) {
-    final path = _firstNonEmpty(<dynamic>[
-      data['path'],
-      data['filePath'],
-    ]);
+    final path = _firstNonEmpty(<dynamic>[data['path'], data['filePath']]);
     final url = _firstNonEmpty(<dynamic>[
       data['url'],
       data['fileUrl'],

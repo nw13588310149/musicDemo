@@ -131,14 +131,10 @@ class _MyCloudDrivePageState extends ConsumerState<MyCloudDrivePage> {
                     state: state,
                     controller: controller,
                     onClose: controller.closePreview,
-                    onRename: () => _handleFileAction(
-                      previewing,
-                      _CloudFileAction.rename,
-                    ),
-                    onShare: () => _handleFileAction(
-                      previewing,
-                      _CloudFileAction.share,
-                    ),
+                    onRename: () =>
+                        _handleFileAction(previewing, _CloudFileAction.rename),
+                    onShare: () =>
+                        _handleFileAction(previewing, _CloudFileAction.share),
                     onDelete: () async {
                       await _handleFileAction(
                         previewing,
@@ -471,23 +467,27 @@ class _CloudSidebar extends StatelessWidget {
       child: Column(
         children: [
           Expanded(
+            // 刚进入页面正在拉取数据时，侧栏保持空白；不展示 loading 转圈，
+            // 也不闪一下"暂无分类"占位。加载完成确实无数据时才显示占位。
             child: state.categories.isEmpty
-                ? Center(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: ui(8)),
-                      child: Text(
-                        '暂无分类\n点击下方"添加分类"创建',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: ui(12),
-                          color: const Color(0xFFB6B5BB),
-                          fontFamily: 'PingFang SC',
-                          fontWeight: FontWeight.w400,
-                          height: 1.6,
-                        ),
-                      ),
-                    ),
-                  )
+                ? (state.loading
+                      ? const SizedBox.shrink()
+                      : Center(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(horizontal: ui(8)),
+                            child: Text(
+                              '暂无分类\n点击下方"添加分类"创建',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: ui(12),
+                                color: const Color(0xFFB6B5BB),
+                                fontFamily: 'PingFang SC',
+                                fontWeight: FontWeight.w400,
+                                height: 1.6,
+                              ),
+                            ),
+                          ),
+                        ))
                 : ListView.separated(
                     itemCount: state.categories.length,
                     separatorBuilder: (context, index) =>
@@ -1463,155 +1463,155 @@ class _FileCardState extends State<_FileCard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-          Expanded(
-            child: Stack(
-              children: [
-                // 中央：88×88 文件类型图标
-                Center(
-                  child: Image.asset(
-                    visual.iconAsset,
-                    width: ui(88),
-                    height: ui(88),
-                    fit: BoxFit.contain,
-                  ),
-                ),
-                // 右上角：类型徽标（操作菜单移到下方灰色信息条）。
-                Positioned(
-                  top: ui(8),
-                  right: ui(8),
-                  child: Container(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: ui(6),
-                      vertical: ui(3),
-                    ),
-                    decoration: BoxDecoration(
-                      color: visual.badgeBg,
-                      borderRadius: BorderRadius.circular(ui(4)),
-                    ),
-                    child: Text(
-                      visual.badgeLabel,
-                      style: TextStyle(
-                        fontSize: ui(10),
-                        color: visual.badgeColor,
-                        fontFamily: 'PingFang SC',
-                        fontWeight: FontWeight.w500,
-                        height: 11.43 / 9.52,
-                      ),
-                    ),
-                  ),
-                ),
-                // 音频类型：右上角浮动播放按钮
-                if (item.type == CloudFileType.audio)
-                  Positioned(
-                    bottom: ui(10),
-                    right: ui(10),
-                    child: GestureDetector(
-                      onTap: () => widget.onAction(_CloudFileAction.play),
-                      child: Container(
-                        width: ui(28),
-                        height: ui(28),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0x14000000),
-                              blurRadius: ui(8),
-                              offset: Offset(0, ui(2)),
-                            ),
-                          ],
-                        ),
-                        child: Icon(
-                          item.isPlaying
-                              ? Icons.pause_rounded
-                              : Icons.play_arrow_rounded,
-                          size: ui(18),
-                          color: const Color(0xFF18C9A5),
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          // 底部 58px 信息条 (#F5F6FA)
-          Container(
-            height: ui(58),
-            color: const Color(0xFFF5F6FA),
-            padding: EdgeInsets.fromLTRB(ui(12), ui(8), ui(8), ui(10)),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
+              Expanded(
+                child: Stack(
                   children: [
-                    Expanded(
-                      child: Text(
-                        item.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: ui(13),
-                          color: const Color(0xFF0B081A),
-                          fontFamily: 'PingFang SC',
-                          fontWeight: FontWeight.w500,
-                          height: 12 / 13,
+                    // 中央：88×88 文件类型图标
+                    Center(
+                      child: Image.asset(
+                        visual.iconAsset,
+                        width: ui(88),
+                        height: ui(88),
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                    // 右上角：类型徽标（操作菜单移到下方灰色信息条）。
+                    Positioned(
+                      top: ui(8),
+                      right: ui(8),
+                      child: Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: ui(6),
+                          vertical: ui(3),
+                        ),
+                        decoration: BoxDecoration(
+                          color: visual.badgeBg,
+                          borderRadius: BorderRadius.circular(ui(4)),
+                        ),
+                        child: Text(
+                          visual.badgeLabel,
+                          style: TextStyle(
+                            fontSize: ui(10),
+                            color: visual.badgeColor,
+                            fontFamily: 'PingFang SC',
+                            fontWeight: FontWeight.w500,
+                            height: 11.43 / 9.52,
+                          ),
                         ),
                       ),
                     ),
-                    SizedBox(width: ui(4)),
-                    GestureDetector(
-                      key: _menuTriggerKey,
-                      behavior: HitTestBehavior.opaque,
-                      onTap: _openActionMenu,
-                      child: SizedBox(
-                        width: ui(20),
-                        height: ui(20),
-                        child: Image.asset(
-                          AppAssets.cloudActionMore,
-                          width: ui(20),
-                          height: ui(20),
-                          fit: BoxFit.contain,
+                    // 音频类型：右上角浮动播放按钮
+                    if (item.type == CloudFileType.audio)
+                      Positioned(
+                        bottom: ui(10),
+                        right: ui(10),
+                        child: GestureDetector(
+                          onTap: () => widget.onAction(_CloudFileAction.play),
+                          child: Container(
+                            width: ui(28),
+                            height: ui(28),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0x14000000),
+                                  blurRadius: ui(8),
+                                  offset: Offset(0, ui(2)),
+                                ),
+                              ],
+                            ),
+                            child: Icon(
+                              item.isPlaying
+                                  ? Icons.pause_rounded
+                                  : Icons.play_arrow_rounded,
+                              size: ui(18),
+                              color: const Color(0xFF18C9A5),
+                            ),
+                          ),
                         ),
+                      ),
+                  ],
+                ),
+              ),
+              // 底部 58px 信息条 (#F5F6FA)
+              Container(
+                height: ui(58),
+                color: const Color(0xFFF5F6FA),
+                padding: EdgeInsets.fromLTRB(ui(12), ui(8), ui(8), ui(10)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            item.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: ui(13),
+                              color: const Color(0xFF0B081A),
+                              fontFamily: 'PingFang SC',
+                              fontWeight: FontWeight.w500,
+                              height: 12 / 13,
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: ui(4)),
+                        GestureDetector(
+                          key: _menuTriggerKey,
+                          behavior: HitTestBehavior.opaque,
+                          onTap: _openActionMenu,
+                          child: SizedBox(
+                            width: ui(20),
+                            height: ui(20),
+                            child: Image.asset(
+                              AppAssets.cloudActionMore,
+                              width: ui(20),
+                              height: ui(20),
+                              fit: BoxFit.contain,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: ui(6)),
+                    Padding(
+                      padding: EdgeInsets.only(right: ui(4)),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            item.sizeLabel,
+                            style: TextStyle(
+                              fontSize: ui(10),
+                              color: const Color(0xFFB6B5BB),
+                              fontFamily: 'Barlow',
+                              fontWeight: FontWeight.w500,
+                              height: 12 / 10,
+                            ),
+                          ),
+                          Text(
+                            item.dateLabel,
+                            style: TextStyle(
+                              fontSize: ui(10),
+                              color: const Color(0xFFB6B5BB),
+                              fontFamily: 'Barlow',
+                              fontWeight: FontWeight.w500,
+                              height: 12 / 10,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
-                SizedBox(height: ui(6)),
-                Padding(
-                  padding: EdgeInsets.only(right: ui(4)),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        item.sizeLabel,
-                        style: TextStyle(
-                          fontSize: ui(10),
-                          color: const Color(0xFFB6B5BB),
-                          fontFamily: 'Barlow',
-                          fontWeight: FontWeight.w500,
-                          height: 12 / 10,
-                        ),
-                      ),
-                      Text(
-                        item.dateLabel,
-                        style: TextStyle(
-                          fontSize: ui(10),
-                          color: const Color(0xFFB6B5BB),
-                          fontFamily: 'Barlow',
-                          fontWeight: FontWeight.w500,
-                          height: 12 / 10,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
-      ),
         ),
       ),
     );
@@ -1800,7 +1800,8 @@ class _CoursewarePreviewPage extends StatelessWidget {
     // 业务上「图片」与「谱例」共用 `CloudFileType.score`：仅有 imageUrls
     // 且没有 audioUrl 视为「图片」，应该走图片预览（带右侧缩略图列）；
     // 否则才是真正的谱例预览。
-    final isImageOnlyScore = item.type == CloudFileType.score &&
+    final isImageOnlyScore =
+        item.type == CloudFileType.score &&
         item.audioUrl.trim().isEmpty &&
         item.imageUrls.isNotEmpty;
 
@@ -2043,8 +2044,7 @@ class _PreviewImageBodyState extends State<_PreviewImageBody> {
   void didUpdateWidget(covariant _PreviewImageBody oldWidget) {
     super.didUpdateWidget(oldWidget);
     final target = widget.state.previewActiveImageIndex;
-    if (_pageController.hasClients &&
-        _pageController.page?.round() != target) {
+    if (_pageController.hasClients && _pageController.page?.round() != target) {
       _pageController.animateToPage(
         target,
         duration: const Duration(milliseconds: 220),
@@ -2157,6 +2157,16 @@ class _PreviewImagePager extends StatelessWidget {
                     child: CachedNetworkImage(
                       imageUrl: resolved,
                       fit: BoxFit.contain,
+                      memCacheWidth: _coursewareDecodeExtent(
+                        context,
+                        MediaQuery.sizeOf(context).width,
+                        2200,
+                      ),
+                      memCacheHeight: _coursewareDecodeExtent(
+                        context,
+                        MediaQuery.sizeOf(context).height,
+                        1600,
+                      ),
                       placeholder: (_, _) => SizedBox(
                         width: ui(28),
                         height: ui(28),
@@ -2246,6 +2256,16 @@ class _PreviewThumbnailRail extends StatelessWidget {
                       fit: BoxFit.cover,
                       width: ui(128),
                       height: ui(170),
+                      memCacheWidth: _coursewareDecodeExtent(
+                        context,
+                        ui(128),
+                        360,
+                      ),
+                      memCacheHeight: _coursewareDecodeExtent(
+                        context,
+                        ui(170),
+                        480,
+                      ),
                       placeholder: (_, _) => const SizedBox.shrink(),
                       errorWidget: (_, _, _) => Icon(
                         Icons.broken_image_outlined,
@@ -2292,15 +2312,7 @@ class _PreviewCoursewareBody extends StatelessWidget {
   }
 
   bool _isImageUrl(String url) {
-    return _hasExt(url, [
-      'png',
-      'jpg',
-      'jpeg',
-      'webp',
-      'gif',
-      'bmp',
-      'svg',
-    ]);
+    return _hasExt(url, ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg']);
   }
 
   @override
@@ -2328,29 +2340,29 @@ class _PreviewCoursewareBody extends StatelessWidget {
                   onPageChanged: (_) {},
                 )
               : resolved.isEmpty
-                  ? _CoursewareEmptyPreview(ui: ui)
-                  : Padding(
-                      padding: EdgeInsets.all(ui(16)),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(ui(7)),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFAFAFD),
-                            border: Border.all(
-                              color: const Color(0xFFF3F2F3),
-                              width: ui(1),
-                            ),
-                          ),
-                          // 直接把文件嵌入到本页面里：Web 端使用 iframe /
-                          // <img> / <audio> / <video> / Office Online；
-                          // 其它平台展示占位提示。不再跳新标签页。
-                          child: CoursewareInlinePreview(
-                            url: resolved,
-                            placeholder: _CoursewareEmptyPreview(ui: ui),
-                          ),
+              ? _CoursewareEmptyPreview(ui: ui)
+              : Padding(
+                  padding: EdgeInsets.all(ui(16)),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(ui(7)),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFAFAFD),
+                        border: Border.all(
+                          color: const Color(0xFFF3F2F3),
+                          width: ui(1),
                         ),
                       ),
+                      // 直接把文件嵌入到本页面里：Web 端使用 iframe /
+                      // <img> / <audio> / <video> / Office Online；
+                      // 其它平台展示占位提示。不再跳新标签页。
+                      child: CoursewareInlinePreview(
+                        url: resolved,
+                        placeholder: _CoursewareEmptyPreview(ui: ui),
+                      ),
                     ),
+                  ),
+                ),
         ),
       ],
     );
@@ -2371,10 +2383,7 @@ class _CoursewareEmptyPreview extends StatelessWidget {
         decoration: BoxDecoration(
           color: const Color(0xFFFAFAFD),
           borderRadius: BorderRadius.circular(ui(7)),
-          border: Border.all(
-            color: const Color(0xFFF3F2F3),
-            width: ui(1),
-          ),
+          border: Border.all(color: const Color(0xFFF3F2F3), width: ui(1)),
         ),
         alignment: Alignment.center,
         child: Column(
@@ -2449,9 +2458,7 @@ class _PreviewScoreBody extends StatelessWidget {
                       ),
                       SizedBox(height: ui(12)),
                       Expanded(
-                        child: _PreviewDescriptionCard(
-                          text: item.title,
-                        ),
+                        child: _PreviewDescriptionCard(text: item.title),
                       ),
                     ],
                   ),
@@ -2632,8 +2639,7 @@ class _PreviewWaveformVisualizer extends StatefulWidget {
       _PreviewWaveformVisualizerState();
 }
 
-class _PreviewWaveformVisualizerState
-    extends State<_PreviewWaveformVisualizer>
+class _PreviewWaveformVisualizerState extends State<_PreviewWaveformVisualizer>
     with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl;
   late final List<double> _phases;
@@ -2838,6 +2844,11 @@ class _PreviewScoreSheetState extends State<_PreviewScoreSheet> {
                     imageUrl: url,
                     width: double.infinity,
                     fit: BoxFit.fitWidth,
+                    memCacheWidth: _coursewareDecodeExtent(
+                      context,
+                      MediaQuery.sizeOf(context).width,
+                      2200,
+                    ),
                     placeholder: (_, _) => SizedBox(
                       height: ui(120),
                       child: Center(
@@ -2932,15 +2943,22 @@ class _PreviewPlaybackBar extends StatelessWidget {
                 ? CachedNetworkImage(
                     imageUrl: coverUrl,
                     fit: BoxFit.cover,
+                    memCacheWidth: _coursewareDecodeExtent(
+                      context,
+                      ui(48),
+                      160,
+                    ),
+                    memCacheHeight: _coursewareDecodeExtent(
+                      context,
+                      ui(48),
+                      160,
+                    ),
                     errorWidget: (_, _, _) => Image.asset(
                       'assets/images/home/feng.png',
                       fit: BoxFit.cover,
                     ),
                   )
-                : Image.asset(
-                    'assets/images/home/feng.png',
-                    fit: BoxFit.cover,
-                  ),
+                : Image.asset('assets/images/home/feng.png', fit: BoxFit.cover),
           ),
           SizedBox(width: ui(12)),
           SizedBox(
@@ -3161,10 +3179,7 @@ class _PreviewProgressTrack extends StatelessWidget {
                       width: fillWidth,
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
-                          colors: <Color>[
-                            Color(0xFFE2D0FF),
-                            Color(0xFF8741FF),
-                          ],
+                          colors: <Color>[Color(0xFFE2D0FF), Color(0xFF8741FF)],
                         ),
                         borderRadius: BorderRadius.circular(ui(23)),
                       ),
@@ -3273,9 +3288,9 @@ class _PreviewSpeedChipState extends State<_PreviewSpeedChip> {
                       borderRadius: BorderRadius.circular(ui(12)),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF8741FF).withValues(
-                            alpha: 0.10,
-                          ),
+                          color: const Color(
+                            0xFF8741FF,
+                          ).withValues(alpha: 0.10),
                           blurRadius: ui(20),
                           offset: Offset(0, ui(8)),
                         ),
@@ -3287,8 +3302,7 @@ class _PreviewSpeedChipState extends State<_PreviewSpeedChip> {
                         for (final v in _PreviewSpeedChip.options)
                           GestureDetector(
                             behavior: HitTestBehavior.opaque,
-                            onTap: () =>
-                                Navigator.of(dialogContext).pop(v),
+                            onTap: () => Navigator.of(dialogContext).pop(v),
                             child: Container(
                               height: itemHeight,
                               alignment: Alignment.center,
@@ -3372,10 +3386,12 @@ class _PreviewSpeedChipState extends State<_PreviewSpeedChip> {
 
 /// 描述上传对话框内单个待上传/已上传文件的全部状态。
 class _UploadSlot {
-  _UploadSlot({required this.name, required this.bytes});
+  _UploadSlot({required this.name, this.bytes, this.path, this.size});
 
   final String name;
-  final Uint8List bytes;
+  final Uint8List? bytes;
+  final String? path;
+  final int? size;
 
   /// 上传进度 0.0–1.0（进行中时 < 1.0；完成后被设为 1.0）
   double progress = 0.0;
@@ -3389,6 +3405,11 @@ class _UploadSlot {
   bool get isDone => uploadedUrl != null;
   bool get hasError => error != null;
   bool get isUploading => !isDone && !hasError;
+  bool get canUpload =>
+      (bytes != null && bytes!.isNotEmpty) ||
+      (path != null && path!.trim().isNotEmpty);
+  bool get hasMemoryPreview =>
+      looksLikeImage && bytes != null && bytes!.isNotEmpty;
 
   /// 根据文件名后缀判断是否为图片，用于显示内存缩略图
   bool get looksLikeImage {
@@ -3467,9 +3488,16 @@ class _UploadDialogState extends State<_UploadDialog> {
 
     final newSlots = files
         .map(
-          (f) => _UploadSlot(name: f.name, bytes: Uint8List.fromList(f.bytes)),
+          (f) => _UploadSlot(
+            name: f.name,
+            bytes: f.bytes,
+            path: f.path,
+            size: f.size,
+          ),
         )
+        .where((slot) => slot.canUpload)
         .toList();
+    if (newSlots.isEmpty) return;
 
     setState(() {
       if (_kind == CloudUploadKind.courseware) {
@@ -3491,20 +3519,35 @@ class _UploadDialogState extends State<_UploadDialog> {
     final files = await pickCoursewareFiles(allowMultiple: false);
     if (files.isEmpty || !mounted) return;
     final f = files.first;
-    final slot = _UploadSlot(name: f.name, bytes: Uint8List.fromList(f.bytes));
+    final slot = _UploadSlot(
+      name: f.name,
+      bytes: f.bytes,
+      path: f.path,
+      size: f.size,
+    );
+    if (!slot.canUpload) return;
     setState(() => _scoreAudio = slot);
     unawaited(_startUpload(slot));
   }
 
   Future<void> _startUpload(_UploadSlot slot) async {
-    final url = await widget.controller.uploadFileRaw(
-      bytes: slot.bytes,
-      filename: slot.name,
-      onProgress: (p) {
-        if (!mounted) return;
-        setState(() => slot.progress = p.clamp(0.0, 0.99));
-      },
-    );
+    void progress(double p) {
+      if (!mounted) return;
+      setState(() => slot.progress = p.clamp(0.0, 0.99));
+    }
+
+    final path = slot.path?.trim();
+    final url = path != null && path.isNotEmpty
+        ? await widget.controller.uploadFilePathRaw(
+            filePath: path,
+            filename: slot.name,
+            onProgress: progress,
+          )
+        : await widget.controller.uploadFileRaw(
+            bytes: slot.bytes ?? Uint8List(0),
+            filename: slot.name,
+            onProgress: progress,
+          );
     if (!mounted) return;
     setState(() {
       if (url != null && url.isNotEmpty) {
@@ -3892,9 +3935,9 @@ class _UploadDialogState extends State<_UploadDialog> {
           // background: real thumbnail or placeholder
           ClipRRect(
             borderRadius: radius,
-            child: slot.looksLikeImage
+            child: slot.hasMemoryPreview
                 ? Image.memory(
-                    slot.bytes,
+                    slot.bytes!,
                     fit: BoxFit.cover,
                     width: size,
                     height: size,
@@ -4386,6 +4429,18 @@ class _ScoreUploadCell extends StatelessWidget {
 /// 控件触发；`rename` / `share` / `delete` 由共享操作菜单
 /// (`showItemActionMenu`) 派发。菜单项的文案由共享组件本身负责，无需在此
 /// 重复定义。
+int? _coursewareDecodeExtent(
+  BuildContext context,
+  double logicalExtent,
+  int maxPixels,
+) {
+  if (!logicalExtent.isFinite || logicalExtent <= 0) {
+    return maxPixels;
+  }
+  final dpr = MediaQuery.devicePixelRatioOf(context);
+  return (logicalExtent * dpr).ceil().clamp(1, maxPixels).toInt();
+}
+
 enum _CloudFileAction { preview, play, rename, share, delete }
 
 /// 文件卡片的视觉数据：图标资源 + 类型徽标背景/文字色 + 徽标文案。

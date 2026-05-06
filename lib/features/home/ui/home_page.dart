@@ -208,30 +208,47 @@ class _HomePageViewState extends State<_HomePageView> {
 
   Widget _buildActionBoard(List<HomeQuickAction> quickActions) {
     final actions = _resolveQuickActions(quickActions);
+    // 按 Figma 严格 9 项布局；不足 9 项时补齐避免错位
+    final padded = actions.length >= 9
+        ? actions.sublist(0, 9)
+        : <HomeQuickAction>[
+            ...actions,
+            for (int i = actions.length; i < 9; i++) actions.last,
+          ];
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
       child: ColoredBox(
         color: Colors.white,
         child: RepaintBoundary(
-          child: GridView.builder(
-            // SizedBox(height:313) 提供了有界高度，不需要 shrinkWrap
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: actions.length,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              mainAxisExtent: 70,
-              mainAxisSpacing: 18,
-              crossAxisSpacing: 0,
+          // Figma 规格：
+          //   - 容器 padding: 上下 24、左右 66
+          //   - flex-wrap, gap: 105px, justify-content: center, align-content: center
+          //   - 3×3 共 9 个按钮（width:44），固定列间距 105
+          //   - 行间距设计稿值 105，但本工程 actionH=313 不够容纳，
+          //     这里改用 spaceBetween 在剩余高度内均匀分布（实测 ~36px）
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 66, vertical: 24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: List.generate(3, (rowIdx) {
+                return Row(
+                  // Figma: justify-content: center —— 列间距固定 105，
+                  // 多余空间放两侧（容器宽于 474 时相当于额外 padding）
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    for (int colIdx = 0; colIdx < 3; colIdx++) ...[
+                      if (colIdx > 0) const SizedBox(width: 105),
+                      _QuickActionItem(
+                        action: padded[rowIdx * 3 + colIdx],
+                        onTap: () =>
+                            _onQuickActionTap(padded[rowIdx * 3 + colIdx]),
+                      ),
+                    ],
+                  ],
+                );
+              }),
             ),
-            itemBuilder: (context, index) {
-              final action = actions[index];
-              return _QuickActionItem(
-                action: action,
-                onTap: () => _onQuickActionTap(action),
-              );
-            },
           ),
         ),
       ),
@@ -266,6 +283,10 @@ class _HomePageViewState extends State<_HomePageView> {
               fontFamily: 'PingFang SC',
             ),
           ),
+          // Figma 视觉间距 12px。
+          // PingFang SC OTF 的 lineGap=0，全局 TextHeightBehavior 开关对其无效，
+          // box 仍是 1.4× fontSize，下方有 ~6px 不可见 descender padding，
+          // 所以 SizedBox 取 12-6=6 才能视觉对齐 Figma。
           const SizedBox(height: 6),
           // 周一~周日，横向可滑动，无滚动条
           SizedBox(
@@ -303,7 +324,9 @@ class _HomePageViewState extends State<_HomePageView> {
               fontFamily: 'PingFang SC',
             ),
           ),
-          const SizedBox(height: 10),
+          // Figma 视觉间距 12px。同上：PingFang SC OTF 因 lineGap=0
+          // 不受全局 TextHeightBehavior 影响，需手工扣掉 ~6px descender padding。
+          const SizedBox(height: 6),
           Expanded(
             child: notices.isEmpty
                 ? const _NoticeEmptyState()
@@ -538,7 +561,8 @@ class _WeekCard extends StatelessWidget {
                 colors: [Color(0xFF8640FF), Color(0xFFB68EFF)],
               )
             : null,
-        color: active ? null : const Color(0xFFF5F6FA),
+        // Figma：非今天卡片底色为 white（与右侧面板同色，仅 chip/文本可见）
+        color: active ? null : Colors.white,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Stack(
@@ -556,6 +580,7 @@ class _WeekCard extends StatelessWidget {
                     ? const Color(0xFFBBB5F3)
                     : const Color(0xFFA9A9A9),
                 fontFamily: 'PingFang SC',
+                fontWeight: FontWeight.w400,
                 height: 1.43,
               ),
             ),
@@ -567,12 +592,15 @@ class _WeekCard extends StatelessWidget {
             child: Text(
               item.dayText,
               textAlign: TextAlign.center,
+              // Figma 设计稿规定：日期数字使用 Barlow w500（几何无衬线）
+              // 当前 Barlow 仅注册了 SemiBold(w600)，w500 会回退到 w600
+              // 待补充 Barlow-Medium.ttf 后即可精确还原
               style: TextStyle(
                 fontSize: 20,
                 color: active ? Colors.white : const Color(0xFF1A1A1A),
                 fontWeight: FontWeight.w500,
                 height: 1.35,
-                fontFamily: 'PingFang SC',
+                fontFamily: 'Barlow',
               ),
             ),
           ),
@@ -595,6 +623,7 @@ class _WeekCard extends StatelessWidget {
                       ? const Color(0xFF8741FF)
                       : const Color(0xFFA9A9A9),
                   fontFamily: 'PingFang SC',
+                  fontWeight: FontWeight.w400,
                   height: 1.43,
                 ),
               ),
@@ -740,26 +769,63 @@ class _CourseNoticeCard extends StatelessWidget {
   }
 }
 
-/// 课程科目标签：#EAE5FF 背景 + #8741FF 文字 PingFang SC 400 12px
-/// 设计稿不再按科目区分颜色，统一紫色
+/// 课程科目标签 12px PingFang SC w400，按学科分类切换配色：
+/// • 视唱/听音/乐理/钢琴等理论与基础类  → 紫（#EAE5FF / #8741FF）
+/// • 笛/箫/笙/胡/筝/吉他等器乐类        → 绿（#DFFCF0 / #0CAC40）
 class _CourseSubjectTag extends StatelessWidget {
   const _CourseSubjectTag({required this.name});
 
   final String name;
 
+  /// 仅用于器乐类匹配的关键字（按设计稿"竹笛课"等绿色样式归类）
+  /// 注：钢琴归到默认紫色（属于"基础键盘类"）
+  static const List<String> _instrumentKeywords = <String>[
+    '笛',
+    '箫',
+    '笙',
+    '胡',
+    '筝',
+    '阮',
+    '琵琶',
+    '吉他',
+    '提琴',
+    '萨克斯',
+    '单簧',
+    '双簧',
+    '长号',
+    '小号',
+    '圆号',
+    '手风琴',
+    '竖琴',
+    '葫芦丝',
+    '陶笛',
+    '口琴',
+    '鼓',
+    '木琴',
+  ];
+
+  bool get _isInstrument => _instrumentKeywords.any((kw) => name.contains(kw));
+
   @override
   Widget build(BuildContext context) {
+    final bg = _isInstrument
+        ? const Color(0xFFDFFCF0)
+        : const Color(0xFFEAE5FF);
+    final fg = _isInstrument
+        ? const Color(0xFF0CAC40)
+        : const Color(0xFF8741FF);
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       decoration: BoxDecoration(
-        color: const Color(0xFFEAE5FF),
+        color: bg,
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
         name,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 12,
-          color: Color(0xFF8741FF),
+          color: fg,
           fontFamily: 'PingFang SC',
           fontWeight: FontWeight.w400,
           height: 15.24 / 12,

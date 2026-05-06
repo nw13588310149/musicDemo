@@ -293,9 +293,9 @@ class TheoryController extends StateNotifier<TheoryState> {
       }
       final path =
           (entry['path'] ?? entry['img'] ?? entry['filePath'])
-                  ?.toString()
-                  .trim() ??
-              '';
+              ?.toString()
+              .trim() ??
+          '';
       if (path.isNotEmpty) {
         return _resolveMediaUrl(path);
       }

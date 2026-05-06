@@ -27,6 +27,8 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     );
 
     return Scaffold(
+      // 与登录页同理：键盘弹出时不要让 Scaffold 压缩 body 触发 canvas 重缩放。
+      resizeToAvoidBottomInset: false,
       body: AuthDesignCanvas(
         builder: (scale) => Stack(
           clipBehavior: Clip.none,

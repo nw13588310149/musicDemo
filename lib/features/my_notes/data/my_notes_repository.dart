@@ -45,6 +45,15 @@ class MyNotesRepository {
     );
   }
 
+  /// 重命名笔记分类。复用与「新增分类」相同的 `noteCategorySave` 接口：
+  /// 后端约定 `id == 0` 表示新增、`id > 0` 表示按 id 更新分类名。
+  Future<ApiResponse> updateCategory({required int id, required String name}) {
+    return client.post(
+      '/app/user/noteCategorySave',
+      data: <String, dynamic>{'id': id, 'name': name},
+    );
+  }
+
   Future<ApiResponse> deleteCategory(int id) {
     return client.post(
       '/app/user/noteCategoryDelete',

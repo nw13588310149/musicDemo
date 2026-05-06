@@ -59,10 +59,10 @@ class DictationDefaultPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const _FeatureDefaultPage(
-        title: '听写练习',
-        icon: Icons.headphones_outlined,
-        accentColor: Color(0xFF00C9A4),
-      );
+    title: '听写练习',
+    icon: Icons.headphones_outlined,
+    accentColor: Color(0xFF00C9A4),
+  );
 }
 
 // ── 视唱 ─────────────────────────────────────────────────────────────────────
@@ -71,10 +71,10 @@ class SightSingingDefaultPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const _FeatureDefaultPage(
-        title: '视唱练习',
-        icon: Icons.music_note_outlined,
-        accentColor: Color(0xFF8741FF),
-      );
+    title: '视唱练习',
+    icon: Icons.music_note_outlined,
+    accentColor: Color(0xFF8741FF),
+  );
 }
 
 // ── 乐理 ─────────────────────────────────────────────────────────────────────
@@ -83,10 +83,10 @@ class MusicTheoryDefaultPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const _FeatureDefaultPage(
-        title: '乐理练习',
-        icon: Icons.library_music_outlined,
-        accentColor: Color(0xFFFF386B),
-      );
+    title: '乐理练习',
+    icon: Icons.library_music_outlined,
+    accentColor: Color(0xFFFF386B),
+  );
 }
 
 // ── 模考 ─────────────────────────────────────────────────────────────────────
@@ -95,10 +95,10 @@ class MockExamDefaultPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const _FeatureDefaultPage(
-        title: '模拟考试',
-        icon: Icons.assignment_outlined,
-        accentColor: Color(0xFFFF7043),
-      );
+    title: '模拟考试',
+    icon: Icons.assignment_outlined,
+    accentColor: Color(0xFFFF7043),
+  );
 }
 
 // ── 刷题 ─────────────────────────────────────────────────────────────────────
@@ -107,10 +107,10 @@ class CampDefaultPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const _FeatureDefaultPage(
-        title: '刷题练习',
-        icon: Icons.quiz_outlined,
-        accentColor: Color(0xFF1976D2),
-      );
+    title: '刷题练习',
+    icon: Icons.quiz_outlined,
+    accentColor: Color(0xFF1976D2),
+  );
 }
 
 // ── 试题 ─────────────────────────────────────────────────────────────────────
@@ -119,10 +119,10 @@ class AnswerQuestionsDefaultPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const _FeatureDefaultPage(
-        title: '答题中心',
-        icon: Icons.checklist_outlined,
-        accentColor: Color(0xFF0CAC40),
-      );
+    title: '答题中心',
+    icon: Icons.checklist_outlined,
+    accentColor: Color(0xFF0CAC40),
+  );
 }
 
 // ── 资讯 ─────────────────────────────────────────────────────────────────────
@@ -131,10 +131,10 @@ class ConsultationDefaultPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const _FeatureDefaultPage(
-        title: '学习资讯',
-        icon: Icons.article_outlined,
-        accentColor: Color(0xFF039BE5),
-      );
+    title: '学习资讯',
+    icon: Icons.article_outlined,
+    accentColor: Color(0xFF039BE5),
+  );
 }
 
 // ── 商城 ─────────────────────────────────────────────────────────────────────
@@ -143,8 +143,8 @@ class StoreDefaultPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const _FeatureDefaultPage(
-        title: '商城',
-        icon: Icons.storefront_outlined,
-        accentColor: Color(0xFFE91E63),
-      );
+    title: '商城',
+    icon: Icons.storefront_outlined,
+    accentColor: Color(0xFFE91E63),
+  );
 }

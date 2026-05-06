@@ -270,10 +270,7 @@ class _PianoKeyboardState extends State<PianoKeyboard> {
     return SizedBox(
       height: height,
       child: Padding(
-        padding: EdgeInsets.symmetric(
-          horizontal: ui(10),
-          vertical: ui(6),
-        ),
+        padding: EdgeInsets.symmetric(horizontal: ui(10), vertical: ui(6)),
         child: Row(
           children: [
             _PianoChromeImageButton(
@@ -290,7 +287,8 @@ class _PianoKeyboardState extends State<PianoKeyboard> {
                   return _PianoMiniScrollTrack(
                     whiteKeys: widget.whiteKeys,
                     blackKeys: widget.blackKeys,
-                    contentWidth: (_whiteKeyWidth ?? 0) * widget.whiteKeys.length,
+                    contentWidth:
+                        (_whiteKeyWidth ?? 0) * widget.whiteKeys.length,
                     viewportWidth: _scroll.hasClients
                         ? _scroll.position.viewportDimension
                         : 0,
@@ -309,7 +307,9 @@ class _PianoKeyboardState extends State<PianoKeyboard> {
                         return;
                       }
                       final maxOffset = _scroll.position.maxScrollExtent;
-                      _scroll.jumpTo((fraction * maxOffset).clamp(0.0, maxOffset));
+                      _scroll.jumpTo(
+                        (fraction * maxOffset).clamp(0.0, maxOffset),
+                      );
                     },
                   );
                 },
@@ -323,10 +323,7 @@ class _PianoKeyboardState extends State<PianoKeyboard> {
               tooltip: '放大',
             ),
             SizedBox(width: ui(8)),
-            _PianoLabelToggle(
-              active: _labelsVisible,
-              onTap: _toggleLabels,
-            ),
+            _PianoLabelToggle(active: _labelsVisible, onTap: _toggleLabels),
           ],
         ),
       ),
@@ -349,8 +346,10 @@ class _PianoKeyboardState extends State<PianoKeyboard> {
               .toDouble();
         }();
 
-        final contentWidth =
-            math.max(viewport, whiteKeyWidth * widget.whiteKeys.length);
+        final contentWidth = math.max(
+          viewport,
+          whiteKeyWidth * widget.whiteKeys.length,
+        );
         final keysHeight = constraints.maxHeight;
         final blackKeyWidth = whiteKeyWidth * 0.62;
         final blackKeyHeight = keysHeight * 0.6;
@@ -358,12 +357,14 @@ class _PianoKeyboardState extends State<PianoKeyboard> {
         // 重建命中区
         _hitRects
           ..clear()
-          ..addAll(_buildHitRects(
-            whiteKeyWidth: whiteKeyWidth,
-            blackKeyWidth: blackKeyWidth,
-            blackKeyHeight: blackKeyHeight,
-            keysHeight: keysHeight,
-          ));
+          ..addAll(
+            _buildHitRects(
+              whiteKeyWidth: whiteKeyWidth,
+              blackKeyWidth: blackKeyWidth,
+              blackKeyHeight: blackKeyHeight,
+              keysHeight: keysHeight,
+            ),
+          );
 
         // 应用初始滚动到中央 C
         if (!_appliedInitialScroll && widget.initialScrollToCenterC) {
@@ -406,15 +407,17 @@ class _PianoKeyboardState extends State<PianoKeyboard> {
                         child: _PianoWhiteKey(
                           spec: widget.whiteKeys[i],
                           index: i,
-                          isPressed: widget.activeNotes
-                              .contains(widget.whiteKeys[i].token),
+                          isPressed: widget.activeNotes.contains(
+                            widget.whiteKeys[i].token,
+                          ),
                           showLabel: _labelsVisible,
                         ),
                       ),
                     // 黑键按比例占用上方 60%
                     for (final spec in widget.blackKeys)
                       Positioned(
-                        left: (spec.afterWhiteIndex + 1) * whiteKeyWidth -
+                        left:
+                            (spec.afterWhiteIndex + 1) * whiteKeyWidth -
                             blackKeyWidth / 2,
                         top: 0,
                         width: blackKeyWidth,
@@ -444,12 +447,7 @@ class _PianoKeyboardState extends State<PianoKeyboard> {
     for (var i = 0; i < widget.whiteKeys.length; i++) {
       yield _KeyHitRect(
         token: widget.whiteKeys[i].token,
-        rect: Rect.fromLTWH(
-          i * whiteKeyWidth,
-          0,
-          whiteKeyWidth,
-          keysHeight,
-        ),
+        rect: Rect.fromLTWH(i * whiteKeyWidth, 0, whiteKeyWidth, keysHeight),
         isBlack: false,
       );
     }
@@ -550,8 +548,9 @@ class _PianoMiniScrollTrack extends StatelessWidget {
         final thumbWidth = trackWidth * ratio;
         final maxThumbOffset = math.max(0.0, trackWidth - thumbWidth);
         final maxScroll = math.max(0.0, contentWidth - viewportWidth);
-        final thumbLeft =
-            maxScroll <= 0 ? 0.0 : (scrollOffset / maxScroll) * maxThumbOffset;
+        final thumbLeft = maxScroll <= 0
+            ? 0.0
+            : (scrollOffset / maxScroll) * maxThumbOffset;
 
         return SizedBox(
           height: ui(26),
@@ -621,10 +620,7 @@ class _PianoMiniScrollTrack extends StatelessWidget {
 
 /// 顶部缩略图：把所有黑白键画成横向一条缩小版，用于背景。
 class _PianoMiniKeysStrip extends StatelessWidget {
-  const _PianoMiniKeysStrip({
-    required this.whiteKeys,
-    required this.blackKeys,
-  });
+  const _PianoMiniKeysStrip({required this.whiteKeys, required this.blackKeys});
 
   final List<PianoKeySpec> whiteKeys;
   final List<PianoKeySpec> blackKeys;
@@ -641,9 +637,7 @@ class _PianoMiniKeysStrip extends StatelessWidget {
         return Stack(
           children: <Widget>[
             // 整体黑底
-            Positioned.fill(
-              child: Container(color: const Color(0xFF11141A)),
-            ),
+            Positioned.fill(child: Container(color: const Color(0xFF11141A))),
             // 白键缩略
             for (var i = 0; i < whiteKeys.length; i++)
               Positioned(
@@ -858,10 +852,7 @@ class _PianoWhiteKeyIdleFace extends StatelessWidget {
             Color(0xFFD8DBE6),
           ],
         ),
-        border: Border.all(
-          color: const Color(0xFFEFF7FF),
-          width: ui(0.6),
-        ),
+        border: Border.all(color: const Color(0xFFEFF7FF), width: ui(0.6)),
         boxShadow: const <BoxShadow>[
           BoxShadow(
             color: Color(0x14111827),
@@ -902,9 +893,7 @@ class _PianoWhiteKeyPressedFace extends StatelessWidget {
       child: Stack(
         children: <Widget>[
           // 1. 底色 #A4ABB7
-          const Positioned.fill(
-            child: ColoredBox(color: Color(0xFFA4ABB7)),
-          ),
+          const Positioned.fill(child: ColoredBox(color: Color(0xFFA4ABB7))),
           // 2. 自上而下：深蓝 → 冷白（gradient #4，47% 透明）
           const Positioned.fill(
             child: DecoratedBox(
@@ -912,10 +901,7 @@ class _PianoWhiteKeyPressedFace extends StatelessWidget {
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: <Color>[
-                    Color(0x78131B38),
-                    Color(0x78CFD7F7),
-                  ],
+                  colors: <Color>[Color(0x78131B38), Color(0x78CFD7F7)],
                 ),
               ),
             ),
@@ -927,10 +913,7 @@ class _PianoWhiteKeyPressedFace extends StatelessWidget {
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: <Color>[
-                    Color(0x00DDD7FF),
-                    Color(0x70DDD7FF),
-                  ],
+                  colors: <Color>[Color(0x00DDD7FF), Color(0x70DDD7FF)],
                 ),
               ),
             ),
@@ -955,9 +938,7 @@ class _PianoWhiteKeyPressedFace extends StatelessWidget {
             ),
           ),
           // 5. 整体冷蓝薄雾（gradient #1，9% 透明度）
-          const Positioned.fill(
-            child: ColoredBox(color: Color(0x179EA9CE)),
-          ),
+          const Positioned.fill(child: ColoredBox(color: Color(0x179EA9CE))),
           // 6. 顶部内阴影模拟（box-shadow inset）
           Positioned(
             left: 0,
@@ -969,10 +950,7 @@ class _PianoWhiteKeyPressedFace extends StatelessWidget {
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: <Color>[
-                    Color(0xB35E667F),
-                    Color(0x005E667F),
-                  ],
+                  colors: <Color>[Color(0xB35E667F), Color(0x005E667F)],
                 ),
               ),
             ),
@@ -1039,8 +1017,9 @@ class _PianoWhiteKeyLabel extends StatelessWidget {
         .substring(0, spec.token.length - 1)
         .replaceAll('#', '');
     // 大字组用大写，其余小写。
-    final mainText =
-        octave <= 2 ? rawLetter.toUpperCase() : rawLetter.toLowerCase();
+    final mainText = octave <= 2
+        ? rawLetter.toUpperCase()
+        : rawLetter.toLowerCase();
     // C4→1，C5→2，C6→3；C2/C3 不带上标。
     final superscript = octave >= 4 ? '${octave - 3}' : '';
 
@@ -1057,8 +1036,7 @@ class _PianoWhiteKeyLabel extends StatelessWidget {
       children: <Widget>[
         // 顶部音名胶囊
         Container(
-          padding:
-              EdgeInsets.symmetric(horizontal: ui(3), vertical: ui(1.5)),
+          padding: EdgeInsets.symmetric(horizontal: ui(3), vertical: ui(1.5)),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(ui(2.5)),
             color: bgColor,
@@ -1168,10 +1146,7 @@ class _OctaveDots extends StatelessWidget {
             child: Container(
               width: ui(3),
               height: ui(3),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: color,
-              ),
+              decoration: BoxDecoration(shape: BoxShape.circle, color: color),
             ),
           ),
       ],
@@ -1220,14 +1195,8 @@ class _PianoBlackKey extends StatelessWidget {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: isPressed
-                    ? const <Color>[
-                        Color(0xFF222631),
-                        Color(0xFF101319),
-                      ]
-                    : const <Color>[
-                        Color(0xFF06070A),
-                        Color(0xFF191C24),
-                      ],
+                    ? const <Color>[Color(0xFF222631), Color(0xFF101319)]
+                    : const <Color>[Color(0xFF06070A), Color(0xFF191C24)],
               ),
               border: Border.all(
                 color: const Color(0xFF999999),
@@ -1271,10 +1240,7 @@ class _PianoBlackKey extends StatelessWidget {
                       gradient: const LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
-                        colors: <Color>[
-                          Color(0x9411131C),
-                          Color(0x002F3442),
-                        ],
+                        colors: <Color>[Color(0x9411131C), Color(0x002F3442)],
                       ),
                       color: const Color(0xFF2F3442),
                       border: Border.all(
@@ -1297,10 +1263,7 @@ class _PianoBlackKey extends StatelessWidget {
                         gradient: const LinearGradient(
                           begin: Alignment.centerRight,
                           end: Alignment.centerLeft,
-                          colors: <Color>[
-                            Color(0xB50B0D14),
-                            Color(0x00393E4B),
-                          ],
+                          colors: <Color>[Color(0xB50B0D14), Color(0x00393E4B)],
                         ),
                         color: const Color(0xFF393E4B),
                         border: Border.all(
@@ -1324,10 +1287,7 @@ class _PianoBlackKey extends StatelessWidget {
                         gradient: const LinearGradient(
                           begin: Alignment.centerLeft,
                           end: Alignment.centerRight,
-                          colors: <Color>[
-                            Color(0xB50B0D14),
-                            Color(0x00393E4B),
-                          ],
+                          colors: <Color>[Color(0xB50B0D14), Color(0x00393E4B)],
                         ),
                         color: const Color(0xFF393E4B),
                         border: Border.all(
@@ -1346,15 +1306,11 @@ class _PianoBlackKey extends StatelessWidget {
                   height: (24.05 / 136.13) * h,
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      borderRadius:
-                          BorderRadius.circular(2.56 * scale),
+                      borderRadius: BorderRadius.circular(2.56 * scale),
                       gradient: const LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
-                        colors: <Color>[
-                          Color(0xB50B0D14),
-                          Color(0x00393E4B),
-                        ],
+                        colors: <Color>[Color(0xB50B0D14), Color(0x00393E4B)],
                       ),
                       color: const Color(0xFF393E4B),
                       border: Border.all(
@@ -1375,10 +1331,7 @@ class _PianoBlackKey extends StatelessWidget {
                       gradient: const LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
-                        colors: <Color>[
-                          Color(0x001A1D25),
-                          Color(0xFF191C24),
-                        ],
+                        colors: <Color>[Color(0x001A1D25), Color(0xFF191C24)],
                       ),
                       border: Border(
                         left: BorderSide(
@@ -1424,16 +1377,20 @@ class _PianoScrollBehavior extends ScrollBehavior {
   const _PianoScrollBehavior();
 
   @override
-  Widget buildScrollbar(BuildContext context, Widget child, ScrollableDetails details) {
+  Widget buildScrollbar(
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) {
     return child;
   }
 
   @override
   Set<PointerDeviceKind> get dragDevices => <PointerDeviceKind>{
-        PointerDeviceKind.touch,
-        PointerDeviceKind.mouse,
-        PointerDeviceKind.stylus,
-        PointerDeviceKind.invertedStylus,
-        PointerDeviceKind.trackpad,
-      };
+    PointerDeviceKind.touch,
+    PointerDeviceKind.mouse,
+    PointerDeviceKind.stylus,
+    PointerDeviceKind.invertedStylus,
+    PointerDeviceKind.trackpad,
+  };
 }

@@ -3,7 +3,9 @@
 //
 // 入口：班主任 dashboard 顶部「班级工作台」按钮 / 「班务 → 班级工作台 >」。
 // 三个 Tab：
-//   1. 概况   _OverviewTab   双列布局：我的班级 + 待批请假 / 班级捷径 / 本周出勤 + 重点关注 / 今日节点 + 近期班务
+//   1. 概况   _OverviewTab   顶部「班级通知」(与学生「我的班级」共享 provider，
+//      可发布/删除) + 双列布局：我的班级 + 待批请假 / 班级捷径 / 本周出勤 +
+//      重点关注 / 今日节点 + 近期班务
 //   2. 学生管理 _StudentsTab  标题副标题 + 搜索框 + 学生卡 3 列网格
 //   3. 成绩   _GradesTab     班级成绩变化折线图 + 考试记录（分数+点评） + 学生分数变化卡
 //
@@ -15,8 +17,12 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
+import '../state/class_notice_controller.dart';
 
 const Color _kPanelBg = Colors.white;
 const Color _kInnerGray = Color(0xFFF5F6FA);
@@ -24,12 +30,14 @@ const Color _kTextDark = Color(0xFF0B081A);
 const Color _kTextSection = Color(0xFF1A1A1A);
 const Color _kTextSecondary = Color(0xFF6D6B75);
 const Color _kTextHint = Color(0xFFB6B5BB);
+const Color _kTextHintLight = Color(0xFFD1D1D1);
 const Color _kPurple = Color(0xFF8741FF);
 const Color _kPurpleSoft = Color(0xFFA773FF);
 const Color _kBlue = Color(0xFF325BFF);
 const Color _kRed = Color(0xFFFF323C);
 const Color _kYellow = Color(0xFFDBEE49);
 const Color _kBorderSoft = Color(0xFFF3F2F3);
+const Color _kAnnounceBg = Color(0xFFF0E8FC);
 
 enum _WorkbenchTab { overview, students, grades }
 
@@ -155,10 +163,7 @@ class _WorkbenchBanner extends StatelessWidget {
           Positioned(
             right: ui(12),
             top: ui(15),
-            child: _WorkbenchTabSegmented(
-              tab: tab,
-              onTabChanged: onTabChanged,
-            ),
+            child: _WorkbenchTabSegmented(tab: tab, onTabChanged: onTabChanged),
           ),
         ],
       ),
@@ -244,47 +249,57 @@ class _OverviewTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return LayoutBuilder(
-      builder: (context, c) {
-        final w = c.maxWidth;
-        final isCompact = w < ui(820);
-        if (isCompact) {
-          // 窄屏：单列堆叠展示。
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ..._buildLeftColumn(ui),
-              SizedBox(height: ui(20)),
-              ..._buildRightColumn(ui),
-            ],
-          );
-        }
-        const leftRatio = 574 / 970;
-        const rightRatio = 384 / 970;
-        final gap = ui(12);
-        final leftW = (w - gap) * leftRatio / (leftRatio + rightRatio);
-        final rightW = (w - gap) * rightRatio / (leftRatio + rightRatio);
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: leftW,
-              child: Column(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 「班级通知」位于双列布局之上，跨整行展示。班主任视角下显示「发布
+        // 通知」按钮 + 每张卡片右上角"×"删除按钮；列表与学生「我的班级」
+        // 共享 classNoticeControllerProvider，发布/删除会即时同步到学生端。
+        const _NoticeSection(),
+        SizedBox(height: ui(20)),
+        LayoutBuilder(
+          builder: (context, c) {
+            final w = c.maxWidth;
+            final isCompact = w < ui(820);
+            if (isCompact) {
+              // 窄屏：单列堆叠展示。
+              return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: _buildLeftColumn(ui),
-              ),
-            ),
-            SizedBox(width: gap),
-            SizedBox(
-              width: rightW,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: _buildRightColumn(ui),
-              ),
-            ),
-          ],
-        );
-      },
+                children: [
+                  ..._buildLeftColumn(ui),
+                  SizedBox(height: ui(20)),
+                  ..._buildRightColumn(ui),
+                ],
+              );
+            }
+            const leftRatio = 574 / 970;
+            const rightRatio = 384 / 970;
+            final gap = ui(12);
+            final leftW = (w - gap) * leftRatio / (leftRatio + rightRatio);
+            final rightW = (w - gap) * rightRatio / (leftRatio + rightRatio);
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: leftW,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: _buildLeftColumn(ui),
+                  ),
+                ),
+                SizedBox(width: gap),
+                SizedBox(
+                  width: rightW,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: _buildRightColumn(ui),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ],
     );
   }
 
@@ -392,6 +407,400 @@ class _SectionTitleWithAction extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+// ----- 班级通知（班主任视角：发布 + 删除） -----
+//
+// 与学生「我的班级 → 班级通知」共享 classNoticeControllerProvider；这里
+// 加一个"发布通知"按钮和卡片右上角"×"删除按钮。卡片样式与学生视角一致
+// （紫底 #F0E8FC，左侧紫色方块 highlight，下方日期）。
+
+class _NoticeSection extends ConsumerWidget {
+  const _NoticeSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final notices = ref.watch(classNoticeControllerProvider);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _NoticeSectionHeader(
+          onPublish: () => _showPublishNoticeDialog(context, ref),
+        ),
+        SizedBox(height: ui(12)),
+        Container(
+          width: double.infinity,
+          padding: EdgeInsets.all(ui(12)),
+          decoration: BoxDecoration(
+            color: _kPanelBg,
+            borderRadius: BorderRadius.circular(ui(16)),
+          ),
+          child: notices.isEmpty
+              ? Padding(
+                  padding: EdgeInsets.symmetric(vertical: ui(20)),
+                  child: Center(
+                    child: Text(
+                      '暂无通知，点击右上角"发布通知"为本班发布第一条通知。',
+                      style: TextStyle(
+                        fontSize: ui(13),
+                        color: _kTextHint,
+                        fontFamily: 'PingFang SC',
+                        fontWeight: FontWeight.w400,
+                        height: 20 / 13,
+                      ),
+                    ),
+                  ),
+                )
+              : LayoutBuilder(
+                  builder: (context, c) {
+                    // 班主任视角下条数可变；用 LayoutBuilder + Wrap 自适应：
+                    //   宽度 ≥ ui(820)：3 列；
+                    //   ui(560) ≤ 宽度 < ui(820)：2 列；
+                    //   宽度 < ui(560)：1 列。
+                    final w = c.maxWidth;
+                    final cols = w >= ui(820)
+                        ? 3
+                        : w >= ui(560)
+                        ? 2
+                        : 1;
+                    final gap = ui(8);
+                    final cardWidth = (w - gap * (cols - 1)) / cols;
+                    return Wrap(
+                      spacing: gap,
+                      runSpacing: gap,
+                      children: [
+                        for (final n in notices)
+                          SizedBox(
+                            width: cardWidth,
+                            child: _NoticeCardEditable(
+                              notice: n,
+                              onDelete: () =>
+                                  _confirmDeleteNotice(context, ref, n),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+class _NoticeSectionHeader extends StatelessWidget {
+  const _NoticeSectionHeader({required this.onPublish});
+
+  final VoidCallback onPublish;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Row(
+      children: [
+        Expanded(child: _SectionTitle('班级通知')),
+        InkWell(
+          onTap: onPublish,
+          borderRadius: BorderRadius.circular(ui(8)),
+          child: Container(
+            padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(7)),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+                colors: [_kPurple, _kPurpleSoft],
+              ),
+              borderRadius: BorderRadius.circular(ui(8)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.add_rounded, size: ui(16), color: Colors.white),
+                SizedBox(width: ui(4)),
+                Text(
+                  '发布通知',
+                  style: TextStyle(
+                    fontSize: ui(13),
+                    color: Colors.white,
+                    fontFamily: 'PingFang SC',
+                    fontWeight: FontWeight.w500,
+                    height: 1.2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _NoticeCardEditable extends StatelessWidget {
+  const _NoticeCardEditable({required this.notice, required this.onDelete});
+
+  final ClassNotice notice;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      padding: EdgeInsets.all(ui(8)),
+      decoration: BoxDecoration(
+        color: _kAnnounceBg,
+        borderRadius: BorderRadius.circular(ui(8)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (notice.highlighted) ...[
+                SizedBox(
+                  width: ui(12),
+                  height: ui(20),
+                  child: Center(
+                    child: Container(
+                      width: ui(10),
+                      height: ui(10),
+                      color: _kPurple,
+                    ),
+                  ),
+                ),
+                SizedBox(width: ui(8)),
+              ],
+              Expanded(
+                child: Text(
+                  notice.text,
+                  style: TextStyle(
+                    fontSize: ui(13),
+                    color: _kTextDark,
+                    fontFamily: 'PingFang SC',
+                    fontWeight: FontWeight.w500,
+                    height: 20 / 13,
+                  ),
+                ),
+              ),
+              SizedBox(width: ui(4)),
+              // 删除按钮：紫色透明 hover；点击弹出确认弹窗。
+              InkWell(
+                onTap: onDelete,
+                borderRadius: BorderRadius.circular(ui(10)),
+                child: Container(
+                  width: ui(20),
+                  height: ui(20),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(ui(10)),
+                  ),
+                  child: Icon(
+                    Icons.close_rounded,
+                    size: ui(14),
+                    color: _kTextSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: ui(4)),
+          Padding(
+            padding: EdgeInsets.only(left: notice.highlighted ? ui(20) : 0),
+            child: Text(
+              notice.date,
+              style: TextStyle(
+                fontSize: ui(11),
+                color: _kTextSecondary,
+                fontFamily: 'PingFang SC',
+                fontWeight: FontWeight.w400,
+                height: 12 / 11,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// —— 发布通知弹窗 ——————————————————————————————————————————————————
+
+Future<void> _showPublishNoticeDialog(
+  BuildContext context,
+  WidgetRef ref,
+) async {
+  final controller = TextEditingController();
+  final result = await showScaledDialog<String>(
+    context: context,
+    barrierColor: Colors.black.withValues(alpha: 0.80),
+    builder: (dialogContext) {
+      final ui = DashboardScaleScope.of(dialogContext).ui;
+      return GradientHeaderDialog(
+        title: '发布班级通知',
+        titleFontSize: 24,
+        titleFontWeight: FontWeight.w500,
+        titlePaddingTop: 40,
+        width: 460,
+        contentPadding: EdgeInsets.fromLTRB(ui(40), ui(40), ui(40), ui(30)),
+        actionBar: AppDialogActionBar(
+          confirmLabel: '发布',
+          cancelLabel: '取消',
+          onCancel: () => Navigator.of(dialogContext).pop(),
+          onConfirm: () =>
+              Navigator.of(dialogContext).pop(controller.text.trim()),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '本通知将同步到学生「我的班级 → 班级通知」展示位，请精炼描述。',
+              style: TextStyle(
+                fontSize: ui(13),
+                color: _kTextSecondary,
+                fontFamily: 'PingFang SC',
+                fontWeight: FontWeight.w400,
+                height: 20 / 13,
+              ),
+            ),
+            SizedBox(height: ui(15)),
+            Text(
+              '通知内容',
+              style: TextStyle(
+                fontSize: ui(14),
+                color: _kTextDark,
+                fontFamily: 'PingFang SC',
+                fontWeight: FontWeight.w500,
+                height: 20 / 14,
+              ),
+            ),
+            SizedBox(height: ui(10)),
+            Container(
+              height: ui(120),
+              padding: EdgeInsets.symmetric(
+                horizontal: ui(16),
+                vertical: ui(12),
+              ),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(ui(8)),
+                border: Border.all(color: _kBorderSoft, width: 1),
+              ),
+              child: TextField(
+                controller: controller,
+                autofocus: true,
+                maxLines: null,
+                expands: true,
+                textAlignVertical: TextAlignVertical.top,
+                style: TextStyle(
+                  fontSize: ui(14),
+                  color: _kTextDark,
+                  fontFamily: 'PingFang SC',
+                  fontWeight: FontWeight.w400,
+                  height: 20 / 14,
+                ),
+                decoration: InputDecoration(
+                  hintText: '示例：本周五16:30合唱排练，地点音乐厅A201。',
+                  hintStyle: TextStyle(
+                    fontSize: ui(14),
+                    color: _kTextHintLight,
+                    fontFamily: 'PingFang SC',
+                    fontWeight: FontWeight.w400,
+                    height: 20 / 14,
+                  ),
+                  border: InputBorder.none,
+                  isCollapsed: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+
+  if (result != null && result.isNotEmpty) {
+    ref.read(classNoticeControllerProvider.notifier).publish(text: result);
+    if (context.mounted) {
+      AppToast.show(context, '班级通知已发布（演示）');
+    }
+  }
+}
+
+// —— 删除通知确认弹窗 ——————————————————————————————————————————
+
+Future<void> _confirmDeleteNotice(
+  BuildContext context,
+  WidgetRef ref,
+  ClassNotice notice,
+) async {
+  final ok = await showScaledDialog<bool>(
+    context: context,
+    barrierColor: Colors.black.withValues(alpha: 0.80),
+    builder: (dialogContext) {
+      final ui = DashboardScaleScope.of(dialogContext).ui;
+      return GradientHeaderDialog(
+        title: '删除班级通知',
+        titleFontSize: 24,
+        titleFontWeight: FontWeight.w500,
+        titlePaddingTop: 40,
+        width: 420,
+        contentPadding: EdgeInsets.fromLTRB(ui(40), ui(30), ui(40), ui(30)),
+        actionBar: AppDialogActionBar(
+          confirmLabel: '删除',
+          cancelLabel: '取消',
+          onCancel: () => Navigator.of(dialogContext).pop(false),
+          onConfirm: () => Navigator.of(dialogContext).pop(true),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '删除后学生端「我的班级」也会同步移除该通知，操作不可撤回。',
+              style: TextStyle(
+                fontSize: ui(14),
+                color: _kTextSecondary,
+                fontFamily: 'PingFang SC',
+                fontWeight: FontWeight.w400,
+                height: 22 / 14,
+              ),
+            ),
+            SizedBox(height: ui(12)),
+            Container(
+              padding: EdgeInsets.all(ui(10)),
+              decoration: BoxDecoration(
+                color: _kAnnounceBg,
+                borderRadius: BorderRadius.circular(ui(8)),
+              ),
+              child: Text(
+                notice.text,
+                style: TextStyle(
+                  fontSize: ui(13),
+                  color: _kTextDark,
+                  fontFamily: 'PingFang SC',
+                  fontWeight: FontWeight.w500,
+                  height: 20 / 13,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+
+  if (ok == true) {
+    ref.read(classNoticeControllerProvider.notifier).remove(notice.id);
+    if (context.mounted) {
+      AppToast.show(context, '班级通知已删除（演示）');
+    }
   }
 }
 
@@ -564,11 +973,7 @@ class _TeacherInfoHeader extends StatelessWidget {
 }
 
 class _HeaderStat extends StatelessWidget {
-  const _HeaderStat({
-    required this.label,
-    required this.value,
-    this.secondary,
-  });
+  const _HeaderStat({required this.label, required this.value, this.secondary});
 
   final String label;
   final String value;
@@ -659,10 +1064,7 @@ class _TeacherInfoMeta extends StatelessWidget {
     );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        metaRow('带班：', '高三音乐实验班'),
-        metaRow('位置：', '艺术楼·合唱排练厅A201'),
-      ],
+      children: [metaRow('带班：', '高三音乐实验班'), metaRow('位置：', '艺术楼·合唱排练厅A201')],
     );
   }
 }
@@ -849,7 +1251,9 @@ class _QuickActionGrid extends StatelessWidget {
               children: [
                 for (var col = 0; col < 3; col++) ...[
                   if (col > 0) SizedBox(width: ui(8)),
-                  Expanded(child: _QuickActionTile(data: _items[row * 3 + col])),
+                  Expanded(
+                    child: _QuickActionTile(data: _items[row * 3 + col]),
+                  ),
                 ],
               ],
             ),
@@ -916,7 +1320,15 @@ class _AttendanceBarCard extends StatelessWidget {
   const _AttendanceBarCard();
 
   static const List<int> _values = [92, 92, 92, 92, 92, 92, 92];
-  static const List<String> _labels = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+  static const List<String> _labels = [
+    '周一',
+    '周二',
+    '周三',
+    '周四',
+    '周五',
+    '周六',
+    '周日',
+  ];
   static const List<int> _ticks = [100, 95, 90, 85, 80, 0];
 
   @override
@@ -1043,10 +1455,7 @@ class _BarsRow extends StatelessWidget {
                         gradient: LinearGradient(
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
-                          colors: [
-                            _kPurpleSoft,
-                            Color(0x66A773FF),
-                          ],
+                          colors: [_kPurpleSoft, Color(0x66A773FF)],
                         ),
                         borderRadius: BorderRadius.only(
                           topLeft: Radius.circular(8),
@@ -1596,9 +2005,7 @@ class _StudentsTabState extends State<_StudentsTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _StudentsHeader(
-          onQueryChanged: (v) => setState(() => _query = v),
-        ),
+        _StudentsHeader(onQueryChanged: (v) => setState(() => _query = v)),
         SizedBox(height: ui(16)),
         LayoutBuilder(
           builder: (context, c) {
@@ -1694,10 +2101,7 @@ class _StudentsHeader extends StatelessWidget {
                       contentPadding: EdgeInsets.zero,
                       border: InputBorder.none,
                     ),
-                    style: TextStyle(
-                      fontSize: ui(14),
-                      color: _kTextSection,
-                    ),
+                    style: TextStyle(fontSize: ui(14), color: _kTextSection),
                   ),
                 ),
               ],
@@ -1865,148 +2269,151 @@ class _StudentManageCard extends StatelessWidget {
           child: Stack(
             clipBehavior: Clip.hardEdge,
             children: [
-          Padding(
-            padding: EdgeInsets.all(ui(12)),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // 头像 + 姓名 + 性别 icon + 职务
-                Row(
+              Padding(
+                padding: EdgeInsets.all(ui(12)),
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(
-                      width: ui(40),
-                      height: ui(40),
-                      decoration: BoxDecoration(
-                        color: _kPurpleSoft,
-                        borderRadius: BorderRadius.circular(ui(8)),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        data.name.characters.first,
-                        style: TextStyle(
-                          fontSize: ui(15),
-                          color: Colors.white,
-                          fontWeight: FontWeight.w500,
-                          height: 1,
+                    // 头像 + 姓名 + 性别 icon + 职务
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: ui(40),
+                          height: ui(40),
+                          decoration: BoxDecoration(
+                            color: _kPurpleSoft,
+                            borderRadius: BorderRadius.circular(ui(8)),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            data.name.characters.first,
+                            style: TextStyle(
+                              fontSize: ui(15),
+                              color: Colors.white,
+                              fontWeight: FontWeight.w500,
+                              height: 1,
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                    SizedBox(width: ui(8)),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Row(
+                        SizedBox(width: ui(8)),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
                             children: [
+                              Row(
+                                children: [
+                                  Text(
+                                    data.name,
+                                    style: TextStyle(
+                                      fontSize: ui(14),
+                                      color: _kTextDark,
+                                      fontWeight: FontWeight.w500,
+                                      height: 1,
+                                    ),
+                                  ),
+                                  SizedBox(width: ui(4)),
+                                  Icon(
+                                    data.gender == '男'
+                                        ? Icons.male_rounded
+                                        : Icons.female_rounded,
+                                    size: ui(14),
+                                    color: data.gender == '男'
+                                        ? _kBlue
+                                        : _kPurple,
+                                  ),
+                                  if (data.role != null) ...[
+                                    SizedBox(width: ui(8)),
+                                    Text(
+                                      data.role!,
+                                      style: TextStyle(
+                                        fontSize: ui(12),
+                                        color: _kPurple,
+                                        fontWeight: FontWeight.w400,
+                                        height: 1,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              SizedBox(height: ui(6)),
                               Text(
-                                data.name,
+                                data.dorm,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
-                                  fontSize: ui(14),
+                                  fontSize: ui(12),
                                   color: _kTextDark,
-                                  fontWeight: FontWeight.w500,
+                                  fontWeight: FontWeight.w400,
                                   height: 1,
                                 ),
                               ),
-                              SizedBox(width: ui(4)),
-                              Icon(
-                                data.gender == '男'
-                                    ? Icons.male_rounded
-                                    : Icons.female_rounded,
-                                size: ui(14),
-                                color: data.gender == '男'
-                                    ? _kBlue
-                                    : _kPurple,
-                              ),
-                              if (data.role != null) ...[
-                                SizedBox(width: ui(8)),
-                                Text(
-                                  data.role!,
-                                  style: TextStyle(
-                                    fontSize: ui(12),
-                                    color: _kPurple,
-                                    fontWeight: FontWeight.w400,
-                                    height: 1,
-                                  ),
+                              SizedBox(height: ui(6)),
+                              Text(
+                                data.studentId,
+                                style: TextStyle(
+                                  fontSize: ui(12),
+                                  color: _kTextHint,
+                                  fontWeight: FontWeight.w400,
+                                  height: 1,
                                 ),
-                              ],
+                              ),
                             ],
                           ),
-                          SizedBox(height: ui(6)),
-                          Text(
-                            data.dorm,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: ui(12),
-                              color: _kTextDark,
-                              fontWeight: FontWeight.w400,
-                              height: 1,
-                            ),
-                          ),
-                          SizedBox(height: ui(6)),
-                          Text(
-                            data.studentId,
-                            style: TextStyle(
-                              fontSize: ui(12),
-                              color: _kTextHint,
-                              fontWeight: FontWeight.w400,
-                              height: 1,
-                            ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: ui(12)),
+                    // 电话信息
+                    Container(
+                      padding: EdgeInsets.symmetric(vertical: ui(12)),
+                      decoration: BoxDecoration(
+                        color: _kInnerGray,
+                        borderRadius: BorderRadius.circular(ui(8)),
+                      ),
+                      child: Row(
+                        children: [
+                          _phoneCell('本人电话', data.phone),
+                          _phoneCell(
+                            '家长${data.parentName}电话',
+                            data.parentPhone,
                           ),
                         ],
                       ),
                     ),
                   ],
                 ),
-                SizedBox(height: ui(12)),
-                // 电话信息
-                Container(
-                  padding: EdgeInsets.symmetric(vertical: ui(12)),
-                  decoration: BoxDecoration(
-                    color: _kInnerGray,
-                    borderRadius: BorderRadius.circular(ui(8)),
-                  ),
-                  child: Row(
-                    children: [
-                      _phoneCell('本人电话', data.phone),
-                      _phoneCell('家长${data.parentName}电话', data.parentPhone),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // 右上角标签
-          if (data.tag != null)
-            Positioned(
-              right: 0,
-              top: 0,
-              child: ClipRRect(
-                borderRadius: BorderRadius.only(
-                  topRight: Radius.circular(ui(12)),
-                  bottomLeft: Radius.circular(ui(12)),
-                ),
-                child: Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: ui(12),
-                    vertical: ui(3),
-                  ),
-                  color: data.tagColor ?? _kPurple,
-                  child: Text(
-                    data.tag!,
-                    style: TextStyle(
-                      fontSize: ui(12),
-                      color: data.tagTextColor ?? Colors.white,
-                      fontWeight: FontWeight.w400,
-                      height: 1,
+              ),
+              // 右上角标签
+              if (data.tag != null)
+                Positioned(
+                  right: 0,
+                  top: 0,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.only(
+                      topRight: Radius.circular(ui(12)),
+                      bottomLeft: Radius.circular(ui(12)),
+                    ),
+                    child: Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: ui(12),
+                        vertical: ui(3),
+                      ),
+                      color: data.tagColor ?? _kPurple,
+                      child: Text(
+                        data.tag!,
+                        style: TextStyle(
+                          fontSize: ui(12),
+                          color: data.tagTextColor ?? Colors.white,
+                          fontWeight: FontWeight.w400,
+                          height: 1,
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ),
             ],
           ),
         ),
@@ -2154,10 +2561,7 @@ class _GradesLineChartCard extends StatelessWidget {
               const Spacer(),
               for (var i = 0; i < _seriesLabels.length; i++) ...[
                 if (i > 0) SizedBox(width: ui(20)),
-                _LegendItem(
-                  color: _seriesColors[i],
-                  label: _seriesLabels[i],
-                ),
+                _LegendItem(color: _seriesColors[i], label: _seriesLabels[i]),
               ],
             ],
           ),
@@ -2478,9 +2882,7 @@ class _ExamSessionChip extends StatelessWidget {
         decoration: BoxDecoration(
           color: selected ? const Color(0xFFF4F4FF) : _kInnerGray,
           borderRadius: BorderRadius.circular(ui(8)),
-          border: selected
-              ? Border.all(color: _kPurpleSoft, width: 1)
-              : null,
+          border: selected ? Border.all(color: _kPurpleSoft, width: 1) : null,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2624,11 +3026,7 @@ class _ExamScoreCard extends StatelessWidget {
                 ),
               ),
               // 「详情 >」固定在右上角，与头像顶端对齐
-              Positioned(
-                right: 0,
-                top: ui(2),
-                child: _DetailLink(),
-              ),
+              Positioned(right: 0, top: ui(2), child: _DetailLink()),
             ],
           ),
           SizedBox(height: ui(8)),
@@ -2759,11 +3157,7 @@ class _DetailLink extends StatelessWidget {
             height: 1,
           ),
         ),
-        Icon(
-          Icons.chevron_right_rounded,
-          size: ui(16),
-          color: _kBlue,
-        ),
+        Icon(Icons.chevron_right_rounded, size: ui(16), color: _kBlue),
       ],
     );
   }
@@ -2785,12 +3179,42 @@ class _ScoreChangeItem {
 }
 
 const List<_ScoreChangeItem> _kScoreChanges = [
-  _ScoreChangeItem(name: '李铮辉', studentId: 'G3030201', recentScore: 86, delta: '+2'),
-  _ScoreChangeItem(name: '李铮辉', studentId: 'G3030201', recentScore: 86, delta: '+2'),
-  _ScoreChangeItem(name: '李铮辉', studentId: 'G3030201', recentScore: 86, delta: '+2'),
-  _ScoreChangeItem(name: '李铮辉', studentId: 'G3030201', recentScore: 86, delta: '+2'),
-  _ScoreChangeItem(name: '李铮辉', studentId: 'G3030201', recentScore: 86, delta: '+2'),
-  _ScoreChangeItem(name: '李铮辉', studentId: 'G3030201', recentScore: 86, delta: '+2'),
+  _ScoreChangeItem(
+    name: '李铮辉',
+    studentId: 'G3030201',
+    recentScore: 86,
+    delta: '+2',
+  ),
+  _ScoreChangeItem(
+    name: '李铮辉',
+    studentId: 'G3030201',
+    recentScore: 86,
+    delta: '+2',
+  ),
+  _ScoreChangeItem(
+    name: '李铮辉',
+    studentId: 'G3030201',
+    recentScore: 86,
+    delta: '+2',
+  ),
+  _ScoreChangeItem(
+    name: '李铮辉',
+    studentId: 'G3030201',
+    recentScore: 86,
+    delta: '+2',
+  ),
+  _ScoreChangeItem(
+    name: '李铮辉',
+    studentId: 'G3030201',
+    recentScore: 86,
+    delta: '+2',
+  ),
+  _ScoreChangeItem(
+    name: '李铮辉',
+    studentId: 'G3030201',
+    recentScore: 86,
+    delta: '+2',
+  ),
 ];
 
 class _GradesScoreChangeCard extends StatelessWidget {
@@ -2952,9 +3376,7 @@ class _ScoreChangeCard extends StatelessWidget {
                       item.delta,
                       style: TextStyle(
                         fontSize: ui(20),
-                        color: item.delta.startsWith('-')
-                            ? _kRed
-                            : _kTextDark,
+                        color: item.delta.startsWith('-') ? _kRed : _kTextDark,
                         fontWeight: FontWeight.w600,
                         fontFamily: 'Barlow',
                         height: 1,
@@ -2975,10 +3397,7 @@ class _ScoreChangeCard extends StatelessWidget {
 // 学生档案详情面板（点击学生卡时从右侧滑出，20% 黑底蒙层覆盖左侧）
 // =============================================================================
 
-Future<void> _showStudentDetail(
-  BuildContext context,
-  _StudentManageData data,
-) {
+Future<void> _showStudentDetail(BuildContext context, _StudentManageData data) {
   // showGeneralDialog 会把内容挂到根 Navigator 的 overlay 上，那条 widget 树
   // 里没有 DashboardScaleScope；这里先把当前 scale 数据捕获下来，进 dialog
   // 后再用一个新的 DashboardScaleScope 包一层，保证面板里的 ui(...) 仍然可用。
@@ -3208,10 +3627,7 @@ class _StudentDetailPanelState extends State<_StudentDetailPanel> {
                           SizedBox(height: ui(8)),
                           _DetailFieldRow(
                             children: [
-                              const _DetailField(
-                                label: '监护人二：',
-                                value: '苏西坡',
-                              ),
+                              const _DetailField(label: '监护人二：', value: '苏西坡'),
                               const _DetailField(label: '关系：', value: '父女'),
                               _DetailField(
                                 label: '手机：',
@@ -3227,10 +3643,7 @@ class _StudentDetailPanelState extends State<_StudentDetailPanel> {
                           SizedBox(height: ui(8)),
                           _DetailFieldRow(
                             children: [
-                              const _DetailField(
-                                label: '紧急联系人：',
-                                value: '苏西坡',
-                              ),
+                              const _DetailField(label: '紧急联系人：', value: '苏西坡'),
                               const _DetailField(
                                 label: '',
                                 value: '',
@@ -3322,10 +3735,7 @@ class _StudentDetailPanelState extends State<_StudentDetailPanel> {
                               selected: i == _selectedTagIdx,
                               onTap: () => setState(() => _selectedTagIdx = i),
                             ),
-                          const _TeacherTagChip(
-                            text: '新建标签',
-                            outlined: true,
-                          ),
+                          const _TeacherTagChip(text: '新建标签', outlined: true),
                         ],
                       ),
                       SizedBox(height: ui(20)),

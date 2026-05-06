@@ -225,7 +225,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             imagePath: 'assets/images/schoolA/6.png',
           ),
           SmartCampusQuickActionData(
-            label: '校园',
+            label: '校圈',
             icon: Icons.apartment_rounded,
             background: _blueSoft,
             foreground: _blue,
@@ -379,7 +379,11 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
           SmartCampusStatCardData(label: '待签课', value: '86.5'),
           SmartCampusStatCardData(label: '未读消息', value: '4', highlight: true),
           SmartCampusStatCardData(label: '本周课时', value: '周五'),
-          SmartCampusStatCardData(label: '下一节', value: '15:30', highlight: true),
+          SmartCampusStatCardData(
+            label: '下一节',
+            value: '15:30',
+            highlight: true,
+          ),
         ],
         actions: const [
           SmartCampusQuickActionData(
@@ -998,7 +1002,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
         roleScopeSections: const [
           SmartCampusRoleScopeSectionData(
             title: '核心场景',
-            items: ['课表', '作业', '成绩', '课堂签到', '请假与补课', '查寝管理', '校园', '群聊'],
+            items: ['课表', '作业', '成绩', '课堂签到', '请假与补课', '查寝管理', '校圈', '群聊'],
           ),
           SmartCampusRoleScopeSectionData(
             title: '管理端',

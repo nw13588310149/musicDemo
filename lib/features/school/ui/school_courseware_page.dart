@@ -1,7 +1,5 @@
 import 'dart:math' as math;
 
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:carousel_slider/carousel_slider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -9,8 +7,9 @@ import '../../../app/router/route_paths.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/network/media_url.dart';
 import '../../../core/widgets/app_asset_graphic.dart';
+import '../../../core/widgets/seamless_banner_carousel.dart';
 import '../../home/state/home_dashboard_controller.dart';
-import '../../home/state/home_dashboard_state.dart';
+import '../../shell/ui/shell_layout.dart';
 import '../state/school_page_controller.dart';
 import '../state/school_page_state.dart';
 
@@ -54,61 +53,65 @@ class _SchoolView extends StatelessWidget {
                     // 固定参数
                     const rightW = 307.0;
                     const gap = 16.0;
-                    // 快捷按钮卡高度：20顶padding + 44图标 + 6间距 + 14文字 + 20底padding
-                    const actionBoardH = 104.0;
+
+                    // ── Right panel 固定 520（按 Figma 学习进度面板设计高度） ─
+                    // 内部布局: 16(top) + 18(标题) + 12(gap) + 146(card) + 8 +
+                    //          146 + 8 + 146 + 16(bottom) = 516 ≈ 520。
+                    // 左列与右栏底部严格对齐，故强制 leftH = 520。
+                    const leftH = 520.0;
 
                     final leftW = math.max(0.0, bc.maxWidth - gap - rightW);
 
-                    // Banner 高度（647:190 比例）
+                    // Banner 高度（647:190 比例）—— 保持响应式比例不变。
                     final bannerH = leftW * 190.0 / 647.0;
 
-                    // 声乐/器乐：每张卡宽 = (leftW - 中间 16) / 2，高 = 宽 × 121/315
+                    // 声乐/器乐：每张卡宽 = (leftW - 16) / 2，高 = 宽 × 121/315
+                    // —— 保持响应式比例不变。
                     final voiceCardW = math.max(0.0, (leftW - gap) / 2.0);
                     final voiceH = voiceCardW * 121.0 / 315.0;
-
-                    // 左列总高 = banner + 16 + actions + 16 + voice
-                    final leftH =
-                        bannerH + gap + actionBoardH + gap + voiceH;
 
                     return Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Left column — 固定宽度确保比例计算正确
+                        // Left column — 固定高度 520，与右栏严格对齐底部。
+                        // Banner / Voice 维持各自 Figma 比例，剩余空间全部
+                        // 给快捷按钮区域（用 Expanded 自动吸收）。
                         SizedBox(
                           width: leftW,
+                          height: leftH,
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // Banner 647:190
                               SizedBox(
                                 height: bannerH,
                                 child: _HeroBanner(height: bannerH),
                               ),
                               const SizedBox(height: gap),
-                              // Quick actions (高度与 actionBoardH 一致)
-                              SizedBox(
-                                height: actionBoardH,
+                              // 快捷按钮：高度 = leftH - banner - voice - 2*gap
+                              // —— 由 Expanded 自动撑开。
+                              Expanded(
                                 child: _QuickActionsBoard(
                                   actions: actions,
                                   schoolId: state.schoolId,
                                 ),
                               ),
                               const SizedBox(height: gap),
-                              // 声乐 / 器乐：Expanded 均分宽度，AspectRatio 推算高度，间距 16px
-                              _VoiceInstrumentRow(
-                                schoolId: state.schoolId,
+                              // 声乐 / 器乐：紧贴底部，与右栏底部对齐。
+                              SizedBox(
+                                height: voiceH,
+                                child: _VoiceInstrumentRow(
+                                  schoolId: state.schoolId,
+                                ),
                               ),
                             ],
                           ),
                         ),
                         const SizedBox(width: gap),
-                        // Right panel — height 精确 = 左列总高，底部对齐
+                        // Right panel — 固定 520 严格还原 Figma 学习进度面板。
                         SizedBox(
                           width: rightW,
                           height: leftH,
-                          child: _LearningProgressPanel(
-                            items: learningItems,
-                          ),
+                          child: _LearningProgressPanel(items: learningItems),
                         ),
                       ],
                     );
@@ -116,7 +119,8 @@ class _SchoolView extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 // ── 校园资讯 section ──────────────────────────────────────
-                _SectionTitleBar(
+                // 与首页"最新"区域保持一致：使用 Shell 共享的标题栏 + 同款资讯卡。
+                ShellSectionTitleBar(
                   title: '校园资讯',
                   onMoreTap: () =>
                       Navigator.pushNamed(context, RoutePaths.consultation),
@@ -245,7 +249,8 @@ class _SchoolView extends StatelessWidget {
 
 // ── Hero Banner ───────────────────────────────────────────────────────────────
 /// 校园页轮播 Banner。
-/// 暂时复用首页的 [homeDashboardControllerProvider] 接口，后续替换为校园专属接口。
+/// 与首页 `_buildBanner` 保持完全一致：使用通用的 [SeamlessBannerCarousel]，
+/// 指示器位置/尺寸与首页严格对齐（right:36, bottom:20, active 21×4，opacity 0.85/1）。
 class _HeroBanner extends ConsumerStatefulWidget {
   const _HeroBanner({required this.height});
 
@@ -256,98 +261,52 @@ class _HeroBanner extends ConsumerStatefulWidget {
 }
 
 class _HeroBannerState extends ConsumerState<_HeroBanner> {
-  int _currentIndex = 0;
-
-  List<String> _resolveImages(List<HomeBannerItem> items) {
-    return items
-        .map((e) => MediaUrl.resolve(e.imageUrl))
-        .where((url) => url.isNotEmpty)
-        .toList();
-  }
+  int _bannerIndex = 0;
 
   @override
   Widget build(BuildContext context) {
-    final bannerItems =
-        ref.watch(homeDashboardControllerProvider).bannerItems;
-    final images = _resolveImages(bannerItems);
+    final bannerItems = ref.watch(homeDashboardControllerProvider).bannerItems;
+    final images = bannerItems
+        .map((e) => MediaUrl.resolve(e.imageUrl))
+        .where((url) => url.isNotEmpty)
+        .toList();
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
       child: Stack(
         children: [
-          // 深色兜底，避免图片切换时白屏
-          const Positioned.fill(child: ColoredBox(color: Color(0xFF2D1C77))),
-          if (images.isEmpty)
-            // 无数据时显示原有静态背景
-            Positioned.fill(
-              child: Stack(
-                children: [
-                  Positioned(
-                    left: -37,
-                    top: -119,
-                    child: AppAssetGraphic(
-                      AppAssets.homeV2BannerGlow,
-                      width: 263,
-                      height: 318,
-                      fit: BoxFit.contain,
-                    ),
-                  ),
-                  Positioned(
-                    right: 48,
-                    top: -30,
-                    child: AppAssetGraphic(
-                      AppAssets.homeV2BannerGuitar,
-                      width: 373,
-                      height: 251,
-                      fit: BoxFit.contain,
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else
-            Positioned.fill(
-              child: CarouselSlider.builder(
-                itemCount: images.length,
-                itemBuilder: (context, index, _) =>
-                    _BannerSlide(url: images[index]),
-                options: CarouselOptions(
-                  height: widget.height,
-                  viewportFraction: 1.0,
-                  enableInfiniteScroll: images.length > 1,
-                  autoPlay: images.length > 1,
-                  autoPlayInterval: const Duration(seconds: 4),
-                  autoPlayAnimationDuration:
-                      const Duration(milliseconds: 420),
-                  autoPlayCurve: Curves.easeInOutCubic,
-                  scrollPhysics: const ClampingScrollPhysics(),
-                  onPageChanged: (index, _) {
-                    if (!mounted) return;
-                    setState(() => _currentIndex = index);
-                  },
-                ),
-              ),
+          const Positioned.fill(child: ColoredBox(color: Color(0xFFF5F6FA))),
+          Positioned.fill(
+            child: SeamlessBannerCarousel(
+              imageUrls: images,
+              placeholder: const ColoredBox(color: Color(0xFFF5F6FA)),
+              empty: Container(color: const Color(0xFFF5F6FA)),
+              animationDuration: const Duration(milliseconds: 420),
+              animationCurve: Curves.easeInOutCubic,
+              onPageChanged: (index) {
+                if (!mounted || _bannerIndex == index) return;
+                setState(() => _bannerIndex = index);
+              },
             ),
-          // 分页指示器
+          ),
           Positioned(
-            right: 20,
-            bottom: 14,
+            right: 36,
+            bottom: 20,
             child: Row(
-              children: List.generate(
-                images.isEmpty ? 3 : images.length,
-                (index) {
-                  final active = images.isEmpty
-                      ? index == 0
-                      : index == _currentIndex;
-                  return Padding(
-                    padding: EdgeInsets.only(left: index == 0 ? 0 : 4),
-                    child: _BannerDot(
-                      width: active ? 20 : 4,
-                      opacity: active ? 1.0 : 0.6,
-                    ),
-                  );
-                },
-              ),
+              children: List.generate(images.isEmpty ? 3 : images.length, (
+                index,
+              ) {
+                final active = images.isEmpty
+                    ? index == 0
+                    : index == _bannerIndex;
+                return Padding(
+                  padding: EdgeInsets.only(left: index == 0 ? 0 : 4),
+                  child: _SchoolBannerIndicator(
+                    width: active ? 21 : 4,
+                    opacity: active ? 1 : 0.85,
+                  ),
+                );
+              }),
             ),
           ),
         ],
@@ -356,39 +315,8 @@ class _HeroBannerState extends ConsumerState<_HeroBanner> {
   }
 }
 
-class _BannerSlide extends StatelessWidget {
-  const _BannerSlide({required this.url});
-
-  final String url;
-
-  @override
-  Widget build(BuildContext context) {
-    if (!url.startsWith('http')) {
-      return Image.asset(
-        url,
-        width: double.infinity,
-        height: double.infinity,
-        fit: BoxFit.cover,
-        filterQuality: FilterQuality.high,
-        gaplessPlayback: true,
-      );
-    }
-    return CachedNetworkImage(
-      imageUrl: url,
-      width: double.infinity,
-      height: double.infinity,
-      fit: BoxFit.cover,
-      filterQuality: FilterQuality.high,
-      fadeInDuration: const Duration(milliseconds: 220),
-      fadeOutDuration: Duration.zero,
-      placeholder: (_, _) => const SizedBox.shrink(),
-      errorWidget: (_, _, _) => const SizedBox.shrink(),
-    );
-  }
-}
-
-class _BannerDot extends StatelessWidget {
-  const _BannerDot({required this.width, required this.opacity});
+class _SchoolBannerIndicator extends StatelessWidget {
+  const _SchoolBannerIndicator({required this.width, this.opacity = 1});
 
   final double width;
   final double opacity;
@@ -501,7 +429,9 @@ class _QuickActionItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const iconSlotSize = 44.0;
-    final iconVisualSize = action.route == RoutePaths.videoTutorial ? 36.0 : 44.0;
+    final iconVisualSize = action.route == RoutePaths.videoTutorial
+        ? 36.0
+        : 44.0;
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
@@ -596,9 +526,7 @@ class _VoiceInstrumentRow extends StatelessWidget {
   ///   - 移除 firstMenu/secondMenu（这里不传即等价于"清空"）
   ///   - 带上 school 标记，让 voice/instrumental 二级页走 schoolTextbookList 接口
   void _go(BuildContext context, String route) {
-    final args = <String, dynamic>{
-      'school': schoolId > 0 ? schoolId : true,
-    };
+    final args = <String, dynamic>{'school': schoolId > 0 ? schoolId : true};
     Navigator.pushNamed(context, route, arguments: args);
   }
 }
@@ -629,10 +557,7 @@ class _FeatureCard extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            Image.asset(
-              bgAsset,
-              alignment: Alignment.center,
-            ),
+            Image.asset(bgAsset, alignment: Alignment.center),
             Padding(
               padding: const EdgeInsets.only(left: 24),
               child: Column(
@@ -669,10 +594,7 @@ class _FeatureCard extends StatelessWidget {
                 child: SizedBox(
                   width: 81.1,
                   height: 87.3,
-                  child: Image.asset(
-                    iconAsset,
-                    alignment: Alignment.center,
-                  ),
+                  child: Image.asset(iconAsset, alignment: Alignment.center),
                 ),
               ),
             ),
@@ -780,13 +702,13 @@ class _ProgressCard extends StatelessWidget {
             ],
           ),
           const Spacer(),
-          // Stats row
+          // Stats row —— Figma 中三组 _Stat 在卡内（283 宽，左右 16 padding）
+          // 平铺，故使用 spaceBetween 严格均分剩余空间。
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _Stat(value: meta.totalHours, label: '总共'),
-              const SizedBox(width: 32),
               _Stat(value: meta.completedHours, label: '已上'),
-              const SizedBox(width: 32),
               _Stat(value: meta.remainingHours, label: '剩余'),
             ],
           ),
@@ -794,11 +716,13 @@ class _ProgressCard extends StatelessWidget {
           // Progress bar row
           Row(
             children: [
+              // Figma: 10/500/PingFang SC/#B6B5BB（之前 w400 错位）
               const Text(
                 '课程进度',
                 style: TextStyle(
                   fontSize: 10,
                   color: Color(0xFFB6B5BB),
+                  fontWeight: FontWeight.w500,
                   fontFamily: 'PingFang SC',
                   height: 1,
                 ),
@@ -808,12 +732,17 @@ class _ProgressCard extends StatelessWidget {
                 child: LayoutBuilder(
                   builder: (context, bc) {
                     final trackW = bc.maxWidth;
-                    final fillW = math.max(
-                      20.0,
-                      trackW * meta.progress / 100,
+                    final fillW = (trackW * meta.progress / 100).clamp(
+                      0.0,
+                      trackW,
                     );
-                    final chipW = 31.0;
-                    final chipLeft = math.max(0.0, fillW - chipW / 2 - 2);
+                    const chipW = 31.0;
+                    // 气泡中心贴齐 fill 终点；100% 时 clamp 防止溢出 track。
+                    final chipCenter = fillW;
+                    final chipLeft = (chipCenter - chipW / 2).clamp(
+                      0.0,
+                      trackW - chipW,
+                    );
 
                     return SizedBox(
                       height: 16,
@@ -821,7 +750,7 @@ class _ProgressCard extends StatelessWidget {
                         clipBehavior: Clip.none,
                         alignment: Alignment.centerLeft,
                         children: [
-                          // Track (full width, no dot reserve)
+                          // Track（背景 196×8，#F0EBFA，radius 23）
                           Positioned.fill(
                             top: 4,
                             bottom: 4,
@@ -832,7 +761,7 @@ class _ProgressCard extends StatelessWidget {
                               ),
                             ),
                           ),
-                          // Fill
+                          // Fill（按 progress% 比例填充，gradient）
                           Positioned(
                             left: 0,
                             top: 4,
@@ -850,7 +779,7 @@ class _ProgressCard extends StatelessWidget {
                               ),
                             ),
                           ),
-                          // Percentage chip
+                          // Percentage chip：31×15、chipColor、white 1px outline、radius 7.5
                           Positioned(
                             left: chipLeft,
                             top: 0,
@@ -859,7 +788,7 @@ class _ProgressCard extends StatelessWidget {
                               height: 15,
                               alignment: Alignment.center,
                               decoration: BoxDecoration(
-                                color: meta.gradientEnd,
+                                color: meta.chipColor,
                                 borderRadius: BorderRadius.circular(7.5),
                                 border: Border.all(
                                   color: Colors.white,
@@ -903,8 +832,11 @@ class _Stat extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // 数字（18/600/Barlow）与"课时"（10/400/PingFang）按字母基线对齐，
+        // 避免之前用 padding-bottom:2 手工垫高造成的像素偏移。
         Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
           children: [
             Text(
               '$value',
@@ -917,16 +849,14 @@ class _Stat extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 2),
-            const Padding(
-              padding: EdgeInsets.only(bottom: 2),
-              child: Text(
-                '课时',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: Color(0xFFCECED1),
-                  fontFamily: 'PingFang SC',
-                  height: 1,
-                ),
+            const Text(
+              '课时',
+              style: TextStyle(
+                fontSize: 10,
+                color: Color(0xFFCECED1),
+                fontFamily: 'PingFang SC',
+                fontWeight: FontWeight.w400,
+                height: 1,
               ),
             ),
           ],
@@ -940,51 +870,6 @@ class _Stat extends StatelessWidget {
             fontWeight: FontWeight.w500,
             fontFamily: 'PingFang SC',
             height: 1,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ── Section title bar ─────────────────────────────────────────────────────────
-class _SectionTitleBar extends StatelessWidget {
-  const _SectionTitleBar({required this.title, required this.onMoreTap});
-
-  final String title;
-  final VoidCallback onMoreTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 20,
-            color: Color(0xFF1A1A1A),
-            fontWeight: FontWeight.w500,
-            fontFamily: 'PingFang SC',
-            height: 1,
-          ),
-        ),
-        const Spacer(),
-        GestureDetector(
-          onTap: onMoreTap,
-          child: const Row(
-            children: [
-              Text(
-                '更多',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Color(0xFFB6B5BB),
-                  fontFamily: 'PingFang SC',
-                  height: 1,
-                ),
-              ),
-              SizedBox(width: 4),
-              Icon(Icons.chevron_right_rounded, size: 16, color: Color(0xFFB6B5BB)),
-            ],
           ),
         ),
       ],
@@ -1016,6 +901,8 @@ class _NewsGrid extends StatelessWidget {
   }
 }
 
+/// 校园资讯卡片：与首页"最新"区域的资讯卡完全一致的视觉规格
+/// （字号 / 颜色 / line-height / 元素绝对定位），仅数据来源换为 SchoolNewsItem。
 class _NewsCard extends StatelessWidget {
   const _NewsCard({required this.item});
 
@@ -1024,6 +911,7 @@ class _NewsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tags = item.tags.take(3).toList();
+
     return GestureDetector(
       onTap: () => Navigator.pushNamed(
         context,
@@ -1032,6 +920,7 @@ class _NewsCard extends StatelessWidget {
       ),
       child: RepaintBoundary(
         child: Container(
+          height: 138,
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
             color: Colors.white,
@@ -1039,79 +928,57 @@ class _NewsCard extends StatelessWidget {
           ),
           child: Stack(
             children: [
-              // NEW badge
-              Positioned(
-                left: 16,
-                top: 17,
-                child: Container(
-                  height: 17,
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFA773FF),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: const Text(
-                    'NEW',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                      fontFamily: 'Gilroy',
-                      height: 1,
-                    ),
-                  ),
-                ),
-              ),
-              // Title
+              const Positioned(left: 16, top: 17.5, child: _SchoolNewsBadge()),
+              // 主标题：16/500/#0B081A，line-height 1.375
               Positioned(
                 left: 55,
                 top: 15,
-                right: 12,
+                right: 14,
                 child: Text(
                   item.shortTitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 14,
+                    fontSize: 16,
                     color: Color(0xFF0B081A),
                     fontWeight: FontWeight.w500,
                     fontFamily: 'PingFang SC',
-                    height: 1.4,
+                    height: 1.375,
                   ),
                 ),
               ),
-              // Subtitle
+              // 副标题：14/400/#6D6B75，line-height 1.43
               Positioned(
                 left: 16,
-                top: 44,
+                top: 44.5,
                 right: 16,
                 child: Text(
                   item.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF788698),
+                    fontSize: 14,
+                    color: Color(0xFF6D6B75),
                     fontFamily: 'PingFang SC',
-                    height: 1.4,
+                    fontWeight: FontWeight.w400,
+                    height: 1.43,
                   ),
                 ),
               ),
-              // Tags
+              // 标签行：9.52/400/#6D6B75，背景 #F4F4FF，圆角 4
               Positioned(
                 left: 16,
-                top: 72,
+                top: 72.5,
                 right: 16,
                 height: 18,
                 child: Row(
                   children: [
-                    for (var i = 0; i < tags.length; i++) ...[
+                    for (int i = 0; i < tags.length; i++) ...[
                       if (i > 0) const SizedBox(width: 4),
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 6,
-                          vertical: 2,
+                          vertical: 3,
                         ),
                         decoration: BoxDecoration(
                           color: const Color(0xFFF4F4FF),
@@ -1120,10 +987,11 @@ class _NewsCard extends StatelessWidget {
                         child: Text(
                           tags[i],
                           style: const TextStyle(
-                            fontSize: 9,
-                            color: Color(0xFF788698),
+                            fontSize: 9.52,
+                            color: Color(0xFF6D6B75),
+                            fontWeight: FontWeight.w400,
+                            height: 11.43 / 9.52,
                             fontFamily: 'PingFang SC',
-                            height: 1.2,
                           ),
                         ),
                       ),
@@ -1131,17 +999,21 @@ class _NewsCard extends StatelessWidget {
                   ],
                 ),
               ),
-              // Time
+              // 时间：11/400/#788698，opacity 0.8，line-height 1.36
               Positioned(
                 left: 16,
-                top: 102,
-                child: Text(
-                  _formatTime(item.createTime),
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Color(0xFF788698),
-                    fontFamily: 'PingFang SC',
-                    height: 1.4,
+                top: 110.5,
+                child: Opacity(
+                  opacity: 0.8,
+                  child: Text(
+                    _formatTime(item.createTime),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Color(0xFF788698),
+                      fontFamily: 'PingFang SC',
+                      fontWeight: FontWeight.w400,
+                      height: 1.36,
+                    ),
                   ),
                 ),
               ),
@@ -1165,6 +1037,34 @@ class _NewsCard extends StatelessWidget {
   }
 }
 
+/// 与首页 _NewsBadge 视觉一致的 NEW 标签：紫色背景 + Gilroy 12/500 白字。
+class _SchoolNewsBadge extends StatelessWidget {
+  const _SchoolNewsBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 17,
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: const Color(0xFFA773FF),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: const Text(
+        'NEW',
+        style: TextStyle(
+          fontSize: 12,
+          color: Colors.white,
+          height: 1,
+          fontWeight: FontWeight.w500,
+          fontFamily: 'Gilroy',
+        ),
+      ),
+    );
+  }
+}
+
 // ── Progress meta ─────────────────────────────────────────────────────────────
 class _ProgressMeta {
   const _ProgressMeta({
@@ -1174,6 +1074,7 @@ class _ProgressMeta {
     required this.progress,
     required this.gradientStart,
     required this.gradientEnd,
+    required this.chipColor,
     this.tip = '',
   });
 
@@ -1183,6 +1084,9 @@ class _ProgressMeta {
   final double progress;
   final Color gradientStart;
   final Color gradientEnd;
+  // Figma 中进度气泡颜色不等同 gradientEnd —— 听写 #B991FF / 视唱 #20E7C0 /
+  // 乐理 #FF7699，单独维护一个字段以便严格还原。
+  final Color chipColor;
   final String tip;
 
   factory _ProgressMeta.fromText(String text, int apiValue) {
@@ -1194,7 +1098,8 @@ class _ProgressMeta {
         progress: 100,
         gradientStart: Color(0xFFFFBECE),
         gradientEnd: Color(0xFFFF5681),
-        tip: '恭喜你！ 你完成了乐理的全部课程。',
+        chipColor: Color(0xFFFF7699),
+        tip: '恭喜你！  你完成了乐理的全部课程。',
       );
     }
     if (text.contains('视唱')) {
@@ -1205,6 +1110,7 @@ class _ProgressMeta {
         progress: apiValue == 0 ? 40.0 : apiValue.toDouble(),
         gradientStart: const Color(0xFF4DE6C8),
         gradientEnd: const Color(0xFF13E8BE),
+        chipColor: const Color(0xFF20E7C0),
       );
     }
     return _ProgressMeta(
@@ -1214,6 +1120,7 @@ class _ProgressMeta {
       progress: apiValue == 0 ? 40.0 : apiValue.toDouble(),
       gradientStart: const Color(0xFFD4BFFF),
       gradientEnd: const Color(0xFFB184FF),
+      chipColor: const Color(0xFFB991FF),
     );
   }
 }

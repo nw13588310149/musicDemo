@@ -46,7 +46,9 @@ Future<List<CoursewarePickedFile>> pickCoursewareFilesImpl({
       if (bytes == null || bytes.isEmpty) {
         continue;
       }
-      result.add(CoursewarePickedFile(name: file.name, bytes: bytes));
+      result.add(
+        CoursewarePickedFile(name: file.name, bytes: bytes, size: file.size),
+      );
     }
     completeWith(result);
   });
@@ -82,11 +84,7 @@ Future<Uint8List?> _readFileBytes(html.File file) {
     if (data is TypedData) {
       if (!completer.isCompleted) {
         completer.complete(
-          Uint8List.view(
-            data.buffer,
-            data.offsetInBytes,
-            data.lengthInBytes,
-          ),
+          Uint8List.view(data.buffer, data.offsetInBytes, data.lengthInBytes),
         );
       }
       return;

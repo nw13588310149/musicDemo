@@ -1,10 +1,5 @@
-import 'package:flutter/material.dart';
-
 class CollectionTabItem {
-  const CollectionTabItem({
-    required this.type,
-    required this.label,
-  });
+  const CollectionTabItem({required this.type, required this.label});
 
   final int type;
   final String label;
@@ -38,6 +33,8 @@ class CollectionEntry {
   final Map<String, dynamic> rawPayload;
 
   bool get isVideo => type == 6;
+  bool get isVocalOrInstrument => type == 4 || type == 5;
+  bool get isLesson => type == 1 || type == 2 || type == 3;
 }
 
 class CollectionShareClass {
@@ -106,6 +103,17 @@ class MyCollectionState {
   }
 }
 
+/// 我的收藏 Tab 顺序：声乐 → 器乐 → 听写 → 视唱 → 乐理 → 视频，
+/// 与设计稿顶部分段控件顺序一致，与服务端返回的 type 字段保持一一对应。
+const List<CollectionTabItem> kCollectionDefaultTabs = <CollectionTabItem>[
+  CollectionTabItem(type: 4, label: '声乐'),
+  CollectionTabItem(type: 5, label: '器乐'),
+  CollectionTabItem(type: 3, label: '听写'),
+  CollectionTabItem(type: 1, label: '视唱'),
+  CollectionTabItem(type: 2, label: '乐理'),
+  CollectionTabItem(type: 6, label: '视频'),
+];
+
 const Map<String, int> kCollectionTypeByLabel = <String, int>{
   '视唱': 1,
   '乐理': 2,
@@ -114,10 +122,3 @@ const Map<String, int> kCollectionTypeByLabel = <String, int>{
   '器乐': 5,
   '视频': 6,
 };
-
-const List<Color> kCollectionAccentPalette = <Color>[
-  Color(0xFFE8D9FF),
-  Color(0xFFD9F0FF),
-  Color(0xFFFFE6D8),
-  Color(0xFFE1F7E9),
-];

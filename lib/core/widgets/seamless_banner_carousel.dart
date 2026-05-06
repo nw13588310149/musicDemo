@@ -39,8 +39,6 @@ class _SeamlessBannerCarouselState extends State<SeamlessBannerCarousel> {
   Timer? _timer;
   List<_BannerSlideData> _slides = const <_BannerSlideData>[];
   List<String> _pendingUrls = const <String>[];
-  bool _loading = false;
-  int _generation = 0;
   int _currentPage = 0;
 
   @override
@@ -52,7 +50,7 @@ class _SeamlessBannerCarouselState extends State<SeamlessBannerCarousel> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_pendingUrls.isEmpty && _slides.isEmpty && !_loading) {
+    if (_pendingUrls.isEmpty && _slides.isEmpty) {
       _syncImages(force: true);
     }
   }
@@ -85,39 +83,32 @@ class _SeamlessBannerCarouselState extends State<SeamlessBannerCarousel> {
     }
 
     _timer?.cancel();
-    _generation++;
     _pendingUrls = urls;
     if (urls.isEmpty) {
       setState(() {
-        _loading = false;
         _slides = const <_BannerSlideData>[];
       });
       _notifyPageChanged(0);
       return;
     }
 
+    final slides = urls
+        .map(
+          (url) => _BannerSlideData(url: url, provider: _imageProviderFor(url)),
+        )
+        .toList(growable: false);
+    final page = _initialPageFor(slides.length);
+    final oldController = _controller;
+    _controller = PageController(initialPage: page);
+    _currentPage = page;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      oldController.dispose();
+    });
     setState(() {
-      _loading = true;
-      _slides = const <_BannerSlideData>[];
+      _slides = slides;
     });
-
-    final generation = _generation;
-    Future.wait(urls.map(_precacheSlide)).then((slides) {
-      if (!mounted || generation != _generation) return;
-      final loadedSlides = slides.whereType<_BannerSlideData>().toList(
-        growable: false,
-      );
-      final page = _initialPageFor(loadedSlides.length);
-      _controller.dispose();
-      _controller = PageController(initialPage: page);
-      _currentPage = page;
-      setState(() {
-        _slides = loadedSlides;
-        _loading = false;
-      });
-      _notifyPageChanged(0);
-      _restartTimer();
-    });
+    _notifyPageChanged(0);
+    _restartTimer();
   }
 
   void _notifyPageChanged(int index) {
@@ -127,19 +118,6 @@ class _SeamlessBannerCarouselState extends State<SeamlessBannerCarousel> {
       if (!mounted) return;
       callback(index);
     });
-  }
-
-  Future<_BannerSlideData?> _precacheSlide(String url) async {
-    final provider = _imageProviderFor(url);
-    try {
-      await precacheImage(
-        provider,
-        context,
-      ).timeout(const Duration(seconds: 8));
-      return _BannerSlideData(url: url, provider: provider);
-    } catch (_) {
-      return null;
-    }
   }
 
   ImageProvider _imageProviderFor(String url) {
@@ -178,7 +156,7 @@ class _SeamlessBannerCarouselState extends State<SeamlessBannerCarousel> {
     if (_pendingUrls.isEmpty) {
       return widget.empty ?? widget.placeholder;
     }
-    if (_loading || _slides.isEmpty) {
+    if (_slides.isEmpty) {
       return widget.placeholder;
     }
     if (_slides.length == 1) {
@@ -216,15 +194,36 @@ class _BannerImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Image(
-      image: slide.provider,
-      width: double.infinity,
-      height: double.infinity,
-      fit: fit,
-      filterQuality: FilterQuality.high,
-      gaplessPlayback: true,
-      errorBuilder: (context, error, stackTrace) =>
-          const ColoredBox(color: Color(0xFFF5F6FA)),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final dpr = MediaQuery.devicePixelRatioOf(context);
+        final imageProvider = ResizeImage.resizeIfNeeded(
+          _cacheExtent(constraints.maxWidth, dpr, 1800),
+          _cacheExtent(constraints.maxHeight, dpr, 1000),
+          slide.provider,
+        );
+        return Image(
+          image: imageProvider,
+          width: double.infinity,
+          height: double.infinity,
+          fit: fit,
+          filterQuality: FilterQuality.medium,
+          gaplessPlayback: true,
+          errorBuilder: (context, error, stackTrace) =>
+              const ColoredBox(color: Color(0xFFF5F6FA)),
+        );
+      },
     );
   }
+}
+
+int? _cacheExtent(
+  double logicalExtent,
+  double devicePixelRatio,
+  int maxPixels,
+) {
+  if (!logicalExtent.isFinite || logicalExtent <= 0) {
+    return maxPixels;
+  }
+  return (logicalExtent * devicePixelRatio).ceil().clamp(1, maxPixels).toInt();
 }

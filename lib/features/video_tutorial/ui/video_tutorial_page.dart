@@ -20,8 +20,14 @@ import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/class_share_drawer.dart';
 import '../../../core/widgets/seamless_banner_carousel.dart';
 import '../../shell/ui/shell_layout.dart';
+import '../data/video_publisher_data.dart';
 import '../state/video_tutorial_controller.dart';
 import '../state/video_tutorial_state.dart';
+
+const int _kVideoPreloadLimit = 8;
+const int _kVideoPrecacheWidth = 720;
+const int _kVideoImageMaxDecodeWidth = 1600;
+const int _kVideoImageMaxDecodeHeight = 1000;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // A. 主页 — 视频列表
@@ -64,10 +70,11 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
 
   void _preloadImages(VideoTutorialState state) {
     final urls = <String>{
-      for (final item in state.banners) _resolveUrl(item.imageUrl),
-      for (final item in state.videoList.take(32)) _resolveUrl(item.coverImg),
+      for (final item in state.banners.take(1)) _resolveUrl(item.imageUrl),
+      for (final item in state.videoList.take(_kVideoPreloadLimit))
+        _resolveUrl(item.coverImg),
       for (final item
-          in state.detail?.seriesVideoList ?? const <VideoListItem>[])
+          in (state.detail?.seriesVideoList ?? const <VideoListItem>[]).take(4))
         _resolveUrl(item.coverImg),
     }..removeWhere((url) => url.isEmpty || _preloadedImageUrls.contains(url));
 
@@ -77,13 +84,25 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
     _preloadedImageUrls.addAll(urls);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      for (final url in urls) {
-        precacheImage(
-          CachedNetworkImageProvider(url),
-          context,
-        ).catchError((_) {});
-      }
+      unawaited(_precacheVideoImages(urls.toList(growable: false)));
     });
+  }
+
+  Future<void> _precacheVideoImages(List<String> urls) async {
+    for (final url in urls) {
+      if (!mounted) return;
+      await Future<void>.delayed(const Duration(milliseconds: 24));
+      if (!mounted) return;
+      try {
+        await precacheImage(
+          ResizeImage(
+            CachedNetworkImageProvider(url),
+            width: _kVideoPrecacheWidth,
+          ),
+          context,
+        ).timeout(const Duration(seconds: 4));
+      } catch (_) {}
+    }
   }
 
   Future<void> _openVideoDetail(VideoListItem item) async {
@@ -180,7 +199,7 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
                 key: const PageStorageKey<String>('video_tutorial_scroll'),
                 controller: _scrollController,
                 physics: const AlwaysScrollableScrollPhysics(),
-                cacheExtent: ui(900),
+                cacheExtent: ui(420),
                 slivers: [
                   // Banner + 最新视频：并入滚动区域
                   SliverToBoxAdapter(
@@ -202,9 +221,10 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
                     ),
                   ),
                   // 二级目录：紧跟 banner 下方，一起滚动
+                  // 与下方视频网格的间距 = 16（Figma 规格）
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: EdgeInsets.fromLTRB(ui(16), 0, ui(16), ui(12)),
+                      padding: EdgeInsets.fromLTRB(ui(16), 0, ui(16), ui(16)),
                       child: _SubCategoryBar(
                         scale: scale,
                         items: state.selectedMenu?.children ?? const [],
@@ -319,16 +339,38 @@ class _VideoCachedImage extends StatelessWidget {
     if (url.isEmpty) {
       return fallback;
     }
-    return CachedNetworkImage(
-      imageUrl: url,
-      fit: fit,
-      fadeInDuration: Duration.zero,
-      fadeOutDuration: Duration.zero,
-      useOldImageOnUrlChange: true,
-      placeholder: (_, _) => fallback,
-      errorWidget: (_, _, _) => fallback,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return CachedNetworkImage(
+          imageUrl: url,
+          fit: fit,
+          memCacheWidth: _decodeExtent(
+            context,
+            constraints.maxWidth,
+            _kVideoImageMaxDecodeWidth,
+          ),
+          memCacheHeight: _decodeExtent(
+            context,
+            constraints.maxHeight,
+            _kVideoImageMaxDecodeHeight,
+          ),
+          fadeInDuration: Duration.zero,
+          fadeOutDuration: Duration.zero,
+          useOldImageOnUrlChange: true,
+          placeholder: (_, _) => fallback,
+          errorWidget: (_, _, _) => fallback,
+        );
+      },
     );
   }
+}
+
+int? _decodeExtent(BuildContext context, double logicalExtent, int maxPixels) {
+  if (!logicalExtent.isFinite || logicalExtent <= 0) {
+    return maxPixels;
+  }
+  final dpr = MediaQuery.devicePixelRatioOf(context);
+  return (logicalExtent * dpr).ceil().clamp(1, maxPixels).toInt();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3457,36 +3499,63 @@ class _VideoCategoryHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = scale.ui;
+    // Figma 规格：
+    //   - 整体高度 36
+    //   - 活动 tab：18/500/PingFang SC/#0B081A，无横向 padding
+    //   - 非活动 tab：14/500/PingFang SC/#6D6B75，padding 16/10
+    //   - 都不带背景填充；点击切换字号 + 颜色
+    //   - 搜索框：254×36，white bg，1px #F3F2F3 outline，radius 12，
+    //     padding 16/10，14×14 search icon + gap 6 + 14/400/PingFang SC/#D1D1D1 文字
+    // 当 menus 为空时安全兜底；否则取选中菜单（找不到时退回首项）。
+    final VideoMenu? selectedMenu = menus.isEmpty
+        ? null
+        : menus.firstWhere(
+            (m) => m.id == selectedMenuId,
+            orElse: () => menus.first,
+          );
+    final searchHint = (selectedMenu != null && selectedMenu.name.isNotEmpty)
+        ? '${selectedMenu.name}视频'
+        : '搜索视频';
+    // 整个顶部栏严格 36 高度。tab 项 + 搜索框都在这个固定高度里垂直居中。
+    // 不再用 padding-vertical 撑高（会与字号组合导致 line-box 被裁切），
+    // 而是让外层固定 36，内层用 Center 真正垂直居中字号变化的文字。
+    final barH = ui(36);
     return SizedBox(
-      height: ui(44),
+      height: barH,
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
-            child: ListView.separated(
+            child: ListView.builder(
               scrollDirection: Axis.horizontal,
               itemCount: menus.length,
-              separatorBuilder: (_, _) => SizedBox(width: ui(8)),
               itemBuilder: (context, index) {
                 final menu = menus[index];
                 final active = menu.id == selectedMenuId;
-                return InkWell(
-                  borderRadius: BorderRadius.circular(ui(8)),
+                // 命中区域 = Container（含 padding），由 GestureDetector(opaque)
+                // 直接吃掉点击。tab 项之间无外层 margin，间距完全由 padding 提供。
+                // 比之前总间距减少 15px：去掉 12px right margin + padding 16→14.5。
+                return GestureDetector(
                   onTap: () => onSelectMenu(menu.id),
+                  behavior: HitTestBehavior.opaque,
                   child: Container(
-                    padding: EdgeInsets.symmetric(horizontal: ui(14)),
-                    decoration: BoxDecoration(
-                      color: active
-                          ? const Color(0xFF212028)
-                          : const Color(0xFFF5F6FA),
-                      borderRadius: BorderRadius.circular(ui(8)),
+                    height: barH,
+                    // 活动 tab 无横向 padding；非活动 tab 14.5 横向 padding
+                    // 既保留视觉间距、也保证命中区域足够宽。
+                    padding: EdgeInsets.symmetric(
+                      horizontal: active ? 0 : ui(14.5),
                     ),
                     alignment: Alignment.center,
                     child: Text(
                       menu.name,
                       style: TextStyle(
-                        fontSize: ui(15),
-                        color: active ? Colors.white : const Color(0xFF6D6B75),
-                        fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+                        fontSize: active ? ui(18) : ui(14),
+                        color: active
+                            ? const Color(0xFF0B081A)
+                            : const Color(0xFF6D6B75),
+                        fontFamily: 'PingFang SC',
+                        fontWeight: FontWeight.w500,
+                        height: 1,
                       ),
                     ),
                   ),
@@ -3494,29 +3563,39 @@ class _VideoCategoryHeader extends StatelessWidget {
               },
             ),
           ),
-          SizedBox(width: ui(16)),
+          SizedBox(width: ui(12)),
           Container(
-            width: ui(220),
-            height: ui(40),
+            width: ui(254),
+            height: barH,
             decoration: BoxDecoration(
-              color: const Color(0xFFF5F6FA),
+              color: Colors.white,
               borderRadius: BorderRadius.circular(ui(12)),
+              border: Border.all(color: const Color(0xFFF3F2F3), width: 1),
             ),
-            padding: EdgeInsets.symmetric(horizontal: ui(12)),
+            // 仅左右 padding；图标 + 文字由 Row 在 36 高度内垂直居中。
+            padding: EdgeInsets.symmetric(horizontal: ui(16)),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 AppAssetGraphic(
                   AppAssets.shellV2Search,
-                  width: ui(14),
-                  height: ui(14),
+                  width: ui(14.43),
+                  height: ui(14.43),
                   fit: BoxFit.contain,
                 ),
-                SizedBox(width: ui(8)),
-                Text(
-                  '搜索视频',
-                  style: TextStyle(
-                    fontSize: ui(14),
-                    color: const Color(0xFFD1D1D1),
+                SizedBox(width: ui(6)),
+                Expanded(
+                  child: Text(
+                    searchHint,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: ui(14),
+                      color: const Color(0xFFD1D1D1),
+                      fontFamily: 'PingFang SC',
+                      fontWeight: FontWeight.w400,
+                      height: 1,
+                    ),
                   ),
                 ),
               ],
@@ -3558,7 +3637,8 @@ class _BannerAndLatestSection extends StatelessWidget {
         .toList();
     final hasBanner = bannerUrls.isNotEmpty;
     return SizedBox(
-      height: ui(264),
+      // Figma：左侧轮播图 + 右侧"最新视频"列表卡 共同高度 = 280
+      height: ui(280),
       child: Row(
         children: [
           Expanded(
@@ -3655,25 +3735,41 @@ class _LatestVideoListCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = scale.ui;
+    // Figma 规格：宽 255、padding 12.5/12、radius 12、bg #F5F6FA。
+    // 标题"最新视频"：13/400/PingFang SC/#0B081A，行高 1。
+    // 行：thumb 68×68 radius 4 + gap 12 + 标题 13/500（最多 2 行 ellipsis）。
+    //
+    // 高度策略：
+    //   外层固定 280；标题 + 间距是固定常量，剩余空间全部交给 Expanded
+    //   承载列表区。这样即使字体度量带来一两 px 的溢出，列表自身的
+    //   ClipRect 也会兜底（之前用精确的 SizedBox(228) 会被字体度量挤出 5px
+    //   导致 BOTTOM OVERFLOWED 警告）。
+    //   visibleCount 仍然限制为 3，这样 3 张完整封面图都能正常展示；
+    //   如未来调高了视频行高 / 增加了顶部内容，也只会被 Clip 而不会报错。
+    final visibleCount = math.min(items.length, 3);
+    const rowH = 68.0;
+    const rowGap = 12.0;
     return Container(
-      width: ui(200),
+      width: ui(255),
       decoration: BoxDecoration(
         color: const Color(0xFFF5F6FA),
         borderRadius: BorderRadius.circular(ui(12)),
       ),
-      padding: EdgeInsets.all(ui(10)),
+      padding: EdgeInsets.fromLTRB(ui(12.5), ui(12), ui(12.5), ui(12)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             '最新视频',
             style: TextStyle(
-              fontSize: ui(14),
+              fontSize: ui(13),
               color: const Color(0xFF0B081A),
-              fontWeight: FontWeight.w600,
+              fontFamily: 'PingFang SC',
+              fontWeight: FontWeight.w400,
+              height: 1,
             ),
           ),
-          SizedBox(height: ui(8)),
+          SizedBox(height: ui(15)),
           Expanded(
             child: items.isEmpty
                 ? Center(
@@ -3682,74 +3778,102 @@ class _LatestVideoListCard extends StatelessWidget {
                       style: TextStyle(
                         fontSize: ui(12),
                         color: const Color(0xFFB6B5BB),
+                        fontFamily: 'PingFang SC',
                       ),
                     ),
                   )
-                : ListView.separated(
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: math.min(items.length, 3),
-                    separatorBuilder: (_, _) => SizedBox(height: ui(8)),
-                    itemBuilder: (context, index) {
-                      final item = items[index];
-                      return InkWell(
-                        onTap: () => onOpenVideo(item),
-                        borderRadius: BorderRadius.circular(ui(8)),
-                        child: Row(
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(ui(6)),
-                              child: SizedBox(
-                                width: ui(56),
-                                height: ui(44),
-                                child: _VideoCachedImage(
-                                  url: resolveUrl(item.coverImg),
-                                  fit: BoxFit.cover,
-                                  fallback: Container(
-                                    color: const Color(0xFFEDEDF2),
-                                    child: Icon(
-                                      Icons.play_circle_fill_rounded,
-                                      color: const Color(0xFFB6B5BB),
-                                      size: ui(16),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            SizedBox(width: ui(8)),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    item.name,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: ui(12),
-                                      color: const Color(0xFF0B081A),
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  SizedBox(height: ui(2)),
-                                  Text(
-                                    '播放量 ${item.playCount}',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: ui(10),
-                                      color: const Color(0xFFB6B5BB),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                : ClipRect(
+                    child: OverflowBox(
+                      maxHeight: ui(
+                        visibleCount * rowH + (visibleCount - 1) * rowGap,
+                      ),
+                      alignment: Alignment.topLeft,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          for (int i = 0; i < visibleCount; i++) ...[
+                            if (i > 0) SizedBox(height: ui(rowGap)),
+                            _LatestVideoRow(
+                              scale: scale,
+                              item: items[i],
+                              coverUrl: resolveUrl(items[i].coverImg),
+                              onTap: () => onOpenVideo(items[i]),
                             ),
                           ],
-                        ),
-                      );
-                    },
+                        ],
+                      ),
+                    ),
                   ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 最新视频列表行：68×68 缩略图 + 信息列。
+/// 数据没有 description 时，标题按 Figma 第 4/5 项的样式垂直居中显示。
+class _LatestVideoRow extends StatelessWidget {
+  const _LatestVideoRow({
+    required this.scale,
+    required this.item,
+    required this.coverUrl,
+    required this.onTap,
+  });
+
+  final DashboardScaleData scale;
+  final VideoListItem item;
+  final String coverUrl;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = scale.ui;
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
+        height: ui(68),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(ui(4)),
+              child: SizedBox(
+                width: ui(68),
+                height: ui(68),
+                child: _VideoCachedImage(
+                  url: coverUrl,
+                  fit: BoxFit.cover,
+                  fallback: Container(
+                    color: const Color(0xFF898989),
+                    child: Icon(
+                      Icons.play_circle_fill_rounded,
+                      color: Colors.white.withValues(alpha: 0.6),
+                      size: ui(20),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            SizedBox(width: ui(12)),
+            Expanded(
+              child: Text(
+                item.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: ui(13),
+                  color: const Color(0xFF0B081A),
+                  fontFamily: 'PingFang SC',
+                  fontWeight: FontWeight.w500,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -3772,23 +3896,29 @@ class _SubCategoryBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = scale.ui;
     if (items.isEmpty) return const SizedBox.shrink();
+    // Figma 规格：
+    //   - 容器 padding 12/10/12/10、radius 8
+    //   - active bg #0B081A，文字 white；inactive bg #F5F6FA，文字 #0B081A
+    //   - 文字 14/400/PingFang SC（height 1）
+    //   - 容器总高 ≈ 10 + 文字 line-box(~20) + 10 = 40
+    //   - 项之间 gap 8（保持原值，Figma 仅给出单个 chip）
     return SizedBox(
-      height: ui(40),
+      height: ui(31),
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: items.length,
-        separatorBuilder: (_, _) => SizedBox(width: ui(8)),
+        separatorBuilder: (_, _) => SizedBox(width: ui(12)),
         itemBuilder: (context, index) {
           final item = items[index];
           final active = item.id == selectedId;
-          return InkWell(
-            borderRadius: BorderRadius.circular(ui(8)),
+          return GestureDetector(
             onTap: () => onSelect(item.id),
+            behavior: HitTestBehavior.opaque,
             child: Container(
-              padding: EdgeInsets.symmetric(horizontal: ui(14)),
+              padding: EdgeInsets.symmetric(horizontal: ui(12)),
               decoration: BoxDecoration(
                 color: active
-                    ? const Color(0xFF212028)
+                    ? const Color(0xFF0B081A)
                     : const Color(0xFFF5F6FA),
                 borderRadius: BorderRadius.circular(ui(8)),
               ),
@@ -3797,8 +3927,10 @@ class _SubCategoryBar extends StatelessWidget {
                 item.name,
                 style: TextStyle(
                   fontSize: ui(14),
-                  color: active ? Colors.white : const Color(0xFF212028),
-                  fontWeight: FontWeight.w500,
+                  color: active ? Colors.white : const Color(0xFF0B081A),
+                  fontFamily: 'PingFang SC',
+                  fontWeight: FontWeight.w400,
+                  height: 1,
                 ),
               ),
             ),
@@ -3933,53 +4065,63 @@ class _VideoGridCard extends StatelessWidget {
                               ),
                               const Spacer(),
                               // 作者 + 播放量
-                              Row(
-                                children: [
-                                  // 作者头像（圆形占位）
-                                  Container(
-                                    width: 16.0 * s,
-                                    height: 16.0 * s,
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFE0DEFF),
-                                      borderRadius: BorderRadius.circular(
-                                        8.0 * s,
+                              Builder(
+                                builder: (_) {
+                                  // 后端没有返回作者，前端按 videoId 稳定取一个
+                                  // 昵称 + 头像，保证同一视频每次进入都一样。
+                                  final publisher = videoPublisherFor(item.id);
+                                  return Row(
+                                    children: [
+                                      // 作者头像（圆形真实图片）
+                                      ClipOval(
+                                        child: Image.asset(
+                                          publisher.avatarAsset,
+                                          width: 16.0 * s,
+                                          height: 16.0 * s,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, _, _) => Container(
+                                            width: 16.0 * s,
+                                            height: 16.0 * s,
+                                            color: const Color(0xFFE0DEFF),
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                  ),
-                                  SizedBox(width: 4.0 * s),
-                                  // 作者名
-                                  Expanded(
-                                    child: Text(
-                                      '音乐之路',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 10.0 * s,
-                                        color: const Color(0xFFB6B5BB),
-                                        fontFamily: 'PingFang SC',
-                                        fontWeight: FontWeight.w500,
-                                        height: 1,
+                                      SizedBox(width: 4.0 * s),
+                                      // 作者名
+                                      Expanded(
+                                        child: Text(
+                                          publisher.nickname,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 10.0 * s,
+                                            color: const Color(0xFFB6B5BB),
+                                            fontFamily: 'PingFang SC',
+                                            fontWeight: FontWeight.w500,
+                                            height: 1,
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                  ),
-                                  // 播放量图标 + 数字
-                                  AppAssetGraphic(
-                                    AppAssets.videoV2CardViews,
-                                    width: 12.0 * s,
-                                    height: 12.0 * s,
-                                  ),
-                                  SizedBox(width: 4.0 * s),
-                                  Text(
-                                    '${item.playCount}',
-                                    style: TextStyle(
-                                      fontSize: 12.0 * s,
-                                      color: const Color(0xFFB6B5BB),
-                                      fontFamily: 'PingFang SC',
-                                      fontWeight: FontWeight.w500,
-                                      height: 1,
-                                    ),
-                                  ),
-                                ],
+                                      // 播放量图标 + 数字
+                                      AppAssetGraphic(
+                                        AppAssets.videoV2CardViews,
+                                        width: 12.0 * s,
+                                        height: 12.0 * s,
+                                      ),
+                                      SizedBox(width: 4.0 * s),
+                                      Text(
+                                        '${item.playCount}',
+                                        style: TextStyle(
+                                          fontSize: 12.0 * s,
+                                          color: const Color(0xFFB6B5BB),
+                                          fontFamily: 'PingFang SC',
+                                          fontWeight: FontWeight.w500,
+                                          height: 1,
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                },
                               ),
                             ],
                           ),

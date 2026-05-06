@@ -15,10 +15,7 @@ final personalCenterControllerProvider =
     >((ref) {
       final repository = ref.watch(personalCenterRepositoryProvider);
       final storage = ref.watch(appStorageProvider);
-      return PersonalCenterController(
-        repository: repository,
-        storage: storage,
-      );
+      return PersonalCenterController(repository: repository, storage: storage);
     });
 
 class PersonalCenterController extends StateNotifier<PersonalCenterState> {
@@ -27,11 +24,7 @@ class PersonalCenterController extends StateNotifier<PersonalCenterState> {
     required AppStorage storage,
   }) : _repository = repository,
        _storage = storage,
-       super(
-         PersonalCenterState(
-           checkStatusEnabled: storage.hasCheckStatus,
-         ),
-       ) {
+       super(PersonalCenterState(checkStatusEnabled: storage.hasCheckStatus)) {
     refresh();
   }
 

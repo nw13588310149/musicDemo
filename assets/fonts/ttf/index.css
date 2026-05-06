@@ -21,7 +21,7 @@
 /* 苹方-简 中黑体 */
 @font-face {
     font-family: 'PingFangSC-Medium-ttf';
-    src: url('./PingFangSC-Medium.ttf') format('truetype');
+    src: url('./PingFangSC-Medium.otf') format('truetype');
 }
 /* 苹方-简 中粗体 */
 @font-face {

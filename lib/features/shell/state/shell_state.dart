@@ -47,6 +47,7 @@ class ShellNoticeItem {
 
 class ShellUser {
   const ShellUser({
+    this.id = '',
     this.nickname = '',
     this.realname = '',
     this.avatarUrl = '',
@@ -55,6 +56,12 @@ class ShellUser {
     this.identity = '',
   });
 
+  /// 后端 `myInfo.user.id`（雪花长整型）。**必须以字符串形式承载**，
+  /// web 端经 JS number(53bit) 转换会丢精度。空串表示未登录或未知。
+  ///
+  /// 用于 `/chat/sendMsg` 等接口的「我是谁」对照（`fromUserId == id`）以
+  /// 渲染消息气泡左右位置。
+  final String id;
   final String nickname;
   final String realname;
   final String avatarUrl;

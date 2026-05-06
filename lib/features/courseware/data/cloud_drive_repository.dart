@@ -40,13 +40,35 @@ class CloudDriveRepository {
     required Uint8List bytes,
     required String filename,
     void Function(int sent, int total)? onSendProgress,
+  }) {
+    return _uploadMultipartWithProgress(
+      createFile: () async =>
+          MultipartFile.fromBytes(bytes, filename: filename),
+      onSendProgress: onSendProgress,
+    );
+  }
+
+  Future<ApiResponse> uploadFilePathWithProgress({
+    required String filePath,
+    required String filename,
+    void Function(int sent, int total)? onSendProgress,
+  }) {
+    return _uploadMultipartWithProgress(
+      createFile: () => MultipartFile.fromFile(filePath, filename: filename),
+      onSendProgress: onSendProgress,
+    );
+  }
+
+  Future<ApiResponse> _uploadMultipartWithProgress({
+    required Future<MultipartFile> Function() createFile,
+    void Function(int sent, int total)? onSendProgress,
   }) async {
     ApiResponse last = ApiResponse.failure('上传失败');
     for (var i = 0; i < _kUploadCandidates.length; i++) {
       final path = _kUploadCandidates[i];
       // FormData 是流，每次必须重新创建
       final form = FormData.fromMap(<String, dynamic>{
-        'file': MultipartFile.fromBytes(bytes, filename: filename),
+        'file': await createFile(),
       });
       // 只有第一个候选端点传递进度回调，避免重试时回调乱序
       final resp = await client.postFormData(
