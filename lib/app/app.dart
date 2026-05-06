@@ -42,18 +42,23 @@ class _MyAppState extends ConsumerState<MyApp> {
       theme: AppTheme.light,
       initialRoute: initialRoute,
       onGenerateRoute: AppRouter.onGenerateRoute,
-      // 让 Flutter 文本基线与 CSS/Figma 行为一致：
-      // - 首行不再应用 height leading（字形贴 box 顶部）
-      // - 末行不再应用 height leading（字形贴 box 底部）
-      // 解决"Flutter 文字比 Figma 偏下、上下间距偏宽"的全局问题，
-      // 使 `Positioned(top: x)` / `SizedBox(height: y)` 与 Figma 像素一致。
+      // 全局文本行为：
+      // 1. 锁定 textScaler = 1.0：禁用 iOS/Android 系统的 "Display & Text Size"
+      //    缩放，保证 Web 与平板上同一个 fontSize 渲染出相同的逻辑像素，
+      //    避免 iPad 上文字"莫名偏小"。
+      // 2. DefaultTextHeightBehavior：让首/末行不再应用 height leading，
+      //    与 CSS/Figma 行为一致，解决全局"文字偏下、上下间距偏宽"。
       builder: (context, child) {
-        return DefaultTextHeightBehavior(
-          textHeightBehavior: const TextHeightBehavior(
-            applyHeightToFirstAscent: false,
-            applyHeightToLastDescent: false,
+        final mediaQuery = MediaQuery.of(context);
+        return MediaQuery(
+          data: mediaQuery.copyWith(textScaler: TextScaler.noScaling),
+          child: DefaultTextHeightBehavior(
+            textHeightBehavior: const TextHeightBehavior(
+              applyHeightToFirstAscent: false,
+              applyHeightToLastDescent: false,
+            ),
+            child: child ?? const SizedBox.shrink(),
           ),
-          child: child ?? const SizedBox.shrink(),
         );
       },
     );
