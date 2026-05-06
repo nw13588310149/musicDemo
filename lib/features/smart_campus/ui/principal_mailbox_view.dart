@@ -47,6 +47,7 @@ import '../data/principal_mailbox_repository.dart';
 import '../state/smart_campus_controller.dart';
 import '../state/smart_campus_state.dart';
 
+import '../../../core/widgets/app_text.dart';
 const Color _kPageBg = Color(0xFFEFF3FC);
 const Color _kCardBg = Colors.white;
 const Color _kInnerGray = Color(0xFFF5F6FA);
@@ -570,7 +571,7 @@ class _HeaderGradientBar extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
+                AppText(
                   title,
                   textAlign: TextAlign.center,
                   style: TextStyle(
@@ -582,7 +583,7 @@ class _HeaderGradientBar extends StatelessWidget {
                   ),
                 ),
                 SizedBox(height: ui(4)),
-                Text(
+                AppText(
                   subtitle,
                   textAlign: TextAlign.center,
                   style: TextStyle(
@@ -718,7 +719,7 @@ class _SegmentItem extends StatelessWidget {
           color: selected ? _kPurple : Colors.transparent,
           borderRadius: BorderRadius.circular(ui(6)),
         ),
-        child: Text(
+        child: AppText(
           label,
           style: TextStyle(
             fontSize: ui(12),
@@ -777,7 +778,7 @@ class _ComposeForm extends StatelessWidget {
             children: [
               _AnonymousSwitch(value: anonymous, onChanged: onAnonymousChanged),
               SizedBox(width: ui(8)),
-              Text(
+              AppText(
                 '开启后发送者将显示为「匿名」',
                 style: TextStyle(
                   fontSize: ui(13),
@@ -853,7 +854,7 @@ class _FeedbackForm extends StatelessWidget {
               const _SectionTitle('我的反馈'),
               const Spacer(),
               if (records.isNotEmpty)
-                Text(
+                AppText(
                   '共 ${records.length} 条',
                   style: TextStyle(
                     fontSize: ui(12),
@@ -918,7 +919,7 @@ class _SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Text(
+    return AppText(
       text,
       style: TextStyle(
         fontSize: ui(16),
@@ -1034,7 +1035,7 @@ class _KindChip extends StatelessWidget {
           color: selected ? _kTextDark : _kInnerGray,
           borderRadius: BorderRadius.circular(ui(8)),
         ),
-        child: Text(
+        child: AppText(
           label,
           style: TextStyle(
             fontSize: ui(14),
@@ -1186,7 +1187,7 @@ class _UploadTile extends StatelessWidget {
           color: const Color(0xFF1C274C),
         ),
         SizedBox(width: ui(4)),
-        Text(
+        AppText(
           '上传文件',
           style: TextStyle(
             fontSize: ui(14),
@@ -1248,7 +1249,7 @@ class _UploadTile extends StatelessWidget {
             statusIcon,
             SizedBox(width: ui(6)),
             Expanded(
-              child: Text(
+              child: AppText(
                 s.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -1276,7 +1277,7 @@ class _UploadTile extends StatelessWidget {
             ),
           )
         else
-          Text(
+          AppText(
             statusLabel,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -1348,7 +1349,7 @@ class _SubmitButton extends StatelessWidget {
               else
                 Icon(Icons.send_rounded, color: Colors.white, size: ui(22)),
               SizedBox(width: ui(8)),
-              Text(
+              AppText(
                 label,
                 style: TextStyle(
                   fontSize: ui(16),
@@ -1475,7 +1476,7 @@ class _StatusFilterChip extends StatelessWidget {
           color: selected ? color : _kInnerGray,
           borderRadius: BorderRadius.circular(ui(8)),
         ),
-        child: Text(
+        child: AppText(
           label,
           style: TextStyle(
             fontSize: ui(13),
@@ -1521,7 +1522,7 @@ class _EmptyHint extends StatelessWidget {
             color: _kPlaceholder,
           ),
           SizedBox(height: ui(12)),
-          Text(
+          AppText(
             hint,
             style: TextStyle(
               fontSize: ui(14),
@@ -1548,7 +1549,7 @@ class _EmptyHint extends StatelessWidget {
                 ),
                 borderRadius: BorderRadius.circular(ui(8)),
               ),
-              child: Text(
+              child: AppText(
                 '写一封新信',
                 style: TextStyle(
                   fontSize: ui(13),
@@ -1602,7 +1603,7 @@ class _MailboxRecordTile extends StatelessWidget {
               ],
               const Spacer(),
               if (record.createTime.isNotEmpty)
-                Text(
+                AppText(
                   record.createTime,
                   style: TextStyle(
                     fontSize: ui(12),
@@ -1615,7 +1616,7 @@ class _MailboxRecordTile extends StatelessWidget {
             ],
           ),
           SizedBox(height: ui(10)),
-          Text(
+          AppText(
             record.content,
             style: TextStyle(
               fontSize: ui(14),
@@ -1663,7 +1664,7 @@ class _MailboxRecordTile extends StatelessWidget {
                         color: _kPurple,
                       ),
                       SizedBox(width: ui(4)),
-                      Text(
+                      AppText(
                         '校长回复',
                         style: TextStyle(
                           fontSize: ui(12),
@@ -1675,7 +1676,7 @@ class _MailboxRecordTile extends StatelessWidget {
                       ),
                       const Spacer(),
                       if (record.replyTime.isNotEmpty)
-                        Text(
+                        AppText(
                           record.replyTime,
                           style: TextStyle(
                             fontSize: ui(11),
@@ -1688,7 +1689,7 @@ class _MailboxRecordTile extends StatelessWidget {
                     ],
                   ),
                   SizedBox(height: ui(6)),
-                  Text(
+                  AppText(
                     record.replyContent,
                     style: TextStyle(
                       fontSize: ui(13),
@@ -1722,7 +1723,7 @@ class _StatusBadge extends StatelessWidget {
         color: status.color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(ui(4)),
       ),
-      child: Text(
+      child: AppText(
         status.label,
         style: TextStyle(
           fontSize: ui(11),
@@ -1756,7 +1757,7 @@ class _KindBadge extends StatelessWidget {
         color: color,
         borderRadius: BorderRadius.circular(ui(4)),
       ),
-      child: Text(
+      child: AppText(
         label,
         style: TextStyle(
           fontSize: ui(11),
@@ -1804,7 +1805,7 @@ class _AttachmentChip extends StatelessWidget {
             SizedBox(width: ui(4)),
             ConstrainedBox(
               constraints: BoxConstraints(maxWidth: ui(160)),
-              child: Text(
+              child: AppText(
                 name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -2032,7 +2033,7 @@ class _FeedbackEmptyHint extends StatelessWidget {
             color: _kPlaceholder,
           ),
           SizedBox(height: ui(12)),
-          Text(
+          AppText(
             '暂无历史反馈，欢迎在下方提一条',
             style: TextStyle(
               fontSize: ui(13),
@@ -2080,7 +2081,7 @@ class _FeedbackTile extends StatelessWidget {
                       : _kPurple.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(ui(4)),
                 ),
-                child: Text(
+                child: AppText(
                   hasReply ? '已回复' : '已提交',
                   style: TextStyle(
                     fontSize: ui(11),
@@ -2093,7 +2094,7 @@ class _FeedbackTile extends StatelessWidget {
               ),
               const Spacer(),
               if (record.createTime.isNotEmpty)
-                Text(
+                AppText(
                   record.createTime,
                   style: TextStyle(
                     fontSize: ui(12),
@@ -2106,7 +2107,7 @@ class _FeedbackTile extends StatelessWidget {
             ],
           ),
           SizedBox(height: ui(8)),
-          Text(
+          AppText(
             record.content,
             style: TextStyle(
               fontSize: ui(13),
@@ -2135,7 +2136,7 @@ class _FeedbackTile extends StatelessWidget {
                         color: _kPurple,
                       ),
                       SizedBox(width: ui(4)),
-                      Text(
+                      AppText(
                         '官方回复',
                         style: TextStyle(
                           fontSize: ui(12),
@@ -2147,7 +2148,7 @@ class _FeedbackTile extends StatelessWidget {
                       ),
                       const Spacer(),
                       if (record.replyTime.isNotEmpty)
-                        Text(
+                        AppText(
                           record.replyTime,
                           style: TextStyle(
                             fontSize: ui(11),
@@ -2160,7 +2161,7 @@ class _FeedbackTile extends StatelessWidget {
                     ],
                   ),
                   SizedBox(height: ui(6)),
-                  Text(
+                  AppText(
                     record.replyContent,
                     style: TextStyle(
                       fontSize: ui(12),

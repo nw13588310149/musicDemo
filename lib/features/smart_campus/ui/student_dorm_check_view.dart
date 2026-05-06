@@ -37,6 +37,7 @@ import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 
+import '../../../core/widgets/app_text.dart';
 // —— 颜色 ————————————————————————————————————————————————————————
 const Color _kPageBg = Color(0xFFEFF3FC);
 const Color _kBoardBg = Color(0xFFF5F6FA);
@@ -186,7 +187,7 @@ class _DormBanner extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
+                  AppText(
                     '查寝管理',
                     style: TextStyle(
                       fontSize: ui(16),
@@ -285,7 +286,7 @@ class _ApplyResubmitButton extends StatelessWidget {
           children: [
             Icon(Icons.calendar_today_outlined, size: ui(14), color: _kPurple),
             SizedBox(width: ui(6)),
-            Text(
+            AppText(
               '申请补卡',
               style: TextStyle(
                 fontSize: ui(12),
@@ -431,7 +432,7 @@ class _DormStatCard extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                AppText(
                   label,
                   style: TextStyle(
                     fontSize: ui(14),
@@ -445,7 +446,7 @@ class _DormStatCard extends StatelessWidget {
                 if (valueIsText)
                   Padding(
                     padding: EdgeInsets.only(right: ui(40)),
-                    child: Text(
+                    child: AppText(
                       value,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -462,7 +463,7 @@ class _DormStatCard extends StatelessWidget {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text(
+                      AppText(
                         value,
                         style: TextStyle(
                           fontSize: ui(32),
@@ -476,7 +477,7 @@ class _DormStatCard extends StatelessWidget {
                         SizedBox(width: ui(8)),
                         Padding(
                           padding: EdgeInsets.only(bottom: ui(2)),
-                          child: Text(
+                          child: AppText(
                             sublabel!,
                             style: TextStyle(
                               fontSize: ui(12),
@@ -516,7 +517,7 @@ class _SectionHeader extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     return Row(
       children: [
-        Text(
+        AppText(
           '我的查寝记录',
           style: TextStyle(
             fontSize: ui(18),
@@ -582,7 +583,7 @@ class _TabPill extends StatelessWidget {
           color: active ? _kTextDark : Colors.transparent,
           borderRadius: BorderRadius.circular(ui(6)),
         ),
-        child: Text(
+        child: AppText(
           label,
           style: TextStyle(
             fontSize: ui(14),
@@ -622,7 +623,7 @@ class _DormCardsGrid extends StatelessWidget {
           children: [
             Icon(Icons.inbox_outlined, size: ui(48), color: _kTextHint),
             SizedBox(height: ui(8)),
-            Text(
+            AppText(
               '当前筛选下没有查寝记录',
               style: TextStyle(
                 fontSize: ui(13),
@@ -683,7 +684,7 @@ class _DormCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Text(
+              AppText(
                 record.session,
                 style: TextStyle(
                   fontSize: ui(18),
@@ -704,7 +705,7 @@ class _DormCard extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text(
+                child: AppText(
                   record.dorm,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -717,7 +718,7 @@ class _DormCard extends StatelessWidget {
                   ),
                 ),
               ),
-              Text(
+              AppText(
                 record.date,
                 style: TextStyle(
                   fontSize: ui(12),
@@ -736,7 +737,7 @@ class _DormCard extends StatelessWidget {
             stampedHighlight: record.status == _DormStatus.late,
           ),
           SizedBox(height: ui(10)),
-          Text(
+          AppText(
             '备注：${record.note}',
             style: TextStyle(
               fontSize: ui(12),
@@ -771,7 +772,7 @@ class _StatusBadge extends StatelessWidget {
         color: bg,
         borderRadius: BorderRadius.circular(ui(4)),
       ),
-      child: Text(
+      child: AppText(
         label,
         style: TextStyle(
           fontSize: ui(12),
@@ -848,7 +849,7 @@ class _TimeCell extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
+        AppText(
           label,
           style: TextStyle(
             fontSize: ui(12),
@@ -859,7 +860,7 @@ class _TimeCell extends StatelessWidget {
           ),
         ),
         SizedBox(height: ui(5)),
-        Text(
+        AppText(
           value,
           style: TextStyle(
             fontSize: ui(12),
@@ -1030,7 +1031,7 @@ class _FieldLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Text(
+    return AppText(
       text,
       style: TextStyle(
         fontSize: ui(14),
@@ -1067,7 +1068,7 @@ class _DatePickerField extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              child: Text(
+              child: AppText(
                 text,
                 style: TextStyle(
                   fontSize: ui(14),
@@ -1112,7 +1113,7 @@ class _ScenePill extends StatelessWidget {
           borderRadius: BorderRadius.circular(ui(8)),
           border: Border.all(color: _kBorderSoft),
         ),
-        child: Text(
+        child: AppText(
           label,
           style: TextStyle(
             fontSize: ui(14),

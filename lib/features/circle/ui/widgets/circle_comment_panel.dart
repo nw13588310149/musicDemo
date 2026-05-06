@@ -5,6 +5,7 @@ import '../../../../core/widgets/app_asset_graphic.dart';
 import '../../../shell/ui/shell_layout.dart';
 import '../../state/circle_state.dart';
 
+import '../../../../core/widgets/app_text.dart';
 /// 沉浸模式下从右侧滑入的评论面板（抖音风）。
 /// 顶部标题、可滚动评论列表、底部输入框三段式布局。
 class CircleCommentPanel extends StatefulWidget {
@@ -122,7 +123,7 @@ class _PanelHeader extends StatelessWidget {
         padding: EdgeInsets.symmetric(horizontal: ui(16)),
         child: Row(
           children: [
-            Text(
+            AppText(
               '评论',
               style: TextStyle(
                 color: const Color(0xFF0B081A),
@@ -132,7 +133,7 @@ class _PanelHeader extends StatelessWidget {
               ),
             ),
             SizedBox(width: ui(8)),
-            Text(
+            AppText(
               formatCircleCount(count),
               style: TextStyle(
                 color: const Color(0xFFB6B5BB),
@@ -242,7 +243,7 @@ class _CommentTile extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              AppText(
                 comment.author.name,
                 style: TextStyle(
                   color: const Color(0xFF0B081A),
@@ -252,7 +253,7 @@ class _CommentTile extends StatelessWidget {
                 ),
               ),
               SizedBox(height: ui(4)),
-              Text(
+              AppText(
                 comment.text,
                 style: TextStyle(
                   color: const Color(0xFF1A1A1A),
@@ -264,7 +265,7 @@ class _CommentTile extends StatelessWidget {
               SizedBox(height: ui(6)),
               Row(
                 children: [
-                  Text(
+                  AppText(
                     comment.timeLabel,
                     style: TextStyle(
                       color: const Color(0xFFB6B5BB),
@@ -273,7 +274,7 @@ class _CommentTile extends StatelessWidget {
                     ),
                   ),
                   SizedBox(width: ui(12)),
-                  Text(
+                  AppText(
                     '回复',
                     style: TextStyle(
                       color: const Color(0xFFB6B5BB),
@@ -337,7 +338,7 @@ class _CommentLike extends StatelessWidget {
             ),
           ),
           SizedBox(height: ui(2)),
-          Text(
+          AppText(
             formatCircleCount(comment.likeCount),
             style: TextStyle(
               color: color,
@@ -368,7 +369,7 @@ class _CommentEmpty extends StatelessWidget {
             color: const Color(0xFFB6B5BB),
           ),
           SizedBox(height: ui(10)),
-          Text(
+          AppText(
             '抢沙发吧～',
             style: TextStyle(
               color: const Color(0xFFB6B5BB),
@@ -443,7 +444,7 @@ class _InputBar extends StatelessWidget {
                 borderRadius: BorderRadius.circular(ui(20)),
               ),
               alignment: Alignment.center,
-              child: Text(
+              child: AppText(
                 '发送',
                 style: TextStyle(
                   color: Colors.white,

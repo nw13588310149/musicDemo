@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import './app_text.dart';
 class AppToast {
   AppToast._();
 
@@ -105,7 +106,7 @@ class AppToast {
                           ),
                           SizedBox(width: ui(10)),
                           Flexible(
-                            child: Text(
+                            child: AppText(
                               text,
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,

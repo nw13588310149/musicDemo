@@ -60,6 +60,7 @@ import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/chat_repository.dart';
 
+import '../../../core/widgets/app_text.dart';
 const Color _kPageBg = Color(0xFFEFF3FC);
 const Color _kCardBg = Colors.white;
 const Color _kBoardBg = Color(0xFFF5F6FA);
@@ -675,7 +676,7 @@ class _NoSelectionHint extends StatelessWidget {
             color: _kTextHint,
           ),
           SizedBox(height: ui(10)),
-          Text(
+          AppText(
             '暂无可聊的群聊',
             style: TextStyle(
               color: _kTextSecondary,
@@ -710,7 +711,7 @@ class _EmptyConversationsHint extends StatelessWidget {
             color: _kTextHint,
           ),
           SizedBox(height: ui(8)),
-          Text(
+          AppText(
             '暂无群聊',
             style: TextStyle(
               color: _kTextSecondary,
@@ -936,7 +937,7 @@ class _ConversationListPane extends StatelessWidget {
         children: [
           Padding(
             padding: EdgeInsets.only(left: ui(4), bottom: ui(12)),
-            child: Text(
+            child: AppText(
               '会话',
               style: TextStyle(
                 fontSize: ui(15),
@@ -992,7 +993,7 @@ class _ConvSearchField extends StatelessWidget {
             color: const Color(0xFFC6C6C6),
           ),
           SizedBox(width: ui(8)),
-          Text(
+          AppText(
             '搜索群聊 / 同学',
             style: TextStyle(
               fontSize: ui(14),
@@ -1048,7 +1049,7 @@ class _ConversationCell extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  AppText(
                     conv.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -1061,7 +1062,7 @@ class _ConversationCell extends StatelessWidget {
                     ),
                   ),
                   SizedBox(height: ui(6)),
-                  Text(
+                  AppText(
                     conv.lastMessage,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -1081,7 +1082,7 @@ class _ConversationCell extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
+                AppText(
                   conv.lastTime,
                   style: TextStyle(
                     fontSize: ui(11),
@@ -1102,7 +1103,7 @@ class _ConversationCell extends StatelessWidget {
                       color: _kBadgeRed,
                       borderRadius: BorderRadius.circular(ui(8)),
                     ),
-                    child: Text(
+                    child: AppText(
                       conv.unread > 99 ? '99+' : '${conv.unread}',
                       style: TextStyle(
                         fontSize: ui(10),
@@ -1172,7 +1173,7 @@ class _CompactConversationStrip extends StatelessWidget {
                     color: c.avatarColor,
                   ),
                   SizedBox(width: ui(6)),
-                  Text(
+                  AppText(
                     c.name,
                     style: TextStyle(
                       fontSize: ui(12),
@@ -1548,7 +1549,7 @@ class _ChatHeaderBar extends StatelessWidget {
                     children: [
                       Row(
                         children: [
-                          Text(
+                          AppText(
                             title,
                             style: TextStyle(
                               fontSize: ui(14),
@@ -1567,7 +1568,7 @@ class _ChatHeaderBar extends StatelessWidget {
                         ],
                       ),
                       SizedBox(height: ui(4)),
-                      Text(
+                      AppText(
                         '$memberCount人',
                         style: TextStyle(
                           fontSize: ui(11),
@@ -1702,7 +1703,7 @@ class _ChatBodyBoard extends StatelessWidget {
                     )
                   : messages.isEmpty
                   ? const Center(
-                      child: Text(
+                      child: AppText(
                         '暂无消息，发送一条吧～',
                         style: TextStyle(
                           color: _kTextSecondary,
@@ -1813,7 +1814,7 @@ class _AnnouncementBar extends StatelessWidget {
               ),
               SizedBox(width: ui(8)),
               Expanded(
-                child: Text(
+                child: AppText(
                   text,
                   style: TextStyle(
                     fontSize: ui(13),
@@ -1830,7 +1831,7 @@ class _AnnouncementBar extends StatelessWidget {
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: onEdit,
-                    child: Text(
+                    child: AppText(
                       '编辑公告',
                       style: TextStyle(
                         fontSize: ui(13),
@@ -1848,7 +1849,7 @@ class _AnnouncementBar extends StatelessWidget {
             SizedBox(height: ui(4)),
             Padding(
               padding: EdgeInsets.only(left: ui(20)),
-              child: Text(
+              child: AppText(
                 updatedAt,
                 style: TextStyle(
                   fontSize: ui(11),
@@ -1877,7 +1878,7 @@ class _DateDivider extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.symmetric(vertical: ui(8)),
       child: Center(
-        child: Text(
+        child: AppText(
           label,
           style: TextStyle(
             fontSize: ui(12),
@@ -1954,7 +1955,7 @@ class _SystemMessageRow extends StatelessWidget {
               color: Colors.white,
               borderRadius: BorderRadius.circular(ui(4)),
             ),
-            child: Text(
+            child: AppText(
               message.tagLabel,
               style: TextStyle(
                 fontSize: ui(11),
@@ -2042,7 +2043,7 @@ class _UserMessageRow extends StatelessWidget {
             : MainAxisAlignment.start,
         children: [
           if (!isMine) ...[
-            Text(
+            AppText(
               message.fromName,
               style: TextStyle(
                 fontSize: ui(12),
@@ -2054,7 +2055,7 @@ class _UserMessageRow extends StatelessWidget {
             ),
             SizedBox(width: ui(8)),
           ],
-          Text(
+          AppText(
             _formatTime(message.sentAt),
             style: TextStyle(
               fontSize: ui(12),
@@ -2066,7 +2067,7 @@ class _UserMessageRow extends StatelessWidget {
           ),
           if (isMine) ...[
             SizedBox(width: ui(8)),
-            Text(
+            AppText(
               message.fromName,
               style: TextStyle(
                 fontSize: ui(12),
@@ -2169,7 +2170,7 @@ class _TextBubbleView extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(ui(8)),
       ),
-      child: Text(
+      child: AppText(
         text,
         style: TextStyle(
           fontSize: ui(13),
@@ -2206,7 +2207,7 @@ class _FileBubbleView extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              AppText(
                 bubble.fileName,
                 style: TextStyle(
                   fontSize: ui(13),
@@ -2217,7 +2218,7 @@ class _FileBubbleView extends StatelessWidget {
                 ),
               ),
               SizedBox(height: ui(2)),
-              Text(
+              AppText(
                 bubble.fileSize,
                 style: TextStyle(
                   fontSize: ui(11),
@@ -2302,7 +2303,7 @@ class _FileIconBlock extends StatelessWidget {
                 color: _kPdfRed,
                 borderRadius: BorderRadius.circular(ui(2)),
               ),
-              child: Text(
+              child: AppText(
                 extension.toUpperCase(),
                 style: TextStyle(
                   fontSize: ui(8),
@@ -2375,7 +2376,7 @@ class _VoiceBubbleView extends StatelessWidget {
               ),
             ),
             SizedBox(width: ui(8)),
-            Text(
+            AppText(
               '${bubble.durationSec}s',
               style: TextStyle(
                 fontSize: ui(12),
@@ -2652,7 +2653,7 @@ class _SendButton extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
+            AppText(
               '发送',
               style: TextStyle(
                 fontSize: ui(13),
@@ -2755,7 +2756,7 @@ class _EmojiPanelState extends State<_EmojiPanel> {
                   borderRadius: BorderRadius.circular(ui(6)),
                   onTap: () => widget.onPick(e),
                   child: Center(
-                    child: Text(
+                    child: AppText(
                       e,
                       style: TextStyle(
                         fontSize: ui(22),
@@ -3032,7 +3033,7 @@ class _VoiceHoldBar extends StatelessWidget {
                       ),
                     ],
                   ),
-                  child: Text(
+                  child: AppText(
                     '按住说话',
                     style: TextStyle(
                       fontSize: ui(14),
@@ -3090,7 +3091,7 @@ class _RecordingHintCard extends StatelessWidget {
               child: _LiveBigWaveform(heights: waveform, color: color),
             ),
             SizedBox(height: ui(12)),
-            Text(
+            AppText(
               willCancel ? '松开取消' : '松开发送 上滑取消',
               style: TextStyle(
                 fontSize: ui(12),
@@ -3175,7 +3176,7 @@ class _AvatarCircle extends StatelessWidget {
         color: color,
         borderRadius: BorderRadius.circular(radius),
       ),
-      child: Text(
+      child: AppText(
         ch,
         style: TextStyle(
           color: Colors.white,

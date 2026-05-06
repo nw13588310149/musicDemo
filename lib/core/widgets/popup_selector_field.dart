@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../features/shell/ui/shell_layout.dart';
 
+import './app_text.dart';
 const Color _kFieldBorder = Color(0xFFF5F6FA);
 const Color _kPanelBorder = Color(0xFFF3F2F3);
 const Color _kTextDark = Color(0xFF0B081A);
@@ -112,7 +113,7 @@ class _PopupSelectorFieldState<T> extends State<PopupSelectorField<T>> {
         child: Row(
           children: [
             Expanded(
-              child: Text(
+              child: AppText(
                 widget.itemLabel(widget.value),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -218,7 +219,7 @@ class _PopupSelectorRow<T> extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              child: Text(
+              child: AppText(
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,

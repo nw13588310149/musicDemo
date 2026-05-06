@@ -11,6 +11,7 @@ import '../../shell/ui/shell_layout.dart';
 import '../state/recording_system_controller.dart';
 import '../state/recording_system_state.dart';
 
+import '../../../core/widgets/app_text.dart';
 class RecordingSystemPage extends ConsumerWidget {
   const RecordingSystemPage({super.key});
 
@@ -412,7 +413,7 @@ class _RecordingSidebar extends StatelessWidget {
                       : Center(
                           child: Padding(
                             padding: EdgeInsets.symmetric(horizontal: ui(8)),
-                            child: Text(
+                            child: AppText(
                               '暂无分类\n点击下方"添加分类"创建',
                               textAlign: TextAlign.center,
                               style: TextStyle(
@@ -515,7 +516,7 @@ class _RecordingCategoryCardState extends State<_RecordingCategoryCard> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
+                  AppText(
                     item.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -528,7 +529,7 @@ class _RecordingCategoryCardState extends State<_RecordingCategoryCard> {
                     ),
                   ),
                   SizedBox(height: ui(3)),
-                  Text(
+                  AppText(
                     '已存储${item.count}个文件',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -706,7 +707,7 @@ class _AddCategoryCard extends StatelessWidget {
               child: Icon(Icons.add_rounded, size: ui(12), color: Colors.white),
             ),
             SizedBox(height: ui(4)),
-            Text(
+            AppText(
               '添加分类',
               style: TextStyle(
                 fontSize: ui(13),
@@ -787,7 +788,7 @@ class _RecordingContentArea extends StatelessWidget {
               onItemTap: (_) => onBackToOverview(),
             )
           else if (selectedCategoryName.isNotEmpty)
-            Text(
+            AppText(
               selectedCategoryName,
               style: TextStyle(
                 fontSize: ui(15),
@@ -865,7 +866,7 @@ class _RecordingContentArea extends StatelessWidget {
           ),
           if (state.errorMessage != null && state.errorMessage!.isNotEmpty) ...[
             SizedBox(height: ui(10)),
-            Text(
+            AppText(
               state.errorMessage!,
               style: TextStyle(
                 fontSize: ui(12),
@@ -958,7 +959,7 @@ class _FolderBreadcrumb extends StatelessWidget {
         final itemIndex = index ~/ 2;
         final label = items[itemIndex];
         final isLast = itemIndex == items.length - 1;
-        final text = Text(
+        final text = AppText(
           label,
           style: TextStyle(
             fontSize: ui(14),
@@ -1077,7 +1078,7 @@ class _ToolbarChip extends StatelessWidget {
               fit: BoxFit.contain,
             ),
             SizedBox(width: ui(6)),
-            Text(
+            AppText(
               label,
               style: TextStyle(
                 fontSize: ui(13),
@@ -1185,7 +1186,7 @@ class _RecordingFolderCardState extends State<_RecordingFolderCard> {
                     Positioned(
                       left: ui(10),
                       bottom: ui(28),
-                      child: Text(
+                      child: AppText(
                         item.dateLabel,
                         style: TextStyle(
                           fontSize: ui(11),
@@ -1198,7 +1199,7 @@ class _RecordingFolderCardState extends State<_RecordingFolderCard> {
                   Positioned(
                     left: ui(10),
                     bottom: ui(8),
-                    child: Text(
+                    child: AppText(
                       item.sizeLabel.isEmpty
                           ? '${item.count} 个录音'
                           : item.sizeLabel,
@@ -1227,7 +1228,7 @@ class _RecordingFolderCardState extends State<_RecordingFolderCard> {
           ),
           SizedBox(height: ui(10)),
           Center(
-            child: Text(
+            child: AppText(
               item.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -1373,7 +1374,7 @@ class _RecordingFileCardState extends State<_RecordingFileCard> {
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         Expanded(
-                          child: Text(
+                          child: AppText(
                             item.name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -1410,7 +1411,7 @@ class _RecordingFileCardState extends State<_RecordingFileCard> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
+                          AppText(
                             item.sizeLabel.isEmpty
                                 ? item.durationLabel
                                 : item.sizeLabel,
@@ -1422,7 +1423,7 @@ class _RecordingFileCardState extends State<_RecordingFileCard> {
                               height: 12 / 10,
                             ),
                           ),
-                          Text(
+                          AppText(
                             item.dateLabel,
                             style: TextStyle(
                               fontSize: ui(10),
@@ -1488,7 +1489,7 @@ class _RecordingFab extends StatelessWidget {
               fit: BoxFit.contain,
             ),
             SizedBox(width: ui(8)),
-            Text(
+            AppText(
               label,
               style: TextStyle(
                 fontSize: ui(16),
@@ -1523,7 +1524,7 @@ class _RecordingEmpty extends StatelessWidget {
             height: ui(200),
             fit: BoxFit.contain,
           ),
-          Text(
+          AppText(
             message,
             style: TextStyle(
               fontSize: ui(15),
@@ -1931,7 +1932,7 @@ class _RecordingStageState extends ConsumerState<_RecordingStage> {
                 ),
                 Expanded(
                   child: Center(
-                    child: Text(
+                    child: AppText(
                       widget.title,
                       style: TextStyle(
                         fontSize: ui(16),
@@ -1996,7 +1997,7 @@ class _LightHeaderButton extends StatelessWidget {
               fit: BoxFit.contain,
             ),
             SizedBox(width: ui(4)),
-            Text(
+            AppText(
               label,
               style: TextStyle(
                 fontSize: ui(12),
@@ -2098,7 +2099,7 @@ class _RecordingStageBody extends StatelessWidget {
               right: 0,
               top: timerTop + ui(74),
               child: Center(
-                child: Text(
+                child: AppText(
                   bottomTip,
                   style: TextStyle(
                     fontSize: ui(12),
@@ -2310,7 +2311,7 @@ class _DarkScrubberPanel extends StatelessWidget {
                 Positioned(
                   left: ui(10),
                   bottom: ui(2),
-                  child: Text(
+                  child: AppText(
                     startLabel,
                     style: TextStyle(
                       fontSize: ui(11),
@@ -2323,7 +2324,7 @@ class _DarkScrubberPanel extends StatelessWidget {
                 Positioned(
                   right: ui(10),
                   bottom: ui(2),
-                  child: Text(
+                  child: AppText(
                     endLabel,
                     style: TextStyle(
                       fontSize: ui(11),
@@ -2406,7 +2407,7 @@ class _TimeScale extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: List<Widget>.generate(divisions, (index) {
           final seconds = ((totalSeconds / (divisions - 1)) * index).round();
-          return Text(
+          return AppText(
             '0:${seconds.toString().padLeft(2, '0')}',
             style: TextStyle(
               fontSize: ui(11),
@@ -2450,7 +2451,7 @@ class _GraniteTimerCapsule extends StatelessWidget {
           ),
         ],
       ),
-      child: Text(
+      child: AppText(
         label,
         style: TextStyle(
           fontSize: ui(28),
@@ -2566,7 +2567,7 @@ class _ErrorBanner extends StatelessWidget {
           ),
           SizedBox(width: ui(8)),
           Expanded(
-            child: Text(
+            child: AppText(
               message,
               style: TextStyle(
                 fontSize: ui(13),
@@ -2623,7 +2624,7 @@ class _SaveRecordingDialog extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Center(
-                  child: Text(
+                  child: AppText(
                     '保存录音文件',
                     style: TextStyle(
                       fontSize: ui(22),
@@ -2635,7 +2636,7 @@ class _SaveRecordingDialog extends ConsumerWidget {
                   ),
                 ),
                 SizedBox(height: ui(28)),
-                Text(
+                AppText(
                   '您可选择喜欢的音效',
                   style: TextStyle(
                     fontSize: ui(14),
@@ -2671,7 +2672,7 @@ class _SaveRecordingDialog extends ConsumerWidget {
                         padding: EdgeInsets.only(
                           right: index == labels.length - 1 ? 0 : ui(12),
                         ),
-                        child: Text(
+                        child: AppText(
                           labels[index],
                           textAlign: TextAlign.center,
                           style: TextStyle(
@@ -2687,7 +2688,7 @@ class _SaveRecordingDialog extends ConsumerWidget {
                   }),
                 ),
                 SizedBox(height: ui(20)),
-                Text(
+                AppText(
                   '作品名称',
                   style: TextStyle(
                     fontSize: ui(14),
@@ -2902,7 +2903,7 @@ class _DialogActionButton extends StatelessWidget {
             ),
           ],
         ),
-        child: Text(
+        child: AppText(
           label,
           style: TextStyle(
             fontSize: ui(16),
@@ -2942,7 +2943,7 @@ class _ShareRecordingDialog extends ConsumerWidget {
             children: [
               Row(
                 children: [
-                  Text(
+                  AppText(
                     '分享到班级',
                     style: TextStyle(
                       fontSize: ui(18),
@@ -2959,7 +2960,7 @@ class _ShareRecordingDialog extends ConsumerWidget {
                 ],
               ),
               SizedBox(height: ui(8)),
-              Text(
+              AppText(
                 '选择需要分享的班级后，系统会逐个发送录音作品。',
                 style: TextStyle(
                   fontSize: ui(13),
@@ -2974,7 +2975,7 @@ class _ShareRecordingDialog extends ConsumerWidget {
                     ? Center(
                         child: Padding(
                           padding: EdgeInsets.symmetric(vertical: ui(24)),
-                          child: Text(
+                          child: AppText(
                             '暂无可分享的班级',
                             style: TextStyle(
                               fontSize: ui(14),
@@ -3021,7 +3022,7 @@ class _ShareRecordingDialog extends ConsumerWidget {
                                   ),
                                   SizedBox(width: ui(10)),
                                   Expanded(
-                                    child: Text(
+                                    child: AppText(
                                       item.name,
                                       style: TextStyle(
                                         fontSize: ui(14),

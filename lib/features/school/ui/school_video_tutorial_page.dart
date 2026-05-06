@@ -11,6 +11,7 @@ import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_asset_graphic.dart';
 import '../../shell/ui/shell_layout.dart';
 
+import '../../../core/widgets/app_text.dart';
 // ── 校园视频 state ──────────────────────────────────────────────────────────
 
 class _SchoolVideoState {
@@ -72,7 +73,7 @@ class SchoolVideoTutorialPage extends ConsumerWidget {
                   SliverFillRemaining(
                     hasScrollBody: false,
                     child: Center(
-                      child: Text(
+                      child: AppText(
                         '暂无视频数据',
                         style: TextStyle(
                           fontSize: ui(14),
@@ -125,7 +126,7 @@ class _CategoryHeader extends StatelessWidget {
                   fit: BoxFit.contain,
                 ),
                 SizedBox(width: ui(8)),
-                Text(
+                AppText(
                   '搜索视频',
                   style: TextStyle(
                     fontSize: ui(14),
@@ -224,7 +225,7 @@ class _LatestVideosPlaceholder extends StatelessWidget {
         borderRadius: BorderRadius.circular(ui(16)),
       ),
       child: Center(
-        child: Text(
+        child: AppText(
           '最新视频',
           style: TextStyle(fontSize: ui(13), color: const Color(0xFFB6B5BB)),
         ),

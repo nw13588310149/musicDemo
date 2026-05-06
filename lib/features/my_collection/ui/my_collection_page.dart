@@ -11,6 +11,7 @@ import '../../video_tutorial/data/video_publisher_data.dart';
 import '../state/my_collection_controller.dart';
 import '../state/my_collection_state.dart';
 
+import '../../../core/widgets/app_text.dart';
 /// 我的收藏页：
 /// - 顶部 6 个 Tab（声乐 / 器乐 / 听写 / 视唱 / 乐理 / 视频），样式与设计稿
 ///   分段控件一致：#F5F6FA 胶囊容器 + 选中态白色卡片+阴影。
@@ -152,16 +153,16 @@ class MyCollectionPage extends ConsumerWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('取消收藏'),
-        content: Text('确定将“${item.title}”从收藏中移除吗？'),
+        title: const AppText('取消收藏'),
+        content: AppText('确定将“${item.title}”从收藏中移除吗？'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
+            child: const AppText('取消'),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('移除'),
+            child: const AppText('移除'),
           ),
         ],
       ),
@@ -259,7 +260,7 @@ class _CollectionTabItemView extends StatelessWidget {
                 borderRadius: BorderRadius.circular(ui(8)),
               ),
         alignment: Alignment.center,
-        child: Text(
+        child: AppText(
           label,
           maxLines: 1,
           softWrap: false,
@@ -400,7 +401,7 @@ Future<void> _showItemActionSheet(
             children: [
               ListTile(
                 leading: const Icon(Icons.share_outlined),
-                title: const Text('分享给班级'),
+                title: const AppText('分享给班级'),
                 onTap: () {
                   Navigator.of(sheetContext).pop();
                   onShare(item);
@@ -408,7 +409,7 @@ Future<void> _showItemActionSheet(
               ),
               ListTile(
                 leading: const Icon(Icons.delete_outline_rounded),
-                title: const Text('取消收藏'),
+                title: const AppText('取消收藏'),
                 onTap: () {
                   Navigator.of(sheetContext).pop();
                   onRemove(item);
@@ -468,7 +469,7 @@ class _SongCollectionCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      AppText(
                         item.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -481,7 +482,7 @@ class _SongCollectionCard extends StatelessWidget {
                         ),
                       ),
                       SizedBox(height: ui(7)),
-                      Text(
+                      AppText(
                         item.subtitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -608,7 +609,7 @@ class _LessonCollectionCard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
+                          AppText(
                             item.title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -622,7 +623,7 @@ class _LessonCollectionCard extends StatelessWidget {
                           ),
                           if (item.subtitle.isNotEmpty) ...[
                             SizedBox(height: ui(6)),
-                            Text(
+                            AppText(
                               item.subtitle,
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
@@ -687,7 +688,7 @@ class _LessonStudyButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(ui(8)),
         ),
         alignment: Alignment.center,
-        child: Text(
+        child: AppText(
           '去学习',
           style: TextStyle(
             fontSize: ui(11),
@@ -730,7 +731,7 @@ class _LessonArtwork extends StatelessWidget {
               left: 0,
               right: 0,
               top: ui(10),
-              child: Text(
+              child: AppText(
                 _coverText(),
                 textAlign: TextAlign.center,
                 style: TextStyle(
@@ -834,7 +835,7 @@ class _VideoCollectionCard extends StatelessWidget {
                                   borderRadius: BorderRadius.circular(18.0 * s),
                                 ),
                                 child: Center(
-                                  child: Text(
+                                  child: AppText(
                                     item.durationText,
                                     style: TextStyle(
                                       fontSize: 12.0 * s,
@@ -861,7 +862,7 @@ class _VideoCollectionCard extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
+                              AppText(
                                 item.title,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -891,7 +892,7 @@ class _VideoCollectionCard extends StatelessWidget {
                                   ),
                                   SizedBox(width: 4.0 * s),
                                   Expanded(
-                                    child: Text(
+                                    child: AppText(
                                       publisher.nickname,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
@@ -910,7 +911,7 @@ class _VideoCollectionCard extends StatelessWidget {
                                     height: 12.0 * s,
                                   ),
                                   SizedBox(width: 4.0 * s),
-                                  Text(
+                                  AppText(
                                     item.metricText,
                                     style: TextStyle(
                                       fontSize: 12.0 * s,
@@ -1038,7 +1039,7 @@ class _CollectionEmpty extends StatelessWidget {
             fit: BoxFit.contain,
           ),
           SizedBox(height: ui(4)),
-          Text(
+          AppText(
             '暂无收藏',
             textAlign: TextAlign.center,
             style: TextStyle(
@@ -1087,7 +1088,7 @@ class _ShareSheet extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Text(
+                  AppText(
                     '分享到班级',
                     style: TextStyle(
                       fontSize: ui(20),
@@ -1102,7 +1103,7 @@ class _ShareSheet extends StatelessWidget {
                 ],
               ),
               SizedBox(height: ui(6)),
-              Text(
+              AppText(
                 state.shareTarget?.title ?? '',
                 style: TextStyle(
                   fontSize: ui(14),
@@ -1141,7 +1142,7 @@ class _ShareSheet extends StatelessWidget {
                           children: [
                             const Icon(Icons.groups_rounded),
                             SizedBox(width: ui(10)),
-                            Expanded(child: Text(item.name)),
+                            Expanded(child: AppText(item.name)),
                             Icon(
                               item.selected
                                   ? Icons.check_circle_rounded
@@ -1167,7 +1168,7 @@ class _ShareSheet extends StatelessWidget {
                     backgroundColor: const Color(0xFF8B5CFF),
                     foregroundColor: Colors.white,
                   ),
-                  child: const Text('发送'),
+                  child: const AppText('发送'),
                 ),
               ),
             ],

@@ -20,6 +20,7 @@ import '../../../../core/widgets/scaled_dialog.dart';
 import '../../../shell/ui/shell_layout.dart';
 import 'face_image_picker.dart';
 
+import '../../../../core/widgets/app_text.dart';
 bool get isCameraCaptureSupportedImpl => true;
 
 // ============================================================================
@@ -260,7 +261,7 @@ class _FaceCameraDialogState extends State<_FaceCameraDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            AppText(
               '摄像头采集',
               style: TextStyle(
                 fontSize: ui(18),
@@ -271,7 +272,7 @@ class _FaceCameraDialogState extends State<_FaceCameraDialog> {
               ),
             ),
             SizedBox(height: ui(8)),
-            Text(
+            AppText(
               '请正对摄像头，保持光线均匀，露出额头与双耳后点击「拍摄」。',
               style: TextStyle(
                 fontSize: ui(13),

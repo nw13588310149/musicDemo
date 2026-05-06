@@ -8,6 +8,7 @@ import '../../../../core/widgets/scaled_dialog.dart';
 import '../../state/shell_state.dart';
 import '../shell_layout.dart';
 
+import '../../../../core/widgets/app_text.dart';
 class ShellTopBar extends StatelessWidget {
   ShellTopBar({
     required this.state,
@@ -118,7 +119,7 @@ class ShellTopBar extends StatelessWidget {
               ),
               SizedBox(width: ui(8)),
               Expanded(
-                child: Text(
+                child: AppText(
                   '传统音乐',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -179,7 +180,7 @@ class ShellTopBar extends StatelessWidget {
               SizedBox(width: ui(6)),
               ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: ui(96)),
-                child: Text(
+                child: AppText(
                   displayName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -387,7 +388,7 @@ class ShellTopBar extends StatelessWidget {
                 color: const Color(0xFFF04545),
                 borderRadius: BorderRadius.circular(ui(20)),
               ),
-              child: Text(
+              child: AppText(
                 unread > 99 ? '99+' : (unread > 9 ? '$unread+' : '$unread'),
                 style: TextStyle(
                   color: Colors.white,
@@ -419,14 +420,14 @@ class ShellTopBar extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Text('通知(${state.noticeItems.length})'),
+                      AppText('通知(${state.noticeItems.length})'),
                       const Spacer(),
                       TextButton(
                         onPressed: () async {
                           Navigator.pop(context);
                           await onMarkAllRead();
                         },
-                        child: const Text('批量已读'),
+                        child: const AppText('批量已读'),
                       ),
                     ],
                   ),
@@ -434,7 +435,7 @@ class ShellTopBar extends StatelessWidget {
                   const SizedBox(height: 12),
                   Expanded(
                     child: state.noticeItems.isEmpty
-                        ? const Center(child: Text('暂无通知'))
+                        ? const Center(child: AppText('暂无通知'))
                         : ListView.builder(
                             itemCount: state.noticeItems.length,
                             itemBuilder: (context, index) {
@@ -447,13 +448,13 @@ class ShellTopBar extends StatelessWidget {
                                   width: 30,
                                   height: 30,
                                 ),
-                                title: Text(
+                                title: AppText(
                                   item.content,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(fontSize: 13),
                                 ),
-                                subtitle: Text(
+                                subtitle: AppText(
                                   item.createTime,
                                   style: const TextStyle(fontSize: 11),
                                 ),
@@ -600,7 +601,7 @@ class _UserMenuRegionRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
+                  AppText(
                     '所在地区',
                     style: TextStyle(
                       fontSize: ui(14),
@@ -611,7 +612,7 @@ class _UserMenuRegionRow extends StatelessWidget {
                     ),
                   ),
                   SizedBox(height: ui(2)),
-                  Text(
+                  AppText(
                     province,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -676,7 +677,7 @@ class _UserMenuRow extends StatelessWidget {
               child: Icon(icon, size: ui(16), color: iconColor),
             ),
             SizedBox(width: ui(10)),
-            Text(
+            AppText(
               label,
               style: TextStyle(
                 fontSize: ui(14),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../constants/app_assets.dart';
 import '../../features/shell/ui/shell_layout.dart';
 
+import './app_text.dart';
 /// Available actions for the shared item action menu (the popup used by
 /// the cloud disk's left sidebar and other lists).
 ///
@@ -263,7 +264,7 @@ class _ItemActionMenuRow extends StatelessWidget {
               fit: BoxFit.contain,
             ),
             SizedBox(width: ui(10)),
-            Text(
+            AppText(
               label,
               style: TextStyle(
                 fontSize: ui(13),

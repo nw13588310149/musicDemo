@@ -12,6 +12,7 @@ import '../../../shell/ui/shell_layout.dart';
 import '../../state/circle_controller.dart';
 import '../../state/circle_state.dart';
 
+import '../../../../core/widgets/app_text.dart';
 const Color _kPurple = Color(0xFF8741FF);
 const Color _kBg = Color(0xFFF5F6FA);
 const Color _kBorder = Color(0xFFCECED1);
@@ -510,7 +511,7 @@ class _KindTabItem extends StatelessWidget {
               color: selected ? Colors.white : _kHint,
             ),
             SizedBox(width: ui(4)),
-            Text(
+            AppText(
               label,
               style: TextStyle(
                 fontSize: ui(12),
@@ -678,7 +679,7 @@ class _MediaArea extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                AppText(
                   fileName!,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -771,7 +772,7 @@ class _PickPlaceholder extends StatelessWidget {
           children: [
             Icon(icon, size: ui(38), color: _kPurple),
             SizedBox(height: ui(8)),
-            Text(
+            AppText(
               label,
               style: TextStyle(
                 fontSize: ui(14),
@@ -782,7 +783,7 @@ class _PickPlaceholder extends StatelessWidget {
               ),
             ),
             SizedBox(height: ui(4)),
-            Text(
+            AppText(
               hint,
               style: TextStyle(
                 fontSize: ui(12),
@@ -835,7 +836,7 @@ class _CoverArea extends StatelessWidget {
       children: [
         Row(
           children: [
-            Text(
+            AppText(
               '封面图',
               style: TextStyle(
                 fontSize: ui(13),
@@ -846,7 +847,7 @@ class _CoverArea extends StatelessWidget {
               ),
             ),
             SizedBox(width: ui(6)),
-            Text(
+            AppText(
               '（可选，仅支持图片）',
               style: TextStyle(
                 fontSize: ui(12),
@@ -919,7 +920,7 @@ class _CoverPickPlaceholder extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  AppText(
                     '点击上传封面',
                     style: TextStyle(
                       fontSize: ui(13),
@@ -930,7 +931,7 @@ class _CoverPickPlaceholder extends StatelessWidget {
                     ),
                   ),
                   SizedBox(height: ui(4)),
-                  Text(
+                  AppText(
                     '建议比例 16:9 / 1:1，jpg / png / webp 等',
                     style: TextStyle(
                       fontSize: ui(12),
@@ -1000,7 +1001,7 @@ class _CoverFilledRow extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                AppText(
                   fileName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -1143,7 +1144,7 @@ class _UploadStatusLine extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          AppText(
             '上传中 ${(uploadProgress * 100).toStringAsFixed(0)}%',
             style: TextStyle(
               fontSize: ui(12),
@@ -1176,7 +1177,7 @@ class _UploadStatusLine extends StatelessWidget {
           ),
           SizedBox(width: ui(4)),
           Expanded(
-            child: Text(
+            child: AppText(
               uploadError!,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -1197,7 +1198,7 @@ class _UploadStatusLine extends StatelessWidget {
                 horizontal: ui(6),
                 vertical: ui(2),
               ),
-              child: Text(
+              child: AppText(
                 '重试',
                 style: TextStyle(
                   fontSize: ui(12),
@@ -1221,7 +1222,7 @@ class _UploadStatusLine extends StatelessWidget {
             color: _kPurple,
           ),
           SizedBox(width: ui(4)),
-          Text(
+          AppText(
             '已上传${_humanSize(fileSize).isEmpty ? '' : ' · '}${_humanSize(fileSize)}',
             style: TextStyle(
               fontSize: ui(12),
@@ -1234,7 +1235,7 @@ class _UploadStatusLine extends StatelessWidget {
         ],
       );
     }
-    return Text(
+    return AppText(
       _humanSize(fileSize),
       style: TextStyle(
         fontSize: ui(12),

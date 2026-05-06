@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/widgets/app_text.dart';
 class PlaceholderPage extends StatelessWidget {
   const PlaceholderPage({
     required this.routeName,
@@ -13,16 +14,16 @@ class PlaceholderPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      appBar: AppBar(title: AppText(title)),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('页面迁移中', style: Theme.of(context).textTheme.headlineSmall),
+              AppText('页面迁移中', style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 12),
-              Text('当前路由: $routeName'),
+              AppText('当前路由: $routeName'),
             ],
           ),
         ),

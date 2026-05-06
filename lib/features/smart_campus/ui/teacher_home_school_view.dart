@@ -32,6 +32,7 @@ import 'package:flutter/material.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 
+import '../../../core/widgets/app_text.dart';
 // —— 颜色 ————————————————————————————————————————————————————————
 const Color _kPageBg = Color(0xFFEFF3FC);
 const Color _kCardGreyBg = Color(0xFFF5F6FA);
@@ -187,7 +188,7 @@ class _TeacherHomeSchoolViewState extends State<TeacherHomeSchoolView> {
             SizedBox(height: ui(10)),
             Padding(
               padding: EdgeInsets.only(left: ui(8)),
-              child: Text(
+              child: AppText(
                 '默认由家长在小程序审批后再由班主任审批；已与家长充分沟通的可选择班主任直接审批。补课协调以教务安排为准。',
                 style: TextStyle(
                   fontSize: ui(12),
@@ -276,7 +277,7 @@ class _Banner extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
+                  AppText(
                     '家校沟通',
                     style: TextStyle(
                       fontSize: ui(16),
@@ -287,7 +288,7 @@ class _Banner extends StatelessWidget {
                     ),
                   ),
                   SizedBox(height: ui(2)),
-                  Text(
+                  AppText(
                     '与本班学生家长就请假、成绩、心理等进行文字沟通；可查看短信送达演示状态。消息以站内信为主，接入后可同步微信/App推送。',
                     style: TextStyle(
                       fontSize: ui(12),
@@ -392,7 +393,7 @@ class _StatCard extends StatelessWidget {
             left: ui(16),
             top: ui(16),
             right: ui(76),
-            child: Text(
+            child: AppText(
               title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -408,7 +409,7 @@ class _StatCard extends StatelessWidget {
           Positioned(
             left: ui(16),
             top: ui(40),
-            child: Text(
+            child: AppText(
               '$value',
               style: TextStyle(
                 fontSize: ui(32),
@@ -520,7 +521,7 @@ class _TabPill extends StatelessWidget {
           color: active ? _kTextDark : Colors.transparent,
           borderRadius: BorderRadius.circular(ui(6)),
         ),
-        child: Text(
+        child: AppText(
           label,
           style: TextStyle(
             fontSize: ui(14),
@@ -613,7 +614,7 @@ class _EmptyHint extends StatelessWidget {
         borderRadius: BorderRadius.circular(ui(12)),
       ),
       child: Center(
-        child: Text(
+        child: AppText(
           query.isNotEmpty ? '未找到匹配的对话' : '当前 ${tab.label} 没有对话',
           style: TextStyle(
             fontSize: ui(13),
@@ -702,7 +703,7 @@ class _ConversationCard extends StatelessWidget {
                         Row(
                           children: [
                             Flexible(
-                              child: Text(
+                              child: AppText(
                                 conversation.studentName,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -725,7 +726,7 @@ class _ConversationCard extends StatelessWidget {
                           ],
                         ),
                         SizedBox(height: ui(6)),
-                        Text(
+                        AppText(
                           '${conversation.parentName}（${conversation.parentRelation}）',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -738,7 +739,7 @@ class _ConversationCard extends StatelessWidget {
                           ),
                         ),
                         SizedBox(height: ui(5)),
-                        Text(
+                        AppText(
                           conversation.studentNo,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -770,7 +771,7 @@ class _ConversationCard extends StatelessWidget {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    AppText(
                       '${conversation.lastSpeaker}：',
                       style: TextStyle(
                         fontSize: ui(12),
@@ -781,7 +782,7 @@ class _ConversationCard extends StatelessWidget {
                       ),
                     ),
                     Expanded(
-                      child: Text(
+                      child: AppText(
                         conversation.lastMessage,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
@@ -801,7 +802,7 @@ class _ConversationCard extends StatelessWidget {
               Row(
                 children: [
                   Expanded(
-                    child: Text(
+                    child: AppText(
                       conversation.timeText,
                       style: TextStyle(
                         fontSize: ui(12),
@@ -813,7 +814,7 @@ class _ConversationCard extends StatelessWidget {
                     ),
                   ),
                   if (conversation.smsFailed)
-                    Text(
+                    AppText(
                       '短信未送达',
                       style: TextStyle(
                         fontSize: ui(12),
@@ -860,7 +861,7 @@ class _AvatarWithBadge extends StatelessWidget {
               borderRadius: BorderRadius.circular(ui(8)),
             ),
             alignment: Alignment.center,
-            child: Text(
+            child: AppText(
               initial,
               style: TextStyle(
                 fontSize: ui(16),
@@ -884,7 +885,7 @@ class _AvatarWithBadge extends StatelessWidget {
                   color: _kBadgeRed,
                   borderRadius: BorderRadius.circular(ui(20)),
                 ),
-                child: Text(
+                child: AppText(
                   unreadCount > 9 ? '10+' : '$unreadCount',
                   style: TextStyle(
                     fontSize: ui(10),
@@ -943,7 +944,7 @@ class _TagPill extends StatelessWidget {
         color: bg,
         borderRadius: BorderRadius.circular(ui(4)),
       ),
-      child: Text(
+      child: AppText(
         label,
         style: TextStyle(
           fontSize: ui(12),
@@ -1049,7 +1050,7 @@ class _ChatDetailDialogState extends State<_ChatDetailDialog> {
                           horizontal: ui(12),
                           vertical: ui(6),
                         ),
-                        child: Text(
+                        child: AppText(
                           '退出',
                           style: TextStyle(
                             fontSize: ui(16),
@@ -1115,7 +1116,7 @@ class _DialogHeader extends StatelessWidget {
                   ],
                 ),
                 alignment: Alignment.center,
-                child: Text(
+                child: AppText(
                   initial,
                   style: TextStyle(
                     fontSize: ui(22),
@@ -1131,7 +1132,7 @@ class _DialogHeader extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    AppText(
                       conversation.studentName,
                       style: TextStyle(
                         fontSize: ui(16),
@@ -1142,7 +1143,7 @@ class _DialogHeader extends StatelessWidget {
                       ),
                     ),
                     SizedBox(height: ui(4)),
-                    Text(
+                    AppText(
                       conversation.studentNo,
                       style: TextStyle(
                         fontSize: ui(12),
@@ -1153,7 +1154,7 @@ class _DialogHeader extends StatelessWidget {
                       ),
                     ),
                     SizedBox(height: ui(2)),
-                    Text(
+                    AppText(
                       conversation.studentNo,
                       style: TextStyle(
                         fontSize: ui(12),
@@ -1186,7 +1187,7 @@ class _DialogHeader extends StatelessWidget {
                 ),
               ),
               SizedBox(width: ui(8)),
-              Text(
+              AppText(
                 '${conversation.parentRelation}-${conversation.parentName}',
                 style: TextStyle(
                   fontSize: ui(16),
@@ -1231,7 +1232,7 @@ class _ChatBubble extends StatelessWidget {
                 color: fromTeacher ? _kPurple : _kCardGreyBg,
                 borderRadius: BorderRadius.circular(ui(8)),
               ),
-              child: Text(
+              child: AppText(
                 message.text,
                 style: TextStyle(
                   fontSize: ui(13),
@@ -1249,7 +1250,7 @@ class _ChatBubble extends StatelessWidget {
                   : MainAxisAlignment.start,
               children: [
                 if (fromTeacher) ...[
-                  Text(
+                  AppText(
                     message.delivered ? '已送达' : '未送达',
                     style: TextStyle(
                       fontSize: ui(12),
@@ -1261,7 +1262,7 @@ class _ChatBubble extends StatelessWidget {
                   ),
                   SizedBox(width: ui(6)),
                 ],
-                Text(
+                AppText(
                   message.time,
                   style: TextStyle(
                     fontSize: ui(12),
@@ -1343,7 +1344,7 @@ class _InputBar extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
+                  AppText(
                     '发送',
                     style: TextStyle(
                       fontSize: ui(13),

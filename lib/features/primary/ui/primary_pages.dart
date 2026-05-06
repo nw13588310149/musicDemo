@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../app/router/route_paths.dart';
 import '../../ai_chat/ui/ai_chat_page.dart';
 
+import '../../../core/widgets/app_text.dart';
 class PrimaryCardData {
   const PrimaryCardData({
     required this.title,
@@ -482,7 +483,7 @@ class _HeaderCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                AppText(
                   title,
                   style: const TextStyle(
                     fontSize: 26,
@@ -491,7 +492,7 @@ class _HeaderCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 6),
-                Text(
+                AppText(
                   subtitle,
                   style: const TextStyle(
                     fontSize: 14,
@@ -508,7 +509,7 @@ class _HeaderCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: const Color(0xFFCDF6EC)),
             ),
-            child: Text(
+            child: AppText(
               dayText,
               style: const TextStyle(fontSize: 12, color: Color(0xFF00A98A)),
             ),
@@ -547,7 +548,7 @@ class _StatsGrid extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      AppText(
                         stat.label,
                         style: const TextStyle(
                           fontSize: 13,
@@ -555,7 +556,7 @@ class _StatsGrid extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      Text(
+                      AppText(
                         stat.value,
                         style: const TextStyle(
                           fontSize: 24,
@@ -653,7 +654,7 @@ class _FeatureCard extends StatelessWidget {
                       color: const Color(0xFFF7F7F7),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Text(
+                    child: AppText(
                       card.badgeText!,
                       style: const TextStyle(
                         fontSize: 10,
@@ -664,7 +665,7 @@ class _FeatureCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 14),
-            Text(
+            AppText(
               card.title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -675,7 +676,7 @@ class _FeatureCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 7),
-            Text(
+            AppText(
               card.subtitle,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,

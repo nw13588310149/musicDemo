@@ -10,6 +10,7 @@ import '../data/avatar_picker.dart';
 import '../state/personal_center_controller.dart';
 import '../state/personal_center_state.dart';
 
+import '../../../core/widgets/app_text.dart';
 /// 个人信息页（迭代自 1.0 `pages/PersonalCenter/info.vue`）。
 ///
 /// 布局/逻辑/功能与 1.0 完全对齐：
@@ -57,7 +58,7 @@ class _InfoHeader extends StatelessWidget {
       children: <Widget>[
         _GlassIconButton(icon: Icons.arrow_back_ios_new_rounded, onTap: onBack),
         SizedBox(width: ui(12)),
-        Text(
+        AppText(
           '个人信息',
           style: TextStyle(
             color: const Color(0xFF0B081A),
@@ -236,7 +237,7 @@ class _InfoRow extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: <Widget>[
-            Text(
+            AppText(
               title,
               style: TextStyle(
                 color: const Color(0xFF0B081A),
@@ -249,7 +250,7 @@ class _InfoRow extends StatelessWidget {
             Expanded(
               child: Padding(
                 padding: EdgeInsets.symmetric(horizontal: ui(16)),
-                child: Text(
+                child: AppText(
                   value,
                   textAlign: TextAlign.right,
                   maxLines: 1,
@@ -295,7 +296,7 @@ class _AvatarRow extends StatelessWidget {
         padding: EdgeInsets.symmetric(vertical: ui(10)),
         child: Row(
           children: <Widget>[
-            Text(
+            AppText(
               '头像',
               style: TextStyle(
                 color: const Color(0xFF0B081A),
@@ -626,7 +627,7 @@ class _AvatarEditDialogState extends State<_AvatarEditDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Text(
+            AppText(
               '修改头像',
               style: TextStyle(
                 fontSize: ui(18),
@@ -693,7 +694,7 @@ class _UploadButton extends StatelessWidget {
                 color: const Color(0xFF8741FF),
               ),
             SizedBox(width: ui(6)),
-            Text(
+            AppText(
               uploading ? '上传中...' : '上传新头像',
               style: TextStyle(
                 color: const Color(0xFF8741FF),
@@ -797,7 +798,7 @@ class _PasswordEditDialogState extends State<_PasswordEditDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Text(
+            AppText(
               '修改密码',
               style: TextStyle(
                 fontSize: ui(18),

@@ -9,6 +9,7 @@ import 'widgets/circle_immersive_view.dart';
 import 'widgets/circle_list_view.dart';
 import 'widgets/circle_publish_dialog.dart';
 
+import '../../../core/widgets/app_text.dart';
 class CirclePage extends ConsumerWidget {
   const CirclePage({super.key});
 
@@ -96,7 +97,7 @@ class _CircleHeader extends StatelessWidget {
           _CircleBackButton(onTap: onBack),
           Expanded(
             child: Center(
-              child: Text(
+              child: AppText(
                 '校圈',
                 style: TextStyle(
                   color: const Color(0xFF0B081A),
@@ -203,7 +204,7 @@ class _ModeChip extends StatelessWidget {
           borderRadius: BorderRadius.circular(ui(6)),
         ),
         alignment: Alignment.center,
-        child: Text(
+        child: AppText(
           label,
           style: TextStyle(
             color: selected ? Colors.white : const Color(0xFFB6B5BB),

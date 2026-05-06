@@ -10,6 +10,7 @@ import '../state/music_companion_controller.dart';
 import '../state/music_companion_state.dart';
 import 'widgets/piano_visualizer.dart';
 
+import '../../../core/widgets/app_text.dart';
 class MusicCompanionV2Page extends ConsumerStatefulWidget {
   const MusicCompanionV2Page({super.key});
 
@@ -188,7 +189,7 @@ class _CompanionTabItem extends StatelessWidget {
                 ]
               : null,
         ),
-        child: Text(
+        child: AppText(
           label,
           style: TextStyle(
             fontSize: ui(14),
@@ -282,7 +283,7 @@ class _MetronomePane extends StatelessWidget {
         children: [
           _MetronomeHeaderCard(state: state, onToggle: onToggle),
           SizedBox(height: ui(20)),
-          Text(
+          AppText(
             '音色选择',
             style: TextStyle(
               fontSize: ui(16),
@@ -307,7 +308,7 @@ class _MetronomePane extends StatelessWidget {
             ],
           ),
           SizedBox(height: ui(20)),
-          Text(
+          AppText(
             '节拍选择',
             style: TextStyle(
               fontSize: ui(16),
@@ -534,7 +535,7 @@ class _ChoiceChipButton extends StatelessWidget {
     final Widget labelWidget = labelWidth != null
         ? SizedBox(
             width: labelWidth,
-            child: Text(
+            child: AppText(
               label,
               textAlign: TextAlign.center,
               maxLines: 1,
@@ -543,7 +544,7 @@ class _ChoiceChipButton extends StatelessWidget {
               style: textStyle,
             ),
           )
-        : Text(label, maxLines: 1, softWrap: false, style: textStyle);
+        : AppText(label, maxLines: 1, softWrap: false, style: textStyle);
 
     return GestureDetector(
       onTap: onTap,
@@ -836,7 +837,7 @@ class _TunerPane extends StatelessWidget {
                   ),
                 ),
                 child: Center(
-                  child: Text(
+                  child: AppText(
                     state.tunerNote,
                     style: TextStyle(
                       fontSize: ui(38),
@@ -860,7 +861,7 @@ class _TunerPane extends StatelessWidget {
                 onTap: onDecreaseFrequency,
               ),
               SizedBox(width: ui(22)),
-              Text(
+              AppText(
                 '${state.tunerReferenceFrequency}hz',
                 style: TextStyle(
                   fontSize: ui(20),
@@ -884,7 +885,7 @@ class _TunerPane extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  AppText(
                     '特定频段',
                     style: TextStyle(
                       fontSize: ui(15),
@@ -906,7 +907,7 @@ class _TunerPane extends StatelessWidget {
                             : const Color(0xFFF4F5FA),
                         borderRadius: BorderRadius.circular(ui(8)),
                       ),
-                      child: Text(
+                      child: AppText(
                         '442hz',
                         style: TextStyle(
                           fontSize: ui(13),
@@ -938,7 +939,7 @@ class _TunerPane extends StatelessWidget {
             ),
           ),
           SizedBox(height: ui(14)),
-          Text(
+          AppText(
             state.tunerPermissionGranted
                 ? (state.tunerListening
                       ? '实时检测中 ${state.tunerDetectedFrequency.toStringAsFixed(1)}Hz'
@@ -955,7 +956,7 @@ class _TunerPane extends StatelessWidget {
             SizedBox(height: ui(10)),
             TextButton(
               onPressed: onRetryPermission,
-              child: Text(
+              child: AppText(
                 '重新授权麦克风',
                 style: TextStyle(
                   fontSize: ui(13),

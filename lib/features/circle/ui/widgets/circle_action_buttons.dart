@@ -5,6 +5,7 @@ import '../../../../core/widgets/app_asset_graphic.dart';
 import '../../../shell/ui/shell_layout.dart';
 import '../../state/circle_state.dart';
 
+import '../../../../core/widgets/app_text.dart';
 /// 单个操作按钮（点赞 / 评论 / 收藏），支持 light / dark 两种调色。
 class CircleActionButton extends StatelessWidget {
   const CircleActionButton({
@@ -40,7 +41,7 @@ class CircleActionButton extends StatelessWidget {
             colorFilter: ColorFilter.mode(coloredIcon!, BlendMode.srcIn),
             child: AppAssetGraphic(iconAsset, width: size, height: size),
           );
-    final textWidget = Text(
+    final textWidget = AppText(
       formatCircleCount(count),
       style: TextStyle(
         color: dark ? Colors.white : const Color(0xFF0B081A),

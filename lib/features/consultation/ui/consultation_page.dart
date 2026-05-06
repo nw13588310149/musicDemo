@@ -8,6 +8,7 @@ import '../state/consultation_controller.dart';
 import '../state/consultation_detail_state.dart';
 import '../state/consultation_state.dart';
 
+import '../../../core/widgets/app_text.dart';
 class ConsultationPage extends ConsumerWidget {
   const ConsultationPage({super.key});
 
@@ -78,7 +79,7 @@ class _ConsultationHeader extends StatelessWidget {
           ConsultationBackButton(onTap: onBack),
           Expanded(
             child: Center(
-              child: Text(
+              child: AppText(
                 '资讯',
                 style: TextStyle(
                   color: const Color(0xFF0B081A),
@@ -190,7 +191,7 @@ class _ConsultationBanner extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        AppText(
                           '资讯中心',
                           style: TextStyle(
                             color: Colors.white,
@@ -200,7 +201,7 @@ class _ConsultationBanner extends StatelessWidget {
                           ),
                         ),
                         SizedBox(height: ui(8)),
-                        Text(
+                        AppText(
                           '艺考热点 · 招生简章一手掌握',
                           style: TextStyle(
                             color: Colors.white.withValues(alpha: 0.85),
@@ -291,7 +292,7 @@ class _ConsultationCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      AppText(
                         item.title,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
@@ -306,7 +307,7 @@ class _ConsultationCard extends StatelessWidget {
                       const Spacer(),
                       Row(
                         children: [
-                          Text(
+                          AppText(
                             formatRelativeTime(item.createTime),
                             style: TextStyle(
                               color: const Color(0xFFB6B5BB),
@@ -394,7 +395,7 @@ class _ViewCount extends StatelessWidget {
           color: const Color(0xFF928FA0),
         ),
         SizedBox(width: ui(4)),
-        Text(
+        AppText(
           count.toString(),
           style: TextStyle(
             color: const Color(0xFFB6B5BB),
@@ -420,7 +421,7 @@ class _LatestBadge extends StatelessWidget {
         color: const Color(0xFF8741FF),
         borderRadius: BorderRadius.circular(ui(4)),
       ),
-      child: Text(
+      child: AppText(
         '最新',
         style: TextStyle(
           color: Colors.white,
@@ -449,7 +450,7 @@ class _ConsultationEmpty extends StatelessWidget {
             size: ui(48),
           ),
           SizedBox(height: ui(12)),
-          Text(
+          AppText(
             '暂无资讯',
             style: TextStyle(
               color: const Color(0xFFB6B5BB),

@@ -35,6 +35,7 @@ import 'teacher_leave_approval_view.dart';
 import 'teacher_lesson_schedule_view.dart';
 import 'teacher_student_roster_view.dart';
 
+import '../../../core/widgets/app_text.dart';
 /// 智慧校园入口页：根据当前 [SmartCampusRole] + [SmartCampusMainView] 路由到
 /// 对应的子视图。
 ///
@@ -392,7 +393,7 @@ class _SmartCampusPlaceholder extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          AppText(
             '智慧校园',
             style: TextStyle(
               fontSize: ui(28),
@@ -402,7 +403,7 @@ class _SmartCampusPlaceholder extends StatelessWidget {
             ),
           ),
           SizedBox(height: ui(12)),
-          Text(
+          AppText(
             '当前角色暂未接入完整视图，先保留角色切换和基础入口，避免影响其他页面开发。',
             style: TextStyle(
               fontSize: ui(14),
@@ -450,7 +451,7 @@ class _SmartCampusPlaceholder extends StatelessWidget {
                     ui: ui,
                   ),
                   SizedBox(height: ui(24)),
-                  Text(
+                  AppText(
                     '说明',
                     style: TextStyle(
                       fontSize: ui(18),
@@ -460,7 +461,7 @@ class _SmartCampusPlaceholder extends StatelessWidget {
                     ),
                   ),
                   SizedBox(height: ui(10)),
-                  Text(
+                  AppText(
                     '老师 / 班主任端首页与「班级工作台」已接入完整视图；学生 / 宿管 / 管理员端仍为骨架占位，按 Figma 节点重建后再上线。',
                     style: TextStyle(
                       fontSize: ui(14),
@@ -562,7 +563,7 @@ class _RoleChip extends StatelessWidget {
           borderRadius: BorderRadius.circular(ui(12)),
         ),
         alignment: Alignment.center,
-        child: Text(
+        child: AppText(
           label,
           style: TextStyle(
             fontSize: ui(14),
@@ -589,7 +590,7 @@ class _InfoRow extends StatelessWidget {
       children: [
         SizedBox(
           width: ui(84),
-          child: Text(
+          child: AppText(
             label,
             style: TextStyle(
               fontSize: ui(14),
@@ -598,7 +599,7 @@ class _InfoRow extends StatelessWidget {
             ),
           ),
         ),
-        Text(
+        AppText(
           value,
           style: TextStyle(
             fontSize: ui(15),

@@ -121,16 +121,16 @@ flutter:
         - asset: assets/fonts/HarmonyOS_Sans_SC_Regular.ttf
         - asset: assets/fonts/HarmonyOS_Sans_SC_Medium.ttf
           weight: 500
-    # PingFang SC 使用 OTF（CFF 轮廓，更接近 Apple 原版字面率与粗细）。
-    # PingFang 原版最重只到 Semibold(中粗体)，没有 Bold/Heavy；
-    # Web 浏览器会对未注册的字重自动做合成加粗，原生 Flutter 不会。
-    # 字重映射严格按设计走，原生端"看起来偏细"的视觉差异由
-    # core/theme/text_style_native_bold.dart 的 .nativeBolden() 工具
-    # 在用到的地方逐处补一层同色阴影来模拟 synthetic bold（Web 不受影响）。
-    #   • w400 → Regular（正文）
-    #   • w500 → Medium（左侧导航 / Tab 标签 / 副标题）
-    #   • w600 → Semibold（强调/小标题）
-    #   • w700 / 800 / 900 → Semibold（PingFang 物理上限，避免回退到系统字体）
+    # PingFang SC 字重映射（OTF / CFF 轮廓）：
+    # 严格按 Figma 设计稿走 —— w500 命中 Medium.otf。
+    # Web 上看起来"合适"，iPad/iOS 上由于 Skia 不做 synthetic bold 会略偏细。
+    # 解决方案不在 pubspec 这里改字重映射（曾尝试将 Semibold.otf 同时绑到
+    # w500/600/700/800/900，但 Flutter Web 的 CanvasKit 对同一文件的多次注册
+    # 有去重 bug：只保留一份并用文件内部 weight=600，导致 w500 在 Web 上反而
+    # 落空回退、显得更细）。
+    # 视觉差异由 lib/core/widgets/app_text.dart 提供的 AppText 自动补正：
+    # AppText 会读取 style 的 fontFamily / fontWeight，在原生端对 PingFang SC
+    # w400/w500 自动叠一道同色阴影模拟 synthetic bold，Web 不受任何影响。
     - family: PingFang SC
       fonts:
         - asset: assets/fonts/ttf/PingFangSC-Ultralight.otf
@@ -145,12 +145,6 @@ flutter:
           weight: 500
         - asset: assets/fonts/ttf/PingFangSC-Semibold.otf
           weight: 600
-        - asset: assets/fonts/ttf/PingFangSC-Semibold.otf
-          weight: 700
-        - asset: assets/fonts/ttf/PingFangSC-Semibold.otf
-          weight: 800
-        - asset: assets/fonts/ttf/PingFangSC-Semibold.otf
-          weight: 900
     # Manrope 变体字（设计稿角标 10+ 等数字使用 Manrope w800）
     # 把变体字以静态 w800 注册，Flutter 通过 fontWeight: w800 即可命中
     - family: Manrope

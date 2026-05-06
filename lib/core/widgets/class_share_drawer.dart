@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../features/shell/ui/shell_layout.dart';
 
+import './app_text.dart';
 class ClassShareItem {
   const ClassShareItem({
     required this.id,
@@ -87,7 +88,7 @@ class ClassShareDrawer extends StatelessWidget {
                 SizedBox(height: ui(24)),
                 targetCard,
                 SizedBox(height: ui(28)),
-                Text(
+                AppText(
                   '您的班级群',
                   style: TextStyle(
                     color: const Color(0xFF0B081A),
@@ -163,7 +164,7 @@ class ShareTargetCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
+                AppText(
                   label,
                   style: TextStyle(
                     color: const Color(0xFF0B081A),
@@ -172,7 +173,7 @@ class ShareTargetCard extends StatelessWidget {
                   ),
                 ),
                 SizedBox(height: ui(10)),
-                Text(
+                AppText(
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -233,7 +234,7 @@ class _ShareDrawerTitle extends StatelessWidget {
           ),
         ),
         SizedBox(width: ui(4)),
-        Text(
+        AppText(
           title,
           style: TextStyle(
             color: const Color(0xFF0B081A),
@@ -290,7 +291,7 @@ class _ClassShareRow extends StatelessWidget {
               ),
               SizedBox(width: ui(16)),
               Expanded(
-                child: Text(
+                child: AppText(
                   item.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -317,7 +318,7 @@ class _ShareDrawerEmpty extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Center(
-      child: Text(
+      child: AppText(
         '暂无班级群',
         style: TextStyle(
           color: const Color(0xFFB6B5BB),
@@ -360,7 +361,7 @@ class _ShareSendButton extends StatelessWidget {
                   valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                 ),
               )
-            : Text(
+            : AppText(
                 '发送',
                 style: TextStyle(
                   color: Colors.white,

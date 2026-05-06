@@ -44,6 +44,7 @@ import 'package:flutter/material.dart';
 
 import '../../shell/ui/shell_layout.dart';
 
+import '../../../core/widgets/app_text.dart';
 const Color _kCardBg = Colors.white;
 const Color _kPageBg = Color(0xFFEFF3FC);
 const Color _kInnerGray = Color(0xFFF5F6FA);
@@ -150,7 +151,7 @@ class _GradesBanner extends StatelessWidget {
           _BackButton(onTap: onBack),
           Expanded(
             child: Center(
-              child: Text(
+              child: AppText(
                 '成绩与排名',
                 style: TextStyle(
                   fontSize: ui(16),
@@ -220,7 +221,7 @@ class _SemesterTabs extends StatelessWidget {
             color: active ? _kTextDark : Colors.transparent,
             borderRadius: BorderRadius.circular(ui(6)),
           ),
-          child: Text(
+          child: AppText(
             label,
             style: TextStyle(
               fontSize: ui(14),
@@ -322,7 +323,7 @@ class _AverageCard extends StatelessWidget {
           Positioned(
             left: 0,
             top: 0,
-            child: Text(
+            child: AppText(
               '学年考试均分',
               style: TextStyle(
                 fontSize: ui(14),
@@ -336,7 +337,7 @@ class _AverageCard extends StatelessWidget {
           Positioned(
             left: 0,
             top: ui(28),
-            child: Text(
+            child: AppText(
               '32',
               style: TextStyle(
                 fontSize: ui(32),
@@ -351,7 +352,7 @@ class _AverageCard extends StatelessWidget {
             left: ui(64),
             right: 0,
             top: ui(36),
-            child: Text(
+            child: AppText(
               '各次月考/大考总均分平均',
               textAlign: TextAlign.right,
               maxLines: 1,
@@ -445,7 +446,7 @@ class _RankCard extends StatelessWidget {
           Positioned(
             left: ui(16),
             top: ui(16),
-            child: Text(
+            child: AppText(
               title,
               style: TextStyle(
                 fontSize: ui(14),
@@ -462,7 +463,7 @@ class _RankCard extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(
+                AppText(
                   value,
                   style: TextStyle(
                     fontSize: ui(32),
@@ -475,7 +476,7 @@ class _RankCard extends StatelessWidget {
                 SizedBox(width: ui(2)),
                 Padding(
                   padding: EdgeInsets.only(bottom: ui(2)),
-                  child: Text(
+                  child: AppText(
                     totalSuffix,
                     style: TextStyle(
                       fontSize: ui(20),
@@ -533,7 +534,7 @@ class _RankBadge {
           else
             Icon(Icons.trending_up_rounded, size: ui(12), color: color),
           SizedBox(width: ui(4)),
-          Text(
+          AppText(
             text,
             style: TextStyle(
               fontSize: ui(11),
@@ -565,7 +566,7 @@ class _BestExamCard extends StatelessWidget {
           Positioned(
             left: ui(16),
             top: ui(16),
-            child: Text(
+            child: AppText(
               '本学期最佳考试',
               style: TextStyle(
                 fontSize: ui(14),
@@ -580,7 +581,7 @@ class _BestExamCard extends StatelessWidget {
             left: ui(16),
             top: ui(50),
             right: ui(12),
-            child: Text(
+            child: AppText(
               '六月摸底考试',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -607,7 +608,7 @@ class _BestExamCard extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
+                  AppText(
                     '均分 ',
                     style: TextStyle(
                       fontSize: ui(11),
@@ -617,7 +618,7 @@ class _BestExamCard extends StatelessWidget {
                       height: 1,
                     ),
                   ),
-                  Text(
+                  AppText(
                     '91分',
                     style: TextStyle(
                       fontSize: ui(11),
@@ -717,7 +718,7 @@ class _SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Text(
+    return AppText(
       text,
       style: TextStyle(
         fontSize: ui(18),
@@ -855,7 +856,7 @@ class _LineTabChip extends StatelessWidget {
               ]
             : null,
       ),
-      child: Text(
+      child: AppText(
         label,
         style: TextStyle(
           fontSize: ui(14),
@@ -916,7 +917,7 @@ class _LineChartArea extends StatelessWidget {
                 left: 0,
                 top: i * tickGap - ui(10),
                 width: ui(20),
-                child: Text(
+                child: AppText(
                   '${_ticks[i]}',
                   textAlign: TextAlign.right,
                   style: TextStyle(
@@ -941,7 +942,7 @@ class _LineChartArea extends StatelessWidget {
                 left: points[i].dx - ui(20),
                 top: points[i].dy - ui(20),
                 width: ui(40),
-                child: Text(
+                child: AppText(
                   values[i] == values[i].roundToDouble()
                       ? values[i].toInt().toString()
                       : values[i].toString(),
@@ -966,7 +967,7 @@ class _LineChartArea extends StatelessWidget {
                   for (var i = 0; i < n; i++)
                     Expanded(
                       child: Center(
-                        child: Text(
+                        child: AppText(
                           months[i],
                           style: TextStyle(
                             fontSize: ui(12),
@@ -1055,7 +1056,7 @@ class _RankRowHeader extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: ui(2)),
       child: Row(
         children: [
-          Text(
+          AppText(
             '每场·总成绩排名 (班级/全校)',
             style: TextStyle(
               fontSize: ui(13),
@@ -1066,7 +1067,7 @@ class _RankRowHeader extends StatelessWidget {
             ),
           ),
           const Spacer(),
-          Text(
+          AppText(
             '班级总人数：42',
             style: TextStyle(
               fontSize: ui(10),
@@ -1077,7 +1078,7 @@ class _RankRowHeader extends StatelessWidget {
             ),
           ),
           SizedBox(width: ui(20)),
-          Text(
+          AppText(
             '全校总人数：368',
             style: TextStyle(
               fontSize: ui(10),
@@ -1156,7 +1157,7 @@ class _RankCell extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         mainAxisAlignment: MainAxisAlignment.start,
         children: [
-          Text(
+          AppText(
             month,
             style: TextStyle(
               fontSize: ui(13),
@@ -1167,7 +1168,7 @@ class _RankCell extends StatelessWidget {
             ),
           ),
           SizedBox(height: ui(4)),
-          Text(
+          AppText(
             value == value.roundToDouble()
                 ? value.toInt().toString()
                 : value.toString(),
@@ -1211,7 +1212,7 @@ class _MiniStatRow extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
+        AppText(
           label,
           style: TextStyle(
             fontSize: ui(12),
@@ -1221,7 +1222,7 @@ class _MiniStatRow extends StatelessWidget {
             height: 1.2,
           ),
         ),
-        Text(
+        AppText(
           value,
           style: TextStyle(
             fontSize: ui(12),
@@ -1305,7 +1306,7 @@ class _ScoreSegmentTile extends StatelessWidget {
         children: [
           Row(
             children: [
-              Text(
+              AppText(
                 segment.label,
                 style: TextStyle(
                   fontSize: ui(14),
@@ -1316,7 +1317,7 @@ class _ScoreSegmentTile extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              Text(
+              AppText(
                 '${segment.percent}%',
                 style: TextStyle(
                   fontSize: ui(14),
@@ -1356,7 +1357,7 @@ class _ScoreSegmentTile extends StatelessWidget {
           SizedBox(height: ui(8)),
           Align(
             alignment: Alignment.centerRight,
-            child: Text(
+            child: AppText(
               '${segment.count}场',
               style: TextStyle(
                 fontSize: ui(12),
@@ -1503,7 +1504,7 @@ class _ExamCardHeader extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     return Row(
       children: [
-        Text(
+        AppText(
           title,
           style: TextStyle(
             fontSize: ui(16),
@@ -1514,7 +1515,7 @@ class _ExamCardHeader extends StatelessWidget {
           ),
         ),
         SizedBox(width: ui(12)),
-        Text(
+        AppText(
           date,
           style: TextStyle(
             fontSize: ui(12),
@@ -1573,7 +1574,7 @@ class _ExamSummaryRow extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.start,
               children: [
-                Text(
+                AppText(
                   stats[i].$1,
                   style: TextStyle(
                     fontSize: ui(12),
@@ -1584,7 +1585,7 @@ class _ExamSummaryRow extends StatelessWidget {
                   ),
                 ),
                 SizedBox(width: ui(4)),
-                Text(
+                AppText(
                   stats[i].$2,
                   style: TextStyle(
                     fontSize: ui(12),
@@ -1628,7 +1629,7 @@ class _ExamSubjectTile extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Text(
+                  AppText(
                     data.teacher,
                     style: TextStyle(
                       fontSize: ui(14),
@@ -1645,7 +1646,7 @@ class _ExamSubjectTile extends StatelessWidget {
               SizedBox(height: ui(8)),
               Row(
                 children: [
-                  Text(
+                  AppText(
                     '班级排名：${data.classRank}',
                     style: TextStyle(
                       fontSize: ui(12),
@@ -1658,7 +1659,7 @@ class _ExamSubjectTile extends StatelessWidget {
                   SizedBox(width: ui(12)),
                   Container(width: 1, height: ui(10), color: _kTextHint),
                   SizedBox(width: ui(12)),
-                  Text(
+                  AppText(
                     '全校排名：${data.schoolRank}',
                     style: TextStyle(
                       fontSize: ui(12),
@@ -1671,7 +1672,7 @@ class _ExamSubjectTile extends StatelessWidget {
                 ],
               ),
               SizedBox(height: ui(6)),
-              Text(
+              AppText(
                 data.comment,
                 style: TextStyle(
                   fontSize: ui(12),
@@ -1688,7 +1689,7 @@ class _ExamSubjectTile extends StatelessWidget {
           Positioned(
             top: 0,
             right: 0,
-            child: Text(
+            child: AppText(
               '${data.score}分',
               style: TextStyle(
                 fontSize: ui(14),
@@ -1732,7 +1733,7 @@ class _SubjectTag extends StatelessWidget {
         color: bg,
         borderRadius: BorderRadius.circular(ui(4)),
       ),
-      child: Text(
+      child: AppText(
         label,
         style: TextStyle(
           fontSize: ui(12),
@@ -1782,7 +1783,7 @@ class _MediaTag extends StatelessWidget {
             Icon(icon, size: ui(12), color: fg),
             SizedBox(width: ui(2)),
           ],
-          Text(
+          AppText(
             label,
             style: TextStyle(
               fontSize: ui(11),
@@ -1810,7 +1811,7 @@ class _ViewDetailButton extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(ui(8)),
       ),
-      child: Text(
+      child: AppText(
         '查看详情',
         style: TextStyle(
           fontSize: ui(12),

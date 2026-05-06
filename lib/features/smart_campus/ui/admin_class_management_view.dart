@@ -11,6 +11,7 @@ import '../../../core/widgets/popup_selector_field.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/admin_repository.dart';
 
+import '../../../core/widgets/app_text.dart';
 // ============================================================================
 // 颜色常量
 // ============================================================================
@@ -808,7 +809,7 @@ class _AdminClassManagementViewState
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text(
+                AppText(
                   '行政班一览',
                   style: TextStyle(
                     fontSize: ui(18),
@@ -867,7 +868,7 @@ class _EmptyState extends StatelessWidget {
         color: _kCardBg,
         borderRadius: BorderRadius.circular(ui(16)),
       ),
-      child: Text(
+      child: AppText(
         label,
         style: TextStyle(
           fontSize: ui(14),
@@ -938,7 +939,7 @@ class _Banner extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
+                AppText(
                   '班级编辑',
                   style: TextStyle(
                     fontSize: ui(16),
@@ -949,7 +950,7 @@ class _Banner extends StatelessWidget {
                   ),
                 ),
                 SizedBox(height: ui(4)),
-                Text(
+                AppText(
                   '人事档案、部门归属、任课与角色；与教师端登录权限、班主任带班关系对齐',
                   textAlign: TextAlign.center,
                   style: TextStyle(
@@ -1023,7 +1024,7 @@ class _BannerActionButton extends StatelessWidget {
           children: [
             Icon(icon, size: ui(16), color: iconColor),
             SizedBox(width: ui(4)),
-            Text(
+            AppText(
               label,
               style: TextStyle(
                 fontSize: ui(12),
@@ -1137,7 +1138,7 @@ class _StatCard extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              AppText(
                 label,
                 style: TextStyle(
                   fontSize: ui(14),
@@ -1148,7 +1149,7 @@ class _StatCard extends StatelessWidget {
                 ),
               ),
               SizedBox(height: ui(8)),
-              Text(
+              AppText(
                 '$value',
                 style: TextStyle(
                   fontSize: ui(32),
@@ -1226,7 +1227,7 @@ class _ClassCard extends StatelessWidget {
               SizedBox(
                 height: ui(64),
                 child: Center(
-                  child: Text(
+                  child: AppText(
                     '暂无学生',
                     style: TextStyle(
                       fontSize: ui(13),
@@ -1305,7 +1306,7 @@ class _ClassHeader extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Flexible(
-                      child: Text(
+                      child: AppText(
                         entry.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -1323,7 +1324,7 @@ class _ClassHeader extends StatelessWidget {
                   ],
                 ),
                 SizedBox(height: ui(6)),
-                Text(
+                AppText(
                   entry.metaLine,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -1338,7 +1339,7 @@ class _ClassHeader extends StatelessWidget {
             ),
           ),
           SizedBox(width: ui(12)),
-          Text(
+          AppText(
             '共${entry.studentCount}人',
             style: TextStyle(
               fontSize: ui(12),
@@ -1406,7 +1407,7 @@ class _KindPill extends StatelessWidget {
             ),
           ),
           SizedBox(width: ui(4)),
-          Text(
+          AppText(
             kind.label,
             style: TextStyle(
               fontSize: ui(12),
@@ -1483,7 +1484,7 @@ class _StudentMiniCard extends StatelessWidget {
                       Row(
                         children: [
                           Flexible(
-                            child: Text(
+                            child: AppText(
                               student.name,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -1497,7 +1498,7 @@ class _StudentMiniCard extends StatelessWidget {
                             ),
                           ),
                           SizedBox(width: ui(8)),
-                          Text(
+                          AppText(
                             student.studentNo,
                             style: TextStyle(
                               fontSize: ui(12),
@@ -1509,7 +1510,7 @@ class _StudentMiniCard extends StatelessWidget {
                         ],
                       ),
                       SizedBox(height: ui(2)),
-                      Text(
+                      AppText(
                         student.major,
                         style: TextStyle(
                           fontSize: ui(12),
@@ -1538,7 +1539,7 @@ class _StudentMiniCard extends StatelessWidget {
                   bottomLeft: Radius.circular(ui(12)),
                 ),
               ),
-              child: Text(
+              child: AppText(
                 '在籍',
                 style: TextStyle(
                   fontSize: ui(12),
@@ -1572,7 +1573,7 @@ class _MiniAvatar extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(ui(8)),
       ),
-      child: Text(
+      child: AppText(
         initial,
         style: TextStyle(
           fontSize: ui(16),
@@ -1837,7 +1838,7 @@ class _CreateClassDrawerState extends State<_CreateClassDrawer> {
                           ),
                         ],
                         SizedBox(height: ui(20)),
-                        Text(
+                        AppText(
                           '任课老师',
                           style: TextStyle(
                             fontSize: ui(14),
@@ -1878,7 +1879,7 @@ class _CreateClassDrawerState extends State<_CreateClassDrawer> {
                           onMoveLeft: _moveTeacherToPool,
                         ),
                         SizedBox(height: ui(20)),
-                        Text(
+                        AppText(
                           '班级学生名册',
                           style: TextStyle(
                             fontSize: ui(14),
@@ -2111,7 +2112,7 @@ class _TransferClassDrawerState extends State<_TransferClassDrawer> {
                           ),
                         ),
                         SizedBox(height: ui(20)),
-                        Text(
+                        AppText(
                           '任课老师',
                           style: TextStyle(
                             fontSize: ui(14),
@@ -2201,7 +2202,7 @@ class _DrawerTitleBar extends StatelessWidget {
             ),
           ),
           SizedBox(width: ui(4)),
-          Text(
+          AppText(
             title,
             style: TextStyle(
               fontSize: ui(16),
@@ -2251,7 +2252,7 @@ class _DrawerFooter extends StatelessWidget {
                   color: _kCancelBg,
                   borderRadius: BorderRadius.circular(ui(12)),
                 ),
-                child: Text(
+                child: AppText(
                   cancelLabel,
                   style: TextStyle(
                     fontSize: ui(14),
@@ -2280,7 +2281,7 @@ class _DrawerFooter extends StatelessWidget {
                   ),
                   borderRadius: BorderRadius.circular(ui(12)),
                 ),
-                child: Text(
+                child: AppText(
                   confirmLabel,
                   style: TextStyle(
                     fontSize: ui(14),
@@ -2330,7 +2331,7 @@ class _ClassKindSelector extends StatelessWidget {
               _PurpleCheckbox(checked: selected),
               SizedBox(width: ui(12)),
               Expanded(
-                child: Text(
+                child: AppText(
                   label,
                   style: TextStyle(
                     fontSize: ui(14),
@@ -2466,7 +2467,7 @@ class _Label extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Text(
+    return AppText(
       text,
       style: TextStyle(
         fontSize: ui(14),
@@ -2673,7 +2674,7 @@ class _TransferList extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: Row(
               children: [
-                Text(
+                AppText(
                   title,
                   style: TextStyle(
                     fontSize: ui(14),
@@ -2684,7 +2685,7 @@ class _TransferList extends StatelessWidget {
                   ),
                 ),
                 SizedBox(width: ui(6)),
-                Text(
+                AppText(
                   '(${students.length})',
                   style: TextStyle(
                     fontSize: ui(14),
@@ -2715,7 +2716,7 @@ class _TransferList extends StatelessWidget {
                   )
                 : students.isEmpty
                 ? Center(
-                    child: Text(
+                    child: AppText(
                       '暂无数据',
                       style: TextStyle(
                         fontSize: ui(13),
@@ -2745,7 +2746,7 @@ class _TransferList extends StatelessWidget {
                           children: [
                             _PurpleCheckbox(checked: on),
                             SizedBox(width: ui(12)),
-                            Text(
+                            AppText(
                               s.studentNo,
                               style: TextStyle(
                                 fontSize: ui(12),
@@ -2755,7 +2756,7 @@ class _TransferList extends StatelessWidget {
                               ),
                             ),
                             SizedBox(width: ui(12)),
-                            Text(
+                            AppText(
                               s.name,
                               style: TextStyle(
                                 fontSize: ui(14),
@@ -2767,7 +2768,7 @@ class _TransferList extends StatelessWidget {
                             ),
                             SizedBox(width: ui(12)),
                             Expanded(
-                              child: Text(
+                              child: AppText(
                                 s.fullMajor,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -2962,7 +2963,7 @@ class _TeacherTransferList extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: Row(
               children: [
-                Text(
+                AppText(
                   title,
                   style: TextStyle(
                     fontSize: ui(14),
@@ -2973,7 +2974,7 @@ class _TeacherTransferList extends StatelessWidget {
                   ),
                 ),
                 SizedBox(width: ui(6)),
-                Text(
+                AppText(
                   '(${teachers.length})',
                   style: TextStyle(
                     fontSize: ui(14),
@@ -3004,7 +3005,7 @@ class _TeacherTransferList extends StatelessWidget {
                   )
                 : teachers.isEmpty
                 ? Center(
-                    child: Text(
+                    child: AppText(
                       '暂无教师',
                       style: TextStyle(
                         fontSize: ui(13),
@@ -3042,7 +3043,7 @@ class _TeacherTransferList extends StatelessWidget {
                                   Row(
                                     children: [
                                       Flexible(
-                                        child: Text(
+                                        child: AppText(
                                           t.name,
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
@@ -3057,7 +3058,7 @@ class _TeacherTransferList extends StatelessWidget {
                                       ),
                                       if (t.workNo.isNotEmpty) ...[
                                         SizedBox(width: ui(8)),
-                                        Text(
+                                        AppText(
                                           t.workNo,
                                           style: TextStyle(
                                             fontSize: ui(12),
@@ -3071,7 +3072,7 @@ class _TeacherTransferList extends StatelessWidget {
                                   ),
                                   if (t.subject.isNotEmpty) ...[
                                     SizedBox(height: ui(4)),
-                                    Text(
+                                    AppText(
                                       t.subject,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
@@ -3088,7 +3089,7 @@ class _TeacherTransferList extends StatelessWidget {
                             ),
                             if (t.dept.isNotEmpty) ...[
                               SizedBox(width: ui(8)),
-                              Text(
+                              AppText(
                                 t.dept,
                                 textAlign: TextAlign.right,
                                 style: TextStyle(

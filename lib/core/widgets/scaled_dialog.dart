@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../features/shell/ui/shell_layout.dart';
 import '../constants/app_assets.dart';
 
+import './app_text.dart';
 /// `showDialog` 的封装：在打开对话框前先从 [context] 中读取
 /// [DashboardScaleScope]，再把同一份 [DashboardScaleData] 重新注入到弹窗子树。
 ///
@@ -153,7 +154,7 @@ class GradientHeaderDialog extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Center(
-                    child: Text(
+                    child: AppText(
                       title,
                       style: TextStyle(
                         fontSize: ui(titleFontSize),
@@ -270,7 +271,7 @@ class _AppDialogButton extends StatelessWidget {
         child: Opacity(
           opacity: disabled ? 0.55 : 1,
           child: Center(
-            child: Text(
+            child: AppText(
               label,
               style: TextStyle(
                 color: isPrimary ? Colors.white : const Color(0xFF0B081A),
@@ -325,7 +326,7 @@ Future<String?> showTextInputDialog({
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              AppText(
                 title,
                 style: TextStyle(
                   fontSize: ui(18),
@@ -429,7 +430,7 @@ Future<String?> showOptionsDialog({
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Text(
+              AppText(
                 title,
                 style: TextStyle(
                   fontSize: ui(18),
@@ -460,7 +461,7 @@ Future<String?> showOptionsDialog({
                         child: Row(
                           children: <Widget>[
                             Expanded(
-                              child: Text(
+                              child: AppText(
                                 value,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -538,7 +539,7 @@ Future<bool> showConfirmDialog({
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              AppText(
                 title,
                 style: TextStyle(
                   fontSize: ui(18),
@@ -548,7 +549,7 @@ Future<bool> showConfirmDialog({
                 ),
               ),
               SizedBox(height: ui(12)),
-              Text(
+              AppText(
                 content,
                 style: TextStyle(
                   fontSize: ui(14),

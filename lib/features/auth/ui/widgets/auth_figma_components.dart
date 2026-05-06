@@ -6,6 +6,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../../core/constants/app_assets.dart';
 
+import '../../../../core/widgets/app_text.dart';
 class AuthFigmaCardFrame extends StatelessWidget {
   const AuthFigmaCardFrame({
     required this.scale,
@@ -111,7 +112,7 @@ class AuthFigmaCardFrame extends StatelessWidget {
                       colors: [Color(0xFF0B081A), Color(0xFF8670E2)],
                     ).createShader(bounds);
                   },
-                  child: Text(
+                  child: AppText(
                     title,
                     style: TextStyle(
                       color: Colors.white,
@@ -320,7 +321,7 @@ class AuthFigmaPrimaryButton extends StatelessWidget {
                   color: Colors.white,
                 ),
               )
-            : Text(
+            : AppText(
                 text,
                 style: TextStyle(
                   color: Colors.white,
@@ -377,7 +378,7 @@ class AuthFigmaSmsButton extends StatelessWidget {
           ),
         ),
         onPressed: enabled ? onTap : null,
-        child: Text(
+        child: AppText(
           text,
           textAlign: TextAlign.center,
           style: TextStyle(
@@ -448,7 +449,7 @@ class AuthFigmaAgreementRow extends StatelessWidget {
         GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () => onChanged(!checked),
-          child: Text(
+          child: AppText(
             '同意并愿意遵守',
             style: TextStyle(
               color: Colors.black,
@@ -466,7 +467,7 @@ class AuthFigmaAgreementRow extends StatelessWidget {
             onChanged(!checked);
             onAgreementTap();
           },
-          child: Text(
+          child: AppText(
             '《音乐之路服务协议》',
             style: TextStyle(
               color: const Color(0xFF856FE2),

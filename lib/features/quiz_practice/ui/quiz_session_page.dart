@@ -8,6 +8,7 @@ import '../state/quiz_practice_state.dart';
 import '../state/quiz_session_controller.dart';
 import '../state/quiz_session_state.dart';
 
+import '../../../core/widgets/app_text.dart';
 class QuizSessionPage extends ConsumerStatefulWidget {
   const QuizSessionPage({super.key, this.openCompletion = false});
 
@@ -80,7 +81,7 @@ class _QuizSessionPageState extends ConsumerState<QuizSessionPage> {
                 ),
                 Expanded(
                   child: state.questions.isEmpty
-                      ? const Center(child: Text('暂无题目'))
+                      ? const Center(child: AppText('暂无题目'))
                       : _SessionBody(
                           state: state,
                           onSelect: controller.selectAnswer,
@@ -152,7 +153,7 @@ class _SessionHeader extends StatelessWidget {
           _BackButton(onTap: onBack),
           Expanded(
             child: Center(
-              child: Text(
+              child: AppText(
                 title,
                 style: TextStyle(
                   color: const Color(0xFF0B081A),
@@ -163,7 +164,7 @@ class _SessionHeader extends StatelessWidget {
               ),
             ),
           ),
-          Text(
+          AppText(
             '自动刷题',
             style: TextStyle(
               color: const Color(0xFF0B081A),
@@ -285,7 +286,7 @@ class _SessionBody extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     final question = state.currentQuestion;
     if (question == null) {
-      return const Center(child: Text('暂无题目'));
+      return const Center(child: AppText('暂无题目'));
     }
 
     return Padding(
@@ -295,7 +296,7 @@ class _SessionBody extends StatelessWidget {
         children: [
           _TypeChip(),
           SizedBox(height: ui(20)),
-          Text(
+          AppText(
             '第${state.currentIndex + 1}题  ${_stripHtml(question.questionHtml)}',
             style: TextStyle(
               color: const Color(0xFF0B081A),
@@ -313,7 +314,7 @@ class _SessionBody extends StatelessWidget {
             SizedBox(height: ui(20)),
             _AnswerRow(question: question),
             SizedBox(height: ui(24)),
-            Text(
+            AppText(
               '题目解析',
               style: TextStyle(
                 color: const Color(0xFF6D6B75),
@@ -323,7 +324,7 @@ class _SessionBody extends StatelessWidget {
               ),
             ),
             SizedBox(height: ui(10)),
-            Text(
+            AppText(
               _stripHtml(question.parseHtml).isEmpty
                   ? '暂无解析'
                   : _stripHtml(question.parseHtml),
@@ -423,7 +424,7 @@ class _OptionsGrid extends StatelessWidget {
               children: [
                 SizedBox(
                   width: ui(22),
-                  child: Text(
+                  child: AppText(
                     '$letter.',
                     style: TextStyle(
                       color: textColor,
@@ -435,7 +436,7 @@ class _OptionsGrid extends StatelessWidget {
                 ),
                 SizedBox(width: ui(9)),
                 Expanded(
-                  child: Text(
+                  child: AppText(
                     text,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -508,14 +509,14 @@ class _AnswerRow extends StatelessWidget {
 
     return Row(
       children: [
-        Text('正确答案：', style: labelStyle),
-        Text(
+        AppText('正确答案：', style: labelStyle),
+        AppText(
           correctLetter,
           style: valueStyle.copyWith(color: const Color(0xFF1AAB5B)),
         ),
         SizedBox(width: ui(36)),
-        Text('已选答案：', style: labelStyle),
-        Text(pickLetter, style: valueStyle.copyWith(color: pickColor)),
+        AppText('已选答案：', style: labelStyle),
+        AppText(pickLetter, style: valueStyle.copyWith(color: pickColor)),
       ],
     );
   }
@@ -570,7 +571,7 @@ class _GhostButton extends StatelessWidget {
             ),
           ],
         ),
-        child: Text(
+        child: AppText(
           label,
           style: TextStyle(
             color: const Color(0xFF0B081A),
@@ -614,7 +615,7 @@ class _PrimaryButton extends StatelessWidget {
             ),
           ],
         ),
-        child: Text(
+        child: AppText(
           label,
           style: TextStyle(
             color: Colors.white,
@@ -788,7 +789,7 @@ class _StatCell extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(
+          AppText(
             value,
             style: TextStyle(
               color: const Color(0xFF0B081A),
@@ -798,7 +799,7 @@ class _StatCell extends StatelessWidget {
             ),
           ),
           SizedBox(height: ui(8)),
-          Text(
+          AppText(
             label,
             style: TextStyle(
               color: const Color(0xFF6D6B75),
@@ -839,7 +840,7 @@ class _RecommendedSwitchCard extends StatelessWidget {
           children: [
             Expanded(
               child: Center(
-                child: Text(
+                child: AppText(
                   label,
                   style: TextStyle(
                     color: const Color(0xFF0B081A),
@@ -856,7 +857,7 @@ class _RecommendedSwitchCard extends StatelessWidget {
                 color: const Color(0xFFA773FF),
                 borderRadius: BorderRadius.circular(ui(4)),
               ),
-              child: Text(
+              child: AppText(
                 '推荐',
                 style: TextStyle(
                   color: Colors.white,

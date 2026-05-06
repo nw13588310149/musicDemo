@@ -24,6 +24,7 @@ import '../data/video_publisher_data.dart';
 import '../state/video_tutorial_controller.dart';
 import '../state/video_tutorial_state.dart';
 
+import '../../../core/widgets/app_text.dart';
 const int _kVideoPreloadLimit = 8;
 const int _kVideoPrecacheWidth = 720;
 const int _kVideoImageMaxDecodeWidth = 1600;
@@ -242,7 +243,7 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
                     SliverFillRemaining(
                       hasScrollBody: false,
                       child: Center(
-                        child: Text(
+                        child: AppText(
                           state.errorMessage.isEmpty
                               ? '暂无视频数据'
                               : state.errorMessage,
@@ -303,7 +304,7 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
                       child: Padding(
                         padding: EdgeInsets.zero,
                         child: Center(
-                          child: Text(
+                          child: AppText(
                             '没有更多了',
                             style: TextStyle(
                               fontSize: ui(12),
@@ -695,7 +696,7 @@ class _VideoDetailSheetState extends ConsumerState<_VideoDetailSheet>
               fit: BoxFit.contain,
               fallback: const Padding(
                 padding: EdgeInsets.all(24),
-                child: Text('图片加载失败', style: TextStyle(color: Colors.white)),
+                child: AppText('图片加载失败', style: TextStyle(color: Colors.white)),
               ),
             ),
           ),
@@ -1474,7 +1475,7 @@ class _Badge extends StatelessWidget {
         color: Colors.black.withValues(alpha: 0.65),
         borderRadius: BorderRadius.circular(999),
       ),
-      child: Text(
+      child: AppText(
         text,
         style: const TextStyle(
           color: Colors.white,
@@ -1539,7 +1540,7 @@ class _GestureIndicator extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
+                AppText(
                   fmt(Duration(milliseconds: seekMs.toInt())),
                   style: const TextStyle(
                     color: Colors.white,
@@ -1548,7 +1549,7 @@ class _GestureIndicator extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
+                AppText(
                   '$sign${fmt(Duration(milliseconds: delta.abs().toInt()))}',
                   style: TextStyle(
                     color: delta >= 0
@@ -1611,7 +1612,7 @@ class _VerticalProgressBadge extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          Text(
+          AppText(
             label,
             style: const TextStyle(color: Colors.white, fontSize: 11),
           ),
@@ -1855,7 +1856,7 @@ class _PlayerBottomBar extends StatelessWidget {
                 constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               ),
               const SizedBox(width: 6),
-              Text(
+              AppText(
                 '${fmt(position)} / ${fmt(duration)}',
                 style: const TextStyle(color: Colors.white, fontSize: 12),
               ),
@@ -1933,7 +1934,7 @@ class _SpeedPanel extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
+                  const AppText(
                     '倍  速',
                     style: TextStyle(
                       color: Colors.white,
@@ -1980,7 +1981,7 @@ class _SpeedPanel extends StatelessWidget {
                         )
                       else
                         const SizedBox(width: 20),
-                      Text(
+                      AppText(
                         rate == 1.0
                             ? '1.0x  (正常)'
                             : '${rate.toStringAsFixed(2).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '')}x',
@@ -2045,12 +2046,12 @@ class _CompletedOverlay extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          const Text('重播', style: TextStyle(color: Colors.white, fontSize: 13)),
+          const AppText('重播', style: TextStyle(color: Colors.white, fontSize: 13)),
           if (nextVideo != null) ...[
             const SizedBox(height: 24),
             const Divider(color: Colors.white24, indent: 40, endIndent: 40),
             const SizedBox(height: 16),
-            Text(
+            AppText(
               '下一集',
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.7),
@@ -2060,7 +2061,7 @@ class _CompletedOverlay extends StatelessWidget {
             const SizedBox(height: 4),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Text(
+              child: AppText(
                 nextVideo!.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -2090,7 +2091,7 @@ class _CompletedOverlay extends StatelessWidget {
                         ),
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: const Text(
+                      child: const AppText(
                         '取消',
                         style: TextStyle(color: Colors.white, fontSize: 12),
                       ),
@@ -2109,7 +2110,7 @@ class _CompletedOverlay extends StatelessWidget {
                       color: const Color(0xFF8741FF),
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: Text(
+                    child: AppText(
                       countdown > 0 ? '${countdown}s 后播放' : '立即播放',
                       style: const TextStyle(
                         color: Colors.white,
@@ -2475,7 +2476,7 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                 ),
                                 const SizedBox(width: 4),
                                 Expanded(
-                                  child: Text(
+                                  child: AppText(
                                     widget.title,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
@@ -2499,7 +2500,7 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                       color: const Color(0xFF8741FF),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
-                                    child: Text(
+                                    child: AppText(
                                       '${_rate.toStringAsFixed(2).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '')}x',
                                       style: const TextStyle(
                                         color: Colors.white,
@@ -2685,7 +2686,7 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                         ),
                                       ),
                                       const SizedBox(width: 4),
-                                      Text(
+                                      AppText(
                                         '${_fmt(_position)} / ${_fmt(_duration)}',
                                         style: const TextStyle(
                                           color: Colors.white,
@@ -2898,7 +2899,7 @@ class _FloatingMiniPlayerState extends State<_FloatingMiniPlayer> {
                             ],
                           ),
                         ),
-                        child: Text(
+                        child: AppText(
                           widget.title,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -3081,7 +3082,7 @@ class _DetailTabButton extends StatelessWidget {
           child: Transform.scale(
             scale: selected ? 1.18 : 1.0,
             alignment: Alignment.center,
-            child: Text(
+            child: AppText(
               text,
               textAlign: TextAlign.center,
               style: TextStyle(
@@ -3136,7 +3137,7 @@ class _ActionBtn extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 4),
-            Text(
+            AppText(
               label,
               style: TextStyle(
                 fontSize: 12,
@@ -3187,7 +3188,7 @@ class _DetailInfoTabState extends State<_DetailInfoTab> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: Text(
+                  child: AppText(
                     detail.name,
                     style: const TextStyle(
                       fontSize: 14,
@@ -3219,7 +3220,7 @@ class _DetailInfoTabState extends State<_DetailInfoTab> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const SizedBox(height: 8),
-                      Text(
+                      AppText(
                         detail.description.isEmpty
                             ? '暂无简介'
                             : detail.description,
@@ -3232,7 +3233,7 @@ class _DetailInfoTabState extends State<_DetailInfoTab> {
                       const SizedBox(height: 4),
                       const Align(
                         alignment: Alignment.centerRight,
-                        child: Text(
+                        child: AppText(
                           '视频来源用户上传，如有侵权，请立即联系删除。',
                           style: TextStyle(
                             fontSize: 10,
@@ -3247,7 +3248,7 @@ class _DetailInfoTabState extends State<_DetailInfoTab> {
           ),
           if (detail.seriesVideoList.isNotEmpty) ...[
             const SizedBox(height: 20),
-            const Text(
+            const AppText(
               '相关视频',
               style: TextStyle(
                 fontSize: 16,
@@ -3290,7 +3291,7 @@ class _ScoreTab extends StatelessWidget {
   Widget build(BuildContext context) {
     if (scoreImages.isEmpty) {
       return const Center(
-        child: Text(
+        child: AppText(
           '暂无谱例',
           style: TextStyle(fontSize: 14, color: Color(0xFFB6B5BB)),
         ),
@@ -3317,7 +3318,7 @@ class _ScoreTab extends StatelessWidget {
               fallback: const SizedBox(
                 height: 120,
                 child: Center(
-                  child: Text(
+                  child: AppText(
                     '图片加载失败',
                     style: TextStyle(fontSize: 12, color: Color(0xFFB6B5BB)),
                   ),
@@ -3389,7 +3390,7 @@ class _SeriesCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(18),
                       ),
                       child: Center(
-                        child: Text(
+                        child: AppText(
                           item.duration,
                           style: const TextStyle(
                             color: Colors.white,
@@ -3409,7 +3410,7 @@ class _SeriesCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
+                  AppText(
                     item.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -3420,7 +3421,7 @@ class _SeriesCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  Text(
+                  AppText(
                     item.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -3460,7 +3461,7 @@ class _SeriesCard extends StatelessWidget {
                     ),
                   ),
                   SizedBox(width: 2),
-                  Text(
+                  AppText(
                     '播放',
                     style: TextStyle(
                       color: Colors.white,
@@ -3546,7 +3547,7 @@ class _VideoCategoryHeader extends StatelessWidget {
                       horizontal: active ? 0 : ui(14.5),
                     ),
                     alignment: Alignment.center,
-                    child: Text(
+                    child: AppText(
                       menu.name,
                       style: TextStyle(
                         fontSize: active ? ui(18) : ui(14),
@@ -3585,7 +3586,7 @@ class _VideoCategoryHeader extends StatelessWidget {
                 ),
                 SizedBox(width: ui(6)),
                 Expanded(
-                  child: Text(
+                  child: AppText(
                     searchHint,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -3759,7 +3760,7 @@ class _LatestVideoListCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          AppText(
             '最新视频',
             style: TextStyle(
               fontSize: ui(13),
@@ -3773,7 +3774,7 @@ class _LatestVideoListCard extends StatelessWidget {
           Expanded(
             child: items.isEmpty
                 ? Center(
-                    child: Text(
+                    child: AppText(
                       '暂无视频',
                       style: TextStyle(
                         fontSize: ui(12),
@@ -3859,7 +3860,7 @@ class _LatestVideoRow extends StatelessWidget {
             ),
             SizedBox(width: ui(12)),
             Expanded(
-              child: Text(
+              child: AppText(
                 item.name,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
@@ -3923,7 +3924,7 @@ class _SubCategoryBar extends StatelessWidget {
                 borderRadius: BorderRadius.circular(ui(8)),
               ),
               alignment: Alignment.center,
-              child: Text(
+              child: AppText(
                 item.name,
                 style: TextStyle(
                   fontSize: ui(14),
@@ -4022,7 +4023,7 @@ class _VideoGridCard extends StatelessWidget {
                                   borderRadius: BorderRadius.circular(18.0 * s),
                                 ),
                                 child: Center(
-                                  child: Text(
+                                  child: AppText(
                                     item.duration,
                                     style: TextStyle(
                                       fontSize: 12.0 * s,
@@ -4051,7 +4052,7 @@ class _VideoGridCard extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               // 标题
-                              Text(
+                              AppText(
                                 item.name,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -4089,7 +4090,7 @@ class _VideoGridCard extends StatelessWidget {
                                       SizedBox(width: 4.0 * s),
                                       // 作者名
                                       Expanded(
-                                        child: Text(
+                                        child: AppText(
                                           publisher.nickname,
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
@@ -4109,7 +4110,7 @@ class _VideoGridCard extends StatelessWidget {
                                         height: 12.0 * s,
                                       ),
                                       SizedBox(width: 4.0 * s),
-                                      Text(
+                                      AppText(
                                         '${item.playCount}',
                                         style: TextStyle(
                                           fontSize: 12.0 * s,

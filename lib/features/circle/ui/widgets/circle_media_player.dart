@@ -7,6 +7,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import '../../../shell/ui/shell_layout.dart';
 import '../../state/circle_state.dart';
 
+import '../../../../core/widgets/app_text.dart';
 /// 沉浸模式下的统一媒体播放壳：
 /// - **图片**：盖一张大图 + 加载/失败兜底
 /// - **视频**：基于 `media_kit` 的内联视频播放（自动播放，离开/dispose 释放）
@@ -339,7 +340,7 @@ class _ProgressBar extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
+              AppText(
                 _fmt(position),
                 style: TextStyle(
                   color: Colors.white,
@@ -348,7 +349,7 @@ class _ProgressBar extends StatelessWidget {
                   height: 1,
                 ),
               ),
-              Text(
+              AppText(
                 _fmt(duration),
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.7),

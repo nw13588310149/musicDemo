@@ -9,6 +9,7 @@ import '../state/home_dashboard_controller.dart';
 import '../state/home_dashboard_state.dart';
 import '../../shell/ui/shell_layout.dart';
 
+import '../../../core/widgets/app_text.dart';
 class HomePage extends ConsumerWidget {
   const HomePage({super.key});
 
@@ -274,7 +275,7 @@ class _HomePageViewState extends State<_HomePageView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          const AppText(
             '课表',
             style: TextStyle(
               fontSize: 18,
@@ -315,7 +316,7 @@ class _HomePageViewState extends State<_HomePageView> {
             ),
           ),
           const SizedBox(height: 14),
-          const Text(
+          const AppText(
             '通知',
             style: TextStyle(
               fontSize: 18,
@@ -404,7 +405,7 @@ class _NoticeEmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Center(
-      child: Text(
+      child: AppText(
         '暂无通知',
         style: TextStyle(
           fontSize: 14,
@@ -441,7 +442,7 @@ class _QuickActionItem extends StatelessWidget {
               filterQuality: FilterQuality.high,
             ),
             const SizedBox(height: 6),
-            Text(
+            AppText(
               action.name,
               textAlign: TextAlign.center,
               style: const TextStyle(
@@ -571,7 +572,7 @@ class _WeekCard extends StatelessWidget {
             left: 0,
             right: 0,
             top: 6,
-            child: Text(
+            child: AppText(
               item.weekText,
               textAlign: TextAlign.center,
               style: TextStyle(
@@ -589,7 +590,7 @@ class _WeekCard extends StatelessWidget {
             left: 0,
             right: 0,
             top: 27,
-            child: Text(
+            child: AppText(
               item.dayText,
               textAlign: TextAlign.center,
               // Figma 设计稿规定：日期数字使用 Barlow w500（几何无衬线）
@@ -615,7 +616,7 @@ class _WeekCard extends StatelessWidget {
                 color: active ? Colors.white : const Color(0xFFF1F2F7),
                 borderRadius: BorderRadius.circular(6),
               ),
-              child: Text(
+              child: AppText(
                 '${item.courseCount}节',
                 style: TextStyle(
                   fontSize: 14,
@@ -710,7 +711,7 @@ class _CourseNoticeCard extends StatelessWidget {
                   bottomLeft: Radius.circular(12),
                 ),
               ),
-              child: Text(
+              child: AppText(
                 notice.statusText,
                 style: TextStyle(
                   fontSize: 12,
@@ -736,7 +737,7 @@ class _CourseNoticeCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                AppText(
                   notice.teacherName,
                   style: const TextStyle(
                     fontSize: 14,
@@ -748,7 +749,7 @@ class _CourseNoticeCard extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                Text(
+                AppText(
                   notice.description,
                   style: const TextStyle(
                     fontSize: 12,
@@ -821,7 +822,7 @@ class _CourseSubjectTag extends StatelessWidget {
         color: bg,
         borderRadius: BorderRadius.circular(4),
       ),
-      child: Text(
+      child: AppText(
         name,
         style: TextStyle(
           fontSize: 12,
@@ -859,7 +860,7 @@ class _NewsCard extends StatelessWidget {
               left: 55,
               top: 15,
               right: 14,
-              child: Text(
+              child: AppText(
                 item.shortTitle,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -876,7 +877,7 @@ class _NewsCard extends StatelessWidget {
               left: 16,
               top: 44.5,
               right: 16,
-              child: Text(
+              child: AppText(
                 item.title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -907,7 +908,7 @@ class _NewsCard extends StatelessWidget {
                         color: const Color(0xFFF4F4FF),
                         borderRadius: BorderRadius.circular(4),
                       ),
-                      child: Text(
+                      child: AppText(
                         tags[i],
                         style: const TextStyle(
                           fontSize: 9.52,
@@ -927,7 +928,7 @@ class _NewsCard extends StatelessWidget {
               top: 110.5,
               child: Opacity(
                 opacity: 0.8,
-                child: Text(
+                child: AppText(
                   _formatTime(item.createTime),
                   style: const TextStyle(
                     fontSize: 11,
@@ -971,7 +972,7 @@ class _NewsBadge extends StatelessWidget {
         color: const Color(0xFFA773FF),
         borderRadius: BorderRadius.circular(4),
       ),
-      child: const Text(
+      child: const AppText(
         'NEW',
         style: TextStyle(
           fontSize: 12,

@@ -37,6 +37,7 @@ import 'package:flutter/material.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 
+import '../../../core/widgets/app_text.dart';
 // ---- 配色 -------------------------------------------------------------------
 const Color _kCardBg = Colors.white;
 const Color _kPageBgChip = Color(0xFFF5F6FA);
@@ -372,7 +373,7 @@ class _RosterBanner extends StatelessWidget {
           ),
           Positioned.fill(
             child: Center(
-              child: Text(
+              child: AppText(
                 '学生名册',
                 style: TextStyle(
                   fontSize: ui(16),
@@ -514,7 +515,7 @@ class _ClassFilterButtonState extends State<_ClassFilterButton> {
         child: Row(
           children: [
             Expanded(
-              child: Text(
+              child: AppText(
                 widget.value,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -609,7 +610,7 @@ class _ClassFilterMenuRow extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              child: Text(
+              child: AppText(
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -807,7 +808,7 @@ class _StatTrioCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
+              AppText(
                 label,
                 style: TextStyle(
                   fontSize: ui(14),
@@ -818,7 +819,7 @@ class _StatTrioCard extends StatelessWidget {
                 ),
               ),
               SizedBox(height: ui(14)),
-              Text(
+              AppText(
                 value,
                 style: TextStyle(
                   fontSize: ui(32),
@@ -913,7 +914,7 @@ class _RosterEmptyState extends StatelessWidget {
         children: [
           Icon(Icons.person_search_rounded, size: ui(40), color: _kTextHint),
           SizedBox(height: ui(8)),
-          Text(
+          AppText(
             '没有匹配的学生',
             style: TextStyle(
               fontSize: ui(14),
@@ -965,7 +966,7 @@ class _StudentCard extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Flexible(
-                            child: Text(
+                            child: AppText(
                               data.name,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -994,7 +995,7 @@ class _StudentCard extends StatelessWidget {
                   ],
                 ),
                 SizedBox(height: ui(6)),
-                Text(
+                AppText(
                   data.dorm,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -1007,7 +1008,7 @@ class _StudentCard extends StatelessWidget {
                   ),
                 ),
                 SizedBox(height: ui(4)),
-                Text(
+                AppText(
                   data.id,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -1060,7 +1061,7 @@ class _StudentAvatar extends StatelessWidget {
           colors: colors,
         ),
       ),
-      child: Text(
+      child: AppText(
         initial,
         style: TextStyle(
           fontSize: ui(16),
@@ -1090,7 +1091,7 @@ class _DetailLink extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
+            AppText(
               '详情',
               style: TextStyle(
                 fontSize: ui(14),
@@ -1160,7 +1161,7 @@ class _TagPill extends StatelessWidget {
         color: isAccent ? _kPurpleTag : _kPageBgChip,
         borderRadius: BorderRadius.circular(ui(4)),
       ),
-      child: Text(
+      child: AppText(
         label,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
@@ -1326,7 +1327,7 @@ class _DrawerTitleBar extends StatelessWidget {
             ),
           ),
           SizedBox(width: ui(4)),
-          Text(
+          AppText(
             '学生档案',
             style: TextStyle(
               fontSize: ui(16),
@@ -1363,7 +1364,7 @@ class _ProfileBlock extends StatelessWidget {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Text(
+                  AppText(
                     data.name,
                     style: TextStyle(
                       fontSize: ui(16),
@@ -1374,7 +1375,7 @@ class _ProfileBlock extends StatelessWidget {
                     ),
                   ),
                   SizedBox(width: ui(8)),
-                  Text(
+                  AppText(
                     data.id,
                     style: TextStyle(
                       fontSize: ui(12),
@@ -1387,7 +1388,7 @@ class _ProfileBlock extends StatelessWidget {
                 ],
               ),
               SizedBox(height: ui(6)),
-              Text(
+              AppText(
                 '声乐 · 民族唱法',
                 style: TextStyle(
                   fontSize: ui(12),
@@ -1445,7 +1446,7 @@ class _InfoRow extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Text(
+        AppText(
           label,
           style: TextStyle(
             fontSize: ui(14),
@@ -1456,7 +1457,7 @@ class _InfoRow extends StatelessWidget {
           ),
         ),
         Flexible(
-          child: Text(
+          child: AppText(
             value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -1499,7 +1500,7 @@ class _InfoTagRow extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Text(
+        AppText(
           label,
           style: TextStyle(
             fontSize: ui(14),
@@ -1543,7 +1544,7 @@ class _DrawerTagPill extends StatelessWidget {
         color: isAccent ? _kPurpleTag : _kPageBgChip,
         borderRadius: BorderRadius.circular(ui(4)),
       ),
-      child: Text(
+      child: AppText(
         label,
         style: TextStyle(
           fontSize: ui(12),
@@ -1572,7 +1573,7 @@ class _TeacherRemarksBlock extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
+          AppText(
             '教师备注',
             style: TextStyle(
               fontSize: ui(16),
@@ -1583,7 +1584,7 @@ class _TeacherRemarksBlock extends StatelessWidget {
             ),
           ),
           SizedBox(height: ui(8)),
-          Text(
+          AppText(
             '专业主项稳定，文化科需跟进英语作文。',
             style: TextStyle(
               fontSize: ui(14),
@@ -1640,7 +1641,7 @@ class _ScoreChartBlock extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
+                    AppText(
                       '我教科目 · 分数走势',
                       style: TextStyle(
                         fontSize: ui(16),
@@ -1651,7 +1652,7 @@ class _ScoreChartBlock extends StatelessWidget {
                       ),
                     ),
                     SizedBox(height: ui(2)),
-                    Text(
+                    AppText(
                       '${_kSubjects[subjectIdx]} · 周测均分',
                       style: TextStyle(
                         fontSize: ui(12),
@@ -1719,7 +1720,7 @@ class _SubjectToggle extends StatelessWidget {
                   color: i == activeIdx ? _kTextDark : Colors.transparent,
                   borderRadius: BorderRadius.circular(ui(6)),
                 ),
-                child: Text(
+                child: AppText(
                   subjects[i],
                   style: TextStyle(
                     fontSize: ui(14),
@@ -1764,7 +1765,7 @@ class _ScoreLineChart extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 for (final l in _kYLabels)
-                  Text(
+                  AppText(
                     '$l',
                     style: TextStyle(
                       fontSize: ui(12),
@@ -1800,7 +1801,7 @@ class _ScoreLineChart extends StatelessWidget {
                     for (final p in periods)
                       Expanded(
                         child: Center(
-                          child: Text(
+                          child: AppText(
                             p,
                             style: TextStyle(
                               fontSize: ui(12),
@@ -1960,7 +1961,7 @@ class _ContactParentButton extends StatelessWidget {
           children: [
             Icon(Icons.phone_rounded, size: ui(16), color: Colors.white),
             SizedBox(width: ui(8)),
-            Text(
+            AppText(
               '联系家长',
               style: TextStyle(
                 fontSize: ui(14),
@@ -2018,7 +2019,7 @@ void _showParentContactDialog(BuildContext context, _Student data) {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
+                      AppText(
                         data.name,
                         style: TextStyle(
                           fontSize: ui(16),
@@ -2029,7 +2030,7 @@ void _showParentContactDialog(BuildContext context, _Student data) {
                         ),
                       ),
                       SizedBox(height: ui(4)),
-                      Text(
+                      AppText(
                         data.id,
                         style: TextStyle(
                           fontSize: ui(12),
@@ -2079,7 +2080,7 @@ void _showParentContactDialog(BuildContext context, _Student data) {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(
+                            AppText(
                               parentName,
                               style: TextStyle(
                                 fontSize: ui(15),
@@ -2090,7 +2091,7 @@ void _showParentContactDialog(BuildContext context, _Student data) {
                               ),
                             ),
                             SizedBox(height: ui(4)),
-                            Text(
+                            AppText(
                               parentRelation,
                               style: TextStyle(
                                 fontSize: ui(12),
@@ -2127,7 +2128,7 @@ void _showParentContactDialog(BuildContext context, _Student data) {
                         ),
                         SizedBox(width: ui(8)),
                         Expanded(
-                          child: Text(
+                          child: AppText(
                             parentPhone,
                             style: TextStyle(
                               fontSize: ui(20),

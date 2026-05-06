@@ -8,6 +8,7 @@ import '../state/consultation_detail_controller.dart';
 import '../state/consultation_detail_state.dart';
 import 'consultation_page.dart';
 
+import '../../../core/widgets/app_text.dart';
 class ConsultationDetailPage extends ConsumerStatefulWidget {
   const ConsultationDetailPage({super.key});
 
@@ -68,7 +69,7 @@ class _ConsultationDetailPageState
                   ),
                   Expanded(
                     child: state.detail == null
-                        ? const Center(child: Text('暂无资讯'))
+                        ? const Center(child: AppText('暂无资讯'))
                         : _DetailBody(detail: state.detail!),
                   ),
                 ],
@@ -137,7 +138,7 @@ class _DetailHeader extends StatelessWidget {
           ConsultationBackButton(onTap: onBack),
           Expanded(
             child: Center(
-              child: Text(
+              child: AppText(
                 '资讯',
                 style: TextStyle(
                   color: const Color(0xFF0B081A),
@@ -182,7 +183,7 @@ class _ShareButton extends StatelessWidget {
               fit: BoxFit.contain,
             ),
             SizedBox(width: ui(4)),
-            Text(
+            AppText(
               '分享',
               style: TextStyle(
                 color: const Color(0xFF0B081A),
@@ -226,7 +227,7 @@ class _DetailBody extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
-                    child: Text(
+                    child: AppText(
                       detail.title,
                       style: TextStyle(
                         color: const Color(0xFF0B081A),
@@ -244,7 +245,7 @@ class _DetailBody extends StatelessWidget {
               SizedBox(height: ui(8)),
               Row(
                 children: [
-                  Text(
+                  AppText(
                     detail.source,
                     style: TextStyle(
                       color: const Color(0xFF6D6B75),
@@ -254,7 +255,7 @@ class _DetailBody extends StatelessWidget {
                     ),
                   ),
                   SizedBox(width: ui(16)),
-                  Text(
+                  AppText(
                     detail.updateTime,
                     style: TextStyle(
                       color: const Color(0xFF6D6B75),
@@ -300,7 +301,7 @@ class _ViewCountText extends StatelessWidget {
           color: const Color(0xFF928FA0),
         ),
         SizedBox(width: ui(4)),
-        Text(
+        AppText(
           count.toString(),
           style: TextStyle(
             color: const Color(0xFFB6B5BB),
@@ -349,7 +350,7 @@ class _ShareDrawer extends ConsumerWidget {
                 SizedBox(height: ui(24)),
                 _ShareTargetCard(detail: state.detail),
                 SizedBox(height: ui(28)),
-                Text(
+                AppText(
                   '您的班级群',
                   style: TextStyle(
                     color: const Color(0xFF0B081A),
@@ -419,7 +420,7 @@ class _DrawerTitle extends StatelessWidget {
           ),
         ),
         SizedBox(width: ui(4)),
-        Text(
+        AppText(
           title,
           style: TextStyle(
             color: const Color(0xFF0B081A),
@@ -455,7 +456,7 @@ class _ShareTargetCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
+                AppText(
                   '您将分享的资讯',
                   style: TextStyle(
                     color: const Color(0xFF0B081A),
@@ -464,7 +465,7 @@ class _ShareTargetCard extends StatelessWidget {
                   ),
                 ),
                 SizedBox(height: ui(10)),
-                Text(
+                AppText(
                   detail?.title ?? '',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -542,7 +543,7 @@ class _ClassRow extends StatelessWidget {
               ),
               SizedBox(width: ui(16)),
               Expanded(
-                child: Text(
+                child: AppText(
                   cls.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -569,7 +570,7 @@ class _ShareDrawerEmpty extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Center(
-      child: Text(
+      child: AppText(
         '暂无班级群',
         style: TextStyle(
           color: const Color(0xFFB6B5BB),
@@ -612,7 +613,7 @@ class _SendButton extends StatelessWidget {
                   valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                 ),
               )
-            : Text(
+            : AppText(
                 '发送',
                 style: TextStyle(
                   color: Colors.white,

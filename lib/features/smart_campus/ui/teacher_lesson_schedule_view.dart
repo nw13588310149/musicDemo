@@ -42,6 +42,7 @@ import '../../shell/ui/shell_layout.dart';
 import '../data/admin_repository.dart';
 import '../data/teacher_repository.dart';
 
+import '../../../core/widgets/app_text.dart';
 // ---- 通用配色（与学生 / 管理员端 schedule 保持一致）----------------------
 
 const Color _kCardBg = Colors.white;
@@ -761,7 +762,7 @@ class _TeacherScheduleHeader extends StatelessWidget {
           ),
           Positioned.fill(
             child: Center(
-              child: Text(
+              child: AppText(
                 '授课课表',
                 style: TextStyle(
                   fontSize: ui(16),
@@ -845,7 +846,7 @@ class _SegmentChip extends StatelessWidget {
           color: active ? _kPurple : Colors.transparent,
           borderRadius: BorderRadius.circular(ui(6)),
         ),
-        child: Text(
+        child: AppText(
           label,
           style: TextStyle(
             fontSize: ui(12),
@@ -944,7 +945,7 @@ class _TeacherScheduleControlBar extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
+                AppText(
                   weekDateLabel,
                   style: TextStyle(
                     fontSize: ui(14),
@@ -1003,7 +1004,7 @@ class _LegendItem extends StatelessWidget {
                 ),
               ),
               SizedBox(width: ui(4)),
-              Text(
+              AppText(
                 label,
                 style: TextStyle(
                   fontSize: ui(12),
@@ -1016,7 +1017,7 @@ class _LegendItem extends StatelessWidget {
           ),
         ),
         SizedBox(width: ui(8)),
-        Text(
+        AppText(
           tail,
           style: TextStyle(
             fontSize: ui(12),
@@ -1084,7 +1085,7 @@ class _WeekSwitcher extends StatelessWidget {
             borderRadius: BorderRadius.circular(ui(4)),
             child: Padding(
               padding: EdgeInsets.symmetric(horizontal: ui(2)),
-              child: Text(
+              child: AppText(
                 '本周',
                 style: TextStyle(
                   fontSize: ui(14),
@@ -1254,7 +1255,7 @@ class _TimeHeader extends StatelessWidget {
           Positioned(
             right: ui(20),
             top: ui(10),
-            child: Text(
+            child: AppText(
               '日期',
               style: TextStyle(
                 fontSize: ui(12),
@@ -1268,7 +1269,7 @@ class _TimeHeader extends StatelessWidget {
           Positioned(
             left: ui(20),
             bottom: ui(12),
-            child: Text(
+            child: AppText(
               '节次',
               style: TextStyle(
                 fontSize: ui(12),
@@ -1310,7 +1311,7 @@ class _TimeRange extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
+        AppText(
           start,
           style: TextStyle(
             fontSize: ui(14),
@@ -1323,7 +1324,7 @@ class _TimeRange extends StatelessWidget {
         SizedBox(height: ui(8)),
         Container(width: ui(12), height: 1, color: _kTextDivider),
         SizedBox(height: ui(8)),
-        Text(
+        AppText(
           end,
           style: TextStyle(
             fontSize: ui(14),
@@ -1403,7 +1404,7 @@ class _DaysHeaderRow extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
+                  AppText(
                     days[i].weekdayLabel,
                     style: TextStyle(
                       fontSize: ui(14),
@@ -1414,7 +1415,7 @@ class _DaysHeaderRow extends StatelessWidget {
                     ),
                   ),
                   SizedBox(height: ui(4)),
-                  Text(
+                  AppText(
                     days[i].dateLabel,
                     style: TextStyle(
                       fontSize: ui(12),
@@ -1566,7 +1567,7 @@ class _IdleSlotPlaceholder extends StatelessWidget {
         border: Border.all(color: _kTextDivider, width: 1),
       ),
       alignment: Alignment.center,
-      child: Text(
+      child: AppText(
         '空闲',
         style: TextStyle(
           fontSize: ui(14),
@@ -1614,7 +1615,7 @@ class _ApplySmallLessonButton extends StatelessWidget {
               child: Icon(Icons.add_rounded, size: ui(10), color: Colors.white),
             ),
             SizedBox(width: ui(6)),
-            Text(
+            AppText(
               '申请小课',
               style: TextStyle(
                 fontSize: ui(12),
@@ -1662,7 +1663,7 @@ class _ClassCard extends StatelessWidget {
               top: ui(8),
               child: SizedBox(
                 width: ui(108),
-                child: Text(
+                child: AppText(
                   data.location,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -1699,7 +1700,7 @@ class _ClassCard extends StatelessWidget {
               top: ui(44),
               child: SizedBox(
                 width: ui(140),
-                child: Text(
+                child: AppText(
                   data.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -1717,7 +1718,7 @@ class _ClassCard extends StatelessWidget {
               Positioned(
                 left: ui(16),
                 top: ui(64),
-                child: Text(
+                child: AppText(
                   data.subline,
                   style: TextStyle(
                     fontSize: ui(12),
@@ -1739,7 +1740,7 @@ class _ClassCard extends StatelessWidget {
                 top: ui(64),
                 child: SizedBox(
                   width: ui(theme.isSmall && data.capacity != null ? 100 : 140),
-                  child: Text(
+                  child: AppText(
                     data.subline,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -1757,7 +1758,7 @@ class _ClassCard extends StatelessWidget {
                 Positioned(
                   right: ui(16),
                   top: ui(64),
-                  child: Text(
+                  child: AppText(
                     data.capacity!,
                     style: TextStyle(
                       fontSize: ui(12),
@@ -1832,7 +1833,7 @@ class _ClassKindTag extends StatelessWidget {
             decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
           ),
           SizedBox(width: ui(4)),
-          Text(
+          AppText(
             label,
             style: TextStyle(
               fontSize: ui(12),
@@ -2204,7 +2205,7 @@ class _ApplySmallLessonDrawerState
                       },
                     ),
                     SizedBox(height: ui(8)),
-                    Text(
+                    AppText(
                       '课表展示为「小班·班级名」，无需再选教学组织形式。',
                       style: TextStyle(
                         fontSize: ui(12),
@@ -2344,7 +2345,7 @@ class _DrawerHeader extends StatelessWidget {
             ),
           ),
           SizedBox(width: ui(4)),
-          Text(
+          AppText(
             title,
             style: TextStyle(
               fontSize: ui(16),
@@ -2394,7 +2395,7 @@ class _SectionLabel extends StatelessWidget {
               : Icon(icon, size: ui(16), color: const Color(0xFF1C274C)),
         ),
         SizedBox(width: ui(8)),
-        Text(
+        AppText(
           label,
           style: TextStyle(
             fontSize: ui(14),
@@ -2426,7 +2427,7 @@ class _ReadonlyField extends StatelessWidget {
         color: _kInnerGray,
         borderRadius: BorderRadius.circular(ui(8)),
       ),
-      child: Text(
+      child: AppText(
         text,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
@@ -2545,7 +2546,7 @@ class _ColorModeChip extends StatelessWidget {
           borderRadius: BorderRadius.circular(ui(8)),
           border: selected ? Border.all(color: _kPurple, width: 1) : null,
         ),
-        child: Text(
+        child: AppText(
           label,
           style: TextStyle(
             fontSize: ui(16),
@@ -2586,7 +2587,7 @@ class _SubmitGradientButton extends StatelessWidget {
         ),
         child: Opacity(
           opacity: onTap == null ? 0.55 : 1,
-          child: Text(
+          child: AppText(
             label,
             style: TextStyle(
               fontSize: ui(16),

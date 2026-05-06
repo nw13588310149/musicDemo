@@ -13,6 +13,7 @@ import 'widgets/auth_background_art.dart';
 import 'widgets/auth_design_canvas.dart';
 import 'widgets/auth_figma_components.dart';
 
+import '../../../core/widgets/app_text.dart';
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
 
@@ -92,7 +93,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         behavior: HitTestBehavior.opaque,
                         onTap: () =>
                             Navigator.pushNamed(context, RoutePaths.forget),
-                        child: Text(
+                        child: AppText(
                           '忘记密码？',
                           style: TextStyle(
                             color: const Color(0xFFB6B5BB),
@@ -155,7 +156,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
+                          AppText(
                             '没有账号？',
                             style: TextStyle(
                               color: const Color(0xFF0B081A),
@@ -173,7 +174,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                               context,
                               RoutePaths.register,
                             ),
-                            child: Text(
+                            child: AppText(
                               '立即注册！',
                               style: TextStyle(
                                 color: const Color(0xFF8741FF),

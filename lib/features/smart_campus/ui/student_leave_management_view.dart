@@ -41,6 +41,7 @@ import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/popup_selector_field.dart';
 import '../../shell/ui/shell_layout.dart';
 
+import '../../../core/widgets/app_text.dart';
 // —— 颜色 ————————————————————————————————————————————————————————
 const Color _kPageBg = Color(0xFFEFF3FC);
 const Color _kBoardBg = Color(0xFFF5F6FA);
@@ -260,7 +261,7 @@ class _LeaveBanner extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
+                  AppText(
                     '请假管理',
                     style: TextStyle(
                       fontSize: ui(16),
@@ -271,7 +272,7 @@ class _LeaveBanner extends StatelessWidget {
                     ),
                   ),
                   SizedBox(height: ui(4)),
-                  Text(
+                  AppText(
                     '默认由家长在小程序审批后再由班主任审批；已与家长充分沟通的可选择班主任直接审批。',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -433,7 +434,7 @@ class _StatCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
+              AppText(
                 label,
                 style: TextStyle(
                   fontSize: ui(14),
@@ -444,7 +445,7 @@ class _StatCard extends StatelessWidget {
                 ),
               ),
               SizedBox(height: ui(8)),
-              Text(
+              AppText(
                 '$value',
                 style: TextStyle(
                   fontSize: ui(32),
@@ -557,7 +558,7 @@ class _TabPill extends StatelessWidget {
           color: active ? _kTextDark : Colors.transparent,
           borderRadius: BorderRadius.circular(ui(6)),
         ),
-        child: Text(
+        child: AppText(
           label,
           style: TextStyle(
             fontSize: ui(14),
@@ -607,7 +608,7 @@ class _CreateApplyButton extends StatelessWidget {
           children: [
             Icon(Icons.edit_document, size: ui(16), color: Colors.white),
             SizedBox(width: ui(8)),
-            Text(
+            AppText(
               '发起申请',
               style: TextStyle(
                 fontSize: ui(16),
@@ -680,7 +681,7 @@ class _EmptyState extends StatelessWidget {
         children: [
           Icon(Icons.inbox_outlined, size: ui(48), color: _kTextHint),
           SizedBox(height: ui(8)),
-          Text(
+          AppText(
             '当前筛选下没有请假记录',
             style: TextStyle(
               fontSize: ui(13),
@@ -742,7 +743,7 @@ class _CardHeaderRow extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     return Row(
       children: [
-        Text(
+        AppText(
           record.type,
           style: TextStyle(
             fontSize: ui(16),
@@ -753,7 +754,7 @@ class _CardHeaderRow extends StatelessWidget {
           ),
         ),
         SizedBox(width: ui(12)),
-        Text(
+        AppText(
           '时长${record.durationLabel}',
           style: TextStyle(
             fontSize: ui(12),
@@ -790,7 +791,7 @@ class _StatusBadge extends StatelessWidget {
         color: bg,
         borderRadius: BorderRadius.circular(ui(4)),
       ),
-      child: Text(
+      child: AppText(
         label,
         style: TextStyle(
           fontSize: ui(12),
@@ -853,7 +854,7 @@ class _LabelRow extends StatelessWidget {
       children: [
         SizedBox(
           width: ui(60),
-          child: Text(
+          child: AppText(
             label,
             style: TextStyle(
               fontSize: ui(12),
@@ -865,7 +866,7 @@ class _LabelRow extends StatelessWidget {
           ),
         ),
         Expanded(
-          child: Text(
+          child: AppText(
             value,
             style: TextStyle(
               fontSize: ui(12),
@@ -1005,7 +1006,7 @@ class _ApprovalNodeView extends StatelessWidget {
           ),
         ),
         SizedBox(width: ui(8)),
-        Text(
+        AppText(
           step.title,
           style: TextStyle(
             fontSize: ui(12),
@@ -1022,7 +1023,7 @@ class _ApprovalNodeView extends StatelessWidget {
             color: labelBg,
             borderRadius: BorderRadius.circular(ui(4)),
           ),
-          child: Text(
+          child: AppText(
             step.label,
             style: TextStyle(
               fontSize: ui(12),
@@ -1058,7 +1059,7 @@ class _WithdrawButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(ui(8)),
           border: Border.all(color: _kBorderSoft),
         ),
-        child: Text(
+        child: AppText(
           '撤销申请',
           style: TextStyle(
             fontSize: ui(14),
@@ -1508,7 +1509,7 @@ class _DrawerHeader extends StatelessWidget {
             ),
           ),
           SizedBox(width: ui(4)),
-          Text(
+          AppText(
             '发起请假',
             style: TextStyle(
               fontSize: ui(16),
@@ -1565,7 +1566,7 @@ class _DrawerFooter extends StatelessWidget {
                   color: _kBorderHair,
                   borderRadius: BorderRadius.circular(ui(12)),
                 ),
-                child: Text(
+                child: AppText(
                   '取消',
                   style: TextStyle(
                     fontSize: ui(14),
@@ -1594,7 +1595,7 @@ class _DrawerFooter extends StatelessWidget {
                   ),
                   borderRadius: BorderRadius.circular(ui(12)),
                 ),
-                child: Text(
+                child: AppText(
                   '提交申请',
                   style: TextStyle(
                     fontSize: ui(14),
@@ -1621,7 +1622,7 @@ class _FieldLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Text(
+    return AppText(
       text,
       style: TextStyle(
         fontSize: ui(14),
@@ -1665,7 +1666,7 @@ class _DateField extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              child: Text(
+              child: AppText(
                 text,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,

@@ -10,6 +10,7 @@ import '../state/quiz_practice_controller.dart';
 import '../state/quiz_practice_state.dart';
 import '../state/quiz_session_state.dart';
 
+import '../../../core/widgets/app_text.dart';
 class QuizPracticePage extends ConsumerWidget {
   const QuizPracticePage({super.key});
 
@@ -121,7 +122,7 @@ class _CampBannerFallback extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                AppText(
                   '刷题练习',
                   style: TextStyle(
                     color: Colors.white,
@@ -131,7 +132,7 @@ class _CampBannerFallback extends StatelessWidget {
                   ),
                 ),
                 SizedBox(height: ui(8)),
-                Text(
+                AppText(
                   '夯实基础 · 知识点专项突破',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.85),
@@ -172,7 +173,7 @@ class _PracticeRingRow extends StatelessWidget {
   Widget build(BuildContext context) {
     if (summaries.isEmpty) {
       return Center(
-        child: TextButton(onPressed: onRefresh, child: const Text('点击重试')),
+        child: TextButton(onPressed: onRefresh, child: const AppText('点击重试')),
       );
     }
     // 1.0：btn_box 高度 188px，内部 4 列居中，每列 25%。
@@ -250,7 +251,7 @@ class _PracticeRingCard extends StatelessWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
+                      AppText(
                         '${summary.progressPercent}%',
                         style: TextStyle(
                           color: const Color(0xFF000000),
@@ -260,7 +261,7 @@ class _PracticeRingCard extends StatelessWidget {
                         ),
                       ),
                       SizedBox(height: ui(8)),
-                      Text(
+                      AppText(
                         summary.type.label,
                         style: TextStyle(
                           color: const Color(0xFF000000),
@@ -291,7 +292,7 @@ class _PracticeRingCard extends StatelessWidget {
                       color: const Color(0xFFF8F8F8),
                       borderRadius: BorderRadius.circular(pillInnerHeight / 2),
                     ),
-                    child: Text(
+                    child: AppText(
                       '${summary.doneCount}/${summary.allCount}',
                       style: TextStyle(
                         color: const Color(0xFF000000),

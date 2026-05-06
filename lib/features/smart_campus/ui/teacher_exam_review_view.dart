@@ -40,6 +40,7 @@ import 'package:flutter/material.dart';
 import '../../../core/widgets/popup_selector_field.dart';
 import '../../shell/ui/shell_layout.dart';
 
+import '../../../core/widgets/app_text.dart';
 // ---- 配色 -------------------------------------------------------------------
 const Color _kPageBg = Color(0xFFEFF3FC);
 const Color _kCardBg = Colors.white;
@@ -314,7 +315,7 @@ class _ExamBanner extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
+                  AppText(
                     '考评管理',
                     style: TextStyle(
                       fontSize: ui(16),
@@ -325,7 +326,7 @@ class _ExamBanner extends StatelessWidget {
                     ),
                   ),
                   SizedBox(height: ui(2)),
-                  Text(
+                  AppText(
                     '列表展示已关联到您任教的月考科目；教师仅可查看学生提交并进行评分与点评，不可新建考试。',
                     style: TextStyle(
                       fontSize: ui(12),
@@ -384,7 +385,7 @@ class _BannerActionButton extends StatelessWidget {
           children: [
             Icon(icon, size: ui(16), color: _kPurple),
             SizedBox(width: ui(4)),
-            Text(
+            AppText(
               label,
               style: TextStyle(
                 fontSize: ui(12),
@@ -470,7 +471,7 @@ class _SegmentChip extends StatelessWidget {
           color: active ? _kTextDark : Colors.transparent,
           borderRadius: BorderRadius.circular(ui(6)),
         ),
-        child: Text(
+        child: AppText(
           label,
           style: TextStyle(
             fontSize: ui(14),
@@ -614,7 +615,7 @@ class _StatCell extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
+          AppText(
             value,
             textAlign: TextAlign.center,
             style: TextStyle(
@@ -626,7 +627,7 @@ class _StatCell extends StatelessWidget {
             ),
           ),
           SizedBox(height: ui(2)),
-          Text(
+          AppText(
             label,
             textAlign: TextAlign.center,
             style: TextStyle(
@@ -715,7 +716,7 @@ class _ExamListPanel extends StatelessWidget {
         children: [
           Padding(
             padding: EdgeInsets.symmetric(vertical: ui(4)),
-            child: Text(
+            child: AppText(
               '考试列表',
               style: TextStyle(
                 fontSize: ui(16),
@@ -775,7 +776,7 @@ class _ExamListCard extends StatelessWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text(
+                    AppText(
                       '${item.publishedRatio.submitted}',
                       style: TextStyle(
                         fontSize: ui(28),
@@ -788,7 +789,7 @@ class _ExamListCard extends StatelessWidget {
                     SizedBox(width: ui(2)),
                     Padding(
                       padding: EdgeInsets.only(bottom: ui(4)),
-                      child: Text(
+                      child: AppText(
                         '/${item.publishedRatio.total}',
                         style: TextStyle(
                           fontSize: ui(16),
@@ -802,7 +803,7 @@ class _ExamListCard extends StatelessWidget {
                   ],
                 ),
                 SizedBox(height: ui(2)),
-                Text(
+                AppText(
                   '截止 ${item.deadline}',
                   style: TextStyle(
                     fontSize: ui(10),
@@ -813,7 +814,7 @@ class _ExamListCard extends StatelessWidget {
                   ),
                 ),
                 SizedBox(height: ui(2)),
-                Text(
+                AppText(
                   item.classLabel,
                   style: TextStyle(
                     fontSize: ui(12),
@@ -835,7 +836,7 @@ class _ExamListCard extends StatelessWidget {
                   ],
                 ),
                 SizedBox(height: ui(6)),
-                Text(
+                AppText(
                   item.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -875,7 +876,7 @@ class _SubjectTag extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(ui(4)),
       ),
-      child: Text(
+      child: AppText(
         label,
         style: TextStyle(
           fontSize: ui(11),
@@ -903,7 +904,7 @@ class _PendingReviewTag extends StatelessWidget {
         color: _kOrangeBg,
         borderRadius: BorderRadius.circular(ui(4)),
       ),
-      child: Text(
+      child: AppText(
         '待评($count)',
         style: TextStyle(
           fontSize: ui(11),
@@ -941,7 +942,7 @@ class _CornerLabel extends StatelessWidget {
           bottomLeft: Radius.circular(ui(12)),
         ),
       ),
-      child: Text(
+      child: AppText(
         label,
         style: TextStyle(
           fontSize: ui(12),
@@ -980,7 +981,7 @@ class _ExamDetailPanel extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Expanded(
-                child: Text(
+                child: AppText(
                   item.title,
                   style: TextStyle(
                     fontSize: ui(16),
@@ -992,7 +993,7 @@ class _ExamDetailPanel extends StatelessWidget {
                 ),
               ),
               SizedBox(width: ui(12)),
-              Text(
+              AppText(
                 '截止 ${item.deadline}',
                 style: TextStyle(
                   fontSize: ui(12),
@@ -1005,7 +1006,7 @@ class _ExamDetailPanel extends StatelessWidget {
             ],
           ),
           SizedBox(height: ui(8)),
-          Text(
+          AppText(
             item.syncNote,
             style: TextStyle(
               fontSize: ui(12),
@@ -1049,7 +1050,7 @@ class _OfficialBlock extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
+          AppText(
             '【教务月考要求】',
             style: TextStyle(
               fontSize: ui(12),
@@ -1060,7 +1061,7 @@ class _OfficialBlock extends StatelessWidget {
             ),
           ),
           SizedBox(height: ui(2)),
-          Text(
+          AppText(
             description,
             style: TextStyle(
               fontSize: ui(12),
@@ -1149,7 +1150,7 @@ class _ProgressMetricCell extends StatelessWidget {
             child: Row(
               children: [
                 Flexible(
-                  child: Text(
+                  child: AppText(
                     label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -1163,7 +1164,7 @@ class _ProgressMetricCell extends StatelessWidget {
                   ),
                 ),
                 SizedBox(width: ui(4)),
-                Text(
+                AppText(
                   value,
                   style: TextStyle(
                     fontSize: ui(12),
@@ -1247,7 +1248,7 @@ class _ColHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Text(
+    return AppText(
       text,
       style: TextStyle(
         fontSize: ui(13),
@@ -1284,7 +1285,7 @@ class _SubmissionRow extends StatelessWidget {
                 _AvatarCircle(name: item.studentName, seed: item.avatarSeed),
                 SizedBox(width: ui(4)),
                 Flexible(
-                  child: Text(
+                  child: AppText(
                     item.studentName,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -1317,7 +1318,7 @@ class _SubmissionRow extends StatelessWidget {
                   color: _kTextDark,
                   borderRadius: BorderRadius.circular(ui(8)),
                 ),
-                child: Text(
+                child: AppText(
                   item.action,
                   style: TextStyle(
                     fontSize: ui(13),
@@ -1344,7 +1345,7 @@ class _CellText extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Text(
+    return AppText(
       text,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
@@ -1385,7 +1386,7 @@ class _StatusPill extends StatelessWidget {
           color: tone.bg,
           borderRadius: BorderRadius.circular(ui(4)),
         ),
-        child: Text(
+        child: AppText(
           tone.text,
           style: TextStyle(
             fontSize: ui(12),
@@ -1428,7 +1429,7 @@ class _AvatarCircle extends StatelessWidget {
         ),
       ),
       alignment: Alignment.center,
-      child: Text(
+      child: AppText(
         name.characters.first,
         style: TextStyle(
           fontSize: ui(13),
@@ -1476,7 +1477,7 @@ class _HistoryDrawer extends StatelessWidget {
                     ),
                   ),
                   SizedBox(width: ui(4)),
-                  Text(
+                  AppText(
                     '历史月考',
                     style: TextStyle(
                       fontSize: ui(16),
@@ -1489,7 +1490,7 @@ class _HistoryDrawer extends StatelessWidget {
                   SizedBox(width: ui(8)),
                   Padding(
                     padding: EdgeInsets.only(top: ui(4)),
-                    child: Text(
+                    child: AppText(
                       '共${items.length}条',
                       style: TextStyle(
                         fontSize: ui(12),
@@ -1544,7 +1545,7 @@ class _HistoryCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(
+              AppText(
                 '${item.publishedRatio.submitted}',
                 style: TextStyle(
                   fontSize: ui(28),
@@ -1557,7 +1558,7 @@ class _HistoryCard extends StatelessWidget {
               SizedBox(width: ui(2)),
               Padding(
                 padding: EdgeInsets.only(bottom: ui(4)),
-                child: Text(
+                child: AppText(
                   '/${item.publishedRatio.total}',
                   style: TextStyle(
                     fontSize: ui(16),
@@ -1571,7 +1572,7 @@ class _HistoryCard extends StatelessWidget {
             ],
           ),
           SizedBox(height: ui(2)),
-          Text(
+          AppText(
             '截止 ${item.deadline}',
             style: TextStyle(
               fontSize: ui(10),
@@ -1582,7 +1583,7 @@ class _HistoryCard extends StatelessWidget {
             ),
           ),
           SizedBox(height: ui(2)),
-          Text(
+          AppText(
             item.classLabel,
             style: TextStyle(
               fontSize: ui(12),
@@ -1601,7 +1602,7 @@ class _HistoryCard extends StatelessWidget {
             ],
           ),
           SizedBox(height: ui(6)),
-          Text(
+          AppText(
             item.title,
             style: TextStyle(
               fontSize: ui(16),
@@ -1679,7 +1680,7 @@ class _ScoreDrawerState extends State<_ScoreDrawer> {
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Text(
+                        AppText(
                           '评分与点评',
                           style: TextStyle(
                             fontSize: ui(16),
@@ -1785,7 +1786,7 @@ class _ScoreProfileRow extends StatelessWidget {
               Row(
                 children: [
                   Expanded(
-                    child: Text(
+                    child: AppText(
                       submission.studentName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -1806,7 +1807,7 @@ class _ScoreProfileRow extends StatelessWidget {
               Row(
                 children: [
                   Expanded(
-                    child: Text(
+                    child: AppText(
                       '${item.examLabel} · ${item.title}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -1820,7 +1821,7 @@ class _ScoreProfileRow extends StatelessWidget {
                     ),
                   ),
                   SizedBox(width: ui(8)),
-                  Text(
+                  AppText(
                     submission.uploadAt,
                     style: TextStyle(
                       fontSize: ui(12),
@@ -1899,7 +1900,7 @@ class _AttachmentCard extends StatelessWidget {
                 color: tagColor,
                 borderRadius: BorderRadius.circular(ui(2)),
               ),
-              child: Text(
+              child: AppText(
                 tagText,
                 style: TextStyle(
                   fontSize: ui(8),
@@ -1918,7 +1919,7 @@ class _AttachmentCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
+                AppText(
                   filename,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -1931,7 +1932,7 @@ class _AttachmentCard extends StatelessWidget {
                   ),
                 ),
                 SizedBox(height: ui(2)),
-                Text(
+                AppText(
                   size,
                   style: TextStyle(
                     fontSize: ui(11),
@@ -1994,7 +1995,7 @@ class _GhostButton extends StatelessWidget {
           children: [
             Icon(icon, size: ui(14), color: _kPillIconColor),
             SizedBox(width: ui(4)),
-            Text(
+            AppText(
               label,
               style: TextStyle(
                 fontSize: ui(12),
@@ -2052,7 +2053,7 @@ class _ScoreInput extends StatelessWidget {
               ),
             ),
           ),
-          Text(
+          AppText(
             ' / 100',
             style: TextStyle(
               fontSize: ui(13),
@@ -2092,7 +2093,7 @@ class _DrawerTitleBar extends StatelessWidget {
           ),
         ),
         SizedBox(width: ui(4)),
-        Text(
+        AppText(
           title,
           style: TextStyle(
             fontSize: ui(16),
@@ -2115,7 +2116,7 @@ class _FieldLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Text(
+    return AppText(
       text,
       style: TextStyle(
         fontSize: ui(14),
@@ -2225,7 +2226,7 @@ class _PrimaryGradientButton extends StatelessWidget {
           children: [
             Icon(icon, size: ui(16), color: Colors.white),
             SizedBox(width: ui(8)),
-            Text(
+            AppText(
               label,
               style: TextStyle(
                 fontSize: ui(14),

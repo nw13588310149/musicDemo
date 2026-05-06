@@ -11,6 +11,7 @@ import '../audio/smart_dictation_audio_engine.dart';
 import '../state/smart_dictation_controller.dart';
 import '../state/smart_dictation_state.dart';
 
+import '../../../core/widgets/app_text.dart';
 /// Notes available for the 最低音 picker (matches Figma design).
 const _kMinRangeNotes = <String>['f', '#f', 'g', '#g', 'a', 'bb'];
 
@@ -339,7 +340,7 @@ class _TrackCard extends StatelessWidget {
               ),
               SizedBox(width: ui(8)),
               Expanded(
-                child: Text(
+                child: AppText(
                   title,
                   style: TextStyle(
                     color: const Color(0xFF0B081A),
@@ -404,7 +405,7 @@ class _ModeBtn extends StatelessWidget {
           color: selected ? null : Colors.white,
           borderRadius: BorderRadius.circular(ui(8)),
         ),
-        child: Text(
+        child: AppText(
           text,
           style: TextStyle(
             color: selected ? Colors.white : const Color(0xFF6D6B75),
@@ -489,7 +490,7 @@ class _Content extends StatelessWidget {
       }
       if (state.activeLessons.isEmpty) {
         return Center(
-          child: Text(
+          child: AppText(
             '暂无关卡数据',
             style: TextStyle(color: const Color(0xFFB6B5BB), fontSize: ui(14)),
           ),
@@ -559,7 +560,7 @@ class _Content extends StatelessWidget {
                   // page title
                   SizedBox(
                     width: double.infinity,
-                    child: Text(
+                    child: AppText(
                       '$trackName-智能练习',
                       textAlign: TextAlign.center,
                       style: TextStyle(
@@ -837,7 +838,7 @@ class _Content extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  const Text(
+                  const AppText(
                     '开始练习',
                     style: TextStyle(
                       fontSize: 16,
@@ -1065,7 +1066,7 @@ class _PracticeViewState extends State<_PracticeView> {
                   ),
                   // title
                   Center(
-                    child: Text(
+                    child: AppText(
                       session.title,
                       style: TextStyle(
                         fontSize: ui(16),
@@ -1265,7 +1266,7 @@ class _TimerCircleState extends State<_TimerCircle>
             showProgressArc: showProgressArc,
           ),
           child: Center(
-            child: Text(
+            child: AppText(
               centerText,
               style: TextStyle(
                 fontSize: ui(centerText.contains(':') ? 24 : 22),
@@ -2151,7 +2152,7 @@ class _PracticeProgressBar extends StatelessWidget {
                       ),
                     ],
                   ),
-                  child: Text(
+                  child: AppText(
                     label,
                     style: TextStyle(
                       fontSize: ui(12),
@@ -2343,7 +2344,7 @@ class _PracticeBottomBar extends StatelessWidget {
                   color: Colors.white,
                 ),
               SizedBox(width: ui(8)),
-              Text(
+              AppText(
                 label,
                 style: const TextStyle(
                   fontSize: 16,
@@ -2513,7 +2514,7 @@ class _PracticeResultDialog extends StatelessWidget {
                     left: ui(24),
                     right: ui(24),
                     top: ui(52),
-                    child: Text(
+                    child: AppText(
                       '太棒了！恭喜完成本课',
                       textAlign: TextAlign.center,
                       style: TextStyle(
@@ -2630,7 +2631,7 @@ class _ResultStatCard extends StatelessWidget {
               left: ui(27),
               top: ui(6),
               right: ui(6),
-              child: Text(
+              child: AppText(
                 title,
                 textAlign: TextAlign.center,
                 style: TextStyle(
@@ -2646,7 +2647,7 @@ class _ResultStatCard extends StatelessWidget {
               left: 0,
               right: 0,
               top: ui(32),
-              child: Text(
+              child: AppText(
                 value,
                 textAlign: TextAlign.center,
                 style: TextStyle(
@@ -2693,7 +2694,7 @@ class _ResultActionButton extends StatelessWidget {
             border: Border.all(color: const Color(0xFFF3F2F3), width: 2),
           ),
           alignment: Alignment.center,
-          child: Text(
+          child: AppText(
             text,
             style: TextStyle(
               color: const Color(0xFF0B081A),
@@ -2758,7 +2759,7 @@ class _ResultActionButton extends StatelessWidget {
                 ),
               ),
             ),
-            Text(
+            AppText(
               text,
               style: TextStyle(
                 color: Colors.white,
@@ -2859,7 +2860,7 @@ class _PracticeExitDialog extends StatelessWidget {
                         top: ui(62),
                         left: 0,
                         right: 0,
-                        child: Text(
+                        child: AppText(
                           '是否退出当前练习',
                           textAlign: TextAlign.center,
                           style: TextStyle(
@@ -2951,7 +2952,7 @@ class _ExitDialogButton extends StatelessWidget {
           ],
         ),
         alignment: Alignment.center,
-        child: Text(
+        child: AppText(
           label,
           style: TextStyle(
             fontSize: ui(16),
@@ -3001,7 +3002,7 @@ class _LessonTile extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       SizedBox(height: ui(4)),
-                      Text(
+                      AppText(
                         '第${lesson.number}课',
                         style: TextStyle(
                           fontSize: ui(13),
@@ -3012,7 +3013,7 @@ class _LessonTile extends StatelessWidget {
                         ),
                       ),
                       SizedBox(height: ui(8)),
-                      Text(
+                      AppText(
                         lesson.subtitle.isEmpty ? '标准音上下行二度' : lesson.subtitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -3068,7 +3069,7 @@ class _LessonTile extends StatelessWidget {
                                     borderRadius: BorderRadius.circular(ui(8)),
                                   ),
                                   alignment: Alignment.center,
-                                  child: Text(
+                                  child: AppText(
                                     '去闯关',
                                     style: TextStyle(
                                       fontSize: ui(11),
@@ -3101,7 +3102,7 @@ class _LessonTile extends StatelessWidget {
                                 ),
                                 SizedBox(width: ui(4)),
                                 Expanded(
-                                  child: Text(
+                                  child: AppText(
                                     '通过上一课即可解锁',
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
@@ -3234,7 +3235,7 @@ class _LessonCover extends StatelessWidget {
             Positioned(
               left: ui(18),
               top: ui(10),
-              child: Text(
+              child: AppText(
                 coverText,
                 style: TextStyle(
                   fontSize: ui(12),
@@ -3342,19 +3343,19 @@ class _NoteNameText extends StatelessWidget {
         children: [
           Align(
             alignment: Alignment.center,
-            child: Text(s, style: style, textAlign: TextAlign.center),
+            child: AppText(s, style: style, textAlign: TextAlign.center),
           ),
           if (prefix != null)
             Positioned(
               left: 0,
               top: ui(-2),
-              child: Text(prefix, style: style, textAlign: TextAlign.center),
+              child: AppText(prefix, style: style, textAlign: TextAlign.center),
             ),
           if (suffix != null)
             Positioned(
               right: 0,
               top: ui(-2),
-              child: Text(suffix, style: style, textAlign: TextAlign.center),
+              child: AppText(suffix, style: style, textAlign: TextAlign.center),
             ),
         ],
       ),
@@ -3421,7 +3422,7 @@ class _SmartOptionChip extends StatelessWidget {
         ),
         alignment: Alignment.center,
         child: hasChinese
-            ? Text(label, style: textStyle, textAlign: TextAlign.center)
+            ? AppText(label, style: textStyle, textAlign: TextAlign.center)
             : isNoteChip
             ? _NoteNameText(ui: ui, note: label, style: textStyle)
             : Text.rich(_buildNoteSpan(label, textStyle)),
@@ -3475,7 +3476,7 @@ class _SmartRowChip extends StatelessWidget {
           padding: EdgeInsets.symmetric(horizontal: ui(24), vertical: ui(9)),
           child: isNote
               ? Text.rich(_buildNoteSpan(label, textStyle))
-              : Text(label, style: textStyle),
+              : AppText(label, style: textStyle),
         ),
       ),
     );
@@ -3503,7 +3504,7 @@ class _SmartSettingRow extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
+        AppText(
           title,
           style: TextStyle(
             fontSize: ui(16),
@@ -3566,7 +3567,7 @@ class _SmartToggleRow extends StatelessWidget {
           ),
         ),
         SizedBox(width: ui(8)),
-        Text(
+        AppText(
           value ? '开' : '关',
           style: TextStyle(
             fontSize: ui(13),

@@ -52,6 +52,7 @@ import '../../../core/widgets/popup_selector_field.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 
+import '../../../core/widgets/app_text.dart';
 // —— 颜色 ————————————————————————————————————————————————————————
 const Color _kPageBg = Color(0xFFEFF3FC);
 const Color _kInnerGray = Color(0xFFF5F6FA);
@@ -458,7 +459,7 @@ class _Banner extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
+                  AppText(
                     '通知管理',
                     style: TextStyle(
                       fontSize: ui(16),
@@ -469,7 +470,7 @@ class _Banner extends StatelessWidget {
                     ),
                   ),
                   SizedBox(height: ui(2)),
-                  Text(
+                  AppText(
                     '按类型维护校级通知，支持草稿、定时与即时发布，并配置推送范围（学生 / 教师 / 宿管等）',
                     style: TextStyle(
                       fontSize: ui(12),
@@ -524,7 +525,7 @@ class _CreateButton extends StatelessWidget {
               color: const Color(0xFF1C274C),
             ),
             SizedBox(width: ui(4)),
-            Text(
+            AppText(
               '新建通知',
               style: TextStyle(
                 fontSize: ui(12),
@@ -677,7 +678,7 @@ class _StatCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                AppText(
                   label,
                   style: TextStyle(
                     fontSize: ui(14),
@@ -688,7 +689,7 @@ class _StatCard extends StatelessWidget {
                   ),
                 ),
                 SizedBox(height: ui(12)),
-                Text(
+                AppText(
                   '$value',
                   style: TextStyle(
                     fontSize: ui(32),
@@ -880,7 +881,7 @@ class _NotificationTable extends StatelessWidget {
             Container(
               height: ui(120),
               alignment: Alignment.center,
-              child: Text(
+              child: AppText(
                 '暂无通知',
                 style: TextStyle(
                   fontSize: ui(13),
@@ -946,7 +947,7 @@ class _HeaderCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final child = Text(
+    final child = AppText(
       text,
       style: TextStyle(
         fontSize: ui(13),
@@ -1045,7 +1046,7 @@ class _TitleCell extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
+        AppText(
           title,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -1057,7 +1058,7 @@ class _TitleCell extends StatelessWidget {
             height: 20 / 13,
           ),
         ),
-        Text(
+        AppText(
           author,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -1083,7 +1084,7 @@ class _TextCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Text(
+    return AppText(
       text,
       maxLines: maxLines,
       overflow: TextOverflow.ellipsis,
@@ -1118,7 +1119,7 @@ class _PriorityCell extends StatelessWidget {
         _signalBar(ui(2), ui(8), bars[2] ? priority.color : _kTextDivider),
         SizedBox(width: ui(4)),
         Flexible(
-          child: Text(
+          child: AppText(
             priority.label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -1163,7 +1164,7 @@ class _StatusCell extends StatelessWidget {
           color: status.bg,
           borderRadius: BorderRadius.circular(ui(4)),
         ),
-        child: Text(
+        child: AppText(
           status.label,
           style: TextStyle(
             fontSize: ui(12),
@@ -1237,7 +1238,7 @@ class _ActionCell extends StatelessWidget {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
-      child: Text(
+      child: AppText(
         text,
         style: TextStyle(
           fontSize: ui(13),
@@ -1267,7 +1268,7 @@ class _NotificationDetailBody extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
+        AppText(
           record.title,
           style: TextStyle(
             fontSize: ui(15),
@@ -1289,7 +1290,7 @@ class _NotificationDetailBody extends StatelessWidget {
                 color: record.status.bg,
                 borderRadius: BorderRadius.circular(ui(4)),
               ),
-              child: Text(
+              child: AppText(
                 record.status.label,
                 style: TextStyle(
                   fontSize: ui(12),
@@ -1301,7 +1302,7 @@ class _NotificationDetailBody extends StatelessWidget {
               ),
             ),
             SizedBox(width: ui(8)),
-            Text(
+            AppText(
               record.author,
               style: TextStyle(
                 fontSize: ui(12),
@@ -1323,7 +1324,7 @@ class _NotificationDetailBody extends StatelessWidget {
         _DetailRow(label: '推送范围', value: record.scopeLabel),
         _DetailRow(label: '时间', value: record.time, isLast: true),
         SizedBox(height: ui(12)),
-        Text(
+        AppText(
           '内容',
           style: TextStyle(
             fontSize: ui(13),
@@ -1341,7 +1342,7 @@ class _NotificationDetailBody extends StatelessWidget {
             color: _kInnerGray,
             borderRadius: BorderRadius.circular(ui(10)),
           ),
-          child: Text(
+          child: AppText(
             record.content.isEmpty ? '（暂无正文）' : record.content,
             style: TextStyle(
               fontSize: ui(13),
@@ -1386,7 +1387,7 @@ class _DetailRow extends StatelessWidget {
         children: [
           SizedBox(
             width: ui(72),
-            child: Text(
+            child: AppText(
               label,
               style: TextStyle(
                 fontSize: ui(13),
@@ -1398,7 +1399,7 @@ class _DetailRow extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: Text(
+            child: AppText(
               value,
               style: TextStyle(
                 fontSize: ui(13),
@@ -1733,7 +1734,7 @@ class _DrawerHeader extends StatelessWidget {
             ),
           ),
           SizedBox(width: ui(8)),
-          Text(
+          AppText(
             title,
             style: TextStyle(
               fontSize: ui(16),
@@ -1776,7 +1777,7 @@ class _SectionLabel extends StatelessWidget {
         if (required)
           Padding(
             padding: EdgeInsets.only(right: ui(2)),
-            child: Text(
+            child: AppText(
               '*',
               style: TextStyle(
                 fontSize: ui(14),
@@ -1787,7 +1788,7 @@ class _SectionLabel extends StatelessWidget {
               ),
             ),
           ),
-        Text(
+        AppText(
           label,
           style: TextStyle(
             fontSize: ui(14),
@@ -1896,7 +1897,7 @@ class _PrioritySegment extends StatelessWidget {
                     _bar(ui(2), ui(8),
                         p.bars[2] ? p.color : _kTextDivider),
                     SizedBox(width: ui(6)),
-                    Text(
+                    AppText(
                       p.label,
                       style: TextStyle(
                         fontSize: ui(13),
@@ -1972,7 +1973,7 @@ class _ScopeChips extends StatelessWidget {
                         color: _kPurple,
                       ),
                     ),
-                  Text(
+                  AppText(
                     s,
                     style: TextStyle(
                       fontSize: ui(13),
@@ -2023,7 +2024,7 @@ class _PublishModeSegment extends StatelessWidget {
                       ? Border.all(color: _kPurple, width: 1)
                       : null,
                 ),
-                child: Text(
+                child: AppText(
                   m.label,
                   style: TextStyle(
                     fontSize: ui(13),
@@ -2074,7 +2075,7 @@ class _ScheduledPickerField extends StatelessWidget {
             ),
             SizedBox(width: ui(8)),
             Expanded(
-              child: Text(
+              child: AppText(
                 hasValue ? _formatDateTime(value!) : '请选择定时发布时间',
                 style: TextStyle(
                   fontSize: ui(14),
@@ -2122,7 +2123,7 @@ class _PrimaryButton extends StatelessWidget {
         ),
         child: Opacity(
           opacity: onTap == null ? 0.55 : 1,
-          child: Text(
+          child: AppText(
             label,
             style: TextStyle(
               fontSize: ui(15),
@@ -2160,7 +2161,7 @@ class _SecondaryButton extends StatelessWidget {
         ),
         child: Opacity(
           opacity: onTap == null ? 0.55 : 1,
-          child: Text(
+          child: AppText(
             label,
             style: TextStyle(
               fontSize: ui(15),

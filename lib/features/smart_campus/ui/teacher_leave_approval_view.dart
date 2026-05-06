@@ -40,6 +40,7 @@ import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 
+import '../../../core/widgets/app_text.dart';
 // —— 颜色 ————————————————————————————————————————————————————————
 const Color _kPageBg = Color(0xFFEFF3FC);
 const Color _kBoardBg = Color(0xFFF5F6FA);
@@ -169,7 +170,7 @@ class _TeacherLeaveApprovalViewState extends State<TeacherLeaveApprovalView> {
             SizedBox(height: ui(8)),
             Padding(
               padding: EdgeInsets.only(left: ui(8)),
-              child: Text(
+              child: AppText(
                 '默认由家长在小程序审批后再由班主任审批；已与家长充分沟通的可选择班主任直接审批。补课协调以教务安排为准。',
                 style: TextStyle(
                   fontSize: ui(12),
@@ -181,7 +182,7 @@ class _TeacherLeaveApprovalViewState extends State<TeacherLeaveApprovalView> {
               ),
             ),
             SizedBox(height: ui(8)),
-            Text(
+            AppText(
               '备案说明：病假超过规定天数或跨周末离校等情形，通过后系统将提醒年级组备案；驳回须填写原因，学生端与家长端均可查看。',
               style: TextStyle(
                 fontSize: ui(12),
@@ -300,7 +301,7 @@ class _Banner extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
+                  AppText(
                     '请假审批',
                     style: TextStyle(
                       fontSize: ui(16),
@@ -311,7 +312,7 @@ class _Banner extends StatelessWidget {
                     ),
                   ),
                   SizedBox(height: ui(2)),
-                  Text(
+                  AppText(
                     '查看本班学生请假材料、家长节点与审批路径；与家长链路一致。通过或驳回后同步到学生端与年级备案（演示）。',
                     style: TextStyle(
                       fontSize: ui(12),
@@ -434,7 +435,7 @@ class _StatCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            AppText(
               label,
               style: TextStyle(
                 fontSize: ui(14),
@@ -445,7 +446,7 @@ class _StatCard extends StatelessWidget {
               ),
             ),
             SizedBox(height: ui(12)),
-            Text(
+            AppText(
               '$value',
               style: TextStyle(
                 fontSize: ui(32),
@@ -515,7 +516,7 @@ class _TabsRow extends StatelessWidget {
               ),
               SizedBox(width: ui(8)),
               Expanded(
-                child: Text(
+                child: AppText(
                   '搜索姓名、学号、手机、宿舍、家长',
                   style: TextStyle(
                     fontSize: ui(14),
@@ -556,7 +557,7 @@ class _TabPill extends StatelessWidget {
           color: active ? _kTextDark : Colors.transparent,
           borderRadius: BorderRadius.circular(ui(active ? 6 : 8)),
         ),
-        child: Text(
+        child: AppText(
           label,
           style: TextStyle(
             fontSize: ui(14),
@@ -591,7 +592,7 @@ class _CardsGrid extends StatelessWidget {
       return Padding(
         padding: EdgeInsets.symmetric(vertical: ui(40)),
         child: Center(
-          child: Text(
+          child: AppText(
             '暂无相关申请',
             style: TextStyle(
               fontSize: ui(14),
@@ -714,7 +715,7 @@ class _CardHeader extends StatelessWidget {
             physics: const NeverScrollableScrollPhysics(),
             child: Row(
               children: [
-                Text(
+                AppText(
                   record.studentName,
                   style: TextStyle(
                     fontSize: ui(14),
@@ -725,7 +726,7 @@ class _CardHeader extends StatelessWidget {
                   ),
                 ),
                 SizedBox(width: ui(4)),
-                Text(
+                AppText(
                   record.studentNo,
                   style: TextStyle(
                     fontSize: ui(12),
@@ -736,7 +737,7 @@ class _CardHeader extends StatelessWidget {
                   ),
                 ),
                 SizedBox(width: ui(12)),
-                Text(
+                AppText(
                   record.leaveType,
                   style: TextStyle(
                     fontSize: ui(12),
@@ -747,7 +748,7 @@ class _CardHeader extends StatelessWidget {
                   ),
                 ),
                 SizedBox(width: ui(12)),
-                Text(
+                AppText(
                   '时长${record.duration}',
                   style: TextStyle(
                     fontSize: ui(12),
@@ -782,7 +783,7 @@ class _StatusBadge extends StatelessWidget {
         color: status.bg,
         borderRadius: BorderRadius.circular(ui(4)),
       ),
-      child: Text(
+      child: AppText(
         status.label,
         style: TextStyle(
           fontSize: ui(12),
@@ -846,7 +847,7 @@ class _InfoLine extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
+        AppText(
           label,
           style: TextStyle(
             fontSize: ui(12),
@@ -857,7 +858,7 @@ class _InfoLine extends StatelessWidget {
           ),
         ),
         Expanded(
-          child: Text(
+          child: AppText(
             value,
             style: TextStyle(
               fontSize: ui(12),
@@ -935,7 +936,7 @@ class _StepNode extends StatelessWidget {
           ),
         ),
         SizedBox(width: ui(8)),
-        Text(
+        AppText(
           label,
           style: TextStyle(
             fontSize: ui(12),
@@ -954,7 +955,7 @@ class _StepNode extends StatelessWidget {
                 : status.softBg,
             borderRadius: BorderRadius.circular(ui(4)),
           ),
-          child: Text(
+          child: AppText(
             status.label,
             style: TextStyle(
               fontSize: ui(12),
@@ -1004,7 +1005,7 @@ class _CardActionButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(ui(8)),
         ),
         alignment: Alignment.center,
-        child: Text(
+        child: AppText(
           label,
           style: TextStyle(
             fontSize: ui(14),
@@ -1048,7 +1049,7 @@ Future<String?> _showRejectDialog(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
+            AppText(
               '学生 ${record.studentName}（${record.studentNo}）· ${record.leaveType}',
               style: TextStyle(
                 fontSize: ui(16),
@@ -1059,7 +1060,7 @@ Future<String?> _showRejectDialog(
               ),
             ),
             SizedBox(height: ui(15)),
-            Text(
+            AppText(
               '驳回说明',
               style: TextStyle(
                 fontSize: ui(14),

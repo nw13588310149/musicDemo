@@ -64,6 +64,7 @@ import '../../shell/ui/shell_layout.dart';
 import '../data/admin_repository.dart';
 import 'face_capture/face_image_picker.dart';
 
+import '../../../core/widgets/app_text.dart';
 // —— 颜色 ————————————————————————————————————————————————————————
 const Color _kPageBg = Color(0xFFEFF3FC);
 const Color _kPanelBg = Color(0xFFF5F6FA);
@@ -585,7 +586,7 @@ class _AdminFaceLibraryViewState extends ConsumerState<AdminFaceLibraryView> {
             ),
             SizedBox(height: ui(24)),
             if (_tab == _FaceTab.enroll) ...[
-              Text(
+              AppText(
                 '录入人脸',
                 style: TextStyle(
                   fontSize: ui(18),
@@ -724,7 +725,7 @@ class _Banner extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
+                  AppText(
                     '人脸库',
                     style: TextStyle(
                       fontSize: ui(16),
@@ -735,7 +736,7 @@ class _Banner extends StatelessWidget {
                     ),
                   ),
                   SizedBox(height: ui(2)),
-                  Text(
+                  AppText(
                     '掌握本班住宿生归宿与晨检结果，协同处理补卡与异常跟进。',
                     style: TextStyle(
                       fontSize: ui(12),
@@ -798,7 +799,7 @@ class _BannerSegment extends StatelessWidget {
                   color: t == currentTab ? _kTextDark : Colors.transparent,
                   borderRadius: BorderRadius.circular(ui(6)),
                 ),
-                child: Text(
+                child: AppText(
                   t.label,
                   style: TextStyle(
                     fontSize: ui(12),
@@ -935,7 +936,7 @@ class _StatCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                AppText(
                   label,
                   style: TextStyle(
                     fontSize: ui(14),
@@ -946,7 +947,7 @@ class _StatCard extends StatelessWidget {
                   ),
                 ),
                 SizedBox(height: ui(12)),
-                Text(
+                AppText(
                   '$value',
                   style: TextStyle(
                     fontSize: ui(32),
@@ -1174,7 +1175,7 @@ class _StepCell extends StatelessWidget {
               ),
             ),
             SizedBox(height: ui(4)),
-            Text(
+            AppText(
               label,
               textAlign: TextAlign.center,
               style: TextStyle(
@@ -1302,7 +1303,7 @@ class _DisabledPickerField extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: Text(
+            child: AppText(
               text,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -1334,7 +1335,7 @@ class _PickerLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Text(
+    return AppText(
       text,
       style: TextStyle(
         fontSize: ui(14),
@@ -1373,7 +1374,7 @@ class _UploadPanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
+        AppText(
           '上传人脸',
           style: TextStyle(
             fontSize: ui(14),
@@ -1430,7 +1431,7 @@ class _UploadPanel extends StatelessWidget {
                   ),
                 )
               else
-                Text(
+                AppText(
                   busy ? '处理中…' : '已选择 ${_friendlyName(photoName)}',
                   style: TextStyle(
                     fontSize: ui(12),
@@ -1567,7 +1568,7 @@ class _UploadActionButton extends StatelessWidget {
                 fit: BoxFit.contain,
               ),
               SizedBox(width: ui(4)),
-              Text(
+              AppText(
                 label,
                 style: TextStyle(
                   fontSize: ui(14),
@@ -1596,7 +1597,7 @@ class _StandardPanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
+        AppText(
           '采集规范',
           style: TextStyle(
             fontSize: ui(14),
@@ -1647,7 +1648,7 @@ class _StandardPanel extends StatelessWidget {
                 ],
               ),
               SizedBox(height: ui(10)),
-              Text(
+              AppText(
                 '背景尽量简洁，避免强逆光或过暗。\n双眼平视镜头，双耳可见为宜。\n手机拍摄建议与他人协助，保持手臂稳定。',
                 style: TextStyle(
                   fontSize: ui(14),
@@ -1717,7 +1718,7 @@ class _SampleThumb extends StatelessWidget {
                 height: ui(20),
                 color: const Color(0x80000000),
                 alignment: Alignment.center,
-                child: Text(
+                child: AppText(
                   caption,
                   textAlign: TextAlign.center,
                   maxLines: 1,
@@ -1774,7 +1775,7 @@ class _ConfirmRow extends StatelessWidget {
                   : null,
             ),
             SizedBox(width: ui(4)),
-            Text(
+            AppText(
               '确认照片为本人正脸，光线均匀，无墨镜、口罩等遮挡，且未过度美颜失真。',
               style: TextStyle(
                 fontSize: ui(12),
@@ -1819,7 +1820,7 @@ class _SubmitButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(ui(8)),
           ),
           alignment: Alignment.center,
-          child: Text(
+          child: AppText(
             '提交人脸录入',
             style: TextStyle(
               fontSize: ui(14),
@@ -1944,7 +1945,7 @@ class _LibraryFilterPill extends StatelessWidget {
           color: active ? _kTextDark : Colors.transparent,
           borderRadius: BorderRadius.circular(ui(6)),
         ),
-        child: Text(
+        child: AppText(
           label,
           style: TextStyle(
             fontSize: ui(14),
@@ -2065,7 +2066,7 @@ class _LibraryTable extends StatelessWidget {
                       color: _kTextHint,
                     ),
                     SizedBox(height: ui(8)),
-                    Text(
+                    AppText(
                       '暂无符合条件的记录',
                       style: TextStyle(
                         fontSize: ui(13),
@@ -2122,7 +2123,7 @@ class _LibraryTableHeader extends StatelessWidget {
 
   Widget _headerLabel(BuildContext context, String text) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Text(
+    return AppText(
       text,
       style: TextStyle(
         fontSize: ui(13),
@@ -2205,7 +2206,7 @@ class _StudentCell extends StatelessWidget {
             shape: BoxShape.circle,
           ),
           alignment: Alignment.center,
-          child: Text(
+          child: AppText(
             record.name.characters.isEmpty
                 ? ''
                 : record.name.characters.first,
@@ -2224,7 +2225,7 @@ class _StudentCell extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
+              AppText(
                 record.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -2236,7 +2237,7 @@ class _StudentCell extends StatelessWidget {
                   height: 20 / 13,
                 ),
               ),
-              Text(
+              AppText(
                 record.studentNo,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -2264,7 +2265,7 @@ class _TextCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Text(
+    return AppText(
       text,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
@@ -2295,7 +2296,7 @@ class _StatusCell extends StatelessWidget {
           color: status.bg,
           borderRadius: BorderRadius.circular(ui(4)),
         ),
-        child: Text(
+        child: AppText(
           status.label,
           style: TextStyle(
             fontSize: ui(12),
@@ -2326,7 +2327,7 @@ class _ActionCell extends StatelessWidget {
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: onApprove,
-            child: Text(
+            child: AppText(
               '通过',
               style: TextStyle(
                 fontSize: ui(13),
@@ -2343,7 +2344,7 @@ class _ActionCell extends StatelessWidget {
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: onReject,
-            child: Text(
+            child: AppText(
               '驳回',
               style: TextStyle(
                 fontSize: ui(13),
@@ -2438,7 +2439,7 @@ class _RecordDetailHeader extends StatelessWidget {
                 )
               else
                 Center(
-                  child: Text(
+                  child: AppText(
                     record.name.characters.isEmpty
                         ? ''
                         : record.name.characters.first,
@@ -2482,7 +2483,7 @@ class _RecordDetailHeader extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Flexible(
-                    child: Text(
+                    child: AppText(
                       record.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -2500,7 +2501,7 @@ class _RecordDetailHeader extends StatelessWidget {
                 ],
               ),
               SizedBox(height: ui(6)),
-              Text(
+              AppText(
                 '学号 ${record.studentNo}',
                 style: TextStyle(
                   fontSize: ui(12),
@@ -2585,7 +2586,7 @@ class _DetailRow extends StatelessWidget {
         children: [
           SizedBox(
             width: ui(96),
-            child: Text(
+            child: AppText(
               label,
               style: TextStyle(
                 fontSize: ui(13),
@@ -2597,7 +2598,7 @@ class _DetailRow extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: Text(
+            child: AppText(
               value.isEmpty ? '—' : value,
               style: TextStyle(
                 fontSize: ui(13),

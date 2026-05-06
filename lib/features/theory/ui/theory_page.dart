@@ -9,6 +9,7 @@ import '../state/theory_controller.dart';
 import '../state/theory_state.dart';
 import 'widgets/theory_pdf_view.dart';
 
+import '../../../core/widgets/app_text.dart';
 class TheoryPage extends ConsumerStatefulWidget {
   const TheoryPage({super.key});
 
@@ -173,7 +174,7 @@ class _ShareDrawer extends ConsumerWidget {
                 SizedBox(height: ui(24)),
                 _ShareTargetCard(detail: state.detail),
                 SizedBox(height: ui(28)),
-                Text(
+                AppText(
                   '您的班级群',
                   style: TextStyle(
                     color: const Color(0xFF0B081A),
@@ -244,7 +245,7 @@ class _DrawerTitle extends StatelessWidget {
           ),
         ),
         SizedBox(width: ui(4)),
-        Text(
+        AppText(
           title,
           style: TextStyle(
             color: const Color(0xFF0B081A),
@@ -280,7 +281,7 @@ class _ShareTargetCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
+                AppText(
                   '您将分享的课件',
                   style: TextStyle(
                     color: const Color(0xFF0B081A),
@@ -289,7 +290,7 @@ class _ShareTargetCard extends StatelessWidget {
                   ),
                 ),
                 SizedBox(height: ui(10)),
-                Text(
+                AppText(
                   detail?.title ?? '',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -370,7 +371,7 @@ class _ClassRow extends StatelessWidget {
               ),
               SizedBox(width: ui(16)),
               Expanded(
-                child: Text(
+                child: AppText(
                   cls.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -397,7 +398,7 @@ class _ShareDrawerEmpty extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Center(
-      child: Text(
+      child: AppText(
         '暂无班级群',
         style: TextStyle(
           color: const Color(0xFFB6B5BB),
@@ -440,7 +441,7 @@ class _SendButton extends StatelessWidget {
                   valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                 ),
               )
-            : Text(
+            : AppText(
                 '发送',
                 style: TextStyle(
                   color: Colors.white,
@@ -492,7 +493,7 @@ class _TheoryHeader extends StatelessWidget {
                 borderRadius: BorderRadius.circular(ui(999)),
               ),
               alignment: Alignment.center,
-              child: Text(
+              child: AppText(
                 detail?.title ?? '乐理详情',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -615,7 +616,7 @@ class _TheoryEmptyState extends StatelessWidget {
             size: ui(40),
           ),
           SizedBox(height: ui(12)),
-          Text(
+          AppText(
             message,
             style: TextStyle(
               color: const Color(0xFFC9C6D8),
@@ -686,7 +687,7 @@ class _SecondaryChipButton extends StatelessWidget {
           children: <Widget>[
             Icon(icon, size: ui(16), color: fg),
             SizedBox(width: ui(4)),
-            Text(
+            AppText(
               label,
               style: TextStyle(
                 color: highlighted

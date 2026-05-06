@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/constants/app_assets.dart';
 
+import '../../../../core/widgets/app_text.dart';
 class AuthShell extends StatelessWidget {
   const AuthShell({
     required this.title,
@@ -124,7 +125,7 @@ class _AuthCard extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
+                    AppText(
                       title,
                       style: const TextStyle(
                         fontSize: 24,

@@ -38,6 +38,7 @@ import 'package:flutter/material.dart';
 
 import '../../shell/ui/shell_layout.dart';
 
+import '../../../core/widgets/app_text.dart';
 // —— 颜色 ————————————————————————————————————————————————————————
 const Color _kPageBg = Color(0xFFEFF3FC);
 const Color _kCardGreyBg = Color(0xFFF5F6FA);
@@ -187,7 +188,7 @@ class _TeacherDormHistoryViewState extends State<TeacherDormHistoryView> {
             SizedBox(height: ui(10)),
             Padding(
               padding: EdgeInsets.only(left: ui(8)),
-              child: Text(
+              child: AppText(
                 '默认由家长在小程序审批后再由班主任审批；已与家长充分沟通的可选择班主任直接审批。补课协调以教务安排为准。',
                 style: TextStyle(
                   fontSize: ui(12),
@@ -289,7 +290,7 @@ class _Banner extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
+                  AppText(
                     '查寝历史记录',
                     style: TextStyle(
                       fontSize: ui(16),
@@ -300,7 +301,7 @@ class _Banner extends StatelessWidget {
                     ),
                   ),
                   SizedBox(height: ui(2)),
-                  Text(
+                  AppText(
                     '按自然日查看本班住宿生晚查寝、晨查寝打卡汇总；数据与「查寝动态」演示同源。查寝老师打卡在专用端完成。',
                     style: TextStyle(
                       fontSize: ui(12),
@@ -355,7 +356,7 @@ class _DateStripCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Text(
+              AppText(
                 dateText,
                 style: TextStyle(
                   fontSize: ui(14),
@@ -372,7 +373,7 @@ class _DateStripCard extends StatelessWidget {
                 color: const Color(0xFF1A1A1A),
               ),
               const Spacer(),
-              Text(
+              AppText(
                 statText,
                 style: TextStyle(
                   fontSize: ui(12),
@@ -449,7 +450,7 @@ class _CalendarCell extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(
+            AppText(
               day.weekdayLabel,
               style: TextStyle(
                 fontSize: ui(12),
@@ -460,7 +461,7 @@ class _CalendarCell extends StatelessWidget {
               ),
             ),
             SizedBox(height: ui(7)),
-            Text(
+            AppText(
               day.dayLabel,
               style: TextStyle(
                 fontSize: ui(16),
@@ -572,7 +573,7 @@ class _StatCard extends StatelessWidget {
             left: ui(16),
             top: ui(16),
             right: ui(56),
-            child: Text(
+            child: AppText(
               title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -588,7 +589,7 @@ class _StatCard extends StatelessWidget {
           Positioned(
             left: ui(16),
             top: ui(40),
-            child: Text(
+            child: AppText(
               '$value',
               style: TextStyle(
                 fontSize: ui(32),
@@ -617,7 +618,7 @@ class _StatCard extends StatelessWidget {
           Positioned(
             left: ui(16),
             bottom: ui(14),
-            child: Text(
+            child: AppText(
               subtitle,
               style: TextStyle(
                 fontSize: ui(12),
@@ -693,7 +694,7 @@ class _TabPill extends StatelessWidget {
           color: active ? _kTextDark : Colors.transparent,
           borderRadius: BorderRadius.circular(ui(6)),
         ),
-        child: Text(
+        child: AppText(
           label,
           style: TextStyle(
             fontSize: ui(14),
@@ -783,7 +784,7 @@ class _DormCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Text(
+              AppText(
                 record.titleText,
                 style: TextStyle(
                   fontSize: ui(18),
@@ -801,7 +802,7 @@ class _DormCard extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text(
+                child: AppText(
                   record.dormName,
                   style: TextStyle(
                     fontSize: ui(13),
@@ -812,7 +813,7 @@ class _DormCard extends StatelessWidget {
                   ),
                 ),
               ),
-              Text(
+              AppText(
                 record.date,
                 style: TextStyle(
                   fontSize: ui(12),
@@ -830,7 +831,7 @@ class _DormCard extends StatelessWidget {
             punchTime: record.punchTime,
           ),
           SizedBox(height: ui(10)),
-          Text(
+          AppText(
             '备注：${record.note}',
             style: TextStyle(
               fontSize: ui(12),
@@ -860,7 +861,7 @@ class _DormStatusBadge extends StatelessWidget {
         color: status.solidBg,
         borderRadius: BorderRadius.circular(ui(4)),
       ),
-      child: Text(
+      child: AppText(
         status.label,
         style: TextStyle(
           fontSize: ui(12),
@@ -926,7 +927,7 @@ class _StudentCard extends StatelessWidget {
                           child: Row(
                             children: [
                               Flexible(
-                                child: Text(
+                                child: AppText(
                                   record.studentName,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
@@ -940,7 +941,7 @@ class _StudentCard extends StatelessWidget {
                                 ),
                               ),
                               SizedBox(width: ui(4)),
-                              Text(
+                              AppText(
                                 record.studentNo,
                                 style: TextStyle(
                                   fontSize: ui(12),
@@ -953,7 +954,7 @@ class _StudentCard extends StatelessWidget {
                             ],
                           ),
                         ),
-                        Text(
+                        AppText(
                           '查寝',
                           style: TextStyle(
                             fontSize: ui(12),
@@ -971,7 +972,7 @@ class _StudentCard extends StatelessWidget {
                     Row(
                       children: [
                         Expanded(
-                          child: Text(
+                          child: AppText(
                             record.dormName,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -984,7 +985,7 @@ class _StudentCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                        Text(
+                        AppText(
                           record.date,
                           style: TextStyle(
                             fontSize: ui(12),
@@ -1007,7 +1008,7 @@ class _StudentCard extends StatelessWidget {
             punchTime: record.punchTime,
           ),
           SizedBox(height: ui(10)),
-          Text(
+          AppText(
             '备注：${record.note}',
             style: TextStyle(
               fontSize: ui(12),
@@ -1037,7 +1038,7 @@ class _StudentStatusBadge extends StatelessWidget {
         color: status.bg,
         borderRadius: BorderRadius.circular(ui(4)),
       ),
-      child: Text(
+      child: AppText(
         status.label,
         style: TextStyle(
           fontSize: ui(12),
@@ -1094,7 +1095,7 @@ class _TimeColumn extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
+        AppText(
           label,
           style: TextStyle(
             fontSize: ui(12),
@@ -1105,7 +1106,7 @@ class _TimeColumn extends StatelessWidget {
           ),
         ),
         SizedBox(height: ui(6)),
-        Text(
+        AppText(
           value,
           style: TextStyle(
             fontSize: ui(12),

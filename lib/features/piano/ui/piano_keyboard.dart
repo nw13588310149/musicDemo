@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/piano_key_specs.dart';
 
+import '../../../core/widgets/app_text.dart';
 /// 全局共享的虚拟钢琴键盘组件。
 ///
 /// 行为对齐 `the-road-of-music/pages/music/VirtualPiano.vue`：
@@ -1046,7 +1047,7 @@ class _PianoWhiteKeyLabel extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Text(
+              AppText(
                 mainText,
                 style: TextStyle(
                   color: textColor,
@@ -1060,7 +1061,7 @@ class _PianoWhiteKeyLabel extends StatelessWidget {
                 SizedBox(width: ui(0.5)),
                 Transform.translate(
                   offset: Offset(0, -ui(2.0)),
-                  child: Text(
+                  child: AppText(
                     superscript,
                     style: TextStyle(
                       color: textColor,
@@ -1086,7 +1087,7 @@ class _PianoWhiteKeyLabel extends StatelessWidget {
             ),
           ),
         // 简谱 1..7
-        Text(
+        AppText(
           spec.solfege == 0 ? '' : '${spec.solfege}',
           style: TextStyle(
             color: const Color(0xFF1A1A1A),
@@ -1351,7 +1352,7 @@ class _PianoBlackKey extends StatelessWidget {
                     left: 0,
                     right: 0,
                     bottom: 6 * scale,
-                    child: Text(
+                    child: AppText(
                       spec.label,
                       textAlign: TextAlign.center,
                       style: TextStyle(

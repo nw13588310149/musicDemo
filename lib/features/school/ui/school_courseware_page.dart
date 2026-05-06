@@ -13,6 +13,7 @@ import '../../shell/ui/shell_layout.dart';
 import '../state/school_page_controller.dart';
 import '../state/school_page_state.dart';
 
+import '../../../core/widgets/app_text.dart';
 // ── Page entry ────────────────────────────────────────────────────────────────
 class SchoolCoursewareV2Page extends ConsumerWidget {
   const SchoolCoursewareV2Page({super.key});
@@ -133,7 +134,7 @@ class _SchoolView extends StatelessWidget {
                   Center(
                     child: Padding(
                       padding: const EdgeInsets.only(top: 8),
-                      child: Text(
+                      child: AppText(
                         state.errorMessage,
                         style: const TextStyle(
                           fontSize: 13,
@@ -459,7 +460,7 @@ class _QuickActionItem extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          Text(
+          AppText(
             action.name,
             textAlign: TextAlign.center,
             style: const TextStyle(
@@ -564,7 +565,7 @@ class _FeatureCard extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  AppText(
                     title,
                     style: const TextStyle(
                       fontSize: 18,
@@ -574,7 +575,7 @@ class _FeatureCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  Text(
+                  AppText(
                     subtitle,
                     style: const TextStyle(
                       fontSize: 12,
@@ -623,7 +624,7 @@ class _LearningProgressPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          const AppText(
             '学习进度',
             style: TextStyle(
               fontSize: 18,
@@ -674,7 +675,7 @@ class _ProgressCard extends StatelessWidget {
           // Subject + completion tip
           Row(
             children: [
-              Text(
+              AppText(
                 item.text,
                 style: const TextStyle(
                   fontSize: 15,
@@ -687,7 +688,7 @@ class _ProgressCard extends StatelessWidget {
               const Spacer(),
               if (meta.tip.isNotEmpty)
                 Flexible(
-                  child: Text(
+                  child: AppText(
                     meta.tip,
                     style: const TextStyle(
                       fontSize: 10,
@@ -717,7 +718,7 @@ class _ProgressCard extends StatelessWidget {
           Row(
             children: [
               // Figma: 10/500/PingFang SC/#B6B5BB（之前 w400 错位）
-              const Text(
+              const AppText(
                 '课程进度',
                 style: TextStyle(
                   fontSize: 10,
@@ -795,7 +796,7 @@ class _ProgressCard extends StatelessWidget {
                                   width: 1,
                                 ),
                               ),
-                              child: Text(
+                              child: AppText(
                                 '${meta.progress.round()}%',
                                 style: const TextStyle(
                                   fontSize: 10,
@@ -838,7 +839,7 @@ class _Stat extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.baseline,
           textBaseline: TextBaseline.alphabetic,
           children: [
-            Text(
+            AppText(
               '$value',
               style: const TextStyle(
                 fontSize: 18,
@@ -849,7 +850,7 @@ class _Stat extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 2),
-            const Text(
+            const AppText(
               '课时',
               style: TextStyle(
                 fontSize: 10,
@@ -862,7 +863,7 @@ class _Stat extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 4),
-        Text(
+        AppText(
           label,
           style: const TextStyle(
             fontSize: 10,
@@ -934,7 +935,7 @@ class _NewsCard extends StatelessWidget {
                 left: 55,
                 top: 15,
                 right: 14,
-                child: Text(
+                child: AppText(
                   item.shortTitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -952,7 +953,7 @@ class _NewsCard extends StatelessWidget {
                 left: 16,
                 top: 44.5,
                 right: 16,
-                child: Text(
+                child: AppText(
                   item.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -984,7 +985,7 @@ class _NewsCard extends StatelessWidget {
                           color: const Color(0xFFF4F4FF),
                           borderRadius: BorderRadius.circular(4),
                         ),
-                        child: Text(
+                        child: AppText(
                           tags[i],
                           style: const TextStyle(
                             fontSize: 9.52,
@@ -1005,7 +1006,7 @@ class _NewsCard extends StatelessWidget {
                 top: 110.5,
                 child: Opacity(
                   opacity: 0.8,
-                  child: Text(
+                  child: AppText(
                     _formatTime(item.createTime),
                     style: const TextStyle(
                       fontSize: 11,
@@ -1051,7 +1052,7 @@ class _SchoolNewsBadge extends StatelessWidget {
         color: const Color(0xFFA773FF),
         borderRadius: BorderRadius.circular(4),
       ),
-      child: const Text(
+      child: const AppText(
         'NEW',
         style: TextStyle(
           fontSize: 12,

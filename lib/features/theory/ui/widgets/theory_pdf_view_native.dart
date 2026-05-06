@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:pdfrx/pdfrx.dart';
 
+import '../../../../core/widgets/app_text.dart';
 class TheoryPdfView extends StatelessWidget {
   const TheoryPdfView({
     super.key,
@@ -43,7 +44,7 @@ class TheoryPdfView extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
-                Text(
+                AppText(
                   progress == null
                       ? 'PDF 加载中…'
                       : 'PDF 加载中…${(progress * 100).clamp(0, 100).toStringAsFixed(0)}%',
@@ -70,7 +71,7 @@ class TheoryPdfView extends StatelessWidget {
                     size: 48,
                   ),
                   const SizedBox(height: 12),
-                  const Text(
+                  const AppText(
                     'PDF 加载失败，请稍后重试',
                     style: TextStyle(
                       color: Color(0xFF6D6B75),

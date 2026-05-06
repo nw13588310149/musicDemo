@@ -18,6 +18,7 @@ import '../state/cloud_drive_state.dart';
 import 'courseware_file_picker.dart';
 import 'courseware_inline_preview.dart';
 
+import '../../../core/widgets/app_text.dart';
 class MyCloudDrivePage extends ConsumerStatefulWidget {
   const MyCloudDrivePage({super.key});
 
@@ -475,7 +476,7 @@ class _CloudSidebar extends StatelessWidget {
                       : Center(
                           child: Padding(
                             padding: EdgeInsets.symmetric(horizontal: ui(8)),
-                            child: Text(
+                            child: AppText(
                               '暂无分类\n点击下方"添加分类"创建',
                               textAlign: TextAlign.center,
                               style: TextStyle(
@@ -578,7 +579,7 @@ class _CloudContentArea extends StatelessWidget {
               onItemTap: (_) => onBackToOverview(),
             )
           else if (selectedCategoryName.isNotEmpty)
-            Text(
+            AppText(
               selectedCategoryName,
               style: TextStyle(
                 fontSize: ui(15),
@@ -664,7 +665,7 @@ class _CloudContentArea extends StatelessWidget {
           ),
           if (state.errorMessage.isNotEmpty) ...[
             SizedBox(height: ui(10)),
-            Text(
+            AppText(
               state.errorMessage,
               style: TextStyle(
                 fontSize: ui(12),
@@ -750,7 +751,7 @@ class _CategoryCardState extends State<_CategoryCard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  AppText(
                     item.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -763,7 +764,7 @@ class _CategoryCardState extends State<_CategoryCard> {
                     ),
                   ),
                   SizedBox(height: ui(4)),
-                  Text(
+                  AppText(
                     '已存储 ${item.count} 个',
                     maxLines: 1,
                     softWrap: false,
@@ -826,7 +827,7 @@ class _StorageUsageCard extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
+                AppText(
                   '云盘存储',
                   style: TextStyle(
                     fontSize: ui(11),
@@ -837,7 +838,7 @@ class _StorageUsageCard extends StatelessWidget {
                   ),
                 ),
                 SizedBox(width: ui(8)),
-                Text(
+                AppText(
                   summaryText,
                   style: TextStyle(
                     fontSize: ui(10),
@@ -930,7 +931,7 @@ class _AddCategoryCard extends StatelessWidget {
                 ),
               ),
               SizedBox(height: ui(4)),
-              Text(
+              AppText(
                 '添加分类',
                 maxLines: 1,
                 style: TextStyle(
@@ -977,7 +978,7 @@ class _FolderBreadcrumb extends StatelessWidget {
         final itemIndex = index ~/ 2;
         final label = items[itemIndex];
         final isLast = itemIndex == items.length - 1;
-        final text = Text(
+        final text = AppText(
           label,
           style: TextStyle(
             fontSize: ui(14),
@@ -1023,7 +1024,7 @@ class _CloudEmptyState extends StatelessWidget {
             fit: BoxFit.contain,
           ),
           SizedBox(height: ui(12)),
-          Text(
+          AppText(
             message,
             style: TextStyle(
               fontSize: ui(14),
@@ -1150,7 +1151,7 @@ class _ToolbarActionButton extends StatelessWidget {
                   else
                     Icon(icon, size: ui(16), color: const Color(0xFF1A1A1A)),
                   SizedBox(width: ui(4)),
-                  Text(
+                  AppText(
                     label!,
                     style: TextStyle(
                       fontSize: ui(12),
@@ -1179,7 +1180,7 @@ class _SelectionInfoBar extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
+        AppText(
           '已存储',
           style: TextStyle(
             fontSize: ui(12),
@@ -1189,7 +1190,7 @@ class _SelectionInfoBar extends StatelessWidget {
           ),
         ),
         SizedBox(width: ui(6)),
-        Text(
+        AppText(
           '$totalCount',
           style: TextStyle(
             fontSize: ui(12),
@@ -1199,7 +1200,7 @@ class _SelectionInfoBar extends StatelessWidget {
           ),
         ),
         SizedBox(width: ui(6)),
-        Text(
+        AppText(
           '个文件',
           style: TextStyle(
             fontSize: ui(12),
@@ -1338,7 +1339,7 @@ class _FolderCardState extends State<_FolderCard> {
                   Positioned(
                     left: ui(10),
                     bottom: ui(28),
-                    child: Text(
+                    child: AppText(
                       isCreate ? '' : item.dateLabel,
                       style: TextStyle(
                         fontSize: ui(11),
@@ -1351,7 +1352,7 @@ class _FolderCardState extends State<_FolderCard> {
                   Positioned(
                     left: ui(10),
                     bottom: ui(8),
-                    child: Text(
+                    child: AppText(
                       isCreate ? '点击创建新的资料目录' : item.sizeLabel,
                       style: TextStyle(
                         fontSize: ui(11),
@@ -1381,7 +1382,7 @@ class _FolderCardState extends State<_FolderCard> {
           ),
           SizedBox(height: ui(10)),
           Center(
-            child: Text(
+            child: AppText(
               item.title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -1488,7 +1489,7 @@ class _FileCardState extends State<_FileCard> {
                           color: visual.badgeBg,
                           borderRadius: BorderRadius.circular(ui(4)),
                         ),
-                        child: Text(
+                        child: AppText(
                           visual.badgeLabel,
                           style: TextStyle(
                             fontSize: ui(10),
@@ -1547,7 +1548,7 @@ class _FileCardState extends State<_FileCard> {
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         Expanded(
-                          child: Text(
+                          child: AppText(
                             item.title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -1584,7 +1585,7 @@ class _FileCardState extends State<_FileCard> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
+                          AppText(
                             item.sizeLabel,
                             style: TextStyle(
                               fontSize: ui(10),
@@ -1594,7 +1595,7 @@ class _FileCardState extends State<_FileCard> {
                               height: 12 / 10,
                             ),
                           ),
-                          Text(
+                          AppText(
                             item.dateLabel,
                             style: TextStyle(
                               fontSize: ui(10),
@@ -1660,7 +1661,7 @@ class _FloatingCreateButton extends StatelessWidget {
               fit: BoxFit.contain,
             ),
             SizedBox(width: ui(8)),
-            Text(
+            AppText(
               label,
               style: TextStyle(
                 fontSize: ui(16),
@@ -1750,7 +1751,7 @@ class _UploadKindOption extends StatelessWidget {
                 : null,
           ),
           SizedBox(width: ui(5)),
-          Text(
+          AppText(
             label,
             style: TextStyle(
               fontSize: ui(14),
@@ -1886,7 +1887,7 @@ class _PreviewHeaderBar extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
+                    AppText(
                       title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -1988,7 +1989,7 @@ class _PreviewActionPill extends StatelessWidget {
               fit: BoxFit.contain,
             ),
             SizedBox(width: ui(4)),
-            Text(
+            AppText(
               label,
               style: TextStyle(
                 fontSize: ui(12),
@@ -2117,7 +2118,7 @@ class _PreviewImagePager extends StatelessWidget {
       return Container(
         color: const Color(0xFFFAFAFD),
         alignment: Alignment.center,
-        child: Text(
+        child: AppText(
           '该资料暂无可预览图片',
           style: TextStyle(
             color: const Color(0xFF8F86A8),
@@ -2223,7 +2224,7 @@ class _PreviewThumbnailRail extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                AppText(
                   '第${index + 1}页',
                   style: TextStyle(
                     fontSize: ui(12),
@@ -2396,7 +2397,7 @@ class _CoursewareEmptyPreview extends StatelessWidget {
               fit: BoxFit.contain,
             ),
             SizedBox(height: ui(14)),
-            Text(
+            AppText(
               '该资料暂无可预览内容',
               style: TextStyle(
                 fontSize: ui(12),
@@ -2530,7 +2531,7 @@ class _PreviewScoreTurntable extends StatelessWidget {
                       fit: BoxFit.contain,
                     ),
                     SizedBox(width: ui(4)),
-                    Text(
+                    AppText(
                       '分享',
                       style: TextStyle(
                         color: const Color(0xFF0B081A),
@@ -2558,7 +2559,7 @@ class _PreviewScoreTurntable extends StatelessWidget {
             ),
             alignment: Alignment.center,
             padding: EdgeInsets.symmetric(horizontal: ui(12)),
-            child: Text(
+            child: AppText(
               title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -2727,7 +2728,7 @@ class _PreviewDescriptionCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(ui(8)),
       ),
       child: SingleChildScrollView(
-        child: Text(
+        child: AppText(
           text.isEmpty ? '暂无简介' : text,
           style: TextStyle(
             color: const Color(0xFF0B081A),
@@ -2803,7 +2804,7 @@ class _PreviewScoreSheetState extends State<_PreviewScoreSheet> {
               height: ui(200),
               fit: BoxFit.contain,
             ),
-            Text(
+            AppText(
               '暂无乐谱',
               style: TextStyle(
                 color: const Color.fromARGB(255, 22, 22, 22),
@@ -2884,7 +2885,7 @@ class _PreviewScoreSheetState extends State<_PreviewScoreSheet> {
               borderRadius: BorderRadius.circular(ui(6)),
             ),
             alignment: Alignment.center,
-            child: Text(
+            child: AppText(
               '${activeIndex + 1}/${images.length}',
               style: TextStyle(
                 color: const Color(0xFF0B081A),
@@ -2967,7 +2968,7 @@ class _PreviewPlaybackBar extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                AppText(
                   item.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -2979,7 +2980,7 @@ class _PreviewPlaybackBar extends StatelessWidget {
                   ),
                 ),
                 SizedBox(height: ui(6)),
-                Text(
+                AppText(
                   '谱例',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -3060,7 +3061,7 @@ class _PreviewPlaybackBar extends StatelessWidget {
                       : const Color(0xFFB6B5BB),
                 ),
                 SizedBox(width: ui(4)),
-                Text(
+                AppText(
                   favorite ? '已收藏' : '收藏',
                   style: TextStyle(
                     color: const Color(0xFFB6B5BB),
@@ -3133,7 +3134,7 @@ class _PreviewProgressTrack extends StatelessWidget {
       children: [
         Align(
           alignment: Alignment.centerRight,
-          child: Text(
+          child: AppText(
             durationLabel,
             style: TextStyle(
               color: const Color(0xFF0B081A),
@@ -3306,7 +3307,7 @@ class _PreviewSpeedChipState extends State<_PreviewSpeedChip> {
                             child: Container(
                               height: itemHeight,
                               alignment: Alignment.center,
-                              child: Text(
+                              child: AppText(
                                 _PreviewSpeedChip.formatSpeed(v),
                                 style: TextStyle(
                                   color: v == widget.speed
@@ -3356,7 +3357,7 @@ class _PreviewSpeedChipState extends State<_PreviewSpeedChip> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
+            AppText(
               _PreviewSpeedChip.formatSpeed(widget.speed),
               style: TextStyle(
                 color: _open
@@ -3677,7 +3678,7 @@ class _UploadDialogState extends State<_UploadDialog> {
                 children: [
                   // ── title ──
                   Center(
-                    child: Text(
+                    child: AppText(
                       '上传课件',
                       style: TextStyle(
                         fontSize: ui(18),
@@ -3691,7 +3692,7 @@ class _UploadDialogState extends State<_UploadDialog> {
                   SizedBox(height: ui(30)),
 
                   // ── courseware title input ──
-                  Text(
+                  AppText(
                     '课件标题',
                     style: TextStyle(
                       fontSize: ui(14),
@@ -3747,7 +3748,7 @@ class _UploadDialogState extends State<_UploadDialog> {
                   SizedBox(height: ui(18)),
 
                   // ── kind selector ──
-                  Text(
+                  AppText(
                     '选择分类',
                     style: TextStyle(
                       fontSize: ui(14),
@@ -3789,7 +3790,7 @@ class _UploadDialogState extends State<_UploadDialog> {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text(
+                      AppText(
                         '上传文件',
                         style: TextStyle(
                           fontSize: ui(14),
@@ -3800,7 +3801,7 @@ class _UploadDialogState extends State<_UploadDialog> {
                         ),
                       ),
                       const Spacer(),
-                      Text(
+                      AppText(
                         '*支持 PDF/Word/图片/HTML，图片支持15M以内',
                         style: TextStyle(
                           fontSize: ui(12),
@@ -3865,7 +3866,7 @@ class _UploadDialogState extends State<_UploadDialog> {
                 size: ui(22),
               ),
               SizedBox(height: ui(2)),
-              Text(
+              AppText(
                 '添加',
                 style: TextStyle(
                   fontSize: ui(11),
@@ -3997,7 +3998,7 @@ class _UploadDialogState extends State<_UploadDialog> {
                           size: ui(20),
                         ),
                         SizedBox(height: ui(2)),
-                        Text(
+                        AppText(
                           '重试',
                           style: TextStyle(
                             color: Colors.white,
@@ -4127,7 +4128,7 @@ class _UploadDialogState extends State<_UploadDialog> {
                 size: ui(22),
               ),
               SizedBox(height: ui(2)),
-              Text(
+              AppText(
                 '添加',
                 style: TextStyle(
                   fontSize: ui(11),
@@ -4221,7 +4222,7 @@ class _UploadDialogState extends State<_UploadDialog> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                AppText(
                   slot.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -4246,7 +4247,7 @@ class _UploadDialogState extends State<_UploadDialog> {
                     ),
                   ),
                   SizedBox(height: ui(3)),
-                  Text(
+                  AppText(
                     slot.progress > 0
                         ? '${(slot.progress * 100).toStringAsFixed(0)}%'
                         : '准备上传...',
@@ -4257,7 +4258,7 @@ class _UploadDialogState extends State<_UploadDialog> {
                     ),
                   ),
                 ] else if (slot.isDone)
-                  Text(
+                  AppText(
                     '上传完成 ✓',
                     style: TextStyle(
                       fontSize: ui(11),
@@ -4266,7 +4267,7 @@ class _UploadDialogState extends State<_UploadDialog> {
                     ),
                   )
                 else if (slot.hasError)
-                  Text(
+                  AppText(
                     slot.error ?? '上传失败',
                     style: TextStyle(
                       fontSize: ui(11),

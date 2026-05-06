@@ -7,6 +7,7 @@ import '../../shell/ui/shell_layout.dart';
 import '../../study_catalog/state/study_catalog_controller.dart';
 import '../../study_catalog/state/study_catalog_state.dart';
 
+import '../../../core/widgets/app_text.dart';
 /// 声乐二级页：脱离 StudyCatalogPage 共享模板，独立按设计稿还原。
 /// 数据仍复用 [studyCatalogControllerProvider]（config = voice），保证接口零回归。
 class VoicePage extends ConsumerStatefulWidget {
@@ -262,7 +263,7 @@ class _VoiceTabItem extends StatelessWidget {
           children: [
             // 【底层盒子】：永远使用 14 号字（透明）撑开布局。
             // 这确保了 Row 计算宽度时只看 14 号字的宽度，后续永远不会被推挤。
-            Text(
+            AppText(
               label,
               style: TextStyle(
                 fontFamily: 'PingFang SC',
@@ -281,7 +282,7 @@ class _VoiceTabItem extends StatelessWidget {
                 alignment: alignment,
                 child: Opacity(
                   opacity: active ? 1 : 0.7,
-                  child: Text(
+                  child: AppText(
                     label,
                     style: TextStyle(
                       fontFamily: 'PingFang SC',
@@ -509,7 +510,7 @@ class _VoiceSongCard extends StatelessWidget {
               ),
             ),
             SizedBox(height: ui(8)),
-            Text(
+            AppText(
               lesson.title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -522,7 +523,7 @@ class _VoiceSongCard extends StatelessWidget {
               ),
             ),
             SizedBox(height: ui(7)),
-            Text(
+            AppText(
               subtitle,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -561,7 +562,7 @@ class _VoiceListEmptyPlaceholder extends StatelessWidget {
             fit: BoxFit.contain,
           ),
           SizedBox(height: ui(4)),
-          Text(
+          AppText(
             message,
             textAlign: TextAlign.center,
             style: TextStyle(

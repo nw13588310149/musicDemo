@@ -5,6 +5,7 @@ import '../../state/circle_state.dart';
 import 'circle_action_buttons.dart';
 import 'circle_badges.dart';
 
+import '../../../../core/widgets/app_text.dart';
 /// 列表模式下的单个帖子卡片：作者 / 文字 / 配图 / 操作按钮。
 class CirclePostCard extends StatelessWidget {
   const CirclePostCard({
@@ -41,7 +42,7 @@ class CirclePostCard extends StatelessWidget {
             children: [
               _CardAuthor(post: post, onDeletePost: onDeletePost),
               SizedBox(height: ui(8)),
-              Text(
+              AppText(
                 post.text,
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
@@ -53,7 +54,7 @@ class CirclePostCard extends StatelessWidget {
                 ),
               ),
               SizedBox(height: ui(6)),
-              Text(
+              AppText(
                 post.timeLabel,
                 style: TextStyle(
                   color: const Color(0xFFB6B5BB),
@@ -101,7 +102,7 @@ class _CardAuthor extends StatelessWidget {
               Row(
                 children: [
                   Flexible(
-                    child: Text(
+                    child: AppText(
                       post.author.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -120,7 +121,7 @@ class _CardAuthor extends StatelessWidget {
                 ],
               ),
               SizedBox(height: ui(2)),
-              Text(
+              AppText(
                 post.author.role,
                 style: TextStyle(
                   color: const Color(0xFFB6B5BB),
@@ -412,7 +413,7 @@ class _MediaTypeChip extends StatelessWidget {
         children: [
           Icon(icon, color: Colors.white, size: ui(12)),
           SizedBox(width: ui(4)),
-          Text(
+          AppText(
             label,
             style: TextStyle(
               color: Colors.white,

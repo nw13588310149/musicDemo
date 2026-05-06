@@ -8,6 +8,7 @@ import '../../shell/ui/shell_layout.dart';
 import '../state/dictation_controller.dart';
 import '../state/dictation_state.dart';
 
+import '../../../core/widgets/app_text.dart';
 class DictationPage extends ConsumerWidget {
   const DictationPage({super.key});
 
@@ -273,7 +274,7 @@ class _SidebarTile extends StatelessWidget {
             ),
             SizedBox(width: ui(10)),
             Expanded(
-              child: Text(
+              child: AppText(
                 title,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
@@ -378,7 +379,7 @@ class _ChildSegmentedItem extends StatelessWidget {
         alignment: Alignment.center,
         child: Opacity(
           opacity: active ? 1.0 : 0.7,
-          child: Text(
+          child: AppText(
             label,
             maxLines: 1,
             overflow: TextOverflow.visible,
@@ -423,7 +424,7 @@ class _LessonSection extends StatelessWidget {
         if (title.isNotEmpty) ...[
           Padding(
             padding: EdgeInsets.only(left: ui(2), bottom: ui(10)),
-            child: Text(
+            child: AppText(
               title,
               style: TextStyle(
                 fontSize: ui(14),
@@ -509,7 +510,7 @@ class _LessonCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        AppText(
                           lesson.title,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -523,7 +524,7 @@ class _LessonCard extends StatelessWidget {
                         ),
                         if (subtitle.isNotEmpty) ...[
                           SizedBox(height: ui(6)),
-                          Text(
+                          AppText(
                             subtitle,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
@@ -551,7 +552,7 @@ class _LessonCard extends StatelessWidget {
                           borderRadius: BorderRadius.circular(ui(8)),
                         ),
                         alignment: Alignment.center,
-                        child: Text(
+                        child: AppText(
                           '去学习',
                           style: TextStyle(
                             fontSize: ui(11),
@@ -606,7 +607,7 @@ class _LessonArtwork extends StatelessWidget {
               left: 0,
               right: 0,
               top: ui(10),
-              child: Text(
+              child: AppText(
                 '听写\n${_artLabel(title, category)}',
                 textAlign: TextAlign.center,
                 style: TextStyle(
@@ -655,7 +656,7 @@ class _EmptyState extends StatelessWidget {
             color: const Color(0xFFC5C7D0),
           ),
           SizedBox(height: ui(12)),
-          Text(
+          AppText(
             message,
             style: TextStyle(
               fontSize: ui(14),
@@ -670,7 +671,7 @@ class _EmptyState extends StatelessWidget {
               foregroundColor: const Color(0xFF292151),
               side: const BorderSide(color: Color(0xFFE0E3F0)),
             ),
-            child: const Text('重新加载'),
+            child: const AppText('重新加载'),
           ),
         ],
       ),

@@ -29,6 +29,7 @@ import 'package:flutter/material.dart';
 
 import '../../shell/ui/shell_layout.dart';
 
+import '../../../core/widgets/app_text.dart';
 // ---- 通用配色 ---------------------------------------------------------------
 
 const Color _kCardBg = Colors.white;
@@ -215,7 +216,7 @@ class _ScheduleBanner extends StatelessWidget {
                   ),
                 ),
                 SizedBox(height: ui(6)),
-                Text(
+                AppText(
                   dateRange,
                   style: TextStyle(
                     fontSize: ui(12),
@@ -276,7 +277,7 @@ class _WeekSwitcher extends StatelessWidget {
             borderRadius: BorderRadius.circular(ui(4)),
             child: Padding(
               padding: EdgeInsets.symmetric(horizontal: ui(2)),
-              child: Text(
+              child: AppText(
                 '本周',
                 style: TextStyle(
                   fontSize: ui(14),
@@ -428,7 +429,7 @@ class _TimeHeader extends StatelessWidget {
           Positioned(
             right: ui(20),
             top: ui(10),
-            child: Text(
+            child: AppText(
               '日期',
               style: TextStyle(
                 fontSize: ui(12),
@@ -442,7 +443,7 @@ class _TimeHeader extends StatelessWidget {
           Positioned(
             left: ui(20),
             bottom: ui(12),
-            child: Text(
+            child: AppText(
               '节次',
               style: TextStyle(
                 fontSize: ui(12),
@@ -484,7 +485,7 @@ class _TimeRange extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
+        AppText(
           start,
           style: TextStyle(
             fontSize: ui(14),
@@ -497,7 +498,7 @@ class _TimeRange extends StatelessWidget {
         SizedBox(height: ui(8)),
         Container(width: ui(12), height: 1, color: _kTextDivider),
         SizedBox(height: ui(8)),
-        Text(
+        AppText(
           end,
           style: TextStyle(
             fontSize: ui(14),
@@ -577,7 +578,7 @@ class _DaysHeaderRow extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
+                  AppText(
                     days[i].weekdayLabel,
                     style: TextStyle(
                       fontSize: ui(14),
@@ -588,7 +589,7 @@ class _DaysHeaderRow extends StatelessWidget {
                     ),
                   ),
                   SizedBox(height: ui(6)),
-                  Text(
+                  AppText(
                     days[i].dateLabel,
                     style: TextStyle(
                       fontSize: ui(12),
@@ -707,7 +708,7 @@ class _ClassCard extends StatelessWidget {
             top: ui(8),
             child: SizedBox(
               width: ui(108),
-              child: Text(
+              child: AppText(
                 data.location,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -747,7 +748,7 @@ class _ClassCard extends StatelessWidget {
             top: ui(44),
             child: SizedBox(
               width: ui(140),
-              child: Text(
+              child: AppText(
                 data.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -767,7 +768,7 @@ class _ClassCard extends StatelessWidget {
             Positioned(
               left: ui(16),
               top: ui(64),
-              child: Text(
+              child: AppText(
                 data.subline,
                 style: TextStyle(
                   fontSize: ui(12),
@@ -790,7 +791,7 @@ class _ClassCard extends StatelessWidget {
               top: ui(64),
               child: SizedBox(
                 width: ui(theme.isSmall && data.capacity != null ? 100 : 140),
-                child: Text(
+                child: AppText(
                   data.subline,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -808,7 +809,7 @@ class _ClassCard extends StatelessWidget {
               Positioned(
                 right: ui(16),
                 top: ui(64),
-                child: Text(
+                child: AppText(
                   data.capacity!,
                   style: TextStyle(
                     fontSize: ui(12),
@@ -882,7 +883,7 @@ class _ClassKindTag extends StatelessWidget {
             decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
           ),
           SizedBox(width: ui(4)),
-          Text(
+          AppText(
             label,
             style: TextStyle(
               fontSize: ui(12),

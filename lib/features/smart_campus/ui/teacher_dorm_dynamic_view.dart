@@ -36,6 +36,7 @@ import 'package:flutter/material.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../shell/ui/shell_layout.dart';
 
+import '../../../core/widgets/app_text.dart';
 // —— 颜色 ————————————————————————————————————————————————————————
 const Color _kPageBg = Color(0xFFEFF3FC);
 const Color _kCardGreyBg = Color(0xFFF5F6FA);
@@ -219,7 +220,7 @@ class _TeacherDormDynamicViewState extends State<TeacherDormDynamicView> {
             SizedBox(height: ui(10)),
             Padding(
               padding: EdgeInsets.only(left: ui(8)),
-              child: Text(
+              child: AppText(
                 '默认由家长在小程序审批后再由班主任审批；已与家长充分沟通的可选择班主任直接审批。补课协调以教务安排为准。',
                 style: TextStyle(
                   fontSize: ui(12),
@@ -381,7 +382,7 @@ class _Banner extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
+                  AppText(
                     '查寝动态',
                     style: TextStyle(
                       fontSize: ui(16),
@@ -392,7 +393,7 @@ class _Banner extends StatelessWidget {
                     ),
                   ),
                   SizedBox(height: ui(2)),
-                  Text(
+                  AppText(
                     '掌握本班住宿生归宿与晨检结果，协同处理补卡与异常跟进。现场刷脸/签到由查寝老师/宿管在专用端执行——本页不提供打卡入口。',
                     style: TextStyle(
                       fontSize: ui(12),
@@ -534,7 +535,7 @@ class _StatCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                AppText(
                   label,
                   style: TextStyle(
                     fontSize: ui(14),
@@ -547,7 +548,7 @@ class _StatCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 SizedBox(height: ui(12)),
-                Text(
+                AppText(
                   '$value',
                   style: TextStyle(
                     fontSize: ui(32),
@@ -559,7 +560,7 @@ class _StatCard extends StatelessWidget {
                 ),
                 if (subtitle != null) ...[
                   SizedBox(height: ui(5)),
-                  Text(
+                  AppText(
                     subtitle!,
                     style: TextStyle(
                       fontSize: ui(12),
@@ -662,7 +663,7 @@ class _TabsRow extends StatelessWidget {
               ),
               SizedBox(width: ui(8)),
               Expanded(
-                child: Text(
+                child: AppText(
                   '搜索姓名、学号、手机、宿舍、家长',
                   style: TextStyle(
                     fontSize: ui(14),
@@ -709,7 +710,7 @@ class _TabPill extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
+            AppText(
               tab.label,
               style: TextStyle(
                 fontSize: ui(14),
@@ -748,7 +749,7 @@ class _RedBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(ui(20)),
       ),
       alignment: Alignment.center,
-      child: Text(
+      child: AppText(
         text,
         style: TextStyle(
           fontSize: ui(10),
@@ -838,7 +839,7 @@ class _FilterPill extends StatelessWidget {
           borderRadius: BorderRadius.circular(ui(8)),
         ),
         alignment: Alignment.center,
-        child: Text(
+        child: AppText(
           tab.label,
           style: TextStyle(
             fontSize: ui(14),
@@ -869,7 +870,7 @@ class _CardsGrid extends StatelessWidget {
       return Padding(
         padding: EdgeInsets.symmetric(vertical: ui(40)),
         child: Center(
-          child: Text(
+          child: AppText(
             '暂无相关记录',
             style: TextStyle(
               fontSize: ui(14),
@@ -968,7 +969,7 @@ class _StudentCard extends StatelessWidget {
                             physics: const NeverScrollableScrollPhysics(),
                             child: Row(
                               children: [
-                                Text(
+                                AppText(
                                   record.studentName,
                                   style: TextStyle(
                                     fontSize: ui(14),
@@ -979,7 +980,7 @@ class _StudentCard extends StatelessWidget {
                                   ),
                                 ),
                                 SizedBox(width: ui(4)),
-                                Text(
+                                AppText(
                                   record.studentNo,
                                   style: TextStyle(
                                     fontSize: ui(12),
@@ -994,7 +995,7 @@ class _StudentCard extends StatelessWidget {
                           ),
                         ),
                         SizedBox(width: ui(8)),
-                        Text(
+                        AppText(
                           '查寝',
                           style: TextStyle(
                             fontSize: ui(12),
@@ -1012,7 +1013,7 @@ class _StudentCard extends StatelessWidget {
                     Row(
                       children: [
                         Expanded(
-                          child: Text(
+                          child: AppText(
                             record.dormName,
                             style: TextStyle(
                               fontSize: ui(12),
@@ -1026,7 +1027,7 @@ class _StudentCard extends StatelessWidget {
                           ),
                         ),
                         SizedBox(width: ui(8)),
-                        Text(
+                        AppText(
                           record.date,
                           style: TextStyle(
                             fontSize: ui(12),
@@ -1049,7 +1050,7 @@ class _StudentCard extends StatelessWidget {
             punchTime: record.punchTime,
           ),
           SizedBox(height: ui(10)),
-          Text(
+          AppText(
             '备注：${record.note}',
             style: TextStyle(
               fontSize: ui(12),
@@ -1081,7 +1082,7 @@ class _StudentStatusBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(ui(4)),
       ),
       alignment: Alignment.center,
-      child: Text(
+      child: AppText(
         status.label,
         style: TextStyle(
           fontSize: ui(12),
@@ -1114,7 +1115,7 @@ class _DormCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
+              AppText(
                 record.title,
                 style: TextStyle(
                   fontSize: ui(18),
@@ -1131,7 +1132,7 @@ class _DormCard extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text(
+                child: AppText(
                   record.dormName,
                   style: TextStyle(
                     fontSize: ui(13),
@@ -1145,7 +1146,7 @@ class _DormCard extends StatelessWidget {
                 ),
               ),
               SizedBox(width: ui(8)),
-              Text(
+              AppText(
                 record.date,
                 style: TextStyle(
                   fontSize: ui(12),
@@ -1163,7 +1164,7 @@ class _DormCard extends StatelessWidget {
             punchTime: record.punchTime,
           ),
           SizedBox(height: ui(10)),
-          Text(
+          AppText(
             '备注：${record.note}',
             style: TextStyle(
               fontSize: ui(12),
@@ -1195,7 +1196,7 @@ class _DormStatusBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(ui(4)),
       ),
       alignment: Alignment.center,
-      child: Text(
+      child: AppText(
         status.label,
         style: TextStyle(
           fontSize: ui(12),
@@ -1255,7 +1256,7 @@ class _TimeColumn extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
+        AppText(
           label,
           style: TextStyle(
             fontSize: ui(12),
@@ -1266,7 +1267,7 @@ class _TimeColumn extends StatelessWidget {
           ),
         ),
         SizedBox(height: ui(4)),
-        Text(
+        AppText(
           value,
           style: TextStyle(
             fontSize: ui(12),
@@ -1301,7 +1302,7 @@ class _PunchAuditGrid extends StatelessWidget {
       return Padding(
         padding: EdgeInsets.symmetric(vertical: ui(40)),
         child: Center(
-          child: Text(
+          child: AppText(
             '暂无补卡申请',
             style: TextStyle(
               fontSize: ui(14),
@@ -1393,7 +1394,7 @@ class _PunchAuditCard extends StatelessWidget {
                             physics: const NeverScrollableScrollPhysics(),
                             child: Row(
                               children: [
-                                Text(
+                                AppText(
                                   record.studentName,
                                   style: TextStyle(
                                     fontSize: ui(14),
@@ -1404,7 +1405,7 @@ class _PunchAuditCard extends StatelessWidget {
                                   ),
                                 ),
                                 SizedBox(width: ui(4)),
-                                Text(
+                                AppText(
                                   record.studentNo,
                                   style: TextStyle(
                                     fontSize: ui(12),
@@ -1419,7 +1420,7 @@ class _PunchAuditCard extends StatelessWidget {
                           ),
                         ),
                         SizedBox(width: ui(8)),
-                        Text(
+                        AppText(
                           '查寝',
                           style: TextStyle(
                             fontSize: ui(12),
@@ -1437,7 +1438,7 @@ class _PunchAuditCard extends StatelessWidget {
                     Row(
                       children: [
                         Expanded(
-                          child: Text(
+                          child: AppText(
                             record.dormName,
                             style: TextStyle(
                               fontSize: ui(12),
@@ -1451,7 +1452,7 @@ class _PunchAuditCard extends StatelessWidget {
                           ),
                         ),
                         SizedBox(width: ui(8)),
-                        Text(
+                        AppText(
                           record.date,
                           style: TextStyle(
                             fontSize: ui(12),
@@ -1473,7 +1474,7 @@ class _PunchAuditCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              AppText(
                 '说明：',
                 style: TextStyle(
                   fontSize: ui(12),
@@ -1484,7 +1485,7 @@ class _PunchAuditCard extends StatelessWidget {
                 ),
               ),
               Expanded(
-                child: Text(
+                child: AppText(
                   record.reason,
                   style: TextStyle(
                     fontSize: ui(12),
@@ -1541,7 +1542,7 @@ class _PunchAuditStatusBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(ui(4)),
       ),
       alignment: Alignment.center,
-      child: Text(
+      child: AppText(
         status.label,
         style: TextStyle(
           fontSize: ui(12),
@@ -1588,7 +1589,7 @@ class _PunchActionButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(ui(8)),
           border: Border.all(color: _kBorderSoft, width: 1),
         ),
-        child: Text(
+        child: AppText(
           label,
           style: TextStyle(
             fontSize: ui(14),

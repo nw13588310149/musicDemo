@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_asset_graphic.dart';
 
+import '../../../core/widgets/app_text.dart';
 abstract final class ShellLayoutSpec {
   static const designWidth = 1024.0;
   static const designHeight = 768.0;
@@ -189,7 +190,7 @@ class ShellSectionTitleBar extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: Text(
+            child: AppText(
               title,
               style: TextStyle(
                 fontSize: ui(20),
@@ -214,7 +215,7 @@ class ShellSectionTitleBar extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
+                  AppText(
                     moreLabel,
                     style: TextStyle(
                       fontSize: ui(14),

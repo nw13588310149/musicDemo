@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/widgets/app_text.dart';
 /// 通用默认功能页脚手架
 /// 各功能模块在正式开发前使用此占位页，保持路由畅通。
 class _FeatureDefaultPage extends StatelessWidget {
@@ -29,7 +30,7 @@ class _FeatureDefaultPage extends StatelessWidget {
             child: Icon(icon, size: 40, color: accentColor),
           ),
           const SizedBox(height: 20),
-          Text(
+          AppText(
             title,
             style: const TextStyle(
               fontSize: 22,
@@ -39,7 +40,7 @@ class _FeatureDefaultPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
+          const AppText(
             '功能开发中，敬请期待',
             style: TextStyle(
               fontSize: 14,

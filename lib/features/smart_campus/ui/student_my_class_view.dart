@@ -28,6 +28,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../state/class_notice_controller.dart';
 
+import '../../../core/widgets/app_text.dart';
 const Color _kCardBg = Colors.white;
 const Color _kInnerGray = Color(0xFFF5F6FA);
 const Color _kTextDark = Color(0xFF0B081A);
@@ -129,7 +130,7 @@ class _MyClassBanner extends StatelessWidget {
             ),
           ),
           Center(
-            child: Text(
+            child: AppText(
               '我的班级',
               style: TextStyle(
                 fontSize: ui(16),
@@ -200,7 +201,7 @@ class _ClassInfoCard extends StatelessWidget {
           Positioned(
             left: ui(16),
             top: ui(12),
-            child: Text(
+            child: AppText(
               data.name,
               style: TextStyle(
                 fontSize: ui(18),
@@ -215,7 +216,7 @@ class _ClassInfoCard extends StatelessWidget {
           Positioned(
             left: ui(16),
             top: ui(41),
-            child: Text(
+            child: AppText(
               data.subtitle,
               style: TextStyle(
                 fontSize: ui(12),
@@ -253,7 +254,7 @@ class _ClassInfoCard extends StatelessWidget {
           Positioned(
             left: ui(16),
             top: ui(134),
-            child: Text(
+            child: AppText(
               data.footer,
               style: TextStyle(
                 fontSize: ui(12),
@@ -299,7 +300,7 @@ class _InfoPair extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          AppText(
             label,
             style: TextStyle(
               fontSize: ui(14),
@@ -310,7 +311,7 @@ class _InfoPair extends StatelessWidget {
             ),
           ),
           SizedBox(height: ui(8)),
-          Text(
+          AppText(
             value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -355,7 +356,7 @@ class _StatBox extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(
+          AppText(
             label,
             style: TextStyle(
               fontSize: ui(14),
@@ -366,7 +367,7 @@ class _StatBox extends StatelessWidget {
             ),
           ),
           SizedBox(height: ui(10)),
-          Text(
+          AppText(
             '$value',
             style: TextStyle(
               fontSize: ui(24),
@@ -411,7 +412,7 @@ class _AnnouncementSection extends ConsumerWidget {
               ? Padding(
                   padding: EdgeInsets.symmetric(vertical: ui(20)),
                   child: Center(
-                    child: Text(
+                    child: AppText(
                       '暂无通知',
                       style: TextStyle(
                         fontSize: ui(13),
@@ -480,7 +481,7 @@ class _AnnouncementCard extends StatelessWidget {
                 SizedBox(width: ui(8)),
               ],
               Expanded(
-                child: Text(
+                child: AppText(
                   item.text,
                   style: TextStyle(
                     fontSize: ui(13),
@@ -496,7 +497,7 @@ class _AnnouncementCard extends StatelessWidget {
           SizedBox(height: ui(4)),
           Padding(
             padding: EdgeInsets.only(left: ui(20)),
-            child: Text(
+            child: AppText(
               item.date,
               style: TextStyle(
                 fontSize: ui(11),
@@ -586,7 +587,7 @@ class _FacultyGroupCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          AppText(
             section.title,
             style: TextStyle(
               fontSize: ui(14),
@@ -650,7 +651,7 @@ class _FacultyCard extends StatelessWidget {
           Positioned(
             left: ui(60),
             top: ui(8),
-            child: Text(
+            child: AppText(
               member.name,
               style: TextStyle(
                 fontSize: ui(14),
@@ -665,7 +666,7 @@ class _FacultyCard extends StatelessWidget {
           Positioned(
             left: ui(108),
             top: ui(10),
-            child: Text(
+            child: AppText(
               member.role,
               style: TextStyle(
                 fontSize: ui(12),
@@ -690,7 +691,7 @@ class _FacultyCard extends StatelessWidget {
                   color: _kCoursePink,
                   borderRadius: BorderRadius.circular(ui(4)),
                 ),
-                child: Text(
+                child: AppText(
                   member.courseTag!,
                   style: TextStyle(
                     fontSize: ui(12),
@@ -708,7 +709,7 @@ class _FacultyCard extends StatelessWidget {
             top: ui(32),
             child: SizedBox(
               width: ui(209),
-              child: Text(
+              child: AppText(
                 member.location,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -728,7 +729,7 @@ class _FacultyCard extends StatelessWidget {
             top: ui(57),
             child: SizedBox(
               width: ui(282),
-              child: Text(
+              child: AppText(
                 member.description,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
@@ -786,7 +787,7 @@ class _ContactCol extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Text(
+        AppText(
           label,
           style: TextStyle(
             fontSize: ui(12),
@@ -797,7 +798,7 @@ class _ContactCol extends StatelessWidget {
           ),
         ),
         SizedBox(height: ui(9)),
-        Text(
+        AppText(
           value,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -874,7 +875,7 @@ class _ClassmateSection extends StatelessWidget {
               ? Padding(
                   padding: EdgeInsets.symmetric(vertical: ui(40)),
                   child: Center(
-                    child: Text(
+                    child: AppText(
                       '没有匹配的同学',
                       style: TextStyle(
                         fontSize: ui(13),
@@ -1008,7 +1009,7 @@ class _ClassmateCard extends StatelessWidget {
             ),
             alignment: Alignment.center,
             child: showInitial
-                ? Text(
+                ? AppText(
                     firstChar,
                     style: TextStyle(
                       fontSize: ui(13),
@@ -1021,7 +1022,7 @@ class _ClassmateCard extends StatelessWidget {
                 : Icon(Icons.person_rounded, size: ui(20), color: _kTextHint),
           ),
           SizedBox(height: ui(8)),
-          Text(
+          AppText(
             item.name,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -1033,7 +1034,7 @@ class _ClassmateCard extends StatelessWidget {
               height: 20 / 14,
             ),
           ),
-          Text(
+          AppText(
             item.major,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -1057,7 +1058,7 @@ class _ClassmateCard extends StatelessWidget {
                   color: _kSelfTagBg,
                   borderRadius: BorderRadius.circular(ui(6)),
                 ),
-                child: Text(
+                child: AppText(
                   item.isSelf ? '自己' : item.role!,
                   style: TextStyle(
                     fontSize: ui(11),
@@ -1094,7 +1095,7 @@ class _SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Text(
+    return AppText(
       title,
       style: TextStyle(
         fontSize: ui(18),
@@ -1132,7 +1133,7 @@ class _SectionHeader extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
+                AppText(
                   actionLabel,
                   style: TextStyle(
                     fontSize: ui(14),

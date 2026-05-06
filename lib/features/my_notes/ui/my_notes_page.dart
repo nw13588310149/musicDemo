@@ -12,6 +12,7 @@ import '../../shell/ui/shell_layout.dart';
 import '../state/my_notes_controller.dart';
 import '../state/my_notes_state.dart';
 
+import '../../../core/widgets/app_text.dart';
 class MyNotesPage extends ConsumerStatefulWidget {
   const MyNotesPage({super.key});
 
@@ -364,7 +365,7 @@ class _NotesSidebar extends StatelessWidget {
                       : Center(
                           child: Padding(
                             padding: EdgeInsets.symmetric(horizontal: ui(8)),
-                            child: Text(
+                            child: AppText(
                               '暂无分类\n点击下方"添加分类"创建',
                               textAlign: TextAlign.center,
                               style: TextStyle(
@@ -465,7 +466,7 @@ class _NoteCategoryCardState extends State<_NoteCategoryCard> {
             SizedBox(width: ui(10)),
             // Single-line "name（count）" label per spec.
             Expanded(
-              child: Text(
+              child: AppText(
                 '${item.name}（${item.count}）',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -533,7 +534,7 @@ class _NotesAddCategoryCard extends StatelessWidget {
               child: Icon(Icons.add_rounded, size: ui(14), color: Colors.white),
             ),
             SizedBox(width: ui(6)),
-            Text(
+            AppText(
               '添加分类',
               style: TextStyle(
                 fontSize: ui(13),
@@ -704,7 +705,7 @@ class _NotesTabItem extends StatelessWidget {
                 ]
               : null,
         ),
-        child: Text(
+        child: AppText(
           label,
           style: TextStyle(
             fontSize: ui(14),
@@ -755,7 +756,7 @@ class _NotesFloatingCreateButton extends StatelessWidget {
               fit: BoxFit.contain,
             ),
             SizedBox(width: ui(8)),
-            Text(
+            AppText(
               '新建笔记',
               style: TextStyle(
                 fontSize: ui(16),
@@ -832,7 +833,7 @@ class _NoteTemplateViewState extends State<_NoteTemplateView> {
               left: 0,
               right: 0,
               child: Center(
-                child: Text(
+                child: AppText(
                   '请选择您的笔记样式',
                   style: TextStyle(
                     fontSize: ui(16),
@@ -905,7 +906,7 @@ class _NoteTemplateViewState extends State<_NoteTemplateView> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text(
+                        AppText(
                           '下一步',
                           style: TextStyle(
                             fontSize: ui(16),
@@ -971,7 +972,7 @@ class _TemplatePreviewCard extends StatelessWidget {
               left: 0,
               right: 0,
               child: Center(
-                child: Text(
+                child: AppText(
                   type.label,
                   style: TextStyle(
                     fontSize: ui(18),
@@ -1056,7 +1057,7 @@ class _NoteEditorView extends StatelessWidget {
               children: [
                 _RoundIconButton(icon: Icons.arrow_back_rounded, onTap: onBack),
                 const Spacer(),
-                Text(
+                AppText(
                   state.draftTitle,
                   style: TextStyle(
                     fontSize: ui(20),
@@ -1180,7 +1181,7 @@ class _NoteEditorView extends StatelessWidget {
                               color: const Color(0xFFF6F7FB),
                               borderRadius: BorderRadius.circular(ui(10)),
                             ),
-                            child: Text(
+                            child: AppText(
                               '${state.strokeWidth.round()}',
                               style: TextStyle(
                                 fontSize: ui(14),
@@ -1209,7 +1210,7 @@ class _NoteEditorView extends StatelessWidget {
                           TextButton.icon(
                             onPressed: onClear,
                             icon: const Icon(Icons.auto_fix_off_outlined),
-                            label: const Text('清空画布'),
+                            label: const AppText('清空画布'),
                             style: TextButton.styleFrom(
                               foregroundColor: const Color(0xFF1F1A32),
                             ),
@@ -1329,7 +1330,7 @@ class _NoteCardState extends State<_NoteCard> {
                   left: k(14),
                   top: k(15),
                   right: k(40),
-                  child: Text(
+                  child: AppText(
                     item.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -1375,7 +1376,7 @@ class _NoteCardState extends State<_NoteCard> {
                 Positioned(
                   left: k(40),
                   top: k(133),
-                  child: Text(
+                  child: AppText(
                     item.dateLabel.replaceAll('-', '.'),
                     style: TextStyle(
                       fontSize: ui(12),
@@ -1594,7 +1595,7 @@ class _NoteActionMenuRow extends StatelessWidget {
               fit: BoxFit.contain,
             ),
             SizedBox(width: ui(10)),
-            Text(
+            AppText(
               label,
               style: TextStyle(
                 fontSize: ui(13),
@@ -1634,7 +1635,7 @@ class _EmptyPanel extends StatelessWidget {
             fit: BoxFit.contain,
           ),
           SizedBox(height: ui(0)),
-          Text(
+          AppText(
             '暂无笔记',
             style: TextStyle(
               fontSize: ui(16),
@@ -1705,7 +1706,7 @@ Future<String?> _showCreateNoteTitleDialog(BuildContext context) async {
                 right: 0,
                 top: u(50),
                 child: Center(
-                  child: Text(
+                  child: AppText(
                     '新建笔记',
                     style: TextStyle(
                       fontSize: u(24),
@@ -1890,7 +1891,7 @@ class _SecondaryActionButton extends StatelessWidget {
               else
                 Icon(icon, size: ui(18), color: foreground),
               SizedBox(width: ui(6)),
-              Text(
+              AppText(
                 label,
                 maxLines: 1,
                 softWrap: false,

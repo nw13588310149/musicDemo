@@ -28,6 +28,7 @@ import 'package:flutter/material.dart';
 
 import '../../shell/ui/shell_layout.dart';
 
+import '../../../core/widgets/app_text.dart';
 const Color _kCardBg = Colors.white;
 const Color _kInnerGray = Color(0xFFF5F6FA);
 const Color _kBorderSoft = Color(0xFFF3F2F3);
@@ -192,7 +193,7 @@ class _CheckInBanner extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
+                AppText(
                   '课堂签到',
                   style: TextStyle(
                     fontSize: ui(16),
@@ -203,7 +204,7 @@ class _CheckInBanner extends StatelessWidget {
                   ),
                 ),
                 SizedBox(height: ui(4)),
-                Text(
+                AppText(
                   '教学周第 $week 周',
                   style: TextStyle(
                     fontSize: ui(12),
@@ -261,7 +262,7 @@ class _CheckInBanner extends StatelessWidget {
                   children: [
                     Icon(Icons.history_rounded, size: ui(16), color: _kPurple),
                     SizedBox(width: ui(4)),
-                    Text(
+                    AppText(
                       '历史记录',
                       style: TextStyle(
                         fontSize: ui(12),
@@ -333,7 +334,7 @@ class _StatCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Text(
+          AppText(
             item.value,
             textAlign: TextAlign.center,
             style: TextStyle(
@@ -345,7 +346,7 @@ class _StatCard extends StatelessWidget {
             ),
           ),
           SizedBox(height: ui(4)),
-          Text(
+          AppText(
             item.label,
             textAlign: TextAlign.center,
             style: TextStyle(
@@ -409,7 +410,7 @@ class _TodayClassesPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          AppText(
             title,
             style: TextStyle(
               fontSize: ui(16),
@@ -463,7 +464,7 @@ class _TodayClassCard extends StatelessWidget {
                 ),
               ),
               alignment: Alignment.center,
-              child: Text(
+              child: AppText(
                 isEnded ? '已结束' : '进行中',
                 style: TextStyle(
                   fontSize: ui(12),
@@ -522,7 +523,7 @@ class _TodayClassCard extends StatelessWidget {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
+                    AppText(
                       item.studentName,
                       style: TextStyle(
                         fontSize: ui(14),
@@ -539,7 +540,7 @@ class _TodayClassCard extends StatelessWidget {
                   ],
                 ),
                 SizedBox(height: ui(4)),
-                Text(
+                AppText(
                   '${item.duration}·${item.location}',
                   style: TextStyle(
                     fontSize: ui(12),
@@ -666,7 +667,7 @@ class _CheckInActionPanel extends StatelessWidget {
                         bottomLeft: Radius.circular(ui(12)),
                       ),
                     ),
-                    child: Text(
+                    child: AppText(
                       data.fenceLabel,
                       style: TextStyle(
                         fontSize: ui(10),
@@ -693,7 +694,7 @@ class _CheckInActionPanel extends StatelessWidget {
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(
+                              AppText(
                                 data.studentName,
                                 style: TextStyle(
                                   fontSize: ui(14),
@@ -710,7 +711,7 @@ class _CheckInActionPanel extends StatelessWidget {
                             ],
                           ),
                           SizedBox(height: ui(4)),
-                          Text(
+                          AppText(
                             '${data.duration}·${data.location}',
                             style: TextStyle(
                               fontSize: ui(12),
@@ -731,7 +732,7 @@ class _CheckInActionPanel extends StatelessWidget {
                   top: ui(64),
                   child: Row(
                     children: [
-                      Text(
+                      AppText(
                         '教师指定的打卡方式：',
                         style: TextStyle(
                           fontSize: ui(12),
@@ -742,7 +743,7 @@ class _CheckInActionPanel extends StatelessWidget {
                         ),
                       ),
                       SizedBox(width: ui(36)),
-                      Text(
+                      AppText(
                         data.method,
                         style: TextStyle(
                           fontSize: ui(12),
@@ -759,7 +760,7 @@ class _CheckInActionPanel extends StatelessWidget {
                 Positioned(
                   left: ui(12),
                   top: ui(89),
-                  child: Text(
+                  child: AppText(
                     '教师需先签，学生后签',
                     style: TextStyle(
                       fontSize: ui(12),
@@ -836,7 +837,7 @@ class _TeacherSignTimeline extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  AppText(
                     '教师上课签',
                     style: TextStyle(
                       fontSize: ui(12),
@@ -855,7 +856,7 @@ class _TeacherSignTimeline extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  AppText(
                     '教师下课签',
                     style: TextStyle(
                       fontSize: ui(12),
@@ -921,7 +922,7 @@ class _TimePill extends StatelessWidget {
         children: [
           Icon(Icons.schedule_rounded, size: ui(14), color: _kPurple),
           SizedBox(width: ui(4)),
-          Text(
+          AppText(
             time,
             style: TextStyle(
               fontSize: ui(12),
@@ -1010,7 +1011,7 @@ class _ActionButton extends StatelessWidget {
           children: [
             Icon(Icons.fingerprint_rounded, size: ui(20), color: foreground),
             SizedBox(width: ui(8)),
-            Text(
+            AppText(
               label,
               style: TextStyle(
                 fontSize: ui(16),
@@ -1118,7 +1119,7 @@ class _RecentRecordCard extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text(
+                child: AppText(
                   data.date,
                   style: TextStyle(
                     fontSize: ui(18),
@@ -1138,7 +1139,7 @@ class _RecentRecordCard extends StatelessWidget {
                   color: isAbsent ? _kAttendRed : _kPurpleLight,
                   borderRadius: BorderRadius.circular(ui(4)),
                 ),
-                child: Text(
+                child: AppText(
                   isAbsent ? '缺勤' : '正常',
                   style: TextStyle(
                     fontSize: ui(12),
@@ -1181,7 +1182,7 @@ class _RecentRecordCard extends StatelessWidget {
                         runSpacing: ui(4),
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          Text(
+                          AppText(
                             data.studentName,
                             style: TextStyle(
                               fontSize: ui(14),
@@ -1196,7 +1197,7 @@ class _RecentRecordCard extends StatelessWidget {
                         ],
                       )
                     else
-                      Text(
+                      AppText(
                         data.studentName,
                         style: TextStyle(
                           fontSize: ui(14),
@@ -1207,7 +1208,7 @@ class _RecentRecordCard extends StatelessWidget {
                         ),
                       ),
                     SizedBox(height: ui(4)),
-                    Text(
+                    AppText(
                       '${data.duration}·${data.location}',
                       style: TextStyle(
                         fontSize: ui(12),
@@ -1242,7 +1243,7 @@ class _RecentRecordCard extends StatelessWidget {
                   color: const Color(0xFF1C274C),
                 ),
                 SizedBox(width: ui(8)),
-                Text(
+                AppText(
                   '申请补签',
                   style: TextStyle(
                     fontSize: ui(14),
@@ -1261,7 +1262,7 @@ class _RecentRecordCard extends StatelessWidget {
               method: data.method,
             ),
           SizedBox(height: ui(8)),
-          Text(
+          AppText(
             '备注：${data.note}',
             style: TextStyle(
               fontSize: ui(12),
@@ -1326,7 +1327,7 @@ class _StatColumn extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     return Column(
       children: [
-        Text(
+        AppText(
           label,
           style: TextStyle(
             fontSize: ui(12),
@@ -1337,7 +1338,7 @@ class _StatColumn extends StatelessWidget {
           ),
         ),
         SizedBox(height: ui(5)),
-        Text(
+        AppText(
           value,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -1368,7 +1369,7 @@ class _CourseGreenTag extends StatelessWidget {
         color: _kCourseTagGreenBg,
         borderRadius: BorderRadius.circular(ui(4)),
       ),
-      child: Text(
+      child: AppText(
         '古筝课',
         style: TextStyle(
           fontSize: ui(11),
@@ -1397,7 +1398,7 @@ class _CourseTag extends StatelessWidget {
         color: isGreen ? _kCourseTagGreenBg : _kStatusYellow,
         borderRadius: BorderRadius.circular(ui(4)),
       ),
-      child: Text(
+      child: AppText(
         '古筝课',
         style: TextStyle(
           fontSize: isGreen ? ui(11) : ui(12),
@@ -1438,7 +1439,7 @@ class _SmallClassTag extends StatelessWidget {
             decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
           ),
           SizedBox(width: ui(4)),
-          Text(
+          AppText(
             '小课',
             style: TextStyle(
               fontSize: ui(11),
@@ -1471,7 +1472,7 @@ class _Avatar extends StatelessWidget {
         shape: BoxShape.circle,
       ),
       alignment: Alignment.center,
-      child: Text(
+      child: AppText(
         firstChar,
         style: TextStyle(
           fontSize: size * 0.4,
@@ -1493,7 +1494,7 @@ class _SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Text(
+    return AppText(
       title,
       style: TextStyle(
         fontSize: ui(18),

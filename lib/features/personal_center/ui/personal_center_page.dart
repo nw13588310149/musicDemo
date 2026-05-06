@@ -17,6 +17,7 @@ import '../data/qr_image_saver.dart';
 import '../state/personal_center_controller.dart';
 import '../state/personal_center_state.dart';
 
+import '../../../core/widgets/app_text.dart';
 /// 与 1.0 `pages/PersonalCenter/index.vue` 中 `APP_PROMO_URL` 一致。
 const _kAppPromoUrl = 'https://apps.apple.com/cn/app/音乐之路/id6504698046';
 
@@ -45,11 +46,11 @@ class _PersonalCenterPageState extends ConsumerState<PersonalCenterPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(state.errorMessage!, textAlign: TextAlign.center),
+            AppText(state.errorMessage!, textAlign: TextAlign.center),
             const SizedBox(height: 12),
             FilledButton(
               onPressed: controller.refresh,
-              child: const Text('重试'),
+              child: const AppText('重试'),
             ),
           ],
         ),
@@ -253,7 +254,7 @@ class _ProfileHero extends StatelessWidget {
                                   children: [
                                     Flexible(
                                       fit: FlexFit.loose,
-                                      child: Text(
+                                      child: AppText(
                                         nick.isNotEmpty ? nick : '未命名',
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
@@ -290,7 +291,7 @@ class _ProfileHero extends StatelessWidget {
                                   ],
                                 ),
                                 const SizedBox(height: 4),
-                                Text(
+                                AppText(
                                   state.user['mobile']?.toString() ?? '',
                                   textAlign: TextAlign.left,
                                   style: const TextStyle(
@@ -459,7 +460,7 @@ class _AnnualVipBadge extends StatelessWidget {
           const Positioned(
             left: 24,
             top: 4,
-            child: Text(
+            child: AppText(
               '年卡会员',
               textAlign: TextAlign.center,
               style: TextStyle(
@@ -539,7 +540,7 @@ class _VipPriceCard extends StatelessWidget {
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
+                          AppText(
                             title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -552,7 +553,7 @@ class _VipPriceCard extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 4),
-                          Text(
+                          AppText(
                             subtitle,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -569,7 +570,7 @@ class _VipPriceCard extends StatelessWidget {
                     if (showPrice)
                       Padding(
                         padding: const EdgeInsets.only(left: 6),
-                        child: Text(
+                        child: AppText(
                           priceText,
                           textAlign: TextAlign.right,
                           maxLines: 1,
@@ -595,7 +596,7 @@ class _VipPriceCard extends StatelessWidget {
                             color: const Color(0xFF8741FF),
                             borderRadius: BorderRadius.circular(20),
                           ),
-                          child: Text(
+                          child: AppText(
                             trailingLabel!,
                             style: const TextStyle(
                               color: Colors.white,
@@ -631,7 +632,7 @@ class _VipPriceCard extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              AppText(
                 title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -643,7 +644,7 @@ class _VipPriceCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 6),
-              Text(
+              AppText(
                 subtitle,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -661,7 +662,7 @@ class _VipPriceCard extends StatelessWidget {
               top: 0,
               bottom: 0,
               child: Center(
-                child: Text(
+                child: AppText(
                   price.startsWith('¥') || price.startsWith('\u00a5')
                       ? price
                       : '¥$price',
@@ -689,7 +690,7 @@ class _VipPriceCard extends StatelessWidget {
                     color: const Color(0xFF8741FF),
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: Text(
+                  child: AppText(
                     trailingLabel!,
                     style: const TextStyle(
                       color: Colors.white,
@@ -755,7 +756,7 @@ class _WalletColumn extends StatelessWidget {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text(
+        AppText(
           value,
           textAlign: TextAlign.center,
           style: const TextStyle(
@@ -767,7 +768,7 @@ class _WalletColumn extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        Text(
+        AppText(
           label,
           style: const TextStyle(
             fontSize: 14,
@@ -885,7 +886,7 @@ class _ActionTile extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Text(
+                    child: AppText(
                       label,
                       style: const TextStyle(
                         fontSize: 14,
@@ -1050,7 +1051,7 @@ class _QrCodeCard extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  AppText(
                     nickname,
                     style: const TextStyle(
                       color: Color(0xFF0B081A),
@@ -1059,7 +1060,7 @@ class _QrCodeCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 2),
-                  Text(
+                  AppText(
                     mobile,
                     style: const TextStyle(
                       color: Color(0xFF6D6B75),
@@ -1095,7 +1096,7 @@ class _QrCodeCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          const Text(
+          const AppText(
             '快来与我一起在音乐之路学习吧～',
             textAlign: TextAlign.center,
             style: TextStyle(
@@ -1106,7 +1107,7 @@ class _QrCodeCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          const Text(
+          const AppText(
             '好友可直接通过扫描二维码下载音乐之路并添加你为好友',
             textAlign: TextAlign.center,
             style: TextStyle(
@@ -1316,7 +1317,7 @@ class _ContactServiceDialog extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          const AppText(
             '联系邮箱',
             style: TextStyle(
               color: Color(0xFF0B081A),
@@ -1371,7 +1372,7 @@ class _RecommendDialog extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          const AppText(
             '把音乐之路推荐给你的同学和朋友，一起在这里学习音乐～',
             style: TextStyle(
               color: Color(0xFF6D6B75),
@@ -1382,7 +1383,7 @@ class _RecommendDialog extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          const Text(
+          const AppText(
             '推广链接',
             style: TextStyle(
               color: Color(0xFF0B081A),
@@ -1494,7 +1495,7 @@ class _ReadonlyValueRow extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: Text(
+            child: AppText(
               value,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -1553,7 +1554,7 @@ class _OutlineActionButton extends StatelessWidget {
           ],
         ),
         alignment: Alignment.center,
-        child: Text(
+        child: AppText(
           label,
           style: const TextStyle(
             color: Color(0xFF0B081A),

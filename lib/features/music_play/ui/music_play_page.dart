@@ -10,6 +10,7 @@ import '../../shell/ui/shell_layout.dart';
 import '../state/music_play_controller.dart';
 import '../state/music_play_state.dart';
 
+import '../../../core/widgets/app_text.dart';
 final Set<String> _musicPlayPrecachedImages = <String>{};
 
 int _musicPlayDecodeWidth(BuildContext context) {
@@ -349,7 +350,7 @@ class _ShareDrawer extends ConsumerWidget {
                 SizedBox(height: ui(24)),
                 _ShareTargetCard(detail: state.detail),
                 SizedBox(height: ui(28)),
-                Text(
+                AppText(
                   '您的班级群',
                   style: TextStyle(
                     color: const Color(0xFF0B081A),
@@ -420,7 +421,7 @@ class _DrawerTitle extends StatelessWidget {
           ),
         ),
         SizedBox(width: ui(4)),
-        Text(
+        AppText(
           title,
           style: TextStyle(
             color: const Color(0xFF0B081A),
@@ -462,7 +463,7 @@ class _ShareTargetCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
+                AppText(
                   '您将分享的课件',
                   style: TextStyle(
                     color: const Color(0xFF0B081A),
@@ -471,7 +472,7 @@ class _ShareTargetCard extends StatelessWidget {
                   ),
                 ),
                 SizedBox(height: ui(10)),
-                Text(
+                AppText(
                   detail?.title ?? '',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -562,7 +563,7 @@ class _ClassRow extends StatelessWidget {
               ),
               SizedBox(width: ui(16)),
               Expanded(
-                child: Text(
+                child: AppText(
                   cls.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -589,7 +590,7 @@ class _ShareDrawerEmpty extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Center(
-      child: Text(
+      child: AppText(
         '暂无班级群',
         style: TextStyle(
           color: const Color(0xFFB6B5BB),
@@ -632,7 +633,7 @@ class _SendButton extends StatelessWidget {
                   valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                 ),
               )
-            : Text(
+            : AppText(
                 '发送',
                 style: TextStyle(
                   color: Colors.white,
@@ -777,7 +778,7 @@ class _MarqueeTitleTextState extends State<_MarqueeTitleText>
 
         if (widget.text.isEmpty || viewportWidth <= 0) {
           _controller.stop();
-          return Text(
+          return AppText(
             widget.text,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -839,7 +840,7 @@ class _MarqueeTitleTextState extends State<_MarqueeTitleText>
       width: width,
       child: Align(
         alignment: Alignment.centerLeft,
-        child: Text(
+        child: AppText(
           widget.text,
           maxLines: 1,
           overflow: TextOverflow.visible,
@@ -1100,7 +1101,7 @@ class _AnswerPanelState extends State<_AnswerPanel> {
                             borderRadius: BorderRadius.circular(ui(6)),
                           ),
                           alignment: Alignment.center,
-                          child: Text(
+                          child: AppText(
                             '${activeIndex + 1}/${images.length}',
                             style: TextStyle(
                               color: const Color(0xFF0B081A),
@@ -1165,10 +1166,10 @@ class _AnswerEmptyState extends StatelessWidget {
           ),
           SizedBox(height: ui(0)),
           isStaffMode
-              ? Text(message, style: messageStyle)
+              ? AppText(message, style: messageStyle)
               : Transform.translate(
                   offset: Offset(0, -ui(25)),
-                  child: Text(message, style: messageStyle),
+                  child: AppText(message, style: messageStyle),
                 ),
         ],
       ),
@@ -1240,7 +1241,7 @@ class _PlaybackBar extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                AppText(
                   detail?.title ?? '未命名音频',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -1252,7 +1253,7 @@ class _PlaybackBar extends StatelessWidget {
                   ),
                 ),
                 SizedBox(height: ui(6)),
-                Text(
+                AppText(
                   track?.title ?? '听写',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -1333,7 +1334,7 @@ class _PlaybackBar extends StatelessWidget {
                       : const Color(0xFFB6B5BB),
                 ),
                 SizedBox(width: ui(4)),
-                Text(
+                AppText(
                   '收藏',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -1389,7 +1390,7 @@ class _ProgressTrack extends StatelessWidget {
           padding: EdgeInsets.only(top: ui(0)),
           child: Align(
             alignment: Alignment.centerRight,
-            child: Text(
+            child: AppText(
               durationLabel,
               style: TextStyle(
                 color: const Color(0xFF0B081A),
@@ -1639,7 +1640,7 @@ class _SecondaryChipButton extends StatelessWidget {
           children: [
             leading,
             SizedBox(width: ui(4)),
-            Text(
+            AppText(
               label,
               style: TextStyle(
                 color: const Color(0xFF0B081A),
@@ -1691,7 +1692,7 @@ class _OutlinedChipButton extends StatelessWidget {
               fit: BoxFit.contain,
             ),
             SizedBox(width: ui(4)),
-            Text(
+            AppText(
               label,
               style: TextStyle(
                 color: const Color(0xFF0B081A),
@@ -1732,7 +1733,7 @@ class _TogglePill extends StatelessWidget {
           borderRadius: BorderRadius.circular(ui(6)),
         ),
         alignment: Alignment.center,
-        child: Text(
+        child: AppText(
           label,
           style: TextStyle(
             color: active ? Colors.white : const Color(0xFFB6B5BB),
@@ -1905,7 +1906,7 @@ class _SpeedChipState extends State<_SpeedChip> {
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Text(
+            AppText(
               _SpeedChip.formatSpeed(widget.speed),
               style: TextStyle(
                 color: _open
@@ -2038,7 +2039,7 @@ class _SpeedMenuItemState extends State<_SpeedMenuItem> {
           child: Row(
             children: [
               Expanded(
-                child: Text(
+                child: AppText(
                   widget.label,
                   textAlign: TextAlign.center,
                   style: TextStyle(
