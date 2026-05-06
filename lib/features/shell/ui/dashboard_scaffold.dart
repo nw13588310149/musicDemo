@@ -41,9 +41,14 @@ class DashboardScaffold extends StatelessWidget {
           data: scale,
           child: Scaffold(
             backgroundColor: backgroundColor,
+            // 让背景延伸到底部系统手势条/导航条之下，避免在平板上出现灰色留白条。
+            // 顶部仍保留 SafeArea，避免状态栏遮挡 topBar；底部由 contentPadding
+            // 提供 16px 的视觉外间距，正常机型下不会与系统手势条冲突。
+            extendBody: true,
             body: ColoredBox(
               color: backgroundColor,
               child: SafeArea(
+                bottom: false,
                 child: Stack(
                   children: [
                     Row(

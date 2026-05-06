@@ -121,8 +121,15 @@ flutter:
         - asset: assets/fonts/HarmonyOS_Sans_SC_Regular.ttf
         - asset: assets/fonts/HarmonyOS_Sans_SC_Medium.ttf
           weight: 500
-    # PingFang SC 使用 OTF（CFF 轮廓，更接近 Apple 原版字面率与粗细）
-    # 同一字族内全部使用 OTF，避免 TTF/OTF 混用导致的渲染不一致
+    # PingFang SC 使用 OTF（CFF 轮廓，更接近 Apple 原版字面率与粗细）。
+    # PingFang 原版最重只到 Semibold(中粗体)，没有 Bold/Heavy。
+    # Web 浏览器会对未注册的字重自动做合成加粗，原生 Flutter 不会，所以
+    # 在 iPad 等原生端会看起来比浏览器细一档。这里把字重整体上移一档，
+    # 让原生端拿到与 Web 视觉接近的"加粗后"效果：
+    #   • w300 → Light（保持）
+    #   • w400 → Medium（原 Regular，轻微加粗，对正文影响最大）
+    #   • w500 → Semibold（原 Medium）
+    #   • w600 / 700 / 800 / 900 → Semibold（已经是物理上限）
     - family: PingFang SC
       fonts:
         - asset: assets/fonts/ttf/PingFangSC-Ultralight.otf
@@ -131,12 +138,18 @@ flutter:
           weight: 200
         - asset: assets/fonts/ttf/PingFangSC-Light.otf
           weight: 300
-        - asset: assets/fonts/ttf/PingFangSC-Regular.otf
-          weight: 400
         - asset: assets/fonts/ttf/PingFangSC-Medium.otf
+          weight: 400
+        - asset: assets/fonts/ttf/PingFangSC-Semibold.otf
           weight: 500
         - asset: assets/fonts/ttf/PingFangSC-Semibold.otf
           weight: 600
+        - asset: assets/fonts/ttf/PingFangSC-Semibold.otf
+          weight: 700
+        - asset: assets/fonts/ttf/PingFangSC-Semibold.otf
+          weight: 800
+        - asset: assets/fonts/ttf/PingFangSC-Semibold.otf
+          weight: 900
     # Manrope 变体字（设计稿角标 10+ 等数字使用 Manrope w800）
     # 把变体字以静态 w800 注册，Flutter 通过 fontWeight: w800 即可命中
     - family: Manrope
