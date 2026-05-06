@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../../../core/constants/app_assets.dart';
+import '../../../../core/theme/text_style_native_bold.dart';
 import '../../../../core/widgets/app_asset_graphic.dart';
 import '../../state/shell_state.dart';
 import '../shell_layout.dart';
@@ -310,13 +311,16 @@ class _NavTile extends StatelessWidget {
                                     maxLines: 1,
                                     softWrap: false,
                                     overflow: TextOverflow.clip,
+                                    // PingFang SC Medium 在 iPad/原生端 Skia 渲染下
+                                    // 比浏览器细一档；用 .nativeBolden() 给原生端补
+                                    // 一道同色阴影模拟 synthetic bold，Web 不受影响。
                                     style: TextStyle(
                                       fontSize: ui(15),
                                       height: 1,
                                       fontFamily: 'PingFang SC',
                                       fontWeight: FontWeight.w500,
                                       color: textColor,
-                                    ),
+                                    ).nativeBolden(),
                                   ),
                                 ),
                                 if (item.badge > 0) ...[
