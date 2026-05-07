@@ -11,6 +11,7 @@ import '../../../core/widgets/seamless_banner_carousel.dart';
 import '../state/home_dashboard_controller.dart';
 import '../state/home_dashboard_state.dart';
 import '../../shell/ui/shell_layout.dart';
+import '../../smart_campus/state/smart_campus_controller.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 class HomePage extends ConsumerWidget {
@@ -24,17 +25,24 @@ class HomePage extends ConsumerWidget {
   }
 }
 
-class _HomePageView extends StatefulWidget {
+class _HomePageView extends ConsumerStatefulWidget {
   const _HomePageView({required this.state});
 
   final HomeDashboardState state;
 
   @override
-  State<_HomePageView> createState() => _HomePageViewState();
+  ConsumerState<_HomePageView> createState() => _HomePageViewState();
 }
 
-class _HomePageViewState extends State<_HomePageView> {
+class _HomePageViewState extends ConsumerState<_HomePageView> {
   int _bannerIndex = 0;
+
+  /// 跳转到智慧校园「我的课表」视图：先把 SmartCampusController 切到
+  /// mySchedule 视图，再 push 智慧校园页，避免落在默认 dashboard 上。
+  void _openMySchedule() {
+    ref.read(smartCampusControllerProvider.notifier).openMySchedule();
+    Navigator.pushNamed(context, RoutePaths.smartCampus);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -324,10 +332,7 @@ class _HomePageViewState extends State<_HomePageView> {
                         right: index == weekItems.length - 1 ? 0 : 8,
                       ),
                       child: GestureDetector(
-                        onTap: () => Navigator.pushNamed(
-                          context,
-                          RoutePaths.smartCampus,
-                        ),
+                        onTap: _openMySchedule,
                         child: _WeekCard(item: weekItems[index]),
                       ),
                     );
@@ -359,10 +364,7 @@ class _HomePageViewState extends State<_HomePageView> {
                         const SizedBox(height: 8),
                     itemBuilder: (context, index) {
                       return GestureDetector(
-                        onTap: () => Navigator.pushNamed(
-                          context,
-                          RoutePaths.smartCampus,
-                        ),
+                        onTap: _openMySchedule,
                         child: _CourseNoticeCard(notice: notices[index]),
                       );
                     },
@@ -412,7 +414,7 @@ class _HomePageViewState extends State<_HomePageView> {
   void _onQuickActionTap(HomeQuickAction action) {
     // 模考 / 商城 暂未实装，统一走 2.0 通用单按钮提示弹窗（"暂未开放"）。
     if (action.route == RoutePaths.mock || action.route == RoutePaths.aiSong) {
-      showInfoDialog(context: context, title: '暂未开放');
+      showInfoDialog(context: context, title: '功能开发中，敬请期待');
       return;
     }
     Navigator.pushNamed(

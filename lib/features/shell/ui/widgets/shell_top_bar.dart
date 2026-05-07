@@ -416,7 +416,6 @@ class ShellTopBar extends StatelessWidget {
       pageBuilder: (dialogContext, animation, secondaryAnimation) {
         Widget panel = _NoticeDrawer(
           items: state.noticeItems,
-          targetIcon: _targetIcon,
           onMarkAllRead: () async {
             Navigator.of(dialogContext).pop();
             await onMarkAllRead();
@@ -438,21 +437,6 @@ class ShellTopBar extends StatelessWidget {
         return SlideTransition(position: offset, child: child);
       },
     );
-  }
-
-  String _targetIcon(int targetType) {
-    switch (targetType) {
-      case 0:
-        return AppAssets.shellMsg1;
-      case 1:
-        return AppAssets.shellMsg2;
-      case 2:
-        return AppAssets.shellMsg3;
-      case 3:
-        return AppAssets.shellMsg4;
-      default:
-        return AppAssets.shellMsg1;
-    }
   }
 
   void _showToast(BuildContext context, String message) {
@@ -668,13 +652,11 @@ class _UserMenuRow extends StatelessWidget {
 class _NoticeDrawer extends StatelessWidget {
   const _NoticeDrawer({
     required this.items,
-    required this.targetIcon,
     required this.onMarkAllRead,
     required this.onClose,
   });
 
   final List<ShellNoticeItem> items;
-  final String Function(int targetType) targetIcon;
   final Future<void> Function() onMarkAllRead;
   final VoidCallback onClose;
 
@@ -718,10 +700,7 @@ class _NoticeDrawer extends StatelessWidget {
                             separatorBuilder: (_, _) => SizedBox(height: ui(8)),
                             itemBuilder: (context, index) {
                               final item = items[index];
-                              return _NoticeRow(
-                                item: item,
-                                icon: targetIcon(item.targetType),
-                              );
+                              return _NoticeRow(item: item);
                             },
                           ),
                   ),
@@ -811,14 +790,16 @@ class _NoticeDrawerHeader extends StatelessWidget {
 }
 
 class _NoticeRow extends StatelessWidget {
-  const _NoticeRow({required this.item, required this.icon});
+  const _NoticeRow({required this.item});
 
   final ShellNoticeItem item;
-  final String icon;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    // 1.0 通知接口的 targetType 图标素材尚未补齐（assets/images/shell/msg{1-4}.png
+    // 未入库），先隐藏前导图标，仅保留文本 + 时间。素材到位后恢复 _NoticeRow 的
+    // leading Image.asset 即可。
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: ui(12),
@@ -828,43 +809,29 @@ class _NoticeRow extends StatelessWidget {
         color: const Color(0xFFF4F4FF),
         borderRadius: BorderRadius.circular(ui(12)),
       ),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Image.asset(
-            icon,
-            width: ui(36),
-            height: ui(36),
-            fit: BoxFit.contain,
+          Text(
+            item.content,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: const Color(0xFF0B081A),
+              fontSize: ui(14),
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w500,
+              height: 1.45,
+            ),
           ),
-          SizedBox(width: ui(12)),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.content,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: const Color(0xFF0B081A),
-                    fontSize: ui(14),
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w500,
-                    height: 1.45,
-                  ),
-                ),
-                SizedBox(height: ui(6)),
-                Text(
-                  item.createTime,
-                  style: TextStyle(
-                    color: const Color(0xFFB6B5BB),
-                    fontSize: ui(12),
-                    fontFamily: 'PingFang SC',
-                    height: 1.2,
-                  ),
-                ),
-              ],
+          SizedBox(height: ui(6)),
+          Text(
+            item.createTime,
+            style: TextStyle(
+              color: const Color(0xFFB6B5BB),
+              fontSize: ui(12),
+              fontFamily: 'PingFang SC',
+              height: 1.2,
             ),
           ),
         ],
