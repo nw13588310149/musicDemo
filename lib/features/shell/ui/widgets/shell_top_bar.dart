@@ -404,69 +404,38 @@ class ShellTopBar extends StatelessWidget {
   }
 
   Future<void> _showNoticeDialog(BuildContext context) async {
-    await showDialog<void>(
+    // 右侧抽屉样式（与视频中心 / 班级分享等抽屉一致的滑入动效），
+    // 替代原 1.0 居中 Dialog 列表样式。
+    final scale = DashboardScaleScope.maybeOf(context);
+    await showGeneralDialog<void>(
       context: context,
-      builder: (context) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: SizedBox(
-            width: 360,
-            height: 460,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Text('通知(${state.noticeItems.length})'),
-                      const Spacer(),
-                      TextButton(
-                        onPressed: () async {
-                          Navigator.pop(context);
-                          await onMarkAllRead();
-                        },
-                        child: const Text('批量已读'),
-                      ),
-                    ],
-                  ),
-                  const Divider(height: 1, color: Color(0x14050505)),
-                  const SizedBox(height: 12),
-                  Expanded(
-                    child: state.noticeItems.isEmpty
-                        ? const Center(child: Text('暂无通知'))
-                        : ListView.builder(
-                            itemCount: state.noticeItems.length,
-                            itemBuilder: (context, index) {
-                              final item = state.noticeItems[index];
-                              return ListTile(
-                                contentPadding: EdgeInsets.zero,
-                                dense: true,
-                                leading: Image.asset(
-                                  _targetIcon(item.targetType),
-                                  width: 30,
-                                  height: 30,
-                                ),
-                                title: Text(
-                                  item.content,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(fontSize: 13),
-                                ),
-                                subtitle: Text(
-                                  item.createTime,
-                                  style: const TextStyle(fontSize: 11),
-                                ),
-                              );
-                            },
-                          ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+      barrierColor: Colors.black.withValues(alpha: 0.20),
+      barrierDismissible: true,
+      barrierLabel: '关闭通知',
+      transitionDuration: const Duration(milliseconds: 240),
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        Widget panel = _NoticeDrawer(
+          items: state.noticeItems,
+          targetIcon: _targetIcon,
+          onMarkAllRead: () async {
+            Navigator.of(dialogContext).pop();
+            await onMarkAllRead();
+          },
+          onClose: () => Navigator.of(dialogContext).pop(),
         );
+        if (scale != null) {
+          panel = DashboardScaleScope(data: scale, child: panel);
+        }
+        return panel;
+      },
+      transitionBuilder: (context, animation, secondary, child) {
+        final offset = Tween<Offset>(
+          begin: const Offset(1, 0),
+          end: Offset.zero,
+        ).animate(
+          CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+        );
+        return SlideTransition(position: offset, child: child);
       },
     );
   }
@@ -689,6 +658,246 @@ class _UserMenuRow extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────── 通知抽屉（右侧滑入） ───────────────────────
+
+class _NoticeDrawer extends StatelessWidget {
+  const _NoticeDrawer({
+    required this.items,
+    required this.targetIcon,
+    required this.onMarkAllRead,
+    required this.onClose,
+  });
+
+  final List<ShellNoticeItem> items;
+  final String Function(int targetType) targetIcon;
+  final Future<void> Function() onMarkAllRead;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Material(
+        color: Colors.white,
+        elevation: 32,
+        shadowColor: Colors.black.withValues(alpha: 0.4),
+        child: SizedBox(
+          width: ui(420),
+          height: double.infinity,
+          child: SafeArea(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(ui(20), ui(20), ui(12), ui(20)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _NoticeDrawerHeader(
+                    count: items.length,
+                    onMarkAllRead: items.isEmpty ? null : onMarkAllRead,
+                    onClose: onClose,
+                  ),
+                  SizedBox(height: ui(16)),
+                  const Divider(
+                    height: 1,
+                    thickness: 1,
+                    color: Color(0xFFF3F2F3),
+                  ),
+                  SizedBox(height: ui(12)),
+                  Expanded(
+                    child: items.isEmpty
+                        ? const _NoticeEmpty()
+                        : ListView.separated(
+                            padding: EdgeInsets.only(right: ui(8)),
+                            itemCount: items.length,
+                            separatorBuilder: (_, _) => SizedBox(height: ui(8)),
+                            itemBuilder: (context, index) {
+                              final item = items[index];
+                              return _NoticeRow(
+                                item: item,
+                                icon: targetIcon(item.targetType),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NoticeDrawerHeader extends StatelessWidget {
+  const _NoticeDrawerHeader({
+    required this.count,
+    required this.onMarkAllRead,
+    required this.onClose,
+  });
+
+  final int count;
+  final Future<void> Function()? onMarkAllRead;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Row(
+      children: [
+        Container(
+          width: ui(3.25),
+          height: ui(14.85),
+          decoration: BoxDecoration(
+            color: const Color(0xFF8741FF),
+            borderRadius: BorderRadius.circular(ui(6)),
+          ),
+        ),
+        SizedBox(width: ui(6)),
+        Text(
+          '通知($count)',
+          style: TextStyle(
+            color: const Color(0xFF0B081A),
+            fontSize: ui(16),
+            fontFamily: 'PingFang SC',
+            fontWeight: AppFont.w600,
+            height: 1.2,
+          ),
+        ),
+        const Spacer(),
+        if (onMarkAllRead != null)
+          InkWell(
+            onTap: onMarkAllRead,
+            borderRadius: BorderRadius.circular(ui(6)),
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: ui(8),
+                vertical: ui(6),
+              ),
+              child: Text(
+                '批量已读',
+                style: TextStyle(
+                  color: const Color(0xFF8741FF),
+                  fontSize: ui(13),
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w500,
+                  height: 1.2,
+                ),
+              ),
+            ),
+          ),
+        SizedBox(width: ui(2)),
+        InkWell(
+          onTap: onClose,
+          borderRadius: BorderRadius.circular(ui(20)),
+          child: Padding(
+            padding: EdgeInsets.all(ui(4)),
+            child: Icon(
+              Icons.close_rounded,
+              size: ui(20),
+              color: const Color(0xFF6D6B75),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _NoticeRow extends StatelessWidget {
+  const _NoticeRow({required this.item, required this.icon});
+
+  final ShellNoticeItem item;
+  final String icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: ui(12),
+        vertical: ui(12),
+      ),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F4FF),
+        borderRadius: BorderRadius.circular(ui(12)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Image.asset(
+            icon,
+            width: ui(36),
+            height: ui(36),
+            fit: BoxFit.contain,
+          ),
+          SizedBox(width: ui(12)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.content,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: const Color(0xFF0B081A),
+                    fontSize: ui(14),
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w500,
+                    height: 1.45,
+                  ),
+                ),
+                SizedBox(height: ui(6)),
+                Text(
+                  item.createTime,
+                  style: TextStyle(
+                    color: const Color(0xFFB6B5BB),
+                    fontSize: ui(12),
+                    fontFamily: 'PingFang SC',
+                    height: 1.2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NoticeEmpty extends StatelessWidget {
+  const _NoticeEmpty();
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.notifications_none_rounded,
+            size: ui(48),
+            color: const Color(0xFFCECED1),
+          ),
+          SizedBox(height: ui(12)),
+          Text(
+            '暂无通知',
+            style: TextStyle(
+              color: const Color(0xFFB6B5BB),
+              fontSize: ui(14),
+              fontFamily: 'PingFang SC',
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -119,9 +119,8 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                   final userBubbleWidth = (mainWidth * 0.62)
                       .clamp(220.0, 420.0)
                       .toDouble();
-                  final aiBubbleWidth = (mainWidth * 0.78)
-                      .clamp(320.0, 560.0)
-                      .toDouble();
+                  // AI 回复气泡占满对话主列宽度（最小 320 兜底）。
+                  final aiBubbleWidth = mainWidth > 320 ? mainWidth : 320.0;
 
                   if (state.isNewConversation) {
                     return _buildLanding(
@@ -1008,6 +1007,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                 const SizedBox(height: 6),
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 180),
+                  width: double.infinity,
                   decoration: BoxDecoration(
                     color: _panelFill,
                     borderRadius: BorderRadius.circular(12),
@@ -1033,6 +1033,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
             if (showAnswer)
               AnimatedContainer(
                 duration: const Duration(milliseconds: 180),
+                width: double.infinity,
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(12),

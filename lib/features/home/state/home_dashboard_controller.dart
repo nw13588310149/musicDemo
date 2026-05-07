@@ -95,10 +95,6 @@ class HomeDashboardController extends StateNotifier<HomeDashboardState> {
         .catchError((_) => const ApiResponse(code: -1, msg: '', data: null));
   }
 
-  void setComingSoonVisible(bool visible) {
-    state = state.copyWith(showComingSoon: visible);
-  }
-
   List<HomeBannerItem> _parseBanners(dynamic data) {
     if (data is! List) {
       return const [];

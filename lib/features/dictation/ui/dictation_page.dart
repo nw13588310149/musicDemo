@@ -263,7 +263,7 @@ class _SidebarTile extends StatelessWidget {
         height: ui(60),
         padding: EdgeInsets.symmetric(horizontal: ui(14)),
         decoration: BoxDecoration(
-          color: active ? const Color(0xFFF4F4FF) : Colors.white,
+          color: active ? const Color(0xFFEEEAFF) : Colors.white,
           borderRadius: BorderRadius.circular(radius),
         ),
         child: Row(

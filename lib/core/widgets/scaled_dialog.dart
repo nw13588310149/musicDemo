@@ -509,6 +509,83 @@ Future<String?> showOptionsDialog({
   );
 }
 
+/// 单按钮提示弹窗（"暂未开放" / "保存成功" 等纯告知场景）。
+/// 样式与 [showConfirmDialog] / [showTextInputDialog] 完全一致：
+/// - 圆角 24，白底，宽 420
+/// - 18/600 标题 + 14/400 说明文（可选）
+/// - 居中单个紫色渐变确认按钮（默认 "知道了"）
+Future<void> showInfoDialog({
+  required BuildContext context,
+  required String title,
+  String? content,
+  String confirmLabel = '知道了',
+  bool barrierDismissible = true,
+}) async {
+  await showScaledDialog<void>(
+    context: context,
+    barrierDismissible: barrierDismissible,
+    barrierColor: Colors.black.withValues(alpha: 0.18),
+    builder: (dialogContext) {
+      final ui = DashboardScaleScope.of(dialogContext).ui;
+      return Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: EdgeInsets.symmetric(
+          horizontal: ui(32),
+          vertical: ui(24),
+        ),
+        child: Container(
+          width: ui(420),
+          padding: EdgeInsets.fromLTRB(ui(24), ui(28), ui(24), ui(20)),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(ui(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: ui(18),
+                  color: const Color(0xFF0B081A),
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w600,
+                ),
+              ),
+              if (content != null && content.isNotEmpty) ...[
+                SizedBox(height: ui(12)),
+                Text(
+                  content,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: ui(14),
+                    height: 1.6,
+                    color: const Color(0xFF788698),
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w400,
+                  ),
+                ),
+              ],
+              SizedBox(height: ui(24)),
+              Center(
+                child: SizedBox(
+                  width: ui(180),
+                  child: _AppDialogButton(
+                    label: confirmLabel,
+                    onTap: () => Navigator.of(dialogContext).pop(),
+                    isPrimary: true,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
 /// 弹出一个二次确认对话框（带说明文本），返回 `true` 表示用户点击确认。
 Future<bool> showConfirmDialog({
   required BuildContext context,

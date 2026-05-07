@@ -1,9 +1,12 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/route_paths.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/network/media_url.dart';
+import '../../../core/widgets/scaled_dialog.dart';
 import '../../../core/widgets/seamless_banner_carousel.dart';
 import '../state/home_dashboard_controller.dart';
 import '../state/home_dashboard_state.dart';
@@ -16,23 +19,15 @@ class HomePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(homeDashboardControllerProvider);
-    final controller = ref.read(homeDashboardControllerProvider.notifier);
 
-    return _HomePageView(
-      state: state,
-      onSetComingSoonVisible: controller.setComingSoonVisible,
-    );
+    return _HomePageView(state: state);
   }
 }
 
 class _HomePageView extends StatefulWidget {
-  const _HomePageView({
-    required this.state,
-    required this.onSetComingSoonVisible,
-  });
+  const _HomePageView({required this.state});
 
   final HomeDashboardState state;
-  final ValueChanged<bool> onSetComingSoonVisible;
 
   @override
   State<_HomePageView> createState() => _HomePageViewState();
@@ -136,10 +131,6 @@ class _HomePageViewState extends State<_HomePageView> {
                     ),
                   ),
                 ),
-              if (state.showComingSoon)
-                _ComingSoonDialog(
-                  onClose: () => widget.onSetComingSoonVisible(false),
-                ),
             ],
           ),
         );
@@ -228,28 +219,58 @@ class _HomePageViewState extends State<_HomePageView> {
           //   - 3×3 共 9 个按钮（width:44），固定列间距 105
           //   - 行间距设计稿值 105，但本工程 actionH=313 不够容纳，
           //     这里改用 spaceBetween 在剩余高度内均匀分布（实测 ~36px）
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 66, vertical: 24),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: List.generate(3, (rowIdx) {
-                return Row(
-                  // Figma: justify-content: center —— 列间距固定 105，
-                  // 多余空间放两侧（容器宽于 474 时相当于额外 padding）
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    for (int colIdx = 0; colIdx < 3; colIdx++) ...[
-                      if (colIdx > 0) const SizedBox(width: 105),
-                      _QuickActionItem(
-                        action: padded[rowIdx * 3 + colIdx],
-                        onTap: () =>
-                            _onQuickActionTap(padded[rowIdx * 3 + colIdx]),
-                      ),
-                    ],
-                  ],
-                );
-              }),
-            ),
+          // 当容器宽度不够时（Figma 理想宽度 = 3*44 + 2*105 + 2*66 = 474），
+          // 通过 LayoutBuilder 等比压缩列间距与左右内边距，保证三列始终
+          // 单行展示、不发生溢出。
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              const itemWidth = 44.0;
+              const idealGap = 105.0;
+              const idealOuterPad = 66.0;
+              const minGap = 8.0;
+              const minOuterPad = 12.0;
+              const idealExtra = 2 * idealGap + 2 * idealOuterPad; // 342
+
+              final w = constraints.maxWidth;
+              final extra = (w - 3 * itemWidth).clamp(0.0, double.infinity);
+
+              double gap;
+              double outerPad;
+              if (extra >= idealExtra) {
+                gap = idealGap;
+                outerPad = idealOuterPad;
+              } else {
+                final factor = extra / idealExtra;
+                gap = math.max(minGap, idealGap * factor);
+                outerPad = math.max(minOuterPad, idealOuterPad * factor);
+              }
+
+              return Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: outerPad,
+                  vertical: 24,
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: List.generate(3, (rowIdx) {
+                    return Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        for (int colIdx = 0; colIdx < 3; colIdx++) ...[
+                          if (colIdx > 0) SizedBox(width: gap),
+                          _QuickActionItem(
+                            action: padded[rowIdx * 3 + colIdx],
+                            onTap: () => _onQuickActionTap(
+                              padded[rowIdx * 3 + colIdx],
+                            ),
+                          ),
+                        ],
+                      ],
+                    );
+                  }),
+                ),
+              );
+            },
           ),
         ),
       ),
@@ -389,6 +410,11 @@ class _HomePageViewState extends State<_HomePageView> {
   }
 
   void _onQuickActionTap(HomeQuickAction action) {
+    // 模考 / 商城 暂未实装，统一走 2.0 通用单按钮提示弹窗（"暂未开放"）。
+    if (action.route == RoutePaths.mock || action.route == RoutePaths.aiSong) {
+      showInfoDialog(context: context, title: '暂未开放');
+      return;
+    }
     Navigator.pushNamed(
       context,
       action.route,
@@ -1020,40 +1046,3 @@ class _NoticeAvatar extends StatelessWidget {
   );
 }
 
-class _ComingSoonDialog extends StatelessWidget {
-  const _ComingSoonDialog({required this.onClose});
-
-  final VoidCallback onClose;
-
-  @override
-  Widget build(BuildContext context) {
-    return Positioned.fill(
-      child: Container(
-        color: Colors.black.withValues(alpha: 0.8),
-        alignment: Alignment.center,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(20),
-              child: Image.asset(
-                AppAssets.homeComingSoon,
-                width: 520,
-                fit: BoxFit.cover,
-              ),
-            ),
-            const SizedBox(height: 15),
-            GestureDetector(
-              onTap: onClose,
-              child: Image.asset(
-                AppAssets.homeDialogClose,
-                width: 40,
-                height: 40,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}

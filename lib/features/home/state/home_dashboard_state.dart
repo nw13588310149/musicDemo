@@ -90,7 +90,6 @@ class HomeDashboardState {
     this.weekItems = const [],
     this.newsItems = const [],
     this.courseNotices = const [],
-    this.showComingSoon = false,
     this.errorMessage = '',
   });
 
@@ -100,7 +99,6 @@ class HomeDashboardState {
   final List<HomeWeekDayItem> weekItems;
   final List<HomeNewsItem> newsItems;
   final List<HomeCourseNotice> courseNotices;
-  final bool showComingSoon;
   final String errorMessage;
 
   HomeDashboardState copyWith({
@@ -110,7 +108,6 @@ class HomeDashboardState {
     List<HomeWeekDayItem>? weekItems,
     List<HomeNewsItem>? newsItems,
     List<HomeCourseNotice>? courseNotices,
-    bool? showComingSoon,
     String? errorMessage,
   }) {
     return HomeDashboardState(
@@ -120,7 +117,6 @@ class HomeDashboardState {
       weekItems: weekItems ?? this.weekItems,
       newsItems: newsItems ?? this.newsItems,
       courseNotices: courseNotices ?? this.courseNotices,
-      showComingSoon: showComingSoon ?? this.showComingSoon,
       errorMessage: errorMessage ?? this.errorMessage,
     );
   }
