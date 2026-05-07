@@ -953,6 +953,8 @@ class _ClassmateSearchBoxState extends State<_ClassmateSearchBox> {
               controller: _controller,
               onChanged: widget.onChanged,
               cursorColor: _kPurple,
+              cursorWidth: 1.5,
+              cursorHeight: ui(16),
               decoration: InputDecoration(
                 isCollapsed: true,
                 contentPadding: EdgeInsets.zero,

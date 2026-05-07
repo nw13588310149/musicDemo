@@ -320,95 +320,91 @@ class _VoiceSearchPill extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     final fontSize = ui(14);
     final iconSize = ui(15);
+    // 与 courseware「我的云盘」搜索框写法保持一致：
+    // - 外层 SizedBox 提供胶囊高度（这里 30）；
+    // - TextField 用 prefixIcon + prefixIconConstraints(minWidth) 占位图标；
+    // - contentPadding 置零、不开 isDense / isCollapsed，让 Material 自带的
+    //   `textAlignVertical=center` 接管文字垂直居中。
+    //
+    // 之前用 Row + forceStrutHeight 自己控制居中，会在 iOS（PingFang OTF 行高
+    // metrics 与 Skia 计算的 strut top padding 不一致）下把文字推向顶部，
+    // 表现为「视觉略偏上」。让 InputDecorator 自己计算居中后，iOS / iPadOS /
+    // Android 表现一致。
 
-    final fieldStyle = TextStyle(
-      fontFamily: 'PingFang SC',
-      fontSize: fontSize,
-      height: 1.0,
-      fontWeight: AppFont.w400,
-      color: const Color(0xFF1A1A1A),
-    );
-    final hintStyle = TextStyle(
-      fontFamily: 'PingFang SC',
-      fontSize: fontSize,
-      height: 1.0,
-      fontWeight: AppFont.w400,
-      color: const Color(0xFFD1D1D1),
-    );
-    // PingFang OTF 在 Flutter 下行高 metrics 偏下，没有 forceStrutHeight 时
-    // 实际文本会比 strut 略高、视觉略偏下。锁住 strut 让文字 line-box 严格 = fontSize。
-    final fieldStrut = StrutStyle(
-      fontFamily: 'PingFang SC',
-      fontSize: fontSize,
-      height: 1.0,
-      leading: 0,
-      fontWeight: FontWeight.w400,
-      forceStrutHeight: true,
-    );
-
-    final pillH = ui(30);
-
-    return Container(
+    return SizedBox(
       width: ui(254),
-      height: pillH,
-      padding: EdgeInsets.symmetric(horizontal: ui(16)),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(12)),
-        border: Border.all(color: const Color(0xFFF3F2F3), width: 1),
-      ),
-      // 关键：让 TextField 撑满整个胶囊高度（pillH），
-      // 再借助 textAlignVertical: center 让 Flutter 内部把文字垂直居中到这块盒子里。
-      // 之前直接由 Row(crossAxisAlignment: center) 居中 14px 高的 TextField，
-      // 因为 PingFang OTF 字形在 line-box 内偏上 + InputDecoration 仍有隐式 baseline padding，
-      // 视觉上会整体偏上 ~4px。让 field 自身有足够的纵向空间，textAlignVertical 才能真正起作用。
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Image.asset(
-            AppAssets.homeSearchIcon,
-            width: iconSize,
-            height: iconSize,
-            fit: BoxFit.contain,
+      height: ui(30),
+      child: TextField(
+        controller: controller,
+        onChanged: onChanged,
+        maxLines: 1,
+        cursorColor: const Color(0xFF8741FF),
+        cursorWidth: 1.5,
+        cursorHeight: ui(15),
+        style: TextStyle(
+          fontFamily: 'PingFang SC',
+          fontSize: fontSize,
+          fontWeight: AppFont.w400,
+          color: const Color(0xFF1A1A1A),
+        ),
+        decoration: InputDecoration(
+          hintText: '传统音乐',
+          hintStyle: TextStyle(
+            fontFamily: 'PingFang SC',
+            fontSize: fontSize,
+            fontWeight: AppFont.w400,
+            color: const Color(0xFFD1D1D1),
           ),
-          SizedBox(width: ui(6)),
-          Expanded(
-            child: SizedBox(
-              height: pillH,
-              child: TextField(
-                controller: controller,
-                onChanged: onChanged,
-                maxLines: 1,
-                textAlignVertical: TextAlignVertical.center,
-                cursorColor: const Color(0xFF8741FF),
-                cursorWidth: 1.4,
-                style: fieldStyle,
-                strutStyle: fieldStrut,
-                decoration: InputDecoration(
-                  isCollapsed: true,
-                  border: InputBorder.none,
-                  hintText: '传统音乐',
-                  hintStyle: hintStyle,
-                  contentPadding: EdgeInsets.zero,
-                  isDense: true,
-                ),
-              ),
+          prefixIcon: Padding(
+            padding: EdgeInsets.only(left: ui(12), right: ui(6)),
+            child: Image.asset(
+              AppAssets.homeSearchIcon,
+              width: iconSize,
+              height: iconSize,
+              fit: BoxFit.contain,
             ),
           ),
-          if (hasQuery)
-            GestureDetector(
-              onTap: onClear,
-              behavior: HitTestBehavior.opaque,
-              child: Padding(
-                padding: EdgeInsets.only(left: ui(6)),
-                child: Icon(
-                  Icons.cancel,
-                  size: iconSize,
-                  color: const Color(0xFFC6C6C6),
-                ),
-              ),
+          prefixIconConstraints: BoxConstraints(minWidth: ui(33)),
+          suffixIcon: hasQuery
+              ? GestureDetector(
+                  onTap: onClear,
+                  behavior: HitTestBehavior.opaque,
+                  child: Padding(
+                    padding: EdgeInsets.only(right: ui(10)),
+                    child: Icon(
+                      Icons.cancel,
+                      size: iconSize,
+                      color: const Color(0xFFC6C6C6),
+                    ),
+                  ),
+                )
+              : null,
+          suffixIconConstraints: BoxConstraints(minWidth: ui(28)),
+          filled: true,
+          fillColor: Colors.white,
+          contentPadding: EdgeInsets.zero,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(ui(12)),
+            borderSide: BorderSide(
+              color: const Color(0xFFF3F2F3),
+              width: ui(1),
             ),
-        ],
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(ui(12)),
+            borderSide: BorderSide(
+              color: const Color(0xFFF3F2F3),
+              width: ui(1),
+            ),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(ui(12)),
+            borderSide: BorderSide(
+              color: const Color(0xFFE3E3E3),
+              width: ui(1),
+            ),
+          ),
+        ),
       ),
     );
   }

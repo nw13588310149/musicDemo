@@ -8,6 +8,8 @@ import '../../../app/router/route_paths.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/network/media_url.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/class_share_drawer.dart';
+import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../../video_tutorial/data/video_publisher_data.dart';
 import '../state/my_collection_controller.dart';
@@ -69,25 +71,11 @@ class MyCollectionPage extends ConsumerWidget {
             ],
           ),
         ),
-        if (state.busy)
+        if (state.busy && state.shareTarget == null)
           const Positioned.fill(
             child: ColoredBox(
               color: Color(0x22000000),
               child: Center(child: CircularProgressIndicator()),
-            ),
-          ),
-        if (state.shareTarget != null)
-          Positioned.fill(
-            child: _ShareSheet(
-              state: state,
-              onClose: controller.closeShare,
-              onToggle: controller.toggleShareClass,
-              onSend: () async {
-                final message = await controller.sendShare();
-                if (context.mounted) {
-                  AppToast.showSuccess(context, message ?? '分享成功');
-                }
-              },
             ),
           ),
       ],
@@ -224,12 +212,23 @@ class MyCollectionPage extends ConsumerWidget {
     WidgetRef ref,
     CollectionEntry item,
   ) async {
-    final message = await ref
-        .read(myCollectionControllerProvider.notifier)
-        .openShare(item);
-    if (context.mounted && message != null) {
-      AppToast.show(context, message);
+    final controller = ref.read(myCollectionControllerProvider.notifier);
+    final message = await controller.openShare(item);
+    if (!context.mounted) {
+      return;
     }
+    if (message != null) {
+      AppToast.show(context, message);
+      return;
+    }
+    // 复用公共"班级分享"左侧抽屉组件，与课件 / 视频 / 乐理详情等分享 UI 保持一致。
+    await showClassShareDrawer<void>(
+      context: context,
+      child: const _CollectionShareDrawer(),
+    );
+    // 抽屉被点击外部关闭或发送完成后，清掉控制器里的分享状态，
+    // 避免下一次点击 "分享" 时复用旧的目标 / 班级勾选。
+    controller.closeShare();
   }
 
   Future<void> _removeItem(
@@ -237,24 +236,13 @@ class MyCollectionPage extends ConsumerWidget {
     WidgetRef ref,
     CollectionEntry item,
   ) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showConfirmDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('取消收藏'),
-        content: Text('确定将“${item.title}”从收藏中移除吗？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('移除'),
-          ),
-        ],
-      ),
+      title: '取消收藏',
+      content: '确定将“${item.title}”从收藏中移除吗？',
+      confirmLabel: '取消收藏',
     );
-    if (confirmed != true || !context.mounted) {
+    if (!confirmed || !context.mounted) {
       return;
     }
     final message = await ref
@@ -408,11 +396,13 @@ class _CollectionGrid extends StatelessWidget {
         itemCount: state.items.length,
         itemBuilder: (context, index) {
           final item = state.items[index];
+          // 声乐 / 器乐：右下角图标点击后弹出 "分享 / 取消收藏" 菜单
+          // （样式同 my-notes 左侧分类菜单）。
           return _SongCollectionCard(
             item: item,
             onTap: () => onOpenItem(item),
-            onMenu: () =>
-                _showItemActionSheet(context, item, onRemove, onShare),
+            onShare: () => onShare(item),
+            onRemove: () => onRemove(item),
           );
         },
       );
@@ -514,23 +504,50 @@ Future<void> _showItemActionSheet(
 // 声乐 / 器乐 卡片：173×182，对齐首页 _VoiceSongCard 设计
 // ──────────────────────────────────────────────────────────────────────────────
 
-class _SongCollectionCard extends StatelessWidget {
+class _SongCollectionCard extends StatefulWidget {
   const _SongCollectionCard({
     required this.item,
     required this.onTap,
-    required this.onMenu,
+    required this.onShare,
+    required this.onRemove,
   });
 
   final CollectionEntry item;
   final VoidCallback onTap;
-  final VoidCallback onMenu;
+  final VoidCallback onShare;
+  final VoidCallback onRemove;
+
+  @override
+  State<_SongCollectionCard> createState() => _SongCollectionCardState();
+}
+
+class _SongCollectionCardState extends State<_SongCollectionCard> {
+  // 用于把"分享 / 取消收藏"菜单锚定在右下角图标上。
+  final GlobalKey _menuTriggerKey = GlobalKey();
+
+  Future<void> _openActionMenu() async {
+    final action = await _showSongCollectionMenu(
+      context: context,
+      triggerKey: _menuTriggerKey,
+    );
+    if (!mounted || action == null) {
+      return;
+    }
+    switch (action) {
+      case _SongMenuAction.share:
+        widget.onShare();
+      case _SongMenuAction.remove:
+        widget.onRemove();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final item = widget.item;
 
     return GestureDetector(
-      onTap: onTap,
+      onTap: widget.onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
         decoration: BoxDecoration(
@@ -585,7 +602,10 @@ class _SongCollectionCard extends StatelessWidget {
                   ),
                 ),
                 SizedBox(width: ui(8)),
-                _SongActionButton(onTap: onMenu),
+                _SongActionButton(
+                  key: _menuTriggerKey,
+                  onTap: _openActionMenu,
+                ),
               ],
             ),
           ],
@@ -624,9 +644,10 @@ class _SongCover extends StatelessWidget {
   }
 }
 
-/// 设计稿中右下角 28×28 播放图标，点击仍打开更多操作（分享 / 取消收藏）。
+/// 卡片右下角 28×28 操作图标。设计稿要求此处展示
+/// `assets/images/note/1.png`，点击后弹出"分享 / 取消收藏"菜单。
 class _SongActionButton extends StatelessWidget {
-  const _SongActionButton({required this.onTap});
+  const _SongActionButton({super.key, required this.onTap});
 
   final VoidCallback onTap;
 
@@ -640,7 +661,7 @@ class _SongActionButton extends StatelessWidget {
         width: ui(28),
         height: ui(28),
         child: Image.asset(
-          AppAssets.soundPlay,
+          'assets/images/note/1.png',
           width: ui(28),
           height: ui(28),
           fit: BoxFit.contain,
@@ -1145,125 +1166,266 @@ class _CollectionEmpty extends StatelessWidget {
   }
 }
 
-class _ShareSheet extends StatelessWidget {
-  const _ShareSheet({
-    required this.state,
-    required this.onClose,
-    required this.onToggle,
-    required this.onSend,
-  });
+// ──────────────────────────────────────────────────────────────────────────────
+// 声乐 / 器乐 卡片右下角图标的弹出菜单：分享 + 取消收藏
+// 视觉与 my_notes_page 左侧分类的省略号菜单一致：
+//   - 142×N 白色面板，圆角 12，浅灰描边 + 双层投影
+//   - 行高 36，左侧 20×20 图标 + 13/20 文字
+//   - "取消收藏" 行使用红色文字 + 删除图标，与"删除"语义统一
+// ──────────────────────────────────────────────────────────────────────────────
 
-  final MyCollectionState state;
-  final VoidCallback onClose;
-  final ValueChanged<int> onToggle;
-  final Future<void> Function() onSend;
+enum _SongMenuAction { share, remove }
+
+Future<_SongMenuAction?> _showSongCollectionMenu({
+  required BuildContext context,
+  required GlobalKey triggerKey,
+}) {
+  final triggerCtx = triggerKey.currentContext;
+  if (triggerCtx == null) {
+    return Future<_SongMenuAction?>.value(null);
+  }
+  final renderBox = triggerCtx.findRenderObject() as RenderBox;
+  final overlayBox =
+      Overlay.of(context, rootOverlay: true).context.findRenderObject()
+          as RenderBox;
+
+  final origin = renderBox.localToGlobal(Offset.zero, ancestor: overlayBox);
+  final size = renderBox.size;
+  final scale = DashboardScaleScope.of(context);
+  final menuWidth = scale.ui(142);
+  // 估算高度：top padding(8) + 36 + 6(divider) + 36 + bottom padding(8) ≈ 94
+  final approxMenuHeight = scale.ui(96);
+
+  // 与 my_notes_page._showNoteActionMenu 的定位逻辑保持一致：
+  // 默认从触发点中心向右下展开；越过右边界则左对齐到按钮中心；
+  // 越过下边界则贴底；上 / 左两个方向再做一次 8px 安全边距兜底。
+  var left = origin.dx + size.width / 2;
+  var top = origin.dy + size.height / 2;
+
+  if (left + menuWidth > overlayBox.size.width - scale.ui(8)) {
+    left = origin.dx + size.width / 2 - menuWidth;
+  }
+  if (left < scale.ui(8)) {
+    left = scale.ui(8);
+  }
+  if (top + approxMenuHeight > overlayBox.size.height - scale.ui(8)) {
+    top = overlayBox.size.height - approxMenuHeight - scale.ui(8);
+  }
+  if (top < scale.ui(8)) {
+    top = scale.ui(8);
+  }
+
+  return showMenu<_SongMenuAction>(
+    context: context,
+    elevation: 0,
+    color: Colors.transparent,
+    shadowColor: Colors.transparent,
+    surfaceTintColor: Colors.transparent,
+    constraints: BoxConstraints.tightFor(width: menuWidth),
+    position: RelativeRect.fromLTRB(
+      left,
+      top,
+      overlayBox.size.width - left - menuWidth,
+      overlayBox.size.height - top,
+    ),
+    items: <PopupMenuEntry<_SongMenuAction>>[
+      PopupMenuItem<_SongMenuAction>(
+        enabled: false,
+        padding: EdgeInsets.zero,
+        // PopupMenu 走独立 Overlay，捕获不到外层 DashboardScaleScope，
+        // 这里重新注入一份，保证内部 ui() 计算与卡片一致。
+        child: DashboardScaleScope(
+          data: scale,
+          child: Builder(
+            builder: (panelCtx) => _SongMenuPanel(
+              onSelected: (action) => Navigator.of(panelCtx).pop(action),
+            ),
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
+class _SongMenuPanel extends StatelessWidget {
+  const _SongMenuPanel({required this.onSelected});
+
+  final ValueChanged<_SongMenuAction> onSelected;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return ColoredBox(
-      color: const Color(0x66000000),
-      child: Center(
-        child: Container(
-          width: ui(420),
-          padding: EdgeInsets.all(ui(20)),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(ui(18)),
+    return Container(
+      width: ui(142),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(ui(12)),
+        border: Border.all(color: const Color(0xFFF3F2F3), width: ui(1.11)),
+        boxShadow: [
+          BoxShadow(color: const Color(0x050B081A), blurRadius: ui(1)),
+          BoxShadow(
+            color: const Color(0x0F0B081A),
+            blurRadius: ui(40),
+            offset: Offset(0, ui(12)),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Text(
-                    '分享到班级',
-                    style: TextStyle(
-                      fontSize: ui(20),
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: onClose,
-                    icon: const Icon(Icons.close_rounded),
-                  ),
-                ],
-              ),
-              SizedBox(height: ui(6)),
-              Text(
-                state.shareTarget?.title ?? '',
-                style: TextStyle(
-                  fontSize: ui(14),
-                  color: const Color(0xFF7D8396),
-                ),
-              ),
-              SizedBox(height: ui(16)),
-              ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: ui(260)),
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: state.shareClasses.length,
-                  separatorBuilder: (context, index) => SizedBox(height: ui(8)),
-                  itemBuilder: (context, index) {
-                    final item = state.shareClasses[index];
-                    return InkWell(
-                      borderRadius: BorderRadius.circular(ui(12)),
-                      onTap: () => onToggle(item.id),
-                      child: Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: ui(14),
-                          vertical: ui(12),
-                        ),
-                        decoration: BoxDecoration(
-                          color: item.selected
-                              ? const Color(0xFFF1ECFF)
-                              : const Color(0xFFF8FAFF),
-                          borderRadius: BorderRadius.circular(ui(12)),
-                          border: Border.all(
-                            color: item.selected
-                                ? const Color(0xFF8B5CFF)
-                                : const Color(0xFFE7EBF7),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.groups_rounded),
-                            SizedBox(width: ui(10)),
-                            Expanded(child: Text(item.name)),
-                            Icon(
-                              item.selected
-                                  ? Icons.check_circle_rounded
-                                  : Icons.radio_button_unchecked_rounded,
-                              color: item.selected
-                                  ? const Color(0xFF8B5CFF)
-                                  : const Color(0xFFA0A6B7),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              SizedBox(height: ui(18)),
-              SizedBox(
-                width: double.infinity,
-                height: ui(44),
-                child: FilledButton(
-                  onPressed: onSend,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF8B5CFF),
-                    foregroundColor: Colors.white,
-                  ),
-                  child: const Text('发送'),
-                ),
-              ),
-            ],
+          BoxShadow(
+            color: const Color(0x050B081A),
+            blurRadius: ui(24),
+            offset: Offset(0, ui(12)),
+            spreadRadius: ui(-16),
           ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(height: ui(8)),
+          _SongMenuRow(
+            label: '分享',
+            icon: AppAssets.coursewareActionShare,
+            onTap: () => onSelected(_SongMenuAction.share),
+          ),
+          SizedBox(height: ui(2)),
+          Container(
+            margin: EdgeInsets.symmetric(horizontal: ui(8)),
+            height: ui(1),
+            color: const Color(0xFFF3F4F6),
+          ),
+          SizedBox(height: ui(3)),
+          _SongMenuRow(
+            label: '取消收藏',
+            icon: AppAssets.coursewareActionDelete,
+            danger: true,
+            onTap: () => onSelected(_SongMenuAction.remove),
+          ),
+          SizedBox(height: ui(8)),
+        ],
+      ),
+    );
+  }
+}
+
+class _SongMenuRow extends StatelessWidget {
+  const _SongMenuRow({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+    this.danger = false,
+  });
+
+  final String label;
+  final String icon;
+  final VoidCallback onTap;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return InkWell(
+      onTap: onTap,
+      child: SizedBox(
+        height: ui(36),
+        child: Row(
+          children: [
+            SizedBox(width: ui(14)),
+            Image.asset(
+              icon,
+              width: ui(20),
+              height: ui(20),
+              fit: BoxFit.contain,
+            ),
+            SizedBox(width: ui(10)),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: ui(13),
+                color: danger
+                    ? const Color(0xFFFF323C)
+                    : const Color(0xFF0B081A),
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w400,
+                height: 20 / 13,
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// 收藏分享：复用公共 ClassShareDrawer（左侧抽屉）
+// ──────────────────────────────────────────────────────────────────────────────
+//
+// 数据流：MyCollectionPage._openShare 先 await `controller.openShare(item)` 拉
+// 班级列表，然后通过 `showClassShareDrawer` 把这个 Widget 推入 Navigator。
+// Drawer 内部 watch 控制器状态，把班级勾选 / 发送转交给 controller，由
+// controller 完成与 1.0 后端的交互；用户外部点击关闭后，外层会再调用
+// `controller.closeShare()` 兜底清理状态。
+class _CollectionShareDrawer extends ConsumerWidget {
+  const _CollectionShareDrawer();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(myCollectionControllerProvider);
+    final controller = ref.read(myCollectionControllerProvider.notifier);
+    final target = state.shareTarget;
+    if (target == null) {
+      // 控制器在外部点击关闭抽屉时已经清掉 shareTarget；此时直接渲染
+      // 一个空抽屉避免崩溃，Navigator 会立即被外部关闭流程出栈。
+      return const ClassShareDrawer(
+        title: '分享收藏',
+        targetCard: SizedBox.shrink(),
+        classes: <ClassShareItem>[],
+        loading: false,
+        sending: false,
+        onToggleClass: _noopToggle,
+        onSend: _noopSend,
+      );
+    }
+    final hasClasses = state.shareClasses.isNotEmpty;
+    return ClassShareDrawer(
+      title: '分享收藏',
+      targetCard: ShareTargetCard(
+        label: '您将分享的内容',
+        title: target.title,
+        coverUrl: target.coverUrl,
+        resolveUrl: MediaUrl.resolve,
+      ),
+      classes: state.shareClasses
+          .map(
+            (c) => ClassShareItem(
+              id: '${c.id}',
+              name: c.name,
+              checked: c.selected,
+            ),
+          )
+          .toList(growable: false),
+      // openShare 完成前类列表必为空 + busy=true → loading；
+      // 已有班级数据后再点 "发送" 期间 busy=true → sending。
+      loading: state.busy && !hasClasses,
+      sending: state.busy && hasClasses,
+      onToggleClass: (id) {
+        final intId = int.tryParse(id) ?? 0;
+        if (intId > 0) {
+          controller.toggleShareClass(intId);
+        }
+      },
+      onSend: () async {
+        final message = await controller.sendShare();
+        if (!context.mounted) return;
+        if (message != null) {
+          AppToast.showError(context, message);
+          return;
+        }
+        Navigator.of(context).pop();
+        AppToast.showSuccess(context, '分享成功');
+      },
+    );
+  }
+}
+
+void _noopToggle(String _) {}
+Future<void> _noopSend() async {}

@@ -1986,6 +1986,9 @@ class _LibrarySearchInput extends StatelessWidget {
           Expanded(
             child: TextField(
               controller: controller,
+              cursorColor: _kPurple,
+              cursorWidth: 1.5,
+              cursorHeight: ui(16),
               style: TextStyle(
                 fontSize: ui(14),
                 color: _kTextDark,

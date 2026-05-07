@@ -553,6 +553,9 @@ class _TitleField extends StatelessWidget {
         onChanged: onChanged,
         maxLines: 1,
         maxLength: 40,
+        cursorColor: const Color(0xFF8741FF),
+        cursorWidth: 1.5,
+        cursorHeight: ui(16),
         style: TextStyle(
           fontSize: ui(14),
           color: _kText,
@@ -605,6 +608,9 @@ class _TextArea extends StatelessWidget {
         maxLines: null,
         expands: true,
         textAlignVertical: TextAlignVertical.top,
+        cursorColor: const Color(0xFF8741FF),
+        cursorWidth: 1.5,
+        cursorHeight: ui(15),
         style: TextStyle(
           fontSize: ui(13),
           color: _kText,

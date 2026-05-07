@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -177,189 +176,146 @@ class _ProfileHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final user = state.user;
+    final nick = user['nickname']?.toString().trim() ?? '';
+    final mobile = user['mobile']?.toString().trim() ?? '';
+    final identity = user['identity']?.toString().trim() ?? '';
+    final avatarUrl = user['headUrl']?.toString();
+
     final days = controller.vipDaysRemaining();
     final showAnnualBadge =
         state.checkStatusEnabled && days != null && days >= 1;
     final pkg0 = state.vipPackages.isNotEmpty ? state.vipPackages[0] : null;
     final pkg1 = state.vipPackages.length > 1 ? state.vipPackages[1] : null;
 
-    final nick = state.user['nickname']?.toString().trim() ?? '';
+    // Figma 设计稿固定高度：970×239。VIP 不可见时收缩高度，仅保留头像+昵称区。
+    final heroHeight = state.checkStatusEnabled ? 239.0 : 132.0;
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final w = constraints.maxWidth;
-        final headerH = w * 240.0 / 970.0;
-        final minContentH = state.checkStatusEnabled ? 248.0 : 132.0;
-        final stackH = math.max(headerH, minContentH);
-
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: SizedBox(
-            height: stackH,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Positioned(
-                  left: 0,
-                  top: 0,
-                  right: 0,
-                  height: headerH,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Image.asset(
-                        AppAssets.infoBg,
-                        fit: BoxFit.cover,
-                        alignment: Alignment.topCenter,
-                      ),
-                      DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.white.withValues(alpha: 0),
-                              const Color(0xFFFAF8FD).withValues(alpha: 0.88),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
+    return SizedBox(
+      height: heroHeight,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // ── 背景：渐变 + 装饰皇冠（沿用 info/bg.png）──
+          Positioned.fill(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Image.asset(
+                    AppAssets.infoBg,
+                    fit: BoxFit.cover,
+                    alignment: Alignment.topCenter,
                   ),
-                ),
-                Positioned(
-                  left: 0,
-                  top: headerH,
-                  right: 0,
-                  bottom: 0,
-                  child: const ColoredBox(color: Color(0xFFFAF8FD)),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _Avatar(url: state.user['headUrl']?.toString()),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    Flexible(
-                                      fit: FlexFit.loose,
-                                      child: Text(
-                                        nick.isNotEmpty ? nick : '未命名',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: AppFont.w500,
-                                          color: Color(0xFF0B081A),
-                                          fontFamily: 'PingFang SC',
-                                          height: 1.25,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    GestureDetector(
-                                      onTap: onEditProfile,
-                                      behavior: HitTestBehavior.opaque,
-                                      child: SizedBox(
-                                        width: 16,
-                                        height: 16,
-                                        child: ClipRect(
-                                          child: Image.asset(
-                                            AppAssets.infoPencilLine,
-                                            width: 16,
-                                            height: 16,
-                                            fit: BoxFit.contain,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    if (showAnnualBadge) ...[
-                                      const SizedBox(width: 8),
-                                      const _AnnualVipBadge(),
-                                    ],
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  state.user['mobile']?.toString() ?? '',
-                                  textAlign: TextAlign.left,
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: AppFont.w400,
-                                    color: Color(0xFF6D6B75),
-                                    fontFamily: 'PingFang SC',
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.white.withValues(alpha: 0),
+                          const Color(0xFFFAF8FD).withValues(alpha: 0.88),
                         ],
                       ),
-                      if (state.checkStatusEnabled) const Spacer(),
-                      if (state.checkStatusEnabled)
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _VipPriceCard(
-                                annualLayout: true,
-                                title: pkg0?.name ?? '年卡365天',
-                                subtitle: pkg0?.description ?? '每月仅需116.5元',
-                                price: pkg0?.price ?? '1,398',
-                                trailingLabel: days != null && days > 3
-                                    ? '已开通'
-                                    : null,
-                                showPrice: days == null || days <= 3,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _VipPriceCard(
-                                annualLayout: false,
-                                title: pkg1?.name ?? '3天体验卡',
-                                subtitle: pkg1?.description ?? '每天仅需6.6元',
-                                price: pkg1?.price ?? '198',
-                                trailingLabel: days != null && days >= 1
-                                    ? '已开通'
-                                    : null,
-                                showPrice: days == null || days < 1,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _WalletPointsCard(
-                                wallet: state.walletText,
-                                points: state.pointsText,
-                              ),
-                            ),
-                          ],
-                        ),
-                    ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        );
-      },
+
+          // ── 昵称 / 手机号 列（左 122，上 45）──
+          Positioned(
+            left: 122,
+            top: 45,
+            child: _NicknameColumn(
+              nickname: nick.isNotEmpty ? nick : '未命名',
+              mobile: mobile,
+              onEdit: onEditProfile,
+            ),
+          ),
+
+          // ── 「年卡会员」徽章（左 215，上 45）──
+          if (showAnnualBadge)
+            const Positioned(
+              left: 215,
+              top: 45,
+              child: _AnnualVipBadge(),
+            ),
+
+          // ── 三张信息卡片（左 16，上 123，每张 303×100，间距 13）。
+          //    注意：卡片需放在头像之前绘制，避免遮挡头像。──
+          if (state.checkStatusEnabled)
+            Positioned(
+              left: 16,
+              top: 123,
+              right: 16,
+              height: 100,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _VipPriceCard(
+                      annualLayout: true,
+                      title: pkg0?.name ?? '年卡365天',
+                      subtitle: pkg0?.description ?? '每月仅需116.5元',
+                      price: pkg0?.price ?? '1,398',
+                      trailingLabel: days != null && days > 3
+                          ? '已开通'
+                          : null,
+                      showPrice: days == null || days <= 3,
+                    ),
+                  ),
+                  const SizedBox(width: 13),
+                  Expanded(
+                    child: _VipPriceCard(
+                      annualLayout: false,
+                      title: pkg1?.name ?? '3天体验卡',
+                      subtitle: pkg1?.description ?? '每天仅需6.6元',
+                      price: pkg1?.price ?? '198',
+                      trailingLabel: days != null && days >= 1
+                          ? '已开通'
+                          : null,
+                      showPrice: days == null || days < 1,
+                    ),
+                  ),
+                  const SizedBox(width: 13),
+                  Expanded(
+                    child: _WalletPointsCard(
+                      wallet: state.walletText,
+                      points: state.pointsText,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          // ── 头像（左 16，上 101.5，82×82，2px 白色描边）。
+          //    放在卡片之后，确保浮于卡片上方。──
+          Positioned(
+            left: 16,
+            top: 25,
+            child: _Avatar(url: avatarUrl, size: 82),
+          ),
+
+          // ── 身份徽标（左 57，上 167.5）──
+          if (identity.isNotEmpty)
+            Positioned(
+              left: 64,
+              top: 90,
+              child: _IdentityBadge(label: identity),
+            ),
+        ],
+      ),
     );
   }
 }
 
 class _Avatar extends StatelessWidget {
-  const _Avatar({required this.url});
+  const _Avatar({required this.url, this.size = 82});
 
   final String? url;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
@@ -367,56 +323,153 @@ class _Avatar extends StatelessWidget {
     final network =
         trimmed.startsWith('http://') || trimmed.startsWith('https://');
     const ring = 2.0;
-    const total = 88.0;
-    final inner = total - 2 * ring;
+    final inner = size - 2 * ring;
     final fallback = Container(
       decoration: const BoxDecoration(
         shape: BoxShape.circle,
-        gradient: LinearGradient(
-          colors: [Color(0xFFE7ECFA), Color(0xFFD9E1F6)],
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-        ),
+        color: Color(0xFFD9D9D9),
       ),
       alignment: Alignment.center,
-      child: const Icon(
+      child: Icon(
         Icons.person_rounded,
-        size: 44,
-        color: Color(0xFF7E879C),
+        size: size * 0.55,
+        color: const Color(0xFF7E879C),
       ),
     );
-    return SizedBox(
-      width: total,
-      height: total,
-      child: Stack(
-        fit: StackFit.expand,
-        clipBehavior: Clip.none,
-        children: [
-          const DecoratedBox(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.white,
-            ),
+    return Container(
+      width: size,
+      height: size,
+      decoration: const BoxDecoration(
+        shape: BoxShape.circle,
+        color: Colors.white,
+      ),
+      padding: const EdgeInsets.all(ring),
+      child: ClipOval(
+        clipBehavior: Clip.antiAliasWithSaveLayer,
+        child: SizedBox(
+          width: inner,
+          height: inner,
+          child: network
+              ? Image.network(
+                  trimmed,
+                  fit: BoxFit.cover,
+                  filterQuality: FilterQuality.medium,
+                  errorBuilder: (_, __, ___) => fallback,
+                )
+              : fallback,
+        ),
+      ),
+    );
+  }
+}
+
+/// 头像下方的身份徽标：黄绿底 #DBEE49 + 白色 1px 描边 + 11/400 文案。
+class _IdentityBadge extends StatelessWidget {
+  const _IdentityBadge({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 18,
+      padding: const EdgeInsets.symmetric(horizontal: 7),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: const Color(0xFFDBEE49),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white, width: 1),
+      ),
+      child: Center(
+        child: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          strutStyle: const StrutStyle(
+            fontSize: 11,
+            height: 1.1,
+            forceStrutHeight: true,
           ),
-          Center(
-            child: ClipOval(
-              clipBehavior: Clip.antiAliasWithSaveLayer,
-              child: SizedBox(
-                width: inner,
-                height: inner,
-                child: network
-                    ? Image.network(
-                        trimmed,
-                        fit: BoxFit.cover,
-                        filterQuality: FilterQuality.medium,
-                        errorBuilder: (context, error, stackTrace) => fallback,
-                      )
-                    : fallback,
+          style: TextStyle(
+            color: const Color(0xFF0B081A),
+            fontSize: 11,
+            fontFamily: 'PingFang SC',
+            fontWeight: AppFont.w400,
+            height: 1.1,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 昵称（16/500）+ 编辑笔，下接手机号（14/400 #6D6B75）。
+class _NicknameColumn extends StatelessWidget {
+  const _NicknameColumn({
+    required this.nickname,
+    required this.mobile,
+    required this.onEdit,
+  });
+
+  final String nickname;
+  final String mobile;
+  final VoidCallback onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 160),
+              child: Text(
+                nickname,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: const Color(0xFF0B081A),
+                  fontSize: 16,
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w500,
+                  height: 1.25,
+                ),
               ),
             ),
+            const SizedBox(width: 4),
+            GestureDetector(
+              onTap: onEdit,
+              behavior: HitTestBehavior.opaque,
+              child: SizedBox(
+                width: 16,
+                height: 16,
+                child: Image.asset(
+                  AppAssets.infoPencilLine,
+                  width: 16,
+                  height: 16,
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        if (mobile.isNotEmpty)
+          Text(
+            mobile,
+            style: TextStyle(
+              color: const Color(0xFF6D6B75),
+              fontSize: 14,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w400,
+              height: 1.2,
+            ),
           ),
-        ],
-      ),
+      ],
     );
   }
 }
@@ -1444,6 +1497,9 @@ class _DialogTextField extends StatelessWidget {
       child: TextField(
         controller: controller,
         autofocus: true,
+        cursorColor: const Color(0xFF8741FF),
+        cursorWidth: 1.5,
+        cursorHeight: 16,
         style: TextStyle(
           fontSize: 14,
           color: Color(0xFF0B081A),

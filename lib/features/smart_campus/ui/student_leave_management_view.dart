@@ -1716,6 +1716,9 @@ class _TextInputField extends StatelessWidget {
       child: TextField(
         controller: controller,
         keyboardType: keyboardType,
+        cursorColor: _kPurple,
+        cursorWidth: 1.5,
+        cursorHeight: ui(16),
         style: TextStyle(
           fontSize: ui(14),
           color: _kTextDark,
@@ -1762,6 +1765,9 @@ class _TextAreaField extends StatelessWidget {
         maxLines: null,
         expands: true,
         textAlignVertical: TextAlignVertical.top,
+        cursorColor: _kPurple,
+        cursorWidth: 1.5,
+        cursorHeight: ui(16),
         style: TextStyle(
           fontSize: ui(14),
           color: _kTextDark,

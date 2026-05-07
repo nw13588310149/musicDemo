@@ -60,4 +60,67 @@ class ShellRepository {
     '/app/user/userinfoUpdate',
     data: <String, dynamic>{'province': province},
   );
+
+  // ── 顶部搜索（对齐 1.0 TopNav.vue `sear`）────────────────────────────────
+  // 1.0 的顶部搜索把同一个 keyword 同时丢给四个不同列表接口，分别命中：
+  //   - 课程（textbookList，data 中包含 type=1/2/3/4/5/9 等不同子类）
+  //   - 视频（videoTutorialList，前端会强制把 type 视作 6）
+  //   - 录音（recordingList，前端把 type 视作 'ly'）
+  //   - 笔记（noteList，前端把 type 视作 'note'）
+  // 后续点击结果时按 type 跳转不同详情页。这里把四个接口收敛在 shell 仓库
+  // 里，避免顶部搜索去耦合到各业务模块自己的 repository（它们的入参语义
+  // 各不相同）。
+  Map<String, dynamic> _searchBody(String keyword, String province) {
+    return <String, dynamic>{
+      'current': 1,
+      'firstMenu': '',
+      'keyword': keyword,
+      // 1.0 实际写死了 "甘肃"，这里改成跟随用户当前 province，未设置时回落
+      // 到 "甘肃" 以保持后端老接口的兼容。
+      'province': province.isEmpty ? '甘肃' : province,
+      'secondMenu': '',
+      'size': 100,
+      'type': '',
+    };
+  }
+
+  Future<ApiResponse> searchTextbookList({
+    required String keyword,
+    required String province,
+  }) {
+    return client.post(
+      '/app/user/textbookList',
+      data: _searchBody(keyword, province),
+    );
+  }
+
+  Future<ApiResponse> searchVideoList({
+    required String keyword,
+    required String province,
+  }) {
+    return client.post(
+      '/app/user/videoTutorialList',
+      data: _searchBody(keyword, province),
+    );
+  }
+
+  Future<ApiResponse> searchRecordingList({
+    required String keyword,
+    required String province,
+  }) {
+    return client.post(
+      '/app/user/recordingList',
+      data: _searchBody(keyword, province),
+    );
+  }
+
+  Future<ApiResponse> searchNoteList({
+    required String keyword,
+    required String province,
+  }) {
+    return client.post(
+      '/app/user/noteList',
+      data: _searchBody(keyword, province),
+    );
+  }
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -72,8 +74,19 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
   final ScrollController _scrollCtrl = ScrollController();
   String _messageSignature = '';
 
+  /// 「贴底滚动」级联里下一帧的 timer。每次新触发滚动时先 cancel 上一个，
+  /// 避免短时间内多次 selectSession / 流式推送堆叠出几十个 jumpTo —— 这会
+  /// 在用户尝试滑动时把他的拖拽 activity 反复打断（表现为「需要划两次」）。
+  Timer? _bottomScrollTimer;
+
+  /// 用户手指当前是否压在消息列表上。压着的时候我们绝对不再触发任何
+  /// `jumpTo` / `animateTo`，否则会把用户的 DragScrollActivity 替换成
+  /// DrivenScrollActivity，第一次滑动直接被吃掉。
+  bool _userTouchingList = false;
+
   @override
   void dispose() {
+    _bottomScrollTimer?.cancel();
     _inputCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
@@ -447,7 +460,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
   // 让 LOGO 视觉中心对齐文字基线。
   static const double _logoSlot = 52;
   static const double _logoVisualSize = 90;
-  static const double _logoVerticalNudge = 9;
+  static const double _logoVerticalNudge = 0;
 
   Widget _buildWelcomeSection() {
     // Figma: 整个 welcome row 高度 76（设计稿副标题 2 行 → 76）。
@@ -810,47 +823,58 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
         Expanded(
           child: state.messagesLoading && state.messages.isEmpty
               ? const Center(child: CircularProgressIndicator())
-              : ListView.builder(
-                  controller: _scrollCtrl,
-                  padding: const EdgeInsets.fromLTRB(
-                    _mainHorizontalPadding,
-                    28,
-                    _mainHorizontalPadding,
-                    20,
-                  ),
-                  itemCount:
-                      state.messages.length + (showWaitingAssistant ? 1 : 0),
-                  itemBuilder: (context, index) {
-                    if (index == state.messages.length) {
-                      return const Padding(
-                        padding: EdgeInsets.only(bottom: 14),
-                        child: Text(
-                          '小艺同学正在思考中…',
-                          style: TextStyle(
-                            color: _textHint,
-                            fontSize: 13,
-                            fontFamily: 'PingFang SC',
-                            height: 1.5,
-                          ),
-                        ),
-                      );
-                    }
-                    final message = state.messages[index];
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 20),
-                      child: message.type == AiChatMessageType.user
-                          ? _buildUserMessage(
-                              message: message,
-                              controller: controller,
-                              maxWidth: userBubbleMaxWidth,
-                            )
-                          : _buildAiMessage(
-                              message: message,
-                              controller: controller,
-                              maxWidth: aiBubbleMaxWidth,
-                            ),
-                    );
+              : Listener(
+                  // 用户手指压下 / 抬起时同步 _userTouchingList。压下后立刻把
+                  // 还没执行完的「贴底滚动」级联取消，避免它在用户拖拽过程中
+                  // 抢走 ScrollPosition 的 activity。
+                  onPointerDown: (_) {
+                    _userTouchingList = true;
+                    _bottomScrollTimer?.cancel();
                   },
+                  onPointerUp: (_) => _userTouchingList = false,
+                  onPointerCancel: (_) => _userTouchingList = false,
+                  child: ListView.builder(
+                    controller: _scrollCtrl,
+                    padding: const EdgeInsets.fromLTRB(
+                      _mainHorizontalPadding,
+                      28,
+                      _mainHorizontalPadding,
+                      20,
+                    ),
+                    itemCount:
+                        state.messages.length + (showWaitingAssistant ? 1 : 0),
+                    itemBuilder: (context, index) {
+                      if (index == state.messages.length) {
+                        return const Padding(
+                          padding: EdgeInsets.only(bottom: 14),
+                          child: Text(
+                            '小艺同学正在思考中…',
+                            style: TextStyle(
+                              color: _textHint,
+                              fontSize: 13,
+                              fontFamily: 'PingFang SC',
+                              height: 1.5,
+                            ),
+                          ),
+                        );
+                      }
+                      final message = state.messages[index];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 20),
+                        child: message.type == AiChatMessageType.user
+                            ? _buildUserMessage(
+                                message: message,
+                                controller: controller,
+                                maxWidth: userBubbleMaxWidth,
+                              )
+                            : _buildAiMessage(
+                                message: message,
+                                controller: controller,
+                                maxWidth: aiBubbleMaxWidth,
+                              ),
+                      );
+                    },
+                  ),
                 ),
         ),
         Padding(
@@ -1151,6 +1175,8 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                   keyboardType: TextInputType.multiline,
                   textAlignVertical: TextAlignVertical.top,
                   cursorColor: _purple,
+                  cursorWidth: 1.5,
+                  cursorHeight: 16,
                   style: TextStyle(
                     color: _textPrimary,
                     fontSize: 14,
@@ -1541,25 +1567,39 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
   }
 
   void _scheduleBottomScroll({int attempt = 0}) {
+    // 新一轮调度先把上一轮排队的 timer 干掉：原实现是 5 个递归 callback
+    // 各自独立 schedule，会在 ~280ms 内连续触发 1 次 jumpTo + 4 次 animateTo。
+    // 切换会话或流式推送时，这串「贴底动画」会接管 ScrollPosition，把用户
+    // 第一次滑动产生的 DragScrollActivity 直接替换成 DrivenScrollActivity，
+    // 表现就是「切换会话后第一次上滑没反应、得划第二次」。
+    if (attempt == 0) {
+      _bottomScrollTimer?.cancel();
+      _bottomScrollTimer = null;
+    }
+
+    // 用户手指压在列表上时，绝不再驱动滚动，把 ScrollPosition 留给手势。
+    if (_userTouchingList) {
+      return;
+    }
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scrollCtrl.hasClients) {
+      if (!mounted || !_scrollCtrl.hasClients || _userTouchingList) {
         return;
       }
       final max = _scrollCtrl.position.maxScrollExtent;
-      if (attempt == 0) {
-        _scrollCtrl.jumpTo(max);
-      } else {
-        _scrollCtrl.animateTo(
-          max,
-          duration: const Duration(milliseconds: 120),
-          curve: Curves.easeOut,
-        );
-      }
-      if (attempt < 4) {
-        Future<void>.delayed(
-          Duration(milliseconds: attempt == 0 ? 24 : 80),
+      // 后续几次「补偿性滚动」也用 jumpTo：它是同步设值、不会留下持续运行的
+      // DrivenScrollActivity，所以即使紧接着用户开始滑动也不会被打断。
+      _scrollCtrl.jumpTo(max);
+
+      if (attempt < 3) {
+        // 一共 4 次（初始 + 3 次补偿），覆盖图片/PDF/HTML 异步布局完成后
+        // maxScrollExtent 增长的情况；间隔比原来更短一些以更快收敛。
+        _bottomScrollTimer = Timer(
+          Duration(milliseconds: attempt == 0 ? 32 : 64),
           () => _scheduleBottomScroll(attempt: attempt + 1),
         );
+      } else {
+        _bottomScrollTimer = null;
       }
     });
   }

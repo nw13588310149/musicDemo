@@ -2469,6 +2469,9 @@ class _HistorySearchFieldState extends State<_HistorySearchField> {
             child: TextField(
               controller: _controller,
               onChanged: widget.onChanged,
+              cursorColor: _kPurple,
+              cursorWidth: 1.5,
+              cursorHeight: ui(16),
               style: TextStyle(
                 fontSize: ui(14),
                 color: _kTextDark,

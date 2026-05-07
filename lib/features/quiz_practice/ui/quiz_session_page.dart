@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
@@ -6,6 +7,7 @@ import '../../../app/router/route_paths.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../shell/ui/shell_layout.dart';
+import '../data/quiz_html.dart';
 import '../state/quiz_practice_state.dart';
 import '../state/quiz_session_controller.dart';
 import '../state/quiz_session_state.dart';
@@ -270,7 +272,7 @@ class _BackButton extends StatelessWidget {
 // 主体：题型 chip / 题干 / 选项 / 解析 / 上下一题按钮
 // ─────────────────────────────────────────────────────────────────────
 
-class _SessionBody extends StatelessWidget {
+class _SessionBody extends StatefulWidget {
   const _SessionBody({
     required this.state,
     required this.onSelect,
@@ -284,18 +286,43 @@ class _SessionBody extends StatelessWidget {
   final VoidCallback onNext;
 
   @override
+  State<_SessionBody> createState() => _SessionBodyState();
+}
+
+class _SessionBodyState extends State<_SessionBody> {
+  final ScrollController _scrollController = ScrollController();
+  int? _lastQuestionId;
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  /// 题目切换时把滚动条复位到顶部。否则上一题滑到底，新一题
+  /// 进来仍停在底，看起来就是一片"白屏"。
+  void _maybeResetScrollOnQuestionChange(int? newQuestionId) {
+    if (newQuestionId == _lastQuestionId) return;
+    _lastQuestionId = newQuestionId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (!_scrollController.hasClients) return;
+      // jumpTo 0；用 jumpTo 而不是 animateTo——题目切换是"跳变"，
+      // 不要带动画，免得用户看到上一题的内容滑出去。
+      _scrollController.jumpTo(0);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final question = state.currentQuestion;
+    final question = widget.state.currentQuestion;
+    _maybeResetScrollOnQuestionChange(question?.itemId);
+
     if (question == null) {
       return const Center(child: Text('暂无题目'));
     }
 
-    final questionHtmlStripped = _stripHtml(question.questionHtml);
-    final parseHtmlStripped = _stripHtml(question.parseHtml);
-
-    // 内容区做成可滚动；底部"上一题/下一题"按钮固定不动。这样题干/
-    // 选项/解析里嵌入的乐谱图片再高也不会撑爆页面。
     return Padding(
       padding: EdgeInsets.fromLTRB(ui(20), ui(12), ui(20), ui(20)),
       child: Column(
@@ -303,91 +330,134 @@ class _SessionBody extends StatelessWidget {
         children: [
           Expanded(
             child: SingleChildScrollView(
+              controller: _scrollController,
               physics: const ClampingScrollPhysics(),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _TypeChip(),
-                  SizedBox(height: ui(20)),
-                  // 题干：左侧"第 N 题"前缀 + 富文本（可能含 <img>、
-                  // <sup>/<sub> 等）。无富文本结构时退回纯 Text，避免
-                  // HtmlWidget 在空字符串下渲染一个空段落。
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '第${state.currentIndex + 1}题  ',
-                        style: TextStyle(
-                          color: const Color(0xFF0B081A),
-                          fontSize: ui(18),
-                          fontWeight: AppFont.w500,
-                          fontFamily: 'PingFang SC',
-                          height: 1.5,
-                        ),
-                      ),
-                      Expanded(
-                        child: _QuizHtml(
-                          html: question.questionHtml,
-                          fallbackText: questionHtmlStripped,
-                          textStyle: TextStyle(
-                            color: const Color(0xFF0B081A),
-                            fontSize: ui(18),
-                            fontWeight: AppFont.w500,
-                            fontFamily: 'PingFang SC',
-                            height: 1.5,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: ui(24)),
-                  _OptionsGrid(question: question, onSelect: onSelect),
-                  if (question.answered) ...[
-                    SizedBox(height: ui(28)),
-                    const Divider(height: 1, color: Color(0xFFF3F2F3)),
-                    SizedBox(height: ui(20)),
-                    _AnswerRow(question: question),
-                    SizedBox(height: ui(24)),
-                    Text(
-                      '题目解析',
-                      style: TextStyle(
-                        color: const Color(0xFF6D6B75),
-                        fontSize: ui(18),
-                        fontWeight: AppFont.w600,
-                        fontFamily: 'PingFang SC',
-                      ),
-                    ),
-                    SizedBox(height: ui(10)),
-                    if (parseHtmlStripped.isEmpty)
-                      Text(
-                        '暂无解析',
-                        style: TextStyle(
-                          color: const Color(0xFFB6B5BB),
-                          fontSize: ui(14),
-                          fontFamily: 'PingFang SC',
-                          height: 1.6,
-                        ),
-                      )
-                    else
-                      _QuizHtml(
-                        html: question.parseHtml,
-                        fallbackText: parseHtmlStripped,
-                        textStyle: TextStyle(
-                          color: const Color(0xFFB6B5BB),
-                          fontSize: ui(14),
-                          fontFamily: 'PingFang SC',
-                          height: 1.6,
-                        ),
-                      ),
-                  ],
-                ],
+              // ValueKey(itemId) 是这次重构最关键的一笔——题目
+              // ID 一变，_QuestionContent 整棵子树会被 Element 层
+              // unmount + remount，HtmlWidget / Image 等带内部状
+              // 态的 widget 全部新建，杜绝"上一题的字 / 图遗留
+              // 到这一题"。
+              child: _QuestionContent(
+                key: ValueKey<int>(question.itemId),
+                question: question,
+                questionNumber: widget.state.currentIndex + 1,
+                onSelect: widget.onSelect,
               ),
             ),
           ),
           SizedBox(height: ui(20)),
-          _NavButtons(onPrevious: onPrevious, onNext: onNext),
+          _NavButtons(
+            onPrevious: widget.onPrevious,
+            onNext: widget.onNext,
+          ),
         ],
       ),
+    );
+  }
+}
+
+/// 题目主体（题型 chip + 题干 + 选项 + 解析）。
+///
+/// 内部不持有任何状态——所有"切题需要 reset"的副作用都靠外层
+/// 给本 widget 传入的 `ValueKey(question.itemId)` 触发整棵子树
+/// 在 Element 层 unmount + remount。
+class _QuestionContent extends StatelessWidget {
+  const _QuestionContent({
+    super.key,
+    required this.question,
+    required this.questionNumber,
+    required this.onSelect,
+  });
+
+  final QuizQuestion question;
+  final int questionNumber;
+  final ValueChanged<int> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _TypeChip(),
+        SizedBox(height: ui(20)),
+        // 题干：左侧"第 N 题"前缀 + 富文本（可能含 <img>、
+        // <sup>/<sub> 等）。
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '第$questionNumber题  ',
+              style: TextStyle(
+                color: const Color(0xFF0B081A),
+                fontSize: ui(18),
+                fontWeight: AppFont.w500,
+                fontFamily: 'PingFang SC',
+                height: 1.5,
+              ),
+            ),
+            Expanded(
+              child: _QuizHtml(
+                html: question.questionHtml,
+                fallbackText: question.questionStripped,
+                hasMedia: question.questionHasMedia,
+                hasInlineRich: question.questionHasInlineRich,
+                textStyle: TextStyle(
+                  color: const Color(0xFF0B081A),
+                  fontSize: ui(18),
+                  fontWeight: AppFont.w500,
+                  fontFamily: 'PingFang SC',
+                  height: 1.5,
+                ),
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: ui(24)),
+        _OptionsGrid(question: question, onSelect: onSelect),
+        if (question.answered) ...[
+          SizedBox(height: ui(28)),
+          const Divider(height: 1, color: Color(0xFFF3F2F3)),
+          SizedBox(height: ui(20)),
+          _AnswerRow(question: question),
+          SizedBox(height: ui(24)),
+          Text(
+            '题目解析',
+            style: TextStyle(
+              color: const Color(0xFF6D6B75),
+              fontSize: ui(18),
+              fontWeight: AppFont.w600,
+              fontFamily: 'PingFang SC',
+            ),
+          ),
+          SizedBox(height: ui(10)),
+          if (question.parseStripped.isEmpty &&
+              !question.parseHasMedia &&
+              !question.parseHasInlineRich)
+            Text(
+              '暂无解析',
+              style: TextStyle(
+                color: const Color(0xFFB6B5BB),
+                fontSize: ui(14),
+                fontFamily: 'PingFang SC',
+                height: 1.6,
+              ),
+            )
+          else
+            _QuizHtml(
+              html: question.parseHtml,
+              fallbackText: question.parseStripped,
+              hasMedia: question.parseHasMedia,
+              hasInlineRich: question.parseHasInlineRich,
+              textStyle: TextStyle(
+                color: const Color(0xFFB6B5BB),
+                fontSize: ui(14),
+                fontFamily: 'PingFang SC',
+                height: 1.6,
+              ),
+            ),
+        ],
+      ],
     );
   }
 }
@@ -432,85 +502,6 @@ class _OptionsGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final letters = ['A', 'B', 'C', 'D'];
-
-    Widget option(int index) {
-      final letter = letters[index];
-      final rawHtml = index < question.options.length
-          ? question.options[index]
-          : '';
-      final stripped = _stripHtml(rawHtml);
-      final answered = question.answered;
-      final isCorrectOption = index == question.correctAnswer;
-      final isUserPick = index == question.userAnswer;
-      final showCorrect = answered && isCorrectOption;
-      final showWrong = answered && isUserPick && !isCorrectOption;
-
-      Color bg = const Color(0xFFF5F6FA);
-      Color textColor = const Color(0xFF0B081A);
-      Widget? trailing;
-      if (showCorrect) {
-        bg = const Color(0xFFE8F5EC);
-        textColor = const Color(0xFF1AAB5B);
-        trailing = Icon(Icons.check_rounded, color: textColor, size: ui(20));
-      } else if (showWrong) {
-        bg = const Color(0xFFFCEBEB);
-        textColor = const Color(0xFFE0494B);
-        trailing = Icon(Icons.close_rounded, color: textColor, size: ui(20));
-      }
-
-      return Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(ui(8)),
-          onTap: answered ? null : () => onSelect(index),
-          child: Container(
-            // 移除固定 44 高度，改成最低 44；选项里出现图片时让卡片
-            // 自适应内容（垂直居中）。
-            constraints: BoxConstraints(minHeight: ui(44)),
-            padding: EdgeInsets.symmetric(
-              horizontal: ui(20),
-              vertical: ui(8),
-            ),
-            decoration: BoxDecoration(
-              color: bg,
-              borderRadius: BorderRadius.circular(ui(8)),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                SizedBox(
-                  width: ui(22),
-                  child: Text(
-                    '$letter.',
-                    style: TextStyle(
-                      color: textColor,
-                      fontSize: ui(16),
-                      fontWeight: AppFont.w600,
-                      fontFamily: 'PingFang SC',
-                    ),
-                  ),
-                ),
-                SizedBox(width: ui(9)),
-                Expanded(
-                  child: _QuizHtml(
-                    html: rawHtml,
-                    fallbackText: stripped,
-                    textStyle: TextStyle(
-                      color: textColor,
-                      fontSize: ui(16),
-                      fontFamily: 'PingFang SC',
-                    ),
-                  ),
-                ),
-                if (trailing != null) ...[SizedBox(width: ui(8)), trailing],
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
     return Column(
       children: [
         // crossAxisAlignment.stretch 让每行的两个选项高度对齐——
@@ -519,9 +510,9 @@ class _OptionsGrid extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(child: option(0)),
+              Expanded(child: _Option(question: question, index: 0, onSelect: onSelect)),
               SizedBox(width: ui(20)),
-              Expanded(child: option(1)),
+              Expanded(child: _Option(question: question, index: 1, onSelect: onSelect)),
             ],
           ),
         ),
@@ -530,13 +521,126 @@ class _OptionsGrid extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(child: option(2)),
+              Expanded(child: _Option(question: question, index: 2, onSelect: onSelect)),
               SizedBox(width: ui(20)),
-              Expanded(child: option(3)),
+              Expanded(child: _Option(question: question, index: 3, onSelect: onSelect)),
             ],
           ),
         ),
       ],
+    );
+  }
+}
+
+/// 单个选项卡（A/B/C/D 之一）。
+///
+/// 拆成独立 widget + key（itemId+index）让 Flutter 在题目切换 /
+/// 选项内容变化时彻底走 unmount → mount，避免 Element 复用把上
+/// 一题选项里的 HtmlWidget DOM / 图片留给新题用。
+class _Option extends StatelessWidget {
+  _Option({
+    required this.question,
+    required this.index,
+    required this.onSelect,
+  }) : super(
+         key: ValueKey<String>(
+           'opt-${question.itemId}-$index',
+         ),
+       );
+
+  final QuizQuestion question;
+  final int index;
+  final ValueChanged<int> onSelect;
+
+  static const _letters = <String>['A', 'B', 'C', 'D'];
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final letter = _letters[index];
+    final rawHtml = index < question.options.length
+        ? question.options[index]
+        : '';
+    final stripped = index < question.optionsStripped.length
+        ? question.optionsStripped[index]
+        : '';
+    final hasMedia = index < question.optionsHasMedia.length
+        ? question.optionsHasMedia[index]
+        : false;
+    final hasInlineRich = index < question.optionsHasInlineRich.length
+        ? question.optionsHasInlineRich[index]
+        : false;
+
+    final answered = question.answered;
+    final isCorrectOption = index == question.correctAnswer;
+    final isUserPick = index == question.userAnswer;
+    final showCorrect = answered && isCorrectOption;
+    final showWrong = answered && isUserPick && !isCorrectOption;
+
+    Color bg = const Color(0xFFF5F6FA);
+    Color textColor = const Color(0xFF0B081A);
+    Widget? trailing;
+    if (showCorrect) {
+      bg = const Color(0xFFE8F5EC);
+      textColor = const Color(0xFF1AAB5B);
+      trailing = Icon(Icons.check_rounded, color: textColor, size: ui(20));
+    } else if (showWrong) {
+      bg = const Color(0xFFFCEBEB);
+      textColor = const Color(0xFFE0494B);
+      trailing = Icon(Icons.close_rounded, color: textColor, size: ui(20));
+    }
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(ui(8)),
+        onTap: answered ? null : () => onSelect(index),
+        child: Container(
+          // 最小 44，让纯图片选项可以撑大；IntrinsicHeight 在外面
+          // 保证同一行两个选项卡片等高。
+          constraints: BoxConstraints(minHeight: ui(44)),
+          padding: EdgeInsets.symmetric(
+            horizontal: ui(20),
+            vertical: ui(8),
+          ),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(ui(8)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: ui(22),
+                child: Text(
+                  '$letter.',
+                  style: TextStyle(
+                    color: textColor,
+                    fontSize: ui(16),
+                    fontWeight: AppFont.w600,
+                    fontFamily: 'PingFang SC',
+                  ),
+                ),
+              ),
+              SizedBox(width: ui(9)),
+              Expanded(
+                child: _QuizHtml(
+                  html: rawHtml,
+                  fallbackText: stripped,
+                  hasMedia: hasMedia,
+                  hasInlineRich: hasInlineRich,
+                  textStyle: TextStyle(
+                    color: textColor,
+                    fontSize: ui(16),
+                    fontFamily: 'PingFang SC',
+                  ),
+                ),
+              ),
+              if (trailing != null) ...[SizedBox(width: ui(8)), trailing],
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -937,48 +1041,55 @@ class _RecommendedSwitchCard extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// 工具
-// ─────────────────────────────────────────────────────────────────────
-
-String _stripHtml(String html) {
-  if (html.isEmpty) return '';
-  return html
-      .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
-      .replaceAll(RegExp(r'</p>', caseSensitive: false), '\n')
-      .replaceAll(RegExp(r'<[^>]+>'), '')
-      .replaceAll('&nbsp;', ' ')
-      .replaceAll('&amp;', '&')
-      .replaceAll('&lt;', '<')
-      .replaceAll('&gt;', '>')
-      .trim();
-}
-
-// ─────────────────────────────────────────────────────────────────────
 // 富文本渲染：题干 / 选项 / 解析共用一套
 // ─────────────────────────────────────────────────────────────────────
+//
+// 工具函数 stripHtmlToText / htmlHasMedia / htmlHasInlineRich 抽到
+// `data/quiz_html.dart`，并在 QuizQuestion 构造时算一次，UI 层只
+// 消费现成的 fallbackText / hasMedia / hasInlineRich 三个字段。
 
 /// 题干、选项、解析的富文本渲染入口。
 ///
-/// 后端这些字段都是富文本编辑器吐出来的 HTML，常见标签包括
-/// `<p>`、`<br>`、`<strong>`、`<em>`、`<sub>`、`<sup>`、`<img>` 等。
-/// 项目里已经引入 `flutter_widget_from_html_core`，但它的 _core_ 包
-/// **不会**自动渲染 `<img>`，所以这里：
-/// - 走 [HtmlWidget]，文本/段落/上下标交给它默认处理；
-/// - 用 `customWidgetBuilder` 拦截 `<img>`，自己用 [Image.network]
-///   渲染成响应式图片，按容器最大宽度自适应缩放，保持比例；
-/// - 富文本拆出来全是空白时，回退到纯文本（避免渲染一个空段落）。
+/// 后端字段是富文本编辑器吐出来的 HTML，常见结构有 `<p>`、`<br>`、
+/// `<strong>`、`<em>`、`<sub>`、`<sup>`、`<img>`、`<div>` 等。这
+/// 里按内容形态分发到三条最合适的渲染管线：
+///
+/// 1. **纯文本**（无 `<img>`/无 inline rich）→ `Text(fallbackText)`。
+///    最便宜，绕开 HtmlWidget 对 `<p>` 块级 margin 带来的"看似
+///    空白"问题。
+/// 2. **图文混排**（只有 `<img>`，可能搭配文字）→ 自定义 inline
+///    span 解析 → `Text.rich`，让"`[图]文字`"在同一行流动。
+///    `HtmlWidget.customWidgetBuilder` 永远把返回的 widget 渲染
+///    成块级，会把图片独占一行，所以这种情况必须自己解析。
+/// 3. **真正的富文本**（含 `<sup>`/`<sub>`/`<strong>` 或 `<table>`/
+///    `<svg>`/`<iframe>` 等复杂结构）→ `HtmlWidget`，并用
+///    `customWidgetBuilder` 接管 `<img>` 渲染成响应式图片。
+///
+/// 题目切换时的"残留"问题统一由 `_SessionBody` 那边给本 widget
+/// 的祖先 `_QuestionContent` 加的 `ValueKey(itemId)` 兜底——
+/// itemId 一变整个子树 unmount，HtmlWidget 内部的 DOM 缓存 /
+/// Image 的 ImageStream 都不会被复用。
 class _QuizHtml extends StatelessWidget {
   const _QuizHtml({
     required this.html,
     required this.fallbackText,
+    required this.hasMedia,
+    required this.hasInlineRich,
     required this.textStyle,
   });
 
   /// 后端原始 HTML 字符串。
   final String html;
 
-  /// 用 [_stripHtml] 抠出来的纯文本，仅作 fallback / 空判定用。
+  /// 预 strip 出来的纯文本，HTML 走非 rich 分支 / 空判定时用。
   final String fallbackText;
+
+  /// 是否含图片 / 表格 / 视频 / iframe 等媒体（构造 QuizQuestion
+  /// 时就算好的）。
+  final bool hasMedia;
+
+  /// 是否含 inline 富文本（`<sup>`/`<sub>`/`<strong>`/`<br>` 等）。
+  final bool hasInlineRich;
 
   /// 普通文本样式（颜色 / 字号 / 字体）。
   final TextStyle textStyle;
@@ -986,15 +1097,35 @@ class _QuizHtml extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final trimmed = html.trim();
-    // HTML 整体为空 / 只有 `<p></p>` 之类的空段落 → 退回纯文本。
-    if (trimmed.isEmpty || fallbackText.isEmpty) {
+    if (trimmed.isEmpty) {
       return Text(fallbackText, style: textStyle);
     }
+
+    // ① 纯文本快路径。
+    if (!hasMedia && !hasInlineRich) {
+      return Text(fallbackText, style: textStyle);
+    }
+
+    // ② 含 inline rich 或非 img 的复杂 media（table/svg/...）→
+    //    走 HtmlWidget，customWidgetBuilder 接管 img。
+    if (hasInlineRich || _hasNonImgMedia(trimmed)) {
+      return _buildHtmlWidget(trimmed);
+    }
+
+    // ③ 只有 <img> + 文字 → 自定义 inline span 解析，让图文同行。
+    final spans = _parseInlineSpans(trimmed, textStyle);
+    if (spans.isEmpty) {
+      return Text(fallbackText, style: textStyle);
+    }
+    return Text.rich(TextSpan(children: spans), style: textStyle);
+  }
+
+  Widget _buildHtmlWidget(String trimmed) {
     return HtmlWidget(
       trimmed,
       textStyle: textStyle,
-      // 关闭默认的 ext renderer，直接走 `customWidgetBuilder` 来
-      // 接管 <img>，避免 _core 包对 img 的占位/默认行为。
+      // 关闭默认 ext renderer，自己接管 <img>，避免 _core 包对
+      // img 的占位 / 默认行为。
       customWidgetBuilder: (element) {
         if (element.localName != 'img') {
           return null;
@@ -1015,12 +1146,212 @@ class _QuizHtml extends StatelessWidget {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// inline span 解析：把"<p><img/>文字</p>"这种简单图文混排 HTML
+// 拆成 `List<InlineSpan>`，喂给 `Text.rich` 实现真正的图文同行。
+//
+// 不试图覆盖所有 HTML（那是 HtmlWidget 的事），只接管"纯文本 +
+// `<p>` / `<div>` / `<br>` / `<img>`"这套最常见的形态——后端的
+// 题目 / 选项 / 解析里 90%+ 都是这种结构。
+// ─────────────────────────────────────────────────────────────────────
+
+final RegExp _inlineImgRegExp = RegExp(
+  r'<img\b[^>]*?/?>',
+  caseSensitive: false,
+);
+final RegExp _inlineBrRegExp = RegExp(r'<br\s*/?>', caseSensitive: false);
+final RegExp _inlineBlockEndRegExp = RegExp(
+  r'</(p|div|li|tr|h[1-6])>',
+  caseSensitive: false,
+);
+final RegExp _inlineBlockStartRegExp = RegExp(
+  r'<(p|div|li|tr|h[1-6])\b[^>]*>',
+  caseSensitive: false,
+);
+final RegExp _nonImgMediaRegExp = RegExp(
+  r'<(svg|video|audio|iframe|table)\b',
+  caseSensitive: false,
+);
+final RegExp _imgAttrSrcRegExp = RegExp(
+  r'''src\s*=\s*(['"])(.*?)\1''',
+  caseSensitive: false,
+);
+final RegExp _imgAttrWidthRegExp = RegExp(
+  r'''width\s*=\s*(['"])([^'"]*)\1''',
+  caseSensitive: false,
+);
+final RegExp _imgAttrHeightRegExp = RegExp(
+  r'''height\s*=\s*(['"])([^'"]*)\1''',
+  caseSensitive: false,
+);
+
+bool _hasNonImgMedia(String html) {
+  return _nonImgMediaRegExp.hasMatch(html);
+}
+
+enum _InlineTokenKind { img, br, blockEnd, blockStart }
+
+class _InlineToken {
+  const _InlineToken(this.kind, this.start, this.end, this.match);
+  final _InlineTokenKind kind;
+  final int start;
+  final int end;
+  final String match;
+}
+
+List<InlineSpan> _parseInlineSpans(String html, TextStyle textStyle) {
+  final tokens = <_InlineToken>[];
+  for (final m in _inlineImgRegExp.allMatches(html)) {
+    tokens.add(_InlineToken(_InlineTokenKind.img, m.start, m.end, m.group(0)!));
+  }
+  for (final m in _inlineBrRegExp.allMatches(html)) {
+    tokens.add(_InlineToken(_InlineTokenKind.br, m.start, m.end, m.group(0)!));
+  }
+  for (final m in _inlineBlockEndRegExp.allMatches(html)) {
+    tokens.add(
+      _InlineToken(_InlineTokenKind.blockEnd, m.start, m.end, m.group(0)!),
+    );
+  }
+  for (final m in _inlineBlockStartRegExp.allMatches(html)) {
+    tokens.add(
+      _InlineToken(_InlineTokenKind.blockStart, m.start, m.end, m.group(0)!),
+    );
+  }
+  tokens.sort((a, b) => a.start.compareTo(b.start));
+
+  final spans = <InlineSpan>[];
+  final pendingText = StringBuffer();
+
+  void flushText() {
+    if (pendingText.isEmpty) return;
+    final decoded = decodeHtmlEntities(pendingText.toString());
+    pendingText.clear();
+    if (decoded.isEmpty) return;
+    spans.add(TextSpan(text: decoded, style: textStyle));
+  }
+
+  void appendNewline() {
+    flushText();
+    if (spans.isEmpty) return;
+    final last = spans.last;
+    if (last is TextSpan && (last.text ?? '').endsWith('\n')) return;
+    spans.add(const TextSpan(text: '\n'));
+  }
+
+  var cursor = 0;
+  for (final tok in tokens) {
+    if (tok.start < cursor) continue; // 罕见的标签区间重叠，跳过
+    if (tok.start > cursor) {
+      pendingText.write(html.substring(cursor, tok.start));
+    }
+    cursor = tok.end;
+
+    switch (tok.kind) {
+      case _InlineTokenKind.img:
+        flushText();
+        final src = _imgAttrSrcRegExp.firstMatch(tok.match)?.group(2)?.trim();
+        if (src != null && src.isNotEmpty) {
+          final w = double.tryParse(
+            _imgAttrWidthRegExp.firstMatch(tok.match)?.group(2) ?? '',
+          );
+          final h = double.tryParse(
+            _imgAttrHeightRegExp.firstMatch(tok.match)?.group(2) ?? '',
+          );
+          spans.add(
+            WidgetSpan(
+              alignment: PlaceholderAlignment.middle,
+              child: _InlineNetworkImage(
+                url: src,
+                designWidth: w,
+                designHeight: h,
+              ),
+            ),
+          );
+        }
+      case _InlineTokenKind.br:
+      case _InlineTokenKind.blockEnd:
+        appendNewline();
+      case _InlineTokenKind.blockStart:
+        // 开标签不引入分隔，纯粹忽略。
+        break;
+    }
+  }
+  if (cursor < html.length) {
+    pendingText.write(html.substring(cursor));
+  }
+  flushText();
+
+  // 去掉首尾的纯空白 TextSpan（包括首尾 "\n"）。
+  bool isBlank(InlineSpan s) =>
+      s is TextSpan && (s.text ?? '').trim().isEmpty;
+  while (spans.isNotEmpty && isBlank(spans.first)) {
+    spans.removeAt(0);
+  }
+  while (spans.isNotEmpty && isBlank(spans.last)) {
+    spans.removeLast();
+  }
+  return spans;
+}
+
+/// 内联用的网络图片——专门给 `WidgetSpan` 当孩子用，不带 Align /
+/// FittedBox，让它能跟周围文字一起按 baseline 走流式布局。
+class _InlineNetworkImage extends StatelessWidget {
+  const _InlineNetworkImage({
+    required this.url,
+    this.designWidth,
+    this.designHeight,
+  });
+
+  final String url;
+  final double? designWidth;
+  final double? designHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    final w = designWidth;
+    final h = designHeight;
+    return CachedNetworkImage(
+      imageUrl: url,
+      cacheKey: url,
+      width: w,
+      height: h,
+      fit: BoxFit.contain,
+      fadeInDuration: Duration.zero,
+      fadeOutDuration: Duration.zero,
+      placeholder: (context, _) =>
+          SizedBox(width: w ?? 40, height: h ?? 40),
+      errorWidget: (context, _, _) => Container(
+        width: w ?? 60,
+        height: h ?? 60,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: const Color(0xFFF5F6FA),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: const Icon(
+          Icons.broken_image_rounded,
+          color: Color(0xFFC9C6D8),
+        ),
+      ),
+    );
+  }
+}
+
 /// 把后端给的 `<img src=".." width="W" height="H" />` 渲染成
-/// 自适应宽度的网络图片：
-/// - 设计尺寸 ≤ 容器最大宽度：按设计尺寸渲染（保留 1.0 视觉）；
-/// - 设计尺寸 > 容器最大宽度：按容器宽度等比缩放，避免越界；
-/// - 加载失败时退化成一个灰色 broken image 占位图，不会让整张题目
-///   崩掉。
+/// 响应式网络图片：
+/// - 设计尺寸 ≤ 容器最大宽度：按设计尺寸 1:1 渲染；
+/// - 设计尺寸 > 容器最大宽度：`FittedBox(scaleDown)` 自动等比缩放；
+/// - 走 [CachedNetworkImage]：磁盘缓存命中时秒出，同一 URL 同 cacheKey
+///   避免 image stream 复用时出现"前一帧旧图"残影；
+/// - 加载失败退化成灰色 broken image 占位，不会让整张题目崩掉。
+///
+/// ⚠️ 关键约束：本 widget 的祖先链上有 `IntrinsicHeight`（用于
+/// 让 A/B/C/D 同一行两个卡片等高）。`IntrinsicHeight` 会向所有子
+/// 孙查询 intrinsic 尺寸，**绝不能**在这里用 `LayoutBuilder`——
+/// `LayoutBuilder` 不支持 intrinsic 查询，会直接抛断言导致整页
+/// 白屏（典型表现：一行内一个文本一个图片选项时整页空白）。
+/// 当前实现链：`Align → FittedBox(scaleDown) → SizedBox(w,h) → CachedNetworkImage`
+/// 全部 intrinsic-friendly。
 class _ResponsiveNetworkImage extends StatelessWidget {
   const _ResponsiveNetworkImage({
     required this.url,
@@ -1034,45 +1365,51 @@ class _ResponsiveNetworkImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final maxW = constraints.maxWidth.isFinite
-            ? constraints.maxWidth
-            : MediaQuery.sizeOf(context).width;
+    final w = designWidth;
+    final h = designHeight;
 
-        double width = designWidth ?? maxW;
-        double? height = designHeight;
-        if (width > maxW) {
-          if (designWidth != null &&
-              designHeight != null &&
-              designWidth! > 0) {
-            height = designHeight! * (maxW / designWidth!);
-          } else {
-            height = null;
-          }
-          width = maxW;
-        }
+    final image = CachedNetworkImage(
+      imageUrl: url,
+      cacheKey: url,
+      width: w,
+      height: h,
+      fit: BoxFit.contain,
+      fadeInDuration: Duration.zero,
+      fadeOutDuration: Duration.zero,
+      placeholder: (context, _) => SizedBox(
+        width: w ?? 40,
+        height: h ?? 40,
+      ),
+      errorWidget: (context, _, _) => Container(
+        width: w ?? 60,
+        height: h ?? 60,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: const Color(0xFFF5F6FA),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: const Icon(
+          Icons.broken_image_rounded,
+          color: Color(0xFFC9C6D8),
+        ),
+      ),
+    );
 
-        return Image.network(
-          url,
-          width: width,
-          height: height,
-          fit: BoxFit.contain,
-          errorBuilder: (context, error, stackTrace) => Container(
-            width: width,
-            height: height ?? 60,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: const Color(0xFFF5F6FA),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: const Icon(
-              Icons.broken_image_rounded,
-              color: Color(0xFFC9C6D8),
-            ),
-          ),
-        );
-      },
+    // 没有设计尺寸：直接交给图片自身的 intrinsic 尺寸 + 父约束
+    // 控制大小，左对齐避免被居中拉伸。
+    if (w == null || h == null || w <= 0 || h <= 0) {
+      return Align(alignment: Alignment.centerLeft, child: image);
+    }
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        // SizedBox 给 FittedBox 一个明确的"原始尺寸"，FittedBox
+        // 才能在父容器变窄时按比例 scaleDown。
+        child: SizedBox(width: w, height: h, child: image),
+      ),
     );
   }
 }

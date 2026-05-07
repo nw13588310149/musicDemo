@@ -51,6 +51,14 @@ class AppTheme {
         circularTrackColor: Color(0x1A8741FF),
         linearTrackColor: Color(0x1A8741FF),
       ),
+      // 全局输入框光标 / 文本选区配色：所有未显式指定 cursorColor 的
+      // TextField / TextFormField 都会走品牌紫；选区色与选区把手保持同色系。
+      // 备注：cursorHeight 不在 ThemeData 暴露，需要在调用点单独设置。
+      textSelectionTheme: TextSelectionThemeData(
+        cursorColor: brandColor,
+        selectionColor: brandColor.withValues(alpha: 0.22),
+        selectionHandleColor: brandColor,
+      ),
       filledButtonTheme: FilledButtonThemeData(
         style: ButtonStyle(
           minimumSize: const WidgetStatePropertyAll(Size.fromHeight(45)),

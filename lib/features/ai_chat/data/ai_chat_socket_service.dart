@@ -157,11 +157,30 @@ class AiChatSocketService {
     if (type != 1 && type != 10014) {
       return false;
     }
-    return json['content'] is String &&
-        json['replyId'] != null &&
-        json['role'] == null &&
-        json['sessionId'] == null &&
-        json['chatSessionId'] == null;
+    final hasStringContent = json['content'] is String;
+    if (!hasStringContent) {
+      return false;
+    }
+
+    // 流式增量帧典型形态：type ∈ {1, 10014}，content 为字符串。
+    //
+    // 历史教训：
+    // 1) 旧版要求 `sessionId == null && role == null`，但服务端在「新建会话
+    //    首条回复」上每片都带 sessionId，结果首轮整帧被误判到 full 分支后立刻
+    //    `_finishAiStream`，后续增量被丢弃 → 表现为「没有打字效果」。
+    // 2) 改成「必须带 replyId」之后，仍然有部分场景（首条回复、断线重连后的
+    //    第一片、deepseek 流的中段恢复包）服务端不下发 replyId，分片再次落入
+    //    full 分支，又出现「结束时一次渲染」。
+    //
+    // 因此这里采用最宽松、最符合 web 1.0 实际行为的规则：
+    // - type == 1：DeepSeek/小艺同学常规流式增量 type，**只要 content 是字符串
+    //   就当作流式分片**，不管 replyId 是否存在；
+    // - type == 10014：协议里同时承担「流式分片」与「最终 envelope」两种语义，
+    //   为了避免把 envelope 全量帧也当成 delta 累加，这里仍要求带 replyId。
+    if (type == 1) {
+      return true;
+    }
+    return json['replyId'] != null;
   }
 
   bool _isAssistantFullPayload(Map<String, dynamic> json, int? type) {

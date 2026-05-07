@@ -687,7 +687,8 @@ class _RosterSearchFieldState extends State<_RosterSearchField> {
               controller: _ctrl,
               onChanged: widget.onChanged,
               cursorColor: _kPurple,
-              cursorWidth: ui(1.5),
+              cursorWidth: 1.5,
+              cursorHeight: ui(16),
               style: TextStyle(
                 fontSize: ui(14),
                 color: _kTextDark,

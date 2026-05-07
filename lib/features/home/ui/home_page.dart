@@ -414,7 +414,7 @@ class _HomePageViewState extends ConsumerState<_HomePageView> {
   void _onQuickActionTap(HomeQuickAction action) {
     // 模考 / 商城 暂未实装，统一走 2.0 通用单按钮提示弹窗（"暂未开放"）。
     if (action.route == RoutePaths.mock || action.route == RoutePaths.aiSong) {
-      showInfoDialog(context: context, title: '功能开发中，敬请期待');
+      showInfoDialog(context: context, title: '功能暂未开放');
       return;
     }
     Navigator.pushNamed(

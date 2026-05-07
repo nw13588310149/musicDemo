@@ -698,6 +698,9 @@ Future<void> _showPublishNoticeDialog(
                 maxLines: null,
                 expands: true,
                 textAlignVertical: TextAlignVertical.top,
+                cursorColor: _kPurple,
+                cursorWidth: 1.5,
+                cursorHeight: ui(16),
                 style: TextStyle(
                   fontSize: ui(14),
                   color: _kTextDark,
@@ -2091,6 +2094,9 @@ class _StudentsHeader extends StatelessWidget {
                 Expanded(
                   child: TextField(
                     onChanged: onQueryChanged,
+                    cursorColor: _kPurple,
+                    cursorWidth: 1.5,
+                    cursorHeight: ui(16),
                     decoration: InputDecoration(
                       hintText: '搜索姓名、学号、手机、宿舍、家长',
                       hintStyle: TextStyle(

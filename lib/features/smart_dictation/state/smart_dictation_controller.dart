@@ -574,9 +574,11 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
     if (_cueInFlight || session.finished) {
       return;
     }
-    final shouldPlayStandard =
-        session.track == SmartDictationTrack.absolute &&
-        state.activeConfig.standardToneEnabled;
+    // 与 the-road-of-music/pages/SmartDictation/answer{,2,3}.vue 对齐：
+    // 三个赛道（绝对音感 / 音程识别 / 和弦识别）启用标准音时，
+    // 第 1 秒先吹 a1（科学音高 A4）作为参考音，第 4 秒再播放本题音频；
+    // 未启用标准音则直接在第 1 秒播放本题音频。
+    final shouldPlayStandard = state.activeConfig.standardToneEnabled;
 
     if (!_playedFirstSecondCue && _questionElapsedMillis >= 1000) {
       _playedFirstSecondCue = true;
@@ -939,25 +941,49 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
     required String minNote,
     required String maxNote,
   }) {
-    final range = _resolveCanonicalRange(
-      minNote: minNote,
-      maxNote: maxNote,
-      basicOnly: basicOnly,
-    );
-    if (range.length < 3 || intervals.isEmpty) {
+    if (intervals.isEmpty) {
+      return const <String>[];
+    }
+
+    // 和弦构建要按半音步长来定位三个音；basicOnly（仅基本音）应只限制根
+    // 音的取值范围，而不是把整张半音表压缩成自然音表 —— 否则 [0, 4, 7]
+    // 会被误用作「根上跨 4 个自然音」，得到的就不是大三和弦了。
+    // 这与 the-road-of-music/pages/SmartDictation/answer3.vue 中的行为一致：
+    // playInit 过滤的是低音候选，上方两个音直接来自和弦表的半音映射。
+    final all = _canonicalOrder;
+    final minCanonical = SmartDictationAudioEngine.canonicalFromToken(minNote);
+    final maxCanonical = SmartDictationAudioEngine.canonicalFromToken(maxNote);
+    final start = minCanonical.isEmpty ? 0 : all.indexOf(minCanonical);
+    final end = maxCanonical.isEmpty
+        ? all.length - 1
+        : all.indexOf(maxCanonical);
+    final safeStart = start < 0 ? 0 : start;
+    final safeEnd = end < 0 ? all.length - 1 : end;
+    if (safeStart > safeEnd) {
       return const <String>[];
     }
 
     final maxInterval = intervals.reduce(max);
-    final maxRoot = range.length - 1 - maxInterval;
-    if (maxRoot < 0) {
+    final upperBound = safeEnd - maxInterval;
+    if (upperBound < safeStart) {
       return const <String>[];
     }
 
-    final rootIndex = _random.nextInt(maxRoot + 1);
+    final candidates = <int>[];
+    for (var i = safeStart; i <= upperBound; i++) {
+      if (basicOnly && all[i].contains('#')) {
+        continue;
+      }
+      candidates.add(i);
+    }
+    if (candidates.isEmpty) {
+      return const <String>[];
+    }
+
+    final rootIndex = candidates[_random.nextInt(candidates.length)];
     final notes = <String>[];
     for (final interval in intervals) {
-      notes.add(range[rootIndex + interval]);
+      notes.add(all[rootIndex + interval]);
     }
     return notes;
   }
@@ -1093,17 +1119,20 @@ const Map<String, int> _intervalSemitoneMap = <String, int>{
   '纯八度': 12,
 };
 
+// 半音步长，对齐 the-road-of-music/pages/SmartDictation/data2.js 中的
+// dataAll[type].s1（在 [F3..D5] 低音上记录的实际音高）。前四个为
+// 原位三和弦，「六」为第一转位、「四六」为第二转位。
 const Map<String, List<int>> _chordIntervalMap = <String, List<int>>{
   '大三和弦': <int>[0, 4, 7],
   '小三和弦': <int>[0, 3, 7],
   '减三和弦': <int>[0, 3, 6],
   '增三和弦': <int>[0, 4, 8],
-  '大六和弦': <int>[0, 4, 9],
-  '小六和弦': <int>[0, 3, 9],
-  '减六和弦': <int>[0, 3, 8],
+  '大六和弦': <int>[0, 3, 8],
+  '小六和弦': <int>[0, 4, 9],
+  '减六和弦': <int>[0, 3, 9],
   '大四六和弦': <int>[0, 5, 9],
   '小四六和弦': <int>[0, 5, 8],
-  '减四六和弦': <int>[0, 5, 7],
+  '减四六和弦': <int>[0, 6, 9],
 };
 
 const List<String> _canonicalOrder = <String>[

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../data/quiz_html.dart';
 import 'quiz_practice_state.dart';
 
 /// 三级页路由参数：从二级页携带的 practice 信息。
@@ -66,17 +67,37 @@ class QuizSessionPageArgs {
 }
 
 /// 单道题目数据。
+///
+/// 富文本字段（`*Html`）来自后端，渲染层用；对应的纯文本
+/// （`*Stripped`）+ HTML 形态布尔（`*HasMedia` / `*HasInlineRich`）
+/// 在构造时算一次，之后跨 build / 跨题切换都不再重新 strip，
+/// 既省 CPU 也避免"字符串还没更新到新题"的中间帧。
 @immutable
 class QuizQuestion {
-  const QuizQuestion({
+  QuizQuestion({
     required this.itemId,
     required this.questionHtml,
-    required this.options,
+    required List<String> options,
     required this.correctAnswer,
     required this.parseHtml,
     required this.userAnswer,
     required this.status,
-  });
+  }) : options = List<String>.unmodifiable(options),
+       questionStripped = stripHtmlToText(questionHtml),
+       parseStripped = stripHtmlToText(parseHtml),
+       optionsStripped = List<String>.unmodifiable(
+         options.map(stripHtmlToText),
+       ),
+       questionHasMedia = htmlHasMedia(questionHtml),
+       questionHasInlineRich = htmlHasInlineRich(questionHtml),
+       parseHasMedia = htmlHasMedia(parseHtml),
+       parseHasInlineRich = htmlHasInlineRich(parseHtml),
+       optionsHasMedia = List<bool>.unmodifiable(
+         options.map(htmlHasMedia),
+       ),
+       optionsHasInlineRich = List<bool>.unmodifiable(
+         options.map(htmlHasInlineRich),
+       );
 
   final int itemId;
 
@@ -95,6 +116,17 @@ class QuizQuestion {
 
   /// 0=未做, 1=做对, 2=做错。
   final int status;
+
+  // ── 预计算字段（构造时一次性求值，跨题切换永远是新对象）────────
+  final String questionStripped;
+  final String parseStripped;
+  final List<String> optionsStripped;
+  final bool questionHasMedia;
+  final bool questionHasInlineRich;
+  final bool parseHasMedia;
+  final bool parseHasInlineRich;
+  final List<bool> optionsHasMedia;
+  final List<bool> optionsHasInlineRich;
 
   bool get answered => status != 0;
 

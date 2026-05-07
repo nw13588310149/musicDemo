@@ -21,6 +21,7 @@ class CoursewareInlinePreview extends StatefulWidget {
     super.key,
     required this.url,
     this.placeholder,
+    this.authToken = '',
   });
 
   final String url;
@@ -28,6 +29,11 @@ class CoursewareInlinePreview extends StatefulWidget {
   /// 当 URL 为空时展示的占位 widget（一般传一个空状态）。Web 实现不会
   /// 在 URL 非空时使用它。
   final Widget? placeholder;
+
+  /// 后端鉴权 token（`app-token` 头）。Web 端走浏览器同源 / iframe 直
+  /// 链，文件 URL 通常本身就是公开静态资源，不需要附加 header；保留
+  /// 这个字段只是为了与原生实现的签名保持一致。
+  final String authToken;
 
   @override
   State<CoursewareInlinePreview> createState() =>

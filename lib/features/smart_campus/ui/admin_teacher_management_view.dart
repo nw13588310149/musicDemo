@@ -849,6 +849,8 @@ class _FilterRowState extends State<_FilterRow> {
                   controller: _searchCtrl,
                   onChanged: widget.onSearchChanged,
                   cursorColor: _kPurple,
+                  cursorWidth: 1.5,
+                  cursorHeight: ui(16),
                   style: TextStyle(
                     fontSize: ui(14),
                     height: 1.2,

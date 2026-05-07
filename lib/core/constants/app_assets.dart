@@ -136,6 +136,11 @@ abstract final class AppAssets {
   static const homeIcon8 = 'assets/images/home/homeIcon8.png';
   static const homeIcon9 = 'assets/images/home/homeIcon9.png';
   static const homeIcon10 = 'assets/images/home/homeIcon10.png';
+  // 用户菜单弹层图标（地区 / 资料修改 / 退出登录）
+  static const homeUserMenuRegion = 'assets/images/home/1.png';
+  static const homeUserMenuProfile = 'assets/images/home/2.png';
+  static const homeUserMenuLogout = 'assets/images/home/3.png';
+
   // 首页九宫格新图标 home1.png ~ home9.png
   static const homeBtn1 = 'assets/images/home/home1.png';
   static const homeBtn2 = 'assets/images/home/home2.png';
@@ -215,7 +220,7 @@ abstract final class AppAssets {
   static const aiChatMascot = 'assets/images/aichat/qiu.gif';
   static const aiChatV2IntroLogo = 'assets/images/aichat/v2/ai_intro_logo.png';
   // 小艺同学欢迎区头像：单图自带渐变背景与阴影，直接铺成 52×52
-  static const aiChatXiaoYiIcon = 'assets/images/home/icon.png';
+  static const aiChatXiaoYiIcon = 'assets/images/aichat/qiu.gif';
   // 效率工具卡背景图（与原渐变同色调，直接平铺即可）
   static const aiChatToolCardBg = 'assets/images/home/aibg.png';
   static const aiChatV2ToolAnalyze =

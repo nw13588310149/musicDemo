@@ -37,6 +37,8 @@ class AuthInputField extends StatelessWidget {
         inputFormatters: inputFormatters,
         textInputAction: textInputAction,
         cursorColor: const Color(0xFF8741FF),
+        cursorWidth: 1.5,
+        cursorHeight: 16,
         style: const TextStyle(
           fontSize: 14,
           height: 1.2,

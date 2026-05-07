@@ -578,21 +578,20 @@ class AiChatController extends StateNotifier<AiChatState> {
       return false;
     }
     final sid = _extractWsSessionId(json);
-    if (sid != null && !_streamIdsEqual(sid, state.activeSessionId)) {
-      return false;
-    }
-    if (sid != null && _streamIdsEqual(sid, state.activeSessionId)) {
-      final replyId = json['replyId'];
-      if (replyId != null && _streamCorrelationReplyId != null) {
-        return _streamIdsEqual(replyId, _streamCorrelationReplyId);
+    // 与当前选中会话或本轮发送锁定的会话任一匹配即可（避免极端情况下
+    // activeSessionId 与 WS 字段短暂不一致时丢掉首轮流式帧）。
+    if (sid != null) {
+      final okActive = _streamIdsEqual(sid, state.activeSessionId);
+      final okTarget = _streamIdsEqual(sid, _streamTargetSessionId);
+      if (!okActive && !okTarget) {
+        return false;
       }
-      return true;
     }
     final replyId = json['replyId'];
+    if (replyId != null && _streamCorrelationReplyId != null) {
+      return _streamIdsEqual(replyId, _streamCorrelationReplyId);
+    }
     if (replyId != null) {
-      if (_streamCorrelationReplyId != null) {
-        return _streamIdsEqual(replyId, _streamCorrelationReplyId);
-      }
       return _streamIdsEqual(_streamTargetSessionId, state.activeSessionId);
     }
     return _streamIdsEqual(_streamTargetSessionId, state.activeSessionId);

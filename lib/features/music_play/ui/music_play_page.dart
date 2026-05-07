@@ -158,8 +158,8 @@ class _MusicPlayPageState extends ConsumerState<MusicPlayPage> {
                         state: state,
                         onToggleAnswer: controller.setShowAnswer,
                         onImageChanged: controller.setImageIndex,
-                        pitchSemitones: state.pitchSemitones,
-                        onPitchChanged: controller.setPitchSemitones,
+                        // 默认布局（听写/乐理/视唱等）不显示升降调按钮：
+                        // 该功能仅在「声乐 / 器乐」入口下开放。
                       ),
                     ),
                   ],
@@ -1797,15 +1797,29 @@ class _SpeedChip extends StatefulWidget {
   final ValueChanged<double> onSpeedChanged;
 
   /// 倍速档位（从大到小，方便用户在弹窗里默认看到加速段）。
+  ///
+  /// 上行（>1.0）：1.05 / 1.1 / 1.15 / 1.2 / 1.25 / 1.3 / 1.4 /
+  /// 1.5 / 1.6 / 1.7 / 2.0——细粒度集中在 1.0~1.3 区间，加速练
+  /// 习时方便逐档微调。
+  ///
+  /// 下行（<1.0）：0.95 / 0.9 / 0.85 / 0.8 / 0.75 / 0.7 / 0.6 /
+  /// 0.5——同样在 0.75~1.0 区间细分，便于慢速练习。
   static const List<double> options = <double>[
     2.0,
+    1.7,
     1.6,
     1.5,
     1.4,
     1.3,
+    1.25,
     1.2,
+    1.15,
+    1.1,
+    1.05,
     1.0,
+    0.95,
     0.9,
+    0.85,
     0.8,
     0.75,
     0.7,

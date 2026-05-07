@@ -281,52 +281,61 @@ class _ConsultationCard extends StatelessWidget {
         ),
         child: SizedBox(
           height: ui(116),
-          child: Padding(
-            padding: EdgeInsets.all(ui(12)),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _CardThumbnail(url: item.coverUrl),
-                SizedBox(width: ui(12)),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: const Color(0xFF0B081A),
-                          fontSize: ui(16),
-                          fontFamily: 'PingFang SC',
-                          fontWeight: AppFont.w500,
-                          height: 24 / 16,
-                        ),
-                      ),
-                      const Spacer(),
-                      Row(
+          // Stack：底层是原有的卡片内容；顶层把「最新」徽标贴到左上角（距上/左各 8）。
+          child: Stack(
+            children: [
+              Padding(
+                padding: EdgeInsets.all(ui(12)),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _CardThumbnail(url: item.coverUrl),
+                    SizedBox(width: ui(12)),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            formatRelativeTime(item.createTime),
+                            item.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: const Color(0xFFB6B5BB),
-                              fontSize: ui(12),
+                              color: const Color(0xFF0B081A),
+                              fontSize: ui(16),
                               fontFamily: 'PingFang SC',
-                              height: 20 / 12,
+                              fontWeight: AppFont.w500,
+                              height: 24 / 16,
                             ),
                           ),
-                          SizedBox(width: ui(12)),
-                          _ViewCount(count: item.viewCount),
                           const Spacer(),
-                          if (showLatestBadge) const _LatestBadge(),
+                          Row(
+                            children: [
+                              Text(
+                                formatRelativeTime(item.createTime),
+                                style: TextStyle(
+                                  color: const Color(0xFFB6B5BB),
+                                  fontSize: ui(12),
+                                  fontFamily: 'PingFang SC',
+                                  height: 20 / 12,
+                                ),
+                              ),
+                              SizedBox(width: ui(12)),
+                              _ViewCount(count: item.viewCount),
+                            ],
+                          ),
                         ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              if (showLatestBadge)
+                Positioned(
+                  left: ui(8),
+                  top: ui(8),
+                  child: const _LatestBadge(),
+                ),
+            ],
           ),
         ),
       ),
@@ -416,7 +425,7 @@ class _LatestBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: ui(6), vertical: ui(2)),
+      padding: EdgeInsets.symmetric(horizontal: ui(6), vertical: ui(4)),
       decoration: BoxDecoration(
         color: const Color(0xFF8741FF),
         borderRadius: BorderRadius.circular(ui(4)),
@@ -427,6 +436,7 @@ class _LatestBadge extends StatelessWidget {
           color: Colors.white,
           fontSize: ui(10),
           fontFamily: 'PingFang SC',
+          fontWeight: AppFont.w400,
           height: 16 / 10,
         ),
       ),

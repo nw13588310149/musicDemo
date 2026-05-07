@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_assets.dart';
+import '../../../core/providers/app_providers.dart';
 import '../../../core/widgets/action_menu.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/class_share_drawer.dart';
@@ -1051,6 +1052,9 @@ class _CloudSearchField extends StatelessWidget {
       height: ui(40),
       child: TextField(
         controller: controller,
+        cursorColor: const Color(0xFF8741FF),
+        cursorWidth: 1.5,
+        cursorHeight: ui(15),
         decoration: InputDecoration(
           hintText: '传统音乐',
           hintStyle: TextStyle(
@@ -1234,8 +1238,8 @@ class _CloudFoldersGrid extends StatelessWidget {
     }
     return GridView.builder(
       padding: EdgeInsets.only(bottom: ui(78)),
-      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: ui(176),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 5,
         mainAxisSpacing: ui(16),
         crossAxisSpacing: ui(16),
         childAspectRatio: 0.95,
@@ -1270,8 +1274,8 @@ class _CloudFilesGrid extends StatelessWidget {
     }
     return GridView.builder(
       padding: EdgeInsets.only(bottom: ui(78)),
-      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: ui(176),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 5,
         mainAxisSpacing: ui(16),
         crossAxisSpacing: ui(16),
         childAspectRatio: 0.9,
@@ -2290,7 +2294,7 @@ class _PreviewThumbnailRail extends StatelessWidget {
 // 按后缀分发到图片显示 / 「在新窗口打开」按钮。
 // ──────────────────────────────────────────────────────────────────────────
 
-class _PreviewCoursewareBody extends StatelessWidget {
+class _PreviewCoursewareBody extends ConsumerWidget {
   const _PreviewCoursewareBody({
     required this.state,
     required this.onClose,
@@ -2317,11 +2321,14 @@ class _PreviewCoursewareBody extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final ui = DashboardScaleScope.of(context).ui;
     final item = state.previewingFile!;
     final raw = _primaryUrl();
     final resolved = CloudDriveController.resolveMediaUrl(raw);
+    // 与 theory 页面 PDF 阅读器一致，把当前登录态的 app-token 透传给
+    // pdfrx，万一后端未来要给课件文件加鉴权头也能直接生效。
+    final token = ref.watch(appStorageProvider).token;
 
     return Column(
       children: [
@@ -2356,9 +2363,12 @@ class _PreviewCoursewareBody extends StatelessWidget {
                       ),
                       // 直接把文件嵌入到本页面里：Web 端使用 iframe /
                       // <img> / <audio> / <video> / Office Online；
-                      // 其它平台展示占位提示。不再跳新标签页。
+                      // 原生端按文件类型分流：PDF 走 pdfrx（与 theory
+                      // 页面同款），图片走 CachedNetworkImage，其它类型
+                      // 展示占位。不再跳新标签页。
                       child: CoursewareInlinePreview(
                         url: resolved,
+                        authToken: token,
                         placeholder: _CoursewareEmptyPreview(ui: ui),
                       ),
                     ),
@@ -3727,6 +3737,9 @@ class _UploadDialogState extends State<_UploadDialog> {
                     height: ui(45),
                     child: TextField(
                       controller: _titleCtrl,
+                      cursorColor: const Color(0xFF8741FF),
+                      cursorWidth: 1.5,
+                      cursorHeight: ui(16),
                       style: TextStyle(
                         fontSize: ui(14),
                         color: const Color(0xFF0B081A),

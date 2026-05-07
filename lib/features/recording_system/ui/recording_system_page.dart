@@ -999,19 +999,28 @@ class _RecordingSearchField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    // 写法对齐「我的云盘」的 _CloudSearchField：
+    // - 外层固定高度 SizedBox 把 TextField 撑成胶囊；
+    // - contentPadding 置零、不开 isDense，让 Material 自带的
+    //   textAlignVertical=center 接管，避免 iOS iPad 上 PingFang
+    //   字形 line metrics 偏移导致文字偏上 / 偏下。
     return SizedBox(
       height: ui(40),
       child: TextField(
         controller: controller,
+        cursorColor: const Color(0xFF8741FF),
+        cursorWidth: 1.5,
+        cursorHeight: ui(15),
         decoration: InputDecoration(
           hintText: '搜索录音名称',
           hintStyle: TextStyle(
             fontSize: ui(13),
             color: const Color(0xFFB6B5BB),
             fontFamily: 'PingFang SC',
+            fontWeight: AppFont.w400,
           ),
           prefixIcon: Padding(
-            padding: EdgeInsets.symmetric(horizontal: ui(8)),
+            padding: EdgeInsets.only(left: ui(12), right: ui(8)),
             child: Image.asset(
               AppAssets.cloudSearch,
               width: ui(16),
@@ -1019,17 +1028,17 @@ class _RecordingSearchField extends StatelessWidget {
               fit: BoxFit.contain,
             ),
           ),
-          prefixIconConstraints: BoxConstraints(
-            minWidth: ui(32),
-            minHeight: ui(20),
-          ),
-          isDense: true,
-          contentPadding: EdgeInsets.symmetric(
-            horizontal: ui(12),
-            vertical: ui(10),
-          ),
+          prefixIconConstraints: BoxConstraints(minWidth: ui(36)),
           filled: true,
           fillColor: Colors.white,
+          contentPadding: EdgeInsets.zero,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(ui(12)),
+            borderSide: BorderSide(
+              color: const Color(0xFFF3F2F3),
+              width: ui(1),
+            ),
+          ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(ui(12)),
             borderSide: BorderSide(
@@ -1120,11 +1129,11 @@ class _RecordingFoldersGrid extends StatelessWidget {
     return GridView.builder(
       padding: EdgeInsets.zero,
       itemCount: items.length,
-      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: ui(220),
-        mainAxisSpacing: ui(20),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 5,
+        mainAxisSpacing: ui(16),
         crossAxisSpacing: ui(16),
-        mainAxisExtent: ui(196),
+        childAspectRatio: 0.95,
       ),
       itemBuilder: (context, index) {
         final item = items[index];
@@ -1272,11 +1281,11 @@ class _RecordingFilesGrid extends StatelessWidget {
     return GridView.builder(
       padding: EdgeInsets.zero,
       itemCount: items.length,
-      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: ui(180),
-        mainAxisSpacing: ui(20),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 5,
+        mainAxisSpacing: ui(16),
         crossAxisSpacing: ui(16),
-        mainAxisExtent: ui(208),
+        childAspectRatio: 0.9,
       ),
       itemBuilder: (context, index) {
         final item = items[index];
@@ -2938,6 +2947,9 @@ class _SaveTitleFieldState extends State<_SaveTitleField> {
       child: TextField(
         controller: _controller,
         onChanged: widget.onChanged,
+        cursorColor: const Color(0xFF8741FF),
+        cursorWidth: 1.5,
+        cursorHeight: ui(16),
         style: TextStyle(
           fontSize: ui(14),
           color: const Color(0xFF0B081A),

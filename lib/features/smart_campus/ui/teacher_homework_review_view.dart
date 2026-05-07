@@ -2332,6 +2332,9 @@ class _ScoreInput extends StatelessWidget {
             child: TextField(
               controller: controller,
               keyboardType: TextInputType.number,
+              cursorColor: _kPurple,
+              cursorWidth: 1.5,
+              cursorHeight: ui(16),
               decoration: InputDecoration(
                 isDense: true,
                 contentPadding: EdgeInsets.zero,
@@ -2462,6 +2465,9 @@ class _PlainInputFieldState extends State<_PlainInputField> {
       child: Center(
         child: TextField(
           controller: _ctrl,
+          cursorColor: _kPurple,
+          cursorWidth: 1.5,
+          cursorHeight: ui(16),
           decoration: InputDecoration(
             isDense: true,
             contentPadding: EdgeInsets.zero,
@@ -2528,6 +2534,9 @@ class _PlainTextAreaState extends State<_PlainTextArea> {
         maxLines: null,
         expands: true,
         textAlignVertical: TextAlignVertical.top,
+        cursorColor: _kPurple,
+        cursorWidth: 1.5,
+        cursorHeight: ui(16),
         decoration: InputDecoration(
           isDense: true,
           contentPadding: EdgeInsets.zero,

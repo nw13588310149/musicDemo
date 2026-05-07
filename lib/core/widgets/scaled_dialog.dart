@@ -342,6 +342,9 @@ Future<String?> showTextInputDialog({
                   controller: controller,
                   autofocus: true,
                   maxLength: maxLength,
+                  cursorColor: const Color(0xFF8741FF),
+                  cursorWidth: 1.5,
+                  cursorHeight: ui(16),
                   style: TextStyle(
                     fontSize: ui(14),
                     color: const Color(0xFF0B081A),

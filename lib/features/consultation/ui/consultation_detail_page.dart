@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
@@ -275,11 +276,106 @@ class _DetailBody extends StatelessWidget {
                   fontFamily: 'PingFang SC',
                   height: 24 / 13,
                 ),
+                // 拦截 <img>：默认 _core 包对 <img> 的处理会把整张大图按
+                // 原始分辨率解码到 GPU，iPad 上快速 fling 时多张高清图同时
+                // 解码 → Skia/Impeller OOM 闪退。这里改成 CachedNetworkImage
+                // + 受限的 memCacheWidth，把解码后位图大小卡在屏幕物理像素
+                // 内，并用 RepaintBoundary 隔离 raster cache。
+                customWidgetBuilder: (element) {
+                  if (element.localName != 'img') return null;
+                  final src = element.attributes['src']?.trim() ?? '';
+                  if (src.isEmpty) return null;
+                  final designW = double.tryParse(
+                    element.attributes['width'] ?? '',
+                  );
+                  final designH = double.tryParse(
+                    element.attributes['height'] ?? '',
+                  );
+                  return _ConsultationHtmlImage(
+                    url: src,
+                    designWidth: designW,
+                    designHeight: designH,
+                  );
+                },
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+/// 资讯正文中的 `<img>` 渲染器：把后端给的远程图片按容器最大宽度等比缩放，
+/// 同时把解码后的位图尺寸（`memCacheWidth`）卡在屏幕物理像素 × 1 的范围里，
+/// 避免一张几 MB 的大图被解到几十 MB 的位图，导致 iPad 在快速滚动时 OOM。
+///
+/// - 加 `RepaintBoundary` 隔离图层，滚动时不会让整篇正文都重新栅格化。
+/// - 用 `CachedNetworkImage` 走磁盘缓存，避免重复下载/解码。
+/// - 加载失败时退回灰色占位，正文不会因为单张图损坏而整页崩。
+class _ConsultationHtmlImage extends StatelessWidget {
+  const _ConsultationHtmlImage({
+    required this.url,
+    this.designWidth,
+    this.designHeight,
+  });
+
+  final String url;
+  final double? designWidth;
+  final double? designHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final media = MediaQuery.maybeOf(context);
+        final dpr = media?.devicePixelRatio ?? 1.0;
+        final maxW = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : (media?.size.width ?? 1024.0);
+
+        double width = designWidth ?? maxW;
+        double? height = designHeight;
+        if (width > maxW) {
+          if (designWidth != null &&
+              designHeight != null &&
+              designWidth! > 0) {
+            height = designHeight! * (maxW / designWidth!);
+          } else {
+            height = null;
+          }
+          width = maxW;
+        }
+
+        // memCacheWidth 上限：屏幕物理像素 × 1，最多 1600，避免设计师
+        // 上传的 4K 大图在内存里占爆。
+        final memCacheW = (width * dpr).clamp(1.0, 1600.0).toInt();
+
+        return RepaintBoundary(
+          child: CachedNetworkImage(
+            imageUrl: url,
+            width: width,
+            height: height,
+            fit: BoxFit.contain,
+            memCacheWidth: memCacheW,
+            fadeInDuration: const Duration(milliseconds: 120),
+            fadeOutDuration: const Duration(milliseconds: 80),
+            errorWidget: (context, error, stackTrace) => Container(
+              width: width,
+              height: height ?? 60,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF5F6FA),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Icon(
+                Icons.broken_image_rounded,
+                color: Color(0xFFC9C6D8),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

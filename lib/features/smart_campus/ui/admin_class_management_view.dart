@@ -2500,6 +2500,8 @@ class _PlainInput extends StatelessWidget {
       child: TextField(
         controller: controller,
         cursorColor: _kPurple,
+        cursorWidth: 1.5,
+        cursorHeight: ui(16),
         style: TextStyle(
           fontSize: ui(14),
           height: 20 / 14,
@@ -2815,6 +2817,8 @@ class _SearchBar extends StatelessWidget {
           Expanded(
             child: TextField(
               cursorColor: _kPurple,
+              cursorWidth: 1.5,
+              cursorHeight: ui(16),
               style: TextStyle(
                 fontSize: ui(14),
                 height: 1.2,

@@ -95,9 +95,13 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
     final question = state.currentQuestion;
     if (question == null || question.answered) return;
 
+    // 关键：捕获题目 itemId，await 之后用 itemId 定位回写——
+    // 用户在网络请求期间可能已经"下一题"，此时 state.currentIndex
+    // 早就指到别的题，按 index 写就把答案盖到错的题上去了。
+    final itemId = question.itemId;
     final status = answer == question.correctAnswer ? 1 : 2;
     final response = await _repository.reportAnswer(
-      questionPracticeItemId: question.itemId,
+      questionPracticeItemId: itemId,
       answer: answer,
       status: status,
     );
@@ -110,13 +114,16 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
       return;
     }
 
-    final updated = question.copyWith(userAnswer: answer, status: status);
     final list = List<QuizQuestion>.from(state.questions);
-    list[state.currentIndex] = updated;
+    final idx = list.indexWhere((q) => q.itemId == itemId);
+    if (idx < 0) return; // 题目已不在当前列表
+    if (list[idx].answered) return; // 已被其它路径回写过
+    list[idx] = list[idx].copyWith(userAnswer: answer, status: status);
     state = state.copyWith(questions: list, clearErrorMessage: true);
 
-    // 自动刷题：2 秒后跳转下一题（与 1.0 保持一致）。
-    if (state.autoNext) {
+    // 自动刷题：仅当用户停留在刚刚作答的这道题时才跳——若用户
+    // 已经手动切到下一题，就别再"自动跳"覆盖他的操作。
+    if (state.autoNext && state.currentIndex == idx) {
       _autoAdvanceTimer?.cancel();
       _autoAdvanceTimer = Timer(const Duration(seconds: 2), () {
         if (!mounted) return;

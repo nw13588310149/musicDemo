@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -661,47 +662,44 @@ class _TheoryContent extends ConsumerWidget {
     final detail = state.detail;
     final token = ref.watch(appStorageProvider).token;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFFFAFAFB),
-        borderRadius: BorderRadius.circular(ui(14)),
-        border: Border.all(color: const Color(0xFFF3F2F3)),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: detail == null
-          ? const _TheoryEmptyState(message: '加载中…')
-          : detail.hasPdf
-          ? Stack(
-              children: <Widget>[
-                Positioned.fill(
-                  child: TheoryPdfView(
-                    url: detail.pdfUrl,
-                    authToken: token,
-                    interactive: pdfInteractive,
-                  ),
-                ),
-                // 右上角浮动"全屏"按钮：
-                // - Native：点击后把 PDF 推到根 Navigator 的全屏对话框；
-                // - Web：iframe 直接调浏览器 Fullscreen API（HtmlElementView
-                //   在 Flutter dialog 里嵌入 iframe 会被 platform view 层
-                //   遮住，所以走原生 fullscreen 反而最干净）；
-                //   退出 = 用户按 Esc 或浏览器自带的退出全屏按钮。
-                Positioned(
-                  // 设计稿要求按钮整体下移 20 逻辑像素，避开 PDF 顶部
-                  // 工具栏 / 页眉。
-                  top: ui(12) + ui(20),
-                  right: ui(12),
-                  child: _PdfFullscreenToggle(
-                    expanded: false,
-                    onTap: onRequestFullscreen,
-                  ),
-                ),
-              ],
-            )
-          : detail.hasHtmlContent
-          ? _TheoryHtmlView(htmlText: detail.htmlContent)
-          : const _TheoryEmptyState(message: '暂无课程内容'),
-    );
+    // PDF / HTML / 空态视图直接铺满父容器，不再外包浅灰底 + 圆角边框
+    // 的卡片样式（避免与浏览器 PDF Viewer 自带的工具条边框形成双层视觉）。
+    if (detail == null) {
+      return const _TheoryEmptyState(message: '加载中…');
+    }
+    if (detail.hasPdf) {
+      return Stack(
+        children: <Widget>[
+          Positioned.fill(
+            child: TheoryPdfView(
+              url: detail.pdfUrl,
+              authToken: token,
+              interactive: pdfInteractive,
+            ),
+          ),
+          // 右上角浮动"全屏"按钮：
+          // - Native：点击后把 PDF 推到根 Navigator 的全屏对话框；
+          // - Web：iframe 直接调浏览器 Fullscreen API（HtmlElementView
+          //   在 Flutter dialog 里嵌入 iframe 会被 platform view 层
+          //   遮住，所以走原生 fullscreen 反而最干净）；
+          //   退出 = 用户按 Esc 或浏览器自带的退出全屏按钮。
+          Positioned(
+            // 设计稿要求按钮整体下移 20 逻辑像素，避开 PDF 顶部
+            // 工具栏 / 页眉。
+            top: ui(12) + ui(20),
+            right: ui(12),
+            child: _PdfFullscreenToggle(
+              expanded: false,
+              onTap: onRequestFullscreen,
+            ),
+          ),
+        ],
+      );
+    }
+    if (detail.hasHtmlContent) {
+      return _TheoryHtmlView(htmlText: detail.htmlContent);
+    }
+    return const _TheoryEmptyState(message: '暂无课程内容');
   }
 }
 
@@ -809,6 +807,19 @@ class _PdfFullscreenView extends StatelessWidget {
   }
 }
 
+/// 没有 PDF 时（`hasPdf == false`）渲染 `longText1` 这种富文本字段。
+///
+/// 后端典型形态有两类：
+/// - 综合模拟试题：`<p><img src=".." width="100%" /><img ... />…</p>`
+///   一组占满宽度的"试卷扫描图"竖向铺开；
+/// - 普通文本说明：`<p>章节标题</p><p>正文…</p>` 多段文字。
+///
+/// 之前实现是 `replaceAll(<[^>]+>)` 一刀把 `<img>` 也剥掉，遇到第
+/// 一类内容直接渲染成空白。这里改成"按 `<img>` 切块"的轻量解析：
+/// - 文本段 → [SelectableText]，沿用原配色 / 字号；
+/// - 图片段 → [_TheoryHtmlImage]，`width="N%"` 撑满容器宽，数字
+///   宽度按设计尺寸渲染；
+/// - 整个内容包在 [SingleChildScrollView] 里支持竖向滚动浏览。
 class _TheoryHtmlView extends StatelessWidget {
   const _TheoryHtmlView({required this.htmlText});
 
@@ -817,21 +828,256 @@ class _TheoryHtmlView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final clean = htmlText
-        .replaceAll(RegExp(r'<[^>]+>'), ' ')
-        .replaceAll('&nbsp;', ' ')
-        .replaceAll(RegExp(r'\n{3,}'), '\n\n');
+    final textStyle = TextStyle(
+      color: const Color(0xFF0B081A),
+      fontSize: ui(14),
+      height: 1.7,
+      fontFamily: 'PingFang SC',
+    );
+    final blocks = _parseTheoryHtmlBlocks(
+      htmlText,
+      textStyle: textStyle,
+      verticalGap: ui(6),
+    );
+    if (blocks.isEmpty) {
+      return const _TheoryEmptyState(message: '暂无内容');
+    }
     return Padding(
       padding: EdgeInsets.all(ui(18)),
       child: SingleChildScrollView(
         physics: const ClampingScrollPhysics(),
-        child: SelectableText(
-          clean,
-          style: TextStyle(
-            color: const Color(0xFF0B081A),
-            fontSize: ui(14),
-            height: 1.7,
-            fontFamily: 'PingFang SC',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: blocks,
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// HTML → block widgets：把 `longText1` 这种简单结构的 HTML 拆成
+// `[Text, Image, Text, Image, ...]` 一组块级 widget，喂给上面的
+// SingleChildScrollView。
+// ─────────────────────────────────────────────────────────────────────
+
+final RegExp _theoryImgRegExp = RegExp(
+  r'<img\b[^>]*?/?>',
+  caseSensitive: false,
+);
+final RegExp _theoryImgSrcRegExp = RegExp(
+  r'''src\s*=\s*(['"])(.*?)\1''',
+  caseSensitive: false,
+);
+final RegExp _theoryImgWidthRegExp = RegExp(
+  r'''width\s*=\s*(['"])([^'"]*)\1''',
+  caseSensitive: false,
+);
+final RegExp _theoryImgHeightRegExp = RegExp(
+  r'''height\s*=\s*(['"])([^'"]*)\1''',
+  caseSensitive: false,
+);
+final RegExp _theoryBrRegExp = RegExp(r'<br\s*/?>', caseSensitive: false);
+final RegExp _theoryBlockEndRegExp = RegExp(
+  r'</(p|div|li|tr|h[1-6])>',
+  caseSensitive: false,
+);
+final RegExp _theoryTagStripRegExp = RegExp(r'<[^>]+>');
+
+/// 极简实体解码——`longText1` 实际遇到的实体集中在引号 / 破折号
+/// / 空格这几类。需要全量解码时可以扩成 quiz_practice 那一份。
+const Map<String, String> _theoryNamedEntities = <String, String>{
+  'nbsp': ' ',
+  'amp': '&',
+  'lt': '<',
+  'gt': '>',
+  'quot': '"',
+  'apos': "'",
+  'ldquo': '\u201C',
+  'rdquo': '\u201D',
+  'lsquo': '\u2018',
+  'rsquo': '\u2019',
+  'hellip': '\u2026',
+  'mdash': '\u2014',
+  'ndash': '\u2013',
+  'middot': '\u00B7',
+  'times': '\u00D7',
+  'divide': '\u00F7',
+  'deg': '\u00B0',
+};
+final RegExp _theoryEntityRegExp = RegExp(
+  r'&(#x[0-9a-fA-F]+|#\d+|[a-zA-Z][a-zA-Z0-9]+);',
+);
+
+String _decodeTheoryEntities(String input) {
+  if (input.isEmpty || !input.contains('&')) return input;
+  return input.replaceAllMapped(_theoryEntityRegExp, (m) {
+    final body = m.group(1)!;
+    if (body.startsWith('#x') || body.startsWith('#X')) {
+      final cp = int.tryParse(body.substring(2), radix: 16);
+      if (cp != null && cp >= 0 && cp <= 0x10FFFF) {
+        return String.fromCharCode(cp);
+      }
+    } else if (body.startsWith('#')) {
+      final cp = int.tryParse(body.substring(1));
+      if (cp != null && cp >= 0 && cp <= 0x10FFFF) {
+        return String.fromCharCode(cp);
+      }
+    } else {
+      final v = _theoryNamedEntities[body];
+      if (v != null) return v;
+    }
+    return m.group(0)!;
+  });
+}
+
+List<Widget> _parseTheoryHtmlBlocks(
+  String html, {
+  required TextStyle textStyle,
+  required double verticalGap,
+}) {
+  final blocks = <Widget>[];
+  final pendingText = StringBuffer();
+
+  void flushText() {
+    if (pendingText.isEmpty) return;
+    final raw = pendingText.toString();
+    pendingText.clear();
+    final stripped = raw
+        .replaceAll(_theoryBrRegExp, '\n')
+        .replaceAll(_theoryBlockEndRegExp, '\n')
+        .replaceAll(_theoryTagStripRegExp, '');
+    final cleaned = _decodeTheoryEntities(
+      stripped,
+    ).replaceAll(RegExp(r'\n{3,}'), '\n\n').trim();
+    if (cleaned.isEmpty) return;
+    blocks.add(
+      Padding(
+        padding: EdgeInsets.symmetric(vertical: verticalGap),
+        child: SelectableText(cleaned, style: textStyle),
+      ),
+    );
+  }
+
+  var cursor = 0;
+  for (final m in _theoryImgRegExp.allMatches(html)) {
+    if (m.start > cursor) {
+      pendingText.write(html.substring(cursor, m.start));
+    }
+    flushText();
+
+    final tag = m.group(0)!;
+    final src = _theoryImgSrcRegExp.firstMatch(tag)?.group(2)?.trim();
+    if (src != null && src.isNotEmpty) {
+      final widthAttr = _theoryImgWidthRegExp.firstMatch(tag)?.group(2) ?? '';
+      final heightAttr =
+          _theoryImgHeightRegExp.firstMatch(tag)?.group(2) ?? '';
+      final fillWidth = widthAttr.endsWith('%');
+      final designW = fillWidth ? null : double.tryParse(widthAttr);
+      final designH = double.tryParse(heightAttr);
+      blocks.add(
+        Padding(
+          padding: EdgeInsets.symmetric(vertical: verticalGap),
+          child: _TheoryHtmlImage(
+            url: src,
+            designWidth: designW,
+            designHeight: designH,
+            fillWidth: fillWidth,
+          ),
+        ),
+      );
+    }
+    cursor = m.end;
+  }
+  if (cursor < html.length) {
+    pendingText.write(html.substring(cursor));
+  }
+  flushText();
+
+  return blocks;
+}
+
+/// 给 [_TheoryHtmlView] 渲染富文本里 `<img>` 的图片 widget。
+///
+/// - `fillWidth = true`（width="100%" 这种情况）：撑满父容器宽
+///   度，高度按图片本身比例自适应；典型场景是综合模拟试题的卷
+///   面扫描图竖向铺开。
+/// - `fillWidth = false` 且有 `designWidth/designHeight`：按设计
+///   尺寸渲染。
+/// - 都没有：交给 [CachedNetworkImage] 用图片自身 intrinsic 尺寸。
+class _TheoryHtmlImage extends StatelessWidget {
+  const _TheoryHtmlImage({
+    required this.url,
+    this.designWidth,
+    this.designHeight,
+    this.fillWidth = false,
+  });
+
+  final String url;
+  final double? designWidth;
+  final double? designHeight;
+  final bool fillWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    if (fillWidth) {
+      return CachedNetworkImage(
+        imageUrl: url,
+        cacheKey: url,
+        width: double.infinity,
+        fit: BoxFit.fitWidth,
+        fadeInDuration: Duration.zero,
+        fadeOutDuration: Duration.zero,
+        placeholder: (context, _) => const SizedBox(
+          height: 80,
+          child: Center(
+            child: SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          ),
+        ),
+        errorWidget: (context, _, _) => Container(
+          height: 80,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: const Color(0xFFF5F6FA),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: const Icon(
+            Icons.broken_image_rounded,
+            color: Color(0xFFC9C6D8),
+          ),
+        ),
+      );
+    }
+
+    final w = designWidth;
+    final h = designHeight;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: CachedNetworkImage(
+        imageUrl: url,
+        cacheKey: url,
+        width: w,
+        height: h,
+        fit: BoxFit.contain,
+        fadeInDuration: Duration.zero,
+        fadeOutDuration: Duration.zero,
+        placeholder: (context, _) =>
+            SizedBox(width: w ?? 40, height: h ?? 40),
+        errorWidget: (context, _, _) => Container(
+          width: w ?? 60,
+          height: h ?? 60,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: const Color(0xFFF5F6FA),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: const Icon(
+            Icons.broken_image_rounded,
+            color: Color(0xFFC9C6D8),
           ),
         ),
       ),

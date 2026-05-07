@@ -231,6 +231,8 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
           // ── 视频列表区：仅此区域可滚动 ──────────────────────────────────
           Expanded(
             child: RefreshIndicator(
+              color: const Color(0xFF8741FF),
+              backgroundColor: Colors.white,
               onRefresh: () =>
                   ref.read(videoTutorialControllerProvider.notifier).refresh(),
               child: CustomScrollView(

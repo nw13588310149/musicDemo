@@ -567,6 +567,8 @@ class _SearchBox extends StatelessWidget {
               controller: controller,
               onChanged: onChanged,
               cursorColor: _kPurple,
+              cursorWidth: 1.5,
+              cursorHeight: ui(16),
               style: TextStyle(
                 fontSize: ui(14),
                 color: _kTextDark,
@@ -1305,6 +1307,8 @@ class _InputBar extends StatelessWidget {
               controller: controller,
               onSubmitted: (_) => onSend(),
               cursorColor: _kPurple,
+              cursorWidth: 1.5,
+              cursorHeight: ui(15),
               style: TextStyle(
                 fontSize: ui(13),
                 color: _kTextDark,

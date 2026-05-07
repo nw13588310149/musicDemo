@@ -1,10 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/router/route_paths.dart';
 import '../../../../core/constants/app_assets.dart';
 import '../../../../core/widgets/app_asset_graphic.dart';
 import '../../../../core/widgets/app_toast.dart';
 import '../../../../core/widgets/scaled_dialog.dart';
+import '../../data/shell_repository.dart';
+import '../../state/shell_controller.dart';
 import '../../state/shell_state.dart';
 import '../shell_layout.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -79,17 +84,6 @@ class ShellTopBar extends StatelessWidget {
                 onTap: () => onNavigate(RoutePaths.info),
               ),
               SizedBox(width: gap),
-              _buildToolButton(
-                context: context,
-                child: AppAssetGraphic(
-                  AppAssets.shellV2Scan,
-                  width: ui(20),
-                  height: ui(20),
-                  fit: BoxFit.contain,
-                ),
-                onTap: () => _showToast(context, '扫码功能即将上线'),
-              ),
-              SizedBox(width: gap),
               _buildUserMenu(context, showUserName: showUserName),
             ],
           ),
@@ -99,44 +93,7 @@ class ShellTopBar extends StatelessWidget {
   }
 
   Widget _buildSearchBox(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return SizedBox(
-      height: ui(40),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(ui(12)),
-        ),
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: ui(14)),
-          child: Row(
-            children: [
-              AppAssetGraphic(
-                AppAssets.shellV2Search,
-                width: ui(16),
-                height: ui(16),
-                fit: BoxFit.contain,
-              ),
-              SizedBox(width: ui(8)),
-              Expanded(
-                child: Text(
-                  '传统音乐',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: ui(14),
-                    color: const Color(0xFFD1D1D1),
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w400,
-                    height: 1,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    return const _TopSearchBox();
   }
 
   Widget _buildToolButton({
@@ -219,8 +176,8 @@ class ShellTopBar extends StatelessWidget {
     // 避免菜单 builder 的 context 找不到 scope 而触发 `scope != null` 断言。
     final scale = DashboardScaleScope.of(context);
     final ui = scale.ui;
-    final menuWidth = ui(220);
-    final menuHeight = ui(168);
+    final menuWidth = ui(180);
+    final menuHeight = ui(212);
 
     // 与 1.0 `placement="bottom-end"` 对齐：弹出在按钮右下方。
     final triggerSize = triggerBox.size;
@@ -463,43 +420,43 @@ class _UserMenuPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final regionText = province.trim().isEmpty ? '未设置' : province.trim();
+    // Figma：white bg + 1px #F3F2F3 border + 16px radius + 0 2 8 rgba(0,0,0,.12) shadow
+    // 内边距 16，三行间距 16；行高度 44，左侧 36 圆形占位 + 20 图标。
     return Container(
       width: width,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(12)),
+        borderRadius: BorderRadius.circular(ui(16)),
+        border: Border.all(color: const Color(0xFFF3F2F3), width: ui(1)),
         boxShadow: [
           BoxShadow(
-            color: const Color(0x1F000000),
-            blurRadius: ui(24),
-            offset: Offset(0, ui(8)),
-          ),
-          BoxShadow(
-            color: const Color(0x12000000),
-            blurRadius: ui(4),
+            color: const Color(0x1F000000), // rgba(0,0,0,0.12)
+            blurRadius: ui(8),
             offset: Offset(0, ui(2)),
           ),
         ],
       ),
-      clipBehavior: Clip.antiAlias,
+      padding: EdgeInsets.all(ui(16)),
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _UserMenuRegionRow(
-            province: regionText,
+          _UserMenuRow(
+            iconAsset: AppAssets.homeUserMenuRegion,
+            label: '所在地区',
+            sublabel: regionText,
             onTap: () => onSelect(_UserMenuAction.region),
           ),
-          _UserMenuDivider(),
+          SizedBox(height: ui(24)),
           _UserMenuRow(
-            icon: Icons.person_outline_rounded,
+            iconAsset: AppAssets.homeUserMenuProfile,
             label: '资料修改',
             onTap: () => onSelect(_UserMenuAction.profile),
           ),
-          _UserMenuDivider(),
+          SizedBox(height: ui(24)),
           _UserMenuRow(
-            icon: Icons.logout_rounded,
+            iconAsset: AppAssets.homeUserMenuLogout,
             label: '退出登录',
-            danger: true,
             onTap: () => onSelect(_UserMenuAction.logout),
           ),
         ],
@@ -508,136 +465,74 @@ class _UserMenuPanel extends StatelessWidget {
   }
 }
 
-class _UserMenuDivider extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: ui(12)),
-      child: const Divider(height: 1, thickness: 1, color: Color(0xFFF3F2F3)),
-    );
-  }
-}
+class _UserMenuRow extends StatelessWidget {
+  const _UserMenuRow({
+    required this.iconAsset,
+    required this.label,
+    required this.onTap,
+    this.sublabel,
+  });
 
-class _UserMenuRegionRow extends StatelessWidget {
-  const _UserMenuRegionRow({required this.province, required this.onTap});
+  /// 行图标（PNG 资源路径）。
+  final String iconAsset;
+  final String label;
 
-  final String province;
+  /// 副标题（仅「所在地区」用于显示当前省份）。null 时不渲染第二行。
+  final String? sublabel;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final hasSub = sublabel != null && sublabel!.isNotEmpty;
     return InkWell(
       onTap: onTap,
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: ui(14), vertical: ui(12)),
+      borderRadius: BorderRadius.circular(ui(8)),
+      child: SizedBox(
+        height: ui(44),
         child: Row(
           children: [
-            Container(
-              width: ui(28),
-              height: ui(28),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF4F0FF),
-                borderRadius: BorderRadius.circular(ui(8)),
-              ),
-              alignment: Alignment.center,
-              child: Icon(
-                Icons.location_on_rounded,
-                size: ui(16),
-                color: const Color(0xFF8741FF),
-              ),
+            Image.asset(
+              iconAsset,
+              width: ui(36),
+              height: ui(36),
+              fit: BoxFit.contain,
             ),
-            SizedBox(width: ui(10)),
+            SizedBox(width: ui(12)),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: hasSub
+                    ? MainAxisAlignment.center
+                    : MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    '所在地区',
+                    label,
                     style: TextStyle(
-                      fontSize: ui(14),
-                      color: const Color(0xFF0B081A),
+                      fontSize: ui(16),
+                      color: Colors.black,
                       fontFamily: 'PingFang SC',
                       fontWeight: AppFont.w500,
                       height: 1.2,
                     ),
                   ),
-                  SizedBox(height: ui(2)),
-                  Text(
-                    province,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: ui(12),
-                      color: const Color(0xFF8741FF),
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w400,
-                      height: 1.2,
+                  if (hasSub) ...[
+                    SizedBox(height: ui(4)),
+                    Text(
+                      sublabel!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: ui(12),
+                        color: const Color(0xFF8741FF),
+                        fontFamily: 'PingFang SC',
+                        fontWeight: AppFont.w400,
+                        height: 1.2,
+                      ),
                     ),
-                  ),
+                  ],
                 ],
-              ),
-            ),
-            Icon(
-              Icons.chevron_right_rounded,
-              size: ui(18),
-              color: const Color(0xFFB6B5BB),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _UserMenuRow extends StatelessWidget {
-  const _UserMenuRow({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.danger = false,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final bool danger;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    final color = danger ? const Color(0xFFFF323C) : const Color(0xFF0B081A);
-    final iconBg = danger ? const Color(0xFFFFEEF0) : const Color(0xFFF4F0FF);
-    final iconColor = danger
-        ? const Color(0xFFFF323C)
-        : const Color(0xFF8741FF);
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: ui(14), vertical: ui(10)),
-        child: Row(
-          children: [
-            Container(
-              width: ui(28),
-              height: ui(28),
-              decoration: BoxDecoration(
-                color: iconBg,
-                borderRadius: BorderRadius.circular(ui(8)),
-              ),
-              alignment: Alignment.center,
-              child: Icon(icon, size: ui(16), color: iconColor),
-            ),
-            SizedBox(width: ui(10)),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: ui(14),
-                color: color,
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w500,
-                height: 1.2,
               ),
             ),
           ],
@@ -865,6 +760,710 @@ class _NoticeEmpty extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────── 顶部全局搜索（对齐 1.0 TopNav.vue）───────────────────
+//
+// 行为对齐：
+//   1) 用户在输入框输入关键字 → 300ms 防抖后并行命中四个 1.0 列表接口；
+//   2) 输入框获得焦点且查询非空时，浮层下拉显示 4 个 tab（课程/视频/录音/笔记），
+//      tab 标题尾部带计数；
+//   3) 点击列表项 → 按 1.0 `goDetail` 的分发规则路由到对应详情页：
+//        type 1/3       → /musicPlay              {id}
+//        type 4/5       → /musicPlay              {id, type:2}
+//        type 2         → /theory                 {id}
+//        type 6         → /video-tutorial         {openVideoId}
+//        type 9         → /consultationDetail     {id}
+//        type 'ly'      → /recording              {id: categoryId}
+//        type 'note'    → /noteDetail             {id, title, type, param1, sId}
+//
+// 视觉上沿用顶部 v2 设计（白底、12px 圆角、40px 高）；下拉浮层使用 Overlay
+// 居中弹出在输入框下方 8px，右下方阴影 + 1px 浅边框，与个人菜单风格一致。
+
+enum _SearchTab { text, video, ly, note }
+
+extension _SearchTabExt on _SearchTab {
+  String get label {
+    switch (this) {
+      case _SearchTab.text:
+        return '课程';
+      case _SearchTab.video:
+        return '视频';
+      case _SearchTab.ly:
+        return '录音';
+      case _SearchTab.note:
+        return '笔记';
+    }
+  }
+}
+
+class _SearchItem {
+  const _SearchItem({
+    required this.id,
+    required this.title,
+    required this.type,
+    this.categoryId,
+    this.paperType,
+    this.param1,
+  });
+
+  /// 后端原始 id（雪花长整型，必须以字符串形式承载，避免 53bit 精度丢失）。
+  final String id;
+  final String title;
+
+  /// 1.0 `goDetail` 的分发字段：可能是数字（1/2/3/4/5/6/9）或字符串（'ly'/'note'）。
+  final dynamic type;
+
+  /// 录音 / 笔记列表项额外字段：
+  ///   - 录音：`categoryId` 用作跳 /recording 的 id。
+  ///   - 笔记：`categoryId` 是分类 id，`paperType`/`param1` 用于详情页。
+  final String? categoryId;
+  final dynamic paperType;
+  final String? param1;
+}
+
+class _TopSearchBox extends ConsumerStatefulWidget {
+  const _TopSearchBox();
+
+  @override
+  ConsumerState<_TopSearchBox> createState() => _TopSearchBoxState();
+}
+
+class _TopSearchBoxState extends ConsumerState<_TopSearchBox> {
+  static const Duration _debounceDuration = Duration(milliseconds: 300);
+
+  final TextEditingController _controller = TextEditingController();
+  final FocusNode _focusNode = FocusNode();
+  final LayerLink _layerLink = LayerLink();
+  final OverlayPortalController _overlayController = OverlayPortalController();
+  final GlobalKey _fieldKey = GlobalKey();
+
+  Timer? _debounce;
+
+  /// 当前已发出（或正在响应中）的 keyword，用于丢弃过期请求结果。
+  String _pendingKeyword = '';
+
+  String _query = '';
+  _SearchTab _activeTab = _SearchTab.text;
+  bool _loading = false;
+  Map<_SearchTab, List<_SearchItem>> _results = const {
+    _SearchTab.text: <_SearchItem>[],
+    _SearchTab.video: <_SearchItem>[],
+    _SearchTab.ly: <_SearchItem>[],
+    _SearchTab.note: <_SearchItem>[],
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(_handleFocusChange);
+    _controller.addListener(_handleTextChange);
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _focusNode.removeListener(_handleFocusChange);
+    _controller.removeListener(_handleTextChange);
+    _controller.dispose();
+    _focusNode.dispose();
+    if (_overlayController.isShowing) {
+      _overlayController.hide();
+    }
+    super.dispose();
+  }
+
+  void _handleFocusChange() {
+    if (_focusNode.hasFocus) {
+      if (_query.trim().isNotEmpty && !_overlayController.isShowing) {
+        _overlayController.show();
+      }
+    } else {
+      // 失焦时延迟一帧再关浮层，避免 ListView 项的点击事件还没派发就被销毁。
+      Future<void>.delayed(const Duration(milliseconds: 120), () {
+        if (!mounted) return;
+        if (!_focusNode.hasFocus && _overlayController.isShowing) {
+          _overlayController.hide();
+        }
+      });
+    }
+  }
+
+  void _handleTextChange() {
+    final value = _controller.text;
+    if (value == _query) return;
+    setState(() => _query = value);
+
+    _debounce?.cancel();
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      // 清空时立即重置结果 & 收起浮层。
+      _pendingKeyword = '';
+      setState(() {
+        _loading = false;
+        _results = const {
+          _SearchTab.text: <_SearchItem>[],
+          _SearchTab.video: <_SearchItem>[],
+          _SearchTab.ly: <_SearchItem>[],
+          _SearchTab.note: <_SearchItem>[],
+        };
+      });
+      if (_overlayController.isShowing) {
+        _overlayController.hide();
+      }
+      return;
+    }
+
+    if (!_overlayController.isShowing && _focusNode.hasFocus) {
+      _overlayController.show();
+    }
+    _debounce = Timer(_debounceDuration, () => _performSearch(trimmed));
+  }
+
+  Future<void> _performSearch(String keyword) async {
+    _pendingKeyword = keyword;
+    setState(() => _loading = true);
+
+    final repo = ref.read(shellRepositoryProvider);
+    final province = ref.read(shellControllerProvider).user.province;
+
+    try {
+      final responses = await Future.wait([
+        repo.searchTextbookList(keyword: keyword, province: province),
+        repo.searchVideoList(keyword: keyword, province: province),
+        repo.searchRecordingList(keyword: keyword, province: province),
+        repo.searchNoteList(keyword: keyword, province: province),
+      ]);
+      // 过期请求兜底：在 await 期间用户可能继续打字，老 keyword 的结果应被丢弃。
+      if (!mounted || _pendingKeyword != keyword) {
+        return;
+      }
+      setState(() {
+        _loading = false;
+        _results = {
+          _SearchTab.text: _parseList(
+            responses[0].data,
+            forcedType: null, // 课程接口自带 type 字段，按原值分发。
+          ),
+          _SearchTab.video: _parseList(responses[1].data, forcedType: 6),
+          _SearchTab.ly: _parseList(responses[2].data, forcedType: 'ly'),
+          _SearchTab.note: _parseList(responses[3].data, forcedType: 'note'),
+        };
+      });
+    } catch (_) {
+      if (!mounted || _pendingKeyword != keyword) return;
+      setState(() {
+        _loading = false;
+        _results = const {
+          _SearchTab.text: <_SearchItem>[],
+          _SearchTab.video: <_SearchItem>[],
+          _SearchTab.ly: <_SearchItem>[],
+          _SearchTab.note: <_SearchItem>[],
+        };
+      });
+    }
+  }
+
+  List<_SearchItem> _parseList(dynamic raw, {dynamic forcedType}) {
+    if (raw is! List) return const <_SearchItem>[];
+    final items = <_SearchItem>[];
+    for (final entry in raw) {
+      if (entry is! Map) continue;
+      final map = entry.map((key, value) => MapEntry(key.toString(), value));
+      final id = map['id']?.toString() ?? '';
+      if (id.isEmpty) continue;
+      final title =
+          (map['title']?.toString().trim().isNotEmpty ?? false)
+          ? map['title'].toString()
+          : (map['name']?.toString() ?? '');
+      final type = forcedType ?? map['type'];
+      final categoryId = map['categoryId']?.toString();
+      items.add(
+        _SearchItem(
+          id: id,
+          title: title,
+          type: type,
+          categoryId: categoryId,
+          paperType: map['paperType'],
+          param1: map['param1']?.toString(),
+        ),
+      );
+    }
+    return items;
+  }
+
+  void _handleItemTap(_SearchItem item) {
+    final navigator = Navigator.of(context);
+    _focusNode.unfocus();
+    if (_overlayController.isShowing) {
+      _overlayController.hide();
+    }
+    final dynamic type = item.type;
+    if (type is int) {
+      switch (type) {
+        case 1:
+        case 3:
+          navigator.pushNamed(
+            RoutePaths.musicPlay,
+            arguments: <String, dynamic>{'id': item.id},
+          );
+          return;
+        case 2:
+          navigator.pushNamed(
+            RoutePaths.theory,
+            arguments: <String, dynamic>{'id': item.id},
+          );
+          return;
+        case 4:
+        case 5:
+          navigator.pushNamed(
+            RoutePaths.musicPlay,
+            arguments: <String, dynamic>{'id': item.id, 'type': 2},
+          );
+          return;
+        case 6:
+          navigator.pushNamed(
+            RoutePaths.videoTutorial,
+            arguments: <String, dynamic>{'openVideoId': item.id},
+          );
+          return;
+        case 9:
+          navigator.pushNamed(
+            RoutePaths.consultationDetail,
+            arguments: <String, dynamic>{'id': item.id},
+          );
+          return;
+      }
+    }
+    if (type == 'ly') {
+      final cid = item.categoryId ?? item.id;
+      navigator.pushNamed(
+        RoutePaths.recording,
+        arguments: <String, dynamic>{'id': cid},
+      );
+      return;
+    }
+    if (type == 'note') {
+      navigator.pushNamed(
+        RoutePaths.noteDetail,
+        arguments: <String, dynamic>{
+          'id': item.categoryId ?? '',
+          'title': item.title,
+          'type': item.paperType,
+          'param1': item.param1 ?? '',
+          'sId': item.id,
+        },
+      );
+      return;
+    }
+  }
+
+  void _handleClear() {
+    _controller.clear();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scale = DashboardScaleScope.of(context);
+    return CompositedTransformTarget(
+      link: _layerLink,
+      child: OverlayPortal.targetsRootOverlay(
+        controller: _overlayController,
+        overlayChildBuilder: (overlayContext) =>
+            _buildOverlay(overlayContext, scale),
+        child: _buildField(context),
+      ),
+    );
+  }
+
+  Widget _buildField(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return SizedBox(
+      key: _fieldKey,
+      height: ui(40),
+      child: TextField(
+        controller: _controller,
+        focusNode: _focusNode,
+        textInputAction: TextInputAction.search,
+        cursorColor: const Color(0xFF8741FF),
+        cursorWidth: 1.5,
+        cursorHeight: ui(16),
+        onSubmitted: (value) {
+          final trimmed = value.trim();
+          if (trimmed.isEmpty) return;
+          _debounce?.cancel();
+          _performSearch(trimmed);
+        },
+        style: TextStyle(
+          fontSize: ui(14),
+          color: const Color(0xFF1A1A1A),
+          fontFamily: 'PingFang SC',
+          fontWeight: AppFont.w400,
+        ),
+        decoration: InputDecoration(
+          isCollapsed: false,
+          filled: true,
+          fillColor: Colors.white,
+          contentPadding: EdgeInsets.zero,
+          hintText: '搜索',
+          hintStyle: TextStyle(
+            fontSize: ui(14),
+            color: const Color(0xFFD1D1D1),
+            fontFamily: 'PingFang SC',
+            fontWeight: AppFont.w400,
+          ),
+          prefixIcon: Padding(
+            padding: EdgeInsets.only(left: ui(14), right: ui(8)),
+            child: AppAssetGraphic(
+              AppAssets.shellV2Search,
+              width: ui(16),
+              height: ui(16),
+              fit: BoxFit.contain,
+            ),
+          ),
+          prefixIconConstraints: BoxConstraints(minWidth: ui(38)),
+          suffixIcon: _query.isEmpty
+              ? null
+              : GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _handleClear,
+                  child: Padding(
+                    padding: EdgeInsets.only(right: ui(10)),
+                    child: Icon(
+                      Icons.cancel,
+                      size: ui(16),
+                      color: const Color(0xFFC6C6C6),
+                    ),
+                  ),
+                ),
+          suffixIconConstraints: BoxConstraints(minWidth: ui(28)),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(ui(12)),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(ui(12)),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(ui(12)),
+            borderSide: BorderSide(
+              color: const Color(0xFFE5DFFE),
+              width: ui(1),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOverlay(BuildContext overlayContext, DashboardScaleData scale) {
+    final ui = scale.ui;
+    final fieldBox =
+        _fieldKey.currentContext?.findRenderObject() as RenderBox?;
+    final fieldWidth = fieldBox?.size.width ?? ui(324);
+    // 浮层最小宽度：保证 4 个 tab 文字不挤；最多撑到 420 让结果更易读。
+    final panelWidth = fieldWidth.clamp(ui(320), ui(420));
+
+    return Stack(
+      children: [
+        // 透明遮罩：点击浮层外区域时关闭浮层。
+        Positioned.fill(
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: () {
+              _focusNode.unfocus();
+              if (_overlayController.isShowing) {
+                _overlayController.hide();
+              }
+            },
+          ),
+        ),
+        CompositedTransformFollower(
+          link: _layerLink,
+          showWhenUnlinked: false,
+          targetAnchor: Alignment.bottomLeft,
+          followerAnchor: Alignment.topLeft,
+          offset: Offset(0, ui(8)),
+          child: DashboardScaleScope(
+            data: scale,
+            child: Material(
+              color: Colors.transparent,
+              child: SizedBox(
+                width: panelWidth,
+                child: _SearchDropdownPanel(
+                  loading: _loading,
+                  query: _query,
+                  activeTab: _activeTab,
+                  results: _results,
+                  onTabChanged: (tab) {
+                    setState(() => _activeTab = tab);
+                  },
+                  onItemTap: _handleItemTap,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SearchDropdownPanel extends StatelessWidget {
+  const _SearchDropdownPanel({
+    required this.loading,
+    required this.query,
+    required this.activeTab,
+    required this.results,
+    required this.onTabChanged,
+    required this.onItemTap,
+  });
+
+  final bool loading;
+  final String query;
+  final _SearchTab activeTab;
+  final Map<_SearchTab, List<_SearchItem>> results;
+  final ValueChanged<_SearchTab> onTabChanged;
+  final ValueChanged<_SearchItem> onItemTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final list = results[activeTab] ?? const <_SearchItem>[];
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(ui(12)),
+        border: Border.all(color: const Color(0xFFF3F2F3), width: ui(1)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0x1F000000),
+            blurRadius: ui(16),
+            offset: Offset(0, ui(4)),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _SearchTabBar(
+            activeTab: activeTab,
+            results: results,
+            onTabChanged: onTabChanged,
+          ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(ui(12), ui(10), ui(12), ui(12)),
+            child: SizedBox(
+              height: ui(360),
+              child: _buildBody(context, list),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBody(BuildContext context, List<_SearchItem> list) {
+    final ui = DashboardScaleScope.of(context).ui;
+    if (loading) {
+      return Center(
+        child: SizedBox(
+          width: ui(28),
+          height: ui(28),
+          child: const CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+    if (list.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.search_off_rounded,
+              size: ui(40),
+              color: const Color(0xFFCECED1),
+            ),
+            SizedBox(height: ui(8)),
+            Text(
+              '暂无结果',
+              style: TextStyle(
+                fontSize: ui(13),
+                color: const Color(0xFFB6B5BB),
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w400,
+                height: 1.2,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(ui(8)),
+        border: Border.all(color: const Color(0xFFF3F3F3), width: ui(1)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: ListView.separated(
+        padding: EdgeInsets.symmetric(horizontal: ui(10), vertical: ui(4)),
+        itemCount: list.length,
+        separatorBuilder: (_, _) => Container(
+          height: ui(1),
+          color: const Color(0xFFF3F3F3),
+        ),
+        itemBuilder: (context, index) {
+          final item = list[index];
+          return _SearchResultRow(
+            index: index,
+            item: item,
+            onTap: () => onItemTap(item),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _SearchTabBar extends StatelessWidget {
+  const _SearchTabBar({
+    required this.activeTab,
+    required this.results,
+    required this.onTabChanged,
+  });
+
+  final _SearchTab activeTab;
+  final Map<_SearchTab, List<_SearchItem>> results;
+  final ValueChanged<_SearchTab> onTabChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      height: ui(44),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          bottom: BorderSide(color: Color(0xFFF3F2F3), width: 1),
+        ),
+      ),
+      child: Row(
+        children: _SearchTab.values.map((tab) {
+          final count = results[tab]?.length ?? 0;
+          final selected = tab == activeTab;
+          return Expanded(
+            child: InkWell(
+              onTap: () => onTabChanged(tab),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Center(
+                    child: RichText(
+                      text: TextSpan(
+                        style: TextStyle(
+                          fontSize: ui(13),
+                          fontFamily: 'PingFang SC',
+                          fontWeight: selected
+                              ? AppFont.w500
+                              : AppFont.w400,
+                          color: selected
+                              ? const Color(0xFF8741FF)
+                              : const Color(0xFF6D6B75),
+                          height: 1.2,
+                        ),
+                        children: [
+                          TextSpan(text: tab.label),
+                          TextSpan(text: '($count)'),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (selected)
+                    Positioned(
+                      bottom: ui(0),
+                      child: Container(
+                        width: ui(28),
+                        height: ui(3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF8741FF),
+                          borderRadius: BorderRadius.circular(ui(3)),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
+class _SearchResultRow extends StatelessWidget {
+  const _SearchResultRow({
+    required this.index,
+    required this.item,
+    required this.onTap,
+  });
+
+  final int index;
+  final _SearchItem item;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return InkWell(
+      onTap: onTap,
+      child: SizedBox(
+        height: ui(44),
+        child: Row(
+          children: [
+            Container(
+              width: ui(20),
+              height: ui(20),
+              alignment: Alignment.center,
+              decoration: const BoxDecoration(
+                color: Color(0xFF8741FF),
+                shape: BoxShape.circle,
+              ),
+              child: Text(
+                '${index + 1}',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: ui(12),
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w500,
+                  height: 1,
+                ),
+              ),
+            ),
+            SizedBox(width: ui(10)),
+            Expanded(
+              child: Text(
+                item.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: ui(13),
+                  color: const Color(0xFF0B081A),
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w400,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

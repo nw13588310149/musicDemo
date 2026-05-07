@@ -952,6 +952,9 @@ class _BodyField extends StatelessWidget {
         maxLines: null,
         expands: true,
         textAlignVertical: TextAlignVertical.top,
+        cursorColor: _kPurple,
+        cursorWidth: 1.5,
+        cursorHeight: ui(14),
         style: TextStyle(
           fontSize: ui(12),
           color: _kTextDark,

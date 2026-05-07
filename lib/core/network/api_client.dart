@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import '../constants/app_constants.dart';
 import '../storage/app_storage.dart';
 import 'api_response.dart';
+import 'media_url.dart';
 
 class ApiClient {
   ApiClient({required AppStorage storage})
@@ -31,7 +32,7 @@ class ApiClient {
         path,
         options: _buildOptions(headers: headers, timeout: timeout),
       );
-      return _toApiResponse(response.data);
+      return _normalizeForPath(path, _toApiResponse(response.data));
     } on DioException catch (error) {
       return ApiResponse.failure(_extractDioMessage(error));
     } catch (_) {
@@ -51,7 +52,7 @@ class ApiClient {
         data: data,
         options: _buildOptions(headers: headers, timeout: timeout),
       );
-      return _toApiResponse(response.data);
+      return _normalizeForPath(path, _toApiResponse(response.data));
     } on DioException catch (error) {
       return ApiResponse.failure(_extractDioMessage(error));
     } catch (_) {
@@ -143,6 +144,45 @@ class ApiClient {
       return ApiResponse.fromJson(body);
     }
     return ApiResponse.failure('接口数据格式错误');
+  }
+
+  /// 针对个别接口做返回数据的规范化。目前只处理 `/app/user/myInfo`：
+  /// 后端有时会把 `headUrl` 写成相对路径（如 `app/upload/.../xxx.png`），
+  /// 这里统一拼成完整 URL，避免上层每个消费方都去 import [MediaUrl]。
+  /// 直接修改 `data['user']` 这个 Map 是安全的——它来自 dio 解析出的
+  /// JSON，仅由本次响应使用，没有任何共享引用。
+  ApiResponse _normalizeForPath(String path, ApiResponse response) {
+    if (!response.isSuccess) {
+      return response;
+    }
+    if (path == '/app/user/myInfo') {
+      _normalizeMyInfoData(response.data);
+    }
+    return response;
+  }
+
+  void _normalizeMyInfoData(dynamic data) {
+    if (data is! Map<String, dynamic>) {
+      return;
+    }
+    // 兼容两种返回形态：data.user.headUrl（标准）和 data.headUrl（兜底）。
+    final user = data['user'];
+    if (user is Map<String, dynamic>) {
+      _resolveStringField(user, 'headUrl');
+    }
+    _resolveStringField(data, 'headUrl');
+  }
+
+  void _resolveStringField(Map<String, dynamic> map, String key) {
+    final raw = map[key];
+    if (raw is! String) {
+      return;
+    }
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) {
+      return;
+    }
+    map[key] = MediaUrl.resolve(trimmed);
   }
 
   String _extractDioMessage(DioException error) {

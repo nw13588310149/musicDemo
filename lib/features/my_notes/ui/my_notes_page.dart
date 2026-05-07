@@ -1676,7 +1676,9 @@ Future<String?> _showCreateNoteTitleDialog(BuildContext context) async {
                     controller: controller,
                     autofocus: true,
                     maxLength: 30,
-                    cursorColor: const Color(0xFF8640FF),
+                    cursorColor: const Color(0xFF8741FF),
+                    cursorWidth: 1.5,
+                    cursorHeight: u(16),
                     style: TextStyle(
                       fontSize: u(14),
                       color: const Color(0xFF0B081A),

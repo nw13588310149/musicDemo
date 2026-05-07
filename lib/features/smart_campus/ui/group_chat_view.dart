@@ -439,6 +439,9 @@ class _GroupChatViewState extends ConsumerState<GroupChatView> {
               maxLines: 8,
               minLines: 6,
               maxLength: 500,
+              cursorColor: const Color(0xFF8741FF),
+              cursorWidth: 1.5,
+              cursorHeight: 16,
               style: const TextStyle(
                 fontSize: 14,
                 color: _kTextDark,
@@ -2548,6 +2551,9 @@ class _ChatInputBarState extends State<_ChatInputBar> {
               child: TextField(
                 controller: widget.controller,
                 focusNode: _focusNode,
+                cursorColor: const Color(0xFF8741FF),
+                cursorWidth: 1.5,
+                cursorHeight: ui(15),
                 style: TextStyle(
                   fontSize: ui(13),
                   color: _kTextDark,

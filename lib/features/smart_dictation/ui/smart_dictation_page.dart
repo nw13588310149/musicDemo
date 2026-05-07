@@ -496,36 +496,11 @@ class _Content extends StatelessWidget {
           ),
         );
       }
-      return Padding(
-        padding: EdgeInsets.symmetric(vertical: ui(14)),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            const cols = 3;
-            const spacing = 12.0;
-            final cardWidth =
-                (constraints.maxWidth - (cols - 1) * ui(spacing)) / cols;
-            final cardHeight = ui(100);
-            return GridView.builder(
-              padding: EdgeInsets.zero,
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: cols,
-                childAspectRatio: cardWidth / cardHeight,
-                mainAxisSpacing: ui(10),
-                crossAxisSpacing: ui(spacing),
-              ),
-              itemCount: state.activeLessons.length,
-              itemBuilder: (context, index) {
-                final lesson = state.activeLessons[index];
-                return _LessonTile(
-                  ui: ui,
-                  track: state.activeTrack,
-                  lesson: lesson,
-                  onTap: () => onStartLesson(lesson),
-                );
-              },
-            );
-          },
-        ),
+      return _StageLessonGrid(
+        ui: ui,
+        track: state.activeTrack,
+        lessons: state.activeLessons,
+        onTap: onStartLesson,
       );
     }
 
@@ -2595,6 +2570,98 @@ class _ExitDialogButton extends StatelessWidget {
             height: 1,
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// 闯关练习的关卡列表网格。
+///
+/// 拆成 Stateful 是为了在用户左侧切赛道（绝对音感 / 音程识别 /
+/// 和弦识别）时把滚动条复位到顶部——否则上一个赛道滑到下半页
+/// 的状态会留下来，新赛道一进来就直接显示中段，让人误以为前面
+/// 没数据。
+///
+/// 复位策略：
+/// - 切换 [track] → `didUpdateWidget` 检测到差异，`jumpTo(0)`；
+/// - 模式从 stage 切到 smart 再切回 stage → `_Content.build` 在
+///   两个分支之间切换时会把本 widget 卸载再重建，scroll controller
+///   从零开始，自然就在顶部；
+/// - 首次进入 → fresh controller，初始就是顶部。
+class _StageLessonGrid extends StatefulWidget {
+  const _StageLessonGrid({
+    required this.ui,
+    required this.track,
+    required this.lessons,
+    required this.onTap,
+  });
+
+  final double Function(num) ui;
+  final SmartDictationTrack track;
+  final List<SmartDictationLesson> lessons;
+  final ValueChanged<SmartDictationLesson> onTap;
+
+  @override
+  State<_StageLessonGrid> createState() => _StageLessonGridState();
+}
+
+class _StageLessonGridState extends State<_StageLessonGrid> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void didUpdateWidget(covariant _StageLessonGrid oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.track != widget.track) {
+      // 在下一帧 jumpTo(0)：此时 GridView 已用新的 lessons 重新
+      // 测量，scroll position 范围也已更新，立刻 jumpTo(0) 才能
+      // 落到真正的顶部。
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (!_scrollController.hasClients) return;
+        _scrollController.jumpTo(0);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = widget.ui;
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: ui(14)),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          const cols = 3;
+          const spacing = 12.0;
+          final cardWidth =
+              (constraints.maxWidth - (cols - 1) * ui(spacing)) / cols;
+          final cardHeight = ui(100);
+          return GridView.builder(
+            controller: _scrollController,
+            padding: EdgeInsets.zero,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: cols,
+              childAspectRatio: cardWidth / cardHeight,
+              mainAxisSpacing: ui(10),
+              crossAxisSpacing: ui(spacing),
+            ),
+            itemCount: widget.lessons.length,
+            itemBuilder: (context, index) {
+              final lesson = widget.lessons[index];
+              return _LessonTile(
+                ui: ui,
+                track: widget.track,
+                lesson: lesson,
+                onTap: () => widget.onTap(lesson),
+              );
+            },
+          );
+        },
       ),
     );
   }

@@ -6,7 +6,6 @@ import '../../../../core/constants/app_assets.dart';
 import '../../../../core/widgets/app_asset_graphic.dart';
 import '../../state/shell_state.dart';
 import '../shell_layout.dart';
-import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 动画常量
@@ -249,7 +248,6 @@ class _NavTile extends StatelessWidget {
         : const Color(0xFF0B081A).withValues(alpha: 0.7);
 
     final collapsed = progress > 0.5;
-    final vPad = collapsed ? ui(6) : ui(12);
 
     return Material(
       color: Colors.transparent,
@@ -257,80 +255,90 @@ class _NavTile extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(ui(12)),
+        // 命中区固定 48 高（与展开态一致），icon 在里面始终垂直居中。
         child: Container(
           constraints: BoxConstraints(minHeight: ui(48)),
-          decoration: BoxDecoration(
-            color: bgColor,
-            borderRadius: BorderRadius.circular(ui(12)),
-          ),
-          padding: EdgeInsets.only(
-            left: tilePadLeft,
-            right: tilePadRight,
-            top: vPad,
-            bottom: vPad,
-          ),
+          alignment: collapsed ? Alignment.center : Alignment.centerLeft,
           child: collapsed
-              ? Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        _buildIcon(context),
-                        if (item.badge > 0)
-                          Positioned(
-                            right: ui(-2),
-                            top: ui(1),
-                            child: const _BadgeDot(),
-                          ),
-                      ],
-                    ),
-                  ],
+              // 折叠态：bg 收成 40×40 正方形，包住 icon；命中区仍是 48 高。
+              ? Container(
+                  width: ui(40),
+                  height: ui(40),
+                  decoration: BoxDecoration(
+                    color: bgColor,
+                    borderRadius: BorderRadius.circular(ui(12)),
+                  ),
+                  alignment: Alignment.center,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      _buildIcon(context),
+                      if (item.badge > 0)
+                        Positioned(
+                          right: ui(-2),
+                          top: ui(1),
+                          child: const _BadgeDot(),
+                        ),
+                    ],
+                  ),
                 )
-              : Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    _buildIcon(context),
-                    Expanded(
-                      child: ClipRect(
-                        child: Align(
-                          widthFactor: labelWidthFactor,
-                          alignment: Alignment.centerLeft,
-                          child: Opacity(
-                            opacity: labelOpacity,
-                            // 设计稿：inline-flex，图标→文案→角标 按内容自然宽度紧凑排列
-                            // 角标紧贴文案（设计稿 4px 间隙），不挤占「智慧校园」
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                SizedBox(width: ui(8)),
-                                Flexible(
-                                  child: Text(
-                                    item.label,
-                                    maxLines: 1,
-                                    softWrap: false,
-                                    overflow: TextOverflow.clip,
-                                    style: TextStyle(
-                                      fontSize: ui(15),
-                                      height: 1,
-                                      fontFamily: 'PingFang SC',
-                                      fontWeight: AppFont.w500,
-                                      color: textColor,
+              // 展开态：bg 横铺整条 tile，左 16 / 右 10 / 上下 12 内边距。
+              : Container(
+                  decoration: BoxDecoration(
+                    color: bgColor,
+                    borderRadius: BorderRadius.circular(ui(12)),
+                  ),
+                  padding: EdgeInsets.only(
+                    left: tilePadLeft,
+                    right: tilePadRight,
+                    top: ui(12),
+                    bottom: ui(12),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      _buildIcon(context),
+                      Expanded(
+                        child: ClipRect(
+                          child: Align(
+                            widthFactor: labelWidthFactor,
+                            alignment: Alignment.centerLeft,
+                            child: Opacity(
+                              opacity: labelOpacity,
+                              // 设计稿：inline-flex，图标→文案→角标 按内容自然宽度紧凑排列
+                              // 角标紧贴文案（设计稿 4px 间隙），不挤占「智慧校园」
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  SizedBox(width: ui(8)),
+                                  Flexible(
+                                    child: Text(
+                                      item.label,
+                                      maxLines: 1,
+                                      softWrap: false,
+                                      overflow: TextOverflow.clip,
+                                      style: TextStyle(
+                                        fontSize: ui(15),
+                                        height: 1,
+                                        fontFamily: 'PingFang SC',
+                                        fontWeight: FontWeight.w500,
+                                        color: textColor,
+                                      ),
                                     ),
                                   ),
-                                ),
-                                if (item.badge > 0) ...[
-                                  SizedBox(width: ui(4)),
-                                  _NavUnreadCapsule(count: item.badge),
+                                  if (item.badge > 0) ...[
+                                    SizedBox(width: ui(4)),
+                                    _NavUnreadCapsule(count: item.badge),
+                                  ],
                                 ],
-                              ],
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
         ),
       ),
