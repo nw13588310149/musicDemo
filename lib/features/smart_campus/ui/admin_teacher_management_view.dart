@@ -9,8 +9,8 @@ import '../../../core/widgets/popup_selector_field.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/admin_repository.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../core/widgets/app_text.dart';
 // ============================================================================
 // 颜色常量
 // ============================================================================
@@ -525,7 +525,7 @@ class _AdminTeacherManagementViewState
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                AppText(
+                Text(
                   '当前结果 ${list.length}人',
                   style: TextStyle(
                     fontSize: ui(12),
@@ -608,18 +608,18 @@ class _Banner extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               mainAxisSize: MainAxisSize.min,
               children: [
-                AppText(
+                Text(
                   '教师管理',
                   style: TextStyle(
                     fontSize: ui(16),
                     height: 1.2,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: AppFont.w600,
                     color: _kTextPrimary,
                     fontFamily: 'PingFang SC',
                   ),
                 ),
                 SizedBox(height: ui(4)),
-                AppText(
+                Text(
                   '人事档案、部门归属、任课与角色；与教师端登录权限、班主任带班关系对齐',
                   textAlign: TextAlign.center,
                   style: TextStyle(
@@ -745,18 +745,18 @@ class _StatGradientCard extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              AppText(
+              Text(
                 label,
                 style: TextStyle(
                   fontSize: ui(14),
                   height: 1.2,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: AppFont.w500,
                   color: Colors.black,
                   fontFamily: 'PingFang SC',
                 ),
               ),
               SizedBox(height: ui(8)),
-              AppText(
+              Text(
                 '$value',
                 style: TextStyle(
                   fontSize: ui(32),
@@ -896,7 +896,7 @@ class _TeacherGrid extends StatelessWidget {
           color: Colors.white,
           borderRadius: BorderRadius.circular(ui(12)),
         ),
-        child: AppText(
+        child: Text(
           '暂无符合条件的教师',
           style: TextStyle(
             fontSize: ui(14),
@@ -967,14 +967,14 @@ class _TeacherCard extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             Flexible(
-                              child: AppText(
+                              child: Text(
                                 teacher.name,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   fontSize: ui(14),
                                   height: 1.2,
-                                  fontWeight: FontWeight.w500,
+                                  fontWeight: AppFont.w500,
                                   color: _kTextPrimary,
                                   fontFamily: 'PingFang SC',
                                 ),
@@ -982,7 +982,7 @@ class _TeacherCard extends StatelessWidget {
                             ),
                             if (teacher.teacherId.isNotEmpty) ...[
                               SizedBox(width: ui(8)),
-                              AppText(
+                              Text(
                                 teacher.teacherId,
                                 style: TextStyle(
                                   fontSize: ui(12),
@@ -995,7 +995,7 @@ class _TeacherCard extends StatelessWidget {
                           ],
                         ),
                         SizedBox(height: ui(6)),
-                        AppText(
+                        Text(
                           teacher.subjectInfo,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -1007,7 +1007,7 @@ class _TeacherCard extends StatelessWidget {
                           ),
                         ),
                         SizedBox(height: ui(4)),
-                        AppText(
+                        Text(
                           teacher.roleInfo,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -1038,7 +1038,7 @@ class _TeacherCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(ui(10)),
                     border: Border.all(color: Colors.white, width: 1),
                   ),
-                  child: AppText(
+                  child: Text(
                     '班主任',
                     style: TextStyle(
                       fontSize: ui(11),
@@ -1077,7 +1077,7 @@ class _TeacherCard extends StatelessWidget {
                       ),
                     ),
                     SizedBox(width: ui(4)),
-                    AppText(
+                    Text(
                       teacher.status.label,
                       style: TextStyle(
                         fontSize: ui(12),
@@ -1114,12 +1114,12 @@ class _Avatar extends StatelessWidget {
         color: const Color(0xFFDAD2FF),
         borderRadius: BorderRadius.circular(ui(8)),
       ),
-      child: AppText(
+      child: Text(
         initial,
         style: TextStyle(
           fontSize: ui(16),
           height: 1.0,
-          fontWeight: FontWeight.w600,
+          fontWeight: AppFont.w600,
           color: _kPurple,
           fontFamily: 'PingFang SC',
         ),
@@ -1171,12 +1171,12 @@ class _TeacherProfileDialog extends StatelessWidget {
                     Row(
                       children: [
                         Flexible(
-                          child: AppText(
+                          child: Text(
                             teacher.name,
                             style: TextStyle(
                               fontSize: ui(16),
                               height: 1.2,
-                              fontWeight: FontWeight.w600,
+                              fontWeight: AppFont.w600,
                               color: Colors.black,
                               fontFamily: 'PingFang SC',
                             ),
@@ -1204,7 +1204,7 @@ class _TeacherProfileDialog extends StatelessWidget {
                                 ),
                               ),
                               SizedBox(width: ui(4)),
-                              AppText(
+                              Text(
                                 teacher.status.label,
                                 style: TextStyle(
                                   fontSize: ui(11),
@@ -1219,7 +1219,7 @@ class _TeacherProfileDialog extends StatelessWidget {
                       ],
                     ),
                     SizedBox(height: ui(4)),
-                    AppText(
+                    Text(
                       teacher.department,
                       style: TextStyle(
                         fontSize: ui(12),
@@ -1229,7 +1229,7 @@ class _TeacherProfileDialog extends StatelessWidget {
                       ),
                     ),
                     SizedBox(height: ui(2)),
-                    AppText(
+                    Text(
                       teacher.teacherId,
                       style: TextStyle(
                         fontSize: ui(12),
@@ -1298,7 +1298,7 @@ class _ProfileRow extends StatelessWidget {
         children: [
           SizedBox(
             width: ui(80),
-            child: AppText(
+            child: Text(
               label,
               style: TextStyle(
                 fontSize: ui(14),
@@ -1309,7 +1309,7 @@ class _ProfileRow extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: AppText(
+            child: Text(
               value,
               style: TextStyle(
                 fontSize: ui(14),

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../../../app/router/route_paths.dart';
 
-import '../../../../core/widgets/app_text.dart';
 class AuthPrimaryButton extends StatelessWidget {
   const AuthPrimaryButton({
     required this.text,
@@ -55,7 +54,7 @@ class AuthPrimaryButton extends StatelessWidget {
                     color: Colors.white,
                   ),
                 )
-              : AppText(
+              : Text(
                   text,
                   style: const TextStyle(
                     fontSize: 14,
@@ -110,7 +109,7 @@ class AuthAgreementRow extends StatelessWidget {
           child: Wrap(
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              const AppText(
+              const Text(
                 '同意并愿意遵守',
                 style: TextStyle(
                   fontSize: 14,
@@ -120,7 +119,7 @@ class AuthAgreementRow extends StatelessWidget {
               ),
               InkWell(
                 onTap: () => Navigator.pushNamed(context, RoutePaths.xieyi2),
-                child: const AppText(
+                child: const Text(
                   '《音乐之路服务协议》',
                   style: TextStyle(
                     fontSize: 14,
@@ -157,7 +156,7 @@ class AuthBottomActionLine extends StatelessWidget {
           child: Divider(color: Color(0xFFF1F1F4), thickness: 1, height: 1),
         ),
         const SizedBox(width: 14),
-        AppText(
+        Text(
           prefix,
           style: const TextStyle(
             fontSize: 14,
@@ -168,7 +167,7 @@ class AuthBottomActionLine extends StatelessWidget {
         const SizedBox(width: 4),
         InkWell(
           onTap: onTap,
-          child: AppText(
+          child: Text(
             action,
             style: const TextStyle(
               fontSize: 14,
@@ -225,7 +224,7 @@ class AuthSmsButton extends StatelessWidget {
           ),
         ),
         onPressed: enabled ? onTap : null,
-        child: AppText(text, textAlign: TextAlign.center),
+        child: Text(text, textAlign: TextAlign.center),
       ),
     );
   }

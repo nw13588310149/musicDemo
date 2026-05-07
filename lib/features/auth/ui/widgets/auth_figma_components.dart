@@ -5,8 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../../core/constants/app_assets.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../../core/widgets/app_text.dart';
 class AuthFigmaCardFrame extends StatelessWidget {
   const AuthFigmaCardFrame({
     required this.scale,
@@ -112,14 +112,14 @@ class AuthFigmaCardFrame extends StatelessWidget {
                       colors: [Color(0xFF0B081A), Color(0xFF8670E2)],
                     ).createShader(bounds);
                   },
-                  child: AppText(
+                  child: Text(
                     title,
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: _s(24),
                       fontFamily: 'PingFang SC',
                       fontFamilyFallback: const ['Harmony'],
-                      fontWeight: FontWeight.w600,
+                      fontWeight: AppFont.w600,
                       height: 36 / 24,
                     ),
                   ),
@@ -171,7 +171,7 @@ class AuthFigmaInputField extends StatelessWidget {
         fontSize: _s(14),
         fontFamily: 'PingFang SC',
         fontFamilyFallback: const ['Harmony'],
-        fontWeight: FontWeight.w400,
+        fontWeight: AppFont.w400,
         height: 12 / 14,
       ),
       decoration: InputDecoration(
@@ -182,7 +182,7 @@ class AuthFigmaInputField extends StatelessWidget {
           fontSize: _s(14),
           fontFamily: 'PingFang SC',
           fontFamilyFallback: const ['Harmony'],
-          fontWeight: FontWeight.w400,
+          fontWeight: AppFont.w400,
           height: 12 / 14,
         ),
         filled: true,
@@ -321,7 +321,7 @@ class AuthFigmaPrimaryButton extends StatelessWidget {
                   color: Colors.white,
                 ),
               )
-            : AppText(
+            : Text(
                 text,
                 style: TextStyle(
                   color: Colors.white,
@@ -378,7 +378,7 @@ class AuthFigmaSmsButton extends StatelessWidget {
           ),
         ),
         onPressed: enabled ? onTap : null,
-        child: AppText(
+        child: Text(
           text,
           textAlign: TextAlign.center,
           style: TextStyle(
@@ -386,7 +386,7 @@ class AuthFigmaSmsButton extends StatelessWidget {
             fontSize: _s(14),
             fontFamily: 'PingFang SC',
             fontFamilyFallback: const ['Harmony'],
-            fontWeight: FontWeight.w400,
+            fontWeight: AppFont.w400,
             height: 12 / 14,
           ),
         ),
@@ -449,14 +449,14 @@ class AuthFigmaAgreementRow extends StatelessWidget {
         GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () => onChanged(!checked),
-          child: AppText(
+          child: Text(
             '同意并愿意遵守',
             style: TextStyle(
               color: Colors.black,
               fontSize: _s(14),
               fontFamily: 'PingFang SC',
               fontFamilyFallback: const ['Harmony'],
-              fontWeight: FontWeight.w400,
+              fontWeight: AppFont.w400,
               height: 12 / 14,
             ),
           ),
@@ -467,14 +467,14 @@ class AuthFigmaAgreementRow extends StatelessWidget {
             onChanged(!checked);
             onAgreementTap();
           },
-          child: AppText(
+          child: Text(
             '《音乐之路服务协议》',
             style: TextStyle(
               color: const Color(0xFF856FE2),
               fontSize: _s(14),
               fontFamily: 'PingFang SC',
               fontFamilyFallback: const ['Harmony'],
-              fontWeight: FontWeight.w400,
+              fontWeight: AppFont.w400,
               height: 12 / 14,
             ),
           ),

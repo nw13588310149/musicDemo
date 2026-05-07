@@ -3,7 +3,6 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
-import '../../../../core/widgets/app_text.dart';
 /// 钢琴页面专用的"按键反应式"可视化条带。
 ///
 /// - **能量模型**：维护 `_barCount` 根柱子的标准化能量值（0..1），每帧按
@@ -364,7 +363,7 @@ class _FloatingNoteWidget extends StatelessWidget {
       child: IgnorePointer(
         child: Opacity(
           opacity: opacity.clamp(0.2, 0.85),
-          child: AppText(
+          child: Text(
             spec.symbol,
             style: TextStyle(
               fontSize: spec.size,

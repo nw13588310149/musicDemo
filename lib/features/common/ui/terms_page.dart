@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/widgets/app_text.dart';
 class TermsPage extends StatelessWidget {
   const TermsPage({super.key});
 
@@ -18,7 +17,7 @@ class TermsPage extends StatelessWidget {
     ];
 
     return Scaffold(
-      appBar: AppBar(title: const AppText('用户协议')),
+      appBar: AppBar(title: const Text('用户协议')),
       body: Container(
         width: double.infinity,
         color: Colors.white,
@@ -27,7 +26,7 @@ class TermsPage extends StatelessWidget {
           children: [
             Expanded(
               child: ListView.separated(
-                itemBuilder: (context, index) => AppText(
+                itemBuilder: (context, index) => Text(
                   paragraphs[index],
                   style: const TextStyle(
                     fontSize: 14,
@@ -46,7 +45,7 @@ class TermsPage extends StatelessWidget {
               height: 40,
               child: FilledButton(
                 onPressed: () => Navigator.pop(context),
-                child: const AppText('我已知晓并同意上述协议'),
+                child: const Text('我已知晓并同意上述协议'),
               ),
             ),
           ],

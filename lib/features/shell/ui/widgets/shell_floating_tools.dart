@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../../../core/constants/app_assets.dart';
 import '../shell_layout.dart';
 
-import '../../../../core/widgets/app_text.dart';
 enum ShellToolAction { metronome, recorder, piano }
 
 class ShellFloatingTools extends StatelessWidget {
@@ -96,7 +95,7 @@ class ShellFloatingTools extends StatelessWidget {
           children: [
             Image.asset(icon, width: ui(25), height: ui(25)),
             SizedBox(height: ui(6)),
-            AppText(
+            Text(
               label,
               style: TextStyle(
                 fontSize: ui(13),

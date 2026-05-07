@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../core/widgets/app_text.dart';
 /// 通用默认功能页脚手架
 /// 各功能模块在正式开发前使用此占位页，保持路由畅通。
 class _FeatureDefaultPage extends StatelessWidget {
@@ -30,17 +30,17 @@ class _FeatureDefaultPage extends StatelessWidget {
             child: Icon(icon, size: 40, color: accentColor),
           ),
           const SizedBox(height: 20),
-          AppText(
+          Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 22,
-              fontWeight: FontWeight.w600,
+              fontWeight: AppFont.w600,
               color: Color(0xFF1A1A1A),
               fontFamily: 'PingFang SC',
             ),
           ),
           const SizedBox(height: 8),
-          const AppText(
+          const Text(
             '功能开发中，敬请期待',
             style: TextStyle(
               fontSize: 14,

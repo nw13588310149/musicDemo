@@ -11,8 +11,8 @@ import '../../../courseware/ui/courseware_file_picker.dart';
 import '../../../shell/ui/shell_layout.dart';
 import '../../state/circle_controller.dart';
 import '../../state/circle_state.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../../core/widgets/app_text.dart';
 const Color _kPurple = Color(0xFF8741FF);
 const Color _kBg = Color(0xFFF5F6FA);
 const Color _kBorder = Color(0xFFCECED1);
@@ -262,7 +262,11 @@ class _CirclePublishDialogState extends ConsumerState<_CirclePublishDialog> {
 
   Future<void> _pickCover() async {
     if (_coverUploading) return;
-    final files = await pickCoursewareFiles(allowMultiple: false);
+    // 校圈封面只允许图片：移动端会直接拉起相册，避免再走文件管理。
+    final files = await pickCoursewareFiles(
+      allowMultiple: false,
+      type: CoursewarePickType.image,
+    );
     if (files.isEmpty || !mounted) return;
     final f = files.first;
     final ext = _extOf(f.name);
@@ -511,13 +515,13 @@ class _KindTabItem extends StatelessWidget {
               color: selected ? Colors.white : _kHint,
             ),
             SizedBox(width: ui(4)),
-            AppText(
+            Text(
               label,
               style: TextStyle(
                 fontSize: ui(12),
                 color: selected ? Colors.white : _kHint,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
                 height: 1,
               ),
             ),
@@ -553,7 +557,7 @@ class _TitleField extends StatelessWidget {
           fontSize: ui(14),
           color: _kText,
           fontFamily: 'PingFang SC',
-          fontWeight: FontWeight.w500,
+          fontWeight: AppFont.w500,
           height: 1.4,
         ),
         decoration: InputDecoration(
@@ -563,7 +567,7 @@ class _TitleField extends StatelessWidget {
             fontSize: ui(14),
             color: _kHint,
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w400,
+            fontWeight: AppFont.w400,
             height: 1.4,
           ),
           border: InputBorder.none,
@@ -605,7 +609,7 @@ class _TextArea extends StatelessWidget {
           fontSize: ui(13),
           color: _kText,
           fontFamily: 'PingFang SC',
-          fontWeight: FontWeight.w400,
+          fontWeight: AppFont.w400,
           height: 20 / 13,
         ),
         decoration: InputDecoration(
@@ -614,7 +618,7 @@ class _TextArea extends StatelessWidget {
             fontSize: ui(13),
             color: _kHint,
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w400,
+            fontWeight: AppFont.w400,
             height: 20 / 13,
           ),
           border: InputBorder.none,
@@ -679,7 +683,7 @@ class _MediaArea extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                AppText(
+                Text(
                   fileName!,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -687,7 +691,7 @@ class _MediaArea extends StatelessWidget {
                     fontSize: ui(13),
                     color: _kText,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w500,
+                    fontWeight: AppFont.w500,
                     height: 1.3,
                   ),
                 ),
@@ -772,24 +776,24 @@ class _PickPlaceholder extends StatelessWidget {
           children: [
             Icon(icon, size: ui(38), color: _kPurple),
             SizedBox(height: ui(8)),
-            AppText(
+            Text(
               label,
               style: TextStyle(
                 fontSize: ui(14),
                 color: _kText,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
                 height: 1.2,
               ),
             ),
             SizedBox(height: ui(4)),
-            AppText(
+            Text(
               hint,
               style: TextStyle(
                 fontSize: ui(12),
                 color: _kHint,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w400,
+                fontWeight: AppFont.w400,
                 height: 1.2,
               ),
             ),
@@ -836,24 +840,24 @@ class _CoverArea extends StatelessWidget {
       children: [
         Row(
           children: [
-            AppText(
+            Text(
               '封面图',
               style: TextStyle(
                 fontSize: ui(13),
                 color: _kText,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
                 height: 1.2,
               ),
             ),
             SizedBox(width: ui(6)),
-            AppText(
+            Text(
               '（可选，仅支持图片）',
               style: TextStyle(
                 fontSize: ui(12),
                 color: _kHint,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w400,
+                fontWeight: AppFont.w400,
                 height: 1.2,
               ),
             ),
@@ -920,24 +924,24 @@ class _CoverPickPlaceholder extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  AppText(
+                  Text(
                     '点击上传封面',
                     style: TextStyle(
                       fontSize: ui(13),
                       color: _kText,
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w500,
+                      fontWeight: AppFont.w500,
                       height: 1.3,
                     ),
                   ),
                   SizedBox(height: ui(4)),
-                  AppText(
+                  Text(
                     '建议比例 16:9 / 1:1，jpg / png / webp 等',
                     style: TextStyle(
                       fontSize: ui(12),
                       color: _kHint,
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w400,
+                      fontWeight: AppFont.w400,
                       height: 1.3,
                     ),
                   ),
@@ -1001,7 +1005,7 @@ class _CoverFilledRow extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                AppText(
+                Text(
                   fileName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -1009,7 +1013,7 @@ class _CoverFilledRow extends StatelessWidget {
                     fontSize: ui(13),
                     color: _kText,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w500,
+                    fontWeight: AppFont.w500,
                     height: 1.3,
                   ),
                 ),
@@ -1144,13 +1148,13 @@ class _UploadStatusLine extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          AppText(
+          Text(
             '上传中 ${(uploadProgress * 100).toStringAsFixed(0)}%',
             style: TextStyle(
               fontSize: ui(12),
               color: _kHint,
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w400,
+              fontWeight: AppFont.w400,
               height: 1.2,
             ),
           ),
@@ -1177,7 +1181,7 @@ class _UploadStatusLine extends StatelessWidget {
           ),
           SizedBox(width: ui(4)),
           Expanded(
-            child: AppText(
+            child: Text(
               uploadError!,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -1185,7 +1189,7 @@ class _UploadStatusLine extends StatelessWidget {
                 fontSize: ui(12),
                 color: const Color(0xFFF04545),
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w400,
+                fontWeight: AppFont.w400,
                 height: 1.2,
               ),
             ),
@@ -1198,13 +1202,13 @@ class _UploadStatusLine extends StatelessWidget {
                 horizontal: ui(6),
                 vertical: ui(2),
               ),
-              child: AppText(
+              child: Text(
                 '重试',
                 style: TextStyle(
                   fontSize: ui(12),
                   color: _kPurple,
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w500,
+                  fontWeight: AppFont.w500,
                   height: 1.2,
                 ),
               ),
@@ -1222,26 +1226,26 @@ class _UploadStatusLine extends StatelessWidget {
             color: _kPurple,
           ),
           SizedBox(width: ui(4)),
-          AppText(
+          Text(
             '已上传${_humanSize(fileSize).isEmpty ? '' : ' · '}${_humanSize(fileSize)}',
             style: TextStyle(
               fontSize: ui(12),
               color: _kHint,
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w400,
+              fontWeight: AppFont.w400,
               height: 1.2,
             ),
           ),
         ],
       );
     }
-    return AppText(
+    return Text(
       _humanSize(fileSize),
       style: TextStyle(
         fontSize: ui(12),
         color: _kHint,
         fontFamily: 'PingFang SC',
-        fontWeight: FontWeight.w400,
+        fontWeight: AppFont.w400,
         height: 1.2,
       ),
     );

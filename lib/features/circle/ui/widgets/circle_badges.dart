@@ -5,7 +5,6 @@ import '../../../../core/widgets/app_asset_graphic.dart';
 import '../../../shell/ui/shell_layout.dart';
 import '../../state/circle_state.dart';
 
-import '../../../../core/widgets/app_text.dart';
 /// 单个标签胶囊：置顶 / 热门。
 class CircleBadgeChip extends StatelessWidget {
   const CircleBadgeChip({super.key, required this.badge});
@@ -33,7 +32,7 @@ class CircleBadgeChip extends StatelessWidget {
         children: [
           AppAssetGraphic(iconAsset, width: ui(12), height: ui(12)),
           SizedBox(width: ui(2)),
-          AppText(
+          Text(
             label,
             style: TextStyle(
               color: fg,

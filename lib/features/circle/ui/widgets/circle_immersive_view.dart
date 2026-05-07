@@ -12,8 +12,8 @@ import 'circle_action_buttons.dart';
 import 'circle_badges.dart';
 import 'circle_comment_panel.dart';
 import 'circle_media_player.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../../core/widgets/app_text.dart';
 /// 沉浸模式：全屏单帖，纵向 PageView 翻页，右侧操作按钮，下方文字浮层；
 /// 评论面板从右侧滑入，覆盖在沉浸面板之上。
 class CircleImmersiveView extends StatefulWidget {
@@ -131,7 +131,7 @@ class _CircleImmersiveViewState extends State<CircleImmersiveView> {
       return const ColoredBox(
         color: Color(0xFF0B081A),
         child: Center(
-          child: AppText(
+          child: Text(
             '暂无动态',
             style: TextStyle(
               color: Color(0xFFB6B5BB),
@@ -321,17 +321,17 @@ class _ImmersiveTextBlock extends StatelessWidget {
           spacing: ui(12),
           runSpacing: ui(6),
           children: [
-            AppText(
+            Text(
               '@${post.author.name}',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: ui(20),
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w600,
+                fontWeight: AppFont.w600,
                 height: 1.2,
               ),
             ),
-            AppText(
+            Text(
               post.author.role,
               style: TextStyle(
                 color: const Color(0xFFCECED1),
@@ -344,7 +344,7 @@ class _ImmersiveTextBlock extends StatelessWidget {
           ],
         ),
         SizedBox(height: ui(12)),
-        AppText(
+        Text(
           post.text,
           maxLines: 3,
           overflow: TextOverflow.ellipsis,
@@ -356,7 +356,7 @@ class _ImmersiveTextBlock extends StatelessWidget {
           ),
         ),
         SizedBox(height: ui(6)),
-        AppText(
+        Text(
           post.timeLabel,
           style: TextStyle(
             color: const Color(0xFFB6B5BB),

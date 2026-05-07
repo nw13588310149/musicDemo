@@ -2,18 +2,28 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import './app_text.dart';
+enum AppToastType { success, error }
+
 class AppToast {
   AppToast._();
 
   static OverlayEntry? _entry;
   static Timer? _timer;
 
+  /// 全局轻提示。
+  ///
+  /// `type` 不传时根据 [message] 文本自动判定成功 / 失败：
+  /// - 含「失败 / 错误 / 无效 / 失效 / 无法 / 不支持 / 尚未 / 不可用」→ 失败
+  /// - 含「成功 / 完成」→ 成功
+  /// - 含「已...」状态确认（已发布 / 已删除 / 已通过 等）→ 成功
+  /// - 其余（请..、暂无.. 等）兜底为失败样式
   static void show(
     BuildContext context,
     String message, {
     Duration duration = const Duration(milliseconds: 2200),
+    AppToastType? type,
   }) {
     final text = message.trim();
     if (text.isEmpty) {
@@ -27,6 +37,8 @@ class AppToast {
     final size = MediaQuery.maybeSizeOf(context) ?? const Size(1440, 900);
     final scale = math.min(size.width / 1440, size.height / 900);
     double ui(num value) => value * (scale.isFinite && scale > 0 ? scale : 1);
+
+    final resolved = type ?? _autoDetectType(text);
 
     _timer?.cancel();
     _entry?.remove();
@@ -53,77 +65,7 @@ class AppToast {
                   );
                 },
                 child: Center(
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      minWidth: ui(188),
-                      maxWidth: ui(420),
-                    ),
-                    child: Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: ui(18),
-                        vertical: ui(12),
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(ui(14)),
-                        border: Border.all(
-                          color: const Color(0xFFF0ECFF),
-                          width: ui(1),
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0x1F4D2B88),
-                            blurRadius: ui(22),
-                            offset: Offset(0, ui(10)),
-                          ),
-                          BoxShadow(
-                            color: const Color(0x0F000000),
-                            blurRadius: ui(4),
-                            offset: Offset(0, ui(1)),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: ui(22),
-                            height: ui(22),
-                            alignment: Alignment.center,
-                            decoration: const BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient: LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [Color(0xFFB68EFF), Color(0xFF8741FF)],
-                              ),
-                            ),
-                            child: Icon(
-                              Icons.info_outline_rounded,
-                              size: ui(14),
-                              color: Colors.white,
-                            ),
-                          ),
-                          SizedBox(width: ui(10)),
-                          Flexible(
-                            child: AppText(
-                              text,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: const Color(0xFF0B081A),
-                                fontSize: ui(14),
-                                fontFamily: 'PingFang SC',
-                                fontWeight: FontWeight.w500,
-                                height: 20 / 14,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+                  child: _buildBody(text, resolved, ui),
                 ),
               ),
             ),
@@ -136,5 +78,100 @@ class AppToast {
       _entry?.remove();
       _entry = null;
     });
+  }
+
+  static void showSuccess(
+    BuildContext context,
+    String message, {
+    Duration duration = const Duration(milliseconds: 2200),
+  }) {
+    show(context, message, duration: duration, type: AppToastType.success);
+  }
+
+  static void showError(
+    BuildContext context,
+    String message, {
+    Duration duration = const Duration(milliseconds: 2200),
+  }) {
+    show(context, message, duration: duration, type: AppToastType.error);
+  }
+
+  static AppToastType _autoDetectType(String text) {
+    const errorKeywords = <String>[
+      '失败',
+      '错误',
+      '无效',
+      '失效',
+      '无法',
+      '不支持',
+      '尚未',
+      '不可用',
+      '重试',
+      '再试',
+    ];
+    for (final kw in errorKeywords) {
+      if (text.contains(kw)) return AppToastType.error;
+    }
+    if (text.contains('成功') || text.contains('完成')) {
+      return AppToastType.success;
+    }
+    if (text.contains('已')) return AppToastType.success;
+    return AppToastType.error;
+  }
+
+  static Widget _buildBody(
+    String text,
+    AppToastType type,
+    double Function(num) ui,
+  ) {
+    final isSuccess = type == AppToastType.success;
+    final bgAsset = isSuccess
+        ? 'assets/images/home/successBG.png'
+        : 'assets/images/home/errorBG.png';
+    final iconAsset = isSuccess
+        ? 'assets/images/home/success.png'
+        : 'assets/images/home/error.png';
+
+    return Container(
+      width: ui(340),
+      height: ui(48),
+      padding: EdgeInsets.symmetric(horizontal: ui(12)),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(ui(8)),
+        image: DecorationImage(
+          image: AssetImage(bgAsset),
+          fit: BoxFit.fill,
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Image.asset(
+            iconAsset,
+            width: ui(24),
+            height: ui(24),
+            fit: BoxFit.contain,
+          ),
+          SizedBox(width: ui(8)),
+          Flexible(
+            fit: FlexFit.loose,
+            child: Text(
+              text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: const Color(0xFF0B081A),
+                fontSize: ui(14),
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w500,
+                height: 20 / 14,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:pdfrx/pdfrx.dart';
 
-import '../../../../core/widgets/app_text.dart';
 class TheoryPdfView extends StatelessWidget {
   const TheoryPdfView({
     super.key,
@@ -26,6 +25,10 @@ class TheoryPdfView extends StatelessWidget {
       params: PdfViewerParams(
         backgroundColor: const Color(0xFFFAFAFB),
         margin: 12,
+        // 去掉每一页四周默认的黑色 drop shadow（pdfrx 默认值是
+        // BoxShadow(color: Colors.black54, blurRadius: 4, ...)），
+        // 让 PDF 干净地贴在卡片背景上。
+        pageDropShadow: null,
         loadingBannerBuilder: (context, bytesDownloaded, totalBytes) {
           final progress = (totalBytes != null && totalBytes > 0)
               ? bytesDownloaded / totalBytes
@@ -44,7 +47,7 @@ class TheoryPdfView extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
-                AppText(
+                Text(
                   progress == null
                       ? 'PDF 加载中…'
                       : 'PDF 加载中…${(progress * 100).clamp(0, 100).toStringAsFixed(0)}%',
@@ -71,7 +74,7 @@ class TheoryPdfView extends StatelessWidget {
                     size: 48,
                   ),
                   const SizedBox(height: 12),
-                  const AppText(
+                  const Text(
                     'PDF 加载失败，请稍后重试',
                     style: TextStyle(
                       color: Color(0xFF6D6B75),
@@ -108,3 +111,8 @@ class TheoryPdfView extends StatelessWidget {
     );
   }
 }
+
+/// 仅在 Web 端调用浏览器 Fullscreen API 把 iframe 撑满全屏；
+/// Native 平台没有 iframe，永远返回 false，让上层走 [showGeneralDialog]
+/// 的 Flutter 全屏对话框。
+bool tryFullscreenWebPdf() => false;

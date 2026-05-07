@@ -6,8 +6,8 @@ import '../../../../core/constants/app_assets.dart';
 import '../../../../core/widgets/app_asset_graphic.dart';
 import '../../state/shell_state.dart';
 import '../shell_layout.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../../core/widgets/app_text.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 // 动画常量
 // ─────────────────────────────────────────────────────────────────────────────
@@ -306,7 +306,7 @@ class _NavTile extends StatelessWidget {
                               children: [
                                 SizedBox(width: ui(8)),
                                 Flexible(
-                                  child: AppText(
+                                  child: Text(
                                     item.label,
                                     maxLines: 1,
                                     softWrap: false,
@@ -315,7 +315,7 @@ class _NavTile extends StatelessWidget {
                                       fontSize: ui(15),
                                       height: 1,
                                       fontFamily: 'PingFang SC',
-                                      fontWeight: FontWeight.w500,
+                                      fontWeight: AppFont.w500,
                                       color: textColor,
                                     ),
                                   ),
@@ -394,7 +394,7 @@ class _NavUnreadCapsule extends StatelessWidget {
         color: const Color(0xFFF04545),
         borderRadius: BorderRadius.circular(ui(20)),
       ),
-      child: AppText(
+      child: Text(
         _label,
         textAlign: TextAlign.center,
         style: TextStyle(

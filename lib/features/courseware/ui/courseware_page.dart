@@ -17,8 +17,8 @@ import '../state/cloud_drive_controller.dart';
 import '../state/cloud_drive_state.dart';
 import 'courseware_file_picker.dart';
 import 'courseware_inline_preview.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../core/widgets/app_text.dart';
 class MyCloudDrivePage extends ConsumerStatefulWidget {
   const MyCloudDrivePage({super.key});
 
@@ -476,14 +476,14 @@ class _CloudSidebar extends StatelessWidget {
                       : Center(
                           child: Padding(
                             padding: EdgeInsets.symmetric(horizontal: ui(8)),
-                            child: AppText(
+                            child: Text(
                               '暂无分类\n点击下方"添加分类"创建',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: ui(12),
                                 color: const Color(0xFFB6B5BB),
                                 fontFamily: 'PingFang SC',
-                                fontWeight: FontWeight.w400,
+                                fontWeight: AppFont.w400,
                                 height: 1.6,
                               ),
                             ),
@@ -579,13 +579,13 @@ class _CloudContentArea extends StatelessWidget {
               onItemTap: (_) => onBackToOverview(),
             )
           else if (selectedCategoryName.isNotEmpty)
-            AppText(
+            Text(
               selectedCategoryName,
               style: TextStyle(
                 fontSize: ui(15),
                 color: const Color(0xFF0B081A),
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
                 height: 12 / 15,
               ),
             )
@@ -665,13 +665,13 @@ class _CloudContentArea extends StatelessWidget {
           ),
           if (state.errorMessage.isNotEmpty) ...[
             SizedBox(height: ui(10)),
-            AppText(
+            Text(
               state.errorMessage,
               style: TextStyle(
                 fontSize: ui(12),
                 color: const Color(0xFFFF5681),
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w400,
+                fontWeight: AppFont.w400,
               ),
             ),
           ],
@@ -751,7 +751,7 @@ class _CategoryCardState extends State<_CategoryCard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  AppText(
+                  Text(
                     item.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -759,12 +759,12 @@ class _CategoryCardState extends State<_CategoryCard> {
                       fontSize: ui(13),
                       color: const Color(0xFF0B081A),
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w500,
+                      fontWeight: AppFont.w500,
                       height: 12 / 13,
                     ),
                   ),
                   SizedBox(height: ui(4)),
-                  AppText(
+                  Text(
                     '已存储 ${item.count} 个',
                     maxLines: 1,
                     softWrap: false,
@@ -774,7 +774,7 @@ class _CategoryCardState extends State<_CategoryCard> {
                           ? const Color(0xFF0B081A)
                           : const Color(0xFF7F7F7F),
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w400,
+                      fontWeight: AppFont.w400,
                       height: 12 / 10,
                     ),
                   ),
@@ -827,24 +827,24 @@ class _StorageUsageCard extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                AppText(
+                Text(
                   '云盘存储',
                   style: TextStyle(
                     fontSize: ui(11),
                     color: const Color(0xFF0B081A),
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w500,
+                    fontWeight: AppFont.w500,
                     height: 12 / 11,
                   ),
                 ),
                 SizedBox(width: ui(8)),
-                AppText(
+                Text(
                   summaryText,
                   style: TextStyle(
                     fontSize: ui(10),
                     color: const Color(0xFFB6B5BB),
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w400,
+                    fontWeight: AppFont.w400,
                     height: 12 / 10,
                   ),
                 ),
@@ -931,14 +931,14 @@ class _AddCategoryCard extends StatelessWidget {
                 ),
               ),
               SizedBox(height: ui(4)),
-              AppText(
+              Text(
                 '添加分类',
                 maxLines: 1,
                 style: TextStyle(
                   fontSize: ui(13),
                   color: const Color(0xFF0B081A),
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w500,
+                  fontWeight: AppFont.w500,
                   height: 12 / 13,
                 ),
               ),
@@ -978,13 +978,13 @@ class _FolderBreadcrumb extends StatelessWidget {
         final itemIndex = index ~/ 2;
         final label = items[itemIndex];
         final isLast = itemIndex == items.length - 1;
-        final text = AppText(
+        final text = Text(
           label,
           style: TextStyle(
             fontSize: ui(14),
             color: isLast ? const Color(0xFF1A1A1A) : const Color(0xFF788698),
             fontFamily: 'PingFang SC',
-            fontWeight: isLast ? FontWeight.w600 : FontWeight.w400,
+            fontWeight: isLast ? AppFont.w600 : AppFont.w400,
           ),
         );
         if (isLast) {
@@ -1024,13 +1024,13 @@ class _CloudEmptyState extends StatelessWidget {
             fit: BoxFit.contain,
           ),
           SizedBox(height: ui(12)),
-          AppText(
+          Text(
             message,
             style: TextStyle(
               fontSize: ui(14),
               color: const Color(0xFFB6B5BB),
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w400,
+              fontWeight: AppFont.w400,
             ),
           ),
         ],
@@ -1057,7 +1057,7 @@ class _CloudSearchField extends StatelessWidget {
             fontSize: ui(14),
             color: const Color(0xFFD1D1D1),
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w400,
+            fontWeight: AppFont.w400,
           ),
           prefixIcon: Padding(
             padding: EdgeInsets.only(left: ui(16), right: ui(10)),
@@ -1151,13 +1151,13 @@ class _ToolbarActionButton extends StatelessWidget {
                   else
                     Icon(icon, size: ui(16), color: const Color(0xFF1A1A1A)),
                   SizedBox(width: ui(4)),
-                  AppText(
+                  Text(
                     label!,
                     style: TextStyle(
                       fontSize: ui(12),
                       color: const Color(0xFF1A1A1A),
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w500,
+                      fontWeight: AppFont.w500,
                     ),
                   ),
                 ],
@@ -1180,17 +1180,17 @@ class _SelectionInfoBar extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        AppText(
+        Text(
           '已存储',
           style: TextStyle(
             fontSize: ui(12),
             color: const Color(0xFFB6B5BB),
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w500,
+            fontWeight: AppFont.w500,
           ),
         ),
         SizedBox(width: ui(6)),
-        AppText(
+        Text(
           '$totalCount',
           style: TextStyle(
             fontSize: ui(12),
@@ -1200,13 +1200,13 @@ class _SelectionInfoBar extends StatelessWidget {
           ),
         ),
         SizedBox(width: ui(6)),
-        AppText(
+        Text(
           '个文件',
           style: TextStyle(
             fontSize: ui(12),
             color: const Color(0xFFB6B5BB),
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w500,
+            fontWeight: AppFont.w500,
           ),
         ),
       ],
@@ -1339,7 +1339,7 @@ class _FolderCardState extends State<_FolderCard> {
                   Positioned(
                     left: ui(10),
                     bottom: ui(28),
-                    child: AppText(
+                    child: Text(
                       isCreate ? '' : item.dateLabel,
                       style: TextStyle(
                         fontSize: ui(11),
@@ -1352,7 +1352,7 @@ class _FolderCardState extends State<_FolderCard> {
                   Positioned(
                     left: ui(10),
                     bottom: ui(8),
-                    child: AppText(
+                    child: Text(
                       isCreate ? '点击创建新的资料目录' : item.sizeLabel,
                       style: TextStyle(
                         fontSize: ui(11),
@@ -1382,7 +1382,7 @@ class _FolderCardState extends State<_FolderCard> {
           ),
           SizedBox(height: ui(10)),
           Center(
-            child: AppText(
+            child: Text(
               item.title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -1391,7 +1391,7 @@ class _FolderCardState extends State<_FolderCard> {
                 fontSize: ui(15),
                 color: const Color(0xFF0B081A),
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
               ),
             ),
           ),
@@ -1489,13 +1489,13 @@ class _FileCardState extends State<_FileCard> {
                           color: visual.badgeBg,
                           borderRadius: BorderRadius.circular(ui(4)),
                         ),
-                        child: AppText(
+                        child: Text(
                           visual.badgeLabel,
                           style: TextStyle(
                             fontSize: ui(10),
                             color: visual.badgeColor,
                             fontFamily: 'PingFang SC',
-                            fontWeight: FontWeight.w500,
+                            fontWeight: AppFont.w500,
                             height: 11.43 / 9.52,
                           ),
                         ),
@@ -1548,7 +1548,7 @@ class _FileCardState extends State<_FileCard> {
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         Expanded(
-                          child: AppText(
+                          child: Text(
                             item.title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -1556,7 +1556,7 @@ class _FileCardState extends State<_FileCard> {
                               fontSize: ui(13),
                               color: const Color(0xFF0B081A),
                               fontFamily: 'PingFang SC',
-                              fontWeight: FontWeight.w500,
+                              fontWeight: AppFont.w500,
                               height: 12 / 13,
                             ),
                           ),
@@ -1585,7 +1585,7 @@ class _FileCardState extends State<_FileCard> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          AppText(
+                          Text(
                             item.sizeLabel,
                             style: TextStyle(
                               fontSize: ui(10),
@@ -1595,7 +1595,7 @@ class _FileCardState extends State<_FileCard> {
                               height: 12 / 10,
                             ),
                           ),
-                          AppText(
+                          Text(
                             item.dateLabel,
                             style: TextStyle(
                               fontSize: ui(10),
@@ -1661,13 +1661,13 @@ class _FloatingCreateButton extends StatelessWidget {
               fit: BoxFit.contain,
             ),
             SizedBox(width: ui(8)),
-            AppText(
+            Text(
               label,
               style: TextStyle(
                 fontSize: ui(16),
                 color: const Color(0xFF0B081A),
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
                 height: 12 / 16,
               ),
             ),
@@ -1751,13 +1751,13 @@ class _UploadKindOption extends StatelessWidget {
                 : null,
           ),
           SizedBox(width: ui(5)),
-          AppText(
+          Text(
             label,
             style: TextStyle(
               fontSize: ui(14),
               color: const Color(0xFF0B081A),
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w400,
+              fontWeight: AppFont.w400,
               height: 12 / 14,
             ),
           ),
@@ -1887,7 +1887,7 @@ class _PreviewHeaderBar extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    AppText(
+                    Text(
                       title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -1895,7 +1895,7 @@ class _PreviewHeaderBar extends StatelessWidget {
                         fontSize: ui(15),
                         color: const Color(0xFF0B081A),
                         fontFamily: 'PingFang SC',
-                        fontWeight: FontWeight.w500,
+                        fontWeight: AppFont.w500,
                       ),
                     ),
                     SizedBox(width: ui(6)),
@@ -1989,13 +1989,13 @@ class _PreviewActionPill extends StatelessWidget {
               fit: BoxFit.contain,
             ),
             SizedBox(width: ui(4)),
-            AppText(
+            Text(
               label,
               style: TextStyle(
                 fontSize: ui(12),
                 color: Colors.black,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w600,
+                fontWeight: AppFont.w600,
               ),
             ),
           ],
@@ -2118,7 +2118,7 @@ class _PreviewImagePager extends StatelessWidget {
       return Container(
         color: const Color(0xFFFAFAFD),
         alignment: Alignment.center,
-        child: AppText(
+        child: Text(
           '该资料暂无可预览图片',
           style: TextStyle(
             color: const Color(0xFF8F86A8),
@@ -2224,7 +2224,7 @@ class _PreviewThumbnailRail extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                AppText(
+                Text(
                   '第${index + 1}页',
                   style: TextStyle(
                     fontSize: ui(12),
@@ -2232,7 +2232,7 @@ class _PreviewThumbnailRail extends StatelessWidget {
                         ? const Color(0xFF8741FF)
                         : const Color(0xFF0B081A),
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w400,
+                    fontWeight: AppFont.w400,
                   ),
                 ),
                 SizedBox(height: ui(4)),
@@ -2397,13 +2397,13 @@ class _CoursewareEmptyPreview extends StatelessWidget {
               fit: BoxFit.contain,
             ),
             SizedBox(height: ui(14)),
-            AppText(
+            Text(
               '该资料暂无可预览内容',
               style: TextStyle(
                 fontSize: ui(12),
                 color: const Color(0xFF8F86A8),
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w400,
+                fontWeight: AppFont.w400,
                 height: 1.5,
               ),
             ),
@@ -2531,13 +2531,13 @@ class _PreviewScoreTurntable extends StatelessWidget {
                       fit: BoxFit.contain,
                     ),
                     SizedBox(width: ui(4)),
-                    AppText(
+                    Text(
                       '分享',
                       style: TextStyle(
                         color: const Color(0xFF0B081A),
                         fontSize: ui(12),
                         fontFamily: 'PingFang SC',
-                        fontWeight: FontWeight.w500,
+                        fontWeight: AppFont.w500,
                       ),
                     ),
                   ],
@@ -2559,7 +2559,7 @@ class _PreviewScoreTurntable extends StatelessWidget {
             ),
             alignment: Alignment.center,
             padding: EdgeInsets.symmetric(horizontal: ui(12)),
-            child: AppText(
+            child: Text(
               title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -2568,7 +2568,7 @@ class _PreviewScoreTurntable extends StatelessWidget {
                 color: Colors.black,
                 fontSize: ui(11),
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w400,
+                fontWeight: AppFont.w400,
                 height: 18 / 11,
               ),
             ),
@@ -2728,13 +2728,13 @@ class _PreviewDescriptionCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(ui(8)),
       ),
       child: SingleChildScrollView(
-        child: AppText(
+        child: Text(
           text.isEmpty ? '暂无简介' : text,
           style: TextStyle(
             color: const Color(0xFF0B081A),
             fontSize: ui(13),
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w400,
+            fontWeight: AppFont.w400,
             height: 26 / 13,
           ),
         ),
@@ -2804,13 +2804,13 @@ class _PreviewScoreSheetState extends State<_PreviewScoreSheet> {
               height: ui(200),
               fit: BoxFit.contain,
             ),
-            AppText(
+            Text(
               '暂无乐谱',
               style: TextStyle(
                 color: const Color.fromARGB(255, 22, 22, 22),
                 fontSize: ui(16),
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w400,
+                fontWeight: AppFont.w400,
               ),
             ),
           ],
@@ -2885,13 +2885,13 @@ class _PreviewScoreSheetState extends State<_PreviewScoreSheet> {
               borderRadius: BorderRadius.circular(ui(6)),
             ),
             alignment: Alignment.center,
-            child: AppText(
+            child: Text(
               '${activeIndex + 1}/${images.length}',
               style: TextStyle(
                 color: const Color(0xFF0B081A),
                 fontSize: ui(12),
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
                 height: 1,
               ),
             ),
@@ -2968,7 +2968,7 @@ class _PreviewPlaybackBar extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                AppText(
+                Text(
                   item.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -2976,11 +2976,11 @@ class _PreviewPlaybackBar extends StatelessWidget {
                     color: const Color(0xFF0B081A),
                     fontSize: ui(15),
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w500,
+                    fontWeight: AppFont.w500,
                   ),
                 ),
                 SizedBox(height: ui(6)),
-                AppText(
+                Text(
                   '谱例',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -2988,7 +2988,7 @@ class _PreviewPlaybackBar extends StatelessWidget {
                     color: const Color(0xFFB6B5BB),
                     fontSize: ui(12),
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w400,
+                    fontWeight: AppFont.w400,
                     height: 12 / 12,
                   ),
                 ),
@@ -3061,13 +3061,13 @@ class _PreviewPlaybackBar extends StatelessWidget {
                       : const Color(0xFFB6B5BB),
                 ),
                 SizedBox(width: ui(4)),
-                AppText(
+                Text(
                   favorite ? '已收藏' : '收藏',
                   style: TextStyle(
                     color: const Color(0xFFB6B5BB),
                     fontSize: ui(13),
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w500,
+                    fontWeight: AppFont.w500,
                     height: 12 / 13,
                   ),
                 ),
@@ -3128,89 +3128,98 @@ class _PreviewProgressTrack extends StatelessWidget {
     final thumbSize = ui(12);
     final hitHeight = ui(20);
 
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Align(
-          alignment: Alignment.centerRight,
-          child: AppText(
-            durationLabel,
-            style: TextStyle(
-              color: const Color(0xFF0B081A),
-              fontSize: ui(12),
-              fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w500,
-              height: 3 / 8,
+    // 自身高度 = hit zone（20），保证在外层 Row（72 高，crossAxis 居中）里
+    // 滑块视觉中线对齐播放条中线。时间标签通过 Stack 浮在滑块上方，
+    // clipBehavior: Clip.none 让其向上溢出但不撑高布局。
+    return SizedBox(
+      height: hitHeight,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned.fill(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final width = constraints.maxWidth;
+                final clamped = ratio.clamp(0.0, 1.0);
+                final fillWidth = width * clamped;
+                final thumbLeft = (width - thumbSize) * clamped;
+                void emit(Offset p) {
+                  if (width <= 0) return;
+                  onSeekRatio((p.dx / width).clamp(0.0, 1.0));
+                }
+
+                return GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapDown: (d) => emit(d.localPosition),
+                  onHorizontalDragStart: (d) => emit(d.localPosition),
+                  onHorizontalDragUpdate: (d) => emit(d.localPosition),
+                  child: Stack(
+                    alignment: Alignment.centerLeft,
+                    clipBehavior: Clip.none,
+                    children: [
+                      Container(
+                        height: trackHeight,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE1E2E5),
+                          borderRadius: BorderRadius.circular(ui(23)),
+                        ),
+                      ),
+                      Container(
+                        height: trackHeight,
+                        width: fillWidth,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: <Color>[
+                              Color(0xFFE2D0FF),
+                              Color(0xFF8741FF),
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(ui(23)),
+                        ),
+                      ),
+                      Positioned(
+                        left: thumbLeft,
+                        child: Container(
+                          width: thumbSize,
+                          height: thumbSize,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF8741FF),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 1),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.12),
+                                offset: const Offset(0, 4),
+                                blurRadius: 4,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
           ),
-        ),
-        SizedBox(height: ui(4)),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final width = constraints.maxWidth;
-            final clamped = ratio.clamp(0.0, 1.0);
-            final fillWidth = width * clamped;
-            final thumbLeft = (width - thumbSize) * clamped;
-            void emit(Offset p) {
-              if (width <= 0) return;
-              onSeekRatio((p.dx / width).clamp(0.0, 1.0));
-            }
-
-            return GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTapDown: (d) => emit(d.localPosition),
-              onHorizontalDragStart: (d) => emit(d.localPosition),
-              onHorizontalDragUpdate: (d) => emit(d.localPosition),
-              child: SizedBox(
-                height: hitHeight,
-                child: Stack(
-                  alignment: Alignment.centerLeft,
-                  clipBehavior: Clip.none,
-                  children: [
-                    Container(
-                      height: trackHeight,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE1E2E5),
-                        borderRadius: BorderRadius.circular(ui(23)),
-                      ),
-                    ),
-                    Container(
-                      height: trackHeight,
-                      width: fillWidth,
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: <Color>[Color(0xFFE2D0FF), Color(0xFF8741FF)],
-                        ),
-                        borderRadius: BorderRadius.circular(ui(23)),
-                      ),
-                    ),
-                    Positioned(
-                      left: thumbLeft,
-                      child: Container(
-                        width: thumbSize,
-                        height: thumbSize,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF8741FF),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 1),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.12),
-                              offset: const Offset(0, 4),
-                              blurRadius: 4,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+          // 时间标签：贴近可见进度条上方（轨道顶在 y=(20-4)/2=8，
+          // bottom: 14 → 标签底边 y=6，距离轨道顶视觉约 ~4px）。
+          Positioned(
+            right: 0,
+            bottom: ui(14),
+            child: Text(
+              durationLabel,
+              style: TextStyle(
+                color: const Color(0xFF0B081A),
+                fontSize: ui(12),
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w500,
+                height: 1,
               ),
-            );
-          },
-        ),
-      ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -3307,7 +3316,7 @@ class _PreviewSpeedChipState extends State<_PreviewSpeedChip> {
                             child: Container(
                               height: itemHeight,
                               alignment: Alignment.center,
-                              child: AppText(
+                              child: Text(
                                 _PreviewSpeedChip.formatSpeed(v),
                                 style: TextStyle(
                                   color: v == widget.speed
@@ -3316,8 +3325,8 @@ class _PreviewSpeedChipState extends State<_PreviewSpeedChip> {
                                   fontSize: ui(13),
                                   fontFamily: 'PingFang SC',
                                   fontWeight: v == widget.speed
-                                      ? FontWeight.w600
-                                      : FontWeight.w400,
+                                      ? AppFont.w600
+                                      : AppFont.w400,
                                 ),
                               ),
                             ),
@@ -3357,7 +3366,7 @@ class _PreviewSpeedChipState extends State<_PreviewSpeedChip> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            AppText(
+            Text(
               _PreviewSpeedChip.formatSpeed(widget.speed),
               style: TextStyle(
                 color: _open
@@ -3365,7 +3374,7 @@ class _PreviewSpeedChipState extends State<_PreviewSpeedChip> {
                     : const Color(0xFF7F7F7F),
                 fontSize: ui(12),
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
                 height: 12 / 12,
               ),
             ),
@@ -3484,7 +3493,15 @@ class _UploadDialogState extends State<_UploadDialog> {
   Future<void> _pick() async {
     final allowMultiple =
         _kind == CloudUploadKind.image || _kind == CloudUploadKind.score;
-    final files = await pickCoursewareFiles(allowMultiple: allowMultiple);
+    // 图片 / 谱例选图直接走 image 类型 — 移动端会拉起相册而不是文件管理。
+    final pickType =
+        (_kind == CloudUploadKind.image || _kind == CloudUploadKind.score)
+        ? CoursewarePickType.image
+        : CoursewarePickType.any;
+    final files = await pickCoursewareFiles(
+      allowMultiple: allowMultiple,
+      type: pickType,
+    );
     if (files.isEmpty || !mounted) return;
 
     final newSlots = files
@@ -3517,7 +3534,10 @@ class _UploadDialogState extends State<_UploadDialog> {
 
   /// 谱例专用：选取单个音频文件。
   Future<void> _pickScoreAudio() async {
-    final files = await pickCoursewareFiles(allowMultiple: false);
+    final files = await pickCoursewareFiles(
+      allowMultiple: false,
+      type: CoursewarePickType.audio,
+    );
     if (files.isEmpty || !mounted) return;
     final f = files.first;
     final slot = _UploadSlot(
@@ -3678,13 +3698,13 @@ class _UploadDialogState extends State<_UploadDialog> {
                 children: [
                   // ── title ──
                   Center(
-                    child: AppText(
+                    child: Text(
                       '上传课件',
                       style: TextStyle(
                         fontSize: ui(18),
                         color: const Color(0xFF0B081A),
                         fontFamily: 'PingFang SC',
-                        fontWeight: FontWeight.w600,
+                        fontWeight: AppFont.w600,
                         height: 1.0,
                       ),
                     ),
@@ -3692,13 +3712,13 @@ class _UploadDialogState extends State<_UploadDialog> {
                   SizedBox(height: ui(30)),
 
                   // ── courseware title input ──
-                  AppText(
+                  Text(
                     '课件标题',
                     style: TextStyle(
                       fontSize: ui(14),
                       color: const Color(0xFF0B081A),
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w500,
+                      fontWeight: AppFont.w500,
                       height: 12 / 14,
                     ),
                   ),
@@ -3711,7 +3731,7 @@ class _UploadDialogState extends State<_UploadDialog> {
                         fontSize: ui(14),
                         color: const Color(0xFF0B081A),
                         fontFamily: 'PingFang SC',
-                        fontWeight: FontWeight.w400,
+                        fontWeight: AppFont.w400,
                       ),
                       decoration: InputDecoration(
                         hintText: '请输入课件标题',
@@ -3719,7 +3739,7 @@ class _UploadDialogState extends State<_UploadDialog> {
                           fontSize: ui(14),
                           color: const Color(0xFFB6B5BB),
                           fontFamily: 'PingFang SC',
-                          fontWeight: FontWeight.w400,
+                          fontWeight: AppFont.w400,
                           height: 12 / 14,
                         ),
                         contentPadding: EdgeInsets.symmetric(
@@ -3748,13 +3768,13 @@ class _UploadDialogState extends State<_UploadDialog> {
                   SizedBox(height: ui(18)),
 
                   // ── kind selector ──
-                  AppText(
+                  Text(
                     '选择分类',
                     style: TextStyle(
                       fontSize: ui(14),
                       color: const Color(0xFF0B081A),
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w500,
+                      fontWeight: AppFont.w500,
                       height: 12 / 14,
                     ),
                   ),
@@ -3790,24 +3810,24 @@ class _UploadDialogState extends State<_UploadDialog> {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      AppText(
+                      Text(
                         '上传文件',
                         style: TextStyle(
                           fontSize: ui(14),
                           color: const Color(0xFF0B081A),
                           fontFamily: 'PingFang SC',
-                          fontWeight: FontWeight.w500,
+                          fontWeight: AppFont.w500,
                           height: 1.0,
                         ),
                       ),
                       const Spacer(),
-                      AppText(
+                      Text(
                         '*支持 PDF/Word/图片/HTML，图片支持15M以内',
                         style: TextStyle(
                           fontSize: ui(12),
                           color: const Color(0xFFCECED1),
                           fontFamily: 'PingFang SC',
-                          fontWeight: FontWeight.w400,
+                          fontWeight: AppFont.w400,
                           height: 1.0,
                         ),
                       ),
@@ -3866,7 +3886,7 @@ class _UploadDialogState extends State<_UploadDialog> {
                 size: ui(22),
               ),
               SizedBox(height: ui(2)),
-              AppText(
+              Text(
                 '添加',
                 style: TextStyle(
                   fontSize: ui(11),
@@ -3998,7 +4018,7 @@ class _UploadDialogState extends State<_UploadDialog> {
                           size: ui(20),
                         ),
                         SizedBox(height: ui(2)),
-                        AppText(
+                        Text(
                           '重试',
                           style: TextStyle(
                             color: Colors.white,
@@ -4128,7 +4148,7 @@ class _UploadDialogState extends State<_UploadDialog> {
                 size: ui(22),
               ),
               SizedBox(height: ui(2)),
-              AppText(
+              Text(
                 '添加',
                 style: TextStyle(
                   fontSize: ui(11),
@@ -4222,7 +4242,7 @@ class _UploadDialogState extends State<_UploadDialog> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                AppText(
+                Text(
                   slot.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -4230,7 +4250,7 @@ class _UploadDialogState extends State<_UploadDialog> {
                     fontSize: ui(13),
                     color: const Color(0xFF0B081A),
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w500,
+                    fontWeight: AppFont.w500,
                   ),
                 ),
                 SizedBox(height: ui(6)),
@@ -4247,7 +4267,7 @@ class _UploadDialogState extends State<_UploadDialog> {
                     ),
                   ),
                   SizedBox(height: ui(3)),
-                  AppText(
+                  Text(
                     slot.progress > 0
                         ? '${(slot.progress * 100).toStringAsFixed(0)}%'
                         : '准备上传...',
@@ -4258,7 +4278,7 @@ class _UploadDialogState extends State<_UploadDialog> {
                     ),
                   ),
                 ] else if (slot.isDone)
-                  AppText(
+                  Text(
                     '上传完成 ✓',
                     style: TextStyle(
                       fontSize: ui(11),
@@ -4267,7 +4287,7 @@ class _UploadDialogState extends State<_UploadDialog> {
                     ),
                   )
                 else if (slot.hasError)
-                  AppText(
+                  Text(
                     slot.error ?? '上传失败',
                     style: TextStyle(
                       fontSize: ui(11),
@@ -4332,7 +4352,7 @@ class _UploadDialogState extends State<_UploadDialog> {
         style: TextStyle(
           fontSize: ui(14),
           fontFamily: 'PingFang SC',
-          fontWeight: FontWeight.w400,
+          fontWeight: AppFont.w400,
           height: 1.0,
         ),
         children: <InlineSpan>[
@@ -4400,7 +4420,7 @@ class _ScoreUploadCell extends StatelessWidget {
                 style: TextStyle(
                   fontSize: ui(14),
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w400,
+                  fontWeight: AppFont.w400,
                   height: 12 / 14,
                 ),
                 children: <InlineSpan>[

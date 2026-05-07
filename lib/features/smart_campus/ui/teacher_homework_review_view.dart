@@ -47,8 +47,8 @@ import 'package:flutter/material.dart';
 
 import '../../../core/widgets/popup_selector_field.dart';
 import '../../shell/ui/shell_layout.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../core/widgets/app_text.dart';
 // ---- 配色 -------------------------------------------------------------------
 const Color _kCardBg = Colors.white;
 const Color _kPageGrey = Color(0xFFF5F6FA);
@@ -347,13 +347,13 @@ class _ReviewBanner extends StatelessWidget {
           ),
           Positioned.fill(
             child: Center(
-              child: AppText(
+              child: Text(
                 '作业与批改',
                 style: TextStyle(
                   fontSize: ui(16),
                   color: _kTextDark,
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w600,
+                  fontWeight: AppFont.w600,
                   height: 1,
                 ),
               ),
@@ -414,13 +414,13 @@ class _BannerActionButton extends StatelessWidget {
           children: [
             Icon(icon, size: ui(16), color: _kPurple),
             SizedBox(width: ui(4)),
-            AppText(
+            Text(
               label,
               style: TextStyle(
                 fontSize: ui(12),
                 color: _kTextDark,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w600,
+                fontWeight: AppFont.w600,
                 height: 1,
               ),
             ),
@@ -502,13 +502,13 @@ class _SegmentChip extends StatelessWidget {
           color: active ? _kTextDark : Colors.transparent,
           borderRadius: BorderRadius.circular(ui(6)),
         ),
-        child: AppText(
+        child: Text(
           label,
           style: TextStyle(
             fontSize: ui(14),
             color: active ? Colors.white : _kTextSecondary,
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w500,
+            fontWeight: AppFont.w500,
             height: 1.2,
           ),
         ),
@@ -646,26 +646,26 @@ class _StatCell extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
-          AppText(
+          Text(
             value,
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: ui(24),
               color: _kTextDark,
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w500,
+              fontWeight: AppFont.w500,
               height: 1.2,
             ),
           ),
           SizedBox(height: ui(2)),
-          AppText(
+          Text(
             label,
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: ui(12),
               color: _kTextSecondary,
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w400,
+              fontWeight: AppFont.w400,
               height: 1.2,
             ),
           ),
@@ -750,13 +750,13 @@ class _HomeworkListPanel extends StatelessWidget {
         children: [
           Padding(
             padding: EdgeInsets.symmetric(vertical: ui(4)),
-            child: AppText(
+            child: Text(
               '作业列表',
               style: TextStyle(
                 fontSize: ui(16),
                 color: _kTextBlack,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
                 height: 1.2,
               ),
             ),
@@ -807,24 +807,24 @@ class _HomeworkListCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                AppText(
+                Text(
                   '截止 ${item.deadline}',
                   style: TextStyle(
                     fontSize: ui(10),
                     color: _kTextHint,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w400,
+                    fontWeight: AppFont.w400,
                     height: 1.2,
                   ),
                 ),
                 SizedBox(height: ui(4)),
-                AppText(
+                Text(
                   item.classLabel,
                   style: TextStyle(
                     fontSize: ui(12),
                     color: _kTextSecondary,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w400,
+                    fontWeight: AppFont.w400,
                     height: 1.2,
                   ),
                 ),
@@ -838,7 +838,7 @@ class _HomeworkListCard extends StatelessWidget {
                   ],
                 ),
                 SizedBox(height: ui(8)),
-                AppText(
+                Text(
                   item.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -846,7 +846,7 @@ class _HomeworkListCard extends StatelessWidget {
                     fontSize: ui(16),
                     color: _kTextBlack,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w500,
+                    fontWeight: AppFont.w500,
                     height: 1.2,
                   ),
                 ),
@@ -878,13 +878,13 @@ class _SubjectTag extends StatelessWidget {
         color: _kSubjectBg,
         borderRadius: BorderRadius.circular(ui(4)),
       ),
-      child: AppText(
+      child: Text(
         label,
         style: TextStyle(
           fontSize: ui(12),
           color: _kTextHint,
           fontFamily: 'PingFang SC',
-          fontWeight: FontWeight.w400,
+          fontWeight: AppFont.w400,
           height: 1.2,
         ),
       ),
@@ -906,13 +906,13 @@ class _PendingReviewTag extends StatelessWidget {
         color: _kOrangeBg,
         borderRadius: BorderRadius.circular(ui(4)),
       ),
-      child: AppText(
+      child: Text(
         '待评($count)',
         style: TextStyle(
           fontSize: ui(12),
           color: _kOrange,
           fontFamily: 'PingFang SC',
-          fontWeight: FontWeight.w400,
+          fontWeight: AppFont.w400,
           height: 1.2,
         ),
       ),
@@ -944,13 +944,13 @@ class _CornerLabel extends StatelessWidget {
           bottomLeft: Radius.circular(ui(12)),
         ),
       ),
-      child: AppText(
+      child: Text(
         label,
         style: TextStyle(
           fontSize: ui(12),
           color: fg,
           fontFamily: 'PingFang SC',
-          fontWeight: FontWeight.w400,
+          fontWeight: AppFont.w400,
           height: 1,
         ),
       ),
@@ -983,25 +983,25 @@ class _HomeworkDetailPanel extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Expanded(
-                child: AppText(
+                child: Text(
                   item.title,
                   style: TextStyle(
                     fontSize: ui(16),
                     color: _kTextBlack,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w500,
+                    fontWeight: AppFont.w500,
                     height: 1.2,
                   ),
                 ),
               ),
               SizedBox(width: ui(12)),
-              AppText(
+              Text(
                 '截止 ${item.deadline}',
                 style: TextStyle(
                   fontSize: ui(12),
                   color: _kTextSecondary,
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w400,
+                  fontWeight: AppFont.w400,
                   height: 1,
                 ),
               ),
@@ -1045,24 +1045,24 @@ class _SuggestedBlock extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          AppText(
+          Text(
             '【建议提交：$suggested】',
             style: TextStyle(
               fontSize: ui(12),
               color: _kTextDark,
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w500,
+              fontWeight: AppFont.w500,
               height: 1.6,
             ),
           ),
           SizedBox(height: ui(2)),
-          AppText(
+          Text(
             description,
             style: TextStyle(
               fontSize: ui(12),
               color: _kTextSecondary,
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w400,
+              fontWeight: AppFont.w400,
               height: 1.6,
             ),
           ),
@@ -1145,7 +1145,7 @@ class _ProgressMetricCell extends StatelessWidget {
             child: Row(
               children: [
                 Flexible(
-                  child: AppText(
+                  child: Text(
                     label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -1153,19 +1153,19 @@ class _ProgressMetricCell extends StatelessWidget {
                       fontSize: ui(12),
                       color: _kTextSecondary,
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w400,
+                      fontWeight: AppFont.w400,
                       height: 1,
                     ),
                   ),
                 ),
                 SizedBox(width: ui(4)),
-                AppText(
+                Text(
                   value,
                   style: TextStyle(
                     fontSize: ui(12),
                     color: _kTextDark,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w500,
+                    fontWeight: AppFont.w500,
                     height: 1,
                   ),
                 ),
@@ -1243,13 +1243,13 @@ class _ColHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return AppText(
+    return Text(
       text,
       style: TextStyle(
         fontSize: ui(13),
         color: _kTextMuted,
         fontFamily: 'PingFang SC',
-        fontWeight: FontWeight.w400,
+        fontWeight: AppFont.w400,
         height: 1.4,
       ),
     );
@@ -1280,7 +1280,7 @@ class _SubmissionRow extends StatelessWidget {
                 _AvatarCircle(name: item.studentName, seed: item.avatarSeed),
                 SizedBox(width: ui(4)),
                 Flexible(
-                  child: AppText(
+                  child: Text(
                     item.studentName,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -1288,7 +1288,7 @@ class _SubmissionRow extends StatelessWidget {
                       fontSize: ui(13),
                       color: _kTextDark,
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w500,
+                      fontWeight: AppFont.w500,
                       height: 1.4,
                     ),
                   ),
@@ -1313,13 +1313,13 @@ class _SubmissionRow extends StatelessWidget {
                   color: _kTextDark,
                   borderRadius: BorderRadius.circular(ui(8)),
                 ),
-                child: AppText(
+                child: Text(
                   item.action,
                   style: TextStyle(
                     fontSize: ui(13),
                     color: Colors.white,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w400,
+                    fontWeight: AppFont.w400,
                     height: 1.4,
                   ),
                 ),
@@ -1340,7 +1340,7 @@ class _CellText extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return AppText(
+    return Text(
       text,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
@@ -1348,7 +1348,7 @@ class _CellText extends StatelessWidget {
         fontSize: ui(13),
         color: _kTextDark,
         fontFamily: 'PingFang SC',
-        fontWeight: FontWeight.w400,
+        fontWeight: AppFont.w400,
         height: 1.4,
       ),
     );
@@ -1381,13 +1381,13 @@ class _StatusPill extends StatelessWidget {
           color: tone.bg,
           borderRadius: BorderRadius.circular(ui(4)),
         ),
-        child: AppText(
+        child: Text(
           tone.text,
           style: TextStyle(
             fontSize: ui(12),
             color: tone.fg,
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w400,
+            fontWeight: AppFont.w400,
             height: 1.2,
           ),
         ),
@@ -1424,13 +1424,13 @@ class _AvatarCircle extends StatelessWidget {
         ),
       ),
       alignment: Alignment.center,
-      child: AppText(
+      child: Text(
         name.characters.first,
         style: TextStyle(
           fontSize: ui(13),
           color: Colors.white,
           fontFamily: 'PingFang SC',
-          fontWeight: FontWeight.w500,
+          fontWeight: AppFont.w500,
           height: 1,
         ),
       ),
@@ -1631,13 +1631,13 @@ class _ClassCheckRow extends StatelessWidget {
                 _CheckBox(checked: checked),
                 SizedBox(width: ui(10)),
                 Expanded(
-                  child: AppText(
+                  child: Text(
                     title,
                     style: TextStyle(
                       fontSize: ui(14),
                       color: _kTextDark,
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w400,
+                      fontWeight: AppFont.w400,
                       height: 1.4,
                     ),
                   ),
@@ -1664,13 +1664,13 @@ class _ClassCheckRow extends StatelessWidget {
                         ),
                       ),
                       SizedBox(width: ui(4)),
-                      AppText(
+                      Text(
                         tag,
                         style: TextStyle(
                           fontSize: ui(12),
                           color: _kTextDark,
                           fontFamily: 'PingFang SC',
-                          fontWeight: FontWeight.w400,
+                          fontWeight: AppFont.w400,
                           height: 1.2,
                         ),
                       ),
@@ -1684,24 +1684,24 @@ class _ClassCheckRow extends StatelessWidget {
               padding: EdgeInsets.only(left: ui(24)),
               child: Row(
                 children: [
-                  AppText(
+                  Text(
                     kind,
                     style: TextStyle(
                       fontSize: ui(12),
                       color: _kTextSecondary,
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w400,
+                      fontWeight: AppFont.w400,
                       height: 1.2,
                     ),
                   ),
                   SizedBox(width: ui(10)),
-                  AppText(
+                  Text(
                     people,
                     style: TextStyle(
                       fontSize: ui(12),
                       color: _kTextSecondary,
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w400,
+                      fontWeight: AppFont.w400,
                       height: 1.2,
                     ),
                   ),
@@ -1761,13 +1761,13 @@ class _DeadlinePicker extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              child: AppText(
+              child: Text(
                 value,
                 style: TextStyle(
                   fontSize: ui(14),
                   color: _kTextDark,
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w400,
+                  fontWeight: AppFont.w400,
                   height: 1.4,
                 ),
               ),
@@ -1814,26 +1814,26 @@ class _HistoryDrawer extends StatelessWidget {
                     ),
                   ),
                   SizedBox(width: ui(4)),
-                  AppText(
+                  Text(
                     '历史发布记录',
                     style: TextStyle(
                       fontSize: ui(16),
                       color: _kTextDark,
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w600,
+                      fontWeight: AppFont.w600,
                       height: 1,
                     ),
                   ),
                   SizedBox(width: ui(8)),
                   Padding(
                     padding: EdgeInsets.only(top: ui(4)),
-                    child: AppText(
+                    child: Text(
                       '共${items.length}条',
                       style: TextStyle(
                         fontSize: ui(12),
                         color: _kTextHint,
                         fontFamily: 'PingFang SC',
-                        fontWeight: FontWeight.w400,
+                        fontWeight: AppFont.w400,
                         height: 1,
                       ),
                     ),
@@ -1882,7 +1882,7 @@ class _HistoryCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              AppText(
+              Text(
                 '${item.publishedRatio.submitted}',
                 style: TextStyle(
                   fontSize: ui(28),
@@ -1895,7 +1895,7 @@ class _HistoryCard extends StatelessWidget {
               SizedBox(width: ui(2)),
               Padding(
                 padding: EdgeInsets.only(bottom: ui(4)),
-                child: AppText(
+                child: Text(
                   '/${item.publishedRatio.total}',
                   style: TextStyle(
                     fontSize: ui(16),
@@ -1909,37 +1909,37 @@ class _HistoryCard extends StatelessWidget {
             ],
           ),
           SizedBox(height: ui(2)),
-          AppText(
+          Text(
             '截止 ${item.deadline}',
             style: TextStyle(
               fontSize: ui(10),
               color: _kTextHint,
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w400,
+              fontWeight: AppFont.w400,
               height: 1.4,
             ),
           ),
           SizedBox(height: ui(2)),
-          AppText(
+          Text(
             item.classLabel,
             style: TextStyle(
               fontSize: ui(12),
               color: _kTextSecondary,
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w400,
+              fontWeight: AppFont.w400,
               height: 1,
             ),
           ),
           SizedBox(height: ui(6)),
           _SubjectTag(label: item.subject),
           SizedBox(height: ui(6)),
-          AppText(
+          Text(
             item.title,
             style: TextStyle(
               fontSize: ui(16),
               color: _kTextBlack,
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w500,
+              fontWeight: AppFont.w500,
               height: 1.2,
             ),
           ),
@@ -2009,13 +2009,13 @@ class _ReviewDrawerState extends State<_ReviewDrawer> {
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        AppText(
+                        Text(
                           '批改与点评',
                           style: TextStyle(
                             fontSize: ui(16),
                             color: _kTextDark,
                             fontFamily: 'PingFang SC',
-                            fontWeight: FontWeight.w600,
+                            fontWeight: AppFont.w600,
                             height: 1,
                           ),
                         ),
@@ -2110,7 +2110,7 @@ class _ReviewProfileRow extends StatelessWidget {
               Row(
                 children: [
                   Expanded(
-                    child: AppText(
+                    child: Text(
                       submission.studentName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -2118,7 +2118,7 @@ class _ReviewProfileRow extends StatelessWidget {
                         fontSize: ui(16),
                         color: Colors.black,
                         fontFamily: 'PingFang SC',
-                        fontWeight: FontWeight.w600,
+                        fontWeight: AppFont.w600,
                         height: 1.2,
                       ),
                     ),
@@ -2131,7 +2131,7 @@ class _ReviewProfileRow extends StatelessWidget {
               Row(
                 children: [
                   Expanded(
-                    child: AppText(
+                    child: Text(
                       '${item.subject} · ${item.title}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -2139,19 +2139,19 @@ class _ReviewProfileRow extends StatelessWidget {
                         fontSize: ui(12),
                         color: _kTextSecondary,
                         fontFamily: 'PingFang SC',
-                        fontWeight: FontWeight.w400,
+                        fontWeight: AppFont.w400,
                         height: 1.2,
                       ),
                     ),
                   ),
                   SizedBox(width: ui(8)),
-                  AppText(
+                  Text(
                     submission.uploadAt,
                     style: TextStyle(
                       fontSize: ui(12),
                       color: _kTextHint,
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w400,
+                      fontWeight: AppFont.w400,
                       height: 1.2,
                     ),
                   ),
@@ -2201,7 +2201,7 @@ class _AttachmentCard extends StatelessWidget {
                 color: const Color(0xFFFF5040),
                 borderRadius: BorderRadius.circular(ui(2)),
               ),
-              child: AppText(
+              child: Text(
                 'PDF',
                 style: TextStyle(
                   fontSize: ui(8),
@@ -2220,7 +2220,7 @@ class _AttachmentCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                AppText(
+                Text(
                   filename,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -2228,18 +2228,18 @@ class _AttachmentCard extends StatelessWidget {
                     fontSize: ui(13),
                     color: _kTextDark,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w500,
+                    fontWeight: AppFont.w500,
                     height: 1.4,
                   ),
                 ),
                 SizedBox(height: ui(2)),
-                AppText(
+                Text(
                   size,
                   style: TextStyle(
                     fontSize: ui(11),
                     color: _kTextSecondary,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w400,
+                    fontWeight: AppFont.w400,
                     height: 1.2,
                   ),
                 ),
@@ -2294,13 +2294,13 @@ class _GhostButton extends StatelessWidget {
           children: [
             Icon(icon, size: ui(14), color: _kPillIconColor),
             SizedBox(width: ui(4)),
-            AppText(
+            Text(
               label,
               style: TextStyle(
                 fontSize: ui(12),
                 color: _kTextDark,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w400,
+                fontWeight: AppFont.w400,
                 height: 1,
               ),
             ),
@@ -2347,18 +2347,18 @@ class _ScoreInput extends StatelessWidget {
                 fontSize: ui(14),
                 color: _kTextDark,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w400,
+                fontWeight: AppFont.w400,
                 height: 1.4,
               ),
             ),
           ),
-          AppText(
+          Text(
             ' / 100',
             style: TextStyle(
               fontSize: ui(13),
               color: _kTextHint,
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w400,
+              fontWeight: AppFont.w400,
               height: 1,
             ),
           ),
@@ -2392,13 +2392,13 @@ class _DrawerTitleBar extends StatelessWidget {
           ),
         ),
         SizedBox(width: ui(4)),
-        AppText(
+        Text(
           title,
           style: TextStyle(
             fontSize: ui(16),
             color: _kTextDark,
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w600,
+            fontWeight: AppFont.w600,
             height: 1,
           ),
         ),
@@ -2415,13 +2415,13 @@ class _FieldLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return AppText(
+    return Text(
       text,
       style: TextStyle(
         fontSize: ui(14),
         color: Colors.black,
         fontFamily: 'PingFang SC',
-        fontWeight: FontWeight.w500,
+        fontWeight: AppFont.w500,
         height: 1.4,
       ),
     );
@@ -2477,7 +2477,7 @@ class _PlainInputFieldState extends State<_PlainInputField> {
             fontSize: ui(14),
             color: _kTextDark,
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w400,
+            fontWeight: AppFont.w400,
             height: 1.4,
           ),
         ),
@@ -2543,7 +2543,7 @@ class _PlainTextAreaState extends State<_PlainTextArea> {
           fontSize: ui(14),
           color: _kTextDark,
           fontFamily: 'PingFang SC',
-          fontWeight: FontWeight.w400,
+          fontWeight: AppFont.w400,
           height: 1.4,
         ),
       ),
@@ -2583,13 +2583,13 @@ class _PrimaryGradientButton extends StatelessWidget {
           children: [
             Icon(icon, size: ui(16), color: Colors.white),
             SizedBox(width: ui(8)),
-            AppText(
+            Text(
               label,
               style: TextStyle(
                 fontSize: ui(14),
                 color: Colors.white,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
                 height: 1.6,
               ),
             ),

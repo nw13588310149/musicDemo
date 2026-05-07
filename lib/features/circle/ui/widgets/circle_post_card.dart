@@ -4,8 +4,8 @@ import '../../../shell/ui/shell_layout.dart';
 import '../../state/circle_state.dart';
 import 'circle_action_buttons.dart';
 import 'circle_badges.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../../core/widgets/app_text.dart';
 /// 列表模式下的单个帖子卡片：作者 / 文字 / 配图 / 操作按钮。
 class CirclePostCard extends StatelessWidget {
   const CirclePostCard({
@@ -42,7 +42,7 @@ class CirclePostCard extends StatelessWidget {
             children: [
               _CardAuthor(post: post, onDeletePost: onDeletePost),
               SizedBox(height: ui(8)),
-              AppText(
+              Text(
                 post.text,
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
@@ -54,7 +54,7 @@ class CirclePostCard extends StatelessWidget {
                 ),
               ),
               SizedBox(height: ui(6)),
-              AppText(
+              Text(
                 post.timeLabel,
                 style: TextStyle(
                   color: const Color(0xFFB6B5BB),
@@ -102,7 +102,7 @@ class _CardAuthor extends StatelessWidget {
               Row(
                 children: [
                   Flexible(
-                    child: AppText(
+                    child: Text(
                       post.author.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -110,7 +110,7 @@ class _CardAuthor extends StatelessWidget {
                         color: const Color(0xFF0B081A),
                         fontSize: ui(18),
                         fontFamily: 'PingFang SC',
-                        fontWeight: FontWeight.w600,
+                        fontWeight: AppFont.w600,
                       ),
                     ),
                   ),
@@ -121,7 +121,7 @@ class _CardAuthor extends StatelessWidget {
                 ],
               ),
               SizedBox(height: ui(2)),
-              AppText(
+              Text(
                 post.author.role,
                 style: TextStyle(
                   color: const Color(0xFFB6B5BB),
@@ -413,7 +413,7 @@ class _MediaTypeChip extends StatelessWidget {
         children: [
           Icon(icon, color: Colors.white, size: ui(12)),
           SizedBox(width: ui(4)),
-          AppText(
+          Text(
             label,
             style: TextStyle(
               color: Colors.white,

@@ -292,6 +292,7 @@ class MyCollectionController extends StateNotifier<MyCollectionState> {
       1 => '标准音上下行二度',
       2 => '基础乐理知识梳理',
       3 => '听音单音专项练习',
+      10 => '试题专项练习',
       _ => '',
     };
   }

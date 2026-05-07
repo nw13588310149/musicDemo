@@ -9,8 +9,8 @@ import '../../piano/ui/piano_keyboard.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../state/music_play_controller.dart';
 import '../state/music_play_state.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../core/widgets/app_text.dart';
 final Set<String> _musicPlayPrecachedImages = <String>{};
 
 int _musicPlayDecodeWidth(BuildContext context) {
@@ -158,6 +158,8 @@ class _MusicPlayPageState extends ConsumerState<MusicPlayPage> {
                         state: state,
                         onToggleAnswer: controller.setShowAnswer,
                         onImageChanged: controller.setImageIndex,
+                        pitchSemitones: state.pitchSemitones,
+                        onPitchChanged: controller.setPitchSemitones,
                       ),
                     ),
                   ],
@@ -178,6 +180,8 @@ class _MusicPlayPageState extends ConsumerState<MusicPlayPage> {
                 },
                 onSpeedChanged: controller.setPlaybackSpeed,
                 onToggleFavorite: controller.toggleFavorite,
+                onTogglePlayMode: controller.togglePlayMode,
+                onSelectTrack: controller.selectTrack,
               ),
               SizedBox(height: ui(12)),
             ],
@@ -246,9 +250,8 @@ class _MusicPlayPageState extends ConsumerState<MusicPlayPage> {
                   onToggleAnswer: controller.setShowAnswer,
                   onImageChanged: controller.setImageIndex,
                   useStaffSimplifiedToggle: true,
-                  onTranspose: () {
-                    AppToast.show(context, '升降调功能即将上线');
-                  },
+                  pitchSemitones: state.pitchSemitones,
+                  onPitchChanged: controller.setPitchSemitones,
                 ),
               ),
             ],
@@ -268,6 +271,8 @@ class _MusicPlayPageState extends ConsumerState<MusicPlayPage> {
           },
           onSpeedChanged: controller.setPlaybackSpeed,
           onToggleFavorite: controller.toggleFavorite,
+          onTogglePlayMode: controller.togglePlayMode,
+          onSelectTrack: controller.selectTrack,
         ),
       ],
     );
@@ -350,13 +355,13 @@ class _ShareDrawer extends ConsumerWidget {
                 SizedBox(height: ui(24)),
                 _ShareTargetCard(detail: state.detail),
                 SizedBox(height: ui(28)),
-                AppText(
+                Text(
                   '您的班级群',
                   style: TextStyle(
                     color: const Color(0xFF0B081A),
                     fontSize: ui(16),
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w600,
+                    fontWeight: AppFont.w600,
                   ),
                 ),
                 SizedBox(height: ui(16)),
@@ -421,13 +426,13 @@ class _DrawerTitle extends StatelessWidget {
           ),
         ),
         SizedBox(width: ui(4)),
-        AppText(
+        Text(
           title,
           style: TextStyle(
             color: const Color(0xFF0B081A),
             fontSize: ui(16),
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w600,
+            fontWeight: AppFont.w600,
           ),
         ),
       ],
@@ -463,7 +468,7 @@ class _ShareTargetCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                AppText(
+                Text(
                   '您将分享的课件',
                   style: TextStyle(
                     color: const Color(0xFF0B081A),
@@ -472,7 +477,7 @@ class _ShareTargetCard extends StatelessWidget {
                   ),
                 ),
                 SizedBox(height: ui(10)),
-                AppText(
+                Text(
                   detail?.title ?? '',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -480,7 +485,7 @@ class _ShareTargetCard extends StatelessWidget {
                     color: const Color(0xFF0B081A),
                     fontSize: ui(16),
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w600,
+                    fontWeight: AppFont.w600,
                   ),
                 ),
               ],
@@ -563,7 +568,7 @@ class _ClassRow extends StatelessWidget {
               ),
               SizedBox(width: ui(16)),
               Expanded(
-                child: AppText(
+                child: Text(
                   cls.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -571,7 +576,7 @@ class _ClassRow extends StatelessWidget {
                     color: Colors.black,
                     fontSize: ui(16),
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w600,
+                    fontWeight: AppFont.w600,
                   ),
                 ),
               ),
@@ -590,7 +595,7 @@ class _ShareDrawerEmpty extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Center(
-      child: AppText(
+      child: Text(
         '暂无班级群',
         style: TextStyle(
           color: const Color(0xFFB6B5BB),
@@ -633,13 +638,13 @@ class _SendButton extends StatelessWidget {
                   valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                 ),
               )
-            : AppText(
+            : Text(
                 '发送',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: ui(14),
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w500,
+                  fontWeight: AppFont.w500,
                   height: 24 / 14,
                 ),
               ),
@@ -701,7 +706,7 @@ class _TurntablePanel extends StatelessWidget {
                   color: Colors.black,
                   fontSize: ui(11),
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w400,
+                  fontWeight: AppFont.w400,
                   height: 18 / 11,
                 ),
               ),
@@ -778,7 +783,7 @@ class _MarqueeTitleTextState extends State<_MarqueeTitleText>
 
         if (widget.text.isEmpty || viewportWidth <= 0) {
           _controller.stop();
-          return AppText(
+          return Text(
             widget.text,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -840,7 +845,7 @@ class _MarqueeTitleTextState extends State<_MarqueeTitleText>
       width: width,
       child: Align(
         alignment: Alignment.centerLeft,
-        child: AppText(
+        child: Text(
           widget.text,
           maxLines: 1,
           overflow: TextOverflow.visible,
@@ -900,7 +905,8 @@ class _AnswerPanel extends StatefulWidget {
     required this.onToggleAnswer,
     required this.onImageChanged,
     this.useStaffSimplifiedToggle = false,
-    this.onTranspose,
+    this.pitchSemitones,
+    this.onPitchChanged,
   });
 
   final MusicPlayState state;
@@ -910,8 +916,11 @@ class _AnswerPanel extends StatefulWidget {
   /// 声乐/器乐课程使用 五线谱/简谱 切换；其他课程使用 关闭/答案。
   final bool useStaffSimplifiedToggle;
 
-  /// 是否显示左上角"升降调"按钮（仅声乐/器乐）。
-  final VoidCallback? onTranspose;
+  /// "升降调"按钮的当前半音数。`null` 表示不显示按钮。
+  final int? pitchSemitones;
+
+  /// 选择新的升降调半音数后回调。`null` 表示不显示按钮。
+  final ValueChanged<int>? onPitchChanged;
 
   @override
   State<_AnswerPanel> createState() => _AnswerPanelState();
@@ -978,11 +987,10 @@ class _AnswerPanelState extends State<_AnswerPanel> {
         Row(
           children: [
             const Spacer(),
-            if (widget.onTranspose != null) ...[
-              _OutlinedChipButton(
-                iconAsset: 'assets/images/home/dictation/9.png',
-                label: '升降调',
-                onTap: widget.onTranspose!,
+            if (widget.pitchSemitones != null && widget.onPitchChanged != null) ...[
+              _TransposeChipButton(
+                pitchSemitones: widget.pitchSemitones!,
+                onPitchChanged: widget.onPitchChanged!,
               ),
               SizedBox(width: ui(10)),
             ],
@@ -1049,39 +1057,36 @@ class _AnswerPanelState extends State<_AnswerPanel> {
                             showStaff: state.showAnswer,
                           );
                         }
-                        return Padding(
-                          padding: EdgeInsets.symmetric(horizontal: ui(16)),
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onDoubleTap: () => showImageGallery(
-                              context,
-                              images: images,
-                              initialIndex: index,
-                              heroTagPrefix: 'music_play_answer',
-                            ),
-                            child: Scrollbar(
-                              thumbVisibility: false,
-                              child: SingleChildScrollView(
-                                physics: const ClampingScrollPhysics(),
-                                padding: EdgeInsets.only(bottom: ui(36)),
-                                child: Hero(
-                                  tag: 'music_play_answer_${image}_$index',
-                                  child: Image.network(
-                                    image,
-                                    width: double.infinity,
-                                    fit: BoxFit.fitWidth,
-                                    cacheWidth: _musicPlayDecodeWidth(context),
-                                    errorBuilder: (context, error, stackTrace) {
-                                      _markImageFailed(index);
-                                      return Center(
-                                        child: _AnswerEmptyState(
-                                          useStaffSimplifiedToggle:
-                                              widget.useStaffSimplifiedToggle,
-                                          showStaff: state.showAnswer,
-                                        ),
-                                      );
-                                    },
-                                  ),
+                        return GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onDoubleTap: () => showImageGallery(
+                            context,
+                            images: images,
+                            initialIndex: index,
+                            heroTagPrefix: 'music_play_answer',
+                          ),
+                          child: Scrollbar(
+                            thumbVisibility: false,
+                            child: SingleChildScrollView(
+                              physics: const ClampingScrollPhysics(),
+                              padding: EdgeInsets.zero,
+                              child: Hero(
+                                tag: 'music_play_answer_${image}_$index',
+                                child: Image.network(
+                                  image,
+                                  width: double.infinity,
+                                  fit: BoxFit.fitWidth,
+                                  cacheWidth: _musicPlayDecodeWidth(context),
+                                  errorBuilder: (context, error, stackTrace) {
+                                    _markImageFailed(index);
+                                    return Center(
+                                      child: _AnswerEmptyState(
+                                        useStaffSimplifiedToggle:
+                                            widget.useStaffSimplifiedToggle,
+                                        showStaff: state.showAnswer,
+                                      ),
+                                    );
+                                  },
                                 ),
                               ),
                             ),
@@ -1101,13 +1106,13 @@ class _AnswerPanelState extends State<_AnswerPanel> {
                             borderRadius: BorderRadius.circular(ui(6)),
                           ),
                           alignment: Alignment.center,
-                          child: AppText(
+                          child: Text(
                             '${activeIndex + 1}/${images.length}',
                             style: TextStyle(
                               color: const Color(0xFF0B081A),
                               fontSize: ui(12),
                               fontFamily: 'PingFang SC',
-                              fontWeight: FontWeight.w500,
+                              fontWeight: AppFont.w500,
                               height: 1,
                             ),
                           ),
@@ -1145,13 +1150,13 @@ class _AnswerEmptyState extends StatelessWidget {
             color: const Color.fromARGB(255, 22, 22, 22),
             fontSize: ui(16),
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w400,
+            fontWeight: AppFont.w400,
           )
         : TextStyle(
             color: const Color(0xFFB6B5BB),
             fontSize: ui(13),
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w400,
+            fontWeight: AppFont.w400,
             height: 2 / 13,
           );
     return Center(
@@ -1166,10 +1171,10 @@ class _AnswerEmptyState extends StatelessWidget {
           ),
           SizedBox(height: ui(0)),
           isStaffMode
-              ? AppText(message, style: messageStyle)
+              ? Text(message, style: messageStyle)
               : Transform.translate(
                   offset: Offset(0, -ui(25)),
-                  child: AppText(message, style: messageStyle),
+                  child: Text(message, style: messageStyle),
                 ),
         ],
       ),
@@ -1186,6 +1191,8 @@ class _PlaybackBar extends StatelessWidget {
     required this.onSeekRatio,
     required this.onSpeedChanged,
     required this.onToggleFavorite,
+    required this.onTogglePlayMode,
+    required this.onSelectTrack,
   });
 
   final MusicPlayState state;
@@ -1195,6 +1202,12 @@ class _PlaybackBar extends StatelessWidget {
   final ValueChanged<double> onSeekRatio;
   final ValueChanged<double> onSpeedChanged;
   final Future<void> Function() onToggleFavorite;
+
+  /// 切换循环模式（顺序 / 单曲 / 随机）。
+  final VoidCallback onTogglePlayMode;
+
+  /// 直接跳到列表中的某一首并播放。
+  final ValueChanged<int> onSelectTrack;
 
   @override
   Widget build(BuildContext context) {
@@ -1235,40 +1248,43 @@ class _PlaybackBar extends StatelessWidget {
                 : Image.asset('assets/images/home/feng.png', fit: BoxFit.cover),
           ),
           SizedBox(width: ui(12)),
-          SizedBox(
-            width: ui(70),
+          // 多曲目时主标题切换为"当前音频文件名"，副标题降级显示教材名；
+          // 单曲目场景沿用旧的"教材名 + 听写/曲目名"。
+          // 应用户要求：标题完整显示、不截断省略——这里去掉 maxLines/ellipsis，
+          // 改用 IntrinsicWidth + softWrap=false 让 Column 按内容宽度撑开。
+          IntrinsicWidth(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                AppText(
-                  detail?.title ?? '未命名音频',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                Text(
+                  _resolvePrimaryTitle(detail, track),
+                  softWrap: false,
+                  overflow: TextOverflow.visible,
                   style: TextStyle(
                     color: const Color(0xFF0B081A),
                     fontSize: ui(15),
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w500,
+                    fontWeight: AppFont.w500,
                   ),
                 ),
                 SizedBox(height: ui(6)),
-                AppText(
-                  track?.title ?? '听写',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                Text(
+                  _resolveSecondaryTitle(detail, track),
+                  softWrap: false,
+                  overflow: TextOverflow.visible,
                   style: TextStyle(
                     color: const Color(0xFFB6B5BB),
                     fontSize: ui(12),
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w400,
+                    fontWeight: AppFont.w400,
                     height: 12 / 12,
                   ),
                 ),
               ],
             ),
           ),
-          SizedBox(width: ui(67)),
+          SizedBox(width: ui(16)),
           _InlineImageIcon(
             asset: 'assets/images/home/left.png',
             onTap: onSkipBackward,
@@ -1319,6 +1335,21 @@ class _PlaybackBar extends StatelessWidget {
             ),
           ),
           SizedBox(width: ui(19)),
+          // 多曲目时（1.0 中 `urlList?.length > 1 && isArr`）显示
+          // 循环模式 + 播放列表 chip。视觉沿用 2.0 的极简 chip 风格。
+          if ((detail?.tracks.length ?? 0) > 1) ...[
+            _LoopModeChip(
+              mode: state.playMode,
+              onTap: onTogglePlayMode,
+            ),
+            SizedBox(width: ui(8)),
+            _PlaylistChip(
+              tracks: detail?.tracks ?? const <MusicPlayTrack>[],
+              activeIndex: state.activeTrackIndex,
+              onSelect: onSelectTrack,
+            ),
+            SizedBox(width: ui(16)),
+          ],
           GestureDetector(
             onTap: onToggleFavorite,
             behavior: HitTestBehavior.opaque,
@@ -1334,7 +1365,7 @@ class _PlaybackBar extends StatelessWidget {
                       : const Color(0xFFB6B5BB),
                 ),
                 SizedBox(width: ui(4)),
-                AppText(
+                Text(
                   '收藏',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -1342,7 +1373,7 @@ class _PlaybackBar extends StatelessWidget {
                     color: const Color(0xFFB6B5BB),
                     fontSize: ui(13),
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w500,
+                    fontWeight: AppFont.w500,
                     height: 12 / 13,
                   ),
                 ),
@@ -1355,6 +1386,27 @@ class _PlaybackBar extends StatelessWidget {
     );
   }
 
+  /// 主标题：多曲目时显示"当前音频文件名"（与左侧标题随播放切换的需求对齐），
+  /// 单曲目时回退到教材名。
+  String _resolvePrimaryTitle(MusicPlayDetail? detail, MusicPlayTrack? track) {
+    if (detail != null && detail.tracks.length > 1) {
+      final title = track?.title.trim() ?? '';
+      if (title.isNotEmpty) return title;
+      return detail.title;
+    }
+    return detail?.title ?? '未命名音频';
+  }
+
+  /// 副标题：多曲目时降级展示教材名，单曲目时保留原本的"曲目名 / 听写"逻辑，
+  /// 避免主副两行重复显示同一个字符串。
+  String _resolveSecondaryTitle(MusicPlayDetail? detail, MusicPlayTrack? track) {
+    if (detail != null && detail.tracks.length > 1) {
+      return detail.title;
+    }
+    final fallback = track?.title.trim() ?? '';
+    return fallback.isEmpty ? '听写' : fallback;
+  }
+
   String _formatDuration(Duration value) {
     if (value == Duration.zero) {
       return '00:00';
@@ -1365,9 +1417,15 @@ class _PlaybackBar extends StatelessWidget {
   }
 }
 
-/// 进度条与时间标签：上方右对齐显示 `当前/总时长`，下方为带紫色渐变填充与圆形
-/// thumb 的轨道。相比一开始的版本去掉了左侧当前时间，并将右侧时间整体下移
-/// 约 10px（通过收紧时间行与滑块之间的间距实现）。
+/// 进度条与时间标签：滑块带紫色渐变填充与圆形 thumb；右上方显示 `当前/总时长`。
+///
+/// 布局策略：
+///   外部父 Row 的 crossAxisAlignment 是 center（播放条 72 高），希望"滑块的
+///   视觉中线"刚好落在播放条的水平中线上。原先用 Column[label, gap, slider]
+///   的写法会把整列高度撑到 ~36，居中后滑块中线整体偏下。这里改用：
+///     - 自身高度 = 滑块 hit zone（20），居中后中线即 = 播放条中线；
+///     - 时间标签通过 Stack 浮在滑块上方，clipBehavior: Clip.none 允许其向上
+///       溢出本控件的边界但不撑高布局，因此不影响滑块对齐。
 class _ProgressTrack extends StatelessWidget {
   const _ProgressTrack({
     required this.ratio,
@@ -1382,29 +1440,33 @@ class _ProgressTrack extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: EdgeInsets.only(top: ui(0)),
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: AppText(
+    final hitHeight = ui(20);
+    return SizedBox(
+      height: hitHeight,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned.fill(
+            child: _GradientSlider(ratio: ratio, onSeekRatio: onSeekRatio),
+          ),
+          // 时间标签：贴近可见进度条上方（轨道顶在 y=(20-4)/2=8，
+          // bottom: 14 → 标签底边 y=6，距离轨道顶视觉约 ~4px）。
+          Positioned(
+            right: 0,
+            bottom: ui(14),
+            child: Text(
               durationLabel,
               style: TextStyle(
                 color: const Color(0xFF0B081A),
                 fontSize: ui(12),
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
-                height: 3 / 8,
+                fontWeight: AppFont.w500,
+                height: 1,
               ),
             ),
           ),
-        ),
-        SizedBox(height: ui(4)),
-        _GradientSlider(ratio: ratio, onSeekRatio: onSeekRatio),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -1563,7 +1625,7 @@ class _DescriptionCard extends StatelessWidget {
                   color: const Color(0xFF0B081A),
                   fontSize: ui(13),
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w400,
+                  fontWeight: AppFont.w400,
                   height: 26 / 13,
                 ),
               ),
@@ -1640,13 +1702,13 @@ class _SecondaryChipButton extends StatelessWidget {
           children: [
             leading,
             SizedBox(width: ui(4)),
-            AppText(
+            Text(
               label,
               style: TextStyle(
                 color: const Color(0xFF0B081A),
                 fontSize: ui(12),
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
                 height: 1,
               ),
             ),
@@ -1658,57 +1720,6 @@ class _SecondaryChipButton extends StatelessWidget {
 }
 
 /// 白底描边的 chip 按钮，对应图稿"升降调"等次要操作。
-class _OutlinedChipButton extends StatelessWidget {
-  const _OutlinedChipButton({
-    required this.iconAsset,
-    required this.label,
-    required this.onTap,
-  });
-
-  final String iconAsset;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: ui(28),
-        padding: EdgeInsets.fromLTRB(ui(12), ui(4), ui(13), ui(4)),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(ui(8)),
-          border: Border.all(color: const Color(0xFFF3F2F3), width: 1),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Image.asset(
-              iconAsset,
-              width: ui(20),
-              height: ui(20),
-              fit: BoxFit.contain,
-            ),
-            SizedBox(width: ui(4)),
-            AppText(
-              label,
-              style: TextStyle(
-                color: const Color(0xFF0B081A),
-                fontSize: ui(12),
-                fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
-                height: 1,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _TogglePill extends StatelessWidget {
   const _TogglePill({
     required this.label,
@@ -1733,13 +1744,13 @@ class _TogglePill extends StatelessWidget {
           borderRadius: BorderRadius.circular(ui(6)),
         ),
         alignment: Alignment.center,
-        child: AppText(
+        child: Text(
           label,
           style: TextStyle(
             color: active ? Colors.white : const Color(0xFFB6B5BB),
             fontSize: ui(12),
             fontFamily: 'PingFang SC',
-            fontWeight: active ? FontWeight.w500 : FontWeight.w400,
+            fontWeight: active ? AppFont.w500 : AppFont.w400,
             height: 1,
           ),
         ),
@@ -1785,7 +1796,22 @@ class _SpeedChip extends StatefulWidget {
   final double speed;
   final ValueChanged<double> onSpeedChanged;
 
-  static const List<double> options = <double>[2.0, 1.5, 1.25, 1.0, 0.75, 0.5];
+  /// 倍速档位（从大到小，方便用户在弹窗里默认看到加速段）。
+  static const List<double> options = <double>[
+    2.0,
+    1.6,
+    1.5,
+    1.4,
+    1.3,
+    1.2,
+    1.0,
+    0.9,
+    0.8,
+    0.75,
+    0.7,
+    0.6,
+    0.5,
+  ];
 
   static String formatSpeed(double value) {
     var text = value.toStringAsFixed(2);
@@ -1814,8 +1840,10 @@ class _SpeedChipState extends State<_SpeedChip> {
     final double menuWidth = ui(96);
     final double itemHeight = ui(34);
     final double padding = ui(6);
-    final double menuHeight =
-        _SpeedChip.options.length * itemHeight + padding * 2;
+    // 选项最多展示 6 行；多于 6 行启用纵向滚动，避免弹窗顶/底超界。
+    const int maxVisible = 6;
+    final int visibleCount = math.min(_SpeedChip.options.length, maxVisible);
+    final double menuHeight = visibleCount * itemHeight + padding * 2;
     final double gap = ui(8);
 
     final overlay =
@@ -1847,6 +1875,7 @@ class _SpeedChipState extends State<_SpeedChip> {
                 left: left,
                 top: top,
                 width: menuWidth,
+                height: menuHeight,
                 child: _SpeedMenuCard(
                   options: _SpeedChip.options,
                   current: widget.speed,
@@ -1906,7 +1935,7 @@ class _SpeedChipState extends State<_SpeedChip> {
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            AppText(
+            Text(
               _SpeedChip.formatSpeed(widget.speed),
               style: TextStyle(
                 color: _open
@@ -1914,7 +1943,7 @@ class _SpeedChipState extends State<_SpeedChip> {
                     : const Color(0xFF7F7F7F),
                 fontSize: ui(12),
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
                 height: 12 / 12,
               ),
             ),
@@ -1937,7 +1966,7 @@ class _SpeedChipState extends State<_SpeedChip> {
   }
 }
 
-class _SpeedMenuCard extends StatelessWidget {
+class _SpeedMenuCard extends StatefulWidget {
   const _SpeedMenuCard({
     required this.options,
     required this.current,
@@ -1953,12 +1982,37 @@ class _SpeedMenuCard extends StatelessWidget {
   final ValueChanged<double> onPick;
 
   @override
+  State<_SpeedMenuCard> createState() => _SpeedMenuCardState();
+}
+
+class _SpeedMenuCardState extends State<_SpeedMenuCard> {
+  late final ScrollController _scrollController;
+
+  @override
+  void initState() {
+    super.initState();
+    final selectedIndex = widget.options.indexOf(widget.current);
+    final initialOffset = selectedIndex < 0
+        ? 0.0
+        : math.max(
+            0.0,
+            (selectedIndex - 2) * widget.itemHeight,
+          );
+    _scrollController = ScrollController(initialScrollOffset: initialOffset);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Material(
       color: Colors.transparent,
       child: Container(
-        padding: EdgeInsets.symmetric(vertical: padding),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(ui(12)),
@@ -1977,20 +2031,41 @@ class _SpeedMenuCard extends StatelessWidget {
             ),
           ],
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final value in options)
-              _SpeedMenuItem(
+        clipBehavior: Clip.antiAlias,
+        child: ScrollConfiguration(
+          behavior: const _NoOverscrollBehavior(),
+          child: ListView.builder(
+            controller: _scrollController,
+            padding: EdgeInsets.symmetric(vertical: widget.padding),
+            itemCount: widget.options.length,
+            itemExtent: widget.itemHeight,
+            itemBuilder: (_, index) {
+              final value = widget.options[index];
+              return _SpeedMenuItem(
                 label: _SpeedChip.formatSpeed(value),
-                height: itemHeight,
-                selected: value == current,
-                onTap: () => onPick(value),
-              ),
-          ],
+                height: widget.itemHeight,
+                selected: value == widget.current,
+                onTap: () => widget.onPick(value),
+              );
+            },
+          ),
         ),
       ),
     );
+  }
+}
+
+/// 弹窗内的滚动列表禁用 overscroll glow，视觉更纯净。
+class _NoOverscrollBehavior extends ScrollBehavior {
+  const _NoOverscrollBehavior();
+
+  @override
+  Widget buildOverscrollIndicator(
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) {
+    return child;
   }
 }
 
@@ -2039,7 +2114,7 @@ class _SpeedMenuItemState extends State<_SpeedMenuItem> {
           child: Row(
             children: [
               Expanded(
-                child: AppText(
+                child: Text(
                   widget.label,
                   textAlign: TextAlign.center,
                   style: TextStyle(
@@ -2048,7 +2123,7 @@ class _SpeedMenuItemState extends State<_SpeedMenuItem> {
                         : const Color(0xFF0B081A),
                     fontSize: ui(13),
                     fontFamily: 'PingFang SC',
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                    fontWeight: selected ? AppFont.w600 : AppFont.w400,
                     height: 1,
                   ),
                 ),
@@ -2059,6 +2134,657 @@ class _SpeedMenuItemState extends State<_SpeedMenuItem> {
                   size: ui(14),
                   color: const Color(0xFF8741FF),
                 ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 顶部"升降调"按钮：沿用之前 outlined chip 的视觉
+/// （白底、灰边、icon + 文字），点击后从按钮下方弹出与
+/// [_SpeedChip] 同款的下拉菜单，可滚动选择半音档位（-6..+6）。
+///
+/// 视觉规则：
+/// - 未升降调（0）：标签固定显示"升降调"，跟原设计保持一致；
+/// - 已升降调：标签变成"升降调 +N" / "升降调 -N"，并把文字染成品牌紫
+///   作为视觉提示（不改变背景/边框，避免破坏原来的极简感）。
+class _TransposeChipButton extends StatefulWidget {
+  const _TransposeChipButton({
+    required this.pitchSemitones,
+    required this.onPitchChanged,
+  });
+
+  final int pitchSemitones;
+  final ValueChanged<int> onPitchChanged;
+
+  /// 半音档位（从大到小，便于升调用户在弹窗第一屏看到正向区间）。
+  static const List<int> options = <int>[
+    6,
+    5,
+    4,
+    3,
+    2,
+    1,
+    0,
+    -1,
+    -2,
+    -3,
+    -4,
+    -5,
+    -6,
+  ];
+
+  /// 弹窗每一行展示的纯档位值（"原调" / "+N" / "-N"）。
+  static String formatPitch(int value) {
+    if (value == 0) {
+      return '原调';
+    }
+    return value > 0 ? '+$value' : '$value';
+  }
+
+  /// chip 自身上展示的标签，0 时退回原文案"升降调"。
+  static String formatChipLabel(int value) {
+    if (value == 0) {
+      return '升降调';
+    }
+    return value > 0 ? '升降调 +$value' : '升降调 $value';
+  }
+
+  @override
+  State<_TransposeChipButton> createState() => _TransposeChipButtonState();
+}
+
+class _TransposeChipButtonState extends State<_TransposeChipButton> {
+  bool _open = false;
+
+  Future<void> _showMenu(BuildContext context) async {
+    final scale = DashboardScaleScope.of(context);
+    final ui = scale.ui;
+    final RenderBox box = context.findRenderObject() as RenderBox;
+    final Offset topLeft = box.localToGlobal(Offset.zero);
+    final Size size = box.size;
+    final double menuWidth = math.max(ui(96), size.width);
+    final double itemHeight = ui(34);
+    final double padding = ui(6);
+    const int maxVisible = 6;
+    final int visibleCount = math.min(
+      _TransposeChipButton.options.length,
+      maxVisible,
+    );
+    final double menuHeight = visibleCount * itemHeight + padding * 2;
+    final double gap = ui(8);
+
+    final overlay =
+        Overlay.of(context, rootOverlay: true).context.findRenderObject()
+            as RenderBox;
+    final Size overlaySize = overlay.size;
+
+    // 默认贴右对齐，让菜单的右边缘与按钮右边缘对齐——
+    // 这样菜单不会"跑到屏幕外面"，符合右上角触发的视觉直觉。
+    double left = topLeft.dx + size.width - menuWidth;
+    left = left.clamp(ui(8), overlaySize.width - menuWidth - ui(8));
+    final double topBelow = topLeft.dy + size.height + gap;
+    final double topAbove = topLeft.dy - menuHeight - gap;
+    // 因为按钮在右上角，优先朝下展开；下方放不下再向上。
+    final bool below = topBelow + menuHeight <= overlaySize.height - ui(8);
+    final double top = below ? topBelow : topAbove;
+
+    setState(() => _open = true);
+
+    final selected = await showGeneralDialog<int>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'transpose_menu',
+      barrierColor: Colors.transparent,
+      transitionDuration: const Duration(milliseconds: 180),
+      pageBuilder: (dialogContext, animation, secondary) {
+        return DashboardScaleScope(
+          data: scale,
+          child: Stack(
+            children: [
+              Positioned(
+                left: left,
+                top: top,
+                width: menuWidth,
+                height: menuHeight,
+                child: _PitchMenuCard(
+                  options: _TransposeChipButton.options,
+                  current: widget.pitchSemitones,
+                  itemHeight: itemHeight,
+                  padding: padding,
+                  onPick: (value) => Navigator.of(dialogContext).pop(value),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondary, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+        );
+        final offsetTween = below
+            ? Tween<Offset>(begin: const Offset(0, -0.04), end: Offset.zero)
+            : Tween<Offset>(begin: const Offset(0, 0.04), end: Offset.zero);
+        return FadeTransition(
+          opacity: curved,
+          child: SlideTransition(
+            position: offsetTween.animate(curved),
+            child: child,
+          ),
+        );
+      },
+    );
+
+    if (!mounted) {
+      return;
+    }
+    setState(() => _open = false);
+    if (selected != null && selected != widget.pitchSemitones) {
+      widget.onPitchChanged(selected);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final tinted = widget.pitchSemitones != 0;
+    final labelColor = tinted
+        ? const Color(0xFF8741FF)
+        : const Color(0xFF0B081A);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _showMenu(context),
+      child: Container(
+        height: ui(28),
+        padding: EdgeInsets.fromLTRB(ui(12), ui(4), ui(13), ui(4)),
+        decoration: BoxDecoration(
+          color: _open ? const Color(0xFFF5F2FF) : Colors.white,
+          borderRadius: BorderRadius.circular(ui(8)),
+          border: Border.all(color: const Color(0xFFF3F2F3), width: 1),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Image.asset(
+              'assets/images/home/dictation/9.png',
+              width: ui(20),
+              height: ui(20),
+              fit: BoxFit.contain,
+            ),
+            SizedBox(width: ui(4)),
+            Text(
+              _TransposeChipButton.formatChipLabel(widget.pitchSemitones),
+              style: TextStyle(
+                color: labelColor,
+                fontSize: ui(12),
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w500,
+                height: 1,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PitchMenuCard extends StatefulWidget {
+  const _PitchMenuCard({
+    required this.options,
+    required this.current,
+    required this.itemHeight,
+    required this.padding,
+    required this.onPick,
+  });
+
+  final List<int> options;
+  final int current;
+  final double itemHeight;
+  final double padding;
+  final ValueChanged<int> onPick;
+
+  @override
+  State<_PitchMenuCard> createState() => _PitchMenuCardState();
+}
+
+class _PitchMenuCardState extends State<_PitchMenuCard> {
+  late final ScrollController _scrollController;
+
+  @override
+  void initState() {
+    super.initState();
+    final selectedIndex = widget.options.indexOf(widget.current);
+    final initialOffset = selectedIndex < 0
+        ? 0.0
+        : math.max(0.0, (selectedIndex - 2) * widget.itemHeight);
+    _scrollController = ScrollController(initialScrollOffset: initialOffset);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(ui(12)),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF8741FF).withValues(alpha: 0.10),
+              blurRadius: ui(20),
+              spreadRadius: 0,
+              offset: Offset(0, ui(8)),
+            ),
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: ui(8),
+              spreadRadius: 0,
+              offset: Offset(0, ui(2)),
+            ),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: ScrollConfiguration(
+          behavior: const _NoOverscrollBehavior(),
+          child: ListView.builder(
+            controller: _scrollController,
+            padding: EdgeInsets.symmetric(vertical: widget.padding),
+            itemCount: widget.options.length,
+            itemExtent: widget.itemHeight,
+            itemBuilder: (_, index) {
+              final value = widget.options[index];
+              return _SpeedMenuItem(
+                label: _TransposeChipButton.formatPitch(value),
+                height: widget.itemHeight,
+                selected: value == widget.current,
+                onTap: () => widget.onPick(value),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 循环模式 chip：和 [_SpeedChip] 一致的极简胶囊外观，但点击不弹菜单，
+/// 而是直接切到下一档（顺序 → 单曲 → 随机 → 顺序）。
+/// 复刻 1.0 中 `play-sx.png / play-xh.png / play_sj.png` 的"一键三态"。
+class _LoopModeChip extends StatelessWidget {
+  const _LoopModeChip({required this.mode, required this.onTap});
+
+  final MusicPlayMode mode;
+  final VoidCallback onTap;
+
+  static String _label(MusicPlayMode mode) {
+    switch (mode) {
+      case MusicPlayMode.sequence:
+        return '顺序播放';
+      case MusicPlayMode.single:
+        return '单曲循环';
+      case MusicPlayMode.shuffle:
+        return '随机循环';
+    }
+  }
+
+  static IconData _icon(MusicPlayMode mode) {
+    switch (mode) {
+      case MusicPlayMode.sequence:
+        return Icons.repeat_rounded;
+      case MusicPlayMode.single:
+        return Icons.repeat_one_rounded;
+      case MusicPlayMode.shuffle:
+        return Icons.shuffle_rounded;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    // 顺序播放视为"默认态"，其他两档视觉上染紫，方便用户一眼分辨。
+    final tinted = mode != MusicPlayMode.sequence;
+    final fg = tinted ? const Color(0xFF8741FF) : const Color(0xFF7F7F7F);
+    return Tooltip(
+      message: _label(mode),
+      waitDuration: const Duration(milliseconds: 400),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Container(
+          height: ui(28),
+          width: ui(28),
+          decoration: BoxDecoration(
+            color: tinted ? const Color(0xFFF5F2FF) : Colors.white,
+            borderRadius: BorderRadius.circular(ui(8)),
+          ),
+          alignment: Alignment.center,
+          child: Icon(_icon(mode), size: ui(18), color: fg),
+        ),
+      ),
+    );
+  }
+}
+
+/// 播放列表 chip：点击后从按钮上方弹出曲目菜单，菜单复用与 [_SpeedChip]
+/// 一致的卡片样式；当前播放项染紫并在右侧标记一个紫色"正在播放"小点。
+class _PlaylistChip extends StatefulWidget {
+  const _PlaylistChip({
+    required this.tracks,
+    required this.activeIndex,
+    required this.onSelect,
+  });
+
+  final List<MusicPlayTrack> tracks;
+  final int activeIndex;
+  final ValueChanged<int> onSelect;
+
+  @override
+  State<_PlaylistChip> createState() => _PlaylistChipState();
+}
+
+class _PlaylistChipState extends State<_PlaylistChip> {
+  bool _open = false;
+
+  Future<void> _showMenu(BuildContext context) async {
+    if (widget.tracks.isEmpty) return;
+    final scale = DashboardScaleScope.of(context);
+    final ui = scale.ui;
+    final RenderBox box = context.findRenderObject() as RenderBox;
+    final Offset topLeft = box.localToGlobal(Offset.zero);
+    final Size size = box.size;
+    // 列表项更宽，要容纳曲名（最多一行 + 省略号）。
+    final double menuWidth = ui(220);
+    final double itemHeight = ui(40);
+    final double padding = ui(6);
+    const int maxVisible = 6;
+    final int visibleCount = math.min(widget.tracks.length, maxVisible);
+    final double menuHeight = visibleCount * itemHeight + padding * 2;
+    final double gap = ui(8);
+
+    final overlay =
+        Overlay.of(context, rootOverlay: true).context.findRenderObject()
+            as RenderBox;
+    final Size overlaySize = overlay.size;
+
+    // 默认让菜单的右边缘贴近按钮右边缘，避免菜单跨出工具栏右侧。
+    double left = topLeft.dx + size.width - menuWidth;
+    left = left.clamp(ui(8), overlaySize.width - menuWidth - ui(8));
+    final double topAbove = topLeft.dy - menuHeight - gap;
+    final double topBelow = topLeft.dy + size.height + gap;
+    final bool above = topAbove >= ui(8);
+    final double top = above ? topAbove : topBelow;
+
+    setState(() => _open = true);
+
+    final selected = await showGeneralDialog<int>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'playlist_menu',
+      barrierColor: Colors.transparent,
+      transitionDuration: const Duration(milliseconds: 180),
+      pageBuilder: (dialogContext, animation, secondary) {
+        return DashboardScaleScope(
+          data: scale,
+          child: Stack(
+            children: [
+              Positioned(
+                left: left,
+                top: top,
+                width: menuWidth,
+                height: menuHeight,
+                child: _PlaylistMenuCard(
+                  tracks: widget.tracks,
+                  activeIndex: widget.activeIndex,
+                  itemHeight: itemHeight,
+                  padding: padding,
+                  onPick: (value) => Navigator.of(dialogContext).pop(value),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondary, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+        );
+        final offsetTween = above
+            ? Tween<Offset>(begin: const Offset(0, 0.04), end: Offset.zero)
+            : Tween<Offset>(begin: const Offset(0, -0.04), end: Offset.zero);
+        return FadeTransition(
+          opacity: curved,
+          child: SlideTransition(
+            position: offsetTween.animate(curved),
+            child: child,
+          ),
+        );
+      },
+    );
+
+    if (!mounted) {
+      return;
+    }
+    setState(() => _open = false);
+    if (selected != null) {
+      widget.onSelect(selected);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final fg = _open
+        ? const Color(0xFF8741FF)
+        : const Color(0xFF7F7F7F);
+    return Tooltip(
+      message: '播放列表',
+      waitDuration: const Duration(milliseconds: 400),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _showMenu(context),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOut,
+          height: ui(28),
+          width: ui(28),
+          decoration: BoxDecoration(
+            color: _open ? const Color(0xFFF5F2FF) : Colors.white,
+            borderRadius: BorderRadius.circular(ui(8)),
+          ),
+          alignment: Alignment.center,
+          child: Icon(Icons.queue_music_rounded, size: ui(18), color: fg),
+        ),
+      ),
+    );
+  }
+}
+
+class _PlaylistMenuCard extends StatefulWidget {
+  const _PlaylistMenuCard({
+    required this.tracks,
+    required this.activeIndex,
+    required this.itemHeight,
+    required this.padding,
+    required this.onPick,
+  });
+
+  final List<MusicPlayTrack> tracks;
+  final int activeIndex;
+  final double itemHeight;
+  final double padding;
+  final ValueChanged<int> onPick;
+
+  @override
+  State<_PlaylistMenuCard> createState() => _PlaylistMenuCardState();
+}
+
+class _PlaylistMenuCardState extends State<_PlaylistMenuCard> {
+  late final ScrollController _scrollController;
+
+  @override
+  void initState() {
+    super.initState();
+    final initialOffset = widget.activeIndex < 0
+        ? 0.0
+        : math.max(0.0, (widget.activeIndex - 2) * widget.itemHeight);
+    _scrollController = ScrollController(initialScrollOffset: initialOffset);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(ui(12)),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF8741FF).withValues(alpha: 0.10),
+              blurRadius: ui(20),
+              spreadRadius: 0,
+              offset: Offset(0, ui(8)),
+            ),
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: ui(8),
+              spreadRadius: 0,
+              offset: Offset(0, ui(2)),
+            ),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: ScrollConfiguration(
+          behavior: const _NoOverscrollBehavior(),
+          child: ListView.builder(
+            controller: _scrollController,
+            padding: EdgeInsets.symmetric(vertical: widget.padding),
+            itemCount: widget.tracks.length,
+            itemExtent: widget.itemHeight,
+            itemBuilder: (_, index) {
+              final track = widget.tracks[index];
+              final selected = index == widget.activeIndex;
+              return _PlaylistMenuItem(
+                index: index,
+                title: track.title,
+                height: widget.itemHeight,
+                selected: selected,
+                onTap: () => widget.onPick(index),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PlaylistMenuItem extends StatefulWidget {
+  const _PlaylistMenuItem({
+    required this.index,
+    required this.title,
+    required this.height,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final int index;
+  final String title;
+  final double height;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  State<_PlaylistMenuItem> createState() => _PlaylistMenuItemState();
+}
+
+class _PlaylistMenuItemState extends State<_PlaylistMenuItem> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final selected = widget.selected;
+    final highlighted = selected || _hover;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          height: widget.height,
+          margin: EdgeInsets.symmetric(horizontal: ui(6)),
+          padding: EdgeInsets.symmetric(horizontal: ui(10)),
+          decoration: BoxDecoration(
+            color: highlighted ? const Color(0xFFF5F2FF) : Colors.transparent,
+            borderRadius: BorderRadius.circular(ui(8)),
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: ui(20),
+                child: Text(
+                  '${widget.index + 1}',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: selected
+                        ? const Color(0xFF8741FF)
+                        : const Color(0xFFB6B5BB),
+                    fontSize: ui(12),
+                    fontFamily: 'Barlow',
+                    fontWeight: FontWeight.w600,
+                    height: 1,
+                  ),
+                ),
+              ),
+              SizedBox(width: ui(8)),
+              Expanded(
+                child: Text(
+                  widget.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: selected
+                        ? const Color(0xFF8741FF)
+                        : const Color(0xFF0B081A),
+                    fontSize: ui(13),
+                    fontFamily: 'PingFang SC',
+                    fontWeight: selected ? AppFont.w600 : AppFont.w400,
+                    height: 1,
+                  ),
+                ),
+              ),
+              if (selected) ...[
+                SizedBox(width: ui(4)),
+                Icon(
+                  Icons.equalizer_rounded,
+                  size: ui(14),
+                  color: const Color(0xFF8741FF),
+                ),
+              ],
             ],
           ),
         ),

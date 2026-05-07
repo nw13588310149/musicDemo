@@ -23,8 +23,8 @@ import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../state/class_notice_controller.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../core/widgets/app_text.dart';
 const Color _kPanelBg = Colors.white;
 const Color _kInnerGray = Color(0xFFF5F6FA);
 const Color _kTextDark = Color(0xFF0B081A);
@@ -150,7 +150,7 @@ class _WorkbenchBanner extends StatelessWidget {
           ),
           // 居中标题
           Center(
-            child: AppText(
+            child: Text(
               '班级工作台',
               style: TextStyle(
                 fontSize: ui(16),
@@ -226,7 +226,7 @@ class _SegmentItem extends StatelessWidget {
           color: selected ? _kTextDark : Colors.transparent,
           borderRadius: BorderRadius.circular(ui(6)),
         ),
-        child: AppText(
+        child: Text(
           label,
           style: TextStyle(
             fontSize: ui(12),
@@ -354,7 +354,7 @@ class _SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return AppText(
+    return Text(
       text,
       style: TextStyle(
         fontSize: ui(18),
@@ -387,7 +387,7 @@ class _SectionTitleWithAction extends StatelessWidget {
             padding: EdgeInsets.symmetric(horizontal: ui(2), vertical: ui(2)),
             child: Row(
               children: [
-                AppText(
+                Text(
                   actionLabel,
                   style: TextStyle(
                     fontSize: ui(14),
@@ -442,13 +442,13 @@ class _NoticeSection extends ConsumerWidget {
               ? Padding(
                   padding: EdgeInsets.symmetric(vertical: ui(20)),
                   child: Center(
-                    child: AppText(
+                    child: Text(
                       '暂无通知，点击右上角"发布通知"为本班发布第一条通知。',
                       style: TextStyle(
                         fontSize: ui(13),
                         color: _kTextHint,
                         fontFamily: 'PingFang SC',
-                        fontWeight: FontWeight.w400,
+                        fontWeight: AppFont.w400,
                         height: 20 / 13,
                       ),
                     ),
@@ -520,13 +520,13 @@ class _NoticeSectionHeader extends StatelessWidget {
               children: [
                 Icon(Icons.add_rounded, size: ui(16), color: Colors.white),
                 SizedBox(width: ui(4)),
-                AppText(
+                Text(
                   '发布通知',
                   style: TextStyle(
                     fontSize: ui(13),
                     color: Colors.white,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w500,
+                    fontWeight: AppFont.w500,
                     height: 1.2,
                   ),
                 ),
@@ -576,13 +576,13 @@ class _NoticeCardEditable extends StatelessWidget {
                 SizedBox(width: ui(8)),
               ],
               Expanded(
-                child: AppText(
+                child: Text(
                   notice.text,
                   style: TextStyle(
                     fontSize: ui(13),
                     color: _kTextDark,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w500,
+                    fontWeight: AppFont.w500,
                     height: 20 / 13,
                   ),
                 ),
@@ -612,13 +612,13 @@ class _NoticeCardEditable extends StatelessWidget {
           SizedBox(height: ui(4)),
           Padding(
             padding: EdgeInsets.only(left: notice.highlighted ? ui(20) : 0),
-            child: AppText(
+            child: Text(
               notice.date,
               style: TextStyle(
                 fontSize: ui(11),
                 color: _kTextSecondary,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w400,
+                fontWeight: AppFont.w400,
                 height: 12 / 11,
               ),
             ),
@@ -659,24 +659,24 @@ Future<void> _showPublishNoticeDialog(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            AppText(
+            Text(
               '本通知将同步到学生「我的班级 → 班级通知」展示位，请精炼描述。',
               style: TextStyle(
                 fontSize: ui(13),
                 color: _kTextSecondary,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w400,
+                fontWeight: AppFont.w400,
                 height: 20 / 13,
               ),
             ),
             SizedBox(height: ui(15)),
-            AppText(
+            Text(
               '通知内容',
               style: TextStyle(
                 fontSize: ui(14),
                 color: _kTextDark,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
                 height: 20 / 14,
               ),
             ),
@@ -702,7 +702,7 @@ Future<void> _showPublishNoticeDialog(
                   fontSize: ui(14),
                   color: _kTextDark,
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w400,
+                  fontWeight: AppFont.w400,
                   height: 20 / 14,
                 ),
                 decoration: InputDecoration(
@@ -711,7 +711,7 @@ Future<void> _showPublishNoticeDialog(
                     fontSize: ui(14),
                     color: _kTextHintLight,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w400,
+                    fontWeight: AppFont.w400,
                     height: 20 / 14,
                   ),
                   border: InputBorder.none,
@@ -763,13 +763,13 @@ Future<void> _confirmDeleteNotice(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            AppText(
+            Text(
               '删除后学生端「我的班级」也会同步移除该通知，操作不可撤回。',
               style: TextStyle(
                 fontSize: ui(14),
                 color: _kTextSecondary,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w400,
+                fontWeight: AppFont.w400,
                 height: 22 / 14,
               ),
             ),
@@ -780,13 +780,13 @@ Future<void> _confirmDeleteNotice(
                 color: _kAnnounceBg,
                 borderRadius: BorderRadius.circular(ui(8)),
               ),
-              child: AppText(
+              child: Text(
                 notice.text,
                 style: TextStyle(
                   fontSize: ui(13),
                   color: _kTextDark,
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w500,
+                  fontWeight: AppFont.w500,
                   height: 20 / 13,
                 ),
               ),
@@ -855,7 +855,7 @@ class _TeacherInfoHeader extends StatelessWidget {
                   borderRadius: BorderRadius.circular(ui(24)),
                 ),
                 alignment: Alignment.center,
-                child: AppText(
+                child: Text(
                   '黎',
                   style: TextStyle(
                     fontSize: ui(18),
@@ -878,7 +878,7 @@ class _TeacherInfoHeader extends StatelessWidget {
                     borderRadius: BorderRadius.circular(ui(10)),
                     border: Border.all(color: Colors.white, width: 1),
                   ),
-                  child: AppText(
+                  child: Text(
                     '班主任',
                     style: TextStyle(
                       fontSize: ui(11),
@@ -901,7 +901,7 @@ class _TeacherInfoHeader extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  AppText(
+                  Text(
                     'Grey黎',
                     style: TextStyle(
                       fontSize: ui(16),
@@ -933,7 +933,7 @@ class _TeacherInfoHeader extends StatelessWidget {
                           ),
                         ),
                         SizedBox(width: ui(4)),
-                        AppText(
+                        Text(
                           '在岗',
                           style: TextStyle(
                             fontSize: ui(12),
@@ -948,7 +948,7 @@ class _TeacherInfoHeader extends StatelessWidget {
                 ],
               ),
               SizedBox(height: ui(6)),
-              AppText(
+              Text(
                 '音乐学科 一级教师',
                 style: TextStyle(
                   fontSize: ui(12),
@@ -987,7 +987,7 @@ class _HeaderStat extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        AppText(
+        Text(
           label,
           style: TextStyle(
             fontSize: ui(12),
@@ -1038,7 +1038,7 @@ class _TeacherInfoMeta extends StatelessWidget {
       padding: EdgeInsets.only(bottom: ui(4)),
       child: Row(
         children: [
-          AppText(
+          Text(
             key,
             style: TextStyle(
               fontSize: ui(12),
@@ -1048,7 +1048,7 @@ class _TeacherInfoMeta extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: AppText(
+            child: Text(
               value,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -1086,7 +1086,7 @@ class _TeacherInfoStats extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
-            AppText(
+            Text(
               label,
               style: TextStyle(
                 fontSize: ui(12),
@@ -1096,7 +1096,7 @@ class _TeacherInfoStats extends StatelessWidget {
               ),
             ),
             SizedBox(height: ui(8)),
-            AppText(
+            Text(
               value,
               style: TextStyle(
                 fontSize: ui(24),
@@ -1148,7 +1148,7 @@ class _ShortcutStatGrid extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  AppText(
+                  Text(
                     value,
                     style: TextStyle(
                       fontSize: ui(24),
@@ -1158,7 +1158,7 @@ class _ShortcutStatGrid extends StatelessWidget {
                     ),
                   ),
                   SizedBox(height: ui(4)),
-                  AppText(
+                  Text(
                     label,
                     style: TextStyle(
                       fontSize: ui(12),
@@ -1177,7 +1177,7 @@ class _ShortcutStatGrid extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    AppText(
+                    Text(
                       actionLabel,
                       style: TextStyle(
                         fontSize: ui(12),
@@ -1298,7 +1298,7 @@ class _QuickActionTile extends StatelessWidget {
           ),
         ),
         SizedBox(height: ui(6)),
-        AppText(
+        Text(
           data.label,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -1348,7 +1348,7 @@ class _AttendanceBarCard extends StatelessWidget {
           // 顶部 % 单位
           Padding(
             padding: EdgeInsets.only(left: ui(2), bottom: ui(4)),
-            child: AppText(
+            child: Text(
               '%',
               style: TextStyle(
                 fontSize: ui(12),
@@ -1378,7 +1378,7 @@ class _AttendanceBarCard extends StatelessWidget {
               children: [
                 for (final l in _labels)
                   Expanded(
-                    child: AppText(
+                    child: Text(
                       l,
                       textAlign: TextAlign.center,
                       style: TextStyle(
@@ -1411,7 +1411,7 @@ class _AxisTicksColumn extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           for (int i = 0; i < ticks.length; i++) ...[
-            AppText(
+            Text(
               ticks[i].toString(),
               style: TextStyle(
                 fontSize: ui(12),
@@ -1466,7 +1466,7 @@ class _BarsRow extends StatelessWidget {
                     ),
                     Positioned(
                       bottom: h + ui(2),
-                      child: AppText(
+                      child: Text(
                         values[i].toString(),
                         style: TextStyle(
                           fontSize: ui(12),
@@ -1682,7 +1682,7 @@ class _PersonRowCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(ui(20)),
                   ),
                   alignment: Alignment.center,
-                  child: AppText(
+                  child: Text(
                     avatarSeed,
                     style: TextStyle(
                       fontSize: ui(15),
@@ -1698,7 +1698,7 @@ class _PersonRowCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      AppText(
+                      Text(
                         name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -1710,7 +1710,7 @@ class _PersonRowCard extends StatelessWidget {
                         ),
                       ),
                       SizedBox(height: ui(6)),
-                      AppText(
+                      Text(
                         line2,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -1722,7 +1722,7 @@ class _PersonRowCard extends StatelessWidget {
                         ),
                       ),
                       SizedBox(height: ui(6)),
-                      AppText(
+                      Text(
                         line3,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -1754,7 +1754,7 @@ class _PersonRowCard extends StatelessWidget {
                   vertical: ui(3),
                 ),
                 color: tagColor,
-                child: AppText(
+                child: Text(
                   tag,
                   style: TextStyle(
                     fontSize: ui(12),
@@ -1879,7 +1879,7 @@ class _TimelineRow extends StatelessWidget {
               Row(
                 children: [
                   Expanded(
-                    child: AppText(
+                    child: Text(
                       item.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -1892,7 +1892,7 @@ class _TimelineRow extends StatelessWidget {
                     ),
                   ),
                   if (item.time != null)
-                    AppText(
+                    Text(
                       item.time!,
                       style: TextStyle(
                         fontSize: ui(12),
@@ -1925,7 +1925,7 @@ class _TimelineSubtitle extends StatelessWidget {
     final matches = regex.allMatches(subtitle).toList();
     if (matches.isEmpty || subtitle.contains(':')) {
       // 单纯描述（包含 ":" 的当作时间标题，原样灰色显示）。
-      return AppText(
+      return Text(
         subtitle,
         style: TextStyle(
           fontSize: ui(12),
@@ -2057,7 +2057,7 @@ class _StudentsHeader extends StatelessWidget {
             children: [
               const _SectionTitle('学生管理'),
               SizedBox(height: ui(4)),
-              AppText(
+              Text(
                 '共42人在籍·本页演示14人·学生及家长信息仅查看;可编辑职务、标签与备注(本机保存)',
                 style: TextStyle(
                   fontSize: ui(12),
@@ -2288,7 +2288,7 @@ class _StudentManageCard extends StatelessWidget {
                             borderRadius: BorderRadius.circular(ui(8)),
                           ),
                           alignment: Alignment.center,
-                          child: AppText(
+                          child: Text(
                             data.name.characters.first,
                             style: TextStyle(
                               fontSize: ui(15),
@@ -2306,7 +2306,7 @@ class _StudentManageCard extends StatelessWidget {
                             children: [
                               Row(
                                 children: [
-                                  AppText(
+                                  Text(
                                     data.name,
                                     style: TextStyle(
                                       fontSize: ui(14),
@@ -2327,7 +2327,7 @@ class _StudentManageCard extends StatelessWidget {
                                   ),
                                   if (data.role != null) ...[
                                     SizedBox(width: ui(8)),
-                                    AppText(
+                                    Text(
                                       data.role!,
                                       style: TextStyle(
                                         fontSize: ui(12),
@@ -2340,7 +2340,7 @@ class _StudentManageCard extends StatelessWidget {
                                 ],
                               ),
                               SizedBox(height: ui(6)),
-                              AppText(
+                              Text(
                                 data.dorm,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -2352,7 +2352,7 @@ class _StudentManageCard extends StatelessWidget {
                                 ),
                               ),
                               SizedBox(height: ui(6)),
-                              AppText(
+                              Text(
                                 data.studentId,
                                 style: TextStyle(
                                   fontSize: ui(12),
@@ -2403,7 +2403,7 @@ class _StudentManageCard extends StatelessWidget {
                         vertical: ui(3),
                       ),
                       color: data.tagColor ?? _kPurple,
-                      child: AppText(
+                      child: Text(
                         data.tag!,
                         style: TextStyle(
                           fontSize: ui(12),
@@ -2429,7 +2429,7 @@ class _StudentManageCard extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            AppText(
+            Text(
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -2442,7 +2442,7 @@ class _StudentManageCard extends StatelessWidget {
               ),
             ),
             SizedBox(height: ui(8)),
-            AppText(
+            Text(
               value,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -2540,7 +2540,7 @@ class _GradesLineChartCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              AppText(
+              Text(
                 '%',
                 style: TextStyle(
                   fontSize: ui(12),
@@ -2550,7 +2550,7 @@ class _GradesLineChartCard extends StatelessWidget {
                 ),
               ),
               SizedBox(width: ui(8)),
-              AppText(
+              Text(
                 '得分率',
                 style: TextStyle(
                   fontSize: ui(12),
@@ -2597,7 +2597,7 @@ class _GradesLineChartCard extends StatelessWidget {
               children: [
                 for (final m in _months)
                   Expanded(
-                    child: AppText(
+                    child: Text(
                       m,
                       textAlign: TextAlign.center,
                       style: TextStyle(
@@ -2642,7 +2642,7 @@ class _LegendItem extends StatelessWidget {
           ),
         ),
         SizedBox(width: ui(4)),
-        AppText(
+        Text(
           label,
           style: TextStyle(
             fontSize: ui(12),
@@ -2889,7 +2889,7 @@ class _ExamSessionChip extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            AppText(
+            Text(
               session.title,
               style: TextStyle(
                 fontSize: ui(14),
@@ -2899,7 +2899,7 @@ class _ExamSessionChip extends StatelessWidget {
               ),
             ),
             SizedBox(height: ui(2)),
-            AppText(
+            Text(
               session.date,
               style: TextStyle(
                 fontSize: ui(12),
@@ -2949,7 +2949,7 @@ class _ExamScoreCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(ui(8)),
                       ),
                       alignment: Alignment.center,
-                      child: AppText(
+                      child: Text(
                         item.name.characters.first,
                         style: TextStyle(
                           fontSize: ui(15),
@@ -2967,7 +2967,7 @@ class _ExamScoreCard extends StatelessWidget {
                         children: [
                           Row(
                             children: [
-                              AppText(
+                              Text(
                                 item.name,
                                 style: TextStyle(
                                   fontSize: ui(14),
@@ -2978,7 +2978,7 @@ class _ExamScoreCard extends StatelessWidget {
                               ),
                               SizedBox(width: ui(8)),
                               Expanded(
-                                child: AppText(
+                                child: Text(
                                   item.studentId,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
@@ -3047,7 +3047,7 @@ class _ExamScoreCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      AppText(
+                      Text(
                         '任课 ${item.teacher}:',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -3059,7 +3059,7 @@ class _ExamScoreCard extends StatelessWidget {
                         ),
                       ),
                       SizedBox(height: ui(6)),
-                      AppText(
+                      Text(
                         item.comment,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -3079,7 +3079,7 @@ class _ExamScoreCard extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    AppText(
+                    Text(
                       item.score.toString(),
                       style: TextStyle(
                         fontSize: ui(20),
@@ -3090,7 +3090,7 @@ class _ExamScoreCard extends StatelessWidget {
                       ),
                     ),
                     SizedBox(height: ui(4)),
-                    AppText(
+                    Text(
                       item.subject,
                       style: TextStyle(
                         fontSize: ui(12),
@@ -3129,7 +3129,7 @@ class _MiniTag extends StatelessWidget {
         color: color,
         borderRadius: BorderRadius.circular(ui(4)),
       ),
-      child: AppText(
+      child: Text(
         text,
         style: TextStyle(
           fontSize: ui(11),
@@ -3149,7 +3149,7 @@ class _DetailLink extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        AppText(
+        Text(
           '详情',
           style: TextStyle(
             fontSize: ui(14),
@@ -3284,7 +3284,7 @@ class _ScoreChangeCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(ui(8)),
                 ),
                 alignment: Alignment.center,
-                child: AppText(
+                child: Text(
                   item.name.characters.first,
                   style: TextStyle(
                     fontSize: ui(15),
@@ -3300,7 +3300,7 @@ class _ScoreChangeCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    AppText(
+                    Text(
                       item.name,
                       style: TextStyle(
                         fontSize: ui(14),
@@ -3310,7 +3310,7 @@ class _ScoreChangeCard extends StatelessWidget {
                       ),
                     ),
                     SizedBox(height: ui(8)),
-                    AppText(
+                    Text(
                       item.studentId,
                       style: TextStyle(
                         fontSize: ui(12),
@@ -3338,7 +3338,7 @@ class _ScoreChangeCard extends StatelessWidget {
                 Expanded(
                   child: Row(
                     children: [
-                      AppText(
+                      Text(
                         '音乐专业最近分数:',
                         style: TextStyle(
                           fontSize: ui(12),
@@ -3348,7 +3348,7 @@ class _ScoreChangeCard extends StatelessWidget {
                         ),
                       ),
                       SizedBox(width: ui(8)),
-                      AppText(
+                      Text(
                         item.recentScore.toString(),
                         style: TextStyle(
                           fontSize: ui(20),
@@ -3363,7 +3363,7 @@ class _ScoreChangeCard extends StatelessWidget {
                 ),
                 Row(
                   children: [
-                    AppText(
+                    Text(
                       '较上一轮:',
                       style: TextStyle(
                         fontSize: ui(12),
@@ -3373,7 +3373,7 @@ class _ScoreChangeCard extends StatelessWidget {
                       ),
                     ),
                     SizedBox(width: ui(8)),
-                    AppText(
+                    Text(
                       item.delta,
                       style: TextStyle(
                         fontSize: ui(20),
@@ -3485,7 +3485,7 @@ class _StudentDetailPanelState extends State<_StudentDetailPanel> {
                             ),
                           ),
                           SizedBox(width: ui(4)),
-                          AppText(
+                          Text(
                             '学生档案',
                             style: TextStyle(
                               fontSize: ui(16),
@@ -3541,7 +3541,7 @@ class _StudentDetailPanelState extends State<_StudentDetailPanel> {
                         borderRadius: BorderRadius.circular(ui(8)),
                       ),
                       alignment: Alignment.center,
-                      child: AppText(
+                      child: Text(
                         data.name.characters.first,
                         style: TextStyle(
                           fontSize: ui(16),
@@ -3556,7 +3556,7 @@ class _StudentDetailPanelState extends State<_StudentDetailPanel> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        AppText(
+                        Text(
                           data.name,
                           style: TextStyle(
                             fontSize: ui(16),
@@ -3566,7 +3566,7 @@ class _StudentDetailPanelState extends State<_StudentDetailPanel> {
                           ),
                         ),
                         SizedBox(height: ui(8)),
-                        AppText(
+                        Text(
                           data.studentId,
                           style: TextStyle(
                             fontSize: ui(12),
@@ -3679,7 +3679,7 @@ class _StudentDetailPanelState extends State<_StudentDetailPanel> {
                           border: Border.all(color: _kInnerGray),
                         ),
                         alignment: Alignment.topLeft,
-                        child: AppText(
+                        child: Text(
                           '说明题目范围、命名规则、提交格式等',
                           style: TextStyle(
                             fontSize: ui(14),
@@ -3705,7 +3705,7 @@ class _StudentDetailPanelState extends State<_StudentDetailPanel> {
                         child: Row(
                           children: [
                             Expanded(
-                              child: AppText(
+                              child: Text(
                                 _classRole,
                                 style: TextStyle(
                                   fontSize: ui(14),
@@ -3764,7 +3764,7 @@ class _StudentDetailPanelState extends State<_StudentDetailPanel> {
                                 color: Colors.white,
                               ),
                               SizedBox(width: ui(8)),
-                              AppText(
+                              Text(
                                 '确认修改',
                                 style: TextStyle(
                                   fontSize: ui(14),
@@ -3807,7 +3807,7 @@ class _DetailGroupCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          AppText(
+          Text(
             title,
             style: TextStyle(
               fontSize: ui(16),
@@ -3862,7 +3862,7 @@ class _DetailField extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        AppText(
+        Text(
           label,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -3874,7 +3874,7 @@ class _DetailField extends StatelessWidget {
           ),
         ),
         SizedBox(height: ui(2)),
-        AppText(
+        Text(
           value,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -3896,7 +3896,7 @@ class _DetailField extends StatelessWidget {
 
 Widget _detailLabel(BuildContext context, String text) {
   final ui = DashboardScaleScope.of(context).ui;
-  return AppText(
+  return Text(
     text,
     style: TextStyle(
       fontSize: ui(14),
@@ -3952,7 +3952,7 @@ class _TeacherTagChip extends StatelessWidget {
           borderRadius: BorderRadius.circular(ui(8)),
           border: border,
         ),
-        child: AppText(
+        child: Text(
           text,
           style: TextStyle(
             fontSize: ui(12),

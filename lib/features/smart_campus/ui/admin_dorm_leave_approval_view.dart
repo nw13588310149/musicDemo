@@ -35,8 +35,8 @@ import 'package:flutter/material.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../core/widgets/app_text.dart';
 // —— 颜色 ————————————————————————————————————————————————————————
 const Color _kPageBg = Color(0xFFEFF3FC);
 const Color _kBoardBg = Color(0xFFF5F6FA);
@@ -151,13 +151,13 @@ class _AdminDormLeaveApprovalViewState
             SizedBox(height: ui(8)),
             Padding(
               padding: EdgeInsets.only(left: ui(8)),
-              child: AppText(
+              child: Text(
                 '默认由家长在小程序审批后再由班主任审批；已与家长充分沟通的可选择班主任直接审批。补课协调以教务安排为准。',
                 style: TextStyle(
                   fontSize: ui(12),
                   color: _kTextHint,
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w400,
+                  fontWeight: AppFont.w400,
                   height: 1.5,
                 ),
               ),
@@ -313,24 +313,24 @@ class _Banner extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  AppText(
+                  Text(
                     '宿管请假审批',
                     style: TextStyle(
                       fontSize: ui(16),
                       color: _kTextDark,
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w600,
+                      fontWeight: AppFont.w600,
                       height: 1.2,
                     ),
                   ),
                   SizedBox(height: ui(2)),
-                  AppText(
+                  Text(
                     '宿管人员须在宿管端提交申请；本页为管理端后勤审批台，与学生「请假与补课」、班主任审批互不混用。',
                     style: TextStyle(
                       fontSize: ui(12),
                       color: _kTextHint,
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w400,
+                      fontWeight: AppFont.w400,
                       height: 1.4,
                     ),
                     maxLines: 1,
@@ -434,18 +434,18 @@ class _StatCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            AppText(
+            Text(
               label,
               style: TextStyle(
                 fontSize: ui(14),
                 color: Colors.black,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
                 height: 1.0,
               ),
             ),
             SizedBox(height: ui(12)),
-            AppText(
+            Text(
               '$value',
               style: TextStyle(
                 fontSize: ui(32),
@@ -517,7 +517,7 @@ class _ControlBar extends StatelessWidget {
                   fontSize: ui(12),
                   color: _kTextDark,
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w400,
+                  fontWeight: AppFont.w400,
                   height: 1.0,
                 ),
                 children: [
@@ -558,13 +558,13 @@ class _ControlBar extends StatelessWidget {
                       color: Colors.white,
                     ),
                     SizedBox(width: ui(8)),
-                    AppText(
+                    Text(
                       '发起申请',
                       style: TextStyle(
                         fontSize: ui(16),
                         color: Colors.white,
                         fontFamily: 'PingFang SC',
-                        fontWeight: FontWeight.w500,
+                        fontWeight: AppFont.w500,
                         height: 1.2,
                       ),
                     ),
@@ -604,13 +604,13 @@ class _TabPill extends StatelessWidget {
           color: active ? _kTextDark : Colors.transparent,
           borderRadius: BorderRadius.circular(ui(active ? 6 : 8)),
         ),
-        child: AppText(
+        child: Text(
           label,
           style: TextStyle(
             fontSize: ui(14),
             color: active ? Colors.white : _kTextSecondary,
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w500,
+            fontWeight: AppFont.w500,
             height: 1.2,
           ),
         ),
@@ -639,13 +639,13 @@ class _CardsGrid extends StatelessWidget {
       return Padding(
         padding: EdgeInsets.symmetric(vertical: ui(40)),
         child: Center(
-          child: AppText(
+          child: Text(
             '暂无相关申请',
             style: TextStyle(
               fontSize: ui(14),
               color: _kTextHint,
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w400,
+              fontWeight: AppFont.w400,
             ),
           ),
         ),
@@ -761,46 +761,46 @@ class _CardHeader extends StatelessWidget {
             physics: const NeverScrollableScrollPhysics(),
             child: Row(
               children: [
-                AppText(
+                Text(
                   record.staffName,
                   style: TextStyle(
                     fontSize: ui(14),
                     color: _kTextDark,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w500,
+                    fontWeight: AppFont.w500,
                     height: 1.0,
                   ),
                 ),
                 SizedBox(width: ui(4)),
-                AppText(
+                Text(
                   record.staffNo,
                   style: TextStyle(
                     fontSize: ui(12),
                     color: _kTextHint,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w400,
+                    fontWeight: AppFont.w400,
                     height: 1.0,
                   ),
                 ),
                 SizedBox(width: ui(12)),
-                AppText(
+                Text(
                   record.leaveType,
                   style: TextStyle(
                     fontSize: ui(12),
                     color: _kTextDark,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w400,
+                    fontWeight: AppFont.w400,
                     height: 1.0,
                   ),
                 ),
                 SizedBox(width: ui(12)),
-                AppText(
+                Text(
                   '时长${record.duration}',
                   style: TextStyle(
                     fontSize: ui(12),
                     color: _kTextSecondary,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w400,
+                    fontWeight: AppFont.w400,
                     height: 1.0,
                   ),
                 ),
@@ -829,13 +829,13 @@ class _StatusBadge extends StatelessWidget {
         color: status.bg,
         borderRadius: BorderRadius.circular(ui(4)),
       ),
-      child: AppText(
+      child: Text(
         status.label,
         style: TextStyle(
           fontSize: ui(12),
           color: status.fg,
           fontFamily: 'PingFang SC',
-          fontWeight: FontWeight.w400,
+          fontWeight: AppFont.w400,
           height: 15.24 / 12,
         ),
       ),
@@ -888,24 +888,24 @@ class _InfoLine extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        AppText(
+        Text(
           label,
           style: TextStyle(
             fontSize: ui(12),
             color: _kTextHint,
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w400,
+            fontWeight: AppFont.w400,
             height: 1.5,
           ),
         ),
         Expanded(
-          child: AppText(
+          child: Text(
             value,
             style: TextStyle(
               fontSize: ui(12),
               color: _kTextDark,
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w400,
+              fontWeight: AppFont.w400,
               height: 1.5,
             ),
           ),
@@ -949,13 +949,13 @@ class _CardActionButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(ui(8)),
         ),
         alignment: Alignment.center,
-        child: AppText(
+        child: Text(
           label,
           style: TextStyle(
             fontSize: ui(14),
             color: isPrimary ? Colors.white : _kTextDark,
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w400,
+            fontWeight: AppFont.w400,
             height: 24 / 14,
           ),
         ),
@@ -993,24 +993,24 @@ Future<String?> _showRejectDialog(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            AppText(
+            Text(
               '宿管 ${record.staffName}（${record.staffNo}）· ${record.leaveType}',
               style: TextStyle(
                 fontSize: ui(16),
                 color: _kTextDark,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
                 height: 20 / 16,
               ),
             ),
             SizedBox(height: ui(15)),
-            AppText(
+            Text(
               '驳回说明',
               style: TextStyle(
                 fontSize: ui(14),
                 color: _kTextDark,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
                 height: 20 / 14,
               ),
             ),
@@ -1036,7 +1036,7 @@ Future<String?> _showRejectDialog(
                   fontSize: ui(14),
                   color: _kTextDark,
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w400,
+                  fontWeight: AppFont.w400,
                   height: 20 / 14,
                 ),
                 decoration: InputDecoration(
@@ -1045,7 +1045,7 @@ Future<String?> _showRejectDialog(
                     fontSize: ui(14),
                     color: _kTextHintLight,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w400,
+                    fontWeight: AppFont.w400,
                     height: 20 / 14,
                   ),
                   border: InputBorder.none,

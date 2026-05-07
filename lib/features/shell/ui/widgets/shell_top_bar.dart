@@ -7,8 +7,8 @@ import '../../../../core/widgets/app_toast.dart';
 import '../../../../core/widgets/scaled_dialog.dart';
 import '../../state/shell_state.dart';
 import '../shell_layout.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../../core/widgets/app_text.dart';
 class ShellTopBar extends StatelessWidget {
   ShellTopBar({
     required this.state,
@@ -119,7 +119,7 @@ class ShellTopBar extends StatelessWidget {
               ),
               SizedBox(width: ui(8)),
               Expanded(
-                child: AppText(
+                child: Text(
                   '传统音乐',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -127,7 +127,7 @@ class ShellTopBar extends StatelessWidget {
                     fontSize: ui(14),
                     color: const Color(0xFFD1D1D1),
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w400,
+                    fontWeight: AppFont.w400,
                     height: 1,
                   ),
                 ),
@@ -180,7 +180,7 @@ class ShellTopBar extends StatelessWidget {
               SizedBox(width: ui(6)),
               ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: ui(96)),
-                child: AppText(
+                child: Text(
                   displayName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -189,7 +189,7 @@ class ShellTopBar extends StatelessWidget {
                     height: 1,
                     color: const Color(0xFF1A1A1A),
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w500,
+                    fontWeight: AppFont.w500,
                   ),
                 ),
               ),
@@ -388,7 +388,7 @@ class ShellTopBar extends StatelessWidget {
                 color: const Color(0xFFF04545),
                 borderRadius: BorderRadius.circular(ui(20)),
               ),
-              child: AppText(
+              child: Text(
                 unread > 99 ? '99+' : (unread > 9 ? '$unread+' : '$unread'),
                 style: TextStyle(
                   color: Colors.white,
@@ -420,14 +420,14 @@ class ShellTopBar extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      AppText('通知(${state.noticeItems.length})'),
+                      Text('通知(${state.noticeItems.length})'),
                       const Spacer(),
                       TextButton(
                         onPressed: () async {
                           Navigator.pop(context);
                           await onMarkAllRead();
                         },
-                        child: const AppText('批量已读'),
+                        child: const Text('批量已读'),
                       ),
                     ],
                   ),
@@ -435,7 +435,7 @@ class ShellTopBar extends StatelessWidget {
                   const SizedBox(height: 12),
                   Expanded(
                     child: state.noticeItems.isEmpty
-                        ? const Center(child: AppText('暂无通知'))
+                        ? const Center(child: Text('暂无通知'))
                         : ListView.builder(
                             itemCount: state.noticeItems.length,
                             itemBuilder: (context, index) {
@@ -448,13 +448,13 @@ class ShellTopBar extends StatelessWidget {
                                   width: 30,
                                   height: 30,
                                 ),
-                                title: AppText(
+                                title: Text(
                                   item.content,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(fontSize: 13),
                                 ),
-                                subtitle: AppText(
+                                subtitle: Text(
                                   item.createTime,
                                   style: const TextStyle(fontSize: 11),
                                 ),
@@ -601,18 +601,18 @@ class _UserMenuRegionRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  AppText(
+                  Text(
                     '所在地区',
                     style: TextStyle(
                       fontSize: ui(14),
                       color: const Color(0xFF0B081A),
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w500,
+                      fontWeight: AppFont.w500,
                       height: 1.2,
                     ),
                   ),
                   SizedBox(height: ui(2)),
-                  AppText(
+                  Text(
                     province,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -620,7 +620,7 @@ class _UserMenuRegionRow extends StatelessWidget {
                       fontSize: ui(12),
                       color: const Color(0xFF8741FF),
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w400,
+                      fontWeight: AppFont.w400,
                       height: 1.2,
                     ),
                   ),
@@ -677,13 +677,13 @@ class _UserMenuRow extends StatelessWidget {
               child: Icon(icon, size: ui(16), color: iconColor),
             ),
             SizedBox(width: ui(10)),
-            AppText(
+            Text(
               label,
               style: TextStyle(
                 fontSize: ui(14),
                 color: color,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
                 height: 1.2,
               ),
             ),

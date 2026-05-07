@@ -19,8 +19,8 @@ import '../../../../core/widgets/app_toast.dart';
 import '../../../../core/widgets/scaled_dialog.dart';
 import '../../../shell/ui/shell_layout.dart';
 import 'face_image_picker.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../../core/widgets/app_text.dart';
 bool get isCameraCaptureSupportedImpl => true;
 
 // ============================================================================
@@ -261,24 +261,24 @@ class _FaceCameraDialogState extends State<_FaceCameraDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            AppText(
+            Text(
               '摄像头采集',
               style: TextStyle(
                 fontSize: ui(18),
                 color: const Color(0xFF0B081A),
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w600,
+                fontWeight: AppFont.w600,
                 height: 1.2,
               ),
             ),
             SizedBox(height: ui(8)),
-            AppText(
+            Text(
               '请正对摄像头，保持光线均匀，露出额头与双耳后点击「拍摄」。',
               style: TextStyle(
                 fontSize: ui(13),
                 color: const Color(0xFF6D6B75),
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w400,
+                fontWeight: AppFont.w400,
                 height: 1.5,
               ),
             ),

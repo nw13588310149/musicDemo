@@ -12,8 +12,8 @@ import '../state/auth_state.dart';
 import 'widgets/auth_background_art.dart';
 import 'widgets/auth_design_canvas.dart';
 import 'widgets/auth_figma_components.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../core/widgets/app_text.dart';
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
 
@@ -93,14 +93,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         behavior: HitTestBehavior.opaque,
                         onTap: () =>
                             Navigator.pushNamed(context, RoutePaths.forget),
-                        child: AppText(
+                        child: Text(
                           '忘记密码？',
                           style: TextStyle(
                             color: const Color(0xFFB6B5BB),
                             fontSize: _s(scale, 14),
                             fontFamily: 'PingFang SC',
                             fontFamilyFallback: const ['Harmony'],
-                            fontWeight: FontWeight.w400,
+                            fontWeight: AppFont.w400,
                             height: 12 / 14,
                           ),
                         ),
@@ -156,14 +156,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          AppText(
+                          Text(
                             '没有账号？',
                             style: TextStyle(
                               color: const Color(0xFF0B081A),
                               fontSize: _s(scale, 14),
                               fontFamily: 'PingFang SC',
                               fontFamilyFallback: const ['Harmony'],
-                              fontWeight: FontWeight.w400,
+                              fontWeight: AppFont.w400,
                               height: 12 / 14,
                             ),
                           ),
@@ -174,14 +174,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                               context,
                               RoutePaths.register,
                             ),
-                            child: AppText(
+                            child: Text(
                               '立即注册！',
                               style: TextStyle(
                                 color: const Color(0xFF8741FF),
                                 fontSize: _s(scale, 14),
                                 fontFamily: 'PingFang SC',
                                 fontFamilyFallback: const ['Harmony'],
-                                fontWeight: FontWeight.w400,
+                                fontWeight: AppFont.w400,
                                 height: 12 / 14,
                               ),
                             ),

@@ -28,8 +28,8 @@
 import 'package:flutter/material.dart';
 
 import '../../shell/ui/shell_layout.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../core/widgets/app_text.dart';
 // ---- 通用配色 ---------------------------------------------------------------
 
 const Color _kCardBg = Colors.white;
@@ -202,7 +202,7 @@ class _ScheduleBanner extends StatelessWidget {
                       fontSize: ui(16),
                       color: _kTextDark,
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w600,
+                      fontWeight: AppFont.w600,
                       height: 1,
                     ),
                     children: [
@@ -216,13 +216,13 @@ class _ScheduleBanner extends StatelessWidget {
                   ),
                 ),
                 SizedBox(height: ui(6)),
-                AppText(
+                Text(
                   dateRange,
                   style: TextStyle(
                     fontSize: ui(12),
                     color: _kTextHint,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w400,
+                    fontWeight: AppFont.w400,
                     height: 1,
                   ),
                 ),
@@ -277,13 +277,13 @@ class _WeekSwitcher extends StatelessWidget {
             borderRadius: BorderRadius.circular(ui(4)),
             child: Padding(
               padding: EdgeInsets.symmetric(horizontal: ui(2)),
-              child: AppText(
+              child: Text(
                 '本周',
                 style: TextStyle(
                   fontSize: ui(14),
                   color: _kTextDark,
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w500,
+                  fontWeight: AppFont.w500,
                   height: 1,
                 ),
               ),
@@ -429,13 +429,13 @@ class _TimeHeader extends StatelessWidget {
           Positioned(
             right: ui(20),
             top: ui(10),
-            child: AppText(
+            child: Text(
               '日期',
               style: TextStyle(
                 fontSize: ui(12),
                 color: Colors.black,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w400,
+                fontWeight: AppFont.w400,
                 height: 1,
               ),
             ),
@@ -443,13 +443,13 @@ class _TimeHeader extends StatelessWidget {
           Positioned(
             left: ui(20),
             bottom: ui(12),
-            child: AppText(
+            child: Text(
               '节次',
               style: TextStyle(
                 fontSize: ui(12),
                 color: Colors.black,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w400,
+                fontWeight: AppFont.w400,
                 height: 1,
               ),
             ),
@@ -485,26 +485,26 @@ class _TimeRange extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        AppText(
+        Text(
           start,
           style: TextStyle(
             fontSize: ui(14),
             color: _kTextDark,
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w400,
+            fontWeight: AppFont.w400,
             height: 16 / 14,
           ),
         ),
         SizedBox(height: ui(8)),
         Container(width: ui(12), height: 1, color: _kTextDivider),
         SizedBox(height: ui(8)),
-        AppText(
+        Text(
           end,
           style: TextStyle(
             fontSize: ui(14),
             color: _kTextDark,
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w400,
+            fontWeight: AppFont.w400,
             height: 16 / 14,
           ),
         ),
@@ -578,24 +578,24 @@ class _DaysHeaderRow extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  AppText(
+                  Text(
                     days[i].weekdayLabel,
                     style: TextStyle(
                       fontSize: ui(14),
                       color: _kTextDark,
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w500,
+                      fontWeight: AppFont.w500,
                       height: 1,
                     ),
                   ),
                   SizedBox(height: ui(6)),
-                  AppText(
+                  Text(
                     days[i].dateLabel,
                     style: TextStyle(
                       fontSize: ui(12),
                       color: _kTextHint,
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w400,
+                      fontWeight: AppFont.w400,
                       height: 1,
                     ),
                   ),
@@ -708,7 +708,7 @@ class _ClassCard extends StatelessWidget {
             top: ui(8),
             child: SizedBox(
               width: ui(108),
-              child: AppText(
+              child: Text(
                 data.location,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -716,7 +716,7 @@ class _ClassCard extends StatelessWidget {
                   fontSize: ui(12),
                   color: theme.titleColor,
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w600,
+                  fontWeight: AppFont.w600,
                   height: 16 / 12,
                 ),
               ),
@@ -748,7 +748,7 @@ class _ClassCard extends StatelessWidget {
             top: ui(44),
             child: SizedBox(
               width: ui(140),
-              child: AppText(
+              child: Text(
                 data.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -756,7 +756,7 @@ class _ClassCard extends StatelessWidget {
                   fontSize: ui(14),
                   color: _kTextDark,
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w500,
+                  fontWeight: AppFont.w500,
                   height: 16 / 14,
                 ),
               ),
@@ -768,13 +768,13 @@ class _ClassCard extends StatelessWidget {
             Positioned(
               left: ui(16),
               top: ui(64),
-              child: AppText(
+              child: Text(
                 data.subline,
                 style: TextStyle(
                   fontSize: ui(12),
                   color: _kTextSecondary,
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w400,
+                  fontWeight: AppFont.w400,
                   height: 16 / 12,
                 ),
               ),
@@ -791,7 +791,7 @@ class _ClassCard extends StatelessWidget {
               top: ui(64),
               child: SizedBox(
                 width: ui(theme.isSmall && data.capacity != null ? 100 : 140),
-                child: AppText(
+                child: Text(
                   data.subline,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -799,7 +799,7 @@ class _ClassCard extends StatelessWidget {
                     fontSize: ui(12),
                     color: _kTextSecondary,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w400,
+                    fontWeight: AppFont.w400,
                     height: 16 / 12,
                   ),
                 ),
@@ -809,13 +809,13 @@ class _ClassCard extends StatelessWidget {
               Positioned(
                 right: ui(16),
                 top: ui(64),
-                child: AppText(
+                child: Text(
                   data.capacity!,
                   style: TextStyle(
                     fontSize: ui(12),
                     color: _kTextDivider,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w400,
+                    fontWeight: AppFont.w400,
                     height: 16 / 12,
                   ),
                 ),
@@ -883,13 +883,13 @@ class _ClassKindTag extends StatelessWidget {
             decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
           ),
           SizedBox(width: ui(4)),
-          AppText(
+          Text(
             label,
             style: TextStyle(
               fontSize: ui(12),
               color: _kTextDark,
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w400,
+              fontWeight: AppFont.w400,
               height: 15.24 / 12,
             ),
           ),

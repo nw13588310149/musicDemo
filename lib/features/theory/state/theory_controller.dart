@@ -83,6 +83,38 @@ class TheoryController extends StateNotifier<TheoryState> {
     );
   }
 
+  /// 切换收藏状态。完全对齐 musicPlay 的实现：
+  /// - 用 detail.id + detail.type 调 `/app/user/favoriteSave`；
+  /// - 服务端成功后只翻转 detail.favorite，错误信息走统一 errorMessage 通道
+  ///   由 `_TheoryPageState.ref.listen` 弹 toast。
+  Future<void> toggleFavorite() async {
+    final detail = state.detail;
+    if (detail == null) {
+      return;
+    }
+    final nextFavorite = !detail.favorite;
+    final response = await repository.setFavorite(
+      targetId: detail.id,
+      type: detail.type,
+      favorite: nextFavorite,
+    );
+    if (!mounted) {
+      return;
+    }
+    if (!response.isSuccess) {
+      state = state.copyWith(
+        errorMessage: response.msg.isEmpty ? '收藏状态更新失败' : response.msg,
+      );
+      return;
+    }
+    state = state.copyWith(
+      detail: detail.copyWith(favorite: nextFavorite),
+      // 与 musicPlay 一致：通过 errorMessage 通道顺手把"已收藏 / 已取消收藏"
+      // 提示出去，UI 层用同一个 toast 入口呈现，不必再加新通道。
+      errorMessage: nextFavorite ? '您已成功收藏' : '您已取消收藏',
+    );
+  }
+
   /// 用户点击"查看答案"时调用，记录学习行为（与 1.0 保持一致）。
   Future<void> markAnswerOpened() async {
     final detail = state.detail;
@@ -194,6 +226,7 @@ class TheoryController extends StateNotifier<TheoryState> {
 
   TheoryDetail _parseDetail(Map<String, dynamic> raw) {
     final id = int.tryParse(raw['id']?.toString() ?? '') ?? 0;
+    final type = int.tryParse(raw['type']?.toString() ?? '') ?? 0;
     final firstMenu = int.tryParse(raw['firstMenu']?.toString() ?? '') ?? 0;
     final title = raw['title']?.toString().trim().isNotEmpty == true
         ? raw['title'].toString().trim()
@@ -210,9 +243,15 @@ class TheoryController extends StateNotifier<TheoryState> {
 
     return TheoryDetail(
       id: id,
+      type: type,
       title: title,
       firstMenu: firstMenu,
       vipOnly: raw['vip']?.toString() == '1',
+      // 后端可能返回 bool / "1" / 1 三种形态，与 musicPlay 解析口径保持一致。
+      favorite:
+          raw['isFavorite'] == true ||
+          raw['isFavorite']?.toString() == '1' ||
+          raw['favorite']?.toString() == '1',
       htmlContent: raw['longText1']?.toString() ?? '',
       pdfUrl: pdfUrl,
       assignmentImages: state.args.answerEndMode

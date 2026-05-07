@@ -9,7 +9,6 @@ import '../../state/circle_controller.dart';
 import '../../state/circle_state.dart';
 import 'circle_post_card.dart';
 
-import '../../../../core/widgets/app_text.dart';
 /// 列表模式：3 列瀑布流。沿 Y 方向按列累计高度，把每个卡片填到当前最矮的那一列。
 class CircleListView extends StatelessWidget {
   const CircleListView({
@@ -50,7 +49,7 @@ class CircleListView extends StatelessWidget {
             children: [
               SizedBox(height: ui(120)),
               const Center(
-                child: AppText(
+                child: Text(
                   '暂无动态',
                   style: TextStyle(
                     color: Color(0xFFB6B5BB),

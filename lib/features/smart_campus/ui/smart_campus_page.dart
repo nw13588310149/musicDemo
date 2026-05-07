@@ -34,8 +34,8 @@ import 'teacher_home_school_view.dart';
 import 'teacher_leave_approval_view.dart';
 import 'teacher_lesson_schedule_view.dart';
 import 'teacher_student_roster_view.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../core/widgets/app_text.dart';
 /// 智慧校园入口页：根据当前 [SmartCampusRole] + [SmartCampusMainView] 路由到
 /// 对应的子视图。
 ///
@@ -393,17 +393,17 @@ class _SmartCampusPlaceholder extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          AppText(
+          Text(
             '智慧校园',
             style: TextStyle(
               fontSize: ui(28),
-              fontWeight: FontWeight.w600,
+              fontWeight: AppFont.w600,
               color: const Color(0xFF0B081A),
               fontFamily: 'PingFang SC',
             ),
           ),
           SizedBox(height: ui(12)),
-          AppText(
+          Text(
             '当前角色暂未接入完整视图，先保留角色切换和基础入口，避免影响其他页面开发。',
             style: TextStyle(
               fontSize: ui(14),
@@ -451,17 +451,17 @@ class _SmartCampusPlaceholder extends StatelessWidget {
                     ui: ui,
                   ),
                   SizedBox(height: ui(24)),
-                  AppText(
+                  Text(
                     '说明',
                     style: TextStyle(
                       fontSize: ui(18),
-                      fontWeight: FontWeight.w600,
+                      fontWeight: AppFont.w600,
                       color: const Color(0xFF0B081A),
                       fontFamily: 'PingFang SC',
                     ),
                   ),
                   SizedBox(height: ui(10)),
-                  AppText(
+                  Text(
                     '老师 / 班主任端首页与「班级工作台」已接入完整视图；学生 / 宿管 / 管理员端仍为骨架占位，按 Figma 节点重建后再上线。',
                     style: TextStyle(
                       fontSize: ui(14),
@@ -563,11 +563,11 @@ class _RoleChip extends StatelessWidget {
           borderRadius: BorderRadius.circular(ui(12)),
         ),
         alignment: Alignment.center,
-        child: AppText(
+        child: Text(
           label,
           style: TextStyle(
             fontSize: ui(14),
-            fontWeight: FontWeight.w500,
+            fontWeight: AppFont.w500,
             color: active ? Colors.white : const Color(0xFF5F6B7B),
             fontFamily: 'PingFang SC',
           ),
@@ -590,7 +590,7 @@ class _InfoRow extends StatelessWidget {
       children: [
         SizedBox(
           width: ui(84),
-          child: AppText(
+          child: Text(
             label,
             style: TextStyle(
               fontSize: ui(14),
@@ -599,12 +599,12 @@ class _InfoRow extends StatelessWidget {
             ),
           ),
         ),
-        AppText(
+        Text(
           value,
           style: TextStyle(
             fontSize: ui(15),
             color: const Color(0xFF0B081A),
-            fontWeight: FontWeight.w500,
+            fontWeight: AppFont.w500,
             fontFamily: 'PingFang SC',
           ),
         ),

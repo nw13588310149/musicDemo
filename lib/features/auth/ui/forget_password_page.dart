@@ -10,8 +10,8 @@ import '../state/auth_state.dart';
 import 'widgets/auth_background_art.dart';
 import 'widgets/auth_design_canvas.dart';
 import 'widgets/auth_figma_components.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../core/widgets/app_text.dart';
 enum _ForgetStep { mobile, sms, password }
 
 class ForgetPasswordPage extends ConsumerStatefulWidget {
@@ -141,14 +141,14 @@ class _ForgetPasswordPageState extends ConsumerState<ForgetPasswordPage> {
         left: _s(scale, 20),
         top: _s(scale, 101),
         width: _s(scale, 345),
-        child: AppText(
+        child: Text(
           '若您的手机号 $_maskedMobile 可接收短信，请点击获取验证码。',
           style: TextStyle(
             color: const Color(0xFFB6B5BB),
             fontSize: _s(scale, 14),
             fontFamily: 'PingFang SC',
             fontFamilyFallback: const ['Harmony'],
-            fontWeight: FontWeight.w400,
+            fontWeight: AppFont.w400,
             height: 12 / 14,
           ),
         ),

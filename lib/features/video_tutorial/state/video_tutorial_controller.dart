@@ -184,6 +184,62 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
     return null;
   }
 
+  /// 通过视频 id 直接打开详情面板。
+  ///
+  /// 用于从其他页面（如"我的收藏"）跳转过来时——上游只持有 targetId、
+  /// 没有 [VideoListItem]。流程与 [openDetail] 基本一致：先查缓存，未命中
+  /// 时拉取详情、做 VIP 校验、写入 state；任一步失败时关闭 detailPanel
+  /// 并返回错误文案，由 UI 层弹 toast。
+  Future<String?> openDetailById(String id) async {
+    if (id.isEmpty) {
+      return '视频信息缺失';
+    }
+
+    final cached = _detailCache[id];
+    if (cached != null) {
+      final blockReason = _vipBlockReason(cached.vip);
+      if (blockReason != null) {
+        return blockReason;
+      }
+      state = state.copyWith(
+        showDetailPanel: true,
+        detailLoading: false,
+        detailTabIndex: 0,
+        detail: cached,
+      );
+      return null;
+    }
+
+    state = state.copyWith(
+      showDetailPanel: true,
+      detailLoading: true,
+      detailTabIndex: 0,
+      clearDetail: true,
+    );
+
+    final response = await _repository.getVideoDetail(id);
+    if (!response.isSuccess) {
+      state = state.copyWith(detailLoading: false, showDetailPanel: false);
+      return response.msg.isEmpty ? '加载视频详情失败' : response.msg;
+    }
+
+    final detail = _parseVideoDetail(response.data);
+    if (detail == null) {
+      state = state.copyWith(detailLoading: false, showDetailPanel: false);
+      return '视频详情数据异常';
+    }
+
+    final blockReason = _vipBlockReason(detail.vip);
+    if (blockReason != null) {
+      state = state.copyWith(detailLoading: false, showDetailPanel: false);
+      return blockReason;
+    }
+
+    _detailCache[detail.id] = detail;
+    state = state.copyWith(detailLoading: false, detail: detail);
+    return null;
+  }
+
   void closeDetail() {
     state = state.copyWith(showDetailPanel: false);
   }

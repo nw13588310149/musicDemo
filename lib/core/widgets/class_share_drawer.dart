@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../features/shell/ui/shell_layout.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import './app_text.dart';
 class ClassShareItem {
   const ClassShareItem({
     required this.id,
@@ -88,13 +88,13 @@ class ClassShareDrawer extends StatelessWidget {
                 SizedBox(height: ui(24)),
                 targetCard,
                 SizedBox(height: ui(28)),
-                AppText(
+                Text(
                   '您的班级群',
                   style: TextStyle(
                     color: const Color(0xFF0B081A),
                     fontSize: ui(16),
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w600,
+                    fontWeight: AppFont.w600,
                   ),
                 ),
                 SizedBox(height: ui(16)),
@@ -164,7 +164,7 @@ class ShareTargetCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                AppText(
+                Text(
                   label,
                   style: TextStyle(
                     color: const Color(0xFF0B081A),
@@ -173,7 +173,7 @@ class ShareTargetCard extends StatelessWidget {
                   ),
                 ),
                 SizedBox(height: ui(10)),
-                AppText(
+                Text(
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -181,7 +181,7 @@ class ShareTargetCard extends StatelessWidget {
                     color: const Color(0xFF0B081A),
                     fontSize: ui(16),
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w600,
+                    fontWeight: AppFont.w600,
                   ),
                 ),
               ],
@@ -234,13 +234,13 @@ class _ShareDrawerTitle extends StatelessWidget {
           ),
         ),
         SizedBox(width: ui(4)),
-        AppText(
+        Text(
           title,
           style: TextStyle(
             color: const Color(0xFF0B081A),
             fontSize: ui(16),
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w600,
+            fontWeight: AppFont.w600,
           ),
         ),
       ],
@@ -291,7 +291,7 @@ class _ClassShareRow extends StatelessWidget {
               ),
               SizedBox(width: ui(16)),
               Expanded(
-                child: AppText(
+                child: Text(
                   item.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -299,7 +299,7 @@ class _ClassShareRow extends StatelessWidget {
                     color: Colors.black,
                     fontSize: ui(16),
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w600,
+                    fontWeight: AppFont.w600,
                   ),
                 ),
               ),
@@ -318,7 +318,7 @@ class _ShareDrawerEmpty extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Center(
-      child: AppText(
+      child: Text(
         '暂无班级群',
         style: TextStyle(
           color: const Color(0xFFB6B5BB),
@@ -361,13 +361,13 @@ class _ShareSendButton extends StatelessWidget {
                   valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                 ),
               )
-            : AppText(
+            : Text(
                 '发送',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: ui(14),
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w500,
+                  fontWeight: AppFont.w500,
                 ),
               ),
       ),

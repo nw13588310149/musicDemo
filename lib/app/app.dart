@@ -48,6 +48,9 @@ class _MyAppState extends ConsumerState<MyApp> {
       //    避免 iPad 上文字"莫名偏小"。
       // 2. DefaultTextHeightBehavior：让首/末行不再应用 height leading，
       //    与 CSS/Figma 行为一致，解决全局"文字偏下、上下间距偏宽"。
+      // 3. 根级 _TapOutsideToDismissKeyboard：点击非可交互空白区域自动收起
+      //    软键盘，解决 iPad/iOS 上多行 TextField（Return 键变换行）+ 没有
+      //    "收起键盘"按钮时无法关闭键盘的问题。
       builder: (context, child) {
         final mediaQuery = MediaQuery.of(context);
         return MediaQuery(
@@ -57,10 +60,47 @@ class _MyAppState extends ConsumerState<MyApp> {
               applyHeightToFirstAscent: false,
               applyHeightToLastDescent: false,
             ),
-            child: child ?? const SizedBox.shrink(),
+            child: _TapOutsideToDismissKeyboard(
+              child: child ?? const SizedBox.shrink(),
+            ),
           ),
         );
       },
+    );
+  }
+}
+
+/// 应用根级"点外面收键盘"包装。
+///
+/// 实现原理：
+/// - 用 [GestureDetector] 监听 `onTap`，配合 `HitTestBehavior.translucent`
+///   让自己加入命中测试但不挡住下层；
+/// - 子树内的按钮 / TextField 自带 GestureDetector / Listener，会在手势
+///   竞技场中胜出，所以正常点按交互不会被打断；
+/// - 只有真正"点到没有任何手势消费者的空白区域"时，根级 `onTap` 才会
+///   触发，调用 `FocusManager.instance.primaryFocus?.unfocus()` 收起软
+///   键盘。
+///
+/// 用 `unfocus(disposition: UnfocusDisposition.scope)` 而不是默认的
+/// `previouslyFocusedChild`，避免焦点回到链路中的某个父 FocusScope 时
+/// 部分 TextField 仍维持 IME 连接、键盘不下去。
+class _TapOutsideToDismissKeyboard extends StatelessWidget {
+  const _TapOutsideToDismissKeyboard({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      // 不能用 onTapDown：那会立刻触发，干扰按钮的 splash / 按下态。
+      // onTap 只在确认是"轻点"且没人抢走手势时才回调。
+      onTap: () {
+        final focus = FocusManager.instance.primaryFocus;
+        if (focus == null || !focus.hasFocus) return;
+        focus.unfocus(disposition: UnfocusDisposition.scope);
+      },
+      child: child,
     );
   }
 }

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../features/shell/ui/shell_layout.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import './app_text.dart';
 const Color _kFieldBorder = Color(0xFFF5F6FA);
 const Color _kPanelBorder = Color(0xFFF3F2F3);
 const Color _kTextDark = Color(0xFF0B081A);
@@ -113,7 +113,7 @@ class _PopupSelectorFieldState<T> extends State<PopupSelectorField<T>> {
         child: Row(
           children: [
             Expanded(
-              child: AppText(
+              child: Text(
                 widget.itemLabel(widget.value),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -121,7 +121,7 @@ class _PopupSelectorFieldState<T> extends State<PopupSelectorField<T>> {
                   fontSize: ui(14),
                   color: _kTextDark,
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w400,
+                  fontWeight: AppFont.w400,
                   height: 20 / 14,
                 ),
               ),
@@ -219,7 +219,7 @@ class _PopupSelectorRow<T> extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              child: AppText(
+              child: Text(
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -227,7 +227,7 @@ class _PopupSelectorRow<T> extends StatelessWidget {
                   fontSize: ui(14),
                   color: selected ? _kPurple : _kTextDark,
                   fontFamily: 'PingFang SC',
-                  fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
+                  fontWeight: selected ? AppFont.w500 : AppFont.w400,
                   height: 20 / 14,
                 ),
               ),

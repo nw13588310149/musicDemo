@@ -6,11 +6,16 @@ class MusicPlayPageArgs {
     required this.id,
     this.type,
     this.allLessonIds = const <int>[],
+    this.closedByDefault = false,
   });
 
   final int id;
   final int? type;
   final List<int> allLessonIds;
+
+  /// 进入页面时是否默认隐藏答案（即"关闭状态"，显示题面而非答案）。
+  /// 试题模块走 answerEnd2 路由时设为 true，避免默认就把答案露出来。
+  final bool closedByDefault;
 
   factory MusicPlayPageArgs.fromRaw(dynamic raw) {
     if (raw is MusicPlayPageArgs) {
@@ -29,7 +34,13 @@ class MusicPlayPageArgs {
       }
       final id = int.tryParse(raw['id']?.toString() ?? '') ?? 0;
       final type = int.tryParse(raw['type']?.toString() ?? '');
-      return MusicPlayPageArgs(id: id, type: type, allLessonIds: all);
+      final closed = raw['closedByDefault'] == true;
+      return MusicPlayPageArgs(
+        id: id,
+        type: type,
+        allLessonIds: all,
+        closedByDefault: closed,
+      );
     }
     return const MusicPlayPageArgs(id: 0);
   }
@@ -39,11 +50,17 @@ class MusicPlayPageArgs {
     return other is MusicPlayPageArgs &&
         other.id == id &&
         other.type == type &&
+        other.closedByDefault == closedByDefault &&
         listEquals(other.allLessonIds, allLessonIds);
   }
 
   @override
-  int get hashCode => Object.hash(id, type, Object.hashAll(allLessonIds));
+  int get hashCode => Object.hash(
+    id,
+    type,
+    closedByDefault,
+    Object.hashAll(allLessonIds),
+  );
 }
 
 @immutable
@@ -53,6 +70,12 @@ class MusicPlayTrack {
   final String url;
   final String title;
 }
+
+/// 多曲目"列表播放"的循环模式，对应 1.0 中 `sxType` 的三档：
+/// - [sequence] 顺序播放（播完最后一首回到第一首）
+/// - [single] 单曲循环
+/// - [shuffle] 随机循环
+enum MusicPlayMode { sequence, single, shuffle }
 
 @immutable
 class MusicPlayDetail {
@@ -122,6 +145,8 @@ class MusicPlayState {
     required this.position,
     required this.duration,
     required this.speed,
+    required this.pitchSemitones,
+    required this.playMode,
     required this.activePianoNotes,
     required this.frequencyBands,
     required this.shareDialogVisible,
@@ -142,6 +167,14 @@ class MusicPlayState {
   final Duration position;
   final Duration duration;
   final double speed;
+
+  /// 独立于倍速的"升降调"（半音数）。0 表示原调；
+  /// 1 = 升一个半音、-1 = 降一个半音；与 [speed] 完全独立。
+  final int pitchSemitones;
+
+  /// 多曲目时的循环模式（顺序 / 单曲 / 随机）。
+  /// 仅当 [MusicPlayDetail.tracks] 长度大于 1 时才在 UI 上暴露切换入口。
+  final MusicPlayMode playMode;
   final Set<String> activePianoNotes;
   final List<double> frequencyBands;
   final bool shareDialogVisible;
@@ -200,6 +233,8 @@ class MusicPlayState {
     Duration? position,
     Duration? duration,
     double? speed,
+    int? pitchSemitones,
+    MusicPlayMode? playMode,
     Set<String>? activePianoNotes,
     List<double>? frequencyBands,
     bool? shareDialogVisible,
@@ -222,6 +257,8 @@ class MusicPlayState {
       position: position ?? this.position,
       duration: duration ?? this.duration,
       speed: speed ?? this.speed,
+      pitchSemitones: pitchSemitones ?? this.pitchSemitones,
+      playMode: playMode ?? this.playMode,
       activePianoNotes: activePianoNotes ?? this.activePianoNotes,
       frequencyBands: frequencyBands ?? this.frequencyBands,
       shareDialogVisible: shareDialogVisible ?? this.shareDialogVisible,
@@ -244,6 +281,8 @@ class MusicPlayState {
     position: Duration.zero,
     duration: Duration.zero,
     speed: 1,
+    pitchSemitones: 0,
+    playMode: MusicPlayMode.sequence,
     activePianoNotes: const <String>{},
     frequencyBands: const <double>[],
     shareDialogVisible: false,

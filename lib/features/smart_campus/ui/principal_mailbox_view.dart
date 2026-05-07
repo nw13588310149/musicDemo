@@ -46,8 +46,8 @@ import '../../shell/ui/shell_layout.dart';
 import '../data/principal_mailbox_repository.dart';
 import '../state/smart_campus_controller.dart';
 import '../state/smart_campus_state.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../core/widgets/app_text.dart';
 const Color _kPageBg = Color(0xFFEFF3FC);
 const Color _kCardBg = Colors.white;
 const Color _kInnerGray = Color(0xFFF5F6FA);
@@ -571,26 +571,26 @@ class _HeaderGradientBar extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                AppText(
+                Text(
                   title,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: ui(16),
                     color: _kTextDark,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w600,
+                    fontWeight: AppFont.w600,
                     height: 1.2,
                   ),
                 ),
                 SizedBox(height: ui(4)),
-                AppText(
+                Text(
                   subtitle,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: ui(12),
                     color: _kTextHint,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w400,
+                    fontWeight: AppFont.w400,
                     height: 1.2,
                   ),
                 ),
@@ -719,7 +719,7 @@ class _SegmentItem extends StatelessWidget {
           color: selected ? _kPurple : Colors.transparent,
           borderRadius: BorderRadius.circular(ui(6)),
         ),
-        child: AppText(
+        child: Text(
           label,
           style: TextStyle(
             fontSize: ui(12),
@@ -778,13 +778,13 @@ class _ComposeForm extends StatelessWidget {
             children: [
               _AnonymousSwitch(value: anonymous, onChanged: onAnonymousChanged),
               SizedBox(width: ui(8)),
-              AppText(
+              Text(
                 '开启后发送者将显示为「匿名」',
                 style: TextStyle(
                   fontSize: ui(13),
                   color: _kTextHint,
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w500,
+                  fontWeight: AppFont.w500,
                   height: 20 / 13,
                 ),
               ),
@@ -854,13 +854,13 @@ class _FeedbackForm extends StatelessWidget {
               const _SectionTitle('我的反馈'),
               const Spacer(),
               if (records.isNotEmpty)
-                AppText(
+                Text(
                   '共 ${records.length} 条',
                   style: TextStyle(
                     fontSize: ui(12),
                     color: _kTextHint,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w400,
+                    fontWeight: AppFont.w400,
                     height: 1.2,
                   ),
                 ),
@@ -919,13 +919,13 @@ class _SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return AppText(
+    return Text(
       text,
       style: TextStyle(
         fontSize: ui(16),
         color: _kTextDark,
         fontFamily: 'PingFang SC',
-        fontWeight: FontWeight.w500,
+        fontWeight: AppFont.w500,
         height: 28 / 16,
       ),
     );
@@ -956,7 +956,7 @@ class _BodyField extends StatelessWidget {
           fontSize: ui(12),
           color: _kTextDark,
           fontFamily: 'PingFang SC',
-          fontWeight: FontWeight.w400,
+          fontWeight: AppFont.w400,
           height: 20 / 12,
         ),
         decoration: InputDecoration(
@@ -965,7 +965,7 @@ class _BodyField extends StatelessWidget {
             fontSize: ui(12),
             color: _kPlaceholder,
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w400,
+            fontWeight: AppFont.w400,
             height: 20 / 12,
           ),
           border: InputBorder.none,
@@ -1035,13 +1035,13 @@ class _KindChip extends StatelessWidget {
           color: selected ? _kTextDark : _kInnerGray,
           borderRadius: BorderRadius.circular(ui(8)),
         ),
-        child: AppText(
+        child: Text(
           label,
           style: TextStyle(
             fontSize: ui(14),
             color: selected ? Colors.white : _kTextDark,
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w400,
+            fontWeight: AppFont.w400,
             height: 1,
           ),
         ),
@@ -1187,13 +1187,13 @@ class _UploadTile extends StatelessWidget {
           color: const Color(0xFF1C274C),
         ),
         SizedBox(width: ui(4)),
-        AppText(
+        Text(
           '上传文件',
           style: TextStyle(
             fontSize: ui(14),
             color: _kTextDark,
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w500,
+            fontWeight: AppFont.w500,
             height: 20 / 14,
           ),
         ),
@@ -1249,7 +1249,7 @@ class _UploadTile extends StatelessWidget {
             statusIcon,
             SizedBox(width: ui(6)),
             Expanded(
-              child: AppText(
+              child: Text(
                 s.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -1257,7 +1257,7 @@ class _UploadTile extends StatelessWidget {
                   fontSize: ui(13),
                   color: _kTextDark,
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w500,
+                  fontWeight: AppFont.w500,
                   height: 1.2,
                 ),
               ),
@@ -1277,7 +1277,7 @@ class _UploadTile extends StatelessWidget {
             ),
           )
         else
-          AppText(
+          Text(
             statusLabel,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -1285,7 +1285,7 @@ class _UploadTile extends StatelessWidget {
               fontSize: ui(11),
               color: statusColor,
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w400,
+              fontWeight: AppFont.w400,
               height: 1.2,
             ),
           ),
@@ -1349,13 +1349,13 @@ class _SubmitButton extends StatelessWidget {
               else
                 Icon(Icons.send_rounded, color: Colors.white, size: ui(22)),
               SizedBox(width: ui(8)),
-              AppText(
+              Text(
                 label,
                 style: TextStyle(
                   fontSize: ui(16),
                   color: Colors.white,
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w500,
+                  fontWeight: AppFont.w500,
                   height: 28 / 16,
                 ),
               ),
@@ -1476,13 +1476,13 @@ class _StatusFilterChip extends StatelessWidget {
           color: selected ? color : _kInnerGray,
           borderRadius: BorderRadius.circular(ui(8)),
         ),
-        child: AppText(
+        child: Text(
           label,
           style: TextStyle(
             fontSize: ui(13),
             color: selected ? Colors.white : _kTextDark,
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w500,
+            fontWeight: AppFont.w500,
             height: 1,
           ),
         ),
@@ -1522,13 +1522,13 @@ class _EmptyHint extends StatelessWidget {
             color: _kPlaceholder,
           ),
           SizedBox(height: ui(12)),
-          AppText(
+          Text(
             hint,
             style: TextStyle(
               fontSize: ui(14),
               color: _kTextHint,
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w400,
+              fontWeight: AppFont.w400,
               height: 1.4,
             ),
           ),
@@ -1549,13 +1549,13 @@ class _EmptyHint extends StatelessWidget {
                 ),
                 borderRadius: BorderRadius.circular(ui(8)),
               ),
-              child: AppText(
+              child: Text(
                 '写一封新信',
                 style: TextStyle(
                   fontSize: ui(13),
                   color: Colors.white,
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w500,
+                  fontWeight: AppFont.w500,
                   height: 1.2,
                 ),
               ),
@@ -1603,26 +1603,26 @@ class _MailboxRecordTile extends StatelessWidget {
               ],
               const Spacer(),
               if (record.createTime.isNotEmpty)
-                AppText(
+                Text(
                   record.createTime,
                   style: TextStyle(
                     fontSize: ui(12),
                     color: _kTextHint,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w400,
+                    fontWeight: AppFont.w400,
                     height: 1.2,
                   ),
                 ),
             ],
           ),
           SizedBox(height: ui(10)),
-          AppText(
+          Text(
             record.content,
             style: TextStyle(
               fontSize: ui(14),
               color: _kTextDark,
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w400,
+              fontWeight: AppFont.w400,
               height: 22 / 14,
             ),
           ),
@@ -1664,38 +1664,38 @@ class _MailboxRecordTile extends StatelessWidget {
                         color: _kPurple,
                       ),
                       SizedBox(width: ui(4)),
-                      AppText(
+                      Text(
                         '校长回复',
                         style: TextStyle(
                           fontSize: ui(12),
                           color: _kPurple,
                           fontFamily: 'PingFang SC',
-                          fontWeight: FontWeight.w500,
+                          fontWeight: AppFont.w500,
                           height: 1.2,
                         ),
                       ),
                       const Spacer(),
                       if (record.replyTime.isNotEmpty)
-                        AppText(
+                        Text(
                           record.replyTime,
                           style: TextStyle(
                             fontSize: ui(11),
                             color: _kTextHint,
                             fontFamily: 'PingFang SC',
-                            fontWeight: FontWeight.w400,
+                            fontWeight: AppFont.w400,
                             height: 1.2,
                           ),
                         ),
                     ],
                   ),
                   SizedBox(height: ui(6)),
-                  AppText(
+                  Text(
                     record.replyContent,
                     style: TextStyle(
                       fontSize: ui(13),
                       color: _kTextDark,
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w400,
+                      fontWeight: AppFont.w400,
                       height: 20 / 13,
                     ),
                   ),
@@ -1723,13 +1723,13 @@ class _StatusBadge extends StatelessWidget {
         color: status.color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(ui(4)),
       ),
-      child: AppText(
+      child: Text(
         status.label,
         style: TextStyle(
           fontSize: ui(11),
           color: status.color,
           fontFamily: 'PingFang SC',
-          fontWeight: FontWeight.w500,
+          fontWeight: AppFont.w500,
           height: 1.4,
         ),
       ),
@@ -1757,13 +1757,13 @@ class _KindBadge extends StatelessWidget {
         color: color,
         borderRadius: BorderRadius.circular(ui(4)),
       ),
-      child: AppText(
+      child: Text(
         label,
         style: TextStyle(
           fontSize: ui(11),
           color: textColor,
           fontFamily: 'PingFang SC',
-          fontWeight: FontWeight.w500,
+          fontWeight: AppFont.w500,
           height: 1.4,
         ),
       ),
@@ -1805,7 +1805,7 @@ class _AttachmentChip extends StatelessWidget {
             SizedBox(width: ui(4)),
             ConstrainedBox(
               constraints: BoxConstraints(maxWidth: ui(160)),
-              child: AppText(
+              child: Text(
                 name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -1813,7 +1813,7 @@ class _AttachmentChip extends StatelessWidget {
                   fontSize: ui(12),
                   color: _kTextDark,
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w400,
+                  fontWeight: AppFont.w400,
                   height: 1.2,
                 ),
               ),
@@ -2033,13 +2033,13 @@ class _FeedbackEmptyHint extends StatelessWidget {
             color: _kPlaceholder,
           ),
           SizedBox(height: ui(12)),
-          AppText(
+          Text(
             '暂无历史反馈，欢迎在下方提一条',
             style: TextStyle(
               fontSize: ui(13),
               color: _kTextHint,
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w400,
+              fontWeight: AppFont.w400,
               height: 1.4,
             ),
           ),
@@ -2081,39 +2081,39 @@ class _FeedbackTile extends StatelessWidget {
                       : _kPurple.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(ui(4)),
                 ),
-                child: AppText(
+                child: Text(
                   hasReply ? '已回复' : '已提交',
                   style: TextStyle(
                     fontSize: ui(11),
                     color: hasReply ? const Color(0xFF35BD7C) : _kPurple,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w500,
+                    fontWeight: AppFont.w500,
                     height: 1.4,
                   ),
                 ),
               ),
               const Spacer(),
               if (record.createTime.isNotEmpty)
-                AppText(
+                Text(
                   record.createTime,
                   style: TextStyle(
                     fontSize: ui(12),
                     color: _kTextHint,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w400,
+                    fontWeight: AppFont.w400,
                     height: 1.2,
                   ),
                 ),
             ],
           ),
           SizedBox(height: ui(8)),
-          AppText(
+          Text(
             record.content,
             style: TextStyle(
               fontSize: ui(13),
               color: _kTextDark,
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w400,
+              fontWeight: AppFont.w400,
               height: 20 / 13,
             ),
           ),
@@ -2136,38 +2136,38 @@ class _FeedbackTile extends StatelessWidget {
                         color: _kPurple,
                       ),
                       SizedBox(width: ui(4)),
-                      AppText(
+                      Text(
                         '官方回复',
                         style: TextStyle(
                           fontSize: ui(12),
                           color: _kPurple,
                           fontFamily: 'PingFang SC',
-                          fontWeight: FontWeight.w500,
+                          fontWeight: AppFont.w500,
                           height: 1.2,
                         ),
                       ),
                       const Spacer(),
                       if (record.replyTime.isNotEmpty)
-                        AppText(
+                        Text(
                           record.replyTime,
                           style: TextStyle(
                             fontSize: ui(11),
                             color: _kTextHint,
                             fontFamily: 'PingFang SC',
-                            fontWeight: FontWeight.w400,
+                            fontWeight: AppFont.w400,
                             height: 1.2,
                           ),
                         ),
                     ],
                   ),
                   SizedBox(height: ui(6)),
-                  AppText(
+                  Text(
                     record.replyContent,
                     style: TextStyle(
                       fontSize: ui(12),
                       color: _kTextDark,
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w400,
+                      fontWeight: AppFont.w400,
                       height: 20 / 12,
                     ),
                   ),

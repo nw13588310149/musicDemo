@@ -4,7 +4,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_soloud/flutter_soloud.dart';
 import 'package:media_kit/media_kit.dart';
 
 import '../../../core/network/api_response.dart';
@@ -37,33 +36,37 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
 
   final MusicPlayRepository repository;
   final MusicCompanionAudioEngine _pianoEngine;
-  final SoLoud _soLoud = SoLoud.instance;
 
-  AudioSource? _source;
-  SoundHandle? _handle;
-  AudioData? _audioData;
-  Timer? _audioTicker;
-  Player? _webPlayer;
-  StreamSubscription<Duration>? _webPositionSub;
-  StreamSubscription<Duration>? _webDurationSub;
-  StreamSubscription<bool>? _webPlayingSub;
-  StreamSubscription<bool>? _webCompletedSub;
+  /// 主音频播放器：使用 `media_kit` 在 native（iOS/Android/Desktop）
+  /// 与 Web 上提供"倍速 + 升降调"双独立旋钮：
+  /// - [Player.setRate] —— 变速保音高（mpv 默认开启 audio-pitch-correction）；
+  /// - [Player.setPitch] —— 独立的半音变调（speed 不动）。
+  /// 钢琴弹奏仍然走 [MusicCompanionAudioEngine]（基于 SoLoud），与此处互不影响。
+  Player? _player;
+  StreamSubscription<Duration>? _positionSub;
+  StreamSubscription<Duration>? _durationSub;
+  StreamSubscription<bool>? _playingSub;
+  StreamSubscription<bool>? _completedSub;
   bool _recordSaved = false;
 
   /// 已经 dispose 的标志位。
   ///
   /// `dispose()` 中第一时间置位，让任何还在 await 的异步链（[togglePlay]、
-  /// [pressPianoKey]、[_openActiveTrack] 等）都能在拿到 `_soLoud.play(...)`
+  /// [pressPianoKey]、[_openActiveTrack] 等）都能在拿到 `player.open(...)`
   /// 之前 short-circuit 退出，避免页面消失之后还冒出一声 "ding"。
   bool _disposed = false;
 
   /// `_openActiveTrack` 并发自增票据。
   ///
   /// iPad 上动作较快时，用户连点 1 次播放或快速翻页，会让两次
-  /// `_openActiveTrack` 并发：两次都各自下载、各自 `_soLoud.play(...)`，
+  /// `_openActiveTrack` 并发：两次都各自调 `player.open(...)`，
   /// 出现"两个音频同时在响"。这里用最经典的 ticket 方案：每次进入
-  /// 自增 1，await 之后比对，落后的那次直接放弃（并清理已加载源）。
+  /// 自增 1，await 之后比对，落后的那次直接放弃。
   int _openTicket = 0;
+
+  /// 把半音数转为 [Player.setPitch] 接受的频率倍率（2^(n/12)）。
+  static double _pitchRatio(int semitones) =>
+      math.pow(2, semitones / 12.0).toDouble();
 
   Future<void> _initialize() async {
     unawaited(_warmUpPiano());
@@ -162,41 +165,15 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       return;
     }
 
-    if (kIsWeb) {
-      final player = _ensureWebPlayer();
-      if (_webPlayer == null || state.duration == Duration.zero) {
-        await _openActiveTrack(play: true);
-        return;
-      }
-      if (state.isPlaying) {
-        await player.pause();
-      } else {
-        await player.play();
-      }
-      return;
-    }
-
-    if (_source == null) {
+    final player = _player;
+    if (player == null || state.duration == Duration.zero) {
       await _openActiveTrack(play: true);
       return;
     }
-
-    final handle = _handle;
     if (state.isPlaying) {
-      if (handle != null && _soLoud.getIsValidVoiceHandle(handle)) {
-        _soLoud.setPause(handle, true);
-      }
-      state = state.copyWith(
-        isPlaying: false,
-        frequencyBands: const <double>[],
-      );
+      await player.pause();
     } else {
-      if (handle != null && _soLoud.getIsValidVoiceHandle(handle)) {
-        _soLoud.setPause(handle, false);
-        state = state.copyWith(isPlaying: true);
-      } else {
-        _startHandle();
-      }
+      await player.play();
     }
   }
 
@@ -250,23 +227,79 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
 
   Future<void> setPlaybackSpeed(double speed) async {
     final nextSpeed = speed.clamp(0.5, 2.0);
-    if (kIsWeb) {
-      await _ensureWebPlayer().setRate(nextSpeed);
-      if (!mounted) {
-        return;
-      }
-      state = state.copyWith(speed: nextSpeed);
-      return;
-    }
-
-    final handle = _handle;
-    if (handle != null && _soLoud.getIsValidVoiceHandle(handle)) {
-      _soLoud.setRelativePlaySpeed(handle, nextSpeed);
+    final player = _player;
+    if (player != null) {
+      try {
+        // mpv 默认 audio-pitch-correction=yes：变速不变调。
+        // Web 端 HTML5 audio 的浏览器默认也保留音高。
+        await player.setRate(nextSpeed);
+      } catch (_) {}
     }
     if (!mounted) {
       return;
     }
     state = state.copyWith(speed: nextSpeed);
+  }
+
+  /// 独立的"升降调"控制（半音）。与 [setPlaybackSpeed] 完全解耦：
+  /// 内部走 [Player.setPitch]，半音 N → 频率倍率 2^(N/12)。
+  Future<void> setPitchSemitones(int semitones) async {
+    final next = semitones.clamp(-12, 12);
+    final player = _player;
+    if (player != null) {
+      try {
+        await player.setPitch(_pitchRatio(next));
+      } catch (_) {
+        // Web/部分平台对 setPitch 不一定支持，静默吞掉，
+        // UI 层依旧按照所选半音数显示。
+      }
+    }
+    if (!mounted) {
+      return;
+    }
+    state = state.copyWith(pitchSemitones: next);
+  }
+
+  /// 切换"循环模式"：顺序 → 单曲循环 → 随机循环 → 顺序。
+  /// 仅在多曲目场景下有意义，单曲目时也允许调用但不会影响实际行为。
+  void togglePlayMode() {
+    final next = switch (state.playMode) {
+      MusicPlayMode.sequence => MusicPlayMode.single,
+      MusicPlayMode.single => MusicPlayMode.shuffle,
+      MusicPlayMode.shuffle => MusicPlayMode.sequence,
+    };
+    state = state.copyWith(playMode: next);
+  }
+
+  /// 直接跳到曲目列表中的指定索引并播放。
+  /// 用户在"播放列表"菜单中点击某一项时调用；与 [previous] / [next] 共享
+  /// 同一套 ticket 化的 `_openActiveTrack`，避免连点产生双声。
+  Future<void> selectTrack(int index) async {
+    if (_disposed) return;
+    final detail = state.detail;
+    if (detail == null || detail.tracks.isEmpty) {
+      return;
+    }
+    final safe = index.clamp(0, detail.tracks.length - 1);
+    if (safe == state.activeTrackIndex) {
+      // 同一首：从头重播（同时承担"单曲循环"自动续播的语义）。
+      await seek(Duration.zero);
+      final player = _player;
+      if (player != null) {
+        try {
+          await player.play();
+        } catch (_) {}
+      }
+      return;
+    }
+    state = state.copyWith(
+      activeTrackIndex: safe,
+      activeImageIndex: 0,
+      position: Duration.zero,
+      duration: Duration.zero,
+      frequencyBands: const <double>[],
+    );
+    await _openActiveTrack(play: true);
   }
 
   Future<void> seek(Duration position) async {
@@ -276,18 +309,11 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
         : Duration(
             milliseconds: position.inMilliseconds.clamp(0, max.inMilliseconds),
           );
-    if (kIsWeb) {
-      await _ensureWebPlayer().seek(safe);
-      if (!mounted) {
-        return;
-      }
-      state = state.copyWith(position: safe);
-      return;
-    }
-
-    final handle = _handle;
-    if (handle != null && _soLoud.getIsValidVoiceHandle(handle)) {
-      _soLoud.seek(handle, safe);
+    final player = _player;
+    if (player != null) {
+      try {
+        await player.seek(safe);
+      } catch (_) {}
     }
     if (!mounted) {
       return;
@@ -503,219 +529,71 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     bool isStale() => _disposed || ticket != _openTicket;
 
     try {
-      if (kIsWeb) {
-        if (isStale()) return;
-        await _openWebTrack(track.url, play: play);
-        return;
-      }
-      await _releaseCurrentSource();
       if (isStale()) return;
-      final source = await _loadAudioSource(track.url);
-      if (isStale()) {
-        // 自己已经过期：把多下载/loadMem 出来的 source 处理掉，避免内存泄漏。
-        try {
-          await _soLoud.disposeSource(source);
-        } catch (_) {}
-        return;
-      }
-      _source = source;
-      final duration = _soLoud.getLength(source);
-      if (mounted && !_disposed) {
-        state = state.copyWith(duration: duration);
-      }
-      if (play && !isStale()) {
-        _startHandle();
-      }
+      final player = _ensurePlayer();
+      debugPrint('MusicPlay audio open: ${track.url}');
+      await player.open(Media(track.url), play: play);
+      if (isStale()) return;
+      // 应用当前的速度/音高（用户在切歌前可能已经调过）。
+      try {
+        await player.setRate(state.speed);
+      } catch (_) {}
+      try {
+        await player.setPitch(_pitchRatio(state.pitchSemitones));
+      } catch (_) {}
     } catch (error) {
       if (isStale()) return;
       debugPrint('MusicPlay audio load failed: $error');
-      state = state.copyWith(errorMessage: '音频加载失败，请稍后重试');
+      if (mounted) {
+        state = state.copyWith(errorMessage: '音频加载失败，请稍后重试');
+      }
     }
   }
 
-  Future<void> _openWebTrack(String url, {required bool play}) async {
-    final player = _ensureWebPlayer();
-    await player.open(Media(url), play: play);
-    await player.setRate(state.speed);
-  }
-
-  Player _ensureWebPlayer() {
-    final current = _webPlayer;
+  Player _ensurePlayer() {
+    final current = _player;
     if (current != null) {
       return current;
     }
-    final player = Player();
-    _webPlayer = player;
-    _bindWebPlayerStreams(player);
+    // 关键：必须把 PlayerConfiguration.pitch 打开，
+    // 否则 [Player.setPitch] 会抛 `ArgumentError('PlayerConfiguration.pitch is false')`，
+    // 导致升降调在 native 端无效（UI 变了但声音不变）。
+    // 该选项会让 mpv 关闭 audio-pitch-correction 并改用 scaletempo 滤镜，
+    // 实现"独立倍速 + 独立音高"。Web 端 setPitch 仍然不支持，会被 try/catch 吞掉。
+    final player = Player(
+      configuration: const PlayerConfiguration(pitch: true),
+    );
+    _player = player;
+    _bindPlayerStreams(player);
     return player;
   }
 
-  void _bindWebPlayerStreams(Player player) {
-    _webPositionSub?.cancel();
-    _webDurationSub?.cancel();
-    _webPlayingSub?.cancel();
-    _webCompletedSub?.cancel();
+  void _bindPlayerStreams(Player player) {
+    _positionSub?.cancel();
+    _durationSub?.cancel();
+    _playingSub?.cancel();
+    _completedSub?.cancel();
 
-    _webPositionSub = player.stream.position.listen((position) {
+    _positionSub = player.stream.position.listen((position) {
       if (mounted) {
         state = state.copyWith(position: position);
       }
     });
-    _webDurationSub = player.stream.duration.listen((duration) {
+    _durationSub = player.stream.duration.listen((duration) {
       if (mounted) {
         state = state.copyWith(duration: duration);
       }
     });
-    _webPlayingSub = player.stream.playing.listen((playing) {
+    _playingSub = player.stream.playing.listen((playing) {
       if (mounted) {
-        state = state.copyWith(
-          isPlaying: playing,
-          frequencyBands: const <double>[],
-        );
+        state = state.copyWith(isPlaying: playing);
       }
     });
-    _webCompletedSub = player.stream.completed.listen((completed) async {
+    _completedSub = player.stream.completed.listen((completed) async {
       if (completed && mounted) {
         await _handleTrackCompleted();
       }
     });
-  }
-
-  Future<AudioSource> _loadAudioSource(String url) async {
-    debugPrint('MusicPlay audio request: $url');
-    final bytes = await repository.downloadAudio(url);
-    await _ensureAudioEngine();
-    return _soLoud.loadMem(
-      _audioFileNameFromUrl(url),
-      bytes,
-      mode: LoadMode.memory,
-    );
-  }
-
-  String _audioFileNameFromUrl(String url) {
-    final uri = Uri.tryParse(url);
-    final name = uri == null || uri.pathSegments.isEmpty
-        ? ''
-        : uri.pathSegments.last;
-    if (name.contains('.') && !name.endsWith('.')) {
-      return name;
-    }
-    return 'music_play_audio.mp3';
-  }
-
-  Future<void> _ensureAudioEngine() async {
-    if (!_soLoud.isInitialized) {
-      await _soLoud.init(bufferSize: 1024, channels: Channels.mono);
-    }
-    _soLoud.setVisualizationEnabled(true);
-    _soLoud.setFftSmoothing(0.90);
-    _audioData ??= AudioData(GetSamplesKind.linear);
-    _startAudioTicker();
-  }
-
-  void _startHandle() {
-    if (_disposed) return;
-    final source = _source;
-    if (source == null) {
-      return;
-    }
-    // 防御：若上一个 handle 还活着，先停掉它，避免同一个 source 被叠播两次。
-    final prev = _handle;
-    if (prev != null && _soLoud.getIsValidVoiceHandle(prev)) {
-      try {
-        unawaited(_soLoud.stop(prev));
-      } catch (_) {}
-    }
-    final handle = _soLoud.play(source, paused: false);
-    _handle = handle;
-    _soLoud.setRelativePlaySpeed(handle, state.speed);
-    if (state.position > Duration.zero) {
-      _soLoud.seek(handle, state.position);
-    }
-    if (mounted && !_disposed) {
-      state = state.copyWith(isPlaying: true);
-    }
-  }
-
-  void _startAudioTicker() {
-    if (_audioTicker != null) {
-      return;
-    }
-    _audioTicker = Timer.periodic(const Duration(milliseconds: 66), (_) {
-      if (!mounted || _disposed) {
-        return;
-      }
-      final handle = _handle;
-      final handleIsValid =
-          handle != null && _soLoud.getIsValidVoiceHandle(handle);
-      final playing = handleIsValid && !_soLoud.getPause(handle);
-      final nextPosition = handleIsValid
-          ? _soLoud.getPosition(handle)
-          : state.position;
-      final bands = playing ? _readFrequencyBands() : const <double>[];
-
-      state = state.copyWith(
-        isPlaying: playing,
-        position: nextPosition,
-        frequencyBands: bands,
-      );
-
-      if (handleIsValid ||
-          state.duration == Duration.zero ||
-          nextPosition < state.duration - const Duration(milliseconds: 180)) {
-        return;
-      }
-      unawaited(_handleTrackCompleted());
-    });
-  }
-
-  List<double> _readFrequencyBands() {
-    final audioData = _audioData;
-    if (audioData == null) {
-      return const <double>[];
-    }
-    try {
-      audioData.updateSamples();
-      final samples = audioData.getAudioData(alwaysReturnData: false);
-      if (samples.length < 256) {
-        return const <double>[];
-      }
-      return _compressFft(samples.sublist(0, 256));
-    } catch (_) {
-      return const <double>[];
-    }
-  }
-
-  List<double> _compressFft(Float32List fft) {
-    const bands = 46;
-    final result = List<double>.filled(bands, 0);
-    for (var i = 0; i < bands; i++) {
-      final start = math.pow(i / bands, 1.55) * (fft.length - 1);
-      final end = math.pow((i + 1) / bands, 1.55) * (fft.length - 1);
-      final from = start.floor().clamp(0, fft.length - 1);
-      final to = math.max(from + 1, end.ceil().clamp(0, fft.length));
-      var sum = 0.0;
-      for (var j = from; j < to; j++) {
-        sum += fft[j].abs();
-      }
-      final average = sum / (to - from);
-      result[i] = math.pow((average * 7.5).clamp(0.0, 1.0), 0.55) as double;
-    }
-    return result;
-  }
-
-  Future<void> _releaseCurrentSource() async {
-    final handle = _handle;
-    if (handle != null && _soLoud.getIsValidVoiceHandle(handle)) {
-      await _soLoud.stop(handle);
-    }
-    _handle = null;
-
-    final source = _source;
-    if (source != null) {
-      await _soLoud.disposeSource(source);
-    }
-    _source = null;
   }
 
   Future<void> _handleTrackCompleted() async {
@@ -736,27 +614,39 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     }
 
     if (detail.tracks.length > 1) {
-      await next();
-      return;
+      // 多曲目：完全对齐 1.0 中 `sxType` 的三段语义。
+      switch (state.playMode) {
+        case MusicPlayMode.single:
+          await selectTrack(state.activeTrackIndex);
+          return;
+        case MusicPlayMode.shuffle:
+          final length = detail.tracks.length;
+          int target = state.activeTrackIndex;
+          if (length > 1) {
+            final random = math.Random();
+            do {
+              target = random.nextInt(length);
+            } while (target == state.activeTrackIndex);
+          }
+          await selectTrack(target);
+          return;
+        case MusicPlayMode.sequence:
+          await next();
+          return;
+      }
     }
 
-    final handle = _handle;
-    if (handle != null && _soLoud.getIsValidVoiceHandle(handle)) {
-      _soLoud.seek(handle, Duration.zero);
-      _soLoud.setPause(handle, true);
+    final player = _player;
+    if (player != null) {
+      try {
+        await player.seek(Duration.zero);
+        await player.pause();
+      } catch (_) {}
     }
     state = state.copyWith(
       isPlaying: false,
       position: Duration.zero,
-      frequencyBands: const <double>[],
     );
-    if (kIsWeb) {
-      final player = _webPlayer;
-      if (player != null) {
-        await player.seek(Duration.zero);
-        await player.pause();
-      }
-    }
   }
 
   bool _hasVipAccess(dynamic data) {
@@ -956,6 +846,11 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   String _resolveMediaUrl(String raw) => MediaUrl.resolve(raw);
 
   bool _defaultShowAnswer(int? pageType, MusicPlayDetail detail) {
+    // 试题（answerEnd2）模块明确要求进入时默认"关闭状态"，
+    // 即先展示题面，由用户主动切到答案。
+    if (state.args.closedByDefault) {
+      return false;
+    }
     if (pageType == 3) {
       return true;
     }
@@ -967,52 +862,31 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
 
   @override
   void dispose() {
-    // 关键：以下所有"同步停声"的动作必须在 super.dispose() 之前完成，
-    // 并且要在任何 await/unawaited 之前先把 _disposed 置位，让其它异步
-    // 链路（包括 piano 的 playNote）能立刻 short-circuit。
+    // 关键：所有"同步停声"动作必须在 super.dispose() 之前完成，
+    // 并先把 _disposed 置位，让任何还在 await 的异步链（[togglePlay]、
+    // [pressPianoKey]、[_openActiveTrack] 等）都能 short-circuit。
     _disposed = true;
-    _audioTicker?.cancel();
-    _audioTicker = null;
-    _audioData?.dispose();
-    _audioData = null;
 
-    // 同步停掉主音频 handle。`_soLoud.stop` 虽然返回 Future，但底层在被
-    // 调用瞬间就把 stop 命令推给 audio 线程，几乎是即刻静音；不 await，
-    // 避免 dispose 阻塞，但比 unawaited(_releaseCurrentSource()) 更早静音。
-    final handle = _handle;
-    if (handle != null) {
+    _positionSub?.cancel();
+    _durationSub?.cancel();
+    _playingSub?.cancel();
+    _completedSub?.cancel();
+
+    final player = _player;
+    if (player != null) {
       try {
-        if (_soLoud.getIsValidVoiceHandle(handle)) {
-          unawaited(_soLoud.stop(handle));
-        }
+        unawaited(player.pause());
+      } catch (_) {}
+      try {
+        unawaited(player.dispose());
       } catch (_) {}
     }
-    _handle = null;
-
-    final source = _source;
-    if (source != null) {
-      try {
-        unawaited(_soLoud.disposeSource(source));
-      } catch (_) {}
-    }
-    _source = null;
-
-    _webPositionSub?.cancel();
-    _webDurationSub?.cancel();
-    _webPlayingSub?.cancel();
-    _webCompletedSub?.cancel();
-    final webPlayer = _webPlayer;
-    if (webPlayer != null) {
-      try {
-        unawaited(webPlayer.pause());
-      } catch (_) {}
-      unawaited(webPlayer.dispose());
-    }
+    _player = null;
 
     // 同步把所有钢琴声 stop 掉，再 unawaited dispose。前者立刻静音，
     // 后者负责释放资源；引擎内部的 _disposed 也已经在 .dispose() 调用瞬间
     // 同步置位（见 MusicCompanionAudioEngine.dispose 头部），因此就算
-    // pressPianoKey 的异步链此时还在挂起，最终 _soLoud.play 也不会被调到。
+    // pressPianoKey 的异步链此时还在挂起，最终 SoLoud.play 也不会被调到。
     _pianoEngine.stopAllImmediately();
     unawaited(_pianoEngine.dispose());
     super.dispose();

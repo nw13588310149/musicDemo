@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../features/shell/ui/shell_layout.dart';
 import '../constants/app_assets.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import './app_text.dart';
 /// `showDialog` 的封装：在打开对话框前先从 [context] 中读取
 /// [DashboardScaleScope]，再把同一份 [DashboardScaleData] 重新注入到弹窗子树。
 ///
@@ -154,7 +154,7 @@ class GradientHeaderDialog extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Center(
-                    child: AppText(
+                    child: Text(
                       title,
                       style: TextStyle(
                         fontSize: ui(titleFontSize),
@@ -271,13 +271,13 @@ class _AppDialogButton extends StatelessWidget {
         child: Opacity(
           opacity: disabled ? 0.55 : 1,
           child: Center(
-            child: AppText(
+            child: Text(
               label,
               style: TextStyle(
                 color: isPrimary ? Colors.white : const Color(0xFF0B081A),
                 fontSize: ui(16),
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w400,
+                fontWeight: AppFont.w400,
                 height: 12 / 16,
               ),
             ),
@@ -326,13 +326,13 @@ Future<String?> showTextInputDialog({
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              AppText(
+              Text(
                 title,
                 style: TextStyle(
                   fontSize: ui(18),
                   color: const Color(0xFF0B081A),
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w600,
+                  fontWeight: AppFont.w600,
                 ),
               ),
               SizedBox(height: ui(20)),
@@ -346,7 +346,7 @@ Future<String?> showTextInputDialog({
                     fontSize: ui(14),
                     color: const Color(0xFF0B081A),
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w400,
+                    fontWeight: AppFont.w400,
                   ),
                   decoration: InputDecoration(
                     hintText: hintText,
@@ -355,7 +355,7 @@ Future<String?> showTextInputDialog({
                       fontSize: ui(14),
                       color: const Color(0xFFB6B5BB),
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w400,
+                      fontWeight: AppFont.w400,
                       height: 12 / 14,
                     ),
                     contentPadding: EdgeInsets.symmetric(
@@ -430,13 +430,13 @@ Future<String?> showOptionsDialog({
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              AppText(
+              Text(
                 title,
                 style: TextStyle(
                   fontSize: ui(18),
                   color: const Color(0xFF0B081A),
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w600,
+                  fontWeight: AppFont.w600,
                 ),
               ),
               SizedBox(height: ui(16)),
@@ -461,7 +461,7 @@ Future<String?> showOptionsDialog({
                         child: Row(
                           children: <Widget>[
                             Expanded(
-                              child: AppText(
+                              child: Text(
                                 value,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -472,8 +472,8 @@ Future<String?> showOptionsDialog({
                                       : const Color(0xFF0B081A),
                                   fontFamily: 'PingFang SC',
                                   fontWeight: isActive
-                                      ? FontWeight.w600
-                                      : FontWeight.w400,
+                                      ? AppFont.w600
+                                      : AppFont.w400,
                                 ),
                               ),
                             ),
@@ -539,24 +539,24 @@ Future<bool> showConfirmDialog({
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              AppText(
+              Text(
                 title,
                 style: TextStyle(
                   fontSize: ui(18),
                   color: const Color(0xFF0B081A),
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w600,
+                  fontWeight: AppFont.w600,
                 ),
               ),
               SizedBox(height: ui(12)),
-              AppText(
+              Text(
                 content,
                 style: TextStyle(
                   fontSize: ui(14),
                   height: 1.6,
                   color: const Color(0xFF788698),
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w400,
+                  fontWeight: AppFont.w400,
                 ),
               ),
               SizedBox(height: ui(24)),

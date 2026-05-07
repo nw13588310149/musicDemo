@@ -36,8 +36,8 @@ import 'package:flutter/material.dart';
 
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../core/widgets/app_text.dart';
 // ---- 配色 -------------------------------------------------------------------
 const Color _kCardBg = Colors.white;
 const Color _kPageBgChip = Color(0xFFF5F6FA);
@@ -373,13 +373,13 @@ class _RosterBanner extends StatelessWidget {
           ),
           Positioned.fill(
             child: Center(
-              child: AppText(
+              child: Text(
                 '学生名册',
                 style: TextStyle(
                   fontSize: ui(16),
                   color: _kTextDark,
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w600,
+                  fontWeight: AppFont.w600,
                   height: 1,
                 ),
               ),
@@ -515,7 +515,7 @@ class _ClassFilterButtonState extends State<_ClassFilterButton> {
         child: Row(
           children: [
             Expanded(
-              child: AppText(
+              child: Text(
                 widget.value,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -523,7 +523,7 @@ class _ClassFilterButtonState extends State<_ClassFilterButton> {
                   fontSize: ui(14),
                   color: _kTextDark,
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w400,
+                  fontWeight: AppFont.w400,
                   height: 1.4,
                 ),
               ),
@@ -610,7 +610,7 @@ class _ClassFilterMenuRow extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              child: AppText(
+              child: Text(
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -618,7 +618,7 @@ class _ClassFilterMenuRow extends StatelessWidget {
                   fontSize: ui(14),
                   color: selected ? _kPurple : _kTextDark,
                   fontFamily: 'PingFang SC',
-                  fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
+                  fontWeight: selected ? AppFont.w500 : AppFont.w400,
                   height: 1.2,
                 ),
               ),
@@ -692,7 +692,7 @@ class _RosterSearchFieldState extends State<_RosterSearchField> {
                 fontSize: ui(14),
                 color: _kTextDark,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w400,
+                fontWeight: AppFont.w400,
                 height: 1.2,
               ),
               decoration: InputDecoration(
@@ -704,7 +704,7 @@ class _RosterSearchFieldState extends State<_RosterSearchField> {
                   fontSize: ui(14),
                   color: _kTextPlaceholder,
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w400,
+                  fontWeight: AppFont.w400,
                   height: 1.2,
                 ),
               ),
@@ -808,18 +808,18 @@ class _StatTrioCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              AppText(
+              Text(
                 label,
                 style: TextStyle(
                   fontSize: ui(14),
                   color: Colors.black,
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w500,
+                  fontWeight: AppFont.w500,
                   height: 1,
                 ),
               ),
               SizedBox(height: ui(14)),
-              AppText(
+              Text(
                 value,
                 style: TextStyle(
                   fontSize: ui(32),
@@ -914,13 +914,13 @@ class _RosterEmptyState extends StatelessWidget {
         children: [
           Icon(Icons.person_search_rounded, size: ui(40), color: _kTextHint),
           SizedBox(height: ui(8)),
-          AppText(
+          Text(
             '没有匹配的学生',
             style: TextStyle(
               fontSize: ui(14),
               color: _kTextHint,
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w400,
+              fontWeight: AppFont.w400,
               height: 1,
             ),
           ),
@@ -966,7 +966,7 @@ class _StudentCard extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Flexible(
-                            child: AppText(
+                            child: Text(
                               data.name,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -974,7 +974,7 @@ class _StudentCard extends StatelessWidget {
                                 fontSize: ui(14),
                                 color: _kTextDark,
                                 fontFamily: 'PingFang SC',
-                                fontWeight: FontWeight.w500,
+                                fontWeight: AppFont.w500,
                                 height: 1.2,
                               ),
                             ),
@@ -995,7 +995,7 @@ class _StudentCard extends StatelessWidget {
                   ],
                 ),
                 SizedBox(height: ui(6)),
-                AppText(
+                Text(
                   data.dorm,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -1003,12 +1003,12 @@ class _StudentCard extends StatelessWidget {
                     fontSize: ui(12),
                     color: _kTextDark,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w400,
+                    fontWeight: AppFont.w400,
                     height: 1.2,
                   ),
                 ),
                 SizedBox(height: ui(4)),
-                AppText(
+                Text(
                   data.id,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -1016,7 +1016,7 @@ class _StudentCard extends StatelessWidget {
                     fontSize: ui(12),
                     color: _kTextHint,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w400,
+                    fontWeight: AppFont.w400,
                     height: 1.2,
                   ),
                 ),
@@ -1061,13 +1061,13 @@ class _StudentAvatar extends StatelessWidget {
           colors: colors,
         ),
       ),
-      child: AppText(
+      child: Text(
         initial,
         style: TextStyle(
           fontSize: ui(16),
           color: _kTextDark,
           fontFamily: 'PingFang SC',
-          fontWeight: FontWeight.w500,
+          fontWeight: AppFont.w500,
           height: 1,
         ),
       ),
@@ -1091,13 +1091,13 @@ class _DetailLink extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            AppText(
+            Text(
               '详情',
               style: TextStyle(
                 fontSize: ui(14),
                 color: _kPurple,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w400,
+                fontWeight: AppFont.w400,
                 height: 1.2,
               ),
             ),
@@ -1161,7 +1161,7 @@ class _TagPill extends StatelessWidget {
         color: isAccent ? _kPurpleTag : _kPageBgChip,
         borderRadius: BorderRadius.circular(ui(4)),
       ),
-      child: AppText(
+      child: Text(
         label,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
@@ -1169,7 +1169,7 @@ class _TagPill extends StatelessWidget {
           fontSize: ui(11),
           color: isAccent ? Colors.white : _kTextSecondary,
           fontFamily: 'PingFang SC',
-          fontWeight: FontWeight.w400,
+          fontWeight: AppFont.w400,
           height: 1.25,
         ),
       ),
@@ -1327,13 +1327,13 @@ class _DrawerTitleBar extends StatelessWidget {
             ),
           ),
           SizedBox(width: ui(4)),
-          AppText(
+          Text(
             '学生档案',
             style: TextStyle(
               fontSize: ui(16),
               color: _kTextDark,
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w600,
+              fontWeight: AppFont.w600,
               height: 1,
             ),
           ),
@@ -1364,37 +1364,37 @@ class _ProfileBlock extends StatelessWidget {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  AppText(
+                  Text(
                     data.name,
                     style: TextStyle(
                       fontSize: ui(16),
                       color: Colors.black,
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w600,
+                      fontWeight: AppFont.w600,
                       height: 1.2,
                     ),
                   ),
                   SizedBox(width: ui(8)),
-                  AppText(
+                  Text(
                     data.id,
                     style: TextStyle(
                       fontSize: ui(12),
                       color: _kTextHint,
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w400,
+                      fontWeight: AppFont.w400,
                       height: 1.2,
                     ),
                   ),
                 ],
               ),
               SizedBox(height: ui(6)),
-              AppText(
+              Text(
                 '声乐 · 民族唱法',
                 style: TextStyle(
                   fontSize: ui(12),
                   color: _kTextSecondary,
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w400,
+                  fontWeight: AppFont.w400,
                   height: 1.2,
                 ),
               ),
@@ -1446,18 +1446,18 @@ class _InfoRow extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        AppText(
+        Text(
           label,
           style: TextStyle(
             fontSize: ui(14),
             color: _kTextHint,
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w400,
+            fontWeight: AppFont.w400,
             height: 1.2,
           ),
         ),
         Flexible(
-          child: AppText(
+          child: Text(
             value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -1465,7 +1465,7 @@ class _InfoRow extends StatelessWidget {
               fontSize: ui(14),
               color: _kTextDark,
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w400,
+              fontWeight: AppFont.w400,
               height: 1.2,
             ),
           ),
@@ -1500,13 +1500,13 @@ class _InfoTagRow extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        AppText(
+        Text(
           label,
           style: TextStyle(
             fontSize: ui(14),
             color: _kTextHint,
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w400,
+            fontWeight: AppFont.w400,
             height: 1.2,
           ),
         ),
@@ -1544,13 +1544,13 @@ class _DrawerTagPill extends StatelessWidget {
         color: isAccent ? _kPurpleTag : _kPageBgChip,
         borderRadius: BorderRadius.circular(ui(4)),
       ),
-      child: AppText(
+      child: Text(
         label,
         style: TextStyle(
           fontSize: ui(12),
           color: isAccent ? Colors.white : _kTextSecondary,
           fontFamily: 'PingFang SC',
-          fontWeight: FontWeight.w400,
+          fontWeight: AppFont.w400,
           height: 1.27,
         ),
       ),
@@ -1573,24 +1573,24 @@ class _TeacherRemarksBlock extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          AppText(
+          Text(
             '教师备注',
             style: TextStyle(
               fontSize: ui(16),
               color: _kTextDark,
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w600,
+              fontWeight: AppFont.w600,
               height: 1.2,
             ),
           ),
           SizedBox(height: ui(8)),
-          AppText(
+          Text(
             '专业主项稳定，文化科需跟进英语作文。',
             style: TextStyle(
               fontSize: ui(14),
               color: _kTextSecondary,
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w400,
+              fontWeight: AppFont.w400,
               height: 1.4,
             ),
           ),
@@ -1641,24 +1641,24 @@ class _ScoreChartBlock extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    AppText(
+                    Text(
                       '我教科目 · 分数走势',
                       style: TextStyle(
                         fontSize: ui(16),
                         color: _kTextDark,
                         fontFamily: 'PingFang SC',
-                        fontWeight: FontWeight.w600,
+                        fontWeight: AppFont.w600,
                         height: 1.2,
                       ),
                     ),
                     SizedBox(height: ui(2)),
-                    AppText(
+                    Text(
                       '${_kSubjects[subjectIdx]} · 周测均分',
                       style: TextStyle(
                         fontSize: ui(12),
                         color: _kTextSecondary,
                         fontFamily: 'PingFang SC',
-                        fontWeight: FontWeight.w400,
+                        fontWeight: AppFont.w400,
                         height: 1.2,
                       ),
                     ),
@@ -1720,13 +1720,13 @@ class _SubjectToggle extends StatelessWidget {
                   color: i == activeIdx ? _kTextDark : Colors.transparent,
                   borderRadius: BorderRadius.circular(ui(6)),
                 ),
-                child: AppText(
+                child: Text(
                   subjects[i],
                   style: TextStyle(
                     fontSize: ui(14),
                     color: i == activeIdx ? Colors.white : _kTextSecondary,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w500,
+                    fontWeight: AppFont.w500,
                     height: 1,
                   ),
                 ),
@@ -1765,13 +1765,13 @@ class _ScoreLineChart extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 for (final l in _kYLabels)
-                  AppText(
+                  Text(
                     '$l',
                     style: TextStyle(
                       fontSize: ui(12),
                       color: _kTextHint,
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w400,
+                      fontWeight: AppFont.w400,
                       height: 1,
                     ),
                   ),
@@ -1801,13 +1801,13 @@ class _ScoreLineChart extends StatelessWidget {
                     for (final p in periods)
                       Expanded(
                         child: Center(
-                          child: AppText(
+                          child: Text(
                             p,
                             style: TextStyle(
                               fontSize: ui(12),
                               color: _kTextSecondary,
                               fontFamily: 'PingFang SC',
-                              fontWeight: FontWeight.w400,
+                              fontWeight: AppFont.w400,
                               height: 1,
                             ),
                           ),
@@ -1913,7 +1913,7 @@ class _ScoreLinePainter extends CustomPainter {
             fontSize: ui(12),
             color: _kTextSecondary,
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w500,
+            fontWeight: AppFont.w500,
             height: 1,
           ),
         ),
@@ -1961,13 +1961,13 @@ class _ContactParentButton extends StatelessWidget {
           children: [
             Icon(Icons.phone_rounded, size: ui(16), color: Colors.white),
             SizedBox(width: ui(8)),
-            AppText(
+            Text(
               '联系家长',
               style: TextStyle(
                 fontSize: ui(14),
                 color: Colors.white,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
                 height: 1.2,
               ),
             ),
@@ -2019,24 +2019,24 @@ void _showParentContactDialog(BuildContext context, _Student data) {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      AppText(
+                      Text(
                         data.name,
                         style: TextStyle(
                           fontSize: ui(16),
                           color: _kTextDark,
                           fontFamily: 'PingFang SC',
-                          fontWeight: FontWeight.w600,
+                          fontWeight: AppFont.w600,
                           height: 1.2,
                         ),
                       ),
                       SizedBox(height: ui(4)),
-                      AppText(
+                      Text(
                         data.id,
                         style: TextStyle(
                           fontSize: ui(12),
                           color: _kTextHint,
                           fontFamily: 'PingFang SC',
-                          fontWeight: FontWeight.w400,
+                          fontWeight: AppFont.w400,
                           height: 1.2,
                         ),
                       ),
@@ -2080,24 +2080,24 @@ void _showParentContactDialog(BuildContext context, _Student data) {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            AppText(
+                            Text(
                               parentName,
                               style: TextStyle(
                                 fontSize: ui(15),
                                 color: _kTextDark,
                                 fontFamily: 'PingFang SC',
-                                fontWeight: FontWeight.w500,
+                                fontWeight: AppFont.w500,
                                 height: 1.2,
                               ),
                             ),
                             SizedBox(height: ui(4)),
-                            AppText(
+                            Text(
                               parentRelation,
                               style: TextStyle(
                                 fontSize: ui(12),
                                 color: _kTextHint,
                                 fontFamily: 'PingFang SC',
-                                fontWeight: FontWeight.w400,
+                                fontWeight: AppFont.w400,
                                 height: 1.2,
                               ),
                             ),
@@ -2128,7 +2128,7 @@ void _showParentContactDialog(BuildContext context, _Student data) {
                         ),
                         SizedBox(width: ui(8)),
                         Expanded(
-                          child: AppText(
+                          child: Text(
                             parentPhone,
                             style: TextStyle(
                               fontSize: ui(20),

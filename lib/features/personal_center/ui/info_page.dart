@@ -9,13 +9,14 @@ import '../../shell/ui/shell_layout.dart';
 import '../data/avatar_picker.dart';
 import '../state/personal_center_controller.dart';
 import '../state/personal_center_state.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../core/widgets/app_text.dart';
 /// 个人信息页（迭代自 1.0 `pages/PersonalCenter/info.vue`）。
 ///
-/// 布局/逻辑/功能与 1.0 完全对齐：
-/// 头像、昵称、姓名（只读）、性别、生日、身份（只读）、实名认证、所在地区、
-/// 所在学校、个人简介、修改密码。视觉风格采用 2.0 的白底卡片 + 紫色渐变按钮。
+/// 视觉对齐 2.0 Figma：外层 #EFF3FC、白卡 padding 20、卡片内部头一行
+/// 是返回按钮 + 居中"个人信息"标题，下面是字段列表（行高 64）。
+/// 头像点击弹出 iOS 风格底部 ActionSheet，提供"从相册中选择 / 使用相机
+/// 拍摄 / 取消"三个动作。
 class InfoPage extends ConsumerWidget {
   const InfoPage({super.key});
 
@@ -23,85 +24,23 @@ class InfoPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(personalCenterControllerProvider);
     final controller = ref.read(personalCenterControllerProvider.notifier);
-    final ui = DashboardScaleScope.of(context).ui;
 
     return ShellPageSurface(
-      padding: EdgeInsets.fromLTRB(ui(12), ui(12), ui(12), ui(12)),
-      color: const Color(0xFFFAFAFB),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          _InfoHeader(onBack: () => Navigator.of(context).maybePop()),
-          SizedBox(height: ui(12)),
-          Expanded(
-            child: state.loading && state.user.isEmpty
-                ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
-                : _InfoListCard(state: state, controller: controller),
-          ),
-        ],
-      ),
+      padding: EdgeInsets.zero,
+      color: const Color(0xFFEFF3FC),
+      child: state.loading && state.user.isEmpty
+          ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+          : _InfoCard(state: state, controller: controller),
     );
   }
 }
 
-// ────────────────── 顶部返回栏 ──────────────────
+// ─────────────────────────────────────────────────────────────────────
+// 整张白卡：内含返回头 + 字段列表。
+// ─────────────────────────────────────────────────────────────────────
 
-class _InfoHeader extends StatelessWidget {
-  const _InfoHeader({required this.onBack});
-
-  final VoidCallback onBack;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Row(
-      children: <Widget>[
-        _GlassIconButton(icon: Icons.arrow_back_ios_new_rounded, onTap: onBack),
-        SizedBox(width: ui(12)),
-        AppText(
-          '个人信息',
-          style: TextStyle(
-            color: const Color(0xFF0B081A),
-            fontSize: ui(16),
-            fontWeight: FontWeight.w600,
-            fontFamily: 'PingFang SC',
-            height: 1.2,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _GlassIconButton extends StatelessWidget {
-  const _GlassIconButton({required this.icon, required this.onTap});
-
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: ui(32),
-        height: ui(32),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(ui(8)),
-          border: Border.all(color: const Color(0xFFF3F2F3)),
-        ),
-        child: Icon(icon, size: ui(16), color: const Color(0xFF1C274C)),
-      ),
-    );
-  }
-}
-
-// ────────────────── 信息卡片 ──────────────────
-
-class _InfoListCard extends StatelessWidget {
-  const _InfoListCard({required this.state, required this.controller});
+class _InfoCard extends StatelessWidget {
+  const _InfoCard({required this.state, required this.controller});
 
   final PersonalCenterState state;
   final PersonalCenterController controller;
@@ -109,96 +48,189 @@ class _InfoListCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    // 白卡占满 ShellPageSurface 整块容器：顶部 header 固定，下方列表可滚动。
+    return Container(
+      padding: EdgeInsets.all(ui(20)),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(ui(16)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          _CardHeader(onBack: () => Navigator.of(context).maybePop()),
+          SizedBox(height: ui(10)),
+          Expanded(
+            child: SingleChildScrollView(
+              physics: const ClampingScrollPhysics(),
+              child: _InfoRows(state: state, controller: controller),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CardHeader extends StatelessWidget {
+  const _CardHeader({required this.onBack});
+
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    // Stack 让返回按钮"贴左 0"，标题"绝对居中"，与设计稿一致
+    // （设计中标题 left 433 在 970 宽度内基本就是水平居中）。
+    return SizedBox(
+      height: ui(32),
+      child: Stack(
+        children: <Widget>[
+          Align(
+            alignment: Alignment.centerLeft,
+            child: _BackButton(onTap: onBack),
+          ),
+          Center(
+            child: Text(
+              '个人信息',
+              style: TextStyle(
+                color: const Color(0xFF0B081A),
+                fontSize: ui(16),
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w600,
+                height: 1.0,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BackButton extends StatelessWidget {
+  const _BackButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: ui(32),
+        height: ui(32),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(ui(8)),
+          border: Border.all(color: const Color(0xFFF3F2F3), width: 1),
+        ),
+        child: Icon(
+          Icons.chevron_left,
+          size: ui(20),
+          color: const Color(0xFF0B081A),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// 字段行列表
+// ─────────────────────────────────────────────────────────────────────
+
+class _InfoRows extends StatelessWidget {
+  const _InfoRows({required this.state, required this.controller});
+
+  final PersonalCenterState state;
+  final PersonalCenterController controller;
+
+  @override
+  Widget build(BuildContext context) {
     final user = state.user;
     final verified = user['verified']?.toString() ?? '';
     final isVerified = verified == '已认证';
 
-    return SingleChildScrollView(
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: ui(20), vertical: ui(8)),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(ui(14)),
-          border: Border.all(color: const Color(0xFFF3F2F3)),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        _AvatarRow(
+          avatarUrl: user['headUrl']?.toString(),
+          onTap: () => _editAvatar(context, controller),
         ),
-        child: Column(
-          children: <Widget>[
-            _AvatarRow(
-              avatarUrl: user['headUrl']?.toString(),
-              onTap: () => _editAvatar(context, controller, user),
-            ),
-            const _RowDivider(),
-            _InfoRow(
-              title: '昵称',
-              value: user['nickname']?.toString() ?? '',
-              onTap: () => _editNickname(context, controller, user),
-            ),
-            const _RowDivider(),
-            _InfoRow(
-              title: '姓名',
-              value: user['realname']?.toString() ?? '',
-              showChevron: false,
-            ),
-            const _RowDivider(),
-            _InfoRow(
-              title: '性别',
-              value: user['gender']?.toString() ?? '',
-              onTap: () => _editGender(context, controller, user),
-            ),
-            const _RowDivider(),
-            _InfoRow(
-              title: '生日',
-              value: user['birthday']?.toString() ?? '',
-              onTap: () => _editBirthday(context, controller, user),
-            ),
-            const _RowDivider(),
-            _InfoRow(
-              title: '身份',
-              value: user['identity']?.toString() ?? '',
-              showChevron: false,
-            ),
-            const _RowDivider(),
-            _InfoRow(
-              title: '实名认证',
-              value: verified,
-              showChevron: !isVerified,
-              onTap: isVerified
-                  ? null
-                  : () {
-                      Navigator.pushNamed(
-                        context,
-                        RoutePaths.verifie,
-                        arguments: <String, dynamic>{'id': verified},
-                      );
-                    },
-            ),
-            const _RowDivider(),
-            _InfoRow(
-              title: '所在地区',
-              value: user['province']?.toString() ?? '',
-              onTap: () => _editProvince(context, controller, user),
-            ),
-            const _RowDivider(),
-            _InfoRow(
-              title: '所在学校',
-              value: user['school']?.toString() ?? '',
-              onTap: () => _editSchool(context, controller, user),
-            ),
-            const _RowDivider(),
-            _InfoRow(
-              title: '个人简介',
-              value: user['introduce']?.toString() ?? '',
-              onTap: () => _editIntroduce(context, controller, user),
-            ),
-            const _RowDivider(),
-            _InfoRow(
-              title: '修改密码',
-              value: '',
-              onTap: () => _editPassword(context, controller),
-            ),
-          ],
+        const _RowDivider(),
+        _InfoRow(
+          title: '昵称',
+          value: user['nickname']?.toString() ?? '',
+          onTap: () => _editNickname(context, controller, user),
         ),
-      ),
+        const _RowDivider(),
+        _InfoRow(
+          title: '姓名',
+          value: user['realname']?.toString() ?? '',
+          showChevron: false,
+        ),
+        const _RowDivider(),
+        _InfoRow(
+          title: '性别',
+          value: user['gender']?.toString() ?? '',
+          onTap: () => _editGender(context, controller, user),
+        ),
+        const _RowDivider(),
+        _InfoRow(
+          title: '生日',
+          value: user['birthday']?.toString() ?? '',
+          onTap: () => _editBirthday(context, controller, user),
+        ),
+        const _RowDivider(),
+        _InfoRow(
+          title: '身份',
+          value: user['identity']?.toString() ?? '',
+          showChevron: false,
+        ),
+        const _RowDivider(),
+        _InfoRow(
+          title: '实名认证',
+          value: verified,
+          showChevron: !isVerified,
+          onTap: isVerified
+              ? null
+              : () {
+                  Navigator.pushNamed(
+                    context,
+                    RoutePaths.verifie,
+                    arguments: <String, dynamic>{'id': verified},
+                  );
+                },
+        ),
+        const _RowDivider(),
+        _InfoRow(
+          title: '所在地区',
+          value: user['province']?.toString() ?? '',
+          onTap: () => _editProvince(context, controller, user),
+        ),
+        const _RowDivider(),
+        _InfoRow(
+          title: '所在学校',
+          value: user['school']?.toString() ?? '',
+          onTap: () => _editSchool(context, controller, user),
+        ),
+        const _RowDivider(),
+        _InfoRow(
+          title: '个人简介',
+          value: user['introduce']?.toString() ?? '',
+          onTap: () => _editIntroduce(context, controller, user),
+        ),
+        const _RowDivider(),
+        _InfoRow(
+          title: '修改密码',
+          value: '',
+          onTap: () => _editPassword(context, controller),
+        ),
+      ],
     );
   }
 }
@@ -211,7 +243,9 @@ class _RowDivider extends StatelessWidget {
       const Divider(height: 1, thickness: 1, color: Color(0xFFF3F2F3));
 }
 
-// ────────────────── 行：标题 + 值 / 头像 + 箭头 ──────────────────
+// ─────────────────────────────────────────────────────────────────────
+// 单条信息行：左标题 + 右值 + chevron
+// ─────────────────────────────────────────────────────────────────────
 
 class _InfoRow extends StatelessWidget {
   const _InfoRow({
@@ -229,38 +263,38 @@ class _InfoRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return InkWell(
+    return GestureDetector(
       onTap: onTap,
-      child: Container(
-        constraints: BoxConstraints(minHeight: ui(56)),
-        padding: EdgeInsets.symmetric(vertical: ui(14)),
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
+        height: ui(64),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: <Widget>[
-            AppText(
+            Text(
               title,
               style: TextStyle(
                 color: const Color(0xFF0B081A),
-                fontSize: ui(15),
+                fontSize: ui(14),
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
-                height: 1.3,
+                fontWeight: AppFont.w400,
+                height: 1.0,
               ),
             ),
             Expanded(
               child: Padding(
                 padding: EdgeInsets.symmetric(horizontal: ui(16)),
-                child: AppText(
+                child: Text(
                   value,
                   textAlign: TextAlign.right,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: const Color(0xFF999999),
+                    color: const Color(0xFF6D6B75),
                     fontSize: ui(14),
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w400,
-                    height: 1.3,
+                    fontWeight: AppFont.w400,
+                    height: 1.0,
                   ),
                 ),
               ),
@@ -269,7 +303,7 @@ class _InfoRow extends StatelessWidget {
               Icon(
                 Icons.chevron_right,
                 size: ui(20),
-                color: const Color(0xFF6B6B6B),
+                color: const Color(0xFF0B081A),
               )
             else
               SizedBox(width: ui(20)),
@@ -289,30 +323,30 @@ class _AvatarRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return InkWell(
+    return GestureDetector(
       onTap: onTap,
-      child: Container(
-        constraints: BoxConstraints(minHeight: ui(64)),
-        padding: EdgeInsets.symmetric(vertical: ui(10)),
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
+        height: ui(64),
         child: Row(
           children: <Widget>[
-            AppText(
+            Text(
               '头像',
               style: TextStyle(
                 color: const Color(0xFF0B081A),
-                fontSize: ui(15),
+                fontSize: ui(14),
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
-                height: 1.3,
+                fontWeight: AppFont.w400,
+                height: 1.0,
               ),
             ),
             const Spacer(),
-            _AvatarImage(url: avatarUrl, size: ui(40)),
+            _AvatarImage(url: avatarUrl, size: ui(44)),
             SizedBox(width: ui(8)),
             Icon(
               Icons.chevron_right,
               size: ui(20),
-              color: const Color(0xFF6B6B6B),
+              color: const Color(0xFF0B081A),
             ),
           ],
         ),
@@ -332,35 +366,43 @@ class _AvatarImage extends StatelessWidget {
     final trimmed = url?.trim() ?? '';
     final isNetwork =
         trimmed.startsWith('http://') || trimmed.startsWith('https://');
-    return ClipOval(
-      child: Container(
-        width: size,
-        height: size,
-        color: const Color(0xFFEFEEF3),
-        alignment: Alignment.center,
-        child: isNetwork
-            ? Image.network(
-                trimmed,
-                width: size,
-                height: size,
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => Icon(
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 2),
+      ),
+      child: ClipOval(
+        child: Container(
+          color: const Color(0xFFEFEEF3),
+          alignment: Alignment.center,
+          child: isNetwork
+              ? Image.network(
+                  trimmed,
+                  width: size,
+                  height: size,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => Icon(
+                    Icons.person_rounded,
+                    size: size * 0.6,
+                    color: const Color(0xFF7E879C),
+                  ),
+                )
+              : Icon(
                   Icons.person_rounded,
                   size: size * 0.6,
                   color: const Color(0xFF7E879C),
                 ),
-              )
-            : Icon(
-                Icons.person_rounded,
-                size: size * 0.6,
-                color: const Color(0xFF7E879C),
-              ),
+        ),
       ),
     );
   }
 }
 
-// ────────────────── 编辑动作（每个字段一个） ──────────────────
+// ─────────────────────────────────────────────────────────────────────
+// 编辑动作：每个字段一个；除了头像和密码外都是简单弹窗。
+// ─────────────────────────────────────────────────────────────────────
 
 Future<void> _editNickname(
   BuildContext context,
@@ -492,7 +534,6 @@ Future<void> _editBirthday(
     cancelText: '取消',
     confirmText: '确定',
     builder: (ctx, child) {
-      // 紫色主题，与 2.0 视觉一致。
       return Theme(
         data: Theme.of(ctx).copyWith(
           colorScheme: const ColorScheme.light(
@@ -536,117 +577,165 @@ DateTime? _parseDate(String? raw) {
   }
 }
 
-// ────────────────── 头像 / 密码 弹窗（自定义） ──────────────────
+// ─────────────────────────────────────────────────────────────────────
+// 头像编辑：iOS 风底部 ActionSheet → picker → upload → 写回 headUrl
+// ─────────────────────────────────────────────────────────────────────
+
+/// 头像来源，与 ActionSheet 上的两个选项一一对应。
+enum _AvatarSource { gallery, camera }
 
 Future<void> _editAvatar(
   BuildContext context,
   PersonalCenterController controller,
-  Map<String, dynamic> user,
 ) async {
-  await showScaledDialog<void>(
+  final source = await _showAvatarSourceSheet(context);
+  if (source == null || !context.mounted) return;
+
+  final picked = await pickAvatarFile(useCamera: source == _AvatarSource.camera);
+  if (!context.mounted) return;
+  if (picked == null) {
+    // 用户取消、相机权限被拒、或当前桌面 IO 不支持选择 — 都给一个友好提示。
+    if (source == _AvatarSource.camera) {
+      _toast(context, '当前平台暂不支持调用相机，请选择"从相册中选择"');
+    }
+    return;
+  }
+
+  // 上传 → 直接更新 headUrl，无需中间预览/确认弹窗。
+  final upload = await controller.uploadAvatar(
+    bytes: picked.bytes,
+    filename: picked.filename,
+  );
+  if (!context.mounted) return;
+  if (upload.error != null) {
+    _toast(context, upload.error!);
+    return;
+  }
+  final path = upload.path;
+  if (path == null || path.isEmpty) {
+    _toast(context, '上传失败');
+    return;
+  }
+  final err = await controller.updateProfileFields(<String, dynamic>{
+    'headUrl': path,
+  });
+  if (!context.mounted) return;
+  _toast(context, err ?? '修改成功！');
+}
+
+/// 显示 iOS 风格的"选择头像来源"底部 ActionSheet：
+/// 主卡片包含标题 + 两个选项，下方独立一个"取消"卡片。
+///
+/// `showModalBottomSheet` 走 root navigator 的 overlay，构建出来的
+/// widget 树不在 dashboard 的 [DashboardScaleScope] 里，直接 `of(ctx)`
+/// 会触发 assert。这里在调用方先抓一份 scale data，再在 builder 里
+/// 用 [DashboardScaleScope] 透传，sheet 内的 `ui(...)` 才能正常工作。
+Future<_AvatarSource?> _showAvatarSourceSheet(BuildContext context) {
+  final scale = DashboardScaleScope.of(context);
+  return showModalBottomSheet<_AvatarSource>(
     context: context,
-    barrierColor: Colors.black.withValues(alpha: 0.18),
-    builder: (ctx) => _AvatarEditDialog(
-      currentUrl: user['headUrl']?.toString(),
-      controller: controller,
+    backgroundColor: Colors.transparent,
+    barrierColor: Colors.black.withValues(alpha: 0.80),
+    isScrollControlled: true,
+    builder: (ctx) => DashboardScaleScope(
+      data: scale,
+      child: const _AvatarSourceSheet(),
     ),
   );
 }
 
-class _AvatarEditDialog extends StatefulWidget {
-  const _AvatarEditDialog({required this.currentUrl, required this.controller});
-
-  final String? currentUrl;
-  final PersonalCenterController controller;
-
-  @override
-  State<_AvatarEditDialog> createState() => _AvatarEditDialogState();
-}
-
-class _AvatarEditDialogState extends State<_AvatarEditDialog> {
-  // Path is what we persist to the backend (`headUrl`).
-  // Url is what we render in the live preview before confirm.
-  String? _newPath;
-  String? _newPreviewUrl;
-  bool _uploading = false;
-
-  Future<void> _pickAndUpload() async {
-    if (_uploading) return;
-    final picked = await pickAvatarFile();
-    if (!mounted) return;
-    if (picked == null) {
-      _toast(context, '当前平台暂未支持选择头像，请在浏览器中操作');
-      return;
-    }
-    setState(() => _uploading = true);
-    final res = await widget.controller.uploadAvatar(
-      bytes: picked.bytes,
-      filename: picked.filename,
-    );
-    if (!mounted) return;
-    if (res.error != null) {
-      setState(() => _uploading = false);
-      _toast(context, res.error!);
-      return;
-    }
-    setState(() {
-      _newPath = res.path;
-      _newPreviewUrl = res.url;
-      _uploading = false;
-    });
-  }
-
-  Future<void> _confirm() async {
-    final path = _newPath;
-    if (path == null || path.isEmpty) {
-      Navigator.of(context).pop();
-      return;
-    }
-    final err = await widget.controller.updateProfileFields(<String, dynamic>{
-      'headUrl': path,
-    });
-    if (!mounted) return;
-    Navigator.of(context).pop();
-    _toast(context, err ?? '修改成功！');
-  }
+class _AvatarSourceSheet extends StatelessWidget {
+  const _AvatarSourceSheet();
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final previewUrl = _newPreviewUrl ?? widget.currentUrl;
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: EdgeInsets.symmetric(horizontal: ui(32), vertical: ui(24)),
-      child: Container(
-        width: ui(420),
-        padding: EdgeInsets.fromLTRB(ui(24), ui(28), ui(24), ui(20)),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(ui(24)),
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          ui(20),
+          ui(0),
+          ui(20),
+          ui(20),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: <Widget>[
-            AppText(
-              '修改头像',
-              style: TextStyle(
-                fontSize: ui(18),
-                color: const Color(0xFF0B081A),
-                fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w600,
+            // 主卡：标题 + 2 个动作
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: ui(377)),
+              child: Container(
+                width: double.infinity,
+                padding: EdgeInsets.symmetric(vertical: ui(8)),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(ui(16)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    SizedBox(
+                      height: ui(48),
+                      child: Center(
+                        child: Text(
+                          '选择头像来源',
+                          style: TextStyle(
+                            color: const Color(0xFF0B081A),
+                            fontSize: ui(14),
+                            fontFamily: 'PingFang SC',
+                            fontWeight: AppFont.w600,
+                            height: 16 / 14,
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: ui(12)),
+                    _SheetItem(
+                      label: '从相册中选择',
+                      onTap: () => Navigator.of(context).pop<_AvatarSource>(
+                        _AvatarSource.gallery,
+                      ),
+                    ),
+                    const _SheetDivider(),
+                    _SheetItem(
+                      label: '使用相机拍摄',
+                      onTap: () => Navigator.of(context).pop<_AvatarSource>(
+                        _AvatarSource.camera,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-            SizedBox(height: ui(20)),
-            _AvatarImage(url: previewUrl, size: ui(160)),
-            SizedBox(height: ui(20)),
-            _UploadButton(uploading: _uploading, onTap: _pickAndUpload),
-            SizedBox(height: ui(20)),
-            AppDialogActionBar(
-              cancelLabel: '取消',
-              confirmLabel: '确认',
-              confirmEnabled: !_uploading,
-              onCancel: () => Navigator.of(context).pop(),
-              onConfirm: _confirm,
+            SizedBox(height: ui(8)),
+            // 取消卡：独立的一块
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: ui(377)),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => Navigator.of(context).pop(),
+                child: Container(
+                  width: double.infinity,
+                  height: ui(56),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(ui(16)),
+                  ),
+                  child: Text(
+                    '取消',
+                    style: TextStyle(
+                      color: const Color(0xFF0B081A),
+                      fontSize: ui(20),
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w600,
+                      height: 24 / 20,
+                    ),
+                  ),
+                ),
+              ),
             ),
           ],
         ),
@@ -655,61 +744,49 @@ class _AvatarEditDialogState extends State<_AvatarEditDialog> {
   }
 }
 
-class _UploadButton extends StatelessWidget {
-  const _UploadButton({required this.uploading, required this.onTap});
+class _SheetItem extends StatelessWidget {
+  const _SheetItem({required this.label, required this.onTap});
 
-  final bool uploading;
+  final String label;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return InkWell(
-      onTap: uploading ? null : onTap,
-      borderRadius: BorderRadius.circular(ui(10)),
-      child: Container(
-        height: ui(38),
-        padding: EdgeInsets.symmetric(horizontal: ui(16)),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF4F4FF),
-          borderRadius: BorderRadius.circular(ui(10)),
-          border: Border.all(color: const Color(0xFFE8E2FF)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            if (uploading)
-              SizedBox(
-                width: ui(14),
-                height: ui(14),
-                child: const CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Color(0xFF8741FF),
-                ),
-              )
-            else
-              Icon(
-                Icons.add_a_photo_outlined,
-                size: ui(16),
-                color: const Color(0xFF8741FF),
-              ),
-            SizedBox(width: ui(6)),
-            AppText(
-              uploading ? '上传中...' : '上传新头像',
-              style: TextStyle(
-                color: const Color(0xFF8741FF),
-                fontSize: ui(13),
-                fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
-                height: 1,
-              ),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: SizedBox(
+        height: ui(56),
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+              color: Colors.black,
+              fontSize: ui(20),
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w400,
+              height: 24 / 20,
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 }
+
+class _SheetDivider extends StatelessWidget {
+  const _SheetDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(height: 1, color: const Color(0x33000000));
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// 修改密码弹窗
+// ─────────────────────────────────────────────────────────────────────
 
 Future<void> _editPassword(
   BuildContext context,
@@ -798,13 +875,13 @@ class _PasswordEditDialogState extends State<_PasswordEditDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            AppText(
+            Text(
               '修改密码',
               style: TextStyle(
                 fontSize: ui(18),
                 color: const Color(0xFF0B081A),
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w600,
+                fontWeight: AppFont.w600,
               ),
             ),
             SizedBox(height: ui(20)),
@@ -849,7 +926,7 @@ class _PasswordField extends StatelessWidget {
           fontSize: ui(14),
           color: const Color(0xFF0B081A),
           fontFamily: 'PingFang SC',
-          fontWeight: FontWeight.w400,
+          fontWeight: AppFont.w400,
         ),
         decoration: InputDecoration(
           hintText: hint,
@@ -857,7 +934,7 @@ class _PasswordField extends StatelessWidget {
             fontSize: ui(14),
             color: const Color(0xFFB6B5BB),
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w400,
+            fontWeight: AppFont.w400,
             height: 12 / 14,
           ),
           contentPadding: EdgeInsets.symmetric(
@@ -886,7 +963,9 @@ class _PasswordField extends StatelessWidget {
   }
 }
 
-// ────────────────── 工具：toast ──────────────────
+// ─────────────────────────────────────────────────────────────────────
+// 工具：toast
+// ─────────────────────────────────────────────────────────────────────
 
 void _toast(BuildContext context, String message) {
   if (!context.mounted) return;

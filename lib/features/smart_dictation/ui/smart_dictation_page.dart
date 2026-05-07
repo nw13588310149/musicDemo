@@ -10,8 +10,8 @@ import '../../shell/ui/shell_layout.dart';
 import '../audio/smart_dictation_audio_engine.dart';
 import '../state/smart_dictation_controller.dart';
 import '../state/smart_dictation_state.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../core/widgets/app_text.dart';
 /// Notes available for the 最低音 picker (matches Figma design).
 const _kMinRangeNotes = <String>['f', '#f', 'g', '#g', 'a', 'bb'];
 
@@ -340,13 +340,13 @@ class _TrackCard extends StatelessWidget {
               ),
               SizedBox(width: ui(8)),
               Expanded(
-                child: AppText(
+                child: Text(
                   title,
                   style: TextStyle(
                     color: const Color(0xFF0B081A),
                     fontSize: ui(13),
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w500,
+                    fontWeight: AppFont.w500,
                     height: 12 / 13,
                   ),
                 ),
@@ -405,13 +405,13 @@ class _ModeBtn extends StatelessWidget {
           color: selected ? null : Colors.white,
           borderRadius: BorderRadius.circular(ui(8)),
         ),
-        child: AppText(
+        child: Text(
           text,
           style: TextStyle(
             color: selected ? Colors.white : const Color(0xFF6D6B75),
             fontSize: ui(13),
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w500,
+            fontWeight: AppFont.w500,
             height: 12 / 13,
           ),
         ),
@@ -490,7 +490,7 @@ class _Content extends StatelessWidget {
       }
       if (state.activeLessons.isEmpty) {
         return Center(
-          child: AppText(
+          child: Text(
             '暂无关卡数据',
             style: TextStyle(color: const Color(0xFFB6B5BB), fontSize: ui(14)),
           ),
@@ -560,13 +560,13 @@ class _Content extends StatelessWidget {
                   // page title
                   SizedBox(
                     width: double.infinity,
-                    child: AppText(
+                    child: Text(
                       '$trackName-智能练习',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: ui(16),
                         fontFamily: 'PingFang SC',
-                        fontWeight: FontWeight.w600,
+                        fontWeight: AppFont.w600,
                         color: const Color(0xFF0B081A),
                       ),
                     ),
@@ -838,12 +838,12 @@ class _Content extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  const AppText(
+                  Text(
                     '开始练习',
                     style: TextStyle(
                       fontSize: 16,
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w500,
+                      fontWeight: AppFont.w500,
                       color: Colors.white,
                       height: 28 / 16,
                     ),
@@ -989,6 +989,7 @@ class _PracticeViewState extends State<_PracticeView> {
           session: session,
           onRestart: widget.onRestartFinished,
           onNext: widget.onNextFinished,
+          onExit: () async => widget.onLeaveConfirm(),
         ),
       );
       _resultOverlay = entry;
@@ -1066,12 +1067,12 @@ class _PracticeViewState extends State<_PracticeView> {
                   ),
                   // title
                   Center(
-                    child: AppText(
+                    child: Text(
                       session.title,
                       style: TextStyle(
                         fontSize: ui(16),
                         fontFamily: 'PingFang SC',
-                        fontWeight: FontWeight.w600,
+                        fontWeight: AppFont.w600,
                         color: const Color(0xFF0B081A),
                       ),
                     ),
@@ -1148,9 +1149,38 @@ class _PracticeViewState extends State<_PracticeView> {
   }
 }
 
-// ── Circular arc timer ────────────────────────────────────────────────────────
+// ── Countdown timer circle ────────────────────────────────────────────────────
+// 1:1 还原 1.0 `pages/SmartDictation/answer.vue` 的 DOM 结构：
+//
+//   <van-circle :stroke-width="100" .../>            ← 130×130 进度圆环
+//   <view class="box2">                              ← 95×95 内圆 overflow:hidden
+//     <view class="box2_bg">                         ← 主题色底（绿→紫）
+//       <view class="one" :style="{top:topOne}"/>    ← 200×200 圆角白块 旋转 6s
+//       <view class="two" :style="{top:topTwo}"/>    ← 200×200 圆角半透明 旋转 8s
+//     </view>
+//     <van-count-down />                              ← 中间倒计时
+//   </view>
+//
+// 实现要点：
+//   - 比例严格按 1.0 的 130 / 95 / 200 / -50 / -111 / -203 缩放；
+//   - 两个旋转圆角方块用 RotationTransition + ClipOval（外圈 box2）；
+//   - top 从 -111 → -203 由 waterFrac 线性插值，水位从底部"涨上来"；
+//   - 反馈态（正确/错误/超时）box2 改为实色，不渲染 .box2_bg，复刻 1.0 行为。
+//
+// 颜色：将 1.0 的 #00C9A4 / #29B5A5 系替换为主题紫 #8741FF / #B68BFF；
+// 错误 / 超时保留 1.0 的红色 #E61F62（不在"绿→紫"换色范围）。
 
-// ── Water-fill timer circle (animated, Figma node 315:4011) ──────────────────
+/// 主题色（将 1.0 的 #00C9A4 绿替换为 #8741FF 紫）。
+const Color _kTimerThemeColor = Color(0xFF8741FF);
+
+/// 答错 / 超时色（与 1.0 #E61F62 一致）。
+const Color _kTimerWrongColor = Color(0xFFE61F62);
+
+/// 外环轨道色（对应 1.0 layer-color #d0e7e4 → 紫调 #EDEBFC）。
+const Color _kTimerTrack = Color(0xFFEDEBFC);
+
+/// 进度弧渐变起始色（对应 1.0 #baddd8 → 浅紫 #D7C9FF）。
+const Color _kTimerRingStart = Color(0xFFD7C9FF);
 
 class _TimerCircle extends StatefulWidget {
   const _TimerCircle({
@@ -1168,21 +1198,28 @@ class _TimerCircle extends StatefulWidget {
 }
 
 class _TimerCircleState extends State<_TimerCircle>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
+    with TickerProviderStateMixin {
+  // 1.0 中两个 .one / .two 各自旋转：6s / 8s 完成一周。
+  late final AnimationController _waveCtrl1;
+  late final AnimationController _waveCtrl2;
 
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(
+    _waveCtrl1 = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2200),
+      duration: const Duration(seconds: 6),
+    )..repeat();
+    _waveCtrl2 = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 8),
     )..repeat();
   }
 
   @override
   void dispose() {
-    _ctrl.dispose();
+    _waveCtrl1.dispose();
+    _waveCtrl2.dispose();
     super.dispose();
   }
 
@@ -1191,7 +1228,35 @@ class _TimerCircleState extends State<_TimerCircle>
     final ui = widget.ui;
     final session = widget.session;
     final notice = widget.noticeMessage;
-    final size = ui(174);
+
+    // 1.0 原始尺寸：外环 130，内圆 95，环宽 = (130-95)/2 = 17.5。
+    // 桌面端整体放大到 ui(174)，内部按 130 系等比缩放。
+    //
+    // 设计稿规格（设计单位 = 130 系）：
+    //   - 外圆直径 = 130
+    //   - 内圆直径 = 94
+    //   - 内圆外缘 → 圆环内缘 5px 间距
+    //   - ⇒ 圆环厚度 = (130 - 94) / 2 - 5 = 13
+    //
+    // 桌面端外径渲染为 ui(144)，内部所有尺寸按 outerSize / 130 等比缩放。
+    final outerSize = ui(144);
+    final outerR = outerSize / 2;
+    final innerSize = outerSize * 94 / 130;
+    final innerR = innerSize / 2;
+    // 内圆与圆环之间 5（设计单位）间距。
+    final innerGap = outerSize * 5 / 130;
+    // 圆环占据径向区间 [outerR - ringWidth, outerR]，
+    // 与内圆保持 innerGap 的间隙：(outerR - ringWidth) - innerR = innerGap。
+    final ringWidth = outerR - innerR - innerGap;
+    // 描边中心半径：外缘贴 outerR，内缘 = outerR - ringWidth。
+    final ringMidR = outerR - ringWidth / 2;
+
+    // .one / .two 仍按 1.0 设计稿"相对内圆"的 200×200、
+    // left:-50、top:-111→-203 几何。内圆基准随设计稿改为 94。
+    final waveSize = innerSize * 200 / 94;
+    final waveLeft = innerSize * (-50 / 94);
+    final waveTopStart = innerSize * (-111 / 94);
+    final waveTopEnd = innerSize * (-203 / 94);
 
     final timedMode = session.timedMode;
     final remainFrac = (timedMode && session.answerSeconds > 0)
@@ -1215,281 +1280,209 @@ class _TimerCircleState extends State<_TimerCircle>
     };
     final hasFeedback = feedbackText.isNotEmpty;
 
-    final showProgressArc =
-        !hasFeedback &&
-        timedMode &&
-        !isTimeout &&
-        !isReady &&
-        session.answerSeconds > 0;
+    // 进度环：除"准备开始"外都画；时间走完后自然停在 1.0（环全填满）。
+    final progressFrac = (timedMode && session.answerSeconds > 0)
+        ? (1.0 - remainFrac).clamp(0.0, 1.0)
+        : 0.0;
+    final showProgressRing =
+        timedMode && !isReady && session.answerSeconds > 0;
 
-    // waterFrac: 0.0 = no water (ready/start), 1.0 = fully filled (timeout)
+    // waterFrac 0..1 → 控制 .one/.two 的 top 偏移（-111 → -203），
+    // 1.0 中是 watch(timeLeft) 同步赋给 topOne/topTwo 的。
     final waterFrac = isTimeout
         ? 1.0
         : isReady
         ? 0.0
         : (1.0 - remainFrac).clamp(0.0, 1.0);
+    final waveTop = waveTopStart + waterFrac * (waveTopEnd - waveTopStart);
+
+    // 反馈态：内圆改实色，不再渲染 .box2_bg。
+    Color? feedbackInnerColor;
+    if (hasFeedback) {
+      feedbackInnerColor = switch (feedbackText) {
+        '正确' => _kTimerThemeColor,
+        '错误' => _kTimerWrongColor,
+        _ => _kTimerWrongColor, // 超时 → 红
+      };
+    } else if (isTimeout) {
+      feedbackInnerColor = _kTimerWrongColor;
+    }
 
     String centerText;
     Color centerTextColor;
     if (hasFeedback) {
       centerText = feedbackText;
-      centerTextColor = switch (feedbackText) {
-        '正确' => const Color(0xFF00C9A4),
-        '错误' => const Color(0xFFE61F62),
-        _ => const Color(0xFFFF323C),
-      };
+      centerTextColor = Colors.white;
     } else if (isTimeout) {
       centerText = '超时';
-      centerTextColor = const Color(0xFFFF323C);
+      centerTextColor = Colors.white;
     } else if (!timedMode || isReady) {
       centerText = '准备开始';
-      centerTextColor = const Color(0xFF0B081A);
+      centerTextColor = const Color(0xFF4E4E4E);
     } else {
       final totalSecs = (session.remainingMillis / 1000).ceil();
       final mm = (totalSecs ~/ 60).toString().padLeft(2, '0');
       final ss = (totalSecs % 60).toString().padLeft(2, '0');
       centerText = '$mm:$ss';
-      centerTextColor = const Color(0xFF0B081A);
+      // 1.0 倒计时数字使用 #4e4e4e（叠在白底/紫水上仍可读）。
+      centerTextColor = const Color(0xFF4E4E4E);
     }
 
     return SizedBox(
-      width: size,
-      height: size,
-      child: AnimatedBuilder(
-        animation: _ctrl,
-        builder: (context, _) => CustomPaint(
-          painter: _WaterTimerPainter(
-            waterFrac: waterFrac,
-            phase: _ctrl.value * 2 * math.pi,
-            isTimeout: isTimeout,
-            remainFrac: remainFrac.clamp(0.0, 1.0),
-            showProgressArc: showProgressArc,
-          ),
-          child: Center(
-            child: AppText(
-              centerText,
-              style: TextStyle(
-                fontSize: ui(centerText.contains(':') ? 24 : 22),
-                fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w600,
-                color: centerTextColor,
-                letterSpacing:
-                    timedMode && !isTimeout && !isReady && !hasFeedback
-                    ? 2.4
-                    : 0,
-                height: 26 / 22,
-              ),
-              textAlign: TextAlign.center,
+      width: outerSize,
+      height: outerSize,
+      child: Stack(
+        alignment: Alignment.center,
+        children: <Widget>[
+          // ① 外层进度环（van-circle 等价）。
+          CustomPaint(
+            size: Size.square(outerSize),
+            painter: _RingPainter(
+              ringMidR: ringMidR,
+              ringWidth: ringWidth,
+              progressFrac: progressFrac,
+              showRing: showProgressRing,
             ),
           ),
-        ),
+          // ② 内层 95×95 box2：白底 + （非反馈态时）box2_bg 水波层。
+          SizedBox(
+            width: innerSize,
+            height: innerSize,
+            child: ClipOval(
+              child: feedbackInnerColor != null
+                  ? ColoredBox(color: feedbackInnerColor)
+                  : Stack(
+                      clipBehavior: Clip.none,
+                      children: <Widget>[
+                        // box2_bg 主题色底
+                        const Positioned.fill(
+                          child: ColoredBox(color: _kTimerThemeColor),
+                        ),
+                        // .one 白色 44% 圆角，6s 旋转
+                        Positioned(
+                          left: waveLeft,
+                          top: waveTop,
+                          width: waveSize,
+                          height: waveSize,
+                          child: RotationTransition(
+                            turns: _waveCtrl1,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(
+                                  waveSize * 0.44,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        // .two 半透明白 38% 圆角，8s 旋转
+                        Positioned(
+                          left: waveLeft,
+                          top: waveTop,
+                          width: waveSize,
+                          height: waveSize,
+                          child: RotationTransition(
+                            turns: _waveCtrl2,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: const Color(0x80FFFFFF),
+                                borderRadius: BorderRadius.circular(
+                                  waveSize * 0.38,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+          ),
+          // ③ 中间倒计时 / 反馈文字
+          Text(
+            centerText,
+            style: TextStyle(
+              fontSize: ui(centerText.contains(':') ? 22 : 20),
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w600,
+              color: centerTextColor,
+              letterSpacing:
+                  timedMode && !isTimeout && !isReady && !hasFeedback ? 2.0 : 0,
+              height: 1.2,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }
 }
 
-/// Paints the layered water-fill circle exactly matching the Figma reference:
-///  ① neutral base circle  #F3F2FA
-///  ② inner gradient bg    #EDEBFC → #F6F5FC  (or dark when timeout)
-///  ③ water fill clipped   animated sine-wave surface
-///     • primary wave  – purple  #8741FF → #B68BFF
-///     • secondary wave – yellow #F5FF68 (semi-transparent, offset phase)
-///  ④ outer gradient ring  #5B4CFF → #F6F5FC  (stroke)
-///  ⑤ inset glow
-class _WaterTimerPainter extends CustomPainter {
-  const _WaterTimerPainter({
-    required this.waterFrac,
-    required this.phase,
-    required this.isTimeout,
-    required this.remainFrac,
-    required this.showProgressArc,
+/// van-circle 等价：浅色轨道 + 主题色顺时针填充弧。
+class _RingPainter extends CustomPainter {
+  const _RingPainter({
+    required this.ringMidR,
+    required this.ringWidth,
+    required this.progressFrac,
+    required this.showRing,
   });
 
-  final double waterFrac; // 0.0 = empty, 1.0 = fully filled
-  final double phase; // wave animation phase in radians
-  final bool isTimeout;
-
-  /// Remaining time / total (1.0 = full time left).
-  final double remainFrac;
-  final bool showProgressArc;
+  /// 视觉环线（描边中心线）的半径。
+  final double ringMidR;
+  final double ringWidth;
+  final double progressFrac;
+  final bool showRing;
 
   @override
   void paint(Canvas canvas, Size size) {
     final c = Offset(size.width / 2, size.height / 2);
-    final r = size.width / 2;
 
-    canvas.drawCircle(c, r, Paint()..color = const Color(0xFFF3F2FA));
-
+    // 轨道
     canvas.drawCircle(
       c,
-      r,
-      Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: <Color>[Color(0xFF8741FF), Color(0xFFF6F5FC)],
-        ).createShader(Rect.fromCircle(center: c, radius: r)),
-    );
-    canvas.drawCircle(
-      c,
-      r * 0.985,
+      ringMidR,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = r * 0.06
-        ..color = const Color(0x70D7D2FF)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+        ..strokeWidth = ringWidth
+        ..color = _kTimerTrack,
     );
 
-    final innerR = r * 0.851;
-    final bgGrad = LinearGradient(
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
-      colors: isTimeout
-          ? const <Color>[Color(0xFF6248C8), Color(0xFF4830A8)]
-          : const <Color>[Color(0xFFEDEBFC), Color(0xFFF6F5FC)],
-    ).createShader(Rect.fromCircle(center: c, radius: innerR));
-    canvas.drawCircle(
-      c,
-      innerR,
-      Paint()
-        ..shader = bgGrad
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 0),
-    );
-    canvas.drawCircle(
-      c,
-      innerR * 0.99,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = r * 0.10
-        ..color = const Color(0x88D7D2FF)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10),
-    );
-    canvas.drawCircle(
-      c,
-      innerR * 0.994,
-      Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: <Color>[Color(0xFFF2EBFC), Color(0xFFF8F5FC)],
-        ).createShader(Rect.fromCircle(center: c, radius: innerR)),
-    );
-    canvas.drawCircle(
-      c,
-      innerR * 0.992,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = r * 0.03
-        ..color = const Color(0x40E3D2FF)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
-    );
-
-    if (waterFrac > 0.008) {
-      canvas.save();
-      canvas.clipPath(
-        Path()..addOval(Rect.fromCircle(center: c, radius: r * 0.793)),
-      );
-
-      // Water level Y from top: 0.0 = top (full), 1.0 = bottom (empty)
-      final levelY = size.height * (1.0 - waterFrac);
-      final amp = size.height * 0.052;
-
-      // Secondary wave: yellow, drawn first so purple overlays it.
-      if (!isTimeout) {
-        canvas.drawPath(
-          _wavePath(
-            size,
-            levelY + amp * 0.48,
-            amp * 0.72,
-            phase + math.pi * 0.85,
-            72,
-          ),
-          Paint()..color = const Color(0xCCF5FF68),
-        );
-      }
-      // Primary wave: purple gradient fill (must be above yellow).
-      canvas.drawPath(
-        _wavePath(size, levelY, amp, phase, 72),
-        Paint()
-          ..shader = LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: isTimeout
-                ? const <Color>[Color(0xFF5B4CFF), Color(0xFF8741FF)]
-                : const <Color>[Color(0xFF8741FF), Color(0xFFB68BFF)],
-          ).createShader(Rect.fromLTWH(0, 0, size.width, size.height)),
-      );
-
-      canvas.restore();
-    }
-
-    canvas.drawCircle(
-      c,
-      innerR * 0.96,
-      Paint()
-        ..color = const Color(0x28D7D2FF)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = r * 0.055
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
-    );
-
-    if (showProgressArc && remainFrac > 0.002) {
-      final arcR = r * 0.925;
-      final arcRect = Rect.fromCircle(center: c, radius: arcR);
-      final sweep = 2 * math.pi * remainFrac.clamp(0.0, 1.0);
+    if (showRing && progressFrac > 0.001) {
+      final ringRect = Rect.fromCircle(center: c, radius: ringMidR);
+      // 1.0 的 van-circle 渐变是水平方向（linearGradient x1=100% → x2=0%），
+      // 0% 为浅色、100% 为主题色 → 视觉上左侧深、右侧浅。
+      // strokeCap=round 还原 van-circle SVG path 默认的 stroke-linecap="round"，
+      // 弧端呈"水滴"圆头，匹配 1.0 截图的视觉。
       final arcPaint = Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = r * 0.055
+        ..strokeWidth = ringWidth
         ..strokeCap = StrokeCap.round
-        ..shader = const SweepGradient(
-          startAngle: -math.pi / 2,
-          endAngle: 3 * math.pi / 2,
-          colors: <Color>[
-            Color(0xFFB68EFF),
-            Color(0xFF8741FF),
-            Color(0xFF5B4CFF),
-            Color(0xFFB68EFF),
-          ],
-          stops: <double>[0.0, 0.35, 0.7, 1.0],
-        ).createShader(arcRect);
-      if (remainFrac >= 0.999) {
-        canvas.drawCircle(c, arcR, arcPaint);
+        ..shader = const LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: <Color>[_kTimerThemeColor, _kTimerRingStart],
+        ).createShader(ringRect);
+
+      if (progressFrac >= 0.999) {
+        canvas.drawCircle(c, ringMidR, arcPaint);
       } else {
-        canvas.drawArc(arcRect, -math.pi / 2, sweep, false, arcPaint);
+        canvas.drawArc(
+          ringRect,
+          -math.pi / 2,
+          2 * math.pi * progressFrac,
+          false,
+          arcPaint,
+        );
       }
     }
-  }
-
-  /// Builds a closed wave path: bottom rectangle + sine-wave top edge.
-  Path _wavePath(
-    Size size,
-    double levelY,
-    double amp,
-    double wavePhase,
-    int segments,
-  ) {
-    final path = Path()..moveTo(0, size.height);
-    path.lineTo(size.width, size.height);
-    path.lineTo(
-      size.width,
-      levelY + amp * math.sin(wavePhase + size.width * 0.04),
-    );
-    for (var i = segments; i >= 0; i--) {
-      final t = i / segments;
-      final x = size.width * t;
-      final y = levelY + amp * math.sin(t * math.pi * 5.2 + wavePhase);
-      path.lineTo(x, y);
-    }
-    return path..close();
   }
 
   @override
-  bool shouldRepaint(_WaterTimerPainter old) =>
-      old.waterFrac != waterFrac ||
-      old.phase != phase ||
-      old.isTimeout != isTimeout ||
-      old.remainFrac != remainFrac ||
-      old.showProgressArc != showProgressArc;
+  bool shouldRepaint(_RingPainter old) =>
+      old.ringMidR != ringMidR ||
+      old.ringWidth != ringWidth ||
+      old.progressFrac != progressFrac ||
+      old.showRing != showRing;
 }
 
 // ── Audio visualizer ─────────────────────────────────────────────────────────
@@ -1497,12 +1490,9 @@ class _WaterTimerPainter extends CustomPainter {
 // driven by the real frequencyBands stream from SmartDictationAudioEngine
 // (SoLoud FFT on native / Web Audio AnalyserNode on the web build).
 //
-// Two smart-dictation specific touches sit on top of the music_play style:
-//   • Active bands are re-centered horizontally so a single piano tone (whose
-//     energy is concentrated in the low-frequency bins) reads as a centered
-//     "swell" rather than a left-aligned cluster.
-//   • Decorative music-note / spark glyphs hover above and below the waveform
-//     and pulse together with playback, matching the original Figma design.
+// Smart-dictation specific: active bands are re-centered horizontally so a
+// single piano tone (energy concentrated in low-frequency bins) reads as a
+// centered "swell" rather than a left-aligned cluster.
 
 class _PracticeAudioVisualizer extends StatelessWidget {
   const _PracticeAudioVisualizer({
@@ -1520,51 +1510,14 @@ class _PracticeAudioVisualizer extends StatelessWidget {
     return SizedBox(
       height: height,
       width: double.infinity,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Positioned.fill(
-            child: RepaintBoundary(
-              child: playing
-                  ? CustomPaint(
-                      painter: _PracticeFrequencyPainter(
-                        frequencyBands: frequencyBands,
-                        time: 0,
-                        playing: true,
-                      ),
-                    )
-                  : CustomPaint(
-                      painter: _PracticeFrequencyPainter(
-                        frequencyBands: const <double>[],
-                        time: 0,
-                        playing: false,
-                      ),
-                    ),
-            ),
+      child: RepaintBoundary(
+        child: CustomPaint(
+          painter: _PracticeFrequencyPainter(
+            frequencyBands: playing ? frequencyBands : const <double>[],
+            time: 0,
+            playing: playing,
           ),
-          Positioned(
-            left: 0,
-            right: 0,
-            top: -ui(16),
-            height: ui(24),
-            child: const IgnorePointer(
-              child: _PracticeFrequencyDecorations(
-                position: _PracticeDecorationPosition.top,
-              ),
-            ),
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: -ui(14),
-            height: ui(22),
-            child: const IgnorePointer(
-              child: _PracticeFrequencyDecorations(
-                position: _PracticeDecorationPosition.bottom,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -1704,343 +1657,6 @@ class _PracticeFrequencyPainter extends CustomPainter {
   }
 }
 
-enum _PracticeDecorationPosition { top, bottom }
-
-/// Decorative pulsing music-note / spark glyphs that surround the waveform.
-/// They always bob and twinkle at a constant intensity, regardless of whether
-/// audio is currently playing — the goal is a lively backdrop, not a status
-/// indicator.
-class _PracticeFrequencyDecorations extends StatefulWidget {
-  const _PracticeFrequencyDecorations({required this.position});
-
-  final _PracticeDecorationPosition position;
-
-  @override
-  State<_PracticeFrequencyDecorations> createState() =>
-      _PracticeFrequencyDecorationsState();
-}
-
-class _PracticeFrequencyDecorationsState
-    extends State<_PracticeFrequencyDecorations>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2400),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return RepaintBoundary(
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, _) {
-          return CustomPaint(
-            painter: _PracticeDecorationPainter(
-              position: widget.position,
-              time: _controller.value,
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _PracticeDecorationPainter extends CustomPainter {
-  const _PracticeDecorationPainter({
-    required this.position,
-    required this.time,
-  });
-
-  final _PracticeDecorationPosition position;
-  final double time;
-
-  // Sparse, intentionally irregular layout — the x positions, vertical
-  // offsets, sizes, motion phases and twinkle phases are all hand-chosen
-  // (not evenly spaced) so the glyphs feel scattered rather than gridded.
-  static const _topGlyphs = <_DecorationGlyph>[
-    _DecorationGlyph(
-      x: 0.13,
-      yBias: 0.55,
-      kind: _GlyphKind.eighthNote,
-      size: 11,
-      motionPhase: 0.0,
-      twinklePhase: 0.6,
-    ),
-    _DecorationGlyph(
-      x: 0.47,
-      yBias: 0.30,
-      kind: _GlyphKind.sparkle,
-      size: 5.0,
-      motionPhase: 1.3,
-      twinklePhase: 2.1,
-    ),
-    _DecorationGlyph(
-      x: 0.83,
-      yBias: 0.65,
-      kind: _GlyphKind.beamedNote,
-      size: 12,
-      motionPhase: 2.4,
-      twinklePhase: 0.0,
-    ),
-  ];
-
-  static const _bottomGlyphs = <_DecorationGlyph>[
-    _DecorationGlyph(
-      x: 0.27,
-      yBias: 0.55,
-      kind: _GlyphKind.sparkle,
-      size: 4.6,
-      motionPhase: 0.5,
-      twinklePhase: 1.4,
-    ),
-    _DecorationGlyph(
-      x: 0.69,
-      yBias: 0.40,
-      kind: _GlyphKind.eighthNote,
-      size: 10,
-      motionPhase: 1.9,
-      twinklePhase: 3.0,
-    ),
-    _DecorationGlyph(
-      x: 0.92,
-      yBias: 0.70,
-      kind: _GlyphKind.dot,
-      size: 2.0,
-      motionPhase: 3.1,
-      twinklePhase: 0.8,
-    ),
-  ];
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (size.width <= 0 || size.height <= 0) {
-      return;
-    }
-    final glyphs = position == _PracticeDecorationPosition.top
-        ? _topGlyphs
-        : _bottomGlyphs;
-    final phase = time * math.pi * 2;
-
-    for (final glyph in glyphs) {
-      final wobble = math.sin(phase + glyph.motionPhase);
-      final twinkle = (0.5 + 0.5 * math.sin(phase * 1.4 + glyph.twinklePhase))
-          .clamp(0.0, 1.0)
-          .toDouble();
-      final dy = wobble * size.height * 0.22;
-      final cx = size.width * glyph.x;
-      final cy = size.height * glyph.yBias + dy;
-      final alpha = (0.55 + 0.45 * twinkle).clamp(0.0, 1.0);
-      _paintGlyph(canvas, Offset(cx, cy), glyph, alpha);
-    }
-  }
-
-  void _paintGlyph(
-    Canvas canvas,
-    Offset center,
-    _DecorationGlyph glyph,
-    double alpha,
-  ) {
-    switch (glyph.kind) {
-      case _GlyphKind.dot:
-        final paint = Paint()
-          ..style = PaintingStyle.fill
-          ..color = const Color(0xFFB68EFF).withValues(alpha: alpha);
-        canvas.drawCircle(center, glyph.size, paint);
-        break;
-      case _GlyphKind.sparkle:
-        _paintSparkle(canvas, center, glyph.size, alpha);
-        break;
-      case _GlyphKind.eighthNote:
-        _paintEighthNote(canvas, center, glyph.size, alpha);
-        break;
-      case _GlyphKind.beamedNote:
-        _paintBeamedNote(canvas, center, glyph.size, alpha);
-        break;
-    }
-  }
-
-  void _paintSparkle(Canvas canvas, Offset center, double size, double alpha) {
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = 1.2
-      ..color = const Color(0xFFF5FF68).withValues(alpha: alpha);
-    final r = size;
-    canvas.drawLine(
-      Offset(center.dx - r, center.dy),
-      Offset(center.dx + r, center.dy),
-      paint,
-    );
-    canvas.drawLine(
-      Offset(center.dx, center.dy - r),
-      Offset(center.dx, center.dy + r),
-      paint,
-    );
-    final glow = Paint()
-      ..style = PaintingStyle.fill
-      ..color = const Color(0xFF8741FF).withValues(alpha: alpha * 0.6);
-    canvas.drawCircle(center, math.max(1.0, size * 0.32), glow);
-  }
-
-  void _paintEighthNote(
-    Canvas canvas,
-    Offset center,
-    double size,
-    double alpha,
-  ) {
-    final color = const Color(0xFF8741FF).withValues(alpha: alpha);
-    final paint = Paint()
-      ..style = PaintingStyle.fill
-      ..color = color;
-    final stroke = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = math.max(1.0, size * 0.14)
-      ..strokeCap = StrokeCap.round
-      ..color = color;
-
-    final headWidth = size * 0.55;
-    final headHeight = size * 0.42;
-    final headCenter = Offset(center.dx - size * 0.18, center.dy + size * 0.34);
-    canvas.save();
-    canvas.translate(headCenter.dx, headCenter.dy);
-    canvas.rotate(-0.32);
-    canvas.drawOval(
-      Rect.fromCenter(
-        center: Offset.zero,
-        width: headWidth,
-        height: headHeight,
-      ),
-      paint,
-    );
-    canvas.restore();
-
-    final stemTop = Offset(center.dx + size * 0.04, center.dy - size * 0.55);
-    final stemBottom = Offset(headCenter.dx + size * 0.20, headCenter.dy);
-    canvas.drawLine(stemTop, stemBottom, stroke);
-
-    final flag = Path()
-      ..moveTo(stemTop.dx, stemTop.dy)
-      ..quadraticBezierTo(
-        stemTop.dx + size * 0.55,
-        stemTop.dy + size * 0.05,
-        stemTop.dx + size * 0.32,
-        stemTop.dy + size * 0.46,
-      );
-    canvas.drawPath(flag, stroke);
-  }
-
-  void _paintBeamedNote(
-    Canvas canvas,
-    Offset center,
-    double size,
-    double alpha,
-  ) {
-    final color = const Color(0xFFB68EFF).withValues(alpha: alpha);
-    final paint = Paint()
-      ..style = PaintingStyle.fill
-      ..color = color;
-    final stroke = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = math.max(1.0, size * 0.12)
-      ..strokeCap = StrokeCap.round
-      ..color = color;
-    final beam = Paint()
-      ..style = PaintingStyle.fill
-      ..color = color;
-
-    final headHeight = size * 0.36;
-    final headWidth = size * 0.46;
-    final leftHead = Offset(center.dx - size * 0.36, center.dy + size * 0.32);
-    final rightHead = Offset(center.dx + size * 0.20, center.dy + size * 0.32);
-
-    for (final head in <Offset>[leftHead, rightHead]) {
-      canvas.save();
-      canvas.translate(head.dx, head.dy);
-      canvas.rotate(-0.28);
-      canvas.drawOval(
-        Rect.fromCenter(
-          center: Offset.zero,
-          width: headWidth,
-          height: headHeight,
-        ),
-        paint,
-      );
-      canvas.restore();
-    }
-
-    final leftStemTop = Offset(
-      leftHead.dx + size * 0.18,
-      center.dy - size * 0.50,
-    );
-    final leftStemBottom = Offset(leftHead.dx + size * 0.18, leftHead.dy);
-    final rightStemTop = Offset(
-      rightHead.dx + size * 0.18,
-      center.dy - size * 0.50,
-    );
-    final rightStemBottom = Offset(rightHead.dx + size * 0.18, rightHead.dy);
-    canvas.drawLine(leftStemTop, leftStemBottom, stroke);
-    canvas.drawLine(rightStemTop, rightStemBottom, stroke);
-
-    final beamRect = Rect.fromLTRB(
-      leftStemTop.dx,
-      leftStemTop.dy,
-      rightStemTop.dx,
-      leftStemTop.dy + size * 0.22,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(beamRect, Radius.circular(size * 0.08)),
-      beam,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _PracticeDecorationPainter oldDelegate) {
-    return oldDelegate.time != time || oldDelegate.position != position;
-  }
-}
-
-enum _GlyphKind { dot, sparkle, eighthNote, beamedNote }
-
-class _DecorationGlyph {
-  const _DecorationGlyph({
-    required this.x,
-    required this.yBias,
-    required this.kind,
-    required this.size,
-    required this.motionPhase,
-    required this.twinklePhase,
-  });
-
-  /// Horizontal position as a fraction of the available width (0..1).
-  final double x;
-
-  /// Vertical anchor as a fraction of the available height (0..1).
-  /// Each glyph picks a slightly different bias so they don't sit on a line.
-  final double yBias;
-
-  final _GlyphKind kind;
-  final double size;
-
-  /// Phase offset for the up/down bobbing motion.
-  final double motionPhase;
-
-  /// Phase offset for the twinkle / opacity oscillation.
-  final double twinklePhase;
-}
-
 // ── Progress bar ──────────────────────────────────────────────────────────────
 
 class _PracticeProgressBar extends StatelessWidget {
@@ -2073,7 +1689,7 @@ class _PracticeProgressBar extends StatelessWidget {
             style: TextStyle(
               fontSize: ui(12),
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w500,
+              fontWeight: AppFont.w500,
               color: Colors.white,
               height: 1,
             ),
@@ -2152,12 +1768,12 @@ class _PracticeProgressBar extends StatelessWidget {
                       ),
                     ],
                   ),
-                  child: AppText(
+                  child: Text(
                     label,
                     style: TextStyle(
                       fontSize: ui(12),
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w500,
+                      fontWeight: AppFont.w500,
                       color: Colors.white,
                       height: 1,
                     ),
@@ -2344,12 +1960,12 @@ class _PracticeBottomBar extends StatelessWidget {
                   color: Colors.white,
                 ),
               SizedBox(width: ui(8)),
-              AppText(
+              Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 16,
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w500,
+                  fontWeight: AppFont.w500,
                   color: Colors.white,
                   height: 28 / 16,
                 ),
@@ -2368,12 +1984,14 @@ class _PracticeResultDialog extends StatelessWidget {
     required this.session,
     required this.onRestart,
     required this.onNext,
+    required this.onExit,
   });
 
   final double Function(num) ui;
   final SmartPracticeSession session;
   final Future<void> Function() onRestart;
   final Future<void> Function() onNext;
+  final Future<void> Function() onExit;
 
   @override
   Widget build(BuildContext context) {
@@ -2514,13 +2132,13 @@ class _PracticeResultDialog extends StatelessWidget {
                     left: ui(24),
                     right: ui(24),
                     top: ui(52),
-                    child: AppText(
+                    child: Text(
                       '太棒了！恭喜完成本课',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: ui(24),
                         fontFamily: 'PingFang SC',
-                        fontWeight: FontWeight.w600,
+                        fontWeight: AppFont.w600,
                         color: const Color(0xFF0B081A),
                         height: 28 / 24,
                       ),
@@ -2559,20 +2177,35 @@ class _PracticeResultDialog extends StatelessWidget {
                     top: ui(ry(423)),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _ResultActionButton(
-                          ui: ui,
-                          text: '重新练习',
-                          onTap: onRestart,
-                        ),
-                        SizedBox(width: ui(16)),
-                        _ResultActionButton(
-                          ui: ui,
-                          text: '下一关',
-                          primary: true,
-                          onTap: onNext,
-                        ),
-                      ],
+                      children: session.sourceMode == SmartDictationMode.smart
+                          ? <Widget>[
+                              _ResultActionButton(
+                                ui: ui,
+                                text: '退出',
+                                onTap: onExit,
+                              ),
+                              SizedBox(width: ui(16)),
+                              _ResultActionButton(
+                                ui: ui,
+                                text: '重新练习',
+                                primary: true,
+                                onTap: onRestart,
+                              ),
+                            ]
+                          : <Widget>[
+                              _ResultActionButton(
+                                ui: ui,
+                                text: '重新练习',
+                                onTap: onRestart,
+                              ),
+                              SizedBox(width: ui(16)),
+                              _ResultActionButton(
+                                ui: ui,
+                                text: '下一关',
+                                primary: true,
+                                onTap: onNext,
+                              ),
+                            ],
                     ),
                   ),
                 ],
@@ -2631,13 +2264,13 @@ class _ResultStatCard extends StatelessWidget {
               left: ui(27),
               top: ui(6),
               right: ui(6),
-              child: AppText(
+              child: Text(
                 title,
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: ui(12),
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w400,
+                  fontWeight: AppFont.w400,
                   color: const Color(0xFF6D6B75),
                   height: 12 / 12,
                 ),
@@ -2647,13 +2280,13 @@ class _ResultStatCard extends StatelessWidget {
               left: 0,
               right: 0,
               top: ui(32),
-              child: AppText(
+              child: Text(
                 value,
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: ui(16),
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w500,
+                  fontWeight: AppFont.w500,
                   color: valueColor,
                   height: 24 / 16,
                 ),
@@ -2694,13 +2327,13 @@ class _ResultActionButton extends StatelessWidget {
             border: Border.all(color: const Color(0xFFF3F2F3), width: 2),
           ),
           alignment: Alignment.center,
-          child: AppText(
+          child: Text(
             text,
             style: TextStyle(
               color: const Color(0xFF0B081A),
               fontSize: ui(16),
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w400,
+              fontWeight: AppFont.w400,
               height: 12 / 16,
             ),
           ),
@@ -2759,13 +2392,13 @@ class _ResultActionButton extends StatelessWidget {
                 ),
               ),
             ),
-            AppText(
+            Text(
               text,
               style: TextStyle(
                 color: Colors.white,
                 fontSize: ui(16),
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w400,
+                fontWeight: AppFont.w400,
                 height: 12 / 16,
               ),
             ),
@@ -2860,13 +2493,13 @@ class _PracticeExitDialog extends StatelessWidget {
                         top: ui(62),
                         left: 0,
                         right: 0,
-                        child: AppText(
+                        child: Text(
                           '是否退出当前练习',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: ui(24),
                             fontFamily: 'PingFang SC',
-                            fontWeight: FontWeight.w500,
+                            fontWeight: AppFont.w500,
                             color: const Color(0xFF0B081A),
                             height: 12 / 24,
                           ),
@@ -2952,12 +2585,12 @@ class _ExitDialogButton extends StatelessWidget {
           ],
         ),
         alignment: Alignment.center,
-        child: AppText(
+        child: Text(
           label,
           style: TextStyle(
             fontSize: ui(16),
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w400,
+            fontWeight: AppFont.w400,
             color: primary ? Colors.white : const Color(0xFF0B081A),
             height: 1,
           ),
@@ -3002,18 +2635,18 @@ class _LessonTile extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       SizedBox(height: ui(4)),
-                      AppText(
+                      Text(
                         '第${lesson.number}课',
                         style: TextStyle(
                           fontSize: ui(13),
                           color: const Color(0xFF0B081A),
                           fontFamily: 'PingFang SC',
-                          fontWeight: FontWeight.w500,
+                          fontWeight: AppFont.w500,
                           height: 12 / 13,
                         ),
                       ),
                       SizedBox(height: ui(8)),
-                      AppText(
+                      Text(
                         lesson.subtitle.isEmpty ? '标准音上下行二度' : lesson.subtitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -3021,7 +2654,7 @@ class _LessonTile extends StatelessWidget {
                           fontSize: ui(11),
                           color: const Color(0xFFB6B5BB),
                           fontFamily: 'PingFang SC',
-                          fontWeight: FontWeight.w400,
+                          fontWeight: AppFont.w400,
                           height: 12 / 11,
                         ),
                       ),
@@ -3069,13 +2702,13 @@ class _LessonTile extends StatelessWidget {
                                     borderRadius: BorderRadius.circular(ui(8)),
                                   ),
                                   alignment: Alignment.center,
-                                  child: AppText(
+                                  child: Text(
                                     '去闯关',
                                     style: TextStyle(
                                       fontSize: ui(11),
                                       color: Colors.white,
                                       fontFamily: 'PingFang SC',
-                                      fontWeight: FontWeight.w500,
+                                      fontWeight: AppFont.w500,
                                       height: 12 / 11,
                                     ),
                                   ),
@@ -3102,7 +2735,7 @@ class _LessonTile extends StatelessWidget {
                                 ),
                                 SizedBox(width: ui(4)),
                                 Expanded(
-                                  child: AppText(
+                                  child: Text(
                                     '通过上一课即可解锁',
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
@@ -3110,7 +2743,7 @@ class _LessonTile extends StatelessWidget {
                                       fontSize: ui(11),
                                       color: const Color(0xFF0B081A),
                                       fontFamily: 'PingFang SC',
-                                      fontWeight: FontWeight.w400,
+                                      fontWeight: AppFont.w400,
                                       height: 12 / 11,
                                     ),
                                   ),
@@ -3235,7 +2868,7 @@ class _LessonCover extends StatelessWidget {
             Positioned(
               left: ui(18),
               top: ui(10),
-              child: AppText(
+              child: Text(
                 coverText,
                 style: TextStyle(
                   fontSize: ui(12),
@@ -3343,19 +2976,19 @@ class _NoteNameText extends StatelessWidget {
         children: [
           Align(
             alignment: Alignment.center,
-            child: AppText(s, style: style, textAlign: TextAlign.center),
+            child: Text(s, style: style, textAlign: TextAlign.center),
           ),
           if (prefix != null)
             Positioned(
               left: 0,
               top: ui(-2),
-              child: AppText(prefix, style: style, textAlign: TextAlign.center),
+              child: Text(prefix, style: style, textAlign: TextAlign.center),
             ),
           if (suffix != null)
             Positioned(
               right: 0,
               top: ui(-2),
-              child: AppText(suffix, style: style, textAlign: TextAlign.center),
+              child: Text(suffix, style: style, textAlign: TextAlign.center),
             ),
         ],
       ),
@@ -3390,7 +3023,7 @@ class _SmartOptionChip extends StatelessWidget {
     final textStyle = TextStyle(
       fontSize: ui(16),
       fontFamily: 'PingFang SC',
-      fontWeight: FontWeight.w600,
+      fontWeight: AppFont.w600,
       color: textColor,
       height: 28 / 16,
     );
@@ -3422,7 +3055,7 @@ class _SmartOptionChip extends StatelessWidget {
         ),
         alignment: Alignment.center,
         child: hasChinese
-            ? AppText(label, style: textStyle, textAlign: TextAlign.center)
+            ? Text(label, style: textStyle, textAlign: TextAlign.center)
             : isNoteChip
             ? _NoteNameText(ui: ui, note: label, style: textStyle)
             : Text.rich(_buildNoteSpan(label, textStyle)),
@@ -3460,7 +3093,7 @@ class _SmartRowChip extends StatelessWidget {
     final textStyle = TextStyle(
       fontSize: ui(14),
       fontFamily: 'PingFang SC',
-      fontWeight: FontWeight.w400,
+      fontWeight: AppFont.w400,
       color: textColor,
       height: 1.0,
     );
@@ -3476,7 +3109,7 @@ class _SmartRowChip extends StatelessWidget {
           padding: EdgeInsets.symmetric(horizontal: ui(24), vertical: ui(9)),
           child: isNote
               ? Text.rich(_buildNoteSpan(label, textStyle))
-              : AppText(label, style: textStyle),
+              : Text(label, style: textStyle),
         ),
       ),
     );
@@ -3504,12 +3137,12 @@ class _SmartSettingRow extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        AppText(
+        Text(
           title,
           style: TextStyle(
             fontSize: ui(16),
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w500,
+            fontWeight: AppFont.w500,
             color: Colors.black,
             height: 28 / 16,
           ),
@@ -3567,12 +3200,12 @@ class _SmartToggleRow extends StatelessWidget {
           ),
         ),
         SizedBox(width: ui(8)),
-        AppText(
+        Text(
           value ? '开' : '关',
           style: TextStyle(
             fontSize: ui(13),
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w500,
+            fontWeight: AppFont.w500,
             color: const Color(0xFFB6B5BB),
             height: 20 / 13,
           ),

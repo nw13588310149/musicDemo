@@ -9,8 +9,8 @@ import '../../shell/ui/shell_layout.dart';
 import '../state/music_companion_controller.dart';
 import '../state/music_companion_state.dart';
 import 'widgets/piano_visualizer.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../core/widgets/app_text.dart';
 class MusicCompanionV2Page extends ConsumerStatefulWidget {
   const MusicCompanionV2Page({super.key});
 
@@ -189,13 +189,13 @@ class _CompanionTabItem extends StatelessWidget {
                 ]
               : null,
         ),
-        child: AppText(
+        child: Text(
           label,
           style: TextStyle(
             fontSize: ui(14),
             height: 1.2,
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w500,
+            fontWeight: AppFont.w500,
             color: active ? const Color(0xFF0B081A) : const Color(0xFF6D6B75),
           ),
         ),
@@ -283,12 +283,12 @@ class _MetronomePane extends StatelessWidget {
         children: [
           _MetronomeHeaderCard(state: state, onToggle: onToggle),
           SizedBox(height: ui(20)),
-          AppText(
+          Text(
             '音色选择',
             style: TextStyle(
               fontSize: ui(16),
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w500,
+              fontWeight: AppFont.w500,
               height: 28 / 16,
               color: Colors.black,
             ),
@@ -308,12 +308,12 @@ class _MetronomePane extends StatelessWidget {
             ],
           ),
           SizedBox(height: ui(20)),
-          AppText(
+          Text(
             '节拍选择',
             style: TextStyle(
               fontSize: ui(16),
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w500,
+              fontWeight: AppFont.w500,
               height: 28 / 16,
               color: Colors.black,
             ),
@@ -526,7 +526,7 @@ class _ChoiceChipButton extends StatelessWidget {
     final textStyle = TextStyle(
       fontSize: ui(14),
       fontFamily: 'PingFang SC',
-      fontWeight: FontWeight.w400,
+      fontWeight: AppFont.w400,
       color: selected ? Colors.white : const Color(0xFF0B081A),
     );
     // `softWrap: false` + `overflow: visible` keeps wider labels (`12/8`)
@@ -535,7 +535,7 @@ class _ChoiceChipButton extends StatelessWidget {
     final Widget labelWidget = labelWidth != null
         ? SizedBox(
             width: labelWidth,
-            child: AppText(
+            child: Text(
               label,
               textAlign: TextAlign.center,
               maxLines: 1,
@@ -544,7 +544,7 @@ class _ChoiceChipButton extends StatelessWidget {
               style: textStyle,
             ),
           )
-        : AppText(label, maxLines: 1, softWrap: false, style: textStyle);
+        : Text(label, maxLines: 1, softWrap: false, style: textStyle);
 
     return GestureDetector(
       onTap: onTap,
@@ -731,7 +731,7 @@ class _MetronomeTempoSlider extends StatelessWidget {
                       style: TextStyle(
                         fontSize: ui(14),
                         fontFamily: 'PingFang SC',
-                        fontWeight: FontWeight.w500,
+                        fontWeight: AppFont.w500,
                         color: Colors.black,
                         height: 1,
                       ),
@@ -837,7 +837,7 @@ class _TunerPane extends StatelessWidget {
                   ),
                 ),
                 child: Center(
-                  child: AppText(
+                  child: Text(
                     state.tunerNote,
                     style: TextStyle(
                       fontSize: ui(38),
@@ -861,7 +861,7 @@ class _TunerPane extends StatelessWidget {
                 onTap: onDecreaseFrequency,
               ),
               SizedBox(width: ui(22)),
-              AppText(
+              Text(
                 '${state.tunerReferenceFrequency}hz',
                 style: TextStyle(
                   fontSize: ui(20),
@@ -885,12 +885,12 @@ class _TunerPane extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  AppText(
+                  Text(
                     '特定频段',
                     style: TextStyle(
                       fontSize: ui(15),
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w600,
+                      fontWeight: AppFont.w600,
                       color: const Color(0xFF1A1A1A),
                     ),
                   ),
@@ -907,7 +907,7 @@ class _TunerPane extends StatelessWidget {
                             : const Color(0xFFF4F5FA),
                         borderRadius: BorderRadius.circular(ui(8)),
                       ),
-                      child: AppText(
+                      child: Text(
                         '442hz',
                         style: TextStyle(
                           fontSize: ui(13),
@@ -939,7 +939,7 @@ class _TunerPane extends StatelessWidget {
             ),
           ),
           SizedBox(height: ui(14)),
-          AppText(
+          Text(
             state.tunerPermissionGranted
                 ? (state.tunerListening
                       ? '实时检测中 ${state.tunerDetectedFrequency.toStringAsFixed(1)}Hz'
@@ -948,7 +948,7 @@ class _TunerPane extends StatelessWidget {
             style: TextStyle(
               fontSize: ui(12),
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w400,
+              fontWeight: AppFont.w400,
               color: const Color(0xFF7B8191),
             ),
           ),
@@ -956,12 +956,12 @@ class _TunerPane extends StatelessWidget {
             SizedBox(height: ui(10)),
             TextButton(
               onPressed: onRetryPermission,
-              child: AppText(
+              child: Text(
                 '重新授权麦克风',
                 style: TextStyle(
                   fontSize: ui(13),
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w600,
+                  fontWeight: AppFont.w600,
                   color: const Color(0xFF7F46FF),
                 ),
               ),

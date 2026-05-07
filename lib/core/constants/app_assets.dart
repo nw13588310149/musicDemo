@@ -184,6 +184,10 @@ abstract final class AppAssets {
   static const homeV2QuickMall = 'assets/images/home/v2/quick_mall.png';
   static const homeV2QuickCampus = 'assets/images/home/v2/quick_campus.png';
   static const homeDictationNavIcon = 'assets/images/home/dictation/1.png';
+  // 听写 / 视唱 / 乐理 / 答题入口 左侧分类列表 —— 非选中态 icon。
+  static const homeCategoryIdleIcon = 'assets/images/home/bg1.png';
+  // 录音作品（recording）页 左侧分类 —— 非选中态 icon。
+  static const recordingCategoryIdleIcon = 'assets/images/sound/ly.png';
   static const homeDictationBookCover = 'assets/images/home/dictation/2.png';
   static const homeV2VoiceCardBg = 'assets/images/home/v2/voice_card_bg.png';
   static const homeFmCover = 'assets/images/home/fm.png';
@@ -337,6 +341,9 @@ abstract final class AppAssets {
       'assets/images/smart_dictation/figma/caidai.png';
   static const smartDictationFigmaResultGlow =
       'assets/images/smart_dictation/figma/qiu.png';
+
+  /// 刷题完成弹窗的"推荐"气泡（紫色 badge + 下指三角，整体 38×30）。
+  static const quizRecommendBubble = 'assets/images/smart_dictation/tj.png';
 
   /// 校圈（社区动态）
   static const schoolIconPin = 'assets/images/school/1.png';

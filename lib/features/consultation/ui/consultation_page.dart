@@ -7,8 +7,8 @@ import '../../shell/ui/shell_layout.dart';
 import '../state/consultation_controller.dart';
 import '../state/consultation_detail_state.dart';
 import '../state/consultation_state.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../core/widgets/app_text.dart';
 class ConsultationPage extends ConsumerWidget {
   const ConsultationPage({super.key});
 
@@ -79,12 +79,12 @@ class _ConsultationHeader extends StatelessWidget {
           ConsultationBackButton(onTap: onBack),
           Expanded(
             child: Center(
-              child: AppText(
+              child: Text(
                 '资讯',
                 style: TextStyle(
                   color: const Color(0xFF0B081A),
                   fontSize: ui(16),
-                  fontWeight: FontWeight.w600,
+                  fontWeight: AppFont.w600,
                   fontFamily: 'PingFang SC',
                 ),
               ),
@@ -191,17 +191,17 @@ class _ConsultationBanner extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        AppText(
+                        Text(
                           '资讯中心',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: ui(22),
                             fontFamily: 'PingFang SC',
-                            fontWeight: FontWeight.w600,
+                            fontWeight: AppFont.w600,
                           ),
                         ),
                         SizedBox(height: ui(8)),
-                        AppText(
+                        Text(
                           '艺考热点 · 招生简章一手掌握',
                           style: TextStyle(
                             color: Colors.white.withValues(alpha: 0.85),
@@ -292,7 +292,7 @@ class _ConsultationCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      AppText(
+                      Text(
                         item.title,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
@@ -300,14 +300,14 @@ class _ConsultationCard extends StatelessWidget {
                           color: const Color(0xFF0B081A),
                           fontSize: ui(16),
                           fontFamily: 'PingFang SC',
-                          fontWeight: FontWeight.w500,
+                          fontWeight: AppFont.w500,
                           height: 24 / 16,
                         ),
                       ),
                       const Spacer(),
                       Row(
                         children: [
-                          AppText(
+                          Text(
                             formatRelativeTime(item.createTime),
                             style: TextStyle(
                               color: const Color(0xFFB6B5BB),
@@ -395,7 +395,7 @@ class _ViewCount extends StatelessWidget {
           color: const Color(0xFF928FA0),
         ),
         SizedBox(width: ui(4)),
-        AppText(
+        Text(
           count.toString(),
           style: TextStyle(
             color: const Color(0xFFB6B5BB),
@@ -421,7 +421,7 @@ class _LatestBadge extends StatelessWidget {
         color: const Color(0xFF8741FF),
         borderRadius: BorderRadius.circular(ui(4)),
       ),
-      child: AppText(
+      child: Text(
         '最新',
         style: TextStyle(
           color: Colors.white,
@@ -450,7 +450,7 @@ class _ConsultationEmpty extends StatelessWidget {
             size: ui(48),
           ),
           SizedBox(height: ui(12)),
-          AppText(
+          Text(
             '暂无资讯',
             style: TextStyle(
               color: const Color(0xFFB6B5BB),

@@ -43,8 +43,8 @@
 import 'package:flutter/material.dart';
 
 import '../../shell/ui/shell_layout.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../core/widgets/app_text.dart';
 const Color _kCardBg = Colors.white;
 const Color _kPageBg = Color(0xFFEFF3FC);
 const Color _kInnerGray = Color(0xFFF5F6FA);
@@ -151,13 +151,13 @@ class _GradesBanner extends StatelessWidget {
           _BackButton(onTap: onBack),
           Expanded(
             child: Center(
-              child: AppText(
+              child: Text(
                 '成绩与排名',
                 style: TextStyle(
                   fontSize: ui(16),
                   color: _kTextDark,
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w600,
+                  fontWeight: AppFont.w600,
                   height: 1,
                 ),
               ),
@@ -221,13 +221,13 @@ class _SemesterTabs extends StatelessWidget {
             color: active ? _kTextDark : Colors.transparent,
             borderRadius: BorderRadius.circular(ui(6)),
           ),
-          child: AppText(
+          child: Text(
             label,
             style: TextStyle(
               fontSize: ui(14),
               color: active ? Colors.white : _kTextSecondary,
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w500,
+              fontWeight: AppFont.w500,
               height: 1,
             ),
           ),
@@ -323,13 +323,13 @@ class _AverageCard extends StatelessWidget {
           Positioned(
             left: 0,
             top: 0,
-            child: AppText(
+            child: Text(
               '学年考试均分',
               style: TextStyle(
                 fontSize: ui(14),
                 color: Colors.black,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
                 height: 1,
               ),
             ),
@@ -337,7 +337,7 @@ class _AverageCard extends StatelessWidget {
           Positioned(
             left: 0,
             top: ui(28),
-            child: AppText(
+            child: Text(
               '32',
               style: TextStyle(
                 fontSize: ui(32),
@@ -352,7 +352,7 @@ class _AverageCard extends StatelessWidget {
             left: ui(64),
             right: 0,
             top: ui(36),
-            child: AppText(
+            child: Text(
               '各次月考/大考总均分平均',
               textAlign: TextAlign.right,
               maxLines: 1,
@@ -361,7 +361,7 @@ class _AverageCard extends StatelessWidget {
                 fontSize: ui(11),
                 color: _kTextDivider,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w400,
+                fontWeight: AppFont.w400,
                 height: 1,
               ),
             ),
@@ -446,13 +446,13 @@ class _RankCard extends StatelessWidget {
           Positioned(
             left: ui(16),
             top: ui(16),
-            child: AppText(
+            child: Text(
               title,
               style: TextStyle(
                 fontSize: ui(14),
                 color: Colors.black,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
                 height: 1,
               ),
             ),
@@ -463,7 +463,7 @@ class _RankCard extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                AppText(
+                Text(
                   value,
                   style: TextStyle(
                     fontSize: ui(32),
@@ -476,7 +476,7 @@ class _RankCard extends StatelessWidget {
                 SizedBox(width: ui(2)),
                 Padding(
                   padding: EdgeInsets.only(bottom: ui(2)),
-                  child: AppText(
+                  child: Text(
                     totalSuffix,
                     style: TextStyle(
                       fontSize: ui(20),
@@ -534,13 +534,13 @@ class _RankBadge {
           else
             Icon(Icons.trending_up_rounded, size: ui(12), color: color),
           SizedBox(width: ui(4)),
-          AppText(
+          Text(
             text,
             style: TextStyle(
               fontSize: ui(11),
               color: color,
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w400,
+              fontWeight: AppFont.w400,
               height: 1,
             ),
           ),
@@ -566,13 +566,13 @@ class _BestExamCard extends StatelessWidget {
           Positioned(
             left: ui(16),
             top: ui(16),
-            child: AppText(
+            child: Text(
               '本学期最佳考试',
               style: TextStyle(
                 fontSize: ui(14),
                 color: Colors.black,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
                 height: 1,
               ),
             ),
@@ -581,7 +581,7 @@ class _BestExamCard extends StatelessWidget {
             left: ui(16),
             top: ui(50),
             right: ui(12),
-            child: AppText(
+            child: Text(
               '六月摸底考试',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -589,7 +589,7 @@ class _BestExamCard extends StatelessWidget {
                 fontSize: ui(20),
                 color: _kPurple,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
                 height: 1.2,
               ),
             ),
@@ -608,23 +608,23 @@ class _BestExamCard extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  AppText(
+                  Text(
                     '均分 ',
                     style: TextStyle(
                       fontSize: ui(11),
                       color: _kPurple,
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w400,
+                      fontWeight: AppFont.w400,
                       height: 1,
                     ),
                   ),
-                  AppText(
+                  Text(
                     '91分',
                     style: TextStyle(
                       fontSize: ui(11),
                       color: _kPurple,
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w600,
+                      fontWeight: AppFont.w600,
                       height: 1,
                     ),
                   ),
@@ -718,13 +718,13 @@ class _SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return AppText(
+    return Text(
       text,
       style: TextStyle(
         fontSize: ui(18),
         color: _kTextSection,
         fontFamily: 'PingFang SC',
-        fontWeight: FontWeight.w500,
+        fontWeight: AppFont.w500,
         height: 1.2,
       ),
     );
@@ -856,13 +856,13 @@ class _LineTabChip extends StatelessWidget {
               ]
             : null,
       ),
-      child: AppText(
+      child: Text(
         label,
         style: TextStyle(
           fontSize: ui(14),
           color: active ? _kTextDark : _kTextSecondary,
           fontFamily: 'PingFang SC',
-          fontWeight: FontWeight.w500,
+          fontWeight: AppFont.w500,
           height: 1,
         ),
       ),
@@ -917,14 +917,14 @@ class _LineChartArea extends StatelessWidget {
                 left: 0,
                 top: i * tickGap - ui(10),
                 width: ui(20),
-                child: AppText(
+                child: Text(
                   '${_ticks[i]}',
                   textAlign: TextAlign.right,
                   style: TextStyle(
                     fontSize: ui(12),
                     color: _kAxisLabel,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w400,
+                    fontWeight: AppFont.w400,
                     height: 20 / 12,
                   ),
                 ),
@@ -942,7 +942,7 @@ class _LineChartArea extends StatelessWidget {
                 left: points[i].dx - ui(20),
                 top: points[i].dy - ui(20),
                 width: ui(40),
-                child: AppText(
+                child: Text(
                   values[i] == values[i].roundToDouble()
                       ? values[i].toInt().toString()
                       : values[i].toString(),
@@ -951,7 +951,7 @@ class _LineChartArea extends StatelessWidget {
                     fontSize: ui(12),
                     color: _kTextSecondary,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w500,
+                    fontWeight: AppFont.w500,
                     height: 20 / 12,
                   ),
                 ),
@@ -967,13 +967,13 @@ class _LineChartArea extends StatelessWidget {
                   for (var i = 0; i < n; i++)
                     Expanded(
                       child: Center(
-                        child: AppText(
+                        child: Text(
                           months[i],
                           style: TextStyle(
                             fontSize: ui(12),
                             color: _kTextSecondary,
                             fontFamily: 'PingFang SC',
-                            fontWeight: FontWeight.w400,
+                            fontWeight: AppFont.w400,
                             height: 20 / 12,
                           ),
                         ),
@@ -1056,35 +1056,35 @@ class _RankRowHeader extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: ui(2)),
       child: Row(
         children: [
-          AppText(
+          Text(
             '每场·总成绩排名 (班级/全校)',
             style: TextStyle(
               fontSize: ui(13),
               color: _kTextDark,
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w400,
+              fontWeight: AppFont.w400,
               height: 1.2,
             ),
           ),
           const Spacer(),
-          AppText(
+          Text(
             '班级总人数：42',
             style: TextStyle(
               fontSize: ui(10),
               color: _kTextHint,
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w400,
+              fontWeight: AppFont.w400,
               height: 1,
             ),
           ),
           SizedBox(width: ui(20)),
-          AppText(
+          Text(
             '全校总人数：368',
             style: TextStyle(
               fontSize: ui(10),
               color: _kTextHint,
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w400,
+              fontWeight: AppFont.w400,
               height: 1,
             ),
           ),
@@ -1157,18 +1157,18 @@ class _RankCell extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         mainAxisAlignment: MainAxisAlignment.start,
         children: [
-          AppText(
+          Text(
             month,
             style: TextStyle(
               fontSize: ui(13),
               color: _kTextDark,
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w400,
+              fontWeight: AppFont.w400,
               height: 1.2,
             ),
           ),
           SizedBox(height: ui(4)),
-          AppText(
+          Text(
             value == value.roundToDouble()
                 ? value.toInt().toString()
                 : value.toString(),
@@ -1212,23 +1212,23 @@ class _MiniStatRow extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        AppText(
+        Text(
           label,
           style: TextStyle(
             fontSize: ui(12),
             color: _kTextHint,
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w400,
+            fontWeight: AppFont.w400,
             height: 1.2,
           ),
         ),
-        AppText(
+        Text(
           value,
           style: TextStyle(
             fontSize: ui(12),
             color: _kTextDark,
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w400,
+            fontWeight: AppFont.w400,
             height: 1.2,
           ),
         ),
@@ -1306,24 +1306,24 @@ class _ScoreSegmentTile extends StatelessWidget {
         children: [
           Row(
             children: [
-              AppText(
+              Text(
                 segment.label,
                 style: TextStyle(
                   fontSize: ui(14),
                   color: _kTextDark,
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w400,
+                  fontWeight: AppFont.w400,
                   height: 1,
                 ),
               ),
               const Spacer(),
-              AppText(
+              Text(
                 '${segment.percent}%',
                 style: TextStyle(
                   fontSize: ui(14),
                   color: _kTextDark,
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w500,
+                  fontWeight: AppFont.w500,
                   height: 1,
                 ),
               ),
@@ -1357,13 +1357,13 @@ class _ScoreSegmentTile extends StatelessWidget {
           SizedBox(height: ui(8)),
           Align(
             alignment: Alignment.centerRight,
-            child: AppText(
+            child: Text(
               '${segment.count}场',
               style: TextStyle(
                 fontSize: ui(12),
                 color: _kPurple,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
                 height: 1,
               ),
             ),
@@ -1504,24 +1504,24 @@ class _ExamCardHeader extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     return Row(
       children: [
-        AppText(
+        Text(
           title,
           style: TextStyle(
             fontSize: ui(16),
             color: Colors.black,
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w500,
+            fontWeight: AppFont.w500,
             height: 1.2,
           ),
         ),
         SizedBox(width: ui(12)),
-        AppText(
+        Text(
           date,
           style: TextStyle(
             fontSize: ui(12),
             color: _kTextDivider,
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w400,
+            fontWeight: AppFont.w400,
             height: 1.2,
           ),
         ),
@@ -1574,24 +1574,24 @@ class _ExamSummaryRow extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.start,
               children: [
-                AppText(
+                Text(
                   stats[i].$1,
                   style: TextStyle(
                     fontSize: ui(12),
                     color: _kTextSecondary,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w400,
+                    fontWeight: AppFont.w400,
                     height: 1.2,
                   ),
                 ),
                 SizedBox(width: ui(4)),
-                AppText(
+                Text(
                   stats[i].$2,
                   style: TextStyle(
                     fontSize: ui(12),
                     color: _kPurple,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w500,
+                    fontWeight: AppFont.w500,
                     height: 1.2,
                   ),
                 ),
@@ -1629,13 +1629,13 @@ class _ExamSubjectTile extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  AppText(
+                  Text(
                     data.teacher,
                     style: TextStyle(
                       fontSize: ui(14),
                       color: _kTextDark,
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w500,
+                      fontWeight: AppFont.w500,
                       height: 1,
                     ),
                   ),
@@ -1646,39 +1646,39 @@ class _ExamSubjectTile extends StatelessWidget {
               SizedBox(height: ui(8)),
               Row(
                 children: [
-                  AppText(
+                  Text(
                     '班级排名：${data.classRank}',
                     style: TextStyle(
                       fontSize: ui(12),
                       color: _kTextDark,
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w400,
+                      fontWeight: AppFont.w400,
                       height: 1.2,
                     ),
                   ),
                   SizedBox(width: ui(12)),
                   Container(width: 1, height: ui(10), color: _kTextHint),
                   SizedBox(width: ui(12)),
-                  AppText(
+                  Text(
                     '全校排名：${data.schoolRank}',
                     style: TextStyle(
                       fontSize: ui(12),
                       color: _kTextDark,
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w400,
+                      fontWeight: AppFont.w400,
                       height: 1.2,
                     ),
                   ),
                 ],
               ),
               SizedBox(height: ui(6)),
-              AppText(
+              Text(
                 data.comment,
                 style: TextStyle(
                   fontSize: ui(12),
                   color: _kTextHint,
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w400,
+                  fontWeight: AppFont.w400,
                   height: 1.2,
                 ),
               ),
@@ -1689,13 +1689,13 @@ class _ExamSubjectTile extends StatelessWidget {
           Positioned(
             top: 0,
             right: 0,
-            child: AppText(
+            child: Text(
               '${data.score}分',
               style: TextStyle(
                 fontSize: ui(14),
                 color: _kBlueScore,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
                 height: 1.2,
               ),
             ),
@@ -1733,13 +1733,13 @@ class _SubjectTag extends StatelessWidget {
         color: bg,
         borderRadius: BorderRadius.circular(ui(4)),
       ),
-      child: AppText(
+      child: Text(
         label,
         style: TextStyle(
           fontSize: ui(12),
           color: fg,
           fontFamily: 'PingFang SC',
-          fontWeight: FontWeight.w400,
+          fontWeight: AppFont.w400,
           height: 15.24 / 12,
         ),
       ),
@@ -1783,13 +1783,13 @@ class _MediaTag extends StatelessWidget {
             Icon(icon, size: ui(12), color: fg),
             SizedBox(width: ui(2)),
           ],
-          AppText(
+          Text(
             label,
             style: TextStyle(
               fontSize: ui(11),
               color: fg,
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w400,
+              fontWeight: AppFont.w400,
               height: 15.24 / 11,
             ),
           ),
@@ -1811,13 +1811,13 @@ class _ViewDetailButton extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(ui(8)),
       ),
-      child: AppText(
+      child: Text(
         '查看详情',
         style: TextStyle(
           fontSize: ui(12),
           color: _kTextDark,
           fontFamily: 'PingFang SC',
-          fontWeight: FontWeight.w500,
+          fontWeight: AppFont.w500,
           height: 16 / 12,
         ),
       ),

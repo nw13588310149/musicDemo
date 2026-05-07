@@ -6,8 +6,8 @@ import '../../../core/widgets/app_toast.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../../study_catalog/state/study_catalog_controller.dart';
 import '../../study_catalog/state/study_catalog_state.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../core/widgets/app_text.dart';
 /// 声乐二级页：脱离 StudyCatalogPage 共享模板，独立按设计稿还原。
 /// 数据仍复用 [studyCatalogControllerProvider]（config = voice），保证接口零回归。
 class VoicePage extends ConsumerStatefulWidget {
@@ -263,12 +263,12 @@ class _VoiceTabItem extends StatelessWidget {
           children: [
             // 【底层盒子】：永远使用 14 号字（透明）撑开布局。
             // 这确保了 Row 计算宽度时只看 14 号字的宽度，后续永远不会被推挤。
-            AppText(
+            Text(
               label,
               style: TextStyle(
                 fontFamily: 'PingFang SC',
                 fontSize: ui(14),
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
                 height: 1.2,
                 color: Colors.transparent,
               ),
@@ -282,12 +282,12 @@ class _VoiceTabItem extends StatelessWidget {
                 alignment: alignment,
                 child: Opacity(
                   opacity: active ? 1 : 0.7,
-                  child: AppText(
+                  child: Text(
                     label,
                     style: TextStyle(
                       fontFamily: 'PingFang SC',
                       fontSize: active ? ui(18) : ui(14),
-                      fontWeight: FontWeight.w500,
+                      fontWeight: AppFont.w500,
                       height: 1.2,
                       color: const Color(0xFF0B081A),
                     ),
@@ -325,14 +325,14 @@ class _VoiceSearchPill extends StatelessWidget {
       fontFamily: 'PingFang SC',
       fontSize: fontSize,
       height: 1.0,
-      fontWeight: FontWeight.w400,
+      fontWeight: AppFont.w400,
       color: const Color(0xFF1A1A1A),
     );
     final hintStyle = TextStyle(
       fontFamily: 'PingFang SC',
       fontSize: fontSize,
       height: 1.0,
-      fontWeight: FontWeight.w400,
+      fontWeight: AppFont.w400,
       color: const Color(0xFFD1D1D1),
     );
     // PingFang OTF 在 Flutter 下行高 metrics 偏下，没有 forceStrutHeight 时
@@ -510,27 +510,27 @@ class _VoiceSongCard extends StatelessWidget {
               ),
             ),
             SizedBox(height: ui(8)),
-            AppText(
+            Text(
               lesson.title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontFamily: 'PingFang SC',
                 fontSize: ui(14),
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
                 color: const Color(0xFF0B081A),
                 height: 1.2,
               ),
             ),
             SizedBox(height: ui(7)),
-            AppText(
+            Text(
               subtitle,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontFamily: 'PingFang SC',
                 fontSize: ui(12),
-                fontWeight: FontWeight.w400,
+                fontWeight: AppFont.w400,
                 color: const Color(0xFFB6B5BB),
                 height: 1.0,
               ),
@@ -562,7 +562,7 @@ class _VoiceListEmptyPlaceholder extends StatelessWidget {
             fit: BoxFit.contain,
           ),
           SizedBox(height: ui(4)),
-          AppText(
+          Text(
             message,
             textAlign: TextAlign.center,
             style: TextStyle(

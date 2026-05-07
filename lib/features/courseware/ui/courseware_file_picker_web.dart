@@ -9,10 +9,18 @@ import 'courseware_file_picker.dart';
 
 Future<List<CoursewarePickedFile>> pickCoursewareFilesImpl({
   required bool allowMultiple,
+  CoursewarePickType type = CoursewarePickType.any,
 }) {
+  // accept 用于约束系统选择器只显示对应类型，并在移动浏览器上让
+  // image/audio 直接拉起相册 / 录音器，避免再走"文件管理"。
+  final accept = switch (type) {
+    CoursewarePickType.image => 'image/*',
+    CoursewarePickType.audio => 'audio/*',
+    CoursewarePickType.any => '*/*',
+  };
   final input = html.FileUploadInputElement()
     ..multiple = allowMultiple
-    ..accept = '*/*'
+    ..accept = accept
     ..style.display = 'none';
 
   // 部分浏览器要求 input 在 DOM 中才能触发文件选择 / FileReader 才能稳定工作。

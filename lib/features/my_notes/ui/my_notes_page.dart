@@ -11,8 +11,8 @@ import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../state/my_notes_controller.dart';
 import '../state/my_notes_state.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../core/widgets/app_text.dart';
 class MyNotesPage extends ConsumerStatefulWidget {
   const MyNotesPage({super.key});
 
@@ -365,14 +365,14 @@ class _NotesSidebar extends StatelessWidget {
                       : Center(
                           child: Padding(
                             padding: EdgeInsets.symmetric(horizontal: ui(8)),
-                            child: AppText(
+                            child: Text(
                               '暂无分类\n点击下方"添加分类"创建',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: ui(12),
                                 color: const Color(0xFFB6B5BB),
                                 fontFamily: 'PingFang SC',
-                                fontWeight: FontWeight.w400,
+                                fontWeight: AppFont.w400,
                                 height: 1.6,
                               ),
                             ),
@@ -456,9 +456,12 @@ class _NoteCategoryCardState extends State<_NoteCategoryCard> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // 36×36 note glyph (note/4.png is fully self-contained).
+            // 36×36 note glyph：未选中走 note/9.png（无填色描线版本），
+            // 选中走 note/4.png（彩色实心版本）。两张图都是 self-contained。
             Image.asset(
-              'assets/images/note/4.png',
+              selected
+                  ? 'assets/images/note/4.png'
+                  : 'assets/images/note/9.png',
               width: ui(36),
               height: ui(36),
               fit: BoxFit.contain,
@@ -466,7 +469,7 @@ class _NoteCategoryCardState extends State<_NoteCategoryCard> {
             SizedBox(width: ui(10)),
             // Single-line "name（count）" label per spec.
             Expanded(
-              child: AppText(
+              child: Text(
                 '${item.name}（${item.count}）',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -474,7 +477,7 @@ class _NoteCategoryCardState extends State<_NoteCategoryCard> {
                   fontSize: ui(13),
                   color: const Color(0xFF0B081A),
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w500,
+                  fontWeight: AppFont.w500,
                   height: 12 / 13,
                 ),
               ),
@@ -534,13 +537,13 @@ class _NotesAddCategoryCard extends StatelessWidget {
               child: Icon(Icons.add_rounded, size: ui(14), color: Colors.white),
             ),
             SizedBox(width: ui(6)),
-            AppText(
+            Text(
               '添加分类',
               style: TextStyle(
                 fontSize: ui(13),
                 color: const Color(0xFF0B081A),
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
                 height: 12 / 13,
               ),
             ),
@@ -705,13 +708,13 @@ class _NotesTabItem extends StatelessWidget {
                 ]
               : null,
         ),
-        child: AppText(
+        child: Text(
           label,
           style: TextStyle(
             fontSize: ui(14),
             color: active ? const Color(0xFF0B081A) : const Color(0xFF6D6B75),
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w500,
+            fontWeight: AppFont.w500,
           ),
         ),
       ),
@@ -756,13 +759,13 @@ class _NotesFloatingCreateButton extends StatelessWidget {
               fit: BoxFit.contain,
             ),
             SizedBox(width: ui(8)),
-            AppText(
+            Text(
               '新建笔记',
               style: TextStyle(
                 fontSize: ui(16),
                 color: const Color(0xFF0B081A),
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
                 height: 12 / 16,
               ),
             ),
@@ -833,12 +836,12 @@ class _NoteTemplateViewState extends State<_NoteTemplateView> {
               left: 0,
               right: 0,
               child: Center(
-                child: AppText(
+                child: Text(
                   '请选择您的笔记样式',
                   style: TextStyle(
                     fontSize: ui(16),
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w600,
+                    fontWeight: AppFont.w600,
                     color: const Color(0xFF0B081A),
                   ),
                 ),
@@ -906,12 +909,12 @@ class _NoteTemplateViewState extends State<_NoteTemplateView> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        AppText(
+                        Text(
                           '下一步',
                           style: TextStyle(
                             fontSize: ui(16),
                             fontFamily: 'PingFang SC',
-                            fontWeight: FontWeight.w500,
+                            fontWeight: AppFont.w500,
                             color: Colors.white,
                             height: 28 / 16,
                           ),
@@ -972,12 +975,12 @@ class _TemplatePreviewCard extends StatelessWidget {
               left: 0,
               right: 0,
               child: Center(
-                child: AppText(
+                child: Text(
                   type.label,
                   style: TextStyle(
                     fontSize: ui(18),
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w500,
+                    fontWeight: AppFont.w500,
                     color: const Color(0xFF0B081A),
                     height: 24 / 18,
                   ),
@@ -1057,7 +1060,7 @@ class _NoteEditorView extends StatelessWidget {
               children: [
                 _RoundIconButton(icon: Icons.arrow_back_rounded, onTap: onBack),
                 const Spacer(),
-                AppText(
+                Text(
                   state.draftTitle,
                   style: TextStyle(
                     fontSize: ui(20),
@@ -1181,7 +1184,7 @@ class _NoteEditorView extends StatelessWidget {
                               color: const Color(0xFFF6F7FB),
                               borderRadius: BorderRadius.circular(ui(10)),
                             ),
-                            child: AppText(
+                            child: Text(
                               '${state.strokeWidth.round()}',
                               style: TextStyle(
                                 fontSize: ui(14),
@@ -1210,7 +1213,7 @@ class _NoteEditorView extends StatelessWidget {
                           TextButton.icon(
                             onPressed: onClear,
                             icon: const Icon(Icons.auto_fix_off_outlined),
-                            label: const AppText('清空画布'),
+                            label: const Text('清空画布'),
                             style: TextButton.styleFrom(
                               foregroundColor: const Color(0xFF1F1A32),
                             ),
@@ -1275,147 +1278,91 @@ class _NoteCardState extends State<_NoteCard> {
       behavior: HitTestBehavior.opaque,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          // Treat the card as a 170-unit square; map every offset/size in
-          // the design to a fraction of the available width.
+          // 卡片以 170×170 设计稿为基准，所有 design 值按当前宽度等比缩放。
           final w = constraints.maxWidth;
           double k(double design) => design / 170 * w;
 
-          return ClipRRect(
-            borderRadius: BorderRadius.circular(k(19)),
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                // Card placeholder background.
-                Positioned.fill(
-                  child: ColoredBox(color: const Color(0xFFF6F5F7)),
+          // 整张卡片的视觉（圆角、紫色顶部、横线、折角、阴影）都内置在
+          // bg.png 里；这里不再叠真实笔记预览图、灰底、条纹、紫渐变条。
+          // 不再使用 ClipRRect 以保留 bg 自身的圆角阴影。
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned.fill(
+                child: Image.asset(
+                  'assets/images/sound/bg.png',
+                  fit: BoxFit.fill,
+                  filterQuality: FilterQuality.medium,
                 ),
-                // Note's stored imageUrl (used as the entire card background
-                // per the latest spec — replaces the old bottom-right thumb).
-                Positioned.fill(
-                  child: _buildOptionalRemoteImage(
-                    item.imageUrl,
-                    fit: BoxFit.cover,
+              ),
+              // 标题
+              Positioned(
+                left: k(14),
+                top: k(15),
+                right: k(40),
+                child: Text(
+                  item.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: ui(13),
+                    color: const Color(0xFF0B081A),
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w500,
                   ),
                 ),
-                // Ruled-paper lines drawn on top of the background.
-                Positioned.fill(
-                  child: CustomPaint(painter: _NoteCardLinesPainter()),
-                ),
-                // Purple gradient header strip (top 46.05 of 170)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  top: 0,
-                  height: k(46),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: <Color>[Color(0xFFF1E8FD), Color(0xFFDDC4FF)],
-                      ),
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(k(19)),
-                        topRight: Radius.circular(k(19)),
-                      ),
-                      border: Border.all(
-                        color: const Color(0xFFE6DAF0),
-                        width: ui(1),
-                      ),
+              ),
+              // ⋯ 菜单触发器（右上角）— note/1.png
+              Positioned(
+                right: k(8),
+                top: k(8),
+                child: GestureDetector(
+                  key: _menuTriggerKey,
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _openActionMenu,
+                  child: Padding(
+                    padding: EdgeInsets.all(k(3)),
+                    child: Image.asset(
+                      'assets/images/note/1.png',
+                      width: k(20),
+                      height: k(20),
+                      fit: BoxFit.contain,
                     ),
                   ),
                 ),
-                // Title (left:14 top:15 in design)
-                Positioned(
-                  left: k(14),
-                  top: k(15),
-                  right: k(40),
-                  child: AppText(
-                    item.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: ui(13),
-                      color: const Color(0xFF0B081A),
-                      fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w500,
-                    ),
+              ),
+              // 黄色日期图标（note/2.png）
+              Positioned(
+                left: k(13),
+                top: k(132),
+                child: Image.asset(
+                  'assets/images/note/2.png',
+                  width: k(20),
+                  height: k(18),
+                  fit: BoxFit.contain,
+                ),
+              ),
+              // 日期文本
+              Positioned(
+                left: k(40),
+                top: k(133),
+                child: Text(
+                  item.dateLabel.replaceAll('-', '.'),
+                  style: TextStyle(
+                    fontSize: ui(12),
+                    color: const Color(0xFFA59DB4),
+                    fontFamily: 'Barlow',
+                    fontWeight: FontWeight.w500,
+                    height: 16 / 12,
                   ),
                 ),
-                // ⋯ menu trigger (top-right) — uses note/1.png
-                Positioned(
-                  right: k(8),
-                  top: k(8),
-                  child: GestureDetector(
-                    key: _menuTriggerKey,
-                    behavior: HitTestBehavior.opaque,
-                    onTap: _openActionMenu,
-                    child: Padding(
-                      padding: EdgeInsets.all(k(3)),
-                      child: Image.asset(
-                        'assets/images/note/1.png',
-                        width: k(20),
-                        height: k(20),
-                        fit: BoxFit.contain,
-                      ),
-                    ),
-                  ),
-                ),
-                // Yellow date glyph (note/2.png) at left:13 top:132
-                Positioned(
-                  left: k(13),
-                  top: k(132),
-                  child: Image.asset(
-                    'assets/images/note/2.png',
-                    width: k(20),
-                    height: k(18),
-                    fit: BoxFit.contain,
-                  ),
-                ),
-                // Date text
-                Positioned(
-                  left: k(40),
-                  top: k(133),
-                  child: AppText(
-                    item.dateLabel.replaceAll('-', '.'),
-                    style: TextStyle(
-                      fontSize: ui(12),
-                      color: const Color(0xFFA59DB4),
-                      fontFamily: 'Barlow',
-                      fontWeight: FontWeight.w500,
-                      height: 16 / 12,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           );
         },
       ),
     );
   }
-}
-
-/// Horizontal lines drawn across the card body to mimic ruled paper.
-class _NoteCardLinesPainter extends CustomPainter {
-  const _NoteCardLinesPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0xFFF1F0F2)
-      ..strokeWidth = 1.92
-      ..strokeCap = StrokeCap.square;
-    // Per design: lines at 65, 84, 103, 122 (out of 170 height).
-    final ratios = <double>[65 / 170, 84 / 170, 103 / 170, 122 / 170];
-    for (final r in ratios) {
-      final y = size.height * r;
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _NoteCardLinesPainter oldDelegate) => false;
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -1595,7 +1542,7 @@ class _NoteActionMenuRow extends StatelessWidget {
               fit: BoxFit.contain,
             ),
             SizedBox(width: ui(10)),
-            AppText(
+            Text(
               label,
               style: TextStyle(
                 fontSize: ui(13),
@@ -1603,7 +1550,7 @@ class _NoteActionMenuRow extends StatelessWidget {
                     ? const Color(0xFFFF323C)
                     : const Color(0xFF0B081A),
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w400,
+                fontWeight: AppFont.w400,
                 height: 20 / 13,
               ),
             ),
@@ -1635,13 +1582,13 @@ class _EmptyPanel extends StatelessWidget {
             fit: BoxFit.contain,
           ),
           SizedBox(height: ui(0)),
-          AppText(
+          Text(
             '暂无笔记',
             style: TextStyle(
               fontSize: ui(16),
               color: const Color(0xFF8A91A5),
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w500,
+              fontWeight: AppFont.w500,
             ),
           ),
         ],
@@ -1706,12 +1653,12 @@ Future<String?> _showCreateNoteTitleDialog(BuildContext context) async {
                 right: 0,
                 top: u(50),
                 child: Center(
-                  child: AppText(
+                  child: Text(
                     '新建笔记',
                     style: TextStyle(
                       fontSize: u(24),
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w500,
+                      fontWeight: AppFont.w500,
                       color: const Color(0xFF0B081A),
                       height: 1.0,
                     ),
@@ -1734,7 +1681,7 @@ Future<String?> _showCreateNoteTitleDialog(BuildContext context) async {
                       fontSize: u(14),
                       color: const Color(0xFF0B081A),
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w400,
+                      fontWeight: AppFont.w400,
                       height: 20 / 14,
                     ),
                     decoration: InputDecoration(
@@ -1745,7 +1692,7 @@ Future<String?> _showCreateNoteTitleDialog(BuildContext context) async {
                         fontSize: u(14),
                         color: const Color(0xFFB6B5BB),
                         fontFamily: 'PingFang SC',
-                        fontWeight: FontWeight.w400,
+                        fontWeight: AppFont.w400,
                         height: 20 / 14,
                       ),
                       contentPadding: EdgeInsets.symmetric(
@@ -1891,7 +1838,7 @@ class _SecondaryActionButton extends StatelessWidget {
               else
                 Icon(icon, size: ui(18), color: foreground),
               SizedBox(width: ui(6)),
-              AppText(
+              Text(
                 label,
                 maxLines: 1,
                 softWrap: false,

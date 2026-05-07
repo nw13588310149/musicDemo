@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 
 import '../../../app/router/route_paths.dart';
+import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../state/quiz_practice_state.dart';
 import '../state/quiz_session_controller.dart';
 import '../state/quiz_session_state.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../core/widgets/app_text.dart';
 class QuizSessionPage extends ConsumerStatefulWidget {
   const QuizSessionPage({super.key, this.openCompletion = false});
 
@@ -81,7 +83,7 @@ class _QuizSessionPageState extends ConsumerState<QuizSessionPage> {
                 ),
                 Expanded(
                   child: state.questions.isEmpty
-                      ? const Center(child: AppText('暂无题目'))
+                      ? const Center(child: Text('暂无题目'))
                       : _SessionBody(
                           state: state,
                           onSelect: controller.selectAnswer,
@@ -153,18 +155,18 @@ class _SessionHeader extends StatelessWidget {
           _BackButton(onTap: onBack),
           Expanded(
             child: Center(
-              child: AppText(
+              child: Text(
                 title,
                 style: TextStyle(
                   color: const Color(0xFF0B081A),
                   fontSize: ui(16),
-                  fontWeight: FontWeight.w600,
+                  fontWeight: AppFont.w600,
                   fontFamily: 'PingFang SC',
                 ),
               ),
             ),
           ),
-          AppText(
+          Text(
             '自动刷题',
             style: TextStyle(
               color: const Color(0xFF0B081A),
@@ -286,57 +288,103 @@ class _SessionBody extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     final question = state.currentQuestion;
     if (question == null) {
-      return const Center(child: AppText('暂无题目'));
+      return const Center(child: Text('暂无题目'));
     }
 
+    final questionHtmlStripped = _stripHtml(question.questionHtml);
+    final parseHtmlStripped = _stripHtml(question.parseHtml);
+
+    // 内容区做成可滚动；底部"上一题/下一题"按钮固定不动。这样题干/
+    // 选项/解析里嵌入的乐谱图片再高也不会撑爆页面。
     return Padding(
       padding: EdgeInsets.fromLTRB(ui(20), ui(12), ui(20), ui(20)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _TypeChip(),
-          SizedBox(height: ui(20)),
-          AppText(
-            '第${state.currentIndex + 1}题  ${_stripHtml(question.questionHtml)}',
-            style: TextStyle(
-              color: const Color(0xFF0B081A),
-              fontSize: ui(18),
-              fontWeight: FontWeight.w500,
-              fontFamily: 'PingFang SC',
-              height: 1.5,
+          Expanded(
+            child: SingleChildScrollView(
+              physics: const ClampingScrollPhysics(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _TypeChip(),
+                  SizedBox(height: ui(20)),
+                  // 题干：左侧"第 N 题"前缀 + 富文本（可能含 <img>、
+                  // <sup>/<sub> 等）。无富文本结构时退回纯 Text，避免
+                  // HtmlWidget 在空字符串下渲染一个空段落。
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '第${state.currentIndex + 1}题  ',
+                        style: TextStyle(
+                          color: const Color(0xFF0B081A),
+                          fontSize: ui(18),
+                          fontWeight: AppFont.w500,
+                          fontFamily: 'PingFang SC',
+                          height: 1.5,
+                        ),
+                      ),
+                      Expanded(
+                        child: _QuizHtml(
+                          html: question.questionHtml,
+                          fallbackText: questionHtmlStripped,
+                          textStyle: TextStyle(
+                            color: const Color(0xFF0B081A),
+                            fontSize: ui(18),
+                            fontWeight: AppFont.w500,
+                            fontFamily: 'PingFang SC',
+                            height: 1.5,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: ui(24)),
+                  _OptionsGrid(question: question, onSelect: onSelect),
+                  if (question.answered) ...[
+                    SizedBox(height: ui(28)),
+                    const Divider(height: 1, color: Color(0xFFF3F2F3)),
+                    SizedBox(height: ui(20)),
+                    _AnswerRow(question: question),
+                    SizedBox(height: ui(24)),
+                    Text(
+                      '题目解析',
+                      style: TextStyle(
+                        color: const Color(0xFF6D6B75),
+                        fontSize: ui(18),
+                        fontWeight: AppFont.w600,
+                        fontFamily: 'PingFang SC',
+                      ),
+                    ),
+                    SizedBox(height: ui(10)),
+                    if (parseHtmlStripped.isEmpty)
+                      Text(
+                        '暂无解析',
+                        style: TextStyle(
+                          color: const Color(0xFFB6B5BB),
+                          fontSize: ui(14),
+                          fontFamily: 'PingFang SC',
+                          height: 1.6,
+                        ),
+                      )
+                    else
+                      _QuizHtml(
+                        html: question.parseHtml,
+                        fallbackText: parseHtmlStripped,
+                        textStyle: TextStyle(
+                          color: const Color(0xFFB6B5BB),
+                          fontSize: ui(14),
+                          fontFamily: 'PingFang SC',
+                          height: 1.6,
+                        ),
+                      ),
+                  ],
+                ],
+              ),
             ),
           ),
-          SizedBox(height: ui(24)),
-          _OptionsGrid(question: question, onSelect: onSelect),
-          if (question.answered) ...[
-            SizedBox(height: ui(28)),
-            const Divider(height: 1, color: Color(0xFFF3F2F3)),
-            SizedBox(height: ui(20)),
-            _AnswerRow(question: question),
-            SizedBox(height: ui(24)),
-            AppText(
-              '题目解析',
-              style: TextStyle(
-                color: const Color(0xFF6D6B75),
-                fontSize: ui(18),
-                fontWeight: FontWeight.w600,
-                fontFamily: 'PingFang SC',
-              ),
-            ),
-            SizedBox(height: ui(10)),
-            AppText(
-              _stripHtml(question.parseHtml).isEmpty
-                  ? '暂无解析'
-                  : _stripHtml(question.parseHtml),
-              style: TextStyle(
-                color: const Color(0xFFB6B5BB),
-                fontSize: ui(14),
-                fontFamily: 'PingFang SC',
-                height: 1.6,
-              ),
-            ),
-          ],
-          const Spacer(),
+          SizedBox(height: ui(20)),
           _NavButtons(onPrevious: onPrevious, onNext: onNext),
         ],
       ),
@@ -388,7 +436,10 @@ class _OptionsGrid extends StatelessWidget {
 
     Widget option(int index) {
       final letter = letters[index];
-      final text = _stripHtml(question.options[index]);
+      final rawHtml = index < question.options.length
+          ? question.options[index]
+          : '';
+      final stripped = _stripHtml(rawHtml);
       final answered = question.answered;
       final isCorrectOption = index == question.correctAnswer;
       final isUserPick = index == question.userAnswer;
@@ -414,33 +465,38 @@ class _OptionsGrid extends StatelessWidget {
           borderRadius: BorderRadius.circular(ui(8)),
           onTap: answered ? null : () => onSelect(index),
           child: Container(
-            height: ui(44),
-            padding: EdgeInsets.symmetric(horizontal: ui(20)),
+            // 移除固定 44 高度，改成最低 44；选项里出现图片时让卡片
+            // 自适应内容（垂直居中）。
+            constraints: BoxConstraints(minHeight: ui(44)),
+            padding: EdgeInsets.symmetric(
+              horizontal: ui(20),
+              vertical: ui(8),
+            ),
             decoration: BoxDecoration(
               color: bg,
               borderRadius: BorderRadius.circular(ui(8)),
             ),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 SizedBox(
                   width: ui(22),
-                  child: AppText(
+                  child: Text(
                     '$letter.',
                     style: TextStyle(
                       color: textColor,
                       fontSize: ui(16),
-                      fontWeight: FontWeight.w600,
+                      fontWeight: AppFont.w600,
                       fontFamily: 'PingFang SC',
                     ),
                   ),
                 ),
                 SizedBox(width: ui(9)),
                 Expanded(
-                  child: AppText(
-                    text,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
+                  child: _QuizHtml(
+                    html: rawHtml,
+                    fallbackText: stripped,
+                    textStyle: TextStyle(
                       color: textColor,
                       fontSize: ui(16),
                       fontFamily: 'PingFang SC',
@@ -457,20 +513,28 @@ class _OptionsGrid extends StatelessWidget {
 
     return Column(
       children: [
-        Row(
-          children: [
-            Expanded(child: option(0)),
-            SizedBox(width: ui(20)),
-            Expanded(child: option(1)),
-          ],
+        // crossAxisAlignment.stretch 让每行的两个选项高度对齐——
+        // 如果一边是文字、一边是图片，两个卡片仍然一样高。
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: option(0)),
+              SizedBox(width: ui(20)),
+              Expanded(child: option(1)),
+            ],
+          ),
         ),
         SizedBox(height: ui(20)),
-        Row(
-          children: [
-            Expanded(child: option(2)),
-            SizedBox(width: ui(20)),
-            Expanded(child: option(3)),
-          ],
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: option(2)),
+              SizedBox(width: ui(20)),
+              Expanded(child: option(3)),
+            ],
+          ),
         ),
       ],
     );
@@ -498,25 +562,25 @@ class _AnswerRow extends StatelessWidget {
     final labelStyle = TextStyle(
       color: const Color(0xFF0B081A),
       fontSize: ui(18),
-      fontWeight: FontWeight.w500,
+      fontWeight: AppFont.w500,
       fontFamily: 'PingFang SC',
     );
     final valueStyle = TextStyle(
       fontSize: ui(18),
-      fontWeight: FontWeight.w600,
+      fontWeight: AppFont.w600,
       fontFamily: 'PingFang SC',
     );
 
     return Row(
       children: [
-        AppText('正确答案：', style: labelStyle),
-        AppText(
+        Text('正确答案：', style: labelStyle),
+        Text(
           correctLetter,
           style: valueStyle.copyWith(color: const Color(0xFF1AAB5B)),
         ),
         SizedBox(width: ui(36)),
-        AppText('已选答案：', style: labelStyle),
-        AppText(pickLetter, style: valueStyle.copyWith(color: pickColor)),
+        Text('已选答案：', style: labelStyle),
+        Text(pickLetter, style: valueStyle.copyWith(color: pickColor)),
       ],
     );
   }
@@ -562,7 +626,7 @@ class _GhostButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(ui(12)),
-          border: Border.all(color: const Color(0xFFF3F2F3), width: 2),
+          border: Border.all(color: const Color(0xFFF3F2F3), width: 1),
           boxShadow: [
             BoxShadow(
               color: const Color(0x59B5B5B5),
@@ -571,7 +635,7 @@ class _GhostButton extends StatelessWidget {
             ),
           ],
         ),
-        child: AppText(
+        child: Text(
           label,
           style: TextStyle(
             color: const Color(0xFF0B081A),
@@ -615,7 +679,7 @@ class _PrimaryButton extends StatelessWidget {
             ),
           ],
         ),
-        child: AppText(
+        child: Text(
           label,
           style: TextStyle(
             color: Colors.white,
@@ -663,12 +727,7 @@ class _CompletionDialog extends ConsumerWidget {
         width: ui(428),
         padding: EdgeInsets.fromLTRB(ui(19), ui(28), ui(19), ui(28)),
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            stops: [0, 0.33, 1.0],
-            colors: [Color(0xFFD2C6FF), Colors.white, Colors.white],
-          ),
+          color: Colors.white,
           borderRadius: BorderRadius.circular(ui(24)),
         ),
         child: Column(
@@ -754,16 +813,14 @@ class _StatGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
+    // 设计宽度 = 弹窗宽 428 - 左右各 19 padding = 390
+    // 4 个统计格 90×86 + 3 个间距 10 = 360 + 30 = 390，正好填满。
     return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         _StatCell(value: '$notDone', label: '未做题'),
-        SizedBox(width: ui(10)),
         _StatCell(value: '$done', label: '已做题'),
-        SizedBox(width: ui(10)),
         _StatCell(value: '$wrong', label: '错题'),
-        SizedBox(width: ui(10)),
         _StatCell(value: '$accuracyPercent%', label: '正确率'),
       ],
     );
@@ -780,7 +837,7 @@ class _StatCell extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
-      width: ui(86),
+      width: ui(90),
       height: ui(86),
       decoration: BoxDecoration(
         color: const Color(0xFFF5F6FA),
@@ -789,17 +846,17 @@ class _StatCell extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          AppText(
+          Text(
             value,
             style: TextStyle(
               color: const Color(0xFF0B081A),
               fontSize: ui(24),
-              fontWeight: FontWeight.w500,
+              fontWeight: AppFont.w500,
               fontFamily: 'PingFang SC',
             ),
           ),
           SizedBox(height: ui(8)),
-          AppText(
+          Text(
             label,
             style: TextStyle(
               color: const Color(0xFF6D6B75),
@@ -822,53 +879,58 @@ class _RecommendedSwitchCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    // Stack 让"推荐 badge + 下指小三角"作为浮层"挂"在卡片右上方，
+    // badge 顶部超出卡片 5px，三角紧贴 badge 底部指向卡片，
+    // 形成消息气泡的视觉。clipBehavior.none 允许超出。
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        height: ui(66),
-        padding: EdgeInsets.symmetric(horizontal: ui(20)),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFFF5F6FA), Colors.white],
+      behavior: HitTestBehavior.opaque,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // 卡片本体
+          Container(
+            height: ui(66),
+            padding: EdgeInsets.symmetric(horizontal: ui(20)),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFFF5F6FA), Colors.white],
+              ),
+              borderRadius: BorderRadius.circular(ui(12)),
+              border: Border.all(
+                color: const Color(0xFFF3F2F3),
+                width: 1,
+              ),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              label,
+              style: TextStyle(
+                color: const Color(0xFF0B081A),
+                fontSize: ui(16),
+                fontFamily: 'PingFang SC',
+                height: 1.0,
+              ),
+            ),
           ),
-          borderRadius: BorderRadius.circular(ui(12)),
-          border: Border.all(color: const Color(0xFFF3F2F3), width: 1),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Center(
-                child: AppText(
-                  label,
-                  style: TextStyle(
-                    color: const Color(0xFF0B081A),
-                    fontSize: ui(16),
-                    fontFamily: 'PingFang SC',
-                    height: 1.0,
-                  ),
-                ),
-              ),
+          // 浮层"推荐"气泡：定位参考设计稿
+          //   弹窗 428、内容宽 390（左右 19 padding）
+          //   badge 全局 left=246, top=90；卡片 left=19, top=95
+          //   ⇒ badge 在卡片内 right ≈ 390-(246-19)-38 = 125, top = -5
+          Positioned(
+            right: ui(125),
+            top: ui(-5),
+            child: Image.asset(
+              AppAssets.quizRecommendBubble,
+              width: ui(38),
+              height: ui(30),
+              fit: BoxFit.contain,
+              filterQuality: FilterQuality.medium,
             ),
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: ui(6), vertical: ui(4)),
-              decoration: BoxDecoration(
-                color: const Color(0xFFA773FF),
-                borderRadius: BorderRadius.circular(ui(4)),
-              ),
-              child: AppText(
-                '推荐',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: ui(13),
-                  fontFamily: 'PingFang SC',
-                  height: 1.0,
-                ),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -889,4 +951,128 @@ String _stripHtml(String html) {
       .replaceAll('&lt;', '<')
       .replaceAll('&gt;', '>')
       .trim();
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// 富文本渲染：题干 / 选项 / 解析共用一套
+// ─────────────────────────────────────────────────────────────────────
+
+/// 题干、选项、解析的富文本渲染入口。
+///
+/// 后端这些字段都是富文本编辑器吐出来的 HTML，常见标签包括
+/// `<p>`、`<br>`、`<strong>`、`<em>`、`<sub>`、`<sup>`、`<img>` 等。
+/// 项目里已经引入 `flutter_widget_from_html_core`，但它的 _core_ 包
+/// **不会**自动渲染 `<img>`，所以这里：
+/// - 走 [HtmlWidget]，文本/段落/上下标交给它默认处理；
+/// - 用 `customWidgetBuilder` 拦截 `<img>`，自己用 [Image.network]
+///   渲染成响应式图片，按容器最大宽度自适应缩放，保持比例；
+/// - 富文本拆出来全是空白时，回退到纯文本（避免渲染一个空段落）。
+class _QuizHtml extends StatelessWidget {
+  const _QuizHtml({
+    required this.html,
+    required this.fallbackText,
+    required this.textStyle,
+  });
+
+  /// 后端原始 HTML 字符串。
+  final String html;
+
+  /// 用 [_stripHtml] 抠出来的纯文本，仅作 fallback / 空判定用。
+  final String fallbackText;
+
+  /// 普通文本样式（颜色 / 字号 / 字体）。
+  final TextStyle textStyle;
+
+  @override
+  Widget build(BuildContext context) {
+    final trimmed = html.trim();
+    // HTML 整体为空 / 只有 `<p></p>` 之类的空段落 → 退回纯文本。
+    if (trimmed.isEmpty || fallbackText.isEmpty) {
+      return Text(fallbackText, style: textStyle);
+    }
+    return HtmlWidget(
+      trimmed,
+      textStyle: textStyle,
+      // 关闭默认的 ext renderer，直接走 `customWidgetBuilder` 来
+      // 接管 <img>，避免 _core 包对 img 的占位/默认行为。
+      customWidgetBuilder: (element) {
+        if (element.localName != 'img') {
+          return null;
+        }
+        final src = element.attributes['src']?.trim() ?? '';
+        if (src.isEmpty) {
+          return null;
+        }
+        final designW = double.tryParse(element.attributes['width'] ?? '');
+        final designH = double.tryParse(element.attributes['height'] ?? '');
+        return _ResponsiveNetworkImage(
+          url: src,
+          designWidth: designW,
+          designHeight: designH,
+        );
+      },
+    );
+  }
+}
+
+/// 把后端给的 `<img src=".." width="W" height="H" />` 渲染成
+/// 自适应宽度的网络图片：
+/// - 设计尺寸 ≤ 容器最大宽度：按设计尺寸渲染（保留 1.0 视觉）；
+/// - 设计尺寸 > 容器最大宽度：按容器宽度等比缩放，避免越界；
+/// - 加载失败时退化成一个灰色 broken image 占位图，不会让整张题目
+///   崩掉。
+class _ResponsiveNetworkImage extends StatelessWidget {
+  const _ResponsiveNetworkImage({
+    required this.url,
+    this.designWidth,
+    this.designHeight,
+  });
+
+  final String url;
+  final double? designWidth;
+  final double? designHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxW = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : MediaQuery.sizeOf(context).width;
+
+        double width = designWidth ?? maxW;
+        double? height = designHeight;
+        if (width > maxW) {
+          if (designWidth != null &&
+              designHeight != null &&
+              designWidth! > 0) {
+            height = designHeight! * (maxW / designWidth!);
+          } else {
+            height = null;
+          }
+          width = maxW;
+        }
+
+        return Image.network(
+          url,
+          width: width,
+          height: height,
+          fit: BoxFit.contain,
+          errorBuilder: (context, error, stackTrace) => Container(
+            width: width,
+            height: height ?? 60,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF5F6FA),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: const Icon(
+              Icons.broken_image_rounded,
+              color: Color(0xFFC9C6D8),
+            ),
+          ),
+        );
+      },
+    );
+  }
 }

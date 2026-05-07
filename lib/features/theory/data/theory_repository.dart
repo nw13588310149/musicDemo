@@ -36,6 +36,22 @@ class TheoryRepository {
     return client.post('/app/school/v2/chat/classList');
   }
 
+  /// 收藏 / 取消收藏教材，与 musicPlay / 1.0 完全一致。
+  Future<ApiResponse> setFavorite({
+    required int targetId,
+    required int type,
+    required bool favorite,
+  }) {
+    return client.post(
+      '/app/user/favoriteSave',
+      data: <String, dynamic>{
+        'favorite': favorite ? 1 : 0,
+        'targetId': targetId,
+        'type': type,
+      },
+    );
+  }
+
   Future<ApiResponse> sendMsg({
     required String classId,
     required String content,

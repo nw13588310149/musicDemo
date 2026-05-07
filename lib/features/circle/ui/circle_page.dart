@@ -8,8 +8,8 @@ import '../state/circle_state.dart';
 import 'widgets/circle_immersive_view.dart';
 import 'widgets/circle_list_view.dart';
 import 'widgets/circle_publish_dialog.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../core/widgets/app_text.dart';
 class CirclePage extends ConsumerWidget {
   const CirclePage({super.key});
 
@@ -97,13 +97,13 @@ class _CircleHeader extends StatelessWidget {
           _CircleBackButton(onTap: onBack),
           Expanded(
             child: Center(
-              child: AppText(
+              child: Text(
                 '校圈',
                 style: TextStyle(
                   color: const Color(0xFF0B081A),
                   fontSize: ui(16),
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w600,
+                  fontWeight: AppFont.w600,
                   height: 1,
                 ),
               ),
@@ -204,13 +204,13 @@ class _ModeChip extends StatelessWidget {
           borderRadius: BorderRadius.circular(ui(6)),
         ),
         alignment: Alignment.center,
-        child: AppText(
+        child: Text(
           label,
           style: TextStyle(
             color: selected ? Colors.white : const Color(0xFFB6B5BB),
             fontSize: ui(12),
             fontFamily: 'PingFang SC',
-            fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
+            fontWeight: selected ? AppFont.w500 : AppFont.w400,
             height: 1,
           ),
         ),

@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_asset_graphic.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../core/widgets/app_text.dart';
 abstract final class ShellLayoutSpec {
   static const designWidth = 1024.0;
   static const designHeight = 768.0;
@@ -190,13 +190,13 @@ class ShellSectionTitleBar extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: AppText(
+            child: Text(
               title,
               style: TextStyle(
                 fontSize: ui(20),
                 color: Color(0xFF1A1A1A),
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
                 height: 1,
               ),
             ),
@@ -215,13 +215,13 @@ class ShellSectionTitleBar extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  AppText(
+                  Text(
                     moreLabel,
                     style: TextStyle(
                       fontSize: ui(14),
                       color: Color(0xFF788698),
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w400,
+                      fontWeight: AppFont.w400,
                       height: 1,
                     ),
                   ),

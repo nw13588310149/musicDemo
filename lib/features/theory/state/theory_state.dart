@@ -56,9 +56,11 @@ class TheoryPageArgs {
 class TheoryDetail {
   const TheoryDetail({
     required this.id,
+    required this.type,
     required this.title,
     required this.firstMenu,
     required this.vipOnly,
+    required this.favorite,
     required this.htmlContent,
     required this.pdfUrl,
     required this.assignmentImages,
@@ -66,9 +68,15 @@ class TheoryDetail {
   });
 
   final int id;
+
+  /// 教材类型，用于 `/app/user/favoriteSave` 的 type 参数（与 1.0 对齐）。
+  final int type;
   final String title;
   final int firstMenu;
   final bool vipOnly;
+
+  /// 当前是否已收藏，对应接口里的 `isFavorite` 字段。
+  final bool favorite;
   final String htmlContent;
   final String pdfUrl;
   final List<String> assignmentImages;
@@ -79,6 +87,21 @@ class TheoryDetail {
   bool get hasAnswerImages => answerImages.isNotEmpty;
   bool get showsAssignmentButton => firstMenu != 6;
   bool get hasHtmlContent => htmlContent.trim().isNotEmpty;
+
+  TheoryDetail copyWith({bool? favorite}) {
+    return TheoryDetail(
+      id: id,
+      type: type,
+      title: title,
+      firstMenu: firstMenu,
+      vipOnly: vipOnly,
+      favorite: favorite ?? this.favorite,
+      htmlContent: htmlContent,
+      pdfUrl: pdfUrl,
+      assignmentImages: assignmentImages,
+      answerImages: answerImages,
+    );
+  }
 }
 
 @immutable

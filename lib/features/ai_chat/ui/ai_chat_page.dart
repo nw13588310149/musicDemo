@@ -11,8 +11,8 @@ import '../../theory/ui/widgets/theory_pdf_view.dart';
 import '../data/ai_chat_attachment_picker.dart';
 import '../state/ai_chat_controller.dart';
 import '../state/ai_chat_state.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../core/widgets/app_text.dart';
 const _border = Color(0xFFF3F2F3);
 const _panelFill = Color(0xFFF4F4FF);
 const _textPrimary = Color(0xFF0B081A);
@@ -176,7 +176,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                   color: _panelFill,
                   borderRadius: BorderRadius.circular(24),
                 ),
-                child: const Center(
+                child: Center(
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -187,13 +187,13 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                       ),
                       SizedBox(width: 8),
                       // Figma: 14/500 / line-height 20 / #8741FF
-                      AppText(
+                      Text(
                         '开启新对话',
                         style: TextStyle(
                           color: _purple,
                           fontSize: 14,
                           fontFamily: 'PingFang SC',
-                          fontWeight: FontWeight.w500,
+                          fontWeight: AppFont.w500,
                           height: 20 / 14,
                         ),
                       ),
@@ -205,18 +205,18 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
           ),
           // Figma: 开启新对话(36 高, top 24.74) → "全部"(top 76.74) = 16px gap
           const SizedBox(height: 16),
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
                 // Figma: 14/500 / line-height 20 / #0B081A
-                AppText(
+                Text(
                   '全部',
                   style: TextStyle(
                     color: _textPrimary,
                     fontSize: 14,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w500,
+                    fontWeight: AppFont.w500,
                     height: 20 / 14,
                   ),
                 ),
@@ -248,13 +248,13 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                       padding: EdgeInsets.zero,
                       children: [
                         // Figma: 历史对话 label  12/500 / line-height 18 / #B6B5BB
-                        const AppText(
+                        Text(
                           '历史对话',
                           style: TextStyle(
                             color: _textHint,
                             fontSize: 12,
                             fontFamily: 'PingFang SC',
-                            fontWeight: FontWeight.w500,
+                            fontWeight: AppFont.w500,
                             height: 18 / 12,
                           ),
                         ),
@@ -282,13 +282,13 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                               // Figma: group label 在 group 内 left:12（相对 group 的 left:0）
                               padding: const EdgeInsets.only(left: 12),
                               // Figma: 12/500 / line-height 18 / #CECED1
-                              child: AppText(
+                              child: Text(
                                 group.label,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   color: Color(0xFFCECED1),
                                   fontSize: 12,
                                   fontFamily: 'PingFang SC',
-                                  fontWeight: FontWeight.w500,
+                                  fontWeight: AppFont.w500,
                                   height: 18 / 12,
                                 ),
                               ),
@@ -354,15 +354,15 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
             children: [
               Expanded(
                 // Figma: 14/400 / line-height 20 / #0B081A
-                child: AppText(
+                child: Text(
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: _textPrimary,
                     fontSize: 14,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w400,
+                    fontWeight: AppFont.w400,
                     height: 20 / 14,
                   ),
                 ),
@@ -482,18 +482,18 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
             ),
           ),
           const SizedBox(width: 16),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Figma: 20/500 / line-height 28 / #0B081A
-                AppText(
+                Text(
                   '我是小艺同学，很高兴见到你！',
                   style: TextStyle(
                     color: _textPrimary,
                     fontSize: 20,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w500,
+                    fontWeight: AppFont.w500,
                     height: 28 / 20,
                   ),
                 ),
@@ -501,7 +501,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                 // Figma: 13/400 / line-height 22 / #707790；强制单行不换行。
                 // 41 个字符 × 13px ≈ 533px，与 Expanded 宽度 ~544px 是临界点，
                 // PingFang OTF 字宽稍大就会换行；softWrap:false 直接禁止换行。
-                AppText(
+                Text(
                   '专属音乐AI问答助手，秒解专业疑问，梳理艺考考点，全程陪伴学习，让音乐备考更轻松高效。',
                   maxLines: 1,
                   softWrap: false,
@@ -510,7 +510,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                     color: _textSecondary,
                     fontSize: 13,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w400,
+                    fontWeight: AppFont.w400,
                     height: 22 / 13,
                   ),
                 ),
@@ -535,26 +535,26 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Figma: 16/500 / line-height 22 / #0B081A
-            const AppText(
+            Text(
               '音乐理论问题',
               style: TextStyle(
                 color: _textPrimary,
                 fontSize: 16,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
                 height: 22 / 16,
               ),
             ),
             // Figma: 副标题紧跟标题（line-height 内紧排），不再额外间距
             const SizedBox(height: 0),
             // Figma: 12/400 / line-height 22 / #B6B5BB
-            const AppText(
+            Text(
               '让你的艺考之路更加顺畅~',
               style: TextStyle(
                 color: _textHint,
                 fontSize: 12,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w400,
+                fontWeight: AppFont.w400,
                 height: 22 / 12,
               ),
             ),
@@ -578,7 +578,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         // Figma: 16/600 italic / Barlow / line-height 22
-                        AppText(
+                        Text(
                           item.indexLabel,
                           style: TextStyle(
                             color: item.indexColor,
@@ -592,15 +592,15 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                         const SizedBox(width: 6),
                         // Figma: 12/400 / PingFang / line-height 22
                         Expanded(
-                          child: AppText(
+                          child: Text(
                             item.text,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: _textPrimary,
                               fontSize: 12,
                               fontFamily: 'PingFang SC',
-                              fontWeight: FontWeight.w400,
+                              fontWeight: AppFont.w400,
                               height: 22 / 12,
                             ),
                           ),
@@ -636,26 +636,26 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                   // 标题/副标题间距与左侧"音乐理论问题"卡保持一致，
                   // 确保第一行内容（"分析乐谱"按钮顶）与左卡第一题项顶严格对齐。
                   // Figma: 16/500 / line-height 22 / #0B081A
-                  const AppText(
+                  Text(
                     '效率工具',
                     style: TextStyle(
                       color: _textPrimary,
                       fontSize: 16,
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w500,
+                      fontWeight: AppFont.w500,
                       height: 22 / 16,
                     ),
                   ),
                   // 与左卡一致：标题与副标题不额外加间距（line-height 内紧排）
                   const SizedBox(height: 0),
                   // Figma: 12/400 / line-height 22 / #B6B5BB
-                  const AppText(
+                  Text(
                     '音乐学习就用艺同学',
                     style: TextStyle(
                       color: _textHint,
                       fontSize: 12,
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w400,
+                      fontWeight: AppFont.w400,
                       height: 22 / 12,
                     ),
                   ),
@@ -693,26 +693,26 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
-                                          AppText(
+                                          Text(
                                             tool.title,
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               color: _textPrimary,
                                               fontSize: 12,
                                               fontFamily: 'PingFang SC',
-                                              fontWeight: FontWeight.w500,
+                                              fontWeight: AppFont.w500,
                                               height: 1.35,
                                             ),
                                           ),
                                           const SizedBox(height: 1),
-                                          AppText(
+                                          Text(
                                             tool.subtitle,
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               color: _textHint,
                                               fontSize: 10,
                                               fontFamily: 'PingFang SC',
-                                              fontWeight: FontWeight.w400,
+                                              fontWeight: AppFont.w400,
                                               height: 1.35,
                                             ),
                                           ),
@@ -797,13 +797,13 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
             color: Colors.white,
             border: Border(bottom: BorderSide(color: _border)),
           ),
-          child: AppText(
+          child: Text(
             _activeTitle(state),
-            style: const TextStyle(
+            style: TextStyle(
               color: Color(0xFF14214E),
               fontSize: 15,
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w500,
+              fontWeight: AppFont.w500,
               height: 1.45,
             ),
           ),
@@ -825,7 +825,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                     if (index == state.messages.length) {
                       return const Padding(
                         padding: EdgeInsets.only(bottom: 14),
-                        child: AppText(
+                        child: Text(
                           '小艺同学正在思考中…',
                           style: TextStyle(
                             color: _textHint,
@@ -891,7 +891,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                   horizontal: 16,
                   vertical: 9,
                 ),
-                child: AppText(
+                child: Text(
                   message.text,
                   style: const TextStyle(
                     color: _textPrimary,
@@ -985,7 +985,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                         height: 14,
                       ),
                       const SizedBox(width: 4),
-                      AppText(
+                      Text(
                         message.reasoningStreaming
                             ? '深度思考中'
                             : message.reasoningExpanded
@@ -997,7 +997,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                               : _textPrimary,
                           fontSize: 13,
                           fontFamily: 'PingFang SC',
-                          fontWeight: FontWeight.w500,
+                          fontWeight: AppFont.w500,
                         ),
                       ),
                     ],
@@ -1150,14 +1150,14 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                   keyboardType: TextInputType.multiline,
                   textAlignVertical: TextAlignVertical.top,
                   cursorColor: _purple,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: _textPrimary,
                     fontSize: 14,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w400,
+                    fontWeight: AppFont.w400,
                     height: 1.6,
                   ),
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     isCollapsed: true,
                     border: InputBorder.none,
                     hintText: '流行音乐中常见的和弦进行有哪些？',
@@ -1165,7 +1165,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                       color: Color(0x7326244C),
                       fontSize: 14,
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w400,
+                      fontWeight: AppFont.w400,
                       height: 1.6,
                     ),
                   ),
@@ -1275,13 +1275,13 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
             children: [
               AppAssetGraphic(icon, width: iconSize, height: iconSize),
               const SizedBox(width: 2),
-              AppText(
+              Text(
                 label,
                 style: TextStyle(
                   color: textColor,
                   fontSize: 12,
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w500,
+                  fontWeight: AppFont.w500,
                   height: 1.17,
                 ),
               ),
@@ -1344,8 +1344,8 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
     // Figma: 10/400 / line-height 16 / #99A1AF；single line。
     // 用 Center 包裹让 Text 取自身内在宽度，并在父容器中水平居中显示，
     // 避免 softWrap:false 时文字从左侧起绘导致视觉上不居中的问题。
-    return const Center(
-      child: AppText(
+    return Center(
+      child: Text(
         '服务生成的所有内容均由人工智能模型生成，其生成内容的准确性和完整性无法保证，不代表我们的态度或观点',
         textAlign: TextAlign.center,
         maxLines: 1,
@@ -1355,7 +1355,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
           color: Color(0xFF99A1AF),
           fontSize: 10,
           fontFamily: 'PingFang SC',
-          fontWeight: FontWeight.w400,
+          fontWeight: AppFont.w400,
           height: 16 / 10,
         ),
       ),
@@ -1491,16 +1491,16 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const AppText('删除会话'),
-          content: AppText('确定删除「${session.title}」吗？'),
+          title: const Text('删除会话'),
+          content: Text('确定删除「${session.title}」吗？'),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const AppText('取消'),
+              child: const Text('取消'),
             ),
             TextButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const AppText('删除'),
+              child: const Text('删除'),
             ),
           ],
         );
@@ -1612,20 +1612,20 @@ class _AttachmentChip extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                AppText(
+                Text(
                   attachment.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: _textPrimary,
                     fontSize: 11,
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w500,
+                    fontWeight: AppFont.w500,
                     height: 1.1,
                   ),
                 ),
                 if (!compact && attachment.size > 0)
-                  AppText(
+                  Text(
                     _formatFileSize(attachment.size),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -1734,19 +1734,19 @@ class _AttachmentPreviewDialog extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        AppText(
+                        Text(
                           attachment.name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: _textPrimary,
                             fontSize: 14,
                             fontFamily: 'PingFang SC',
-                            fontWeight: FontWeight.w600,
+                            fontWeight: AppFont.w600,
                           ),
                         ),
                         if (attachment.size > 0)
-                          AppText(
+                          Text(
                             _AttachmentChip._formatFileSize(attachment.size),
                             style: const TextStyle(
                               color: _textHint,
@@ -1826,20 +1826,20 @@ class _UnsupportedAttachmentPreview extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            AppText(
+            Text(
               attachment.name,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 color: _textPrimary,
                 fontSize: 15,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w600,
+                fontWeight: AppFont.w600,
               ),
             ),
             const SizedBox(height: 8),
-            const AppText(
+            const Text(
               '当前文件类型暂不支持在线预览',
               style: TextStyle(
                 color: _textSecondary,
@@ -1863,7 +1863,7 @@ class _UnsupportedAttachmentPreview extends StatelessWidget {
               onPressed: () =>
                   Clipboard.setData(ClipboardData(text: attachment.url)),
               icon: const Icon(Icons.content_copy_outlined, size: 16),
-              label: const AppText('复制文件地址'),
+              label: const Text('复制文件地址'),
             ),
           ],
         ),
@@ -1939,7 +1939,7 @@ class _MessageText extends StatelessWidget {
       color: muted ? _textSecondary : _textPrimary,
       fontSize: 14,
       fontFamily: 'PingFang SC',
-      fontWeight: FontWeight.w400,
+      fontWeight: AppFont.w400,
       height: 1.7,
     );
 
@@ -1996,7 +1996,7 @@ class _MessageText extends StatelessWidget {
                   children: [
                     SizedBox(
                       width: 22,
-                      child: AppText(
+                      child: Text(
                         block.items[index].marker,
                         style: baseStyle.copyWith(
                           color: _purple,
@@ -2194,7 +2194,7 @@ class _TypingPlaceholder extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        AppText(
+        Text(
           label,
           style: TextStyle(
             color: muted ? _textSecondary : _textPrimary,

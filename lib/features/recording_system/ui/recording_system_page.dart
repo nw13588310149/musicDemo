@@ -10,8 +10,8 @@ import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../state/recording_system_controller.dart';
 import '../state/recording_system_state.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../core/widgets/app_text.dart';
 class RecordingSystemPage extends ConsumerWidget {
   const RecordingSystemPage({super.key});
 
@@ -413,14 +413,14 @@ class _RecordingSidebar extends StatelessWidget {
                       : Center(
                           child: Padding(
                             padding: EdgeInsets.symmetric(horizontal: ui(8)),
-                            child: AppText(
+                            child: Text(
                               '暂无分类\n点击下方"添加分类"创建',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: ui(12),
                                 color: const Color(0xFFB6B5BB),
                                 fontFamily: 'PingFang SC',
-                                fontWeight: FontWeight.w400,
+                                fontWeight: AppFont.w400,
                                 height: 1.6,
                               ),
                             ),
@@ -504,11 +504,18 @@ class _RecordingCategoryCardState extends State<_RecordingCategoryCard> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // 36×36 white circle with the yellow folder glyph from CSS.
+            // 选中：保留 CSS 还原的黄色文件夹手绘 glyph；
+            // 未选中：使用设计稿提供的灰色文件夹素材 ly.png。
             SizedBox(
               width: ui(36),
               height: ui(36),
-              child: const _RecordingFolderGlyph(),
+              child: selected
+                  ? const _RecordingFolderGlyph()
+                  : Image.asset(
+                      AppAssets.recordingCategoryIdleIcon,
+                      fit: BoxFit.contain,
+                      gaplessPlayback: true,
+                    ),
             ),
             SizedBox(width: ui(5)),
             Expanded(
@@ -516,7 +523,7 @@ class _RecordingCategoryCardState extends State<_RecordingCategoryCard> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  AppText(
+                  Text(
                     item.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -524,12 +531,12 @@ class _RecordingCategoryCardState extends State<_RecordingCategoryCard> {
                       fontSize: ui(13),
                       color: const Color(0xFF0B081A),
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w500,
+                      fontWeight: AppFont.w500,
                       height: 12 / 13,
                     ),
                   ),
                   SizedBox(height: ui(3)),
-                  AppText(
+                  Text(
                     '已存储${item.count}个文件',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -537,7 +544,7 @@ class _RecordingCategoryCardState extends State<_RecordingCategoryCard> {
                       fontSize: ui(10),
                       color: const Color(0xFF0B081A),
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w400,
+                      fontWeight: AppFont.w400,
                       height: 12 / 10,
                     ),
                   ),
@@ -707,13 +714,13 @@ class _AddCategoryCard extends StatelessWidget {
               child: Icon(Icons.add_rounded, size: ui(12), color: Colors.white),
             ),
             SizedBox(height: ui(4)),
-            AppText(
+            Text(
               '添加分类',
               style: TextStyle(
                 fontSize: ui(13),
                 color: const Color(0xFF0B081A),
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
                 height: 12 / 13,
               ),
             ),
@@ -788,13 +795,13 @@ class _RecordingContentArea extends StatelessWidget {
               onItemTap: (_) => onBackToOverview(),
             )
           else if (selectedCategoryName.isNotEmpty)
-            AppText(
+            Text(
               selectedCategoryName,
               style: TextStyle(
                 fontSize: ui(15),
                 color: const Color(0xFF0B081A),
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
                 height: 12 / 15,
               ),
             )
@@ -866,13 +873,13 @@ class _RecordingContentArea extends StatelessWidget {
           ),
           if (state.errorMessage != null && state.errorMessage!.isNotEmpty) ...[
             SizedBox(height: ui(10)),
-            AppText(
+            Text(
               state.errorMessage!,
               style: TextStyle(
                 fontSize: ui(12),
                 color: const Color(0xFFFF5681),
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w400,
+                fontWeight: AppFont.w400,
               ),
             ),
           ],
@@ -959,13 +966,13 @@ class _FolderBreadcrumb extends StatelessWidget {
         final itemIndex = index ~/ 2;
         final label = items[itemIndex];
         final isLast = itemIndex == items.length - 1;
-        final text = AppText(
+        final text = Text(
           label,
           style: TextStyle(
             fontSize: ui(14),
             color: isLast ? const Color(0xFF1A1A1A) : const Color(0xFF788698),
             fontFamily: 'PingFang SC',
-            fontWeight: isLast ? FontWeight.w600 : FontWeight.w400,
+            fontWeight: isLast ? AppFont.w600 : AppFont.w400,
           ),
         );
         if (isLast) {
@@ -1078,13 +1085,13 @@ class _ToolbarChip extends StatelessWidget {
               fit: BoxFit.contain,
             ),
             SizedBox(width: ui(6)),
-            AppText(
+            Text(
               label,
               style: TextStyle(
                 fontSize: ui(13),
                 color: const Color(0xFF0B081A),
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
                 height: 12 / 13,
               ),
             ),
@@ -1186,7 +1193,7 @@ class _RecordingFolderCardState extends State<_RecordingFolderCard> {
                     Positioned(
                       left: ui(10),
                       bottom: ui(28),
-                      child: AppText(
+                      child: Text(
                         item.dateLabel,
                         style: TextStyle(
                           fontSize: ui(11),
@@ -1199,7 +1206,7 @@ class _RecordingFolderCardState extends State<_RecordingFolderCard> {
                   Positioned(
                     left: ui(10),
                     bottom: ui(8),
-                    child: AppText(
+                    child: Text(
                       item.sizeLabel.isEmpty
                           ? '${item.count} 个录音'
                           : item.sizeLabel,
@@ -1228,7 +1235,7 @@ class _RecordingFolderCardState extends State<_RecordingFolderCard> {
           ),
           SizedBox(height: ui(10)),
           Center(
-            child: AppText(
+            child: Text(
               item.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -1237,7 +1244,7 @@ class _RecordingFolderCardState extends State<_RecordingFolderCard> {
                 fontSize: ui(15),
                 color: const Color(0xFF0B081A),
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
               ),
             ),
           ),
@@ -1374,7 +1381,7 @@ class _RecordingFileCardState extends State<_RecordingFileCard> {
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         Expanded(
-                          child: AppText(
+                          child: Text(
                             item.name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -1382,7 +1389,7 @@ class _RecordingFileCardState extends State<_RecordingFileCard> {
                               fontSize: ui(13),
                               color: const Color(0xFF0B081A),
                               fontFamily: 'PingFang SC',
-                              fontWeight: FontWeight.w500,
+                              fontWeight: AppFont.w500,
                               height: 12 / 13,
                             ),
                           ),
@@ -1411,7 +1418,7 @@ class _RecordingFileCardState extends State<_RecordingFileCard> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          AppText(
+                          Text(
                             item.sizeLabel.isEmpty
                                 ? item.durationLabel
                                 : item.sizeLabel,
@@ -1423,7 +1430,7 @@ class _RecordingFileCardState extends State<_RecordingFileCard> {
                               height: 12 / 10,
                             ),
                           ),
-                          AppText(
+                          Text(
                             item.dateLabel,
                             style: TextStyle(
                               fontSize: ui(10),
@@ -1489,13 +1496,13 @@ class _RecordingFab extends StatelessWidget {
               fit: BoxFit.contain,
             ),
             SizedBox(width: ui(8)),
-            AppText(
+            Text(
               label,
               style: TextStyle(
                 fontSize: ui(16),
                 color: const Color(0xFF0B081A),
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
                 height: 12 / 16,
               ),
             ),
@@ -1524,13 +1531,13 @@ class _RecordingEmpty extends StatelessWidget {
             height: ui(200),
             fit: BoxFit.contain,
           ),
-          AppText(
+          Text(
             message,
             style: TextStyle(
               fontSize: ui(15),
               color: const Color(0xFF0B081A),
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w500,
+              fontWeight: AppFont.w500,
             ),
           ),
         ],
@@ -1553,6 +1560,10 @@ class _RecordingEditorView extends ConsumerWidget {
     final controller = ref.read(recordingSystemControllerProvider.notifier);
     final phase = state.recordingPhase;
     final canFinish = state.elapsedMs >= 5000;
+    final canListenWhileRecording =
+        state.elapsedMs >= 1000 &&
+        state.elapsedMs < 5000 &&
+        (phase == RecordingPhase.recording || phase == RecordingPhase.paused);
     final displayDurationMs = math.max(state.elapsedMs, 8000);
     final progressRatio = (state.elapsedMs / displayDurationMs)
         .clamp(0.0, 1.0)
@@ -1637,7 +1648,29 @@ class _RecordingEditorView extends ConsumerWidget {
                 }
               : null,
         ),
-        bottomTip: '录制不能低于5秒',
+        bottomTip: canListenWhileRecording
+            ? '未满 5 秒可先试听当前录音（将结束本条录制）'
+            : '录制不能低于5秒',
+        bottomAccessory: canListenWhileRecording
+            ? TextButton(
+                onPressed: () async {
+                  final message =
+                      await controller.finalizeRecordingForListening();
+                  if (message != null && context.mounted) {
+                    _showMessage(context, message);
+                  }
+                },
+                child: Text(
+                  '试听当前录音',
+                  style: TextStyle(
+                    fontSize: DashboardScaleScope.of(context).ui(14),
+                    color: const Color(0xFF8741FF),
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w600,
+                  ),
+                ),
+              )
+            : null,
         errorMessage: state.errorMessage,
       ),
     );
@@ -1665,48 +1698,83 @@ class _RecordingPreviewView extends ConsumerWidget {
         : (state.previewPositionMs / totalMs).clamp(0.0, 1.0);
     final clampedTotalMs = math.max(totalMs, 8000);
 
-    // 「音频录制」播放页：草稿试听与已保存回放共用同一套最小化布局。
-    // - 顶部 header：仅保留「分享 / 删除」两个轻量按钮（不要收藏）。
-    // - 底部一行：左侧 -15s、正中央大紫色播放/暂停、右侧 +15s。
-    // - 不再展示倍速、收藏、重录、完成等次要操作；
-    //   保存动作走 finishRecording 之后自动弹出的保存弹窗。
+    // 「音频录制」播放页：草稿试听与已保存回放共用同一套布局。
+    // - 顶部：本地草稿显示「保存」（手动打开保存弹窗）；已入库作品不显示。
+    // - 「分享 / 删除」保留。
+    // - 底部：-15s、播放/暂停、+15s。
+    final headerActions = <Widget>[
+      if (item?.isLocalDraft == true &&
+          state.recordedBytes != null &&
+          state.recordedBytes!.isNotEmpty)
+        Padding(
+          padding: EdgeInsets.only(right: ui(8)),
+          child: InkWell(
+            onTap: controller.requestSaveDialog,
+            borderRadius: BorderRadius.circular(ui(8)),
+            child: Container(
+              height: ui(32),
+              padding: EdgeInsets.symmetric(horizontal: ui(12)),
+              decoration: BoxDecoration(
+                color: const Color(0xFF8741FF),
+                borderRadius: BorderRadius.circular(ui(8)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.save_rounded, size: ui(16), color: Colors.white),
+                  SizedBox(width: ui(4)),
+                  Text(
+                    '保存',
+                    style: TextStyle(
+                      fontSize: ui(12),
+                      color: Colors.white,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      _LightHeaderButton(
+        iconAsset: AppAssets.coursewareActionShare,
+        label: '分享',
+        onTap: () async {
+          final message = await controller.openShare();
+          if (message != null && context.mounted) {
+            _showMessage(context, message);
+          }
+        },
+      ),
+      _LightHeaderButton(
+        iconAsset: AppAssets.coursewareActionDelete,
+        label: '删除',
+        onTap: () async {
+          if (item == null) {
+            return;
+          }
+          final confirmed = await showConfirmDialog(
+            context: context,
+            title: '删除录音',
+            content: '删除后不可恢复，确认删除"${item.name}"吗？',
+            confirmLabel: '删除',
+          );
+          if (!confirmed || !context.mounted) {
+            return;
+          }
+          final message = await controller.deleteRecording(item);
+          if (message != null && context.mounted) {
+            _showMessage(context, message);
+          }
+        },
+      ),
+    ];
+
     return _RecordingStage(
       title: '音频录制',
       onBack: controller.backToList,
-      headerActions: [
-        _LightHeaderButton(
-          iconAsset: AppAssets.coursewareActionShare,
-          label: '分享',
-          onTap: () async {
-            final message = await controller.openShare();
-            if (message != null && context.mounted) {
-              _showMessage(context, message);
-            }
-          },
-        ),
-        _LightHeaderButton(
-          iconAsset: AppAssets.coursewareActionDelete,
-          label: '删除',
-          onTap: () async {
-            if (item == null) {
-              return;
-            }
-            final confirmed = await showConfirmDialog(
-              context: context,
-              title: '删除录音',
-              content: '删除后不可恢复，确认删除"${item.name}"吗？',
-              confirmLabel: '删除',
-            );
-            if (!confirmed || !context.mounted) {
-              return;
-            }
-            final message = await controller.deleteRecording(item);
-            if (message != null && context.mounted) {
-              _showMessage(context, message);
-            }
-          },
-        ),
-      ],
+      headerActions: headerActions,
       body: _RecordingStageBody(
         bars: bars,
         progressRatio: progressRatio,
@@ -1715,6 +1783,14 @@ class _RecordingPreviewView extends ConsumerWidget {
         elapsedClock: _formatClock(state.previewPositionMs),
         progressClock: _formatSecondsClock(state.previewPositionMs),
         totalClock: _formatSecondsClock(clampedTotalMs),
+        // 顶部波形可视化区：点按 / 水平拖动 → 跳转到对应进度。
+        // 用 totalMs（实际可用时长）反算目标毫秒，clampedTotalMs 仅是
+        // UI 展示下限（避免短录音坐标轴看起来挤），不参与 seek 逻辑。
+        onWaveSeek: totalMs <= 0
+            ? null
+            : (ratio) {
+                controller.seekPreviewTo((ratio * totalMs).round());
+              },
         // 左/右 pill 留空：按设计稿三键 [-15 ▶ +15] 整体居中、互相间距 52。
         leftPill: const SizedBox.shrink(),
         rightPill: const SizedBox.shrink(),
@@ -1932,13 +2008,13 @@ class _RecordingStageState extends ConsumerState<_RecordingStage> {
                 ),
                 Expanded(
                   child: Center(
-                    child: AppText(
+                    child: Text(
                       widget.title,
                       style: TextStyle(
                         fontSize: ui(16),
                         color: const Color(0xFF0B081A),
                         fontFamily: 'PingFang SC',
-                        fontWeight: FontWeight.w600,
+                        fontWeight: AppFont.w600,
                       ),
                     ),
                   ),
@@ -1997,13 +2073,13 @@ class _LightHeaderButton extends StatelessWidget {
               fit: BoxFit.contain,
             ),
             SizedBox(width: ui(4)),
-            AppText(
+            Text(
               label,
               style: TextStyle(
                 fontSize: ui(12),
                 color: Colors.black,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w600,
+                fontWeight: AppFont.w600,
               ),
             ),
           ],
@@ -2027,6 +2103,8 @@ class _RecordingStageBody extends StatelessWidget {
     required this.bottomTip,
     required this.errorMessage,
     this.centerControls,
+    this.onWaveSeek,
+    this.bottomAccessory,
   });
 
   final List<double> bars;
@@ -2043,6 +2121,11 @@ class _RecordingStageBody extends StatelessWidget {
   // 可选的「中间控制组」：录制态的 -15/▶/+15 或大圆按钮等。传入后
   // 底部会变成 [left | center | right] 三段式布局。
   final Widget? centerControls;
+  // 波形区点按 / 拖动时回调（0..1 比例），传入则启用 seek 交互；
+  // 录制中页面不传，保持只读展示。
+  final void Function(double ratio)? onWaveSeek;
+  /// 显示在 bottomTip 下方的可选控件（如录制页的「试听」按钮）。
+  final Widget? bottomAccessory;
 
   @override
   Widget build(BuildContext context) {
@@ -2075,6 +2158,7 @@ class _RecordingStageBody extends StatelessWidget {
                 progressRatio: progressRatio,
                 cursorRatio: cursorRatio,
                 durationMs: durationMs,
+                onSeek: onWaveSeek,
               ),
             ),
             Positioned(
@@ -2099,14 +2183,24 @@ class _RecordingStageBody extends StatelessWidget {
               right: 0,
               top: timerTop + ui(74),
               child: Center(
-                child: AppText(
-                  bottomTip,
-                  style: TextStyle(
-                    fontSize: ui(12),
-                    color: const Color(0xFFB6B5BB),
-                    fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w400,
-                  ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      bottomTip,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: ui(12),
+                        color: const Color(0xFFB6B5BB),
+                        fontFamily: 'PingFang SC',
+                        fontWeight: AppFont.w400,
+                      ),
+                    ),
+                    if (bottomAccessory != null) ...[
+                      SizedBox(height: ui(8)),
+                      bottomAccessory!,
+                    ],
+                  ],
                 ),
               ),
             ),
@@ -2139,12 +2233,18 @@ class _DarkWavePanel extends StatelessWidget {
     required this.progressRatio,
     required this.cursorRatio,
     required this.durationMs,
+    this.onSeek,
   });
 
   final List<double> bars;
   final double progressRatio;
   final double cursorRatio;
   final int durationMs;
+
+  /// 接收用户在波形区上的点按 / 水平拖动产生的进度比例 (0..1)。
+  /// 传入时，整个波形区会被一个透明的 [GestureDetector] 覆盖；
+  /// 不传则保持只读展示（比如录制中页不应允许拖动 seek）。
+  final void Function(double ratio)? onSeek;
 
   @override
   Widget build(BuildContext context) {
@@ -2169,7 +2269,8 @@ class _DarkWavePanel extends StatelessWidget {
           borderRadius: BorderRadius.circular(ui(10)),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              return Stack(
+              final width = constraints.maxWidth;
+              final stack = Stack(
                 children: [
                   Positioned.fill(
                     child: CustomPaint(
@@ -2179,17 +2280,36 @@ class _DarkWavePanel extends StatelessWidget {
                       ),
                     ),
                   ),
-                  _Cursor(
-                    width: constraints.maxWidth,
-                    progressRatio: cursorRatio,
+                  // 光标只是装饰：用 IgnorePointer 让它不拦截手势，
+                  // 否则用户拖到光标头部那两个小圆点上就 seek 不到了。
+                  IgnorePointer(
+                    child: _Cursor(
+                      width: width,
+                      progressRatio: cursorRatio,
+                    ),
                   ),
                   Positioned(
                     left: ui(12),
                     right: ui(12),
                     bottom: ui(8),
-                    child: _TimeScale(durationMs: durationMs),
+                    child: IgnorePointer(child: _TimeScale(durationMs: durationMs)),
                   ),
                 ],
+              );
+              if (onSeek == null) {
+                return stack;
+              }
+              double ratioFromDx(double dx) =>
+                  (dx / math.max(width, 1)).clamp(0.0, 1.0);
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapDown: (details) =>
+                    onSeek!(ratioFromDx(details.localPosition.dx)),
+                onHorizontalDragStart: (details) =>
+                    onSeek!(ratioFromDx(details.localPosition.dx)),
+                onHorizontalDragUpdate: (details) =>
+                    onSeek!(ratioFromDx(details.localPosition.dx)),
+                child: stack,
               );
             },
           ),
@@ -2311,26 +2431,26 @@ class _DarkScrubberPanel extends StatelessWidget {
                 Positioned(
                   left: ui(10),
                   bottom: ui(2),
-                  child: AppText(
+                  child: Text(
                     startLabel,
                     style: TextStyle(
                       fontSize: ui(11),
                       color: const Color(0xFF747474),
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w500,
+                      fontWeight: AppFont.w500,
                     ),
                   ),
                 ),
                 Positioned(
                   right: ui(10),
                   bottom: ui(2),
-                  child: AppText(
+                  child: Text(
                     endLabel,
                     style: TextStyle(
                       fontSize: ui(11),
                       color: const Color(0xFF747474),
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w500,
+                      fontWeight: AppFont.w500,
                     ),
                   ),
                 ),
@@ -2407,7 +2527,7 @@ class _TimeScale extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: List<Widget>.generate(divisions, (index) {
           final seconds = ((totalSeconds / (divisions - 1)) * index).round();
-          return AppText(
+          return Text(
             '0:${seconds.toString().padLeft(2, '0')}',
             style: TextStyle(
               fontSize: ui(11),
@@ -2451,7 +2571,7 @@ class _GraniteTimerCapsule extends StatelessWidget {
           ),
         ],
       ),
-      child: AppText(
+      child: Text(
         label,
         style: TextStyle(
           fontSize: ui(28),
@@ -2567,7 +2687,7 @@ class _ErrorBanner extends StatelessWidget {
           ),
           SizedBox(width: ui(8)),
           Expanded(
-            child: AppText(
+            child: Text(
               message,
               style: TextStyle(
                 fontSize: ui(13),
@@ -2624,25 +2744,25 @@ class _SaveRecordingDialog extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Center(
-                  child: AppText(
+                  child: Text(
                     '保存录音文件',
                     style: TextStyle(
                       fontSize: ui(22),
                       color: const Color(0xFF0B081A),
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w500,
+                      fontWeight: AppFont.w500,
                       height: 1.0,
                     ),
                   ),
                 ),
                 SizedBox(height: ui(28)),
-                AppText(
+                Text(
                   '您可选择喜欢的音效',
                   style: TextStyle(
                     fontSize: ui(14),
                     color: const Color(0xFF0B081A),
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w500,
+                    fontWeight: AppFont.w500,
                     height: 20 / 14,
                   ),
                 ),
@@ -2672,14 +2792,14 @@ class _SaveRecordingDialog extends ConsumerWidget {
                         padding: EdgeInsets.only(
                           right: index == labels.length - 1 ? 0 : ui(12),
                         ),
-                        child: AppText(
+                        child: Text(
                           labels[index],
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: ui(14),
                             color: const Color(0xFF0B081A),
                             fontFamily: 'PingFang SC',
-                            fontWeight: FontWeight.w400,
+                            fontWeight: AppFont.w400,
                             height: 20 / 14,
                           ),
                         ),
@@ -2688,13 +2808,13 @@ class _SaveRecordingDialog extends ConsumerWidget {
                   }),
                 ),
                 SizedBox(height: ui(20)),
-                AppText(
+                Text(
                   '作品名称',
                   style: TextStyle(
                     fontSize: ui(14),
                     color: const Color(0xFF0B081A),
                     fontFamily: 'PingFang SC',
-                    fontWeight: FontWeight.w500,
+                    fontWeight: AppFont.w500,
                     height: 20 / 14,
                   ),
                 ),
@@ -2822,7 +2942,7 @@ class _SaveTitleFieldState extends State<_SaveTitleField> {
           fontSize: ui(14),
           color: const Color(0xFF0B081A),
           fontFamily: 'PingFang SC',
-          fontWeight: FontWeight.w400,
+          fontWeight: AppFont.w400,
         ),
         decoration: InputDecoration(
           hintText: '请输入文件名称',
@@ -2830,7 +2950,7 @@ class _SaveTitleFieldState extends State<_SaveTitleField> {
             fontSize: ui(14),
             color: const Color(0xFFCECED1),
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w400,
+            fontWeight: AppFont.w400,
             height: 20 / 14,
           ),
           isDense: true,
@@ -2903,13 +3023,13 @@ class _DialogActionButton extends StatelessWidget {
             ),
           ],
         ),
-        child: AppText(
+        child: Text(
           label,
           style: TextStyle(
             fontSize: ui(16),
             color: primary ? Colors.white : const Color(0xFF0B081A),
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w400,
+            fontWeight: AppFont.w400,
             height: 12 / 16,
           ),
         ),
@@ -2943,13 +3063,13 @@ class _ShareRecordingDialog extends ConsumerWidget {
             children: [
               Row(
                 children: [
-                  AppText(
+                  Text(
                     '分享到班级',
                     style: TextStyle(
                       fontSize: ui(18),
                       color: const Color(0xFF0B081A),
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w600,
+                      fontWeight: AppFont.w600,
                     ),
                   ),
                   const Spacer(),
@@ -2960,7 +3080,7 @@ class _ShareRecordingDialog extends ConsumerWidget {
                 ],
               ),
               SizedBox(height: ui(8)),
-              AppText(
+              Text(
                 '选择需要分享的班级后，系统会逐个发送录音作品。',
                 style: TextStyle(
                   fontSize: ui(13),
@@ -2975,7 +3095,7 @@ class _ShareRecordingDialog extends ConsumerWidget {
                     ? Center(
                         child: Padding(
                           padding: EdgeInsets.symmetric(vertical: ui(24)),
-                          child: AppText(
+                          child: Text(
                             '暂无可分享的班级',
                             style: TextStyle(
                               fontSize: ui(14),
@@ -3022,13 +3142,13 @@ class _ShareRecordingDialog extends ConsumerWidget {
                                   ),
                                   SizedBox(width: ui(10)),
                                   Expanded(
-                                    child: AppText(
+                                    child: Text(
                                       item.name,
                                       style: TextStyle(
                                         fontSize: ui(14),
                                         color: const Color(0xFF0B081A),
                                         fontFamily: 'PingFang SC',
-                                        fontWeight: FontWeight.w500,
+                                        fontWeight: AppFont.w500,
                                       ),
                                     ),
                                   ),

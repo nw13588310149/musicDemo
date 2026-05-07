@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/piano_key_specs.dart';
 
-import '../../../core/widgets/app_text.dart';
 /// 全局共享的虚拟钢琴键盘组件。
 ///
 /// 行为对齐 `the-road-of-music/pages/music/VirtualPiano.vue`：
@@ -94,11 +93,34 @@ class _PianoKeyboardState extends State<PianoKeyboard> {
 
   bool _appliedInitialScroll = false;
 
+  /// 仅做一次：4 张键贴图的 ImageProvider 预解码，
+  /// 避免首次进入时白键露出底部暗色背景"黑一下"。
+  bool _precachedKeyAssets = false;
+
   @override
   void initState() {
     super.initState();
     _labelsVisible = widget.initialLabelsVisible;
     _whiteKeyWidth = widget.initialWhiteKeyWidth;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_precachedKeyAssets) {
+      _precachedKeyAssets = true;
+      // 把 4 张键贴图丢进 ImageCache。即使首帧渲染时还没解码完，
+      // 第二帧（约 16ms 后）就会拿到结果；配合下面 _PianoWhiteKey /
+      // _PianoBlackKey 的 frameBuilder 占位色，实际看不到"黑一下"。
+      for (final asset in const <String>[
+        _whiteIdleAsset,
+        _whitePressedAsset,
+        _blackIdleAsset,
+        _blackPressedAsset,
+      ]) {
+        precacheImage(AssetImage(asset), context);
+      }
+    }
   }
 
   @override
@@ -740,9 +762,13 @@ class _PianoLabelToggle extends StatelessWidget {
 
 /// 单个白键。
 ///
-/// 还原 Figma 设计稿的两层堆叠结构：
-/// - 后层（top: 5.71px）：暗色基底 #222A38 加底部白边，模拟键背阴影。
-/// - 前层（top: 0）：白色渐变面，浅色描边，承载点击/标签。
+/// 视觉素材统一使用 Figma 切图：
+/// - 默认态：`assets/images/piano/3.png`
+/// - 按下态：`assets/images/piano/4.png`
+///
+/// PNG 自身已经包含键面渐变、底部"键背阴影/脚线"等 3D 厚度感，
+/// 这里只把图片按 [BoxFit.fill] 拉伸到键的整块区域，再叠一层
+/// 标签（音名胶囊 + 简谱数字）。
 class _PianoWhiteKey extends StatelessWidget {
   const _PianoWhiteKey({
     required this.spec,
@@ -761,225 +787,64 @@ class _PianoWhiteKey extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final faceRadius = BorderRadius.only(
-      topLeft: Radius.circular(ui(1.28)),
-      topRight: Radius.circular(ui(1.28)),
-      bottomLeft: Radius.circular(ui(7.67)),
-      bottomRight: Radius.circular(ui(7.67)),
-    );
-    // 未按下：键面下边距 ~14px（露出底部暗边给 3D 厚度感）
-    // 按下：键面下沉，只露 ~5px 暗边
-    final faceBottomReserve = isPressed ? ui(4.55) : ui(13.96);
-
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: ui(0.5)),
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: <Widget>[
-          // 后层：键背阴影底盘（top: 5.71, 高度铺到底）+ 底部白色脚线
-          Positioned(
-            left: 0,
-            right: 0,
-            top: ui(5.71),
-            bottom: 0,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                borderRadius: faceRadius,
-                gradient: const LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: <Color>[Color(0x33222A38), Color(0x33CFD6F6)],
-                ),
-                border: Border(
-                  bottom: BorderSide(color: Colors.white, width: ui(1.3)),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // 切图自身会描绘"键面 + 底部脚线/阴影"。按下时阴影变小、键面下沉
+          // 的视觉变化全部由 4.png 自己负责，所以这里不再做位置动画。
+          //
+          // 标签需要落在"键面区域"的下方、避开底部那段阴影。按现有切图实测：
+          // - 默认态 3.png 大约底部 12% 是阴影；
+          // - 按下态 4.png 阴影被压扁到 4% 左右。
+          // 这里按比例算 label 的 bottom，保证两态都贴在键面下沿。
+          final h = constraints.maxHeight;
+          final labelBottom = isPressed ? h * 0.06 : h * 0.13;
+
+          return Stack(
+            clipBehavior: Clip.none,
+            children: <Widget>[
+              Positioned.fill(
+                child: Image.asset(
+                  isPressed ? _whitePressedAsset : _whiteIdleAsset,
+                  fit: BoxFit.fill,
+                  filterQuality: FilterQuality.medium,
+                  // 关键 1：image 切换时保留旧帧到新图解码完成，按下/松开
+                  // 之间不会出现一帧的"白色露底"。
+                  gaplessPlayback: true,
+                  // 关键 2：首次解码完成前给一个跟键面接近的浅色占位，避免
+                  // 露出键盘容器的 #1A1C21 暗背景（视觉上的"白键黑一下"）。
+                  frameBuilder: _whiteKeyFrameBuilder,
                 ),
               ),
-            ),
-          ),
-          // 前层：白键键面（按下时下沉、变深、加内阴影）
-          AnimatedPositioned(
-            duration: const Duration(milliseconds: 90),
-            curve: Curves.easeOut,
-            left: 0,
-            right: 0,
-            top: 0,
-            bottom: faceBottomReserve,
-            child: isPressed
-                ? _PianoWhiteKeyPressedFace(
-                    faceRadius: faceRadius,
-                    showLabel: showLabel,
-                    spec: spec,
-                    index: index,
-                  )
-                : _PianoWhiteKeyIdleFace(
-                    faceRadius: faceRadius,
-                    showLabel: showLabel,
-                    spec: spec,
-                    index: index,
-                  ),
-          ),
-        ],
+              if (showLabel)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: labelBottom,
+                  child: _PianoWhiteKeyLabel(spec: spec, index: index),
+                ),
+            ],
+          );
+        },
       ),
     );
   }
 }
 
-/// 未按下的白键面：保持最早的简洁白色 + 微弱阴影
-class _PianoWhiteKeyIdleFace extends StatelessWidget {
-  const _PianoWhiteKeyIdleFace({
-    required this.faceRadius,
-    required this.showLabel,
-    required this.spec,
-    required this.index,
-  });
-
-  final BorderRadius faceRadius;
-  final bool showLabel;
-  final PianoKeySpec spec;
-  final int index;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: faceRadius,
-        gradient: const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: <Color>[
-            Color(0xFFFFFFFF),
-            Color(0xFFF1F2F8),
-            Color(0xFFD8DBE6),
-          ],
-        ),
-        border: Border.all(color: const Color(0xFFEFF7FF), width: ui(0.6)),
-        boxShadow: const <BoxShadow>[
-          BoxShadow(
-            color: Color(0x14111827),
-            blurRadius: 4,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      child: showLabel
-          ? Padding(
-              padding: EdgeInsets.only(bottom: ui(10)),
-              child: _PianoWhiteKeyLabel(spec: spec, index: index),
-            )
-          : null,
-    );
+/// 白键贴图加载占位：贴图未就绪时铺一层接近键面的浅灰，
+/// 避免露出键盘容器暗背景。`wasSynchronouslyLoaded` 为 true
+/// 表示已命中 ImageCache（precacheImage 起作用了），直接用真图。
+Widget _whiteKeyFrameBuilder(
+  BuildContext context,
+  Widget child,
+  int? frame,
+  bool wasSynchronouslyLoaded,
+) {
+  if (wasSynchronouslyLoaded || frame != null) {
+    return child;
   }
-}
-
-/// 按下态白键面：底色 #A4ABB7 + 多层冷光叠加 + 顶部内阴影
-class _PianoWhiteKeyPressedFace extends StatelessWidget {
-  const _PianoWhiteKeyPressedFace({
-    required this.faceRadius,
-    required this.showLabel,
-    required this.spec,
-    required this.index,
-  });
-
-  final BorderRadius faceRadius;
-  final bool showLabel;
-  final PianoKeySpec spec;
-  final int index;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return ClipRRect(
-      borderRadius: faceRadius,
-      child: Stack(
-        children: <Widget>[
-          // 1. 底色 #A4ABB7
-          const Positioned.fill(child: ColoredBox(color: Color(0xFFA4ABB7))),
-          // 2. 自上而下：深蓝 → 冷白（gradient #4，47% 透明）
-          const Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: <Color>[Color(0x78131B38), Color(0x78CFD7F7)],
-                ),
-              ),
-            ),
-          ),
-          // 3. 自上透明 → 下方淡紫光（gradient #3）
-          const Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: <Color>[Color(0x00DDD7FF), Color(0x70DDD7FF)],
-                ),
-              ),
-            ),
-          ),
-          // 4. 高光横带（gradient #2）
-          const Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: <Color>[
-                    Color(0x00FFFFFF),
-                    Color(0x26FFFFFF),
-                    Color(0x36FFFFFF),
-                    Color(0x2BFFFFFF),
-                    Color(0x00FFFFFF),
-                  ],
-                  stops: <double>[0.0, 0.23, 0.30, 0.50, 1.0],
-                ),
-              ),
-            ),
-          ),
-          // 5. 整体冷蓝薄雾（gradient #1，9% 透明度）
-          const Positioned.fill(child: ColoredBox(color: Color(0x179EA9CE))),
-          // 6. 顶部内阴影模拟（box-shadow inset）
-          Positioned(
-            left: 0,
-            right: 0,
-            top: 0,
-            height: ui(36),
-            child: const DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: <Color>[Color(0xB35E667F), Color(0x005E667F)],
-                ),
-              ),
-            ),
-          ),
-          // 7. 描边
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                borderRadius: faceRadius,
-                border: Border.all(
-                  color: const Color(0xFFE9F0F6),
-                  width: ui(0.64),
-                ),
-              ),
-            ),
-          ),
-          // 8. 标签
-          if (showLabel)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: ui(10),
-              child: _PianoWhiteKeyLabel(spec: spec, index: index),
-            ),
-        ],
-      ),
-    );
-  }
+  return const ColoredBox(color: Color(0xFFD8DBE6), child: SizedBox.expand());
 }
 
 /// 白键标签。布局严格对齐 1.0 Vue（VirtualPiano.vue + notes.js）：
@@ -1047,7 +912,7 @@ class _PianoWhiteKeyLabel extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              AppText(
+              Text(
                 mainText,
                 style: TextStyle(
                   color: textColor,
@@ -1061,7 +926,7 @@ class _PianoWhiteKeyLabel extends StatelessWidget {
                 SizedBox(width: ui(0.5)),
                 Transform.translate(
                   offset: Offset(0, -ui(2.0)),
-                  child: AppText(
+                  child: Text(
                     superscript,
                     style: TextStyle(
                       color: textColor,
@@ -1087,7 +952,7 @@ class _PianoWhiteKeyLabel extends StatelessWidget {
             ),
           ),
         // 简谱 1..7
-        AppText(
+        Text(
           spec.solfege == 0 ? '' : '${spec.solfege}',
           style: TextStyle(
             color: const Color(0xFF1A1A1A),
@@ -1157,10 +1022,18 @@ class _OctaveDots extends StatelessWidget {
 
 /// 单个黑键。
 ///
-/// 按 Figma 切图严格对齐：
-/// - 主体：暗色 #191C24 + 顶部 #06070A→透明 渐变 + 灰色描边 + 双重投影。
-/// - 内嵌"凹槽"：左右两条 1px 立柱、中部 28×106 凹陷面。
-/// - 底部金属垫片 35×24 + 中间 1px pinstripe。
+/// 视觉素材统一使用 Figma 切图：
+/// - 默认态：`assets/images/piano/1.png`
+/// - 按下态：`assets/images/piano/2.png`
+///
+/// PNG **画布尺寸**为 [_blackCanvasW] × [_blackCanvasH]（73.65 × 144.82），
+/// 其中**有效键身**只占 [_blackEffectiveW] × [_blackEffectiveH]（39.5 × 136.13）
+/// 居中位置，画布四周剩余部分是透明留白 + drop-shadow。
+///
+/// 因此不能直接 `BoxFit.fill` 把整张画布拉到键区——那样会把透明边一起塞进
+/// 键身里，导致键看起来偏小、底部阴影错位。这里反过来：把图片渲染得**比键身
+/// 略大**，让"有效区"刚好对齐键身，多出的画布（即阴影 + 透明）自然超出键
+/// 边、落在相邻白键上方，模拟真实的 drop-shadow。
 class _PianoBlackKey extends StatelessWidget {
   const _PianoBlackKey({
     required this.spec,
@@ -1174,204 +1047,139 @@ class _PianoBlackKey extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 1),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          // Figma 中黑键基础尺寸：39.5 × 136.13。所有比例都基于这个原始数值，
-          // 这样可以无缝缩放至当前布局给到的实际宽高。
-          final scale = constraints.maxWidth / 39.5;
+          final w = constraints.maxWidth;
           final h = constraints.maxHeight;
-          final radius = BorderRadius.only(
-            bottomLeft: Radius.circular(6.39 * scale),
-            bottomRight: Radius.circular(6.39 * scale),
-          );
 
-          return AnimatedContainer(
-            duration: const Duration(milliseconds: 70),
-            decoration: BoxDecoration(
-              borderRadius: radius,
-              // 主体：上深下浅的两层叠加，按下时整体提亮
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: isPressed
-                    ? const <Color>[Color(0xFF222631), Color(0xFF101319)]
-                    : const <Color>[Color(0xFF06070A), Color(0xFF191C24)],
-              ),
-              border: Border.all(
-                color: const Color(0xFF999999),
-                width: 0.64 * scale,
-              ),
-              boxShadow: const <BoxShadow>[
-                BoxShadow(
-                  color: Color(0x8A11213A),
-                  blurRadius: 13,
-                  spreadRadius: -9,
-                  offset: Offset(0, 12),
+          // 默认态 / 按下态各自有一组"画布尺寸"和"有效区尺寸"。
+          // 调键体在屏幕上看起来的大小请参考下方常量：
+          //   - effectiveW / effectiveH **变小** → PNG 整体渲染**变大**
+          //     → 键体在屏幕上看起来更大；
+          //   - 反之 effective* **变大** → 键体看起来更小。
+          // 横向和纵向可以独立调，宽高比不一定保持一致。
+          final canvasW = isPressed ? _blackPressedCanvasW : _blackIdleCanvasW;
+          final canvasH = isPressed ? _blackPressedCanvasH : _blackIdleCanvasH;
+          final effectiveW = isPressed
+              ? _blackPressedEffectiveW
+              : _blackIdleEffectiveW;
+          final effectiveH = isPressed
+              ? _blackPressedEffectiveH
+              : _blackIdleEffectiveH;
+
+          // 把 PNG 画布按"有效区 = 键身"反推回它该被渲染多大：
+          // imgW / canvasW = w / effectiveW  →  imgW = w * canvasW / effectiveW
+          final imgW = w * canvasW / effectiveW;
+          final imgH = h * canvasH / effectiveH;
+          // 留白居中分布，所以左右/上下各超出一半。
+          final offsetX = -(imgW - w) / 2;
+          final offsetY = -(imgH - h) / 2;
+
+          // label 字号沿用"按 39.5px 设计宽缩放"的旧逻辑。
+          final scale = w / effectiveW;
+
+          return Stack(
+            clipBehavior: Clip.none,
+            children: <Widget>[
+              Positioned(
+                left: offsetX,
+                top: offsetY,
+                width: imgW,
+                height: imgH,
+                child: Image.asset(
+                  isPressed ? _blackPressedAsset : _blackIdleAsset,
+                  fit: BoxFit.fill,
+                  filterQuality: FilterQuality.medium,
+                  // 同白键：保留旧帧 + 解码前画占位色，
+                  // 消除"按下闪一下白""首次进入闪一下"。
+                  gaplessPlayback: true,
+                  frameBuilder: _blackKeyFrameBuilder,
                 ),
-                BoxShadow(
-                  color: Color(0x7D5D6E9F),
-                  blurRadius: 13,
-                  offset: Offset(0, 2.6),
-                ),
-              ],
-            ),
-            child: Stack(
-              clipBehavior: Clip.hardEdge,
-              children: <Widget>[
-                // 顶端 outline 高光（HTML 中 outline 1.28px white@.28）
+              ),
+              if (showLabel)
                 Positioned(
                   left: 0,
                   right: 0,
-                  top: 0,
-                  child: Container(
-                    height: 1.3 * scale,
-                    color: Colors.white.withValues(alpha: 0.28),
-                  ),
-                ),
-                // 凹槽中心矩形 #2F3442
-                Positioned(
-                  left: 5.63 * scale,
-                  right: (39.5 - 5.63 - 28.25) * scale,
-                  top: (2.80 / 136.13) * h,
-                  height: (105.68 / 136.13) * h,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: <Color>[Color(0x9411131C), Color(0x002F3442)],
-                      ),
-                      color: const Color(0xFF2F3442),
-                      border: Border.all(
-                        color: const Color(0x99999999),
-                        width: 0.32 * scale,
-                      ),
+                  // 6 * scale 是切图设计稿原始位置，再额外上移 ui(10)
+                  // 让 F# / G# 等标签离键底有更舒服的呼吸距离。
+                  bottom: 6 * scale + ui(10),
+                  child: Text(
+                    spec.label,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.85),
+                      fontSize: 9 * scale,
+                      fontFamily: 'Manrope',
+                      fontWeight: FontWeight.w600,
+                      height: 1,
                     ),
                   ),
                 ),
-                // 凹槽右立柱（顶部高光向下衰减）
-                Positioned(
-                  left: 34.81 * scale,
-                  top: (12.42 / 136.13) * h,
-                  width: 3.37 * scale,
-                  height: (119.95 / 136.13) * h,
-                  child: Opacity(
-                    opacity: 0.67,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          begin: Alignment.centerRight,
-                          end: Alignment.centerLeft,
-                          colors: <Color>[Color(0xB50B0D14), Color(0x00393E4B)],
-                        ),
-                        color: const Color(0xFF393E4B),
-                        border: Border.all(
-                          color: const Color(0x99999999),
-                          width: 0.32 * scale,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                // 凹槽左立柱：与右立柱镜像，所以渐变方向反过来
-                Positioned(
-                  left: 1.33 * scale,
-                  top: (12.42 / 136.13) * h,
-                  width: 3.37 * scale,
-                  height: (119.95 / 136.13) * h,
-                  child: Opacity(
-                    opacity: 0.67,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
-                          colors: <Color>[Color(0xB50B0D14), Color(0x00393E4B)],
-                        ),
-                        color: const Color(0xFF393E4B),
-                        border: Border.all(
-                          color: const Color(0x99999999),
-                          width: 0.32 * scale,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                // 底部金属垫片
-                Positioned(
-                  left: 2.15 * scale,
-                  width: 35.20 * scale,
-                  top: (109.61 / 136.13) * h,
-                  height: (24.05 / 136.13) * h,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(2.56 * scale),
-                      gradient: const LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: <Color>[Color(0xB50B0D14), Color(0x00393E4B)],
-                      ),
-                      color: const Color(0xFF393E4B),
-                      border: Border.all(
-                        color: const Color(0x99999999),
-                        width: 0.32 * scale,
-                      ),
-                    ),
-                  ),
-                ),
-                // 金属垫片中央 pinstripe
-                Positioned(
-                  left: 19.39 * scale,
-                  width: 1.80 * scale,
-                  top: (113.21 / 136.13) * h,
-                  height: (20.49 / 136.13) * h,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: <Color>[Color(0x001A1D25), Color(0xFF191C24)],
-                      ),
-                      border: Border(
-                        left: BorderSide(
-                          color: const Color(0x33E4E9F5),
-                          width: 0.64 * scale,
-                        ),
-                        right: BorderSide(
-                          color: const Color(0x33E4E9F5),
-                          width: 0.64 * scale,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                if (showLabel)
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 6 * scale,
-                    child: AppText(
-                      spec.label,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.85),
-                        fontSize: 9 * scale,
-                        fontFamily: 'Manrope',
-                        fontWeight: FontWeight.w600,
-                        height: 1,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+            ],
           );
         },
       ),
     );
   }
 }
+
+/// 黑键贴图加载占位：贴图未就绪时给一块跟键体接近的深色，
+/// 避免按下/首帧露白。`Padding` 把占位色限制在键身范围内，
+/// 不让它跟着画布溢出去画到相邻白键上方。
+Widget _blackKeyFrameBuilder(
+  BuildContext context,
+  Widget child,
+  int? frame,
+  bool wasSynchronouslyLoaded,
+) {
+  if (wasSynchronouslyLoaded || frame != null) {
+    return child;
+  }
+  // 占位居中收缩到"有效键身"那一块（避免阴影区也铺一片黑色）。
+  // 数值取自 _black*Effective* 的近似比例：横向 39.5/73.65 ≈ 0.536，
+  // 纵向 136/144.82 ≈ 0.940。
+  return const FractionallySizedBox(
+    widthFactor: 0.536,
+    heightFactor: 0.940,
+    child: ColoredBox(
+      color: Color(0xFF14171F),
+      child: SizedBox.expand(),
+    ),
+  );
+}
+
+// ===== 黑键 PNG 的画布 + 有效区尺寸（Figma 单位） =====
+//
+// 这些常量决定了 PNG 在键里的渲染大小。每个状态四个常量：
+//   _black{State}CanvasW / CanvasH        —— PNG 整张画布的设计尺寸
+//   _black{State}EffectiveW / EffectiveH  —— 画布里"键体"实际占的范围
+//
+// 渲染逻辑：把 PNG 画到 (w * canvasW/effectiveW) × (h * canvasH/effectiveH)
+// 大小，让 effective 区刚好填满键的实际显示区域 w × h，画布周围的
+// 透明 / drop-shadow 部分自然超出键边、落到相邻白键上。
+//
+// 调按下态键体的视觉大小：
+//   - 觉得键变小了 → **降低** _blackPressedEffectiveW / EffectiveH
+//   - 觉得键变大了 → **提高** _blackPressedEffectiveW / EffectiveH
+// 数值变化在屏幕上的放大效果：1px 设计单位差 ≈ 渲染键高的 0.7%。
+const double _blackIdleCanvasW = 73.65;
+const double _blackIdleCanvasH = 144.82;
+const double _blackIdleEffectiveW = 39.5;
+const double _blackIdleEffectiveH = 136.13;
+
+const double _blackPressedCanvasW = 73.65;
+const double _blackPressedCanvasH = 144.82;
+const double _blackPressedEffectiveW = 35;
+const double _blackPressedEffectiveH = 123;
+
+// 钢琴键纹理素材路径常量（避免在两处出现魔术字符串）。
+const String _whiteIdleAsset = 'assets/images/piano/3.png';
+const String _whitePressedAsset = 'assets/images/piano/4.png';
+const String _blackIdleAsset = 'assets/images/piano/1.png';
+const String _blackPressedAsset = 'assets/images/piano/2.png';
 
 /// 让滚动行为不显示桌面端默认的 scrollbar，并允许鼠标拖动。
 class _PianoScrollBehavior extends ScrollBehavior {

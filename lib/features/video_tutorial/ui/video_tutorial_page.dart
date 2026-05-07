@@ -7,6 +7,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:chinese_font_library/chinese_font_library.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -23,8 +24,8 @@ import '../../shell/ui/shell_layout.dart';
 import '../data/video_publisher_data.dart';
 import '../state/video_tutorial_controller.dart';
 import '../state/video_tutorial_state.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../core/widgets/app_text.dart';
 const int _kVideoPreloadLimit = 8;
 const int _kVideoPrecacheWidth = 720;
 const int _kVideoImageMaxDecodeWidth = 1600;
@@ -46,6 +47,9 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
   final ScrollController _scrollController = ScrollController();
   int _bannerIndex = 0;
   bool _isDetailOpening = false;
+  // 首次 didChangeDependencies 时消费一次路由参数（如 my_collection 跳转过来
+  // 携带的 openVideoId），避免 build 周期内被反复触发。
+  bool _consumedRouteArgs = false;
   final Set<String> _preloadedImageUrls = <String>{};
 
   @override
@@ -53,6 +57,22 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
     super.initState();
     MediaKit.ensureInitialized();
     _scrollController.addListener(_handleScroll);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_consumedRouteArgs) return;
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is! Map) return;
+    final id = args['openVideoId']?.toString() ?? '';
+    if (id.isEmpty) return;
+    _consumedRouteArgs = true;
+    // 等首帧渲染稳定后再触发，避免在 build 阶段触发 setState/Navigator push。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _openVideoDetailById(id);
+    });
   }
 
   @override
@@ -107,11 +127,28 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
   }
 
   Future<void> _openVideoDetail(VideoListItem item) async {
+    await _runOpenDetail(
+      (notifier) => notifier.openDetail(item),
+    );
+  }
+
+  /// 通过视频 id 直接打开详情面板，用于"我的收藏"等只携带 id 的入口。
+  Future<void> _openVideoDetailById(String id) async {
+    await _runOpenDetail(
+      (notifier) => notifier.openDetailById(id),
+    );
+  }
+
+  /// 共用：调用 controller 加载详情 → push 右侧详情路由 → 关闭面板。
+  /// 不同入口只在第一步（如何拉详情）上有差异。
+  Future<void> _runOpenDetail(
+    Future<String?> Function(VideoTutorialController) load,
+  ) async {
     if (_isDetailOpening) return;
     _isDetailOpening = true;
 
     final notifier = ref.read(videoTutorialControllerProvider.notifier);
-    final message = await notifier.openDetail(item);
+    final message = await load(notifier);
 
     if (!mounted) {
       _isDetailOpening = false;
@@ -211,6 +248,7 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
                         banners: state.banners,
                         activeIndex: _bannerIndex,
                         loading: state.loading,
+                        // 右侧"最新视频"：直接取下方网格列表的前三条
                         latestVideos: state.videoList.take(3).toList(),
                         resolveUrl: _resolveUrl,
                         onBannerChanged: (i) {
@@ -243,7 +281,7 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
                     SliverFillRemaining(
                       hasScrollBody: false,
                       child: Center(
-                        child: AppText(
+                        child: Text(
                           state.errorMessage.isEmpty
                               ? '暂无视频数据'
                               : state.errorMessage,
@@ -304,7 +342,7 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
                       child: Padding(
                         padding: EdgeInsets.zero,
                         child: Center(
-                          child: AppText(
+                          child: Text(
                             '没有更多了',
                             style: TextStyle(
                               fontSize: ui(12),
@@ -696,7 +734,7 @@ class _VideoDetailSheetState extends ConsumerState<_VideoDetailSheet>
               fit: BoxFit.contain,
               fallback: const Padding(
                 padding: EdgeInsets.all(24),
-                child: AppText('图片加载失败', style: TextStyle(color: Colors.white)),
+                child: Text('图片加载失败', style: TextStyle(color: Colors.white)),
               ),
             ),
           ),
@@ -808,11 +846,11 @@ class _VideoShareDrawerState extends State<_VideoShareDrawer> {
     if (!mounted) return;
     setState(() => _sending = false);
     if (message != null && message.isNotEmpty) {
-      AppToast.show(context, message);
+      AppToast.showError(context, message);
       return;
     }
     Navigator.of(context).pop();
-    AppToast.show(context, '消息已成功发送');
+    AppToast.showSuccess(context, '消息已成功发送');
   }
 
   @override
@@ -1475,7 +1513,7 @@ class _Badge extends StatelessWidget {
         color: Colors.black.withValues(alpha: 0.65),
         borderRadius: BorderRadius.circular(999),
       ),
-      child: AppText(
+      child: Text(
         text,
         style: const TextStyle(
           color: Colors.white,
@@ -1540,7 +1578,7 @@ class _GestureIndicator extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                AppText(
+                Text(
                   fmt(Duration(milliseconds: seekMs.toInt())),
                   style: const TextStyle(
                     color: Colors.white,
@@ -1549,7 +1587,7 @@ class _GestureIndicator extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 4),
-                AppText(
+                Text(
                   '$sign${fmt(Duration(milliseconds: delta.abs().toInt()))}',
                   style: TextStyle(
                     color: delta >= 0
@@ -1612,7 +1650,7 @@ class _VerticalProgressBadge extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          AppText(
+          Text(
             label,
             style: const TextStyle(color: Colors.white, fontSize: 11),
           ),
@@ -1856,7 +1894,7 @@ class _PlayerBottomBar extends StatelessWidget {
                 constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               ),
               const SizedBox(width: 6),
-              AppText(
+              Text(
                 '${fmt(position)} / ${fmt(duration)}',
                 style: const TextStyle(color: Colors.white, fontSize: 12),
               ),
@@ -1934,7 +1972,7 @@ class _SpeedPanel extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const AppText(
+                  const Text(
                     '倍  速',
                     style: TextStyle(
                       color: Colors.white,
@@ -1981,7 +2019,7 @@ class _SpeedPanel extends StatelessWidget {
                         )
                       else
                         const SizedBox(width: 20),
-                      AppText(
+                      Text(
                         rate == 1.0
                             ? '1.0x  (正常)'
                             : '${rate.toStringAsFixed(2).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '')}x',
@@ -2046,12 +2084,12 @@ class _CompletedOverlay extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          const AppText('重播', style: TextStyle(color: Colors.white, fontSize: 13)),
+          const Text('重播', style: TextStyle(color: Colors.white, fontSize: 13)),
           if (nextVideo != null) ...[
             const SizedBox(height: 24),
             const Divider(color: Colors.white24, indent: 40, endIndent: 40),
             const SizedBox(height: 16),
-            AppText(
+            Text(
               '下一集',
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.7),
@@ -2061,7 +2099,7 @@ class _CompletedOverlay extends StatelessWidget {
             const SizedBox(height: 4),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: AppText(
+              child: Text(
                 nextVideo!.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -2091,7 +2129,7 @@ class _CompletedOverlay extends StatelessWidget {
                         ),
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: const AppText(
+                      child: const Text(
                         '取消',
                         style: TextStyle(color: Colors.white, fontSize: 12),
                       ),
@@ -2110,7 +2148,7 @@ class _CompletedOverlay extends StatelessWidget {
                       color: const Color(0xFF8741FF),
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: AppText(
+                    child: Text(
                       countdown > 0 ? '${countdown}s 后播放' : '立即播放',
                       style: const TextStyle(
                         color: Colors.white,
@@ -2476,7 +2514,7 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                 ),
                                 const SizedBox(width: 4),
                                 Expanded(
-                                  child: AppText(
+                                  child: Text(
                                     widget.title,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
@@ -2500,7 +2538,7 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                       color: const Color(0xFF8741FF),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
-                                    child: AppText(
+                                    child: Text(
                                       '${_rate.toStringAsFixed(2).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '')}x',
                                       style: const TextStyle(
                                         color: Colors.white,
@@ -2686,7 +2724,7 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                         ),
                                       ),
                                       const SizedBox(width: 4),
-                                      AppText(
+                                      Text(
                                         '${_fmt(_position)} / ${_fmt(_duration)}',
                                         style: const TextStyle(
                                           color: Colors.white,
@@ -2899,7 +2937,7 @@ class _FloatingMiniPlayerState extends State<_FloatingMiniPlayer> {
                             ],
                           ),
                         ),
-                        child: AppText(
+                        child: Text(
                           widget.title,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -3082,7 +3120,7 @@ class _DetailTabButton extends StatelessWidget {
           child: Transform.scale(
             scale: selected ? 1.18 : 1.0,
             alignment: Alignment.center,
-            child: AppText(
+            child: Text(
               text,
               textAlign: TextAlign.center,
               style: TextStyle(
@@ -3137,7 +3175,7 @@ class _ActionBtn extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 4),
-            AppText(
+            Text(
               label,
               style: TextStyle(
                 fontSize: 12,
@@ -3188,7 +3226,7 @@ class _DetailInfoTabState extends State<_DetailInfoTab> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: AppText(
+                  child: Text(
                     detail.name,
                     style: const TextStyle(
                       fontSize: 14,
@@ -3220,7 +3258,7 @@ class _DetailInfoTabState extends State<_DetailInfoTab> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const SizedBox(height: 8),
-                      AppText(
+                      Text(
                         detail.description.isEmpty
                             ? '暂无简介'
                             : detail.description,
@@ -3233,7 +3271,7 @@ class _DetailInfoTabState extends State<_DetailInfoTab> {
                       const SizedBox(height: 4),
                       const Align(
                         alignment: Alignment.centerRight,
-                        child: AppText(
+                        child: Text(
                           '视频来源用户上传，如有侵权，请立即联系删除。',
                           style: TextStyle(
                             fontSize: 10,
@@ -3248,7 +3286,7 @@ class _DetailInfoTabState extends State<_DetailInfoTab> {
           ),
           if (detail.seriesVideoList.isNotEmpty) ...[
             const SizedBox(height: 20),
-            const AppText(
+            const Text(
               '相关视频',
               style: TextStyle(
                 fontSize: 16,
@@ -3291,7 +3329,7 @@ class _ScoreTab extends StatelessWidget {
   Widget build(BuildContext context) {
     if (scoreImages.isEmpty) {
       return const Center(
-        child: AppText(
+        child: Text(
           '暂无谱例',
           style: TextStyle(fontSize: 14, color: Color(0xFFB6B5BB)),
         ),
@@ -3318,7 +3356,7 @@ class _ScoreTab extends StatelessWidget {
               fallback: const SizedBox(
                 height: 120,
                 child: Center(
-                  child: AppText(
+                  child: Text(
                     '图片加载失败',
                     style: TextStyle(fontSize: 12, color: Color(0xFFB6B5BB)),
                   ),
@@ -3390,7 +3428,7 @@ class _SeriesCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(18),
                       ),
                       child: Center(
-                        child: AppText(
+                        child: Text(
                           item.duration,
                           style: const TextStyle(
                             color: Colors.white,
@@ -3410,7 +3448,7 @@ class _SeriesCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  AppText(
+                  Text(
                     item.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -3421,7 +3459,7 @@ class _SeriesCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  AppText(
+                  Text(
                     item.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -3461,7 +3499,7 @@ class _SeriesCard extends StatelessWidget {
                     ),
                   ),
                   SizedBox(width: 2),
-                  AppText(
+                  Text(
                     '播放',
                     style: TextStyle(
                       color: Colors.white,
@@ -3502,11 +3540,13 @@ class _VideoCategoryHeader extends StatelessWidget {
     final ui = scale.ui;
     // Figma 规格：
     //   - 整体高度 36
-    //   - 活动 tab：18/500/PingFang SC/#0B081A，无横向 padding
-    //   - 非活动 tab：14/500/PingFang SC/#6D6B75，padding 16/10
-    //   - 都不带背景填充；点击切换字号 + 颜色
-    //   - 搜索框：254×36，white bg，1px #F3F2F3 outline，radius 12，
-    //     padding 16/10，14×14 search icon + gap 6 + 14/400/PingFang SC/#D1D1D1 文字
+    //   - 活动 tab：18/500/PingFang SC/#0B081A
+    //   - 非活动 tab：14/500/PingFang SC/#6D6B75
+    //   - 都不带背景填充与横向 padding；选中态仅切换字号 + 颜色
+    //   - tab 之间：固定 32px 间距（按钮右边 → 下一个按钮文字左边）
+    //   - 每个 tab 始终预留"激活字号(18)"的宽度作为布局尺寸，
+    //     这样切换选中态时其他按钮（含搜索框）位置不会被推动
+    //   - 搜索框：254×36，white bg，1px #F3F2F3 outline，radius 12
     // 当 menus 为空时安全兜底；否则取选中菜单（找不到时退回首项）。
     final VideoMenu? selectedMenu = menus.isEmpty
         ? null
@@ -3518,8 +3558,6 @@ class _VideoCategoryHeader extends StatelessWidget {
         ? '${selectedMenu.name}视频'
         : '搜索视频';
     // 整个顶部栏严格 36 高度。tab 项 + 搜索框都在这个固定高度里垂直居中。
-    // 不再用 padding-vertical 撑高（会与字号组合导致 line-box 被裁切），
-    // 而是让外层固定 36，内层用 Center 真正垂直居中字号变化的文字。
     final barH = ui(36);
     return SizedBox(
       height: barH,
@@ -3527,36 +3565,51 @@ class _VideoCategoryHeader extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
-            child: ListView.builder(
+            child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: menus.length,
+              // tab 之间固定 32px 间距，与选中态无关。
+              separatorBuilder: (_, _) => SizedBox(width: ui(20)),
               itemBuilder: (context, index) {
                 final menu = menus[index];
                 final active = menu.id == selectedMenuId;
-                // 命中区域 = Container（含 padding），由 GestureDetector(opaque)
-                // 直接吃掉点击。tab 项之间无外层 margin，间距完全由 padding 提供。
-                // 比之前总间距减少 15px：去掉 12px right margin + padding 16→14.5。
                 return GestureDetector(
                   onTap: () => onSelectMenu(menu.id),
                   behavior: HitTestBehavior.opaque,
-                  child: Container(
+                  child: SizedBox(
                     height: barH,
-                    // 活动 tab 无横向 padding；非活动 tab 14.5 横向 padding
-                    // 既保留视觉间距、也保证命中区域足够宽。
-                    padding: EdgeInsets.symmetric(
-                      horizontal: active ? 0 : ui(14.5),
-                    ),
-                    alignment: Alignment.center,
-                    child: AppText(
-                      menu.name,
-                      style: TextStyle(
-                        fontSize: active ? ui(18) : ui(14),
-                        color: active
-                            ? const Color(0xFF0B081A)
-                            : const Color(0xFF6D6B75),
-                        fontFamily: 'PingFang SC',
-                        fontWeight: FontWeight.w500,
-                        height: 1,
+                    child: Center(
+                      // 用 Stack 把"激活字号占位文本"与"实际文本"叠在一起：
+                      //   - 占位文本始终按激活字号渲染但完全透明，仅用于撑开
+                      //     按钮宽度，确保切换选中态时该 tab 的尺寸不变；
+                      //   - 实际文本根据选中态切换字号与颜色，水平/垂直居中。
+                      // 这样选中放大不会推动右侧其他 tab 与搜索框的位置。
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Text(
+                            menu.name,
+                            style: TextStyle(
+                              fontSize: ui(18),
+                              color: const Color(0x00000000),
+                              fontFamily: 'PingFang SC',
+                              fontWeight: AppFont.w500,
+                              height: 1,
+                            ).useSystemChineseFont(),
+                          ),
+                          Text(
+                            menu.name,
+                            style: TextStyle(
+                              fontSize: active ? ui(18) : ui(14),
+                              color: active
+                                  ? const Color(0xFF0B081A)
+                                  : const Color(0xFF6D6B75),
+                              fontFamily: 'PingFang SC',
+                              fontWeight: AppFont.w500,
+                              height: 1,
+                            ).useSystemChineseFont(),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -3586,7 +3639,7 @@ class _VideoCategoryHeader extends StatelessWidget {
                 ),
                 SizedBox(width: ui(6)),
                 Expanded(
-                  child: AppText(
+                  child: Text(
                     searchHint,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -3594,9 +3647,9 @@ class _VideoCategoryHeader extends StatelessWidget {
                       fontSize: ui(14),
                       color: const Color(0xFFD1D1D1),
                       fontFamily: 'PingFang SC',
-                      fontWeight: FontWeight.w400,
+                      fontWeight: AppFont.w400,
                       height: 1,
-                    ),
+                    ).useSystemChineseFont(),
                   ),
                 ),
               ],
@@ -3736,19 +3789,16 @@ class _LatestVideoListCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = scale.ui;
-    // Figma 规格：宽 255、padding 12.5/12、radius 12、bg #F5F6FA。
+    // Figma 规格：宽 255、radius 12、bg #F5F6FA。
     // 标题"最新视频"：13/400/PingFang SC/#0B081A，行高 1。
     // 行：thumb 68×68 radius 4 + gap 12 + 标题 13/500（最多 2 行 ellipsis）。
     //
-    // 高度策略：
-    //   外层固定 280；标题 + 间距是固定常量，剩余空间全部交给 Expanded
-    //   承载列表区。这样即使字体度量带来一两 px 的溢出，列表自身的
-    //   ClipRect 也会兜底（之前用精确的 SizedBox(228) 会被字体度量挤出 5px
-    //   导致 BOTTOM OVERFLOWED 警告）。
-    //   visibleCount 仍然限制为 3，这样 3 张完整封面图都能正常展示；
-    //   如未来调高了视频行高 / 增加了顶部内容，也只会被 Clip 而不会报错。
+    // 布局：父 SizedBox 已固定 280，整张卡片在 Row 的 280 高度内；
+    //   12(top) + 13(title) + 8(gap) + 3×68 + 2×12 + 6(bottom) = 263 ≤ 280。
+    //   13px 余量留给字体度量浮动，所以无需再用 OverflowBox/ClipRect 兜底——
+    //   直接用纯 Column 渲染行即可，避免历史上 OverflowBox 在某些缩放下
+    //   不绘制内容的问题（导致只看到标题、看不到任何行）。
     final visibleCount = math.min(items.length, 3);
-    const rowH = 68.0;
     const rowGap = 12.0;
     return Container(
       width: ui(255),
@@ -3756,57 +3806,44 @@ class _LatestVideoListCard extends StatelessWidget {
         color: const Color(0xFFF5F6FA),
         borderRadius: BorderRadius.circular(ui(12)),
       ),
-      padding: EdgeInsets.fromLTRB(ui(12.5), ui(12), ui(12.5), ui(12)),
+      padding: EdgeInsets.fromLTRB(ui(12.5), ui(12), ui(12.5), ui(6)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          AppText(
+          Text(
             '最新视频',
             style: TextStyle(
               fontSize: ui(13),
               color: const Color(0xFF0B081A),
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w400,
+              fontWeight: AppFont.w400,
               height: 1,
-            ),
+            ).useSystemChineseFont(),
           ),
-          SizedBox(height: ui(15)),
-          Expanded(
-            child: items.isEmpty
-                ? Center(
-                    child: AppText(
-                      '暂无视频',
-                      style: TextStyle(
-                        fontSize: ui(12),
-                        color: const Color(0xFFB6B5BB),
-                        fontFamily: 'PingFang SC',
-                      ),
-                    ),
-                  )
-                : ClipRect(
-                    child: OverflowBox(
-                      maxHeight: ui(
-                        visibleCount * rowH + (visibleCount - 1) * rowGap,
-                      ),
-                      alignment: Alignment.topLeft,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          for (int i = 0; i < visibleCount; i++) ...[
-                            if (i > 0) SizedBox(height: ui(rowGap)),
-                            _LatestVideoRow(
-                              scale: scale,
-                              item: items[i],
-                              coverUrl: resolveUrl(items[i].coverImg),
-                              onTap: () => onOpenVideo(items[i]),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-          ),
+          SizedBox(height: ui(8)),
+          if (items.isEmpty)
+            Expanded(
+              child: Center(
+                child: Text(
+                  '暂无视频',
+                  style: TextStyle(
+                    fontSize: ui(12),
+                    color: const Color(0xFFB6B5BB),
+                    fontFamily: 'PingFang SC',
+                  ).useSystemChineseFont(),
+                ),
+              ),
+            )
+          else
+            for (int i = 0; i < visibleCount; i++) ...[
+              if (i > 0) SizedBox(height: ui(rowGap)),
+              _LatestVideoRow(
+                scale: scale,
+                item: items[i],
+                coverUrl: resolveUrl(items[i].coverImg),
+                onTap: () => onOpenVideo(items[i]),
+              ),
+            ],
         ],
       ),
     );
@@ -3860,7 +3897,7 @@ class _LatestVideoRow extends StatelessWidget {
             ),
             SizedBox(width: ui(12)),
             Expanded(
-              child: AppText(
+              child: Text(
                 item.name,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
@@ -3868,9 +3905,9 @@ class _LatestVideoRow extends StatelessWidget {
                   fontSize: ui(13),
                   color: const Color(0xFF0B081A),
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w500,
+                  fontWeight: AppFont.w500,
                   height: 1.4,
-                ),
+                ).useSystemChineseFont(),
               ),
             ),
           ],
@@ -3924,15 +3961,15 @@ class _SubCategoryBar extends StatelessWidget {
                 borderRadius: BorderRadius.circular(ui(8)),
               ),
               alignment: Alignment.center,
-              child: AppText(
+              child: Text(
                 item.name,
                 style: TextStyle(
                   fontSize: ui(14),
                   color: active ? Colors.white : const Color(0xFF0B081A),
                   fontFamily: 'PingFang SC',
-                  fontWeight: FontWeight.w400,
+                  fontWeight: AppFont.w400,
                   height: 1,
-                ),
+                ).useSystemChineseFont(),
               ),
             ),
           );
@@ -4023,15 +4060,15 @@ class _VideoGridCard extends StatelessWidget {
                                   borderRadius: BorderRadius.circular(18.0 * s),
                                 ),
                                 child: Center(
-                                  child: AppText(
+                                  child: Text(
                                     item.duration,
                                     style: TextStyle(
                                       fontSize: 12.0 * s,
                                       color: Colors.white,
                                       fontFamily: 'PingFang SC',
-                                      fontWeight: FontWeight.w400,
+                                      fontWeight: AppFont.w400,
                                       height: 1,
-                                    ),
+                                    ).useSystemChineseFont(),
                                   ),
                                 ),
                               ),
@@ -4052,17 +4089,17 @@ class _VideoGridCard extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               // 标题
-                              AppText(
+                              Text(
                                 item.name,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   fontSize: 13.0 * s,
                                   color: const Color(0xFF0B081A),
-                                  fontWeight: FontWeight.w500,
+                                  fontWeight: AppFont.w500,
                                   fontFamily: 'PingFang SC',
                                   height: 1.3,
-                                ),
+                                ).useSystemChineseFont(),
                               ),
                               const Spacer(),
                               // 作者 + 播放量
@@ -4090,7 +4127,7 @@ class _VideoGridCard extends StatelessWidget {
                                       SizedBox(width: 4.0 * s),
                                       // 作者名
                                       Expanded(
-                                        child: AppText(
+                                        child: Text(
                                           publisher.nickname,
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
@@ -4098,9 +4135,9 @@ class _VideoGridCard extends StatelessWidget {
                                             fontSize: 10.0 * s,
                                             color: const Color(0xFFB6B5BB),
                                             fontFamily: 'PingFang SC',
-                                            fontWeight: FontWeight.w500,
+                                            fontWeight: AppFont.w500,
                                             height: 1,
-                                          ),
+                                          ).useSystemChineseFont(),
                                         ),
                                       ),
                                       // 播放量图标 + 数字
@@ -4110,15 +4147,15 @@ class _VideoGridCard extends StatelessWidget {
                                         height: 12.0 * s,
                                       ),
                                       SizedBox(width: 4.0 * s),
-                                      AppText(
+                                      Text(
                                         '${item.playCount}',
                                         style: TextStyle(
                                           fontSize: 12.0 * s,
                                           color: const Color(0xFFB6B5BB),
                                           fontFamily: 'PingFang SC',
-                                          fontWeight: FontWeight.w500,
+                                          fontWeight: AppFont.w500,
                                           height: 1,
-                                        ),
+                                        ).useSystemChineseFont(),
                                       ),
                                     ],
                                   );

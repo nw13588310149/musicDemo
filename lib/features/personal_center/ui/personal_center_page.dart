@@ -16,8 +16,8 @@ import '../../smart_campus/state/smart_campus_state.dart';
 import '../data/qr_image_saver.dart';
 import '../state/personal_center_controller.dart';
 import '../state/personal_center_state.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../core/widgets/app_text.dart';
 /// 与 1.0 `pages/PersonalCenter/index.vue` 中 `APP_PROMO_URL` 一致。
 const _kAppPromoUrl = 'https://apps.apple.com/cn/app/音乐之路/id6504698046';
 
@@ -46,11 +46,11 @@ class _PersonalCenterPageState extends ConsumerState<PersonalCenterPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            AppText(state.errorMessage!, textAlign: TextAlign.center),
+            Text(state.errorMessage!, textAlign: TextAlign.center),
             const SizedBox(height: 12),
             FilledButton(
               onPressed: controller.refresh,
-              child: const AppText('重试'),
+              child: const Text('重试'),
             ),
           ],
         ),
@@ -95,7 +95,7 @@ class _PersonalCenterPageState extends ConsumerState<PersonalCenterPage> {
       return;
     }
     if (result.error != null) {
-      AppToast.show(context, result.error!);
+      AppToast.showError(context, result.error!);
       return;
     }
     await showScaledDialog<void>(
@@ -153,13 +153,13 @@ class _PersonalCenterPageState extends ConsumerState<PersonalCenterPage> {
       return;
     }
     if (msg != null) {
-      AppToast.show(context, msg);
+      AppToast.showError(context, msg);
     } else {
       await ref.read(shellControllerProvider.notifier).refreshUserAndSchool();
       if (!context.mounted) {
         return;
       }
-      AppToast.show(context, '兑换成功');
+      AppToast.showSuccess(context, '兑换成功');
     }
   }
 }
@@ -254,13 +254,13 @@ class _ProfileHero extends StatelessWidget {
                                   children: [
                                     Flexible(
                                       fit: FlexFit.loose,
-                                      child: AppText(
+                                      child: Text(
                                         nick.isNotEmpty ? nick : '未命名',
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontSize: 16,
-                                          fontWeight: FontWeight.w500,
+                                          fontWeight: AppFont.w500,
                                           color: Color(0xFF0B081A),
                                           fontFamily: 'PingFang SC',
                                           height: 1.25,
@@ -291,12 +291,12 @@ class _ProfileHero extends StatelessWidget {
                                   ],
                                 ),
                                 const SizedBox(height: 4),
-                                AppText(
+                                Text(
                                   state.user['mobile']?.toString() ?? '',
                                   textAlign: TextAlign.left,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 14,
-                                    fontWeight: FontWeight.w400,
+                                    fontWeight: AppFont.w400,
                                     color: Color(0xFF6D6B75),
                                     fontFamily: 'PingFang SC',
                                   ),
@@ -460,7 +460,7 @@ class _AnnualVipBadge extends StatelessWidget {
           const Positioned(
             left: 24,
             top: 4,
-            child: AppText(
+            child: Text(
               '年卡会员',
               textAlign: TextAlign.center,
               style: TextStyle(
@@ -540,7 +540,7 @@ class _VipPriceCard extends StatelessWidget {
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          AppText(
+                          Text(
                             title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -553,13 +553,13 @@ class _VipPriceCard extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 4),
-                          AppText(
+                          Text(
                             subtitle,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
-                              fontWeight: FontWeight.w400,
+                              fontWeight: AppFont.w400,
                               color: Color(0xFF6D6B75),
                               fontFamily: 'PingFang SC',
                             ),
@@ -570,7 +570,7 @@ class _VipPriceCard extends StatelessWidget {
                     if (showPrice)
                       Padding(
                         padding: const EdgeInsets.only(left: 6),
-                        child: AppText(
+                        child: Text(
                           priceText,
                           textAlign: TextAlign.right,
                           maxLines: 1,
@@ -596,7 +596,7 @@ class _VipPriceCard extends StatelessWidget {
                             color: const Color(0xFF8741FF),
                             borderRadius: BorderRadius.circular(20),
                           ),
-                          child: AppText(
+                          child: Text(
                             trailingLabel!,
                             style: const TextStyle(
                               color: Colors.white,
@@ -632,7 +632,7 @@ class _VipPriceCard extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              AppText(
+              Text(
                 title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -644,7 +644,7 @@ class _VipPriceCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 6),
-              AppText(
+              Text(
                 subtitle,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -662,7 +662,7 @@ class _VipPriceCard extends StatelessWidget {
               top: 0,
               bottom: 0,
               child: Center(
-                child: AppText(
+                child: Text(
                   price.startsWith('¥') || price.startsWith('\u00a5')
                       ? price
                       : '¥$price',
@@ -690,7 +690,7 @@ class _VipPriceCard extends StatelessWidget {
                     color: const Color(0xFF8741FF),
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: AppText(
+                  child: Text(
                     trailingLabel!,
                     style: const TextStyle(
                       color: Colors.white,
@@ -756,7 +756,7 @@ class _WalletColumn extends StatelessWidget {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        AppText(
+        Text(
           value,
           textAlign: TextAlign.center,
           style: const TextStyle(
@@ -768,13 +768,13 @@ class _WalletColumn extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        AppText(
+        Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 14,
             color: Color(0xFF6D6B75),
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w400,
+            fontWeight: AppFont.w400,
             height: 1,
           ),
         ),
@@ -886,7 +886,7 @@ class _ActionTile extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: AppText(
+                    child: Text(
                       label,
                       style: const TextStyle(
                         fontSize: 14,
@@ -959,7 +959,7 @@ class _MyQrCodeDialogState extends State<_MyQrCodeDialog> {
     if (_saving) return;
     final bytes = _qrBytes;
     if (bytes == null) {
-      AppToast.show(context, '二维码暂不支持保存，请截屏');
+      AppToast.showError(context, '二维码暂不支持保存，请截屏');
       return;
     }
     setState(() => _saving = true);
@@ -971,13 +971,16 @@ class _MyQrCodeDialogState extends State<_MyQrCodeDialog> {
     setState(() => _saving = false);
     if (result.ok) {
       Navigator.of(context).pop();
-      AppToast.show(context, kIsWeb ? '已开始下载二维码' : '已保存到 ${result.path}');
+      AppToast.showSuccess(
+        context,
+        kIsWeb ? '已开始下载二维码' : '已保存到 ${result.path}',
+      );
       return;
     }
     if (result.cancelled) {
       return;
     }
-    AppToast.show(context, result.error ?? '保存失败');
+    AppToast.showError(context, result.error ?? '保存失败');
   }
 
   String _suggestedFileName() {
@@ -1051,7 +1054,7 @@ class _QrCodeCard extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  AppText(
+                  Text(
                     nickname,
                     style: const TextStyle(
                       color: Color(0xFF0B081A),
@@ -1060,7 +1063,7 @@ class _QrCodeCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 2),
-                  AppText(
+                  Text(
                     mobile,
                     style: const TextStyle(
                       color: Color(0xFF6D6B75),
@@ -1096,7 +1099,7 @@ class _QrCodeCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          const AppText(
+          const Text(
             '快来与我一起在音乐之路学习吧～',
             textAlign: TextAlign.center,
             style: TextStyle(
@@ -1107,7 +1110,7 @@ class _QrCodeCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          const AppText(
+          const Text(
             '好友可直接通过扫描二维码下载音乐之路并添加你为好友',
             textAlign: TextAlign.center,
             style: TextStyle(
@@ -1317,13 +1320,13 @@ class _ContactServiceDialog extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const AppText(
+          Text(
             '联系邮箱',
             style: TextStyle(
               color: Color(0xFF0B081A),
               fontSize: 14,
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w500,
+              fontWeight: AppFont.w500,
               height: 20 / 14,
             ),
           ),
@@ -1333,7 +1336,7 @@ class _ContactServiceDialog extends StatelessWidget {
             onCopy: () async {
               await Clipboard.setData(ClipboardData(text: email));
               if (!context.mounted) return;
-              AppToast.show(context, '已复制邮箱');
+              AppToast.showSuccess(context, '已复制邮箱');
             },
           ),
           const SizedBox(height: 24),
@@ -1372,24 +1375,24 @@ class _RecommendDialog extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const AppText(
+          Text(
             '把音乐之路推荐给你的同学和朋友，一起在这里学习音乐～',
             style: TextStyle(
               color: Color(0xFF6D6B75),
               fontSize: 14,
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w400,
+              fontWeight: AppFont.w400,
               height: 1.5,
             ),
           ),
           const SizedBox(height: 16),
-          const AppText(
+          Text(
             '推广链接',
             style: TextStyle(
               color: Color(0xFF0B081A),
               fontSize: 14,
               fontFamily: 'PingFang SC',
-              fontWeight: FontWeight.w500,
+              fontWeight: AppFont.w500,
               height: 20 / 14,
             ),
           ),
@@ -1401,7 +1404,7 @@ class _RecommendDialog extends StatelessWidget {
                 const ClipboardData(text: _kAppPromoUrl),
               );
               if (!context.mounted) return;
-              AppToast.show(context, '链接已复制，快去发给好友吧');
+              AppToast.showSuccess(context, '链接已复制，快去发给好友吧');
             },
           ),
           const SizedBox(height: 24),
@@ -1415,7 +1418,7 @@ class _RecommendDialog extends StatelessWidget {
               );
               if (!context.mounted) return;
               Navigator.of(context).pop();
-              AppToast.show(context, '链接已复制，快去发给好友吧');
+              AppToast.showSuccess(context, '链接已复制，快去发给好友吧');
             },
           ),
         ],
@@ -1441,19 +1444,19 @@ class _DialogTextField extends StatelessWidget {
       child: TextField(
         controller: controller,
         autofocus: true,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 14,
           color: Color(0xFF0B081A),
           fontFamily: 'PingFang SC',
-          fontWeight: FontWeight.w400,
+          fontWeight: AppFont.w400,
         ),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: const TextStyle(
+          hintStyle: TextStyle(
             color: Color(0xFFCECED1),
             fontSize: 14,
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w400,
+            fontWeight: AppFont.w400,
             height: 20 / 14,
           ),
           contentPadding: const EdgeInsets.symmetric(
@@ -1495,15 +1498,15 @@ class _ReadonlyValueRow extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: AppText(
+            child: Text(
               value,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 color: Color(0xFF0B081A),
                 fontSize: 14,
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w400,
+                fontWeight: AppFont.w400,
                 height: 20 / 14,
               ),
             ),
@@ -1554,13 +1557,13 @@ class _OutlineActionButton extends StatelessWidget {
           ],
         ),
         alignment: Alignment.center,
-        child: AppText(
+        child: Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             color: Color(0xFF0B081A),
             fontSize: 16,
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w400,
+            fontWeight: AppFont.w400,
             height: 12 / 16,
           ),
         ),

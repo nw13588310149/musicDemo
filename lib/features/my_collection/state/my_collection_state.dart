@@ -34,7 +34,7 @@ class CollectionEntry {
 
   bool get isVideo => type == 6;
   bool get isVocalOrInstrument => type == 4 || type == 5;
-  bool get isLesson => type == 1 || type == 2 || type == 3;
+  bool get isLesson => type == 1 || type == 2 || type == 3 || type == 10;
 }
 
 class CollectionShareClass {
@@ -103,14 +103,16 @@ class MyCollectionState {
   }
 }
 
-/// 我的收藏 Tab 顺序：声乐 → 器乐 → 听写 → 视唱 → 乐理 → 视频，
+/// 我的收藏 Tab 顺序：声乐 → 器乐 → 听写 → 视唱 → 乐理 → 试题 → 视频，
 /// 与设计稿顶部分段控件顺序一致，与服务端返回的 type 字段保持一一对应。
+/// type=10 对应"试题"，与 study_catalog / answerQuestions 模块一致。
 const List<CollectionTabItem> kCollectionDefaultTabs = <CollectionTabItem>[
   CollectionTabItem(type: 4, label: '声乐'),
   CollectionTabItem(type: 5, label: '器乐'),
   CollectionTabItem(type: 3, label: '听写'),
   CollectionTabItem(type: 1, label: '视唱'),
   CollectionTabItem(type: 2, label: '乐理'),
+  CollectionTabItem(type: 10, label: '试题'),
   CollectionTabItem(type: 6, label: '视频'),
 ];
 
@@ -121,4 +123,5 @@ const Map<String, int> kCollectionTypeByLabel = <String, int>{
   '声乐': 4,
   '器乐': 5,
   '视频': 6,
+  '试题': 10,
 };

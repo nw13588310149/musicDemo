@@ -335,6 +335,9 @@ Map<String, dynamic> _buildAnswerArgs(
   return <String, dynamic>{
     'id': lesson.id,
     if (!usesAnswerEnd2) 'answerEndMode': true,
+    // 试题 → answerEnd2(MusicPlayPage) 入口默认显示"关闭状态"（题面），
+    // 由用户主动切到答案；与 1.0 行为一致。
+    if (usesAnswerEnd2) 'closedByDefault': true,
   };
 }
 

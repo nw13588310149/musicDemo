@@ -3,8 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../shell/ui/shell_layout.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../core/widgets/app_text.dart';
 /// 管理员智慧校园首页：970×~1100 双栏布局。
 ///
 /// 左主栏（约 696 宽）自上而下：
@@ -299,12 +299,12 @@ class _SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return AppText(
+    return Text(
       title,
       style: TextStyle(
         fontSize: ui(18),
         height: 1.2,
-        fontWeight: FontWeight.w500,
+        fontWeight: AppFont.w500,
         color: const Color(0xFF1A1A1A),
         fontFamily: 'PingFang SC',
       ),
@@ -466,7 +466,7 @@ class _QuickActionCell extends StatelessWidget {
                           color: const Color(0xFFF04545),
                           borderRadius: BorderRadius.circular(ui(20)),
                         ),
-                        child: AppText(
+                        child: Text(
                           action.badge!,
                           style: TextStyle(
                             color: Colors.white,
@@ -482,12 +482,12 @@ class _QuickActionCell extends StatelessWidget {
               ),
             ),
             SizedBox(height: ui(8)),
-            AppText(
+            Text(
               action.label,
               style: TextStyle(
                 fontSize: ui(14),
                 height: 1.2,
-                fontWeight: FontWeight.w500,
+                fontWeight: AppFont.w500,
                 color: const Color(0xFF1A1A1A),
                 fontFamily: 'PingFang SC',
               ),
@@ -538,13 +538,13 @@ class _StatCard extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(12)),
       child: Column(
         children: [
-          AppText(
+          Text(
             item.value,
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: ui(24),
               height: 1.2,
-              fontWeight: FontWeight.w500,
+              fontWeight: AppFont.w500,
               color: item.highlight
                   ? const Color(0xFF8741FF)
                   : const Color(0xFF0B081A),
@@ -552,7 +552,7 @@ class _StatCard extends StatelessWidget {
             ),
           ),
           SizedBox(height: ui(2)),
-          AppText(
+          Text(
             item.label,
             textAlign: TextAlign.center,
             style: TextStyle(
@@ -603,7 +603,7 @@ class _DataDashboardCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       for (final l in yLabels)
-                        AppText(
+                        Text(
                           l,
                           style: TextStyle(
                             fontSize: ui(12),
@@ -631,7 +631,7 @@ class _DataDashboardCard extends StatelessWidget {
               children: [
                 for (final x in xLabels)
                   Expanded(
-                    child: AppText(
+                    child: Text(
                       x,
                       textAlign: TextAlign.center,
                       style: TextStyle(
@@ -796,18 +796,18 @@ class _FourEndsCardState extends State<_FourEndsCard> {
             ),
           ),
           SizedBox(height: ui(20)),
-          AppText(
+          Text(
             content.title,
             style: TextStyle(
               fontSize: ui(14),
               height: 1.2,
-              fontWeight: FontWeight.w500,
+              fontWeight: AppFont.w500,
               color: const Color(0xFF0B081A),
               fontFamily: 'PingFang SC',
             ),
           ),
           SizedBox(height: ui(8)),
-          AppText(
+          Text(
             content.body,
             style: TextStyle(
               fontSize: ui(12),
@@ -817,18 +817,18 @@ class _FourEndsCardState extends State<_FourEndsCard> {
             ),
           ),
           SizedBox(height: ui(20)),
-          AppText(
+          Text(
             '管理端',
             style: TextStyle(
               fontSize: ui(14),
               height: 1.2,
-              fontWeight: FontWeight.w500,
+              fontWeight: AppFont.w500,
               color: const Color(0xFF0B081A),
               fontFamily: 'PingFang SC',
             ),
           ),
           SizedBox(height: ui(8)),
-          AppText(
+          Text(
             _managerEndContent,
             style: TextStyle(
               fontSize: ui(12),
@@ -868,7 +868,7 @@ class _FourEndTab extends StatelessWidget {
             color: active ? const Color(0xFF0B081A) : const Color(0xFFF5F6FA),
             borderRadius: BorderRadius.circular(ui(8)),
           ),
-          child: AppText(
+          child: Text(
             label,
             style: TextStyle(
               fontSize: ui(14),
@@ -942,12 +942,12 @@ class _WorkReminderCard extends StatelessWidget {
                       color: const Color(0xFFFFE5E5),
                       borderRadius: BorderRadius.circular(ui(4)),
                     ),
-                    child: AppText(
+                    child: Text(
                       '预警',
                       style: TextStyle(
                         fontSize: ui(10),
                         height: 1.2,
-                        fontWeight: FontWeight.w500,
+                        fontWeight: AppFont.w500,
                         color: const Color(0xFFFF323C),
                         fontFamily: 'PingFang SC',
                       ),
@@ -955,7 +955,7 @@ class _WorkReminderCard extends StatelessWidget {
                   ),
                   SizedBox(width: ui(6)),
                   Expanded(
-                    child: AppText(
+                    child: Text(
                       item.title,
                       style: TextStyle(
                         fontSize: ui(12),
@@ -968,7 +968,7 @@ class _WorkReminderCard extends StatelessWidget {
                 ],
               ),
               SizedBox(height: ui(6)),
-              AppText(
+              Text(
                 item.subtitle,
                 style: TextStyle(
                   fontSize: ui(12),
@@ -1023,12 +1023,12 @@ class _AdminSidePanel extends StatelessWidget {
           SizedBox(height: ui(20)),
           const _ProfileInfoRows(),
           SizedBox(height: ui(24)),
-          AppText(
+          Text(
             '校级通知',
             style: TextStyle(
               fontSize: ui(16),
               height: 1.2,
-              fontWeight: FontWeight.w500,
+              fontWeight: AppFont.w500,
               color: const Color(0xFF1A1A1A),
               fontFamily: 'PingFang SC',
             ),
@@ -1080,7 +1080,7 @@ class _ProfileHeader extends StatelessWidget {
               ),
               child: avatarUrl.isEmpty
                   ? Center(
-                      child: AppText(
+                      child: Text(
                         displayName.isEmpty
                             ? 'A'
                             : displayName.characters.first,
@@ -1089,7 +1089,7 @@ class _ProfileHeader extends StatelessWidget {
                           height: 1.0,
                           color: const Color(0xFF8741FF),
                           fontFamily: 'PingFang SC',
-                          fontWeight: FontWeight.w500,
+                          fontWeight: AppFont.w500,
                         ),
                       ),
                     )
@@ -1104,14 +1104,14 @@ class _ProfileHeader extends StatelessWidget {
                   Row(
                     children: [
                       Flexible(
-                        child: AppText(
+                        child: Text(
                           displayName.isEmpty ? '管理员' : displayName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: ui(16),
                             height: 1.2,
-                            fontWeight: FontWeight.w500,
+                            fontWeight: AppFont.w500,
                             color: const Color(0xFF0B081A),
                             fontFamily: 'PingFang SC',
                           ),
@@ -1143,7 +1143,7 @@ class _ProfileHeader extends StatelessWidget {
                               ),
                             ),
                             SizedBox(width: ui(4)),
-                            AppText(
+                            Text(
                               '运行中',
                               style: TextStyle(
                                 fontSize: ui(11),
@@ -1158,7 +1158,7 @@ class _ProfileHeader extends StatelessWidget {
                     ],
                   ),
                   SizedBox(height: ui(6)),
-                  AppText(
+                  Text(
                     '音乐学科 一级教师',
                     style: TextStyle(
                       fontSize: ui(12),
@@ -1183,7 +1183,7 @@ class _ProfileHeader extends StatelessWidget {
               borderRadius: BorderRadius.circular(ui(10)),
               border: Border.all(color: Colors.white, width: 1),
             ),
-            child: AppText(
+            child: Text(
               '管理员',
               style: TextStyle(
                 fontSize: ui(11),
@@ -1228,7 +1228,7 @@ class _InfoLine extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     return Row(
       children: [
-        AppText(
+        Text(
           label,
           style: TextStyle(
             fontSize: ui(12),
@@ -1238,7 +1238,7 @@ class _InfoLine extends StatelessWidget {
           ),
         ),
         Expanded(
-          child: AppText(
+          child: Text(
             value,
             style: TextStyle(
               fontSize: ui(12),
@@ -1285,12 +1285,12 @@ class _SchoolNoticeCard extends StatelessWidget {
                       color: const Color(0xFFEAE5FF),
                       borderRadius: BorderRadius.circular(ui(4)),
                     ),
-                    child: AppText(
+                    child: Text(
                       item.tag,
                       style: TextStyle(
                         fontSize: ui(10),
                         height: 1.2,
-                        fontWeight: FontWeight.w500,
+                        fontWeight: AppFont.w500,
                         color: const Color(0xFF0B081A),
                         fontFamily: 'PingFang SC',
                       ),
@@ -1298,7 +1298,7 @@ class _SchoolNoticeCard extends StatelessWidget {
                   ),
                   SizedBox(width: ui(6)),
                   Expanded(
-                    child: AppText(
+                    child: Text(
                       item.text,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -1313,7 +1313,7 @@ class _SchoolNoticeCard extends StatelessWidget {
                 ],
               ),
               SizedBox(height: ui(6)),
-              AppText(
+              Text(
                 item.time,
                 style: TextStyle(
                   fontSize: ui(12),

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/widgets/app_text.dart';
 class LegacyPlaceholderContent extends StatelessWidget {
   const LegacyPlaceholderContent({
     required this.routeName,
@@ -31,7 +30,7 @@ class LegacyPlaceholderContent extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            AppText(
+            Text(
               title,
               style: const TextStyle(
                 fontSize: 24,
@@ -40,12 +39,12 @@ class LegacyPlaceholderContent extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 10),
-            const AppText(
+            const Text(
               '页面迁移中',
               style: TextStyle(fontSize: 15, color: Color(0xFF666666)),
             ),
             const SizedBox(height: 8),
-            AppText(
+            Text(
               routeName,
               style: const TextStyle(fontSize: 13, color: Color(0xFF999999)),
             ),

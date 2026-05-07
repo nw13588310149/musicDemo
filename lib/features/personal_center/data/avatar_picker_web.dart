@@ -4,10 +4,17 @@ import 'dart:async';
 import 'dart:html' as html;
 import 'dart:typed_data';
 
-Future<({Uint8List bytes, String filename})?> pickAvatarFileImpl() async {
+Future<({Uint8List bytes, String filename})?> pickAvatarFileImpl({
+  bool useCamera = false,
+}) async {
   final input = html.FileUploadInputElement()
     ..accept = 'image/*'
     ..multiple = false;
+  // capture="environment" 在移动浏览器上会拉起系统相机（指向后置摄像头）；
+  // 桌面浏览器若硬件不支持会自动退化为常规文件选择。
+  if (useCamera) {
+    input.setAttribute('capture', 'environment');
+  }
 
   final completer = Completer<({Uint8List bytes, String filename})?>();
 

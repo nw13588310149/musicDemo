@@ -3,7 +3,6 @@ import 'package:flutter/gestures.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
 
-import './app_text.dart';
 /// 全屏图片查看器：半透明黑底 + PhotoViewGallery，支持
 /// 双击 / 捏合缩放、左右滑切换、Hero 转场。
 ///
@@ -177,7 +176,7 @@ class _ImageGalleryViewerState extends State<ImageGalleryViewer> {
                         color: Colors.black54,
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: AppText(
+                      child: Text(
                         '${_currentIndex + 1}/${widget.images.length}',
                         style: const TextStyle(
                           color: Colors.white,

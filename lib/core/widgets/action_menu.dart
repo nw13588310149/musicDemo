@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../constants/app_assets.dart';
 import '../../features/shell/ui/shell_layout.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import './app_text.dart';
 /// Available actions for the shared item action menu (the popup used by
 /// the cloud disk's left sidebar and other lists).
 ///
@@ -264,7 +264,7 @@ class _ItemActionMenuRow extends StatelessWidget {
               fit: BoxFit.contain,
             ),
             SizedBox(width: ui(10)),
-            AppText(
+            Text(
               label,
               style: TextStyle(
                 fontSize: ui(13),
@@ -272,7 +272,7 @@ class _ItemActionMenuRow extends StatelessWidget {
                     ? const Color(0xFFFF323C)
                     : const Color(0xFF0B081A),
                 fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w400,
+                fontWeight: AppFont.w400,
                 height: 20 / 13,
               ),
             ),

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,8 +12,8 @@ import '../../shell/ui/shell_layout.dart';
 import '../../video_tutorial/data/video_publisher_data.dart';
 import '../state/my_collection_controller.dart';
 import '../state/my_collection_state.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../core/widgets/app_text.dart';
 /// 我的收藏页：
 /// - 顶部 6 个 Tab（声乐 / 器乐 / 听写 / 视唱 / 乐理 / 视频），样式与设计稿
 ///   分段控件一致：#F5F6FA 胶囊容器 + 选中态白色卡片+阴影。
@@ -83,7 +85,7 @@ class MyCollectionPage extends ConsumerWidget {
               onSend: () async {
                 final message = await controller.sendShare();
                 if (context.mounted) {
-                  AppToast.show(context, message ?? '分享成功');
+                  AppToast.showSuccess(context, message ?? '分享成功');
                 }
               },
             ),
@@ -95,7 +97,7 @@ class MyCollectionPage extends ConsumerWidget {
   void _openItem(BuildContext context, CollectionEntry item) {
     final targetId = item.targetId > 0 ? item.targetId : item.id;
     if (targetId <= 0) {
-      AppToast.show(context, '收藏内容已失效');
+      AppToast.showError(context, '收藏内容已失效');
       return;
     }
     switch (item.type) {
@@ -125,11 +127,96 @@ class MyCollectionPage extends ConsumerWidget {
           arguments: <String, dynamic>{'id': '$targetId', 'type': 2},
         );
       case 6: // 视频
-        // 视频中心目前从列表页内部唤起播放，跳转到列表页方便用户继续观看。
-        Navigator.pushNamed(context, RoutePaths.videoTutorial);
+        // 视频详情接口（videoTutorialDetail）期望的 id 与 videoTutorialList
+        // 返回的 id 一致——它就藏在收藏接口给到的 target 快照（rawPayload）
+        // 里。优先从 rawPayload['id'] 直接取字符串，避免 CollectionEntry.targetId
+        // 走 _toInt 时把非数字 id 折成 0；为空时再退回 targetId。
+        final rawVideoId = item.rawPayload['id']?.toString().trim() ?? '';
+        final openVideoId = rawVideoId.isNotEmpty ? rawVideoId : '$targetId';
+        Navigator.pushNamed(
+          context,
+          RoutePaths.videoTutorial,
+          arguments: <String, dynamic>{'openVideoId': openVideoId},
+        );
+      case 10: // 试题
+        // 按"是否带可播放音频"分流：试题项的 `file1` 是 JSON 字符串数组，
+        // 任一 URL 为音频文件（按扩展名识别）→ answerEnd2（musicPlay
+        // 题面+答案 + 播放器），否则 → answerEnd（PDF / 阅读式答案页）。
+        if (_hasPlayableAudioFile1(item)) {
+          Navigator.pushNamed(
+            context,
+            RoutePaths.answerEnd2,
+            arguments: <String, dynamic>{
+              'id': '$targetId',
+              'closedByDefault': true,
+            },
+          );
+        } else {
+          Navigator.pushNamed(
+            context,
+            RoutePaths.answerEnd,
+            arguments: <String, dynamic>{
+              'id': '$targetId',
+              'answerEndMode': true,
+            },
+          );
+        }
       default:
-        AppToast.show(context, '暂不支持的收藏类型');
+        AppToast.showError(context, '暂不支持的收藏类型');
     }
+  }
+
+  /// 收藏项的 `target.file1` 是否包含可播放音频。
+  ///
+  /// `file1` 一般是 JSON 字符串数组（如
+  /// `'["https://.../1.mp3","https://.../2.mp3"]'`），偶尔是单条 URL；
+  /// 只要其中任意一项的扩展名命中常见音频格式即返回 true。
+  bool _hasPlayableAudioFile1(CollectionEntry item) {
+    final raw = item.rawPayload['file1'];
+    if (raw == null) return false;
+    final str = raw.toString().trim();
+    if (str.isEmpty) return false;
+
+    final urls = <String>[];
+    try {
+      final decoded = jsonDecode(str);
+      if (decoded is List) {
+        for (final u in decoded) {
+          if (u is String) urls.add(u.trim());
+        }
+      } else if (decoded is String) {
+        urls.add(decoded.trim());
+      }
+    } catch (_) {
+      // 不是合法 JSON：可能就是裸 URL，整体当一项处理。
+      urls.add(str);
+    }
+    // jsonDecode 解析成空 list 的兜底（极少见）。
+    if (urls.isEmpty && !str.startsWith('[')) {
+      urls.add(str);
+    }
+
+    const audioExt = <String>[
+      '.mp3',
+      '.wav',
+      '.m4a',
+      '.aac',
+      '.ogg',
+      '.flac',
+      '.opus',
+      '.amr',
+      '.wma',
+    ];
+    for (final url in urls) {
+      if (url.isEmpty) continue;
+      final lower = url.toLowerCase();
+      final qIdx = lower.indexOf('?');
+      final clean = qIdx >= 0 ? lower.substring(0, qIdx) : lower;
+      if (audioExt.any(clean.endsWith)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   Future<void> _openShare(
@@ -153,16 +240,16 @@ class MyCollectionPage extends ConsumerWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const AppText('取消收藏'),
-        content: AppText('确定将“${item.title}”从收藏中移除吗？'),
+        title: const Text('取消收藏'),
+        content: Text('确定将“${item.title}”从收藏中移除吗？'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const AppText('取消'),
+            child: const Text('取消'),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const AppText('移除'),
+            child: const Text('移除'),
           ),
         ],
       ),
@@ -174,7 +261,7 @@ class MyCollectionPage extends ConsumerWidget {
         .read(myCollectionControllerProvider.notifier)
         .removeFavorite(item);
     if (context.mounted) {
-      AppToast.show(context, message ?? '已取消收藏');
+      AppToast.showSuccess(context, message ?? '已取消收藏');
     }
   }
 }
@@ -260,7 +347,7 @@ class _CollectionTabItemView extends StatelessWidget {
                 borderRadius: BorderRadius.circular(ui(8)),
               ),
         alignment: Alignment.center,
-        child: AppText(
+        child: Text(
           label,
           maxLines: 1,
           softWrap: false,
@@ -271,7 +358,7 @@ class _CollectionTabItemView extends StatelessWidget {
           style: TextStyle(
             fontSize: ui(14),
             fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w500,
+            fontWeight: AppFont.w500,
             height: 1.25,
             leadingDistribution: TextLeadingDistribution.even,
             color: active ? const Color(0xFF0B081A) : const Color(0xFF6D6B75),
@@ -401,7 +488,7 @@ Future<void> _showItemActionSheet(
             children: [
               ListTile(
                 leading: const Icon(Icons.share_outlined),
-                title: const AppText('分享给班级'),
+                title: const Text('分享给班级'),
                 onTap: () {
                   Navigator.of(sheetContext).pop();
                   onShare(item);
@@ -409,7 +496,7 @@ Future<void> _showItemActionSheet(
               ),
               ListTile(
                 leading: const Icon(Icons.delete_outline_rounded),
-                title: const AppText('取消收藏'),
+                title: const Text('取消收藏'),
                 onTap: () {
                   Navigator.of(sheetContext).pop();
                   onRemove(item);
@@ -469,27 +556,27 @@ class _SongCollectionCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      AppText(
+                      Text(
                         item.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontFamily: 'PingFang SC',
                           fontSize: ui(14),
-                          fontWeight: FontWeight.w500,
+                          fontWeight: AppFont.w500,
                           color: const Color(0xFF0B081A),
                           height: 1.2,
                         ),
                       ),
                       SizedBox(height: ui(7)),
-                      AppText(
+                      Text(
                         item.subtitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontFamily: 'PingFang SC',
                           fontSize: ui(12),
-                          fontWeight: FontWeight.w400,
+                          fontWeight: AppFont.w400,
                           color: const Color(0xFFB6B5BB),
                           height: 1,
                         ),
@@ -609,13 +696,13 @@ class _LessonCollectionCard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          AppText(
+                          Text(
                             item.title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: ui(13),
-                              fontWeight: FontWeight.w500,
+                              fontWeight: AppFont.w500,
                               color: const Color(0xFF0B081A),
                               fontFamily: 'PingFang SC',
                               height: 1.2,
@@ -623,7 +710,7 @@ class _LessonCollectionCard extends StatelessWidget {
                           ),
                           if (item.subtitle.isNotEmpty) ...[
                             SizedBox(height: ui(6)),
-                            AppText(
+                            Text(
                               item.subtitle,
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
@@ -688,12 +775,12 @@ class _LessonStudyButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(ui(8)),
         ),
         alignment: Alignment.center,
-        child: AppText(
+        child: Text(
           '去学习',
           style: TextStyle(
             fontSize: ui(11),
             color: Colors.white,
-            fontWeight: FontWeight.w500,
+            fontWeight: AppFont.w500,
             fontFamily: 'PingFang SC',
             height: 12 / 11,
           ),
@@ -731,7 +818,7 @@ class _LessonArtwork extends StatelessWidget {
               left: 0,
               right: 0,
               top: ui(10),
-              child: AppText(
+              child: Text(
                 _coverText(),
                 textAlign: TextAlign.center,
                 style: TextStyle(
@@ -753,11 +840,13 @@ class _LessonArtwork extends StatelessWidget {
   ///   听写 → "听选\n单音"
   ///   视唱 → "视唱\n训练"
   ///   乐理 → "乐理\n练习"
+  ///   试题 → "试题\n练习"
   String _coverText() {
     return switch (type) {
       1 => '视唱\n训练',
       2 => '乐理\n练习',
       3 => '听选\n单音',
+      10 => '试题\n练习',
       _ => '收藏\n内容',
     };
   }
@@ -835,13 +924,13 @@ class _VideoCollectionCard extends StatelessWidget {
                                   borderRadius: BorderRadius.circular(18.0 * s),
                                 ),
                                 child: Center(
-                                  child: AppText(
+                                  child: Text(
                                     item.durationText,
                                     style: TextStyle(
                                       fontSize: 12.0 * s,
                                       color: Colors.white,
                                       fontFamily: 'PingFang SC',
-                                      fontWeight: FontWeight.w400,
+                                      fontWeight: AppFont.w400,
                                       height: 1,
                                     ),
                                   ),
@@ -862,14 +951,14 @@ class _VideoCollectionCard extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              AppText(
+                              Text(
                                 item.title,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   fontSize: 13.0 * s,
                                   color: const Color(0xFF0B081A),
-                                  fontWeight: FontWeight.w500,
+                                  fontWeight: AppFont.w500,
                                   fontFamily: 'PingFang SC',
                                   height: 1.3,
                                 ),
@@ -892,7 +981,7 @@ class _VideoCollectionCard extends StatelessWidget {
                                   ),
                                   SizedBox(width: 4.0 * s),
                                   Expanded(
-                                    child: AppText(
+                                    child: Text(
                                       publisher.nickname,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
@@ -900,7 +989,7 @@ class _VideoCollectionCard extends StatelessWidget {
                                         fontSize: 10.0 * s,
                                         color: const Color(0xFFB6B5BB),
                                         fontFamily: 'PingFang SC',
-                                        fontWeight: FontWeight.w500,
+                                        fontWeight: AppFont.w500,
                                         height: 1,
                                       ),
                                     ),
@@ -911,13 +1000,13 @@ class _VideoCollectionCard extends StatelessWidget {
                                     height: 12.0 * s,
                                   ),
                                   SizedBox(width: 4.0 * s),
-                                  AppText(
+                                  Text(
                                     item.metricText,
                                     style: TextStyle(
                                       fontSize: 12.0 * s,
                                       color: const Color(0xFFB6B5BB),
                                       fontFamily: 'PingFang SC',
-                                      fontWeight: FontWeight.w500,
+                                      fontWeight: AppFont.w500,
                                       height: 1,
                                     ),
                                   ),
@@ -1039,13 +1128,13 @@ class _CollectionEmpty extends StatelessWidget {
             fit: BoxFit.contain,
           ),
           SizedBox(height: ui(4)),
-          AppText(
+          Text(
             '暂无收藏',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontFamily: 'PingFang SC',
               fontSize: ui(16),
-              fontWeight: FontWeight.w400,
+              fontWeight: AppFont.w400,
               color: const Color(0xFF0B081A),
               height: 1.25,
             ),
@@ -1088,7 +1177,7 @@ class _ShareSheet extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  AppText(
+                  Text(
                     '分享到班级',
                     style: TextStyle(
                       fontSize: ui(20),
@@ -1103,7 +1192,7 @@ class _ShareSheet extends StatelessWidget {
                 ],
               ),
               SizedBox(height: ui(6)),
-              AppText(
+              Text(
                 state.shareTarget?.title ?? '',
                 style: TextStyle(
                   fontSize: ui(14),
@@ -1142,7 +1231,7 @@ class _ShareSheet extends StatelessWidget {
                           children: [
                             const Icon(Icons.groups_rounded),
                             SizedBox(width: ui(10)),
-                            Expanded(child: AppText(item.name)),
+                            Expanded(child: Text(item.name)),
                             Icon(
                               item.selected
                                   ? Icons.check_circle_rounded
@@ -1168,7 +1257,7 @@ class _ShareSheet extends StatelessWidget {
                     backgroundColor: const Color(0xFF8B5CFF),
                     foregroundColor: Colors.white,
                   ),
-                  child: const AppText('发送'),
+                  child: const Text('发送'),
                 ),
               ),
             ],

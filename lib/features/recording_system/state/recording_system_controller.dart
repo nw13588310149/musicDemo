@@ -505,9 +505,36 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     }
   }
 
+  /// 结束录制并进入试听页（不自动弹出保存弹窗；保存由试听页的「保存」单独触发）。
   Future<String?> finishRecording() async {
-    if (state.elapsedMs < 5000) {
-      return '录制时长不能低于 5 秒';
+    return _finalizeRecordingToPreview(minElapsedMs: 5000);
+  }
+
+  /// 未满 5 秒时也可结束当前片段并进入试听页，便于先听再决定是否继续重录。
+  /// 与 [finishRecording] 相同，仅最短时长阈值为 1 秒。
+  Future<String?> finalizeRecordingForListening() async {
+    return _finalizeRecordingToPreview(minElapsedMs: 1000);
+  }
+
+  /// 打开保存录音弹窗（需已有本地草稿字节，通常在试听页调用）。
+  void requestSaveDialog() {
+    final bytes = state.recordedBytes;
+    if (bytes == null || bytes.isEmpty) {
+      return;
+    }
+    if (state.viewMode != RecordingViewMode.preview) {
+      return;
+    }
+    state = state.copyWith(showSaveDialog: true);
+  }
+
+  Future<String?> _finalizeRecordingToPreview({
+    required int minElapsedMs,
+  }) async {
+    if (state.elapsedMs < minElapsedMs) {
+      return minElapsedMs >= 5000
+          ? '录制时长不能低于 5 秒'
+          : '录制过短，请再录一会再试听';
     }
     try {
       final recorder = _ensureRecorder();
@@ -554,7 +581,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
         previewPlaying: false,
         previewPlaybackRate: 1,
         recordedBytes: bytes,
-        showSaveDialog: true,
+        showSaveDialog: false,
         selectedSaveCategoryId: draft.categoryId,
         pendingTitle: draft.name == defaultName
             ? '录音作品${DateTime.now().month.toString().padLeft(2, '0')}${DateTime.now().day.toString().padLeft(2, '0')}'
@@ -609,6 +636,15 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
   }
 
   Future<void> seekPreviewBy(int deltaMs) async {
+    return seekPreviewTo(state.previewPositionMs + deltaMs);
+  }
+
+  /// 跳转到绝对位置（毫秒）。波形区拖动定位、点击定位都走这里。
+  ///
+  /// 为了拖动手感跟手，先同步把 [RecordingSystemState.previewPositionMs] 改到
+  /// 目标值（驱动光标 / 进度条立即跟随），随后再异步驱动播放器 seek，
+  /// 播放器自身的 position stream 回来后会自然把 state 校准到精确位置。
+  Future<void> seekPreviewTo(int targetMs) async {
     final source = state.previewSource;
     if (source == null || source.isEmpty) {
       return;
@@ -622,14 +658,14 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       state.previewDurationMs,
       state.previewPositionMs,
     );
-    final targetMs = (state.previewPositionMs + deltaMs).clamp(0, maxPosition);
+    final clamped = targetMs.clamp(0, maxPosition).toInt();
+    state = state.copyWith(previewPositionMs: clamped);
     if (_openedPreviewSource != source) {
       await player.open(Media(source), play: false);
       _openedPreviewSource = source;
       await player.pause();
     }
-    await player.seek(Duration(milliseconds: targetMs.toInt()));
-    state = state.copyWith(previewPositionMs: targetMs.toInt());
+    await player.seek(Duration(milliseconds: clamped));
   }
 
   void closeSaveDialog() {
@@ -705,6 +741,14 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
   }
 
   Future<String?> deleteRecording(RecordingEntry item) async {
+    // 本地未完成草稿：不调接口，丢弃临时文件并回到可录制状态。
+    if (item.id <= 0 || item.isLocalDraft) {
+      await _stopPreviewPlayback();
+      _openedPreviewSource = null;
+      await openNewRecording();
+      return null;
+    }
+
     state = state.copyWith(busy: true, clearError: true);
     final response = await _repository.deleteRecording(item.id);
     state = state.copyWith(busy: false);

@@ -14,8 +14,8 @@ import '../../../core/widgets/app_toast.dart';
 import '../../quiz_practice/state/quiz_practice_state.dart';
 import '../../quiz_practice/state/quiz_session_state.dart';
 import '../../shell/ui/shell_layout.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-import '../../../core/widgets/app_text.dart';
 // ── 校园刷题 state ──────────────────────────────────────────────────────────
 
 class _SchoolQuizState {
@@ -150,17 +150,17 @@ class _CampBannerFallback extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                AppText(
+                Text(
                   '刷题练习',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: ui(26),
-                    fontWeight: FontWeight.w600,
+                    fontWeight: AppFont.w600,
                     fontFamily: 'PingFang SC',
                   ),
                 ),
                 SizedBox(height: ui(8)),
-                AppText(
+                Text(
                   '夯实基础 · 知识点专项突破',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.85),
@@ -199,7 +199,7 @@ class _PracticeRingRow extends StatelessWidget {
   Widget build(BuildContext context) {
     if (summaries.isEmpty) {
       return Center(
-        child: TextButton(onPressed: onRefresh, child: const AppText('点击重试')),
+        child: TextButton(onPressed: onRefresh, child: const Text('点击重试')),
       );
     }
     return Center(
@@ -275,7 +275,7 @@ class _PracticeRingCard extends StatelessWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      AppText(
+                      Text(
                         '${summary.progressPercent}%',
                         style: TextStyle(
                           color: const Color(0xFF000000),
@@ -285,12 +285,12 @@ class _PracticeRingCard extends StatelessWidget {
                         ),
                       ),
                       SizedBox(height: ui(8)),
-                      AppText(
+                      Text(
                         summary.type.label,
                         style: TextStyle(
                           color: const Color(0xFF000000),
                           fontSize: ui(14),
-                          fontWeight: FontWeight.w400,
+                          fontWeight: AppFont.w400,
                           fontFamily: 'PingFang SC',
                         ),
                       ),
@@ -316,7 +316,7 @@ class _PracticeRingCard extends StatelessWidget {
                       color: const Color(0xFFF8F8F8),
                       borderRadius: BorderRadius.circular(pillInnerHeight / 2),
                     ),
-                    child: AppText(
+                    child: Text(
                       '${summary.doneCount}/${summary.allCount}',
                       style: TextStyle(
                         color: const Color(0xFF000000),
