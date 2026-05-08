@@ -634,7 +634,19 @@ class CloudDriveController extends StateNotifier<CloudDriveState> {
     _disposePreviewPlayer();
     final resolved = resolveMediaUrl(url);
     if (resolved.isEmpty) return;
-    final player = Player();
+
+    // media_kit 初始化在 iOS 上偶发抛 native 异常（音频会话占用、
+    // libmpv 加载失败、URL 解析异常等），任意一处都不应该让整个
+    // 课件预览页 / APP 跟着崩。统一 try/catch 兜底：失败时回到
+    // 「无播放器」的安静状态，UI 上「播放/进度条」只是无响应。
+    Player? player;
+    try {
+      player = Player();
+    } catch (_) {
+      _previewPlayer = null;
+      return;
+    }
+
     _previewPlayer = player;
     _previewPlayingSub = player.stream.playing.listen((playing) {
       if (!mounted) return;
@@ -651,11 +663,17 @@ class CloudDriveController extends StateNotifier<CloudDriveState> {
     _previewCompletedSub = player.stream.completed.listen((completed) async {
       if (completed && mounted) {
         // 播完后回到开头，停在暂停态。
-        await player.seek(Duration.zero);
+        await player!.seek(Duration.zero);
         await player.pause();
       }
     });
-    unawaited(player.open(Media(resolved), play: false));
+    unawaited(
+      player
+          .open(Media(resolved), play: false)
+          // 同样拦住 open 阶段的异常，避免 unawaited 的 future 报错把
+          // zone level 的 onError 触发 fatal。
+          .catchError((Object _) {}),
+    );
   }
 
   Future<void> previewTogglePlay() async {
@@ -754,6 +772,9 @@ class CloudDriveController extends StateNotifier<CloudDriveState> {
         files: const <CloudFileItem>[],
         folders: const <CloudFolderItem>[],
         selectedFileIds: const <int>[],
+        // 分类全没了，预览中的文件一定也消失，强制清空 previewingFile，
+        // 上层 UI 会跟着退出预览页，避免拿着孤儿数据继续渲染。
+        previewingFile: null,
         errorMessage: '',
         storageUsedBytes: usage.$1,
         storageTotalBytes: usage.$2,
@@ -766,12 +787,35 @@ class CloudDriveController extends StateNotifier<CloudDriveState> {
       categoryId: selectedId,
       folderId: state.currentFolderId,
     );
+
+    // 同步 previewingFile：renameCourseware/addCourseware 等接口走完都会
+    // 调本方法刷新 state.files 拿到新数据，但 state.previewingFile 还是
+    // 当时 openPreview 塞进去那份旧的 CloudFileItem。预览页顶部
+    // _PreviewHeaderBar 直接读 previewingFile.title 渲染，不同步的话表现
+    // 就是「重命名接口已 200，header 还是旧名字」。
+    //   - 在新 files 里能按 id 找到 → 用刷新后的版本覆盖（标题/imageUrls
+    //     /大小等所有字段都顺带刷新，不会出现部分字段过期的脏数据）。
+    //   - 找不到（被删 / 被移到其他分类 / 进了别的文件夹）→ 置 null，
+    //     上层 UI 会自动关闭预览页。
+    final preview = state.previewingFile;
+    CloudFileItem? nextPreview = preview;
+    if (preview != null) {
+      nextPreview = null;
+      for (final f in files) {
+        if (f.id == preview.id) {
+          nextPreview = f;
+          break;
+        }
+      }
+    }
+
     state = state.copyWith(
       categories: categories,
       selectedCategoryId: selectedId,
       files: _sortFiles(files, state.sortType, state.sortAscending),
       folders: _sortFolders(folders, state.sortType, state.sortAscending),
       selectedFileIds: const <int>[],
+      previewingFile: nextPreview,
       errorMessage: '',
       storageUsedBytes: usage.$1,
       storageTotalBytes: usage.$2,

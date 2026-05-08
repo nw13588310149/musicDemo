@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_asset_graphic.dart';
+import '../../../core/widgets/app_refresh_indicator.dart';
 import '../../shell/ui/shell_layout.dart';
 
 // ── 校园视频 state ──────────────────────────────────────────────────────────
@@ -64,7 +65,7 @@ class SchoolVideoTutorialPage extends ConsumerWidget {
           ),
           // ── 视频列表区 ─────────────────────────────────────────────────────
           Expanded(
-            child: RefreshIndicator(
+            child: AppRefreshIndicator(
               onRefresh: ref.read(_schoolVideoProvider.notifier).refresh,
               child: CustomScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),

@@ -332,12 +332,14 @@ Map<String, dynamic> _buildAnswerArgs(
 ) {
   final usesAnswerEnd2 =
       state.selectedMenuId == '63' || state.selectedMenuId == '64';
+  // 试题 → answerEnd2：听写 / 乐理默认收起答案（题面）；「视唱」分类默认展开答案。
+  final menuName = state.selectedMenu?.name.trim() ?? '';
+  final isSightSingingTab = menuName.contains('视唱');
+
   return <String, dynamic>{
     'id': lesson.id,
     if (!usesAnswerEnd2) 'answerEndMode': true,
-    // 试题 → answerEnd2(MusicPlayPage) 入口默认显示"关闭状态"（题面），
-    // 由用户主动切到答案；与 1.0 行为一致。
-    if (usesAnswerEnd2) 'closedByDefault': true,
+    if (usesAnswerEnd2 && !isSightSingingTab) 'closedByDefault': true,
   };
 }
 

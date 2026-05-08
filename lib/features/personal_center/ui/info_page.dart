@@ -459,6 +459,7 @@ Future<void> _editIntroduce(
     hintText: '请输入个人简介',
     initialValue: user['introduce']?.toString() ?? '',
     maxLength: 200,
+    multiline: true,
   );
   if (value == null || value.isEmpty || !context.mounted) {
     return;

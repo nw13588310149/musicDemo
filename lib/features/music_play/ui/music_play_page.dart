@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -159,7 +160,8 @@ class _MusicPlayPageState extends ConsumerState<MusicPlayPage> {
                         onToggleAnswer: controller.setShowAnswer,
                         onImageChanged: controller.setImageIndex,
                         // 默认布局（听写/乐理/视唱等）不显示升降调按钮：
-                        // 该功能仅在「声乐 / 器乐」入口下开放。
+                        // 声乐/器乐在 [_buildVocalLayout] 中按详情开放；`firstMenu == 18`
+                        // 时详情要求不展示升降调。
                       ),
                     ),
                   ],
@@ -250,8 +252,12 @@ class _MusicPlayPageState extends ConsumerState<MusicPlayPage> {
                   onToggleAnswer: controller.setShowAnswer,
                   onImageChanged: controller.setImageIndex,
                   useStaffSimplifiedToggle: true,
-                  pitchSemitones: state.pitchSemitones,
-                  onPitchChanged: controller.setPitchSemitones,
+                  pitchSemitones: state.detail?.hidePitchShift == true
+                      ? null
+                      : state.pitchSemitones,
+                  onPitchChanged: state.detail?.hidePitchShift == true
+                      ? null
+                      : controller.setPitchSemitones,
                 ),
               ),
             ],
@@ -1473,11 +1479,99 @@ class _ProgressTrack extends StatelessWidget {
 
 /// 自绘的紫色渐变进度条（带阴影 thumb），不依赖 Material Slider，
 /// 以严格匹配设计稿中 #E2D0FF → #8741FF 的渐变填充与 12×12 thumb。
-class _GradientSlider extends StatelessWidget {
+///
+/// 关键交互优化（针对 iPad / iOS 上拖动卡顿、延迟大）：
+///   1. 拖动期间 thumb 位置使用本地 `_dragRatio` 直绘，不再等 native
+///      `player.seek()` 回来才动 —— 即时跟手；
+///   2. `onSeekRatio` 节流到 ~60ms / 帧，配合 controller 端的 seek 合并，
+///      保证同一时刻只有一次 native seek 在飞，松手必收敛到最新位置；
+///   3. 松手后保留 250ms grace 再清掉 `_dragRatio`，给 player.stream.position
+///      留出收敛时间，避免松手瞬间 thumb"回弹"到旧位置再跳回去。
+class _GradientSlider extends StatefulWidget {
   const _GradientSlider({required this.ratio, required this.onSeekRatio});
 
   final double ratio;
   final ValueChanged<double> onSeekRatio;
+
+  @override
+  State<_GradientSlider> createState() => _GradientSliderState();
+}
+
+class _GradientSliderState extends State<_GradientSlider> {
+  /// 用户拖动 / 单击期间的本地 thumb 位置；非空时覆盖 [widget.ratio]。
+  double? _dragRatio;
+  double? _lastEmittedRatio;
+  DateTime _lastEmitAt = DateTime.fromMillisecondsSinceEpoch(0);
+  Timer? _trailingTimer;
+  Timer? _graceTimer;
+
+  /// 节流间隔：拖动期间最多每 60ms 真正下发一次 seek。配合 controller
+  /// 的 seek 合并，60ms 已经足够丝滑（>16fps），不会让 native 队列堆积。
+  static const Duration _kThrottle = Duration(milliseconds: 60);
+
+  /// 松手后保留 `_dragRatio` 的 grace 时间。给 native player.seek 收敛、
+  /// position stream 追上目标位置留时间，避免"thumb 闪一下旧位置"。
+  static const Duration _kGrace = Duration(milliseconds: 250);
+
+  @override
+  void dispose() {
+    _trailingTimer?.cancel();
+    _graceTimer?.cancel();
+    super.dispose();
+  }
+
+  /// 把最新 `r` 写到 `_dragRatio` 即时刷新 thumb；同时按 60ms 节流向外
+  /// 透出 `onSeekRatio`，落在节流窗内的中间帧只挂一个 trailing timer，
+  /// 保证窗口结束时一定补发"最后一帧"位置。
+  void _emit(double r, {bool flush = false}) {
+    // 如果 grace 还在跑（上一次松手到清空 _dragRatio 的过渡期），用户
+    // 又重新摸了一下，立刻把 grace 取消，避免它回头把 _dragRatio 抹掉。
+    _graceTimer?.cancel();
+    _graceTimer = null;
+
+    if (_dragRatio != r) {
+      setState(() => _dragRatio = r);
+    }
+
+    final now = DateTime.now();
+    if (flush || now.difference(_lastEmitAt) >= _kThrottle) {
+      _lastEmitAt = now;
+      _lastEmittedRatio = r;
+      _trailingTimer?.cancel();
+      _trailingTimer = null;
+      widget.onSeekRatio(r);
+    } else {
+      _trailingTimer?.cancel();
+      _trailingTimer = Timer(_kThrottle, () {
+        if (!mounted) return;
+        final pending = _dragRatio;
+        if (pending == null) return;
+        if (_lastEmittedRatio == pending) return;
+        _lastEmitAt = DateTime.now();
+        _lastEmittedRatio = pending;
+        widget.onSeekRatio(pending);
+      });
+    }
+  }
+
+  void _endDrag() {
+    final pending = _dragRatio;
+    if (pending != null && pending != _lastEmittedRatio) {
+      _trailingTimer?.cancel();
+      _trailingTimer = null;
+      _lastEmittedRatio = pending;
+      _lastEmitAt = DateTime.now();
+      widget.onSeekRatio(pending);
+    }
+    _graceTimer?.cancel();
+    _graceTimer = Timer(_kGrace, () {
+      if (!mounted) return;
+      setState(() {
+        _dragRatio = null;
+        _lastEmittedRatio = null;
+      });
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1486,24 +1580,29 @@ class _GradientSlider extends StatelessWidget {
     final thumbSize = ui(12);
     final hitHeight = ui(20);
 
+    final effectiveRatio = (_dragRatio ?? widget.ratio).clamp(0.0, 1.0);
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
-        final clamped = ratio.clamp(0.0, 1.0);
-        final fillWidth = width * clamped;
-        final thumbLeft = (width - thumbSize) * clamped;
+        final fillWidth = width * effectiveRatio;
+        final thumbLeft = (width - thumbSize) * effectiveRatio;
 
-        void emit(Offset localPosition) {
-          if (width <= 0) return;
-          final r = (localPosition.dx / width).clamp(0.0, 1.0);
-          onSeekRatio(r);
+        double localToRatio(Offset localPosition) {
+          if (width <= 0) return 0;
+          return (localPosition.dx / width).clamp(0.0, 1.0);
         }
 
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTapDown: (d) => emit(d.localPosition),
-          onHorizontalDragStart: (d) => emit(d.localPosition),
-          onHorizontalDragUpdate: (d) => emit(d.localPosition),
+          onTapDown: (d) => _emit(localToRatio(d.localPosition), flush: true),
+          onTapUp: (_) => _endDrag(),
+          onTapCancel: _endDrag,
+          onHorizontalDragStart: (d) =>
+              _emit(localToRatio(d.localPosition), flush: true),
+          onHorizontalDragUpdate: (d) => _emit(localToRatio(d.localPosition)),
+          onHorizontalDragEnd: (_) => _endDrag(),
+          onHorizontalDragCancel: _endDrag,
           child: SizedBox(
             height: hitHeight,
             child: Stack(
@@ -2158,7 +2257,7 @@ class _SpeedMenuItemState extends State<_SpeedMenuItem> {
 
 /// 顶部"升降调"按钮：沿用之前 outlined chip 的视觉
 /// （白底、灰边、icon + 文字），点击后从按钮下方弹出与
-/// [_SpeedChip] 同款的下拉菜单，可滚动选择半音档位（-6..+6）。
+/// [_SpeedChip] 同款的下拉菜单，可滚动选择半音档位（-12..+12，一个八度）。
 ///
 /// 视觉规则：
 /// - 未升降调（0）：标签固定显示"升降调"，跟原设计保持一致；
@@ -2174,20 +2273,9 @@ class _TransposeChipButton extends StatefulWidget {
   final ValueChanged<int> onPitchChanged;
 
   /// 半音档位（从大到小，便于升调用户在弹窗第一屏看到正向区间）。
-  static const List<int> options = <int>[
-    6,
-    5,
-    4,
-    3,
-    2,
-    1,
-    0,
-    -1,
-    -2,
-    -3,
-    -4,
-    -5,
-    -6,
+  /// 与 [MusicPlayController.setPitchSemitones] 的 `clamp(-12, 12)` 一致。
+  static final List<int> options = <int>[
+    for (var v = 12; v >= -12; v--) v,
   ];
 
   /// 弹窗每一行展示的纯档位值（"原调" / "+N" / "-N"）。

@@ -91,6 +91,7 @@ class MusicPlayDetail {
     required this.answerImages,
     required this.tracks,
     required this.longTextHtml,
+    this.firstMenu,
   });
 
   final int id;
@@ -104,6 +105,12 @@ class MusicPlayDetail {
   final List<String> answerImages;
   final List<MusicPlayTrack> tracks;
   final String longTextHtml;
+
+  /// 详情接口 `firstMenu`（一级菜单 id）。`18` 时隐藏升降调且不应用变调。
+  final int? firstMenu;
+
+  /// `firstMenu == 18`：不展示升降调控件，播放保持原调。
+  bool get hidePitchShift => firstMenu == 18;
 }
 
 @immutable

@@ -288,7 +288,10 @@ class _AppDialogButton extends StatelessWidget {
   }
 }
 
-/// 弹出一个**单行文本输入**对话框，返回用户输入（trim 后非空）；点击取消返回 null。
+/// 弹出一个文本输入对话框，返回用户输入（trim 后非空）；点击取消返回 null。
+///
+/// 默认单行；[multiline] 为 true 时使用多行输入（类似 HTML `textarea`），
+/// 适合个人简介等场景。
 ///
 /// 样式与上传课件弹窗保持一致：
 /// - 圆角 24，白底（无渐变 / 无顶部装饰图）
@@ -302,6 +305,10 @@ Future<String?> showTextInputDialog({
   String confirmLabel = '确认',
   String cancelLabel = '取消',
   int? maxLength,
+  /// 多行输入（换行、多行滚动），类似 textarea。
+  bool multiline = false,
+  /// 多行模式下输入框高度（逻辑像素，经 [DashboardScaleScope] 缩放）。
+  double multilineHeight = 152,
 }) async {
   final controller = TextEditingController(text: initialValue);
   final result = await showScaledDialog<String>(
@@ -337,11 +344,22 @@ Future<String?> showTextInputDialog({
               ),
               SizedBox(height: ui(20)),
               SizedBox(
-                height: ui(45),
+                height: multiline ? ui(multilineHeight) : ui(45),
                 child: TextField(
                   controller: controller,
                   autofocus: true,
                   maxLength: maxLength,
+                  expands: multiline,
+                  maxLines: multiline ? null : 1,
+                  keyboardType: multiline
+                      ? TextInputType.multiline
+                      : TextInputType.text,
+                  textInputAction: multiline
+                      ? TextInputAction.newline
+                      : TextInputAction.done,
+                  textAlignVertical: multiline
+                      ? TextAlignVertical.top
+                      : TextAlignVertical.center,
                   cursorColor: const Color(0xFF8741FF),
                   cursorWidth: 1.5,
                   cursorHeight: ui(16),

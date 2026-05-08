@@ -3002,16 +3002,28 @@ TextSpan _buildNoteSpan(String note, TextStyle base) {
   return TextSpan(children: spans);
 }
 
+/// Renders a note token (e.g. `#f2`, `bb`, `g`) with the central letter
+/// centered, the sharp/flat prefix pinned to the **top-left** corner and the
+/// octave-number suffix pinned to the **top-right** corner.
+///
+/// Used by:
+/// - 绝对音感 grid keys (52×52, fontSize 16) → default [boxWidth]/[boxHeight].
+/// - 最低音 / 最高音 行内小 chip (fontSize 14) → 显式传更紧凑的 box 尺寸，
+///   保证标记定位规则与绝对音感按键完全一致。
 class _NoteNameText extends StatelessWidget {
   const _NoteNameText({
     required this.ui,
     required this.note,
     required this.style,
+    this.boxWidth,
+    this.boxHeight,
   });
 
   final double Function(num) ui;
   final String note;
   final TextStyle style;
+  final double? boxWidth;
+  final double? boxHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -3036,8 +3048,8 @@ class _NoteNameText extends StatelessWidget {
     }
 
     return SizedBox(
-      width: ui(31),
-      height: ui(28),
+      width: boxWidth ?? ui(31),
+      height: boxHeight ?? ui(28),
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -3174,8 +3186,18 @@ class _SmartRowChip extends StatelessWidget {
         ),
         child: Padding(
           padding: EdgeInsets.symmetric(horizontal: ui(24), vertical: ui(9)),
+          // 最低音 / 最高音 行内 chip：用 _NoteNameText 走"中心字母 +
+          // 左上角 #/b + 右上角 八度数字"的角标布局，跟绝对音感的按键完全
+          // 一致。boxWidth/boxHeight 按 14px 字号收紧（默认值是给 16px 的
+          // 绝对音感 grid 用的，太宽会让 chip 横向变胖）。
           child: isNote
-              ? Text.rich(_buildNoteSpan(label, textStyle))
+              ? _NoteNameText(
+                  ui: ui,
+                  note: label,
+                  style: textStyle,
+                  boxWidth: ui(28),
+                  boxHeight: ui(18),
+                )
               : Text(label, style: textStyle),
         ),
       ),

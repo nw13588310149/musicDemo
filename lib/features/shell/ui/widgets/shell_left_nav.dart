@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../../../core/constants/app_assets.dart';
+import '../../../../core/theme/app_font.dart';
 import '../../../../core/widgets/app_asset_graphic.dart';
 import '../../state/shell_state.dart';
 import '../shell_layout.dart';
@@ -318,11 +319,16 @@ class _NavTile extends StatelessWidget {
                                       maxLines: 1,
                                       softWrap: false,
                                       overflow: TextOverflow.clip,
+                                      // PingFang SC 在 iOS / Web (Safari/
+                                      // CanvasKit) 上缺少 CoreText 的字面
+                                      // 灰度补偿，直接写 FontWeight.w500
+                                      // 视觉上比设计稿轻一档，必须走
+                                      // AppFont.w500 让平台层把字重统一上浮。
                                       style: TextStyle(
                                         fontSize: ui(15),
                                         height: 1,
                                         fontFamily: 'PingFang SC',
-                                        fontWeight: FontWeight.w500,
+                                        fontWeight: AppFont.w500,
                                         color: textColor,
                                       ),
                                     ),

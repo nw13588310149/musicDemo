@@ -1391,11 +1391,17 @@ class _FolderCardState extends State<_FolderCard> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
+              // fontWeight 故意写 FontWeight.w400 而不是 AppFont.w400：
+              // AppFont.w400 在 iOS 会被上浮一档（→ w500，命中
+              // PingFangSC-Medium.otf）做 CJK 视觉补偿；这里设计稿明确
+              // 要求字面用 PingFangSC-Regular.otf，不接受补偿，因此绕开
+              // [AppFont] 直接用原生 [FontWeight] 锁住 w400 槽位。
               style: TextStyle(
-                fontSize: ui(15),
+                fontSize: ui(13),
                 color: const Color(0xFF0B081A),
                 fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w500,
+                fontWeight: FontWeight.w400,
+                height: 15 / 13,
               ),
             ),
           ),
@@ -2197,6 +2203,15 @@ class _PreviewImagePager extends StatelessWidget {
   }
 }
 
+/// 图片预览页右侧的缩略图栏。设计要点（参 Figma）：
+/// - 容器宽 160，左边 1px `#F3F2F3` 分隔线，白底；
+/// - 每张缩略图 128×170，圆角 9，1px `#F3F2F3` 描边；
+/// - 页码标签做成「右下角徽章」嵌在缩略图内（只有顶左 + 底左圆角 8，
+///   底右那一头让缩略图本身的 9px 圆角带圆，避免双圆视觉不一致）；
+/// - 激活态：图上叠一层 11% 透明的暗紫蒙版（约 `#0B081A` @ 0x1C），
+///   徽章底色由 `#F5F6FA` 切成 `#EAE5FF`，徽章文字由 `#0B081A` 切成
+///   `#8741FF`。**不要**改成"整图换底色"的旧写法 —— 旧写法在 BoxFit.cover
+///   下被图片完全遮住，肉眼根本看不到激活效果。
 class _PreviewThumbnailRail extends StatelessWidget {
   const _PreviewThumbnailRail({
     required this.urls,
@@ -2220,67 +2235,101 @@ class _PreviewThumbnailRail extends StatelessWidget {
       child: ListView.separated(
         padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(16)),
         itemCount: urls.length,
+        // Figma: 缩略图之间 8px 间距（页码标签已经吃在卡片内部，不再额外抬高）。
         separatorBuilder: (_, _) => SizedBox(height: ui(8)),
         itemBuilder: (context, index) {
           final isCurrent = index == currentIndex;
           return GestureDetector(
             onTap: () => onSelect(index),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '第${index + 1}页',
-                  style: TextStyle(
-                    fontSize: ui(12),
-                    color: isCurrent
-                        ? const Color(0xFF8741FF)
-                        : const Color(0xFF0B081A),
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w400,
-                  ),
-                ),
-                SizedBox(height: ui(4)),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(ui(8)),
-                  child: Container(
-                    width: ui(128),
-                    height: ui(170),
-                    decoration: BoxDecoration(
-                      color: isCurrent
-                          ? const Color(0xFFEAE5FF)
-                          : const Color(0xFFF5F6FA),
-                      border: Border.all(
-                        color: const Color(0xFFF3F2F3),
-                        width: ui(1),
+            behavior: HitTestBehavior.opaque,
+            child: SizedBox(
+              width: ui(128),
+              height: ui(170),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(ui(9)),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // 缩略图本体：兜底浅灰底 + 1px 浅边框 + 远端图片。
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFAFAFD),
+                        border: Border.all(
+                          color: const Color(0xFFF3F2F3),
+                          width: ui(1),
+                        ),
+                        borderRadius: BorderRadius.circular(ui(9)),
+                      ),
+                      child: CachedNetworkImage(
+                        imageUrl: CloudDriveController.resolveMediaUrl(
+                          urls[index],
+                        ),
+                        fit: BoxFit.cover,
+                        width: ui(128),
+                        height: ui(170),
+                        memCacheWidth: _coursewareDecodeExtent(
+                          context,
+                          ui(128),
+                          360,
+                        ),
+                        memCacheHeight: _coursewareDecodeExtent(
+                          context,
+                          ui(170),
+                          480,
+                        ),
+                        placeholder: (_, _) => const SizedBox.shrink(),
+                        errorWidget: (_, _, _) => Center(
+                          child: Icon(
+                            Icons.broken_image_outlined,
+                            size: ui(28),
+                            color: const Color(0xFFB6B5BB),
+                          ),
+                        ),
                       ),
                     ),
-                    child: CachedNetworkImage(
-                      imageUrl: CloudDriveController.resolveMediaUrl(
-                        urls[index],
+                    // 激活态：11% 暗紫蒙版（#0B081A @ ~11%）盖在图上面，
+                    // 让正在预览的页明显比其它页"暗"一档。颜色 0x1C 对应
+                    // 28/255 ≈ 11%，与 Figma 的 rgba(11,8,26,0.11) 对齐。
+                    if (isCurrent)
+                      const Positioned.fill(
+                        child: ColoredBox(color: Color(0x1C0B081A)),
                       ),
-                      fit: BoxFit.cover,
-                      width: ui(128),
-                      height: ui(170),
-                      memCacheWidth: _coursewareDecodeExtent(
-                        context,
-                        ui(128),
-                        360,
-                      ),
-                      memCacheHeight: _coursewareDecodeExtent(
-                        context,
-                        ui(170),
-                        480,
-                      ),
-                      placeholder: (_, _) => const SizedBox.shrink(),
-                      errorWidget: (_, _, _) => Icon(
-                        Icons.broken_image_outlined,
-                        size: ui(28),
-                        color: const Color(0xFFB6B5BB),
+                    // 右下角徽章：50×18，左上角 + 右下角圆角 8（设计是
+                    // 顶左/底左 + 自然贴在右下被父级 9px clip 带圆），
+                    // active=#EAE5FF + #8741FF / inactive=#F5F6FA + #0B081A。
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: ui(6),
+                          vertical: ui(2),
+                        ),
+                        decoration: BoxDecoration(
+                          color: isCurrent
+                              ? const Color(0xFFEAE5FF)
+                              : const Color(0xFFF5F6FA),
+                          borderRadius: BorderRadius.only(
+                            topLeft: Radius.circular(ui(8)),
+                          ),
+                        ),
+                        child: Text(
+                          '第${index + 1}页',
+                          style: TextStyle(
+                            fontSize: ui(12),
+                            color: isCurrent
+                                ? const Color(0xFF8741FF)
+                                : const Color(0xFF0B081A),
+                            fontFamily: 'PingFang SC',
+                            fontWeight: AppFont.w400,
+                            height: 1.0,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
           );
         },
@@ -3404,6 +3453,42 @@ class _PreviewSpeedChipState extends State<_PreviewSpeedChip> {
 
 // ── Upload Dialog ──────────────────────────────────────────────────────────
 
+/// 上传体积上限。超过则在「选择文件」阶段直接拒绝，避免一路 await 到
+/// 真正读字节 / 拼 multipart 时 OOM 导致 iPad / iPhone 上 APP 闪退。
+///
+/// - 图片：15MB（与 UI 提示「图片支持 15M 以内」一致）
+/// - 音频 / 课件文件：1GB（覆盖一节课的高码率录音 / 大型 PDF）
+const int _kMaxImageBytes = 15 * 1024 * 1024;
+const int _kMaxFileBytes = 1024 * 1024 * 1024;
+
+/// 缩略图渲染时的最大解码边长（逻辑像素）。`Image.memory` 默认会按
+/// 原图分辨率全量解码到光栅缓存：一张 4000×3000 的 JPEG 会占
+/// ~50MB raster，连选 10 张就会把 iPad WebView / iOS 的 GPU 内存撑爆，
+/// OS 直接 SIGKILL 进程。我们拼图只显示 76×76，留出 2 倍 DPR 余量
+/// 解码到 200×200 已经足够清晰、内存足够低。
+const int _kThumbDecodeMaxPx = 200;
+
+/// 把字节数转成「12.5MB」/「1.2GB」形式，给提示用。
+String _formatUploadSize(int bytes) {
+  if (bytes <= 0) return '0B';
+  const kb = 1024;
+  const mb = kb * 1024;
+  const gb = mb * 1024;
+  if (bytes >= gb) {
+    final v = bytes / gb;
+    return '${v.toStringAsFixed(v < 10 ? 1 : 0)}GB';
+  }
+  if (bytes >= mb) {
+    final v = bytes / mb;
+    return '${v.toStringAsFixed(v < 10 ? 1 : 0)}MB';
+  }
+  if (bytes >= kb) {
+    final v = bytes / kb;
+    return '${v.toStringAsFixed(v < 10 ? 1 : 0)}KB';
+  }
+  return '${bytes}B';
+}
+
 /// 描述上传对话框内单个待上传/已上传文件的全部状态。
 class _UploadSlot {
   _UploadSlot({required this.name, this.bytes, this.path, this.size});
@@ -3499,6 +3584,26 @@ class _UploadDialogState extends State<_UploadDialog> {
 
   // ── file picking ──────────────────────────────────────────────────────────
 
+  /// 体积超限 / 选取异常时统一弹一条 toast。提取出来是因为
+  /// `_pick` / `_pickScoreAudio` 都需要相同的反馈。
+  void _notifyOversize(String fileName, int sizeBytes, int limitBytes) {
+    if (!mounted) return;
+    AppToast.show(
+      context,
+      '"$fileName" 体积过大（${_formatUploadSize(sizeBytes)}，上限 '
+      '${_formatUploadSize(limitBytes)}），已跳过',
+      duration: const Duration(seconds: 3),
+    );
+  }
+
+  /// 体积校验。size 未知（picker 没返回字节数）时，
+  /// 通过已有的 `bytes` 长度兜底。返回 null 表示通过。
+  int? _slotSizeBytes(CoursewarePickedFile f) {
+    if (f.size != null && f.size! > 0) return f.size;
+    if (f.bytes != null) return f.bytes!.lengthInBytes;
+    return null;
+  }
+
   /// 主选取（image / score 多选追加图片；courseware 单文件覆盖）。
   Future<void> _pick() async {
     final allowMultiple =
@@ -3508,23 +3613,42 @@ class _UploadDialogState extends State<_UploadDialog> {
         (_kind == CloudUploadKind.image || _kind == CloudUploadKind.score)
         ? CoursewarePickType.image
         : CoursewarePickType.any;
-    final files = await pickCoursewareFiles(
-      allowMultiple: allowMultiple,
-      type: pickType,
-    );
+    // 选取本身可能在 iOS 上抛 native exception（DRM 音频、被 dismiss
+    // 的 picker、照片库授权异常等），try/catch 兜底防止一路冒到根
+    // zone handler 引发闪退。
+    final List<CoursewarePickedFile> files;
+    try {
+      files = await pickCoursewareFiles(
+        allowMultiple: allowMultiple,
+        type: pickType,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AppToast.show(context, '文件选择失败：${_describeError(e)}');
+      return;
+    }
     if (files.isEmpty || !mounted) return;
 
-    final newSlots = files
-        .map(
-          (f) => _UploadSlot(
-            name: f.name,
-            bytes: f.bytes,
-            path: f.path,
-            size: f.size,
-          ),
-        )
-        .where((slot) => slot.canUpload)
-        .toList();
+    final imageMode =
+        _kind == CloudUploadKind.image || _kind == CloudUploadKind.score;
+    final limit = imageMode ? _kMaxImageBytes : _kMaxFileBytes;
+
+    final newSlots = <_UploadSlot>[];
+    for (final f in files) {
+      final size = _slotSizeBytes(f);
+      if (size != null && size > limit) {
+        _notifyOversize(f.name, size, limit);
+        continue;
+      }
+      final slot = _UploadSlot(
+        name: f.name,
+        bytes: f.bytes,
+        path: f.path,
+        size: f.size,
+      );
+      if (!slot.canUpload) continue;
+      newSlots.add(slot);
+    }
     if (newSlots.isEmpty) return;
 
     setState(() {
@@ -3544,12 +3668,24 @@ class _UploadDialogState extends State<_UploadDialog> {
 
   /// 谱例专用：选取单个音频文件。
   Future<void> _pickScoreAudio() async {
-    final files = await pickCoursewareFiles(
-      allowMultiple: false,
-      type: CoursewarePickType.audio,
-    );
+    final List<CoursewarePickedFile> files;
+    try {
+      files = await pickCoursewareFiles(
+        allowMultiple: false,
+        type: CoursewarePickType.audio,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AppToast.show(context, '音频选择失败：${_describeError(e)}');
+      return;
+    }
     if (files.isEmpty || !mounted) return;
     final f = files.first;
+    final size = _slotSizeBytes(f);
+    if (size != null && size > _kMaxFileBytes) {
+      _notifyOversize(f.name, size, _kMaxFileBytes);
+      return;
+    }
     final slot = _UploadSlot(
       name: f.name,
       bytes: f.bytes,
@@ -3567,18 +3703,32 @@ class _UploadDialogState extends State<_UploadDialog> {
       setState(() => slot.progress = p.clamp(0.0, 0.99));
     }
 
-    final path = slot.path?.trim();
-    final url = path != null && path.isNotEmpty
-        ? await widget.controller.uploadFilePathRaw(
-            filePath: path,
-            filename: slot.name,
-            onProgress: progress,
-          )
-        : await widget.controller.uploadFileRaw(
-            bytes: slot.bytes ?? Uint8List(0),
-            filename: slot.name,
-            onProgress: progress,
-          );
+    String? url;
+    Object? failure;
+    try {
+      final path = slot.path?.trim();
+      url = path != null && path.isNotEmpty
+          // path 路径走 MultipartFile.fromFile —— Dio 会以流的方式从磁盘
+          // 读取，不会在内存中复制整个文件。这是 iOS 上传大文件的核心
+          // 优化点。
+          ? await widget.controller.uploadFilePathRaw(
+              filePath: path,
+              filename: slot.name,
+              onProgress: progress,
+            )
+          // bytes 路径只在 Web / 历史 IO 兜底中出现；进入这里之前已经
+          // 在 _pick 阶段做了体积校验，理论上不会触发 OOM。
+          : await widget.controller.uploadFileRaw(
+              bytes: slot.bytes ?? Uint8List(0),
+              filename: slot.name,
+              onProgress: progress,
+            );
+    } catch (e) {
+      // Dio 抛 DioException、底层抛 OutOfMemoryError 等都在这里被吞掉，
+      // 只把 slot 标成失败让用户重试，不会再向上冒到 unawaited 让整
+      // 个 zone 报错从而触发 iOS 端的 fatal error。
+      failure = e;
+    }
     if (!mounted) return;
     setState(() {
       if (url != null && url.isNotEmpty) {
@@ -3586,10 +3736,20 @@ class _UploadDialogState extends State<_UploadDialog> {
         slot.progress = 1.0;
         slot.error = null;
       } else {
-        slot.error = '上传失败，点击重试';
+        slot.error = failure != null
+            ? '上传失败：${_describeError(failure)}'
+            : '上传失败，点击重试';
         slot.progress = 0.0;
       }
     });
+  }
+
+  /// 把任意 Object 转成简短的提示文案，避免把巨长的 stack trace
+  /// 直接打到 toast / slot 上。
+  String _describeError(Object e) {
+    final raw = e.toString();
+    if (raw.length <= 60) return raw;
+    return '${raw.substring(0, 60)}…';
   }
 
   void _removeSlot(_UploadSlot slot) => setState(() {
@@ -3969,12 +4129,33 @@ class _UploadDialogState extends State<_UploadDialog> {
           // background: real thumbnail or placeholder
           ClipRRect(
             borderRadius: radius,
+            // cacheWidth/cacheHeight：把 raw bitmap 解码尺寸卡到预览尺寸
+            // 上限内。Image.memory 默认按原图分辨率全量解码 raster，
+            // 一张高分辨率手机原图就足以撑爆 iPad WebView 的 GPU 内存
+            // 触发 SIGKILL（用户层观察就是「闪退」）。
+            // errorBuilder：解码失败（PNG/JPEG 损坏、超大 GIF 等）也不
+            // 让控件抛异常一路冒到 build phase。
             child: slot.hasMemoryPreview
                 ? Image.memory(
                     slot.bytes!,
                     fit: BoxFit.cover,
                     width: size,
                     height: size,
+                    cacheWidth: _kThumbDecodeMaxPx,
+                    cacheHeight: _kThumbDecodeMaxPx,
+                    gaplessPlayback: true,
+                    filterQuality: FilterQuality.low,
+                    errorBuilder: (context, _, _) => Container(
+                      width: size,
+                      height: size,
+                      color: const Color(0xFFF0EBFF),
+                      alignment: Alignment.center,
+                      child: Icon(
+                        Icons.broken_image_outlined,
+                        size: ui(20),
+                        color: const Color(0xFFB6B5BB),
+                      ),
+                    ),
                   )
                 : Container(
                     width: size,

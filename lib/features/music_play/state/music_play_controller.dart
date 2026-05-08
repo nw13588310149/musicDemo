@@ -64,6 +64,25 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   /// 自增 1，await 之后比对，落后的那次直接放弃。
   int _openTicket = 0;
 
+  // ── 进度条 seek 合并 ────────────────────────────────────────────────
+  // iPad 上拖进度条时，60–120Hz 的 onHorizontalDragUpdate 会让每个手势
+  // 帧都触发一次 native `player.seek()`。mpv 的 seek 是 platform 往返
+  // 调用（50–150ms / 次），不做合并就会出现"队列堆积 → 松手后还在追
+  // 历史目标"的体验。下面三个字段实现：
+  //   1. 同时只允许一次 native seek 在飞 (`_seekInFlight`)；
+  //   2. 中间帧的目标只记到 `_pendingSeek`，最新的会覆盖旧的 —— 松手
+  //      时一定收敛到最新手指位置；
+  //   3. seek 发起后 ~350ms 内，`player.stream.position` 还可能吐 mpv
+  //      "尚未跳到"前的旧位置，用 `_seekFilterUntil` + `_lastSeekTarget`
+  //      把这些远离目标 (>500ms) 的事件丢弃，避免 thumb 看到"先回弹
+  //      再前进"的鬼影。
+  bool _seekInFlight = false;
+  Duration? _pendingSeek;
+  Duration? _lastSeekTarget;
+  DateTime? _seekFilterUntil;
+  static const Duration _kSeekStaleWindow = Duration(milliseconds: 350);
+  static const int _kSeekStaleDiffMs = 500;
+
   /// 把半音数转为 [Player.setPitch] 接受的频率倍率（2^(n/12)）。
   static double _pitchRatio(int semitones) =>
       math.pow(2, semitones / 12.0).toDouble();
@@ -145,12 +164,15 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
         ? state.showAnswer
         : _defaultShowAnswer(state.args.type, detail);
 
+    final nextPitch = detail.hidePitchShift ? 0 : state.pitchSemitones;
+
     state = state.copyWith(
       loading: false,
       detail: detail,
       showAnswer: nextShowAnswer,
       activeImageIndex: 0,
       activeTrackIndex: 0,
+      pitchSemitones: nextPitch,
       clearErrorMessage: true,
     );
 
@@ -244,6 +266,9 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   /// 独立的"升降调"控制（半音）。与 [setPlaybackSpeed] 完全解耦：
   /// 内部走 [Player.setPitch]，半音 N → 频率倍率 2^(N/12)。
   Future<void> setPitchSemitones(int semitones) async {
+    if (state.detail?.hidePitchShift == true) {
+      return;
+    }
     final next = semitones.clamp(-12, 12);
     final player = _player;
     if (player != null) {
@@ -309,16 +334,57 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
         : Duration(
             milliseconds: position.inMilliseconds.clamp(0, max.inMilliseconds),
           );
-    final player = _player;
-    if (player != null) {
-      try {
-        await player.seek(safe);
-      } catch (_) {}
-    }
-    if (!mounted) {
+
+    // 1) 已有 seek 在飞 → 只更新 pending 目标 + 乐观刷 UI 后立刻返回，
+    //    让正在跑的 seek 循环跑完当前帧后接到最新目标。这样无论拖多快，
+    //    native 端始终只有一条 seek 在排队。
+    if (_seekInFlight) {
+      _pendingSeek = safe;
+      _lastSeekTarget = safe;
+      _seekFilterUntil = DateTime.now().add(_kSeekStaleWindow);
+      if (mounted) {
+        state = state.copyWith(position: safe);
+      }
       return;
     }
-    state = state.copyWith(position: safe);
+
+    // 2) 空闲：拿到飞行权 → 进入 seek 循环。每轮跑完后看 `_pendingSeek`，
+    //    若有更新过的目标就继续跑下一轮；否则退出。
+    _seekInFlight = true;
+    Duration target = safe;
+    _lastSeekTarget = target;
+    _seekFilterUntil = DateTime.now().add(_kSeekStaleWindow);
+    if (mounted) {
+      state = state.copyWith(position: target);
+    }
+
+    try {
+      while (true) {
+        final player = _player;
+        if (player == null) {
+          break;
+        }
+        try {
+          await player.seek(target);
+        } catch (_) {}
+
+        final pending = _pendingSeek;
+        if (pending != null && pending != target) {
+          target = pending;
+          _pendingSeek = null;
+          _lastSeekTarget = target;
+          _seekFilterUntil = DateTime.now().add(_kSeekStaleWindow);
+          if (mounted) {
+            state = state.copyWith(position: target);
+          }
+          continue;
+        }
+        _pendingSeek = null;
+        break;
+      }
+    } finally {
+      _seekInFlight = false;
+    }
   }
 
   Future<void> toggleFavorite() async {
@@ -354,6 +420,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
         answerImages: detail.answerImages,
         tracks: detail.tracks,
         longTextHtml: detail.longTextHtml,
+        firstMenu: detail.firstMenu,
       ),
     );
   }
@@ -539,7 +606,10 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
         await player.setRate(state.speed);
       } catch (_) {}
       try {
-        await player.setPitch(_pitchRatio(state.pitchSemitones));
+        final semitones = state.detail?.hidePitchShift == true
+            ? 0
+            : state.pitchSemitones;
+        await player.setPitch(_pitchRatio(semitones));
       } catch (_) {}
     } catch (error) {
       if (isStale()) return;
@@ -575,9 +645,28 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     _completedSub?.cancel();
 
     _positionSub = player.stream.position.listen((position) {
-      if (mounted) {
-        state = state.copyWith(position: position);
+      if (!mounted) {
+        return;
       }
+      // seek 触发后短暂窗口（350ms）内，mpv 仍可能把"还没跳到目标"前的
+      // 旧位置流回来。如果直接 copy 进 state，UI thumb 会看到"先回弹
+      // 再前进"。这里把距离目标超过 500ms 的事件丢弃；一旦看到接近
+      // 目标的位置就立刻解除过滤，避免误伤后续真实的播放进度。
+      final filterUntil = _seekFilterUntil;
+      final target = _lastSeekTarget;
+      if (filterUntil != null && target != null) {
+        if (DateTime.now().isBefore(filterUntil)) {
+          final diffMs =
+              (position.inMilliseconds - target.inMilliseconds).abs();
+          if (diffMs > _kSeekStaleDiffMs) {
+            return;
+          }
+          _seekFilterUntil = null;
+        } else {
+          _seekFilterUntil = null;
+        }
+      }
+      state = state.copyWith(position: position);
     });
     _durationSub = player.stream.duration.listen((duration) {
       if (mounted) {
@@ -683,6 +772,16 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
           '',
     );
 
+    int? firstMenu;
+    final fm = raw['firstMenu'];
+    if (fm != null) {
+      if (fm is int) {
+        firstMenu = fm;
+      } else {
+        firstMenu = int.tryParse(fm.toString());
+      }
+    }
+
     return MusicPlayDetail(
       id: id,
       type: type,
@@ -699,6 +798,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       answerImages: _parseImageList(raw['img1']),
       tracks: _parseTracks(raw['file1']),
       longTextHtml: raw['longText1']?.toString() ?? '',
+      firstMenu: firstMenu,
     );
   }
 
@@ -846,8 +946,8 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   String _resolveMediaUrl(String raw) => MediaUrl.resolve(raw);
 
   bool _defaultShowAnswer(int? pageType, MusicPlayDetail detail) {
-    // 试题（answerEnd2）模块明确要求进入时默认"关闭状态"，
-    // 即先展示题面，由用户主动切到答案。
+    // 试题（answerEnd2）听写 / 乐理：路由参数 `closedByDefault: true` 时默认
+    // 先展示题面；「视唱」分类不传该参数，走下方 pageType / 资源逻辑。
     if (state.args.closedByDefault) {
       return false;
     }

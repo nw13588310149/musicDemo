@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_assets.dart';
+import '../../../core/widgets/app_refresh_indicator.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../../study_catalog/state/study_catalog_controller.dart';
@@ -446,7 +447,7 @@ class _VoiceBody extends StatelessWidget {
       return _VoiceListEmptyPlaceholder(message: '没有匹配 “${query.trim()}” 的作品');
     }
 
-    return RefreshIndicator(
+    return AppRefreshIndicator(
       onRefresh: onRefresh,
       child: GridView.builder(
         padding: EdgeInsets.fromLTRB(ui(21), ui(0), ui(21), ui(20)),

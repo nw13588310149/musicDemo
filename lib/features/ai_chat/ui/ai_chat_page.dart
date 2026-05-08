@@ -6,9 +6,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_assets.dart';
 import '../../../core/providers/app_providers.dart';
+import '../../../core/widgets/action_menu.dart';
 import '../../../core/widgets/app_asset_graphic.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/image_gallery_viewer.dart';
+import '../../../core/widgets/scaled_dialog.dart';
 import '../../theory/ui/widgets/theory_pdf_view.dart';
 import '../data/ai_chat_attachment_picker.dart';
 import '../state/ai_chat_controller.dart';
@@ -83,6 +85,15 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
   /// `jumpTo` / `animateTo`，否则会把用户的 DragScrollActivity 替换成
   /// DrivenScrollActivity，第一次滑动直接被吃掉。
   bool _userTouchingList = false;
+
+  /// 每个会话条目「⋯」按钮的 GlobalKey，用于把删除悬浮菜单
+  /// （[showItemActionMenu]）锚定到正确的位置。按 sessionId 缓存一次创建，
+  /// 这样同一个会话切换 active 状态后菜单仍能找到旧 RenderBox。
+  /// 不做主动清理：用户一辈子的会话数量有限，几个 GlobalKey 的成本可以忽略。
+  final Map<String, GlobalKey> _moreTriggerKeys = <String, GlobalKey>{};
+
+  GlobalKey _moreTriggerKeyFor(String sessionId) =>
+      _moreTriggerKeys.putIfAbsent(sessionId, GlobalKey.new);
 
   @override
   void dispose() {
@@ -324,7 +335,10 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                                     _showInfo(error);
                                   }
                                 },
-                                onMoreTap: () => _confirmDeleteSession(
+                                moreTriggerKey: _moreTriggerKeyFor(
+                                  group.items[i].id,
+                                ),
+                                onMoreTap: () => _showSessionMoreMenu(
                                   controller,
                                   group.items[i],
                                 ),
@@ -347,6 +361,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
     required VoidCallback onTap,
     bool showMore = false,
     VoidCallback? onMoreTap,
+    GlobalKey? moreTriggerKey,
   }) {
     // 历史会话条目同样去掉点击水波纹/高亮：
     // 用 GestureDetector + Container 替代 Material + InkWell。
@@ -381,6 +396,10 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
               ),
               if (showMore)
                 GestureDetector(
+                  // GlobalKey 必须挂在「实际可命中」的那个 GestureDetector
+                  // 上，因为 showItemActionMenu 通过 currentContext.findRenderObject()
+                  // 拿位置来锚定悬浮菜单。
+                  key: moreTriggerKey,
                   onTap: onMoreTap,
                   behavior: HitTestBehavior.opaque,
                   child: const Padding(
@@ -1510,31 +1529,76 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
     setState(() {});
   }
 
+  /// 会话条目「⋯」弹出的悬浮菜单。视觉与「我的云盘」左侧类目卡片完全
+  /// 一致——共用 [showItemActionMenu]（白底 / 12 圆角 / 1.11px 浅边 /
+  /// 三层柔和阴影 / 36 高 row）。当前只暴露「删除」一项。
+  Future<void> _showSessionMoreMenu(
+    AiChatController controller,
+    AiChatSession session,
+  ) async {
+    final triggerKey = _moreTriggerKeys[session.id];
+    if (triggerKey == null) {
+      return;
+    }
+    final action = await showItemActionMenu(
+      context: context,
+      triggerKey: triggerKey,
+      actions: const <ItemMenuAction>[ItemMenuAction.delete],
+    );
+    if (!mounted) return;
+    if (action != ItemMenuAction.delete) return;
+    await _confirmDeleteSession(controller, session);
+  }
+
+  /// 「删除会话」二次确认弹窗。完全按 Figma 视觉还原：
+  /// • 428 宽圆角 24 卡片，顶部 D8CCFF→白渐变 + 装饰图（共用
+  ///   [GradientHeaderDialog]，与个人中心 / 智慧校园所有同款弹窗一致）。
+  /// • 标题「删除会话」20/500 居中，#0B081A。
+  /// • 提问行 16/400 / line-height 20 / #0B081A，左对齐放在 8 圆角的
+  ///   透明容器里（图里那个看不见背景的 380×48 框就是 padding 容器）。
+  /// • 底部 取消（白）/ 确认（紫渐变）双按钮，复用 [AppDialogActionBar]
+  ///   即可拿到 figma 一致的阴影和颜色。
   Future<void> _confirmDeleteSession(
     AiChatController controller,
     AiChatSession session,
   ) async {
-    final shouldDelete = await showDialog<bool>(
+    final shouldDelete = await showScaledDialog<bool>(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('删除会话'),
-          content: Text('确定删除「${session.title}」吗？'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('取消'),
+      barrierColor: Colors.black.withValues(alpha: 0.8),
+      builder: (dialogContext) {
+        return GradientHeaderDialog(
+          title: '删除会话',
+          titleFontSize: 20,
+          titleFontWeight: AppFont.w500,
+          titlePaddingTop: 25,
+          width: 428,
+          actionBar: AppDialogActionBar(
+            cancelLabel: '取消',
+            confirmLabel: '确认',
+            onCancel: () => Navigator.of(dialogContext).pop(false),
+            onConfirm: () => Navigator.of(dialogContext).pop(true),
+          ),
+          child: Padding(
+            // Figma: 380×48 容器内 padding-left/right:16，padding-top/bottom:12。
+            // GradientHeaderDialog 的 contentPadding 默认是 LRTB(20,25,20,20)，
+            // 已经撑出 380 的可用宽度；这里只补内层 16/12 的内边距即可。
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Text(
+              '确定删除「${session.title}」吗？',
+              style: TextStyle(
+                color: _textPrimary,
+                fontSize: 16,
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w400,
+                height: 20 / 16,
+              ),
             ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('删除'),
-            ),
-          ],
+          ),
         );
       },
     );
 
-    if (shouldDelete != true) {
+    if (!mounted || shouldDelete != true) {
       return;
     }
 

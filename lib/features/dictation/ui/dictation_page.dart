@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/route_paths.dart';
 import '../../../core/constants/app_assets.dart';
+import '../../../core/widgets/app_refresh_indicator.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../state/dictation_controller.dart';
@@ -171,7 +172,7 @@ class _ContentPanel extends StatelessWidget {
                   )
                 : Padding(
                     padding: EdgeInsets.symmetric(vertical: ui(12)),
-                    child: RefreshIndicator(
+                    child: AppRefreshIndicator(
                       onRefresh: onRefresh,
                       child: ListView.separated(
                         padding: EdgeInsets.fromLTRB(

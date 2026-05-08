@@ -17,6 +17,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/network/media_url.dart';
 import '../../../core/widgets/app_asset_graphic.dart';
+import '../../../core/widgets/app_refresh_indicator.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/class_share_drawer.dart';
 import '../../../core/widgets/seamless_banner_carousel.dart';
@@ -230,9 +231,7 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
           ),
           // ── 视频列表区：仅此区域可滚动 ──────────────────────────────────
           Expanded(
-            child: RefreshIndicator(
-              color: const Color(0xFF8741FF),
-              backgroundColor: Colors.white,
+            child: AppRefreshIndicator(
               onRefresh: () =>
                   ref.read(videoTutorialControllerProvider.notifier).refresh(),
               child: CustomScrollView(
@@ -487,6 +486,12 @@ class _VideoDetailOverlay extends StatelessWidget {
             child: FractionallySizedBox(
               widthFactor: 0.5,
               child: Material(
+                // 强制纯白底：Material 3 在 elevation 较大时会叠一层
+                // `colorScheme.surfaceTint` 的覆盖（默认走 colorScheme.primary
+                // = 绿色），混到白底上视觉就偏暖偏黄。这里同时锁定 color 与
+                // surfaceTintColor，让面板底部始终是纯白。
+                color: Colors.white,
+                surfaceTintColor: Colors.transparent,
                 elevation: 32,
                 shadowColor: Colors.black.withValues(alpha: 0.4),
                 child: _VideoDetailSheet(
@@ -3118,13 +3123,18 @@ class _DetailTabButton extends StatelessWidget {
       child: SizedBox(
         width: 76,
         height: 32,
-        child: Center(
+        // 文字与缩放都改为左对齐：让 tab 文字的左边始终贴着 76 宽盒子的
+        // 左边（= action bar padding.left = 20），与下方 _DetailInfoTab
+        // 标题文字的左边对齐；同时把 Transform.scale 的 pivot 也设为
+        // centerLeft，避免选中态 1.18 放大时左边再往左飘 5px。
+        child: Align(
+          alignment: Alignment.centerLeft,
           child: Transform.scale(
             scale: selected ? 1.18 : 1.0,
-            alignment: Alignment.center,
+            alignment: Alignment.centerLeft,
             child: Text(
               text,
-              textAlign: TextAlign.center,
+              textAlign: TextAlign.left,
               style: TextStyle(
                 fontSize: 14,
                 color: selected
@@ -3394,7 +3404,7 @@ class _SeriesCard extends StatelessWidget {
           color: const Color(0xFFF4F4FF),
           borderRadius: BorderRadius.circular(12),
         ),
-        padding: const EdgeInsets.all(8),
+        padding: const EdgeInsets.fromLTRB(8, 8, 24, 8),
         child: Row(
           children: [
             ClipRRect(
@@ -3486,22 +3496,23 @@ class _SeriesCard extends StatelessWidget {
                 ),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Row(
+              child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   SizedBox(
                     width: 16,
                     height: 16,
                     child: Center(
-                      child: Icon(
-                        Icons.play_arrow_rounded,
-                        size: 16,
-                        color: Colors.white,
+                      child: Image.asset(
+                        AppAssets.videoV2RelatedPlay,
+                        width: 16,
+                        height: 16,
+                        fit: BoxFit.contain,
                       ),
                     ),
                   ),
-                  SizedBox(width: 2),
-                  Text(
+                  const SizedBox(width: 2),
+                  const Text(
                     '播放',
                     style: TextStyle(
                       color: Colors.white,

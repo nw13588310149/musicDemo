@@ -644,8 +644,14 @@ class _SongCover extends StatelessWidget {
   }
 }
 
-/// 卡片右下角 28×28 操作图标。设计稿要求此处展示
+/// 卡片右下角 20×20 操作图标。设计稿要求此处展示
 /// `assets/images/note/1.png`，点击后弹出"分享 / 取消收藏"菜单。
+///
+/// 图标尺寸 20×20 与「录音」/「我的云盘」**文件夹卡片**右上角的「⋯」
+/// （[AppAssets.cloudActionMore]，统一 ui(20)×ui(20)）保持一致，避免
+/// 不同列表里"三个点"忽大忽小。资源仍用 `note/1.png` —— 收藏卡片是
+/// 浅色填充小圆图标的另一种视觉，与云盘文件夹的纯线性 ⋯ 是不同图，
+/// 这次只统一**尺寸**而不换图。
 class _SongActionButton extends StatelessWidget {
   const _SongActionButton({super.key, required this.onTap});
 
@@ -658,12 +664,12 @@ class _SongActionButton extends StatelessWidget {
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: SizedBox(
-        width: ui(28),
-        height: ui(28),
+        width: ui(20),
+        height: ui(20),
         child: Image.asset(
           'assets/images/note/1.png',
-          width: ui(28),
-          height: ui(28),
+          width: ui(20),
+          height: ui(20),
           fit: BoxFit.contain,
         ),
       ),

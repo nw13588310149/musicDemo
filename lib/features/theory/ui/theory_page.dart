@@ -697,7 +697,10 @@ class _TheoryContent extends ConsumerWidget {
       );
     }
     if (detail.hasHtmlContent) {
-      return _TheoryHtmlView(htmlText: detail.htmlContent);
+      return _TheoryHtmlView(
+        htmlText: detail.htmlContent,
+        answerEndMode: state.args.answerEndMode,
+      );
     }
     return const _TheoryEmptyState(message: '暂无课程内容');
   }
@@ -821,9 +824,15 @@ class _PdfFullscreenView extends StatelessWidget {
 ///   宽度按设计尺寸渲染；
 /// - 整个内容包在 [SingleChildScrollView] 里支持竖向滚动浏览。
 class _TheoryHtmlView extends StatelessWidget {
-  const _TheoryHtmlView({required this.htmlText});
+  const _TheoryHtmlView({
+    required this.htmlText,
+    this.answerEndMode = false,
+  });
 
   final String htmlText;
+
+  /// 答题结束页（answerEnd）：`longText1` 区域上下留白略收紧为 15。
+  final bool answerEndMode;
 
   @override
   Widget build(BuildContext context) {
@@ -842,8 +851,11 @@ class _TheoryHtmlView extends StatelessWidget {
     if (blocks.isEmpty) {
       return const _TheoryEmptyState(message: '暂无内容');
     }
+    final padding = answerEndMode
+        ? EdgeInsets.fromLTRB(ui(18), ui(5), ui(18), ui(5))
+        : EdgeInsets.all(ui(18));
     return Padding(
-      padding: EdgeInsets.all(ui(18)),
+      padding: padding,
       child: SingleChildScrollView(
         physics: const ClampingScrollPhysics(),
         child: Column(

@@ -264,6 +264,8 @@ abstract final class AppAssets {
   static const videoV2StarFilled = 'assets/images/video/15.png';
   static const videoV2SeekForward15 = 'assets/images/video/16.png';
   static const videoV2Collapse = 'assets/images/video/17.png';
+  /// 视频详情「相关视频」列表播放按钮图标
+  static const videoV2RelatedPlay = 'assets/images/video/18.png';
 
   static const cloudFolderIcon = 'assets/images/yunpan/yp1.png';
   static const cloudActionMore = 'assets/images/yunpan/yp2.png';

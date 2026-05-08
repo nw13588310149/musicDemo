@@ -51,6 +51,10 @@ class AppTheme {
         circularTrackColor: Color(0x1A8741FF),
         linearTrackColor: Color(0x1A8741FF),
       ),
+      // RefreshIndicator 在当前 Flutter SDK 上没有 RefreshIndicatorThemeData
+      // 这一通道（直接读 ColorScheme.primary / canvasColor），因此「下拉刷新
+      // 统一品牌紫」改用 `AppRefreshIndicator` 包装组件实现，业务页面直接用
+      // 它即可，不再依赖 ThemeData。详见 lib/core/widgets/app_refresh_indicator.dart。
       // 全局输入框光标 / 文本选区配色：所有未显式指定 cursorColor 的
       // TextField / TextFormField 都会走品牌紫；选区色与选区把手保持同色系。
       // 备注：cursorHeight 不在 ThemeData 暴露，需要在调用点单独设置。

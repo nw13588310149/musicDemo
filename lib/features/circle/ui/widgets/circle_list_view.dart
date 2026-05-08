@@ -2,6 +2,7 @@ import 'dart:async' show unawaited;
 
 import 'package:flutter/material.dart';
 
+import '../../../../core/widgets/app_refresh_indicator.dart';
 import '../../../../core/widgets/app_toast.dart';
 import '../../../../core/widgets/scaled_dialog.dart';
 import '../../../shell/ui/shell_layout.dart';
@@ -41,8 +42,7 @@ class CircleListView extends StatelessWidget {
     if (posts.isEmpty) {
       return Container(
         color: const Color(0xFFEFF3FC),
-        child: RefreshIndicator(
-          color: const Color(0xFF8741FF),
+        child: AppRefreshIndicator(
           onRefresh: () => controller.refreshPosts(),
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -65,8 +65,7 @@ class CircleListView extends StatelessWidget {
     }
     return Container(
       color: const Color(0xFFEFF3FC),
-      child: RefreshIndicator(
-        color: const Color(0xFF8741FF),
+      child: AppRefreshIndicator(
         onRefresh: () => controller.refreshPosts(),
         child: LayoutBuilder(
           builder: (context, constraints) {

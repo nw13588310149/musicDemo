@@ -1249,11 +1249,19 @@ class _RecordingFolderCardState extends State<_RecordingFolderCard> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
+              // fontWeight 故意写 FontWeight.w400 而不是 AppFont.w400：
+              // AppFont.w400 在 iOS 会被上浮一档（→ w500，命中
+              // PingFangSC-Medium.otf）做 CJK 视觉补偿；这里设计稿明确
+              // 要求字面用 PingFangSC-Regular.otf，不接受补偿，因此绕开
+              // [AppFont] 直接用原生 [FontWeight] 锁住 w400 槽位。
+              // 与「我的云盘」文件夹卡片（courseware_page.dart 中的
+              // [_FolderCard]）的标题样式严格保持一致。
               style: TextStyle(
-                fontSize: ui(15),
+                fontSize: ui(13),
                 color: const Color(0xFF0B081A),
                 fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w500,
+                fontWeight: FontWeight.w400,
+                height: 15 / 13,
               ),
             ),
           ),

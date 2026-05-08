@@ -1,11 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/config/app_config_repository.dart';
 import '../core/providers/app_providers.dart';
 import '../core/theme/app_theme.dart';
+import '../core/utils/keyboard_dismisser.dart';
 import 'router/app_router.dart';
 import 'router/route_paths.dart';
 
@@ -42,15 +44,34 @@ class _MyAppState extends ConsumerState<MyApp> {
       theme: AppTheme.light,
       initialRoute: initialRoute,
       onGenerateRoute: AppRouter.onGenerateRoute,
+      // 本地化：强制 zh-CN，并注入 Material / Cupertino / Widgets 三套
+      // LocalizationsDelegates。修复 iPadOS 输入框长按 / Live Text 弹出的
+      // 系统编辑菜单（Scan Text、Copy、Paste 等）显示英文的问题。
+      // supportedLocales 列了 zh-CN 和 en-US 两条：前者命中后所有 Cupertino
+      // 文案走中文；保留 en 是为了在系统语言为英文且用户清掉本地缓存时
+      // 仍有兜底，不至于回退到 ARB 缺失的 Locale 报错。
+      locale: const Locale('zh', 'CN'),
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('zh', 'CN'),
+        Locale('en', 'US'),
+      ],
       // 全局文本行为：
       // 1. 锁定 textScaler = 1.0：禁用 iOS/Android 系统的 "Display & Text Size"
       //    缩放，保证 Web 与平板上同一个 fontSize 渲染出相同的逻辑像素，
       //    避免 iPad 上文字"莫名偏小"。
       // 2. DefaultTextHeightBehavior：让首/末行不再应用 height leading，
       //    与 CSS/Figma 行为一致，解决全局"文字偏下、上下间距偏宽"。
-      // 3. 根级 _TapOutsideToDismissKeyboard：点击非可交互空白区域自动收起
-      //    软键盘，解决 iPad/iOS 上多行 TextField（Return 键变换行）+ 没有
-      //    "收起键盘"按钮时无法关闭键盘的问题。
+      // 3. [GlobalKeyboardFocusSentinel]：监听 FocusManager，焦点离开
+      //    EditableText 时再发一次 `TextInput.hide` + Web 端 blur，治掉
+      //    iPadOS 浮动小键盘"输入框失焦后还赖在屏幕上"的顽固 bug。
+      // 4. 根级 [_TapOutsideToDismissKeyboard]：点击非可交互空白区域自动
+      //    收起软键盘，解决 iPad/iOS 上多行 TextField（Return 键变换行）
+      //    + 没有"收起键盘"按钮时无法关闭键盘的问题。
       builder: (context, child) {
         final mediaQuery = MediaQuery.of(context);
         return MediaQuery(
@@ -60,8 +81,10 @@ class _MyAppState extends ConsumerState<MyApp> {
               applyHeightToFirstAscent: false,
               applyHeightToLastDescent: false,
             ),
-            child: _TapOutsideToDismissKeyboard(
-              child: child ?? const SizedBox.shrink(),
+            child: GlobalKeyboardFocusSentinel(
+              child: _TapOutsideToDismissKeyboard(
+                child: child ?? const SizedBox.shrink(),
+              ),
             ),
           ),
         );
@@ -99,6 +122,9 @@ class _TapOutsideToDismissKeyboard extends StatelessWidget {
         final focus = FocusManager.instance.primaryFocus;
         if (focus == null || !focus.hasFocus) return;
         focus.unfocus(disposition: UnfocusDisposition.scope);
+        // 双保险：iPadOS 浮动小键盘有时不响应 unfocus 触发的 IME hide，
+        // 这里再显式调一次平台原生 / 浏览器层的收键盘逻辑。
+        dismissPlatformKeyboard();
       },
       child: child,
     );

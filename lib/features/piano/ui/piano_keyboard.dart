@@ -65,7 +65,9 @@ class PianoKeyboard extends StatefulWidget {
   /// 是否初始显示音名 / 简谱标签。
   final bool initialLabelsVisible;
 
-  /// 初始是否将视口滚动到中央 C 附近。
+  /// 初始是否把视口滚动到「键盘内容几何中点」（与 1.0 VirtualPiano.vue
+  /// 一致：`left = (100 - allWidth) / 2`）。中央 C 会自然落在视口中部偏左、
+  /// 左右各显示约一个 octave。字段保留旧名以避免破坏外部调用方。
   final bool initialScrollToCenterC;
 
   /// 自定义键位（默认全键盘 C2-B6）。
@@ -161,25 +163,23 @@ class _PianoKeyboardState extends State<PianoKeyboard> {
     setState(() => _labelsVisible = !_labelsVisible);
   }
 
-  /// 让 scroll 跳到某个 token 居中。在缩放后用于保持视口稳定。
-  void _scrollToToken(String token, {required double viewportWidth}) {
-    final whiteKeys = widget.whiteKeys;
-    final whiteKeyWidth = _whiteKeyWidth!;
-    int idx = whiteKeys.indexWhere((k) => k.token == token);
-    if (idx < 0) {
-      // 黑键回退到所属白键
-      final black = widget.blackKeys.firstWhere(
-        (k) => k.token == token,
-        orElse: () => widget.whiteKeys[kPianoCenterCWhiteIndex],
-      );
-      idx = black.afterWhiteIndex;
+  /// 把整段键盘内容的几何中点对到视口中央（= maxScrollExtent / 2）。
+  ///
+  /// 对齐 1.0 `the-road-of-music/pages/music/VirtualPiano.vue` 的初始
+  /// 滚动逻辑：`left = (100 - allWidth) / 2`。35 个白键的几何中点在
+  /// idx ≈ 17（F4 附近），中央 C 自然落在视口中部偏左、左右各能看到约
+  /// 一个 octave 的键。这样的"键盘居中"符合用户对默认视图的预期；如果
+  /// 改成把 C4 钉在视口正中（如旧实现），左侧只能露出 5–6 个白键、
+  /// 右侧能露出 8–9 个，整个键盘视觉上会"偏左"。
+  void _scrollToContentCenter({required double viewportWidth}) {
+    final whiteKeyWidth = _whiteKeyWidth;
+    if (whiteKeyWidth == null) {
+      return;
     }
-    final contentWidth = whiteKeys.length * whiteKeyWidth;
+    final contentWidth = widget.whiteKeys.length * whiteKeyWidth;
     final maxOffset = math.max(0.0, contentWidth - viewportWidth);
-    final target = (idx + 0.5) * whiteKeyWidth - viewportWidth / 2;
-    final clamped = target.clamp(0.0, maxOffset);
     if (_scroll.hasClients) {
-      _scroll.jumpTo(clamped);
+      _scroll.jumpTo(maxOffset / 2);
     }
   }
 
@@ -389,14 +389,16 @@ class _PianoKeyboardState extends State<PianoKeyboard> {
             ),
           );
 
-        // 应用初始滚动到中央 C
+        // 首次进入：把键盘横向滚动到「内容几何中点」对到视口中央，
+        // 与 1.0 Vue 行为一致。中央 C 会自然落到视口中部偏左、左右
+        // 各显示约一个 octave，整体视觉居中而不偏左。
         if (!_appliedInitialScroll && widget.initialScrollToCenterC) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!mounted || !_scroll.hasClients) {
               return;
             }
             _appliedInitialScroll = true;
-            _scrollToToken('C4', viewportWidth: viewport);
+            _scrollToContentCenter(viewportWidth: viewport);
           });
         }
 

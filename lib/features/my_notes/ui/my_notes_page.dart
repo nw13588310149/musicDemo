@@ -649,7 +649,7 @@ class _NotesTabBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
-      padding: EdgeInsets.fromLTRB(ui(4), ui(4), ui(3), ui(4)),
+      padding: EdgeInsets.all(ui(4)),
       decoration: BoxDecoration(
         color: const Color(0xFFF5F6FA),
         borderRadius: BorderRadius.circular(ui(8)),
@@ -693,7 +693,7 @@ class _NotesTabItem extends StatelessWidget {
       onTap: onTap,
       child: Container(
         height: ui(36),
-        padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(10)),
+        padding: EdgeInsets.symmetric(horizontal: ui(16)),
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: active ? Colors.white : Colors.transparent,
@@ -710,8 +710,10 @@ class _NotesTabItem extends StatelessWidget {
         ),
         child: Text(
           label,
+          textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: ui(14),
+            height: 1,
             color: active ? const Color(0xFF0B081A) : const Color(0xFF6D6B75),
             fontFamily: 'PingFang SC',
             fontWeight: AppFont.w500,

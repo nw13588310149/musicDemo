@@ -7,6 +7,7 @@ import '../../../app/router/route_paths.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/network/media_url.dart';
 import '../../../core/widgets/app_asset_graphic.dart';
+import '../../../core/widgets/app_refresh_indicator.dart';
 import '../../../core/widgets/seamless_banner_carousel.dart';
 import '../../home/state/home_dashboard_controller.dart';
 import '../../shell/ui/shell_layout.dart';
@@ -41,7 +42,7 @@ class _SchoolView extends StatelessWidget {
 
     return Stack(
       children: [
-        RefreshIndicator(
+        AppRefreshIndicator(
           onRefresh: onRefresh,
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
