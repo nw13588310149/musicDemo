@@ -147,10 +147,14 @@ flutter:
           weight: 500
         - asset: assets/fonts/ttf/PingFangSC-Semibold.otf
           weight: 600
-    # Manrope 变体字（设计稿角标 10+ 等数字使用 Manrope w800）
-    # 把变体字以静态 w800 注册，Flutter 通过 fontWeight: w800 即可命中
+    # Manrope：
+    # • w500（Medium）—— 首页右侧周课表的日期数字（9 / 10 / 11…）
+    # • w800（变体字静态映射）—— 智慧校园等地方的角标 10+ 数字
+    # 注意：Manrope Medium.ttf 文件名带空格，YAML 字符串里照实写即可。
     - family: Manrope
       fonts:
+        - asset: assets/fonts/Manrope Medium.ttf
+          weight: 500
         - asset: assets/fonts/Manrope-Variable.ttf
           weight: 800
     # Barlow：

@@ -36,6 +36,32 @@ class InfoPage extends ConsumerWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// 返回按钮的目的地解析
+// ─────────────────────────────────────────────────────────────────────
+
+/// 个人信息页返回按钮的统一处理。
+///
+/// 入口有两条：
+///   1. `personal_center` 页面里点"编辑资料"——通过 `Navigator.pushNamed`
+///      进入 /info，此时栈里有上一页，[Navigator.canPop] 为 true，maybePop
+///      就能回去。
+///   2. 顶栏右上角的设置图标 / 头像下拉的"资料修改"——shell 走的是
+///      `Navigator.pushReplacementNamed`，会把 /info 直接替换成当前唯一
+///      路由，栈里没有上一页，maybePop 是 no-op，导致返回按钮"按了没反应"。
+///
+/// 解决：先试着 pop；pop 不动（场景 2）就把路由替换成
+/// [RoutePaths.personalCenter]，把"资料修改 → 个人信息"这条入口路径的"返回"
+/// 落到个人中心页，而不是留在原地。
+void _backToPrev(BuildContext context) {
+  final navigator = Navigator.of(context);
+  if (navigator.canPop()) {
+    navigator.pop();
+    return;
+  }
+  navigator.pushReplacementNamed(RoutePaths.personalCenter);
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // 整张白卡：内含返回头 + 字段列表。
 // ─────────────────────────────────────────────────────────────────────
 
@@ -58,7 +84,7 @@ class _InfoCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          _CardHeader(onBack: () => Navigator.of(context).maybePop()),
+          _CardHeader(onBack: () => _backToPrev(context)),
           SizedBox(height: ui(10)),
           Expanded(
             child: SingleChildScrollView(
@@ -151,8 +177,6 @@ class _InfoRows extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final user = state.user;
-    final verified = user['verified']?.toString() ?? '';
-    final isVerified = verified == '已认证';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -191,21 +215,8 @@ class _InfoRows extends StatelessWidget {
           value: user['identity']?.toString() ?? '',
           showChevron: false,
         ),
-        const _RowDivider(),
-        _InfoRow(
-          title: '实名认证',
-          value: verified,
-          showChevron: !isVerified,
-          onTap: isVerified
-              ? null
-              : () {
-                  Navigator.pushNamed(
-                    context,
-                    RoutePaths.verifie,
-                    arguments: <String, dynamic>{'id': verified},
-                  );
-                },
-        ),
+        // 「实名认证」行临时隐藏：当前阶段没有正式的认证流程对接，整行连同
+        // 跳转 [RoutePaths.verifie] 的入口一起去掉，后续接入审核流时再恢复。
         const _RowDivider(),
         _InfoRow(
           title: '所在地区',

@@ -624,15 +624,15 @@ class _WeekCard extends StatelessWidget {
             child: Text(
               item.dayText,
               textAlign: TextAlign.center,
-              // Figma 设计稿规定：日期数字使用 Barlow w500（几何无衬线）
-              // 当前 Barlow 仅注册了 SemiBold(w600)，w500 会回退到 w600
-              // 待补充 Barlow-Medium.ttf 后即可精确还原
+              // 设计稿要求：周课表日期数字 = Manrope Medium（w500）。
+              // 字体文件 [assets/fonts/Manrope Medium.ttf] 在 pubspec 里以
+              // weight: 500 注册到 Manrope family，下面 w500 直接命中。
               style: TextStyle(
                 fontSize: 20,
                 color: active ? Colors.white : const Color(0xFF1A1A1A),
                 fontWeight: FontWeight.w500,
                 height: 1.35,
-                fontFamily: 'Barlow',
+                fontFamily: 'Manrope',
               ),
             ),
           ),
