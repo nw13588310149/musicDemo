@@ -74,6 +74,16 @@ class _VoicePageState extends ConsumerState<VoicePage> {
                 errorMessage: state.errorMessage,
                 onOpenLesson: (lesson) => _openLesson(state, lesson),
                 onRefresh: controller.refreshLessons,
+                // 同一个 widget 同时承载「声乐」与「器乐」两个二级页：
+                // [InstrumentalPage] 内部就是 const VoicePage(config: instrumental)。
+                // 因此卡片封面要按 config.key 分流：
+                //   voice        → fm.png  「VOCAL MUSIC / 声乐」
+                //   instrumental → fm2.png 「INSTRUMENTAL MUSIC / 器乐」
+                // 其它 key 不会经过此页面，留 fm.png 兜底，避免未来加新 config
+                // 时漏改导致空白。
+                coverAsset: state.config.key == 'instrumental'
+                    ? AppAssets.homeFm2Cover
+                    : AppAssets.homeFmCover,
               ),
             ),
           ],
@@ -421,6 +431,7 @@ class _VoiceBody extends StatelessWidget {
     required this.errorMessage,
     required this.onOpenLesson,
     required this.onRefresh,
+    required this.coverAsset,
   });
 
   final bool loading;
@@ -430,6 +441,8 @@ class _VoiceBody extends StatelessWidget {
   final String errorMessage;
   final ValueChanged<StudyCatalogLesson> onOpenLesson;
   final Future<void> Function() onRefresh;
+  /// 卡片封面图（声乐用 fm.png / 器乐用 fm2.png），由顶层按 config 决定。
+  final String coverAsset;
 
   @override
   Widget build(BuildContext context) {
@@ -463,6 +476,7 @@ class _VoiceBody extends StatelessWidget {
           final lesson = lessons[index];
           return _VoiceSongCard(
             lesson: lesson,
+            coverAsset: coverAsset,
             onTap: () => onOpenLesson(lesson),
           );
         },
@@ -473,10 +487,16 @@ class _VoiceBody extends StatelessWidget {
 
 /// 单首作品卡片：封面 + 标题 + 调号占位（设计稿尺寸 173×182）。
 class _VoiceSongCard extends StatelessWidget {
-  const _VoiceSongCard({required this.lesson, required this.onTap});
+  const _VoiceSongCard({
+    required this.lesson,
+    required this.onTap,
+    required this.coverAsset,
+  });
 
   final StudyCatalogLesson lesson;
   final VoidCallback onTap;
+  /// 由 [_VoiceBody] 透传：声乐列表 = fm.png；器乐列表 = fm2.png。
+  final String coverAsset;
 
   @override
   Widget build(BuildContext context) {
@@ -500,7 +520,7 @@ class _VoiceSongCard extends StatelessWidget {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(ui(8)),
                 child: Image.asset(
-                  AppAssets.homeFmCover,
+                  coverAsset,
                   fit: BoxFit.cover,
                   width: double.infinity,
                 ),

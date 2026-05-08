@@ -474,7 +474,13 @@ class _NicknameColumn extends StatelessWidget {
   }
 }
 
-/// 「年卡会员」角标（设计稿绝对布局：73×22 渐变条 + 左侧 24×24 装饰 + 文案位置）。
+/// 「年卡会员」角标。
+///
+/// 之前是用 [Stack] 把 24×24 V 标 + 73×22 紫渐变胶囊 + Alibaba PuHuiTi 700
+/// 文字三块合成的。现在直接换成单张设计图 [AppAssets.infoAnnualVipBadge]：
+/// - 容器宽高沿用之前的 `82×24` 占位坐标，避免父级 [Positioned] 的位置偏移；
+/// - `BoxFit.contain` 让设计图按自身比例自适应，不被拉伸；
+/// - V 标会被设计图自身的横向溢出贴在胶囊左侧（与原视觉一致）。
 class _AnnualVipBadge extends StatelessWidget {
   const _AnnualVipBadge();
 
@@ -483,64 +489,11 @@ class _AnnualVipBadge extends StatelessWidget {
     return SizedBox(
       width: 82,
       height: 24,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Positioned(
-            left: 7,
-            top: 1,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFFB864FA), Color(0xFF8741FF)],
-                ),
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(4),
-                  topRight: Radius.circular(21),
-                  bottomRight: Radius.circular(21),
-                  bottomLeft: Radius.circular(4),
-                ),
-                border: Border.all(color: const Color(0xFF9B6EFA), width: 1),
-              ),
-              child: const SizedBox(width: 73, height: 22),
-            ),
-          ),
-          Positioned(
-            left: -2,
-            top: 0,
-            child: SizedBox(width: 24, height: 24, child: _VipBadgeIcon()),
-          ),
-          const Positioned(
-            left: 24,
-            top: 4,
-            child: Text(
-              '年卡会员',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontFamily: 'Alibaba PuHuiTi 2.0',
-                fontWeight: FontWeight.w700,
-                height: 16 / 12,
-              ),
-            ),
-          ),
-        ],
+      child: Image.asset(
+        AppAssets.infoAnnualVipBadge,
+        fit: BoxFit.contain,
+        alignment: Alignment.centerLeft,
       ),
-    );
-  }
-}
-
-/// 设计稿左侧多层效果用 `vip.png` 一图近似。
-class _VipBadgeIcon extends StatelessWidget {
-  const _VipBadgeIcon();
-
-  @override
-  Widget build(BuildContext context) {
-    return Image.asset(
-      AppAssets.infoVip,
-      fit: BoxFit.contain,
-      alignment: Alignment.center,
     );
   }
 }
@@ -638,26 +591,9 @@ class _VipPriceCard extends StatelessWidget {
                         ),
                       ),
                     if (!showPrice && trailingLabel != null)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 6),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF8741FF),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            trailingLabel!,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontFamily: 'PingFang SC',
-                            ),
-                          ),
-                        ),
+                      const Padding(
+                        padding: EdgeInsets.only(left: 6),
+                        child: _VipActivatedBadge(height: 22),
                       ),
                   ],
                 ),
@@ -729,32 +665,38 @@ class _VipPriceCard extends StatelessWidget {
               ),
             ),
           if (!showPrice && trailingLabel != null)
-            Positioned(
+            const Positioned(
               right: 4,
               top: 0,
               bottom: 0,
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF8741FF),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    trailingLabel!,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontFamily: 'PingFang SC',
-                    ),
-                  ),
-                ),
-              ),
+              child: Center(child: _VipActivatedBadge(height: 24)),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// 「已开通」徽章。
+///
+/// 之前是 `Container` + 紫色 [BoxDecoration] 胶囊 + 白字文本合成；现在直接
+/// 渲染设计图 [AppAssets.infoVipActivated]（紫字、无背景、自带留白）。
+/// - 通过 [height] 控制纵向占位（年卡 22、体验卡 24，沿用原始 padding 高度，
+///   保持两侧卡片视觉对齐）；
+/// - `BoxFit.contain` 让宽度按图片比例自适应，不被父级 [Row] 拉伸。
+class _VipActivatedBadge extends StatelessWidget {
+  const _VipActivatedBadge({required this.height});
+
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: height,
+      child: Image.asset(
+        AppAssets.infoVipActivated,
+        fit: BoxFit.contain,
+        alignment: Alignment.center,
       ),
     );
   }

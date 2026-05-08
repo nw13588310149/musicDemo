@@ -60,12 +60,15 @@ class ShellTopBar extends StatelessWidget {
                 ),
               ),
               SizedBox(width: gap),
+              // 帮助 / 通知 / 设置 三个图标统一 40×40：图标自身带留白，
+              // 与外层 _buildToolButton 的 40×40 命中区一致，视觉上由图标
+              // 本体的内边距充当点击热区与背景的间距。
               _buildToolButton(
                 context: context,
                 child: AppAssetGraphic(
                   AppAssets.shellV2Help,
-                  width: ui(24),
-                  height: ui(24),
+                  width: ui(40),
+                  height: ui(40),
                   fit: BoxFit.contain,
                 ),
                 onTap: () => _showToast(context, '帮助功能即将上线'),
@@ -77,8 +80,8 @@ class ShellTopBar extends StatelessWidget {
                 context: context,
                 child: AppAssetGraphic(
                   AppAssets.shellV2Setting,
-                  width: ui(24),
-                  height: ui(24),
+                  width: ui(40),
+                  height: ui(40),
                   fit: BoxFit.contain,
                 ),
                 onTap: () => onNavigate(RoutePaths.info),
@@ -324,10 +327,11 @@ class ShellTopBar extends StatelessWidget {
       children: [
         _buildToolButton(
           context: context,
+          // 与帮助 / 设置三个图标统一 40×40，让按钮本体留白由图标资源自带。
           child: AppAssetGraphic(
             AppAssets.shellV2Notice,
-            width: ui(24),
-            height: ui(24),
+            width: ui(40),
+            height: ui(40),
             fit: BoxFit.contain,
           ),
           onTap: () => _showNoticeDialog(context),

@@ -583,11 +583,14 @@ class _WeekCard extends StatelessWidget {
       width: 64,
       height: 88,
       decoration: BoxDecoration(
-        gradient: active
-            ? const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xFF8640FF), Color(0xFFB68EFF)],
+        // 「今日」高亮背景：从代码渐变改为预设 PNG（[AppAssets.homeWeekTodayBg]
+        // = bgc.png，64×88 顶紫底浅渐变，自带 12 圆角）。BoxFit.cover 让位图
+        // 撑满整个卡片；外层 borderRadius 仍保留 12，与图本身的圆角对齐时
+        // 顺便裁掉 PNG 边缘可能的透明像素，避免在白底上露出锯齿。
+        image: active
+            ? const DecorationImage(
+                image: AssetImage(AppAssets.homeWeekTodayBg),
+                fit: BoxFit.cover,
               )
             : null,
         // Figma：非今天卡片底色为 white（与右侧面板同色，仅 chip/文本可见）

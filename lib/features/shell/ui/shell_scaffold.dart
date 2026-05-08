@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/router/route_paths.dart';
+import '../../recording_system/state/recording_system_controller.dart';
 import '../state/shell_controller.dart';
 import 'dashboard_scaffold.dart';
 import 'shell_layout.dart';
@@ -31,12 +33,12 @@ class ShellScaffold extends ConsumerWidget {
           state: state,
           currentRoute: currentRoute,
           onToggleCollapse: controller.toggleCollapse,
-          onNavigate: (route) => _navigate(context, route),
+          onNavigate: (route) => _navigate(context, ref, route),
         ),
       ),
       topBar: ShellTopBar(
         state: state,
-        onNavigate: (route) => _navigate(context, route),
+        onNavigate: (route) => _navigate(context, ref, route),
         onLogout: controller.logout,
         onMarkAllRead: controller.markAllNoticeRead,
         onLoadProvinces: controller.loadProvinces,
@@ -46,8 +48,16 @@ class ShellScaffold extends ConsumerWidget {
     );
   }
 
-  void _navigate(BuildContext context, String route) {
+  void _navigate(BuildContext context, WidgetRef ref, String route) {
     if (route == currentRoute) {
+      // 录音系统的导航项再次点击时，直接调用 controller 把视图归位到列表
+      // 首页（同时停掉在跑的录音 / 试听）。其他模块再点同一项保持原有"啥
+      // 也不做"的行为，避免影响它们的页内 UI 状态。
+      if (route == RoutePaths.recording) {
+        ref
+            .read(recordingSystemControllerProvider.notifier)
+            .enterListHome();
+      }
       return;
     }
     Navigator.pushReplacementNamed(context, route);

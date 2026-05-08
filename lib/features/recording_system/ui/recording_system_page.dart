@@ -12,11 +12,83 @@ import '../state/recording_system_controller.dart';
 import '../state/recording_system_state.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-class RecordingSystemPage extends ConsumerWidget {
+/// 录音系统的根页面。
+///
+/// 升级为 [ConsumerStatefulWidget] 是为了挂上两条页面级生命周期钩子，解决
+/// 之前两个用户痛点：
+///
+/// 1. **退出该页要停止"在跑"的录音**：录音控制器是全局 Riverpod
+///    [recordingSystemControllerProvider]，导航到别的功能页时它本身不会
+///    dispose，老代码也没人调 `recorder.cancel()`，于是 [Timer.periodic] +
+///    [AudioRecorder] + 振幅订阅会在后台继续吃 CPU / 麦克风，直到再次回来
+///    或彻底崩溃。这里在 [State.dispose] 里调
+///    [RecordingSystemController.abandonActiveSession] 把它们一次性收掉。
+///
+/// 2. **再次进入应该回到列表首页**：上次离开时若停留在录制页 / 试听页，
+///    那些视图状态会被 Riverpod 全局 state 一直留着，下次再进来直接掉回
+///    录制 / 试听。改成在 [State.initState] 里调 [enterListHome]，无论之前
+///    停在哪一层都先归位到分类 / 文件夹列表。
+///
+/// 同时挂 [WidgetsBindingObserver]，App 切到后台 / inactive 时也立即停掉
+/// 录音占用，避免锁屏或切窗口时麦克风被持续占用。
+class RecordingSystemPage extends ConsumerStatefulWidget {
   const RecordingSystemPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<RecordingSystemPage> createState() =>
+      _RecordingSystemPageState();
+}
+
+class _RecordingSystemPageState extends ConsumerState<RecordingSystemPage>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // 进入页面立即把视图归位：哪怕全局 state 还停在 record / preview，
+    // initState 调用 enterListHome 之后 build 就会渲染列表首页。
+    // 用 post-frame 是为了避开 initState 阶段直接同步改 Riverpod 触发的
+    // "build 期间通知 listener" 警告。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      ref
+          .read(recordingSystemControllerProvider.notifier)
+          .enterListHome();
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    // 这里不能 await：State.dispose 是同步的。controller.abandonActiveSession
+    // 内部全部包了 try-catch，且对 stream / timer 的 cancel 不需要等待回执，
+    // 把它当成"发出指令立刻返回"即可。
+    ref
+        .read(recordingSystemControllerProvider.notifier)
+        .abandonActiveSession();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // App 不再前台可见时（锁屏 / 切到其他 App / 多窗口失焦），无论当前
+    // 在录音的哪一层都把麦克风、播放器、振幅订阅收掉。回到前台时不会
+    // 自动恢复——用户需要手动重新点击「开始录制」，符合预期。
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      ref
+          .read(recordingSystemControllerProvider.notifier)
+          .abandonActiveSession();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(recordingSystemControllerProvider);
     return switch (state.viewMode) {
       RecordingViewMode.list => _RecordingListView(state: state),
@@ -1567,6 +1639,18 @@ class _RecordingEmpty extends StatelessWidget {
 // 三级页面：录音编辑 / 播放试听（按 Figma 设计）
 // ===========================================================================
 
+/// 录音「录制」视图。
+///
+/// 性能要点：
+/// - 录制中以 ~10Hz 更新的 `elapsedMs` / `liveWaveform` 已经从 [RecordingSystemState]
+///   迁移到 [RecordingSystemController.liveTick]（[ValueNotifier]）。本视图
+///   外层只依赖低频字段（`recordingPhase` / `errorMessage`），所以外层结构
+///   只在用户操作（开始 / 暂停 / 继续 / 出错）时重建。
+/// - 真正高频变化的部分——波形、时钟、底部时长门槛提示、右侧"完成"按钮
+///   的可用态——全部包在 [ValueListenableBuilder] 里。当 [liveTick] 推送
+///   新值时，只有 builder 里的那棵 [_RecordingStageBody] 子树会重建，外层
+///   的 `_RecordingStage`（含返回按钮、标题栏、底部白色容器）以及左侧
+///   pill / 中间录制按钮都不会被波及。
 class _RecordingEditorView extends ConsumerWidget {
   const _RecordingEditorView({required this.state});
 
@@ -1576,18 +1660,10 @@ class _RecordingEditorView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final controller = ref.read(recordingSystemControllerProvider.notifier);
     final phase = state.recordingPhase;
-    final canFinish = state.elapsedMs >= 5000;
-    final canListenWhileRecording =
-        state.elapsedMs >= 1000 &&
-        state.elapsedMs < 5000 &&
-        (phase == RecordingPhase.recording || phase == RecordingPhase.paused);
-    final displayDurationMs = math.max(state.elapsedMs, 8000);
-    final progressRatio = (state.elapsedMs / displayDurationMs)
-        .clamp(0.0, 1.0)
-        .toDouble();
 
     // 左侧 pill：idle 状态展示「暂停」白底胶囊（视觉占位、不可点）；
     // 录制 / 暂停状态展示「继续」红字胶囊（仅在 paused 时点击恢复）。
+    // 仅依赖 phase，可以在外层算一次。
     final Widget leftPill;
     switch (phase) {
       case RecordingPhase.idle:
@@ -1638,57 +1714,74 @@ class _RecordingEditorView extends ConsumerWidget {
       },
     );
 
+    final errorMessage = state.errorMessage;
+
     return _RecordingStage(
       title: '音频录制',
       onBack: controller.backToList,
       headerActions: const [],
-      body: _RecordingStageBody(
-        bars: state.liveWaveform.isEmpty
-            ? _buildFallbackBars(120, seed: 9)
-            : _stretchBars(state.liveWaveform, 120),
-        progressRatio: progressRatio,
-        cursorRatio: 0.5,
-        durationMs: displayDurationMs,
-        elapsedClock: _formatClock(state.elapsedMs),
-        progressClock: _formatSecondsClock(state.elapsedMs),
-        totalClock: _formatSecondsClock(displayDurationMs),
-        leftPill: leftPill,
-        centerControls: centerControls,
-        rightPill: _SoundControlButton(
-          asset: AppAssets.soundFinishButton,
-          onTap: canFinish
-              ? () async {
-                  final message = await controller.finishRecording();
-                  if (message != null && context.mounted) {
-                    _showMessage(context, message);
-                  }
-                }
-              : null,
-        ),
-        bottomTip: canListenWhileRecording
-            ? '未满 5 秒可先试听当前录音（将结束本条录制）'
-            : '录制不能低于5秒',
-        bottomAccessory: canListenWhileRecording
-            ? TextButton(
-                onPressed: () async {
-                  final message =
-                      await controller.finalizeRecordingForListening();
-                  if (message != null && context.mounted) {
-                    _showMessage(context, message);
-                  }
-                },
-                child: Text(
-                  '试听当前录音',
-                  style: TextStyle(
-                    fontSize: DashboardScaleScope.of(context).ui(14),
-                    color: const Color(0xFF8741FF),
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w600,
-                  ),
-                ),
-              )
-            : null,
-        errorMessage: state.errorMessage,
+      body: ValueListenableBuilder<RecordingLiveTick>(
+        valueListenable: controller.liveTick,
+        builder: (context, tick, _) {
+          final canFinish = tick.elapsedMs >= 5000;
+          final canListenWhileRecording =
+              tick.elapsedMs >= 1000 &&
+              tick.elapsedMs < 5000 &&
+              (phase == RecordingPhase.recording ||
+                  phase == RecordingPhase.paused);
+          final displayDurationMs = math.max(tick.elapsedMs, 8000);
+          final progressRatio = (tick.elapsedMs / displayDurationMs)
+              .clamp(0.0, 1.0)
+              .toDouble();
+          return _RecordingStageBody(
+            bars: tick.bars.isEmpty
+                ? _buildFallbackBars(120, seed: 9)
+                : _stretchBars(tick.bars, 120),
+            progressRatio: progressRatio,
+            cursorRatio: 0.5,
+            durationMs: displayDurationMs,
+            elapsedClock: _formatClock(tick.elapsedMs),
+            progressClock: _formatSecondsClock(tick.elapsedMs),
+            totalClock: _formatSecondsClock(displayDurationMs),
+            leftPill: leftPill,
+            centerControls: centerControls,
+            rightPill: _SoundControlButton(
+              asset: AppAssets.soundFinishButton,
+              onTap: canFinish
+                  ? () async {
+                      final message = await controller.finishRecording();
+                      if (message != null && context.mounted) {
+                        _showMessage(context, message);
+                      }
+                    }
+                  : null,
+            ),
+            bottomTip: canListenWhileRecording
+                ? '未满 5 秒可先试听当前录音（将结束本条录制）'
+                : '录制不能低于5秒',
+            bottomAccessory: canListenWhileRecording
+                ? TextButton(
+                    onPressed: () async {
+                      final message =
+                          await controller.finalizeRecordingForListening();
+                      if (message != null && context.mounted) {
+                        _showMessage(context, message);
+                      }
+                    },
+                    child: Text(
+                      '试听当前录音',
+                      style: TextStyle(
+                        fontSize: DashboardScaleScope.of(context).ui(14),
+                        color: const Color(0xFF8741FF),
+                        fontFamily: 'PingFang SC',
+                        fontWeight: AppFont.w600,
+                      ),
+                    ),
+                  )
+                : null,
+            errorMessage: errorMessage,
+          );
+        },
       ),
     );
   }
@@ -2287,31 +2380,40 @@ class _DarkWavePanel extends StatelessWidget {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final width = constraints.maxWidth;
-              final stack = Stack(
-                children: [
-                  Positioned.fill(
-                    child: CustomPaint(
-                      painter: _DarkWavePainter(
-                        bars: bars,
-                        playedRatio: progressRatio,
+              // [RepaintBoundary] 把整个波形 + 光标 + 时间刻度独立成一张
+              // 缓存图层。录制中 [_DarkWavePainter] 一秒会被替换 ~10 次触发
+              // 内部 repaint，没有这层 boundary 的话外层暗色框架（含两层
+              // `Container` 的 [Border] 和上下渐变背景）会跟着进同一次
+              // raster 任务，是录制页"卡顿"的另一处放大器。
+              final stack = RepaintBoundary(
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: CustomPaint(
+                        painter: _DarkWavePainter(
+                          bars: bars,
+                          playedRatio: progressRatio,
+                        ),
                       ),
                     ),
-                  ),
-                  // 光标只是装饰：用 IgnorePointer 让它不拦截手势，
-                  // 否则用户拖到光标头部那两个小圆点上就 seek 不到了。
-                  IgnorePointer(
-                    child: _Cursor(
-                      width: width,
-                      progressRatio: cursorRatio,
+                    // 光标只是装饰：用 IgnorePointer 让它不拦截手势，
+                    // 否则用户拖到光标头部那两个小圆点上就 seek 不到了。
+                    IgnorePointer(
+                      child: _Cursor(
+                        width: width,
+                        progressRatio: cursorRatio,
+                      ),
                     ),
-                  ),
-                  Positioned(
-                    left: ui(12),
-                    right: ui(12),
-                    bottom: ui(8),
-                    child: IgnorePointer(child: _TimeScale(durationMs: durationMs)),
-                  ),
-                ],
+                    Positioned(
+                      left: ui(12),
+                      right: ui(12),
+                      bottom: ui(8),
+                      child: IgnorePointer(
+                        child: _TimeScale(durationMs: durationMs),
+                      ),
+                    ),
+                  ],
+                ),
               );
               if (onSeek == null) {
                 return stack;

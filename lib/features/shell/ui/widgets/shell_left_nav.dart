@@ -242,7 +242,19 @@ class _NavTile extends StatelessWidget {
     final scale = DashboardScaleScope.of(context);
     final ui = scale.ui;
 
-    final bgColor = active ? const Color(0xFF202020) : Colors.transparent;
+    // 选中态背景：从「写死的 #202020」改为「PNG 平铺」。
+    // - active.png 本身是深色 + 圆角矩形，作为 DecorationImage 平铺即可。
+    // - 用 BoxFit.cover：图本身约 3:1 的横向比例，展开态横长矩形天然契合，
+    //   折叠态 40×40 也能铺满（cover 会裁掉横向两侧，但图是纯色横块，
+    //   裁掉中段同色像素肉眼不可分辨，安全）。
+    // - 外层仍保留 borderRadius.circular(12)，把图边缘任何透明 / 半透明
+    //   渐变像素裁掉，避免「图自带圆角 + 容器无圆角」时四角露出底色的白。
+    final activeBg = active
+        ? const DecorationImage(
+            image: AssetImage(AppAssets.leftNavActiveBg),
+            fit: BoxFit.cover,
+          )
+        : null;
     // 设计稿：未选中文案 opacity 0.70 + #0B081A；选中项白字
     final textColor = active
         ? Colors.white
@@ -266,7 +278,7 @@ class _NavTile extends StatelessWidget {
                   width: ui(40),
                   height: ui(40),
                   decoration: BoxDecoration(
-                    color: bgColor,
+                    image: activeBg,
                     borderRadius: BorderRadius.circular(ui(12)),
                   ),
                   alignment: Alignment.center,
@@ -286,7 +298,7 @@ class _NavTile extends StatelessWidget {
               // 展开态：bg 横铺整条 tile，左 16 / 右 10 / 上下 12 内边距。
               : Container(
                   decoration: BoxDecoration(
-                    color: bgColor,
+                    image: activeBg,
                     borderRadius: BorderRadius.circular(ui(12)),
                   ),
                   padding: EdgeInsets.only(

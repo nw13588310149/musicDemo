@@ -195,7 +195,18 @@ abstract final class AppAssets {
   static const recordingCategoryIdleIcon = 'assets/images/sound/ly.png';
   static const homeDictationBookCover = 'assets/images/home/dictation/2.png';
   static const homeV2VoiceCardBg = 'assets/images/home/v2/voice_card_bg.png';
+  /// 声乐二级页（[VoicePage]）卡片封面：紫色霓虹「VOCAL MUSIC / 声乐」海报。
   static const homeFmCover = 'assets/images/home/fm.png';
+  /// 器乐二级页（[InstrumentalPage] 内部复用 [VoicePage]）卡片封面：
+  /// 紫色霓虹「INSTRUMENTAL MUSIC / 器乐」海报。与 [homeFmCover] 同尺寸/同设计语言。
+  static const homeFm2Cover = 'assets/images/home/fm2.png';
+  /// 左侧导航选中态背景图：深色（≈ #202020）圆角矩形 PNG，替代原本写死的纯色。
+  /// 在 [_NavTile] 展开/折叠两态都通过 `BoxFit.cover` 铺满命中区，外层
+  /// `BorderRadius.circular(12)` 仍保留，把图本身边缘渐变的透明像素裁掉。
+  static const leftNavActiveBg = 'assets/images/home/active.png';
+  /// 首页右侧周课表「今日」日期卡片的渐变背景图（≈ 64×88，#8640FF→#B68EFF
+  /// 顶到底的紫渐变，自带 12 圆角）。替代 [_WeekCard] 中写死的 LinearGradient。
+  static const homeWeekTodayBg = 'assets/images/home/bgc.png';
   static const homeSearchIcon = 'assets/images/home/search.png';
   static const emptyCoursePlaceholder = 'assets/images/404/kc.png';
   static const homeV2InstrumentCardBg =
@@ -205,15 +216,21 @@ abstract final class AppAssets {
   static const homeViews = 'assets/images/home/views.png';
   static const homeComingSoon = 'assets/images/home/sx.jpg';
   static const homeDialogClose = 'assets/images/home/bg_close.jpg';
-  static const homeSendButtonDisabled = 'assets/images/home/Button1.png';
-  static const homeSendButtonEnabled = 'assets/images/home/Button2.png';
+  /// AI 对话输入框「发送」按钮——不可发送态（输入框为空 / 正在发送中）。
+  /// 浅灰圆角方块 + 浅灰上箭头。
+  static const aiChatSendButtonDisabled = 'assets/images/aichat/Button1.png';
+  /// AI 对话输入框「发送」按钮——可发送态（输入框非空且未发送中）。
+  /// 紫色 #8741FF 圆角方块 + 白色上箭头。
+  static const aiChatSendButtonEnabled = 'assets/images/aichat/Button.png';
 
   static const aiChatThink = 'assets/images/aichat/v2/ai_chip_think_idle.svg';
   static const aiChatThinkActive =
       'assets/images/aichat/v2/ai_chip_think_active.svg';
-  static const aiChatSearch = 'assets/images/aichat/v2/ai_chip_search.svg';
-  static const aiChatSearchActive =
-      'assets/images/aichat/v2/ai_chip_search.svg';
+  /// 联网搜索 chip——未开启态：浅灰描边的地球 PNG。
+  static const aiChatSearch = 'assets/images/aichat/aichat2.png';
+  /// 联网搜索 chip——开启态：紫色描边的地球 PNG，与深度思考激活态色系
+  /// （#8741FF）保持一致。
+  static const aiChatSearchActive = 'assets/images/aichat/aichat2_active.png';
   static const aiChatAttach = 'assets/images/aichat/v2/ai_attach.svg';
   static const aiChatSend = 'assets/images/aichat/v2/ai_send.svg';
   static const aiChatMenu = 'assets/images/aichat/v2/ai_history_more.svg';
@@ -391,6 +408,13 @@ abstract final class AppAssets {
   /// 个人中心（设计资源）
   static const infoBg = 'assets/images/info/bg.png';
   static const infoVip = 'assets/images/info/vip.png';
+  /// 个人中心顶部「年卡会员」徽章整图（紫色多边形 V 标 + 渐变胶囊 + 白字
+  /// 「年卡会员」），直接替代 [_AnnualVipBadge] 中代码渐变 + 文字 + V 装饰
+  /// 的合成实现。
+  static const infoAnnualVipBadge = 'assets/images/info/1.png';
+  /// 年卡 / 体验卡价格卡右侧「已开通」徽章整图（紫色文字，无背景）。
+  /// 替代 [_VipPriceCard] 中胶囊背景 + 白字「已开通」的合成实现。
+  static const infoVipActivated = 'assets/images/info/2.png';
   /// 年卡会员卡片的背景图（淡紫渐变 + 右侧雪花装饰）。
   static const infoCard = 'assets/images/info/card.png';
   static const infoPencilLine = 'assets/images/info/pencil-line.png';

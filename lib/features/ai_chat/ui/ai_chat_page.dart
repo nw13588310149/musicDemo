@@ -24,8 +24,6 @@ const _textSecondary = Color(0xFF707790);
 const _textHint = Color(0xFFB6B5BB);
 const _purple = Color(0xFF8741FF);
 const _purpleSoft = Color(0x0D8741FF);
-const _green = Color(0xFF0CAC40);
-const _greenSoft = Color(0x0D0CAC40);
 
 const _historyPaneWidth = 230.0;
 const _mainHorizontalPadding = 64.0;
@@ -1241,13 +1239,19 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                     ),
                     const SizedBox(width: 8),
                     _featureChip(
-                      icon: AppAssets.aiChatSearch,
+                      // 与「深度思考」一致：按 active 状态切图标资源。
+                      // idle = aichat2.png（灰）/ active = aichat2_active.png（紫）。
+                      icon: state.isWebSearching
+                          ? AppAssets.aiChatSearchActive
+                          : AppAssets.aiChatSearch,
                       label: '联网搜索',
                       active: state.isWebSearching,
                       onTap: controller.toggleWebSearching,
-                      activeTextColor: _green,
-                      activeBg: _greenSoft,
-                      iconSize: 20,
+                      // 文字色 + 背景色与深度思考完全一致（紫色 #8741FF）。
+                      activeTextColor: _purple,
+                      activeBg: _purpleSoft,
+                      iconSize: 15,
+                      iconLabelGap: 4,
                     ),
                     const Spacer(),
                     _iconButton(
@@ -1299,6 +1303,9 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
     required Color activeTextColor,
     required Color activeBg,
     required double iconSize,
+    /// 图标右边缘与文案左侧的间距（逻辑像素）。深度思考默认 2；
+    /// 「联网搜索」设计稿为 5。
+    double iconLabelGap = 2,
   }) {
     final textColor = active ? activeTextColor : _textHint;
     final bgColor = active ? activeBg : Colors.transparent;
@@ -1320,7 +1327,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               AppAssetGraphic(icon, width: iconSize, height: iconSize),
-              const SizedBox(width: 2),
+              SizedBox(width: iconLabelGap),
               Text(
                 label,
                 style: TextStyle(
@@ -1376,9 +1383,13 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
   }
 
   Widget _sendButton({required bool enabled, required VoidCallback? onTap}) {
+    // 直接使用 aichat/Button*.png 当按钮本体：图自身已经包含背景色（紫
+    // [aiChatSendButtonEnabled] / 浅灰 [aiChatSendButtonDisabled]）、圆角
+    // 与上箭头，不需要再叠加 Container / Icon。disabled 时把 onTap 设为
+    // null，InkWell 自带的禁用态命中行为已经足够（无 ripple、不可点）。
     final asset = enabled
-        ? AppAssets.homeSendButtonEnabled
-        : AppAssets.homeSendButtonDisabled;
+        ? AppAssets.aiChatSendButtonEnabled
+        : AppAssets.aiChatSendButtonDisabled;
     return InkWell(
       borderRadius: BorderRadius.circular(16),
       onTap: onTap,

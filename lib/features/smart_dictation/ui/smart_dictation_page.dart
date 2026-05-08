@@ -333,8 +333,8 @@ class _TrackCard extends StatelessWidget {
                 alignment: Alignment.center,
                 child: Image.asset(
                   AppAssets.smartDictationFigmaIcon,
-                  width: ui(18),
-                  height: ui(16),
+                  width: ui(36),
+                  height: ui(36),
                   fit: BoxFit.contain,
                 ),
               ),
