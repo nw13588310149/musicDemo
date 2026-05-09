@@ -87,6 +87,26 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   static double _pitchRatio(int semitones) =>
       math.pow(2, semitones / 12.0).toDouble();
 
+  /// "随机循环" 用的随机源。整个 controller 生命周期共用一个实例，避免每次
+  /// 抽下一首都重新 seed → 在系统时钟低分辨率的设备（部分 Android）上连出
+  /// 同一个数字的尴尬。
+  final math.Random _shuffleRandom = math.Random();
+
+  /// 在 [total] 个 track 中给"随机循环"挑一个**不等于** [currentIdx] 的下标。
+  ///
+  /// 经典 "skip-current" 写法：从 `total - 1` 个候选里 [Random.nextInt]，
+  /// 拿到的下标若 `>= currentIdx` 再 +1，等价于把当前 track 从候选集里抽掉。
+  /// 这样保证：
+  ///   - 不会立即重复同一首（用户对 "随机" 的最低期待）；
+  ///   - 仍然每首都有 `1/(N-1)` 的概率被抽到，分布均匀。
+  int _shuffleNextIndex(int currentIdx, int total) {
+    if (total <= 1) {
+      return 0;
+    }
+    final n = _shuffleRandom.nextInt(total - 1);
+    return n >= currentIdx ? n + 1 : n;
+  }
+
   Future<void> _initialize() async {
     unawaited(_warmUpPiano());
     try {
@@ -241,9 +261,13 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       await seek(Duration.zero);
       return;
     }
-    final previousIndex = state.activeTrackIndex <= 0
-        ? detail.tracks.length - 1
-        : state.activeTrackIndex - 1;
+    // "随机循环"模式下，"上一首"也走随机抽取：用户既然选了随机，下一/上一
+    // 都按随机来更符合直觉（避免出现"上一首明明刚听过"的体验割裂）。
+    final previousIndex = state.playMode == MusicPlayMode.shuffle
+        ? _shuffleNextIndex(state.activeTrackIndex, detail.tracks.length)
+        : (state.activeTrackIndex <= 0
+            ? detail.tracks.length - 1
+            : state.activeTrackIndex - 1);
     state = state.copyWith(
       activeTrackIndex: previousIndex,
       activeImageIndex: 0,
@@ -265,9 +289,12 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       await seek(Duration.zero);
       return;
     }
-    final nextIndex = state.activeTrackIndex >= detail.tracks.length - 1
-        ? 0
-        : state.activeTrackIndex + 1;
+    // 随机循环：next 等价于"再随机抽一首"；其它模式按顺序推进 + 末尾回环。
+    final nextIndex = state.playMode == MusicPlayMode.shuffle
+        ? _shuffleNextIndex(state.activeTrackIndex, detail.tracks.length)
+        : (state.activeTrackIndex >= detail.tracks.length - 1
+            ? 0
+            : state.activeTrackIndex + 1);
     state = state.copyWith(
       activeTrackIndex: nextIndex,
       activeImageIndex: 0,
@@ -632,6 +659,10 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       id: nextId,
       type: state.args.type,
       allLessonIds: ids,
+      // 切到下一节时保留入口侧的 autoPlayNext / closedByDefault 语义，否则
+      // 节奏 / 旋律 自动跳到下一节后会因为 args 重置而失去自动续播能力。
+      autoPlayNext: state.args.autoPlayNext,
+      closedByDefault: state.args.closedByDefault,
     );
     state = state.copyWith(args: nextArgs);
     await loadDetail(nextId, preserveShowAnswer: false);
@@ -750,53 +781,94 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       unawaited(repository.saveStudyRecord(detail.id));
     }
 
-    // 视唱（multi-lesson playlist）的播放完毕策略：按用户要求一律「停在当前
-    // 课程」，不再自动切到下一首；用户需要主动点「下一首」按钮才会切歌。
-    // 这里直接复用单曲目的「seek 0 + pause」分支，所以走到下面的 fallback。
-    if (state.args.allLessonIds.isNotEmpty) {
-      final player = _player;
-      if (player != null) {
-        try {
-          await player.seek(Duration.zero);
-          await player.pause();
-        } catch (_) {}
-      }
-      if (mounted) {
-        state = state.copyWith(
-          isPlaying: false,
-          position: Duration.zero,
-        );
-      }
+    final tracks = detail.tracks;
+    final mode = state.playMode;
+
+    // 单曲循环：始终回到当前曲——优先级最高，UI 显式选择，与入口无关。
+    if (mode == MusicPlayMode.single) {
+      await selectTrack(state.activeTrackIndex);
       return;
     }
 
-    if (detail.tracks.length > 1) {
-      // 按用户反馈：多曲目场景下"播完当前音频应该停住，不要自动切下一曲"。
-      //   - 单曲循环：仍然循环当前同一首（用户主动选择的"循环"语义）；
-      //   - 顺序 / 随机：完整放完当前一首就 pause + 回到 0，不再自动切歌；
-      //     用户通过页面上的「上一首 / 下一首」按钮（或音频列表）显式切。
-      // 这样多曲目播放器的"完成"语义和单曲目保持一致，避免一进列表就一路
-      // 自动放到底，给学习场景带来困扰。
-      if (state.playMode == MusicPlayMode.single) {
-        await selectTrack(state.activeTrackIndex);
+    // 多 track 才有"列表/随机循环"的语义；_LoopModeChip 也只在 tracks > 1
+    // 时显示，所以这里能进来必然是用户主动选的循环模式，应该一直循环下去，
+    // 不受 autoPlayNext 影响（autoPlayNext 只决定"是否跨课跳到下一节"）。
+    if (tracks.length > 1) {
+      if (mode == MusicPlayMode.shuffle) {
+        // 随机循环：永远在课内 N 条 track 中随机抽一条不同的继续播。
+        final nextIdx = _shuffleNextIndex(state.activeTrackIndex, tracks.length);
+        state = state.copyWith(
+          activeTrackIndex: nextIdx,
+          activeImageIndex: 0,
+          position: Duration.zero,
+          duration: Duration.zero,
+          frequencyBands: const <double>[],
+        );
+        await _openActiveTrack(play: true);
         return;
       }
-      final player = _player;
-      if (player != null) {
-        try {
-          await player.seek(Duration.zero);
-          await player.pause();
-        } catch (_) {}
-      }
-      if (mounted) {
+
+      if (mode == MusicPlayMode.sequence) {
+        final nextIndex = state.activeTrackIndex + 1;
+        if (nextIndex < tracks.length) {
+          // 课内还有下一条，照常推进。
+          state = state.copyWith(
+            activeTrackIndex: nextIndex,
+            activeImageIndex: 0,
+            position: Duration.zero,
+            duration: Duration.zero,
+            frequencyBands: const <double>[],
+          );
+          await _openActiveTrack(play: true);
+          return;
+        }
+        // 已经播到本节最后一条 track。两种走向：
+        //  - autoPlayNext + 有 allLessonIds + 不是最后一节  → 跳到下一节自动播；
+        //  - 否则                                          → 回到本节第一条
+        //    track 继续循环（这就是 "列表循环" 的字面语义，跟 enum doc 保持一致）。
+        if (state.args.autoPlayNext && state.args.allLessonIds.isNotEmpty) {
+          final ids = state.args.allLessonIds;
+          final currentIdx = ids.indexOf(state.args.id);
+          if (currentIdx >= 0 && currentIdx < ids.length - 1) {
+            await _switchLesson(1);
+            final player = _player;
+            if (player != null) {
+              try {
+                await player.play();
+              } catch (_) {}
+            }
+            return;
+          }
+        }
         state = state.copyWith(
-          isPlaying: false,
+          activeTrackIndex: 0,
+          activeImageIndex: 0,
           position: Duration.zero,
+          duration: Duration.zero,
+          frequencyBands: const <double>[],
         );
+        await _openActiveTrack(play: true);
+        return;
       }
-      return;
     }
 
+    // 单 track 课程 + autoPlayNext：跨课接力（节奏 / 旋律典型用法）。
+    if (state.args.autoPlayNext && state.args.allLessonIds.isNotEmpty) {
+      final ids = state.args.allLessonIds;
+      final currentIdx = ids.indexOf(state.args.id);
+      if (currentIdx >= 0 && currentIdx < ids.length - 1) {
+        await _switchLesson(1);
+        final player = _player;
+        if (player != null) {
+          try {
+            await player.play();
+          } catch (_) {}
+        }
+        return;
+      }
+    }
+
+    // 默认收尾：seek 回 0 + pause。涵盖单 track 单课、试题等"播完即停"的入口。
     final player = _player;
     if (player != null) {
       try {
@@ -804,10 +876,12 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
         await player.pause();
       } catch (_) {}
     }
-    state = state.copyWith(
-      isPlaying: false,
-      position: Duration.zero,
-    );
+    if (mounted) {
+      state = state.copyWith(
+        isPlaying: false,
+        position: Duration.zero,
+      );
+    }
   }
 
   bool _hasVipAccess(dynamic data) {

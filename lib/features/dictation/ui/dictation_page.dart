@@ -140,11 +140,21 @@ class _ContentPanel extends StatelessWidget {
     return menuName.replaceAll('听写', '').replaceAll('听选', '').trim();
   }
 
+  /// 「节奏」「旋律」类目的 musicPlay 页要播完自动接下一首；其余类目
+  /// （音程 / 和弦 / 单音 / 音组 / 调式 / 乐句）维持播完即停。
+  /// 判定方式跟 [_resolveCategoryLabel] 共用同一份关键词优先级列表，避免
+  /// 多处真理来源不一致。
+  static bool _menuPrefersAutoPlayNext(DictationState state) {
+    final category = _resolveCategoryLabel(state);
+    return category == '节奏' || category == '旋律';
+  }
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final hasChildren = state.selectedChildren.isNotEmpty;
     final category = _resolveCategoryLabel(state);
+    final autoPlayNext = _menuPrefersAutoPlayNext(state);
 
     return Container(
       color: Colors.white,
@@ -207,6 +217,8 @@ class _ContentPanel extends StatelessWidget {
                                   'id': lesson.id,
                                   // 听写默认进入"关闭状态"（题面），由用户主动切到答案
                                   'closedByDefault': true,
+                                  // 节奏 / 旋律：播完自动接下一首；其余类目仍是播完停。
+                                  if (autoPlayNext) 'autoPlayNext': true,
                                 },
                               );
                             },

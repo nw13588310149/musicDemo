@@ -356,5 +356,15 @@ Map<String, dynamic> _buildVoiceInstrumentArgs(
   StudyCatalogState state,
   StudyCatalogLesson lesson,
 ) {
-  return <String, dynamic>{'id': lesson.id, 'type': 2};
+  // 声乐 / 器乐 的子菜单包括：音组、音程、和弦、节奏、旋律、调式、乐句、单音。
+  // 跟「听写」入口保持一致：仅「节奏」「旋律」类目播完自动接下一首；其余
+  // 类目（音程 / 和弦 / 单音 …）维持播完即停的默认行为。
+  final menuName = state.selectedMenu?.name ?? '';
+  final isAutoPlayCategory =
+      menuName.contains('节奏') || menuName.contains('旋律');
+  return <String, dynamic>{
+    'id': lesson.id,
+    'type': 2,
+    if (isAutoPlayCategory) 'autoPlayNext': true,
+  };
 }

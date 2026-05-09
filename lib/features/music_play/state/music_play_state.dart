@@ -7,6 +7,7 @@ class MusicPlayPageArgs {
     this.type,
     this.allLessonIds = const <int>[],
     this.closedByDefault = false,
+    this.autoPlayNext = false,
   });
 
   final int id;
@@ -16,6 +17,14 @@ class MusicPlayPageArgs {
   /// 进入页面时是否默认隐藏答案（即"关闭状态"，显示题面而非答案）。
   /// 试题模块走 answerEnd2 路由时设为 true，避免默认就把答案露出来。
   final bool closedByDefault;
+
+  /// 单曲播完后是否自动接下一首。
+  ///
+  /// 默认 false（播完停在当前位置，沿用绝大多数模块的"播完即停"语义）。
+  /// 仅在「节奏」「旋律」类目从听写 / 声乐 / 器乐入口跳进来时才置 true：
+  /// 这两个类目典型一节课多个 track（节奏型 / 旋律片段），用户期望像
+  /// 老款 1.0 一样一气听完整组，再手动决定。
+  final bool autoPlayNext;
 
   factory MusicPlayPageArgs.fromRaw(dynamic raw) {
     if (raw is MusicPlayPageArgs) {
@@ -35,11 +44,13 @@ class MusicPlayPageArgs {
       final id = int.tryParse(raw['id']?.toString() ?? '') ?? 0;
       final type = int.tryParse(raw['type']?.toString() ?? '');
       final closed = raw['closedByDefault'] == true;
+      final autoPlayNext = raw['autoPlayNext'] == true;
       return MusicPlayPageArgs(
         id: id,
         type: type,
         allLessonIds: all,
         closedByDefault: closed,
+        autoPlayNext: autoPlayNext,
       );
     }
     return const MusicPlayPageArgs(id: 0);
@@ -51,6 +62,7 @@ class MusicPlayPageArgs {
         other.id == id &&
         other.type == type &&
         other.closedByDefault == closedByDefault &&
+        other.autoPlayNext == autoPlayNext &&
         listEquals(other.allLessonIds, allLessonIds);
   }
 
@@ -59,6 +71,7 @@ class MusicPlayPageArgs {
     id,
     type,
     closedByDefault,
+    autoPlayNext,
     Object.hashAll(allLessonIds),
   );
 }

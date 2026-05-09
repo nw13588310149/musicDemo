@@ -3042,11 +3042,27 @@ class _SaveRecordingDialog extends ConsumerWidget {
                         label: '确认',
                         primary: true,
                         onTap: () async {
+                          // 严格按这个顺序：1) 调保存接口；2) 失败 -> Toast，
+                          // 弹窗保持打开让用户重试；3) 成功 -> 关闭弹窗 + Toast
+                          // + 在下一帧再切回列表 + 刷新。最后这步必须延后到
+                          // postFrameCallback，否则 iPad 上 saveCurrentRecording
+                          // 一次性把 dialog 关掉 + viewMode 切到 list，会触发
+                          // "This exception was thrown because the deactivated
+                          // widget's ancestor was looked up..." 框架异常。
                           final message = await controller
                               .saveCurrentRecording();
-                          if (context.mounted) {
-                            _showMessage(context, message ?? '录音已保存');
+                          if (!context.mounted) {
+                            return;
                           }
+                          if (message != null) {
+                            _showMessage(context, message);
+                            return;
+                          }
+                          controller.closeSaveDialog();
+                          _showMessage(context, '录音已保存');
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            controller.finishSaveAndReturnToList();
+                          });
                         },
                       ),
                     ),

@@ -1035,7 +1035,28 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     state = state.copyWith(previewCollected: !state.previewCollected);
   }
 
+  /// Upload the in-memory recording bytes and persist a recordingSave row.
+  /// On success returns null, on any failure returns a localized error string.
+  ///
+  /// IMPORTANT - this method intentionally does NOT close the save dialog or
+  /// flip `viewMode` back to list. Doing both inside one call has been the
+  /// source of the iPad save crash ("This exception was thrown because the
+  /// deactivated widget's ancestor was looked up..."): tearing down the
+  /// dialog AND the parent _RecordingStage at the same time leaves the
+  /// dialog mid-rebuild on an already-deactivated tree.
+  ///
+  /// Cleanup is the UI's responsibility:
+  ///   1. await saveCurrentRecording() -> message
+  ///   2. if message == null: controller.closeSaveDialog()
+  ///   3. addPostFrameCallback(() => controller.finishSaveAndReturnToList())
+  /// See `_DialogActionButton` for the actual choreography.
   Future<String?> saveCurrentRecording() async {
+    // Re-entrancy guard: if the user double-taps the confirm button, ignore
+    // the second tap rather than firing a second upload + saveRecording
+    // (would create a duplicate row).
+    if (state.busy) {
+      return null;
+    }
     final bytes = state.recordedBytes;
     final categoryId = state.selectedSaveCategoryId;
     if (bytes == null || bytes.isEmpty) {
@@ -1073,13 +1094,12 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
         return _zhUploadNoPath;
       }
 
-      final folderId = state.currentFolderId;
       final saveResponse = await _repository.saveRecording(
         categoryId: categoryId,
         name: title,
         duration: _formatDurationLabel(state.previewDurationMs),
         filePath: filePath,
-        folderId: folderId,
+        folderId: state.currentFolderId,
       );
       if (!saveResponse.isSuccess) {
         if (mounted) {
@@ -1088,22 +1108,10 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
         return _fallbackMessage(saveResponse.msg, _zhSaveRecordingFailed);
       }
 
-      // Success: dismiss the dialog and refresh the list. If the user was
-      // recording inside a folder we return to that folder; otherwise we
-      // return to the category's folder list.
+      // Success: just clear busy. The UI will close the dialog and call
+      // finishSaveAndReturnToList() in the next frame.
       if (mounted) {
-        state = state.copyWith(busy: false, showSaveDialog: false);
-      }
-      if (folderId > 0) {
-        await openFolder(
-          RecordingFolderItem(
-            id: folderId,
-            categoryId: categoryId,
-            name: state.currentFolderName,
-          ),
-        );
-      } else {
-        await selectCategory(categoryId);
+        state = state.copyWith(busy: false);
       }
       return null;
     } on PlatformException catch (error) {
@@ -1116,6 +1124,54 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
         state = state.copyWith(busy: false);
       }
       return '$_zhSaveRecordingFailed: $error';
+    }
+  }
+
+  /// Called by the UI ONE FRAME AFTER a successful save (see
+  /// _DialogActionButton). Switches back to the list view and reloads the
+  /// folder / category contents so the new recording shows up.
+  ///
+  /// The deferral via `addPostFrameCallback` is essential: the dialog
+  /// dismissal animation triggered by `closeSaveDialog()` needs at least
+  /// one frame to start before we tear down the parent _RecordingStage by
+  /// flipping `viewMode` to list. Doing both in the same frame is what
+  /// caused the iPad "deactivated widget's ancestor" exception.
+  Future<void> finishSaveAndReturnToList() async {
+    final folderId = state.currentFolderId;
+    final categoryId = state.selectedSaveCategoryId > 0
+        ? state.selectedSaveCategoryId
+        : state.selectedCategoryId;
+    if (mounted) {
+      state = state.copyWith(
+        viewMode: RecordingViewMode.list,
+        recordingPhase: RecordingPhase.idle,
+        elapsedMs: 0,
+        liveWaveform: const <double>[],
+        clearPreviewItem: true,
+        clearPreviewSource: true,
+        clearRecordedBytes: true,
+        showSaveDialog: false,
+        showShareDialog: false,
+        shareClasses: const <RecordingShareClass>[],
+        previewPlaying: false,
+        previewPositionMs: 0,
+        previewDurationMs: 0,
+      );
+    }
+    if (folderId > 0) {
+      await openFolder(
+        RecordingFolderItem(
+          id: folderId,
+          categoryId: categoryId > 0 ? categoryId : state.selectedCategoryId,
+          name: state.currentFolderName,
+        ),
+      );
+    } else if (categoryId > 0 && categoryId != state.selectedCategoryId) {
+      await selectCategory(categoryId);
+    } else if (categoryId > 0) {
+      // Same category, just reload its folder list so the new file's
+      // counter (if any) refreshes.
+      await _reloadFolders(categoryId);
     }
   }
 
