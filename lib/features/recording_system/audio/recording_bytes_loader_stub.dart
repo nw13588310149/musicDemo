@@ -6,4 +6,4 @@ Future<Uint8List> readRecordedBytes(String source) async {
   );
 }
 
-String createTemporaryRecordingPath() => 'recording.wav';
+String createTemporaryRecordingPath() => 'recording.m4a';

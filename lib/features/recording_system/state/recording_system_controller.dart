@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:audio_waveforms/audio_waveforms.dart';
-import 'package:flutter/services.dart' show MissingPluginException;
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart' show MissingPluginException, PlatformException;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/media_url.dart';
@@ -80,6 +81,9 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
   /// ??? / ???????? true?UI ???????????????
   bool _audioFeatureBroken = false;
 
+  static const _unsupportedAudioMessage =
+      'Recording is not supported on Web. Please use the iPad or mobile app.';
+
   Future<void> refresh() async {
     try {
       _preparedPlayerSource = null;
@@ -126,13 +130,13 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
         pendingTitle: '',
         errorMessage: folderResponse == null || folderResponse.isSuccess
             ? null
-            : _fallbackMessage(folderResponse.msg, '?????????'),
+            : _fallbackMessage(folderResponse.msg, 'Failed to load folders'),
       );
     } catch (_) {
       if (!mounted) {
         return;
       }
-      state = state.copyWith(loading: false, errorMessage: '??????????????');
+      state = state.copyWith(loading: false, errorMessage: 'Failed to load recordings. Please try again.');
     }
   }
 
@@ -168,13 +172,13 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
         shareClasses: const <RecordingShareClass>[],
         errorMessage: response.isSuccess
             ? null
-            : _fallbackMessage(response.msg, '?????????'),
+            : _fallbackMessage(response.msg, 'Failed to load folders'),
       );
     } catch (_) {
       if (!mounted) {
         return;
       }
-      state = state.copyWith(loading: false, errorMessage: '???????????????');
+      state = state.copyWith(loading: false, errorMessage: 'Failed to switch category.');
     }
   }
 
@@ -211,13 +215,13 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
         shareClasses: const <RecordingShareClass>[],
         errorMessage: response.isSuccess
             ? null
-            : _fallbackMessage(response.msg, '????????'),
+            : _fallbackMessage(response.msg, 'Failed to load recordings'),
       );
     } catch (_) {
       if (!mounted) {
         return;
       }
-      state = state.copyWith(loading: false, errorMessage: '??????????????');
+      state = state.copyWith(loading: false, errorMessage: 'Failed to load recordings.');
     }
   }
 
@@ -254,13 +258,13 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
         folders: _parseFolders(response.data, categoryId),
         errorMessage: response.isSuccess
             ? null
-            : _fallbackMessage(response.msg, '?????????'),
+            : _fallbackMessage(response.msg, 'Failed to load folders'),
       );
     } catch (_) {
       if (!mounted) {
         return;
       }
-      state = state.copyWith(loading: false, errorMessage: '???????????????');
+      state = state.copyWith(loading: false, errorMessage: 'Failed to return to folders.');
     }
   }
 
@@ -287,13 +291,13 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
   Future<String?> addCategory(String name) async {
     final trimmed = name.trim();
     if (trimmed.isEmpty) {
-      return '???????';
+      return 'Please enter a category name';
     }
     state = state.copyWith(busy: true, clearError: true);
     final response = await _repository.addCategory(trimmed);
     state = state.copyWith(busy: false);
     if (!response.isSuccess) {
-      return _fallbackMessage(response.msg, '??????');
+      return _fallbackMessage(response.msg, 'Failed to create category');
     }
     await refresh();
     return null;
@@ -304,7 +308,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     final response = await _repository.deleteCategory(id);
     state = state.copyWith(busy: false);
     if (!response.isSuccess) {
-      return _fallbackMessage(response.msg, '??????');
+      return _fallbackMessage(response.msg, 'Failed to delete category');
     }
     await refresh();
     return null;
@@ -315,16 +319,16 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
   Future<String?> renameCategory(int id, String name) async {
     final trimmed = name.trim();
     if (trimmed.isEmpty) {
-      return '???????';
+      return 'Please enter a category name';
     }
     if (id <= 0) {
-      return '?????????';
+      return 'Invalid category';
     }
     state = state.copyWith(busy: true, clearError: true);
     final response = await _repository.renameCategory(id, trimmed);
     state = state.copyWith(busy: false);
     if (!response.isSuccess) {
-      return _fallbackMessage(response.msg, '???????');
+      return _fallbackMessage(response.msg, 'Failed to rename category');
     }
     await refresh();
     return null;
@@ -336,11 +340,11 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
   Future<String?> addFolder(String name) async {
     final trimmed = name.trim();
     if (trimmed.isEmpty) {
-      return '????????';
+      return 'Please enter a folder name';
     }
     final categoryId = state.selectedCategoryId;
     if (categoryId <= 0) {
-      return '????????';
+      return 'Please select a category first';
     }
     state = state.copyWith(busy: true, clearError: true);
     final response = await _repository.addFolder(
@@ -349,7 +353,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     );
     state = state.copyWith(busy: false);
     if (!response.isSuccess) {
-      return _fallbackMessage(response.msg, '???????');
+      return _fallbackMessage(response.msg, 'Failed to create folder');
     }
     await _reloadFolders(categoryId);
     return null;
@@ -359,10 +363,10 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
   Future<String?> renameFolder(RecordingFolderItem folder, String name) async {
     final trimmed = name.trim();
     if (trimmed.isEmpty) {
-      return '????????';
+      return 'Please enter a folder name';
     }
     if (folder.id <= 0) {
-      return '?????????';
+      return 'Invalid folder';
     }
     state = state.copyWith(busy: true, clearError: true);
     final response = await _repository.renameFolder(
@@ -372,7 +376,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     );
     state = state.copyWith(busy: false);
     if (!response.isSuccess) {
-      return _fallbackMessage(response.msg, '????????');
+      return _fallbackMessage(response.msg, 'Failed to rename folder');
     }
     await _reloadFolders(folder.categoryId);
     return null;
@@ -381,13 +385,13 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
   /// ?????????????????????
   Future<String?> deleteFolder(RecordingFolderItem folder) async {
     if (folder.id <= 0) {
-      return '????????';
+      return 'Invalid folder';
     }
     state = state.copyWith(busy: true, clearError: true);
     final response = await _repository.deleteFolder(folder.id);
     state = state.copyWith(busy: false);
     if (!response.isSuccess) {
-      return _fallbackMessage(response.msg, '???????');
+      return _fallbackMessage(response.msg, 'Failed to delete folder');
     }
     await _reloadFolders(folder.categoryId);
     return null;
@@ -510,8 +514,8 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
   }
 
   Future<String?> startRecording() async {
-    if (_audioFeatureBroken) {
-      return '??????????';
+    if (kIsWeb || _audioFeatureBroken) {
+      return _unsupportedAudioMessage;
     }
     try {
       // ?????????????? / ???????? stop???????
@@ -523,7 +527,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
 
       final hasPermission = await recorderController.checkPermission();
       if (!hasPermission) {
-        return '??????????????';
+        return 'Microphone permission is required.';
       }
       // audio_waveforms ??? Android / iOS ?? mpeg4 ?? + AAC ???
       // ??? record ?? wav ????? upload ????????????
@@ -551,7 +555,14 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       if (mounted) {
         state = state.copyWith(recordingPhase: RecordingPhase.idle);
       }
-      return '??????????';
+      return _unsupportedAudioMessage;
+    } on PlatformException catch (error) {
+      if (mounted) {
+        state = state.copyWith(recordingPhase: RecordingPhase.idle);
+      }
+      return error.message?.trim().isNotEmpty == true
+          ? error.message
+          : 'Failed to start recording. Please check microphone permission.';
     } catch (_) {
       // ?????????? idle??? UI ????????
       await _safeAsync(() => recorderController.stop());
@@ -559,7 +570,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       if (mounted) {
         state = state.copyWith(recordingPhase: RecordingPhase.idle);
       }
-      return '??????????????';
+      return 'Failed to start recording. Please try again.';
     }
   }
 
@@ -569,7 +580,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       state = state.copyWith(recordingPhase: RecordingPhase.paused);
       return null;
     } catch (_) {
-      return '??????';
+      return 'Failed to pause recording';
     }
   }
 
@@ -580,7 +591,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       state = state.copyWith(recordingPhase: RecordingPhase.recording);
       return null;
     } catch (_) {
-      return '??????';
+      return 'Failed to resume recording';
     }
   }
 
@@ -606,8 +617,8 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     final elapsedMs = recorderController.elapsedDuration.inMilliseconds;
     if (elapsedMs < minElapsedMs) {
       return minElapsedMs >= 5000
-          ? '???????? 5 ?'
-          : '?????????????';
+          ? 'Recording must be at least 5 seconds'
+          : 'Please record audio first';
     }
     try {
       // RecorderController.stop() ?? nullable ????iOS ?????? null
@@ -615,7 +626,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       final source = await recorderController.stop();
       final resolvedSource = source ?? _currentRecordingPath;
       if (resolvedSource == null || resolvedSource.isEmpty) {
-        return '??????????????';
+        return 'Failed to create recording file. Please record again.';
       }
       final bytes = await loadRecordedBytes(resolvedSource);
       final durationMs = elapsedMs;
@@ -628,7 +639,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       _resetRecorderWaveform();
 
       final durationLabel = _formatDurationLabel(durationMs);
-      const defaultName = '???';
+      const defaultName = 'Untitled recording';
       final draft = RecordingEntry(
         id: -1,
         categoryId: state.selectedSaveCategoryId > 0
@@ -664,12 +675,12 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
         showSaveDialog: false,
         selectedSaveCategoryId: draft.categoryId,
         pendingTitle: draft.name == defaultName
-            ? '????${DateTime.now().month.toString().padLeft(2, '0')}${DateTime.now().day.toString().padLeft(2, '0')}'
+            ? 'Recording${DateTime.now().month.toString().padLeft(2, '0')}${DateTime.now().day.toString().padLeft(2, '0')}'
             : draft.name,
       );
       return null;
     } catch (_) {
-      return '??????????';
+      return 'Failed to finish recording. Please record again.';
     }
   }
 
@@ -704,10 +715,16 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     if (source == null || source.isEmpty) {
       return;
     }
+    if (kIsWeb) {
+      if (mounted) {
+        state = state.copyWith(errorMessage: _unsupportedAudioMessage);
+      }
+      return;
+    }
     final ready = await _preparePreviewPlayer(source);
     if (!ready) {
       if (mounted) {
-        state = state.copyWith(errorMessage: '????????????');
+        state = state.copyWith(errorMessage: 'Failed to prepare audio.');
       }
       return;
     }
@@ -717,7 +734,19 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       } else {
         await playerController.startPlayer();
       }
-    } catch (_) {}
+    } on PlatformException catch (error) {
+      if (mounted) {
+        state = state.copyWith(
+          errorMessage: error.message?.trim().isNotEmpty == true
+              ? error.message
+              : 'Playback failed.',
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        state = state.copyWith(errorMessage: 'Playback failed.');
+      }
+    }
   }
 
   /// ???????????? [deltaMs] ???
@@ -741,7 +770,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     final ready = await _preparePreviewPlayer(source);
     if (!ready) {
       if (mounted) {
-        state = state.copyWith(errorMessage: '????????????');
+        state = state.copyWith(errorMessage: 'Failed to prepare audio.');
       }
       return;
     }
@@ -751,7 +780,11 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     final clamped = targetMs.clamp(0, math.max(maxDur, 0)).toInt();
     try {
       await playerController.seekTo(clamped);
-    } catch (_) {}
+    } catch (_) {
+      if (mounted) {
+        state = state.copyWith(errorMessage: 'Failed to seek audio.');
+      }
+    }
   }
 
   void closeSaveDialog() {
@@ -778,60 +811,73 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     final bytes = state.recordedBytes;
     final categoryId = state.selectedSaveCategoryId;
     if (bytes == null || bytes.isEmpty) {
-      return '????????????';
+      return 'No recording file to save';
     }
     if (categoryId <= 0) {
-      return '??????????';
+      return 'Please select a category';
     }
 
     final title = state.pendingTitle.trim();
     if (title.isEmpty) {
-      return '???????';
+      return 'Please enter a title';
     }
 
     state = state.copyWith(busy: true, clearError: true);
-    final uploadResponse = await _repository.uploadRecording(
-      bytes: bytes,
-      filename: 'recording_${DateTime.now().millisecondsSinceEpoch}.m4a',
-    );
-    if (!uploadResponse.isSuccess) {
-      state = state.copyWith(busy: false);
-      return _fallbackMessage(uploadResponse.msg, '??????');
-    }
-    // ??????????? `path`??? `app/upload/.../xxx.m4a`????
-    // ???? url?????????? path ????????
-    final filePath = parseUploadResult(uploadResponse.data).savable;
-    if (filePath.isEmpty) {
-      state = state.copyWith(busy: false);
-      return '??????????????';
-    }
-
-    final folderId = state.currentFolderId;
-    final saveResponse = await _repository.saveRecording(
-      categoryId: categoryId,
-      name: title,
-      duration: _formatDurationLabel(state.previewDurationMs),
-      filePath: filePath,
-      folderId: folderId,
-    );
-    state = state.copyWith(busy: false);
-    if (!saveResponse.isSuccess) {
-      return _fallbackMessage(saveResponse.msg, '??????');
-    }
-
-    // ????????????????????????
-    if (folderId > 0) {
-      await openFolder(
-        RecordingFolderItem(
-          id: folderId,
-          categoryId: categoryId,
-          name: state.currentFolderName,
-        ),
+    try {
+      final uploadResponse = await _repository.uploadRecording(
+        bytes: bytes,
+        filename: 'recording_${DateTime.now().millisecondsSinceEpoch}.m4a',
       );
-    } else {
-      await selectCategory(categoryId);
+      if (!uploadResponse.isSuccess) {
+        state = state.copyWith(busy: false);
+        return _fallbackMessage(uploadResponse.msg, 'Failed to upload recording');
+      }
+      // ?????????? path?? app/upload/.../xxx.m4a??????????
+      // ?????????????????????? URL?
+      final filePath = parseUploadResult(uploadResponse.data).savable;
+      if (filePath.isEmpty) {
+        state = state.copyWith(busy: false);
+        return 'Upload succeeded but no file path was returned';
+      }
+
+      final folderId = state.currentFolderId;
+      final saveResponse = await _repository.saveRecording(
+        categoryId: categoryId,
+        name: title,
+        duration: _formatDurationLabel(state.previewDurationMs),
+        filePath: filePath,
+        folderId: folderId,
+      );
+      state = state.copyWith(busy: false);
+      if (!saveResponse.isSuccess) {
+        return _fallbackMessage(saveResponse.msg, 'Failed to save recording');
+      }
+
+      if (folderId > 0) {
+        await openFolder(
+          RecordingFolderItem(
+            id: folderId,
+            categoryId: categoryId,
+            name: state.currentFolderName,
+          ),
+        );
+      } else {
+        await selectCategory(categoryId);
+      }
+      return null;
+    } on PlatformException catch (error) {
+      if (mounted) {
+        state = state.copyWith(busy: false);
+      }
+      return error.message?.trim().isNotEmpty == true
+          ? error.message
+          : 'Failed to save recording.';
+    } catch (_) {
+      if (mounted) {
+        state = state.copyWith(busy: false);
+      }
+      return 'Failed to save recording. Please check the network and try again.';
     }
-    return null;
   }
 
   Future<String?> deleteRecording(RecordingEntry item) async {
@@ -847,7 +893,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     final response = await _repository.deleteRecording(item.id);
     state = state.copyWith(busy: false);
     if (!response.isSuccess) {
-      return _fallbackMessage(response.msg, '??????');
+      return _fallbackMessage(response.msg, 'Failed to delete recording');
     }
     final remaining = state.items
         .where((entry) => entry.id != item.id)
@@ -869,18 +915,18 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
   Future<String?> renameRecording(RecordingEntry item, String name) async {
     final trimmed = name.trim();
     if (trimmed.isEmpty) {
-      return '???????';
+      return 'Please enter a title';
     }
     if (trimmed == item.name) {
       return null;
     }
     if (item.id <= 0) {
-      return '??????????';
+      return 'Invalid recording';
     }
     final payload = item.payload;
     final filePath = (payload['filePath'] ?? payload['url'] ?? '').toString();
     if (filePath.isEmpty) {
-      return '????????????';
+      return 'Missing recording file path';
     }
     final duration = (payload['duration'] ?? item.durationLabel).toString();
     final folderId = _toInt(payload['folderId']);
@@ -898,7 +944,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     );
     state = state.copyWith(busy: false);
     if (!response.isSuccess) {
-      return _fallbackMessage(response.msg, '?????');
+      return _fallbackMessage(response.msg, 'Rename failed');
     }
     // ????????????? / ????????????????
     final currentFolderId = state.currentFolderId;
@@ -919,13 +965,13 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
   Future<String?> openShare() async {
     final target = state.previewItem;
     if (target == null || target.isLocalDraft) {
-      return '?????????????';
+      return 'Please save the recording before sharing';
     }
     state = state.copyWith(busy: true, clearError: true);
     final response = await _repository.getClassList();
     state = state.copyWith(busy: false);
     if (!response.isSuccess || response.data is! List) {
-      return _fallbackMessage(response.msg, '????????');
+      return _fallbackMessage(response.msg, 'Failed to load class list');
     }
     final classes = <RecordingShareClass>[];
     for (final raw in response.data as List) {
@@ -964,11 +1010,11 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
   Future<String?> sendShare() async {
     final target = state.previewItem;
     if (target == null || target.isLocalDraft) {
-      return '?????????????';
+      return 'Please save the recording before sharing';
     }
     final selected = state.shareClasses.where((item) => item.selected).toList();
     if (selected.isEmpty) {
-      return '??????????';
+      return 'Please select a class';
     }
     state = state.copyWith(busy: true, clearError: true);
     for (final item in selected) {
@@ -978,7 +1024,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       );
       if (!response.isSuccess) {
         state = state.copyWith(busy: false);
-        return _fallbackMessage(response.msg, '????');
+        return _fallbackMessage(response.msg, 'Share failed');
       }
     }
     state = state.copyWith(
@@ -1018,7 +1064,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
   /// ???? true ??? prepare?????????????160 ???
   /// ?????????? [AudioFileWaveforms] ??????
   Future<bool> _preparePreviewPlayer(String source) async {
-    if (source.isEmpty) {
+    if (kIsWeb || source.isEmpty) {
       return false;
     }
     if (_preparedPlayerSource == source &&
@@ -1039,6 +1085,8 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       _preparedPlayerSource = source;
       return true;
     } on MissingPluginException {
+      return false;
+    } on PlatformException {
       return false;
     } catch (_) {
       return false;
