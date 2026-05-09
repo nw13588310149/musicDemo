@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_client.dart';
@@ -36,19 +37,66 @@ class RecordingSystemRepository {
     required Uint8List bytes,
     required String filename,
   }) async {
+    final mediaType = _audioMediaType(filename);
+    debugPrint(
+      '[recording] uploadRecording start: filename=$filename '
+      'bytes=${bytes.length} mime=${mediaType.mimeType}',
+    );
     ApiResponse last = ApiResponse.failure('上传失败');
     for (final path in _kUploadCandidates) {
       // FormData 是流，每次重试都必须重新构造。
+      // 显式声明 contentType：iPad/iOS 录音是 .m4a，dio 默认推断
+      // 不到 mime 时会回退到 application/octet-stream，部分网关
+      // 会拦截"未知二进制"上传导致 400，这里把准确的 audio mime
+      // 钉死，让后端按音频文件入库。
       final form = FormData.fromMap(<String, dynamic>{
-        'file': MultipartFile.fromBytes(bytes, filename: filename),
+        'file': MultipartFile.fromBytes(
+          bytes,
+          filename: filename,
+          contentType: mediaType,
+        ),
       });
-      final resp = await client.postFormData(path, data: form);
-      last = resp;
-      if (resp.isSuccess) {
-        return resp;
+      try {
+        final resp = await client.postFormData(path, data: form);
+        last = resp;
+        debugPrint(
+          '[recording] uploadRecording $path -> '
+          'success=${resp.isSuccess} code=${resp.code} '
+          'msg="${resp.msg}"',
+        );
+        if (resp.isSuccess) {
+          return resp;
+        }
+      } catch (error, stack) {
+        debugPrint(
+          '[recording] uploadRecording $path threw: $error\n$stack',
+        );
       }
     }
     return last;
+  }
+
+  /// 选择上传录音用的 multipart Content-Type。
+  ///
+  /// - `.m4a` / `.aac` -> `audio/mp4`（iOS `record` 插件 AAC-LC 输出）
+  /// - `.webm`         -> `audio/webm`（Web `MediaRecorder` opus）
+  /// - `.wav`          -> `audio/wav`
+  /// - 其它             -> `application/octet-stream`
+  DioMediaType _audioMediaType(String filename) {
+    final lower = filename.toLowerCase();
+    if (lower.endsWith('.m4a') || lower.endsWith('.aac')) {
+      return DioMediaType('audio', 'mp4');
+    }
+    if (lower.endsWith('.webm')) {
+      return DioMediaType('audio', 'webm');
+    }
+    if (lower.endsWith('.wav')) {
+      return DioMediaType('audio', 'wav');
+    }
+    if (lower.endsWith('.mp3')) {
+      return DioMediaType('audio', 'mpeg');
+    }
+    return DioMediaType('application', 'octet-stream');
   }
 
   // ── Category ───────────────────────────────────────────────────────────────
