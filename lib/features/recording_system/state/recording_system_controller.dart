@@ -3,16 +3,12 @@ import 'dart:io' show FileSystemException;
 import 'dart:math' as math;
 import 'dart:typed_data' show Uint8List;
 
-import 'package:audio_waveforms/audio_waveforms.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show ValueNotifier, kIsWeb;
 import 'package:flutter/services.dart'
     show MissingPluginException, PlatformException;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-// Web-compatible audio player. media_kit is already initialized in main.dart
-// (MediaKit.ensureInitialized) and is the same library used by the cloud
-// drive / music-play features. We use it ONLY on Web as a fallback for
-// preview playback, since `audio_waveforms` doesn't ship a Web backend.
-import 'package:media_kit/media_kit.dart' as mk;
+import 'package:just_audio/just_audio.dart';
+import 'package:record/record.dart';
 
 import '../../../core/network/media_url.dart';
 import '../../../core/network/upload_result.dart';
@@ -20,38 +16,44 @@ import '../audio/recording_bytes_loader.dart';
 import '../data/recording_system_repository.dart';
 import 'recording_system_state.dart';
 
-// IMPORTANT - Encoding note for maintainers:
-// All strings AND comments in this file are intentionally pure ASCII / English
-// (no CJK characters). Reason: the Cursor `Write` tool on Windows has been
-// observed to mangle UTF-8 multibyte chars when persisting files (every
-// Chinese char becomes `?`), which then leaks to the UI as e.g.
-// "?????????????? iPad / ??????" in error banners. Keeping this file ASCII
-// guarantees error messages render correctly on every platform regardless of
-// font availability (Flutter Web's default Roboto has no CJK glyphs either,
-// so even if encoding survived, Chinese without an explicit `PingFang SC`
-// fontFamily would still render as `?` boxes on Web).
-//
-// User-facing Chinese is handled in the UI layer (recording_system_page.dart),
-// which was authored manually and uses `fontFamily: 'PingFang SC'` everywhere.
+// IMPORTANT - encoding note for maintainers:
+// Strings AND comments in this file are pure ASCII / English. CJK strings
+// shown in the UI are kept here as `\uXXXX` escapes; the UI layer renders
+// them with `fontFamily: 'PingFang SC'`. This keeps the file binary-safe
+// regardless of editor codepage and avoids the historical "?????" mojibake
+// we hit when saving Chinese in this controller through Cursor on Windows.
 
-/// Recording feature controller, backed by Simform's `audio_waveforms`.
+/// How fast the recorder polls amplitude. ~12 samples / second is enough
+/// for a smooth scrolling waveform without hammering the platform channel.
+const Duration _kAmplitudePollInterval = Duration(milliseconds: 80);
+
+/// How fast we tick the elapsed-time stopwatch. 30 fps is plenty for the
+/// `00:00.00` (centisecond) display and avoids a microtask flood.
+const Duration _kStopwatchTickInterval = Duration(milliseconds: 33);
+
+/// Maximum number of amplitude samples we keep around for the live
+/// scrolling waveform notification. Roughly 6.5s @ 80ms/sample.
+const int _kLiveWaveSampleCap = 80;
+
+/// Amplitude (dBFS) ? linear 0..1 normalization for the waveform painter.
+/// dBFS values are negative; -60 is "very quiet", 0 is "peak". Clamp into
+/// a 60 dB range so room-noise samples don't render as flat zeros.
+double _normalizeAmplitudeDb(double current) {
+  if (!current.isFinite) return 0;
+  final clamped = current.clamp(-60.0, 0.0);
+  return ((clamped + 60.0) / 60.0).toDouble();
+}
+
+/// Recording system controller, backed by:
+///   * `record` (`AudioRecorder`) for capture on every platform we ship to,
+///     including Web (browser MediaRecorder).
+///   * `just_audio` (`AudioPlayer`) for playback. Single instance, single
+///     codepath; works the same on iOS/Android/macOS/Windows/Web.
 ///
-/// Architecture:
-/// - [recorderController] drives recording + live amplitude + elapsedDuration
-///   (it's a ChangeNotifier itself). The UI subscribes via AnimatedBuilder so
-///   only the stopwatch / wave panel rebuilds, never the whole subtree.
-/// - [playerController] drives preview playback via native AVAudioPlayer /
-///   ExoPlayer + AudioFileWaveforms widget for waveform & draggable cursor.
-///
-/// Platform support:
-/// - iOS / Android: full support (recording + preview playback).
-/// - Web: recording is NOT supported (audio_waveforms has no Web backend);
-///   the user gets a clear "use the iPad / mobile app" banner if they try
-///   to record. Preview playback OF ALREADY-SAVED recordings IS supported
-///   on Web via a media_kit fallback player ([_webPreviewPlayer]).
-/// - Windows / macOS desktop: native channels throw [MissingPluginException];
-///   every native call is wrapped in [_safeAsync] / try-catch so the UI never
-///   crashes - only recording / playback are unavailable.
+/// The controller exposes three [ValueNotifier]s for UI surfaces that update
+/// at high frequency. The Riverpod state itself only carries low-frequency
+/// fields (current view mode, recording phase, error banner ?) so opening
+/// the recording page doesn't kick off a 30Hz `state.copyWith` storm.
 final recordingSystemControllerProvider =
     StateNotifierProvider<RecordingSystemController, RecordingSystemState>((
       ref,
@@ -61,196 +63,141 @@ final recordingSystemControllerProvider =
     });
 
 class RecordingSystemController extends StateNotifier<RecordingSystemState> {
-  RecordingSystemController({
-    required RecordingSystemRepository repository,
-    RecorderController? recorderController,
-    PlayerController? playerController,
-  }) : _repository = repository,
-       recorderController = recorderController ?? RecorderController(),
-       playerController = playerController ?? PlayerController(),
-       super(const RecordingSystemState()) {
-    // PlayerController.onCurrentDurationChanged defaults to ~5Hz; high yields
-    // ~10Hz which makes the preview cursor smoother on iPad.
-    try {
-      this.playerController.updateFrequency = UpdateFrequency.high;
-    } catch (_) {}
-    _bindPlayerStreams();
+  RecordingSystemController({required RecordingSystemRepository repository})
+    : _repository = repository,
+      super(const RecordingSystemState()) {
     unawaited(refresh());
   }
 
   final RecordingSystemRepository _repository;
 
-  /// Recording controller. UI binds via `AudioWaveforms(recorderController:)`
-  /// or `AnimatedBuilder(animation: recorderController, ...)`.
-  final RecorderController recorderController;
+  // ?? Native handles, lazily created ????????????????????????????????????
+  // Lazy because (a) we don't want to ask for mic permission until the
+  // user actually taps record, and (b) some platforms (CI / desktop) lack
+  // either binary and would crash a sync constructor.
+  AudioRecorder? _recorder;
+  AudioPlayer? _player;
 
-  /// Playback controller. UI binds via `AudioFileWaveforms(playerController:)`
-  /// or `AnimatedBuilder(animation: playerController, ...)`.
-  final PlayerController playerController;
+  // ?? High-frequency notifiers ??????????????????????????????????????????
+  /// Elapsed milliseconds during recording. Driven by [Stopwatch] +
+  /// `Timer.periodic(33ms)` (?30fps) and pushed only when the int value
+  /// changes (so identical ticks short-circuit at the notifier).
+  final ValueNotifier<int> elapsedMs = ValueNotifier<int>(0);
 
+  /// Recent amplitude samples for the live scrolling wave (0..1 each).
+  /// Capped at [_kLiveWaveSampleCap]; we drop oldest so newest stays right.
+  final ValueNotifier<List<double>> liveAmplitudes =
+      ValueNotifier<List<double>>(const <double>[]);
+
+  /// Preview playback position. Driven by [AudioPlayer.positionStream] and
+  /// pushed only on `inMilliseconds` change.
+  final ValueNotifier<int> previewPositionMs = ValueNotifier<int>(0);
+
+  /// Preview playback total duration. Driven by [AudioPlayer.durationStream]
+  /// (or seeded from the backend `duration` string before the player
+  /// resolves it).
+  final ValueNotifier<int> previewDurationMs = ValueNotifier<int>(0);
+
+  // ?? Stopwatch + amplitude wiring ??????????????????????????????????????
+  Stopwatch? _stopwatch;
+  Timer? _stopwatchTicker;
+  StreamSubscription<Amplitude>? _amplitudeSub;
+  StreamSubscription<RecordState>? _recordStateSub;
+
+  /// Full amplitude history of the active recording, snapshotted onto the
+  /// preview entry on stop. We keep the full list (not just the recent N)
+  /// so the preview wave always covers the entire clip.
+  final List<double> _amplitudeHistory = <double>[];
+
+  // ?? Player wiring ?????????????????????????????????????????????????????
+  StreamSubscription<Duration>? _positionSub;
+  StreamSubscription<Duration?>? _durationSub;
   StreamSubscription<PlayerState>? _playerStateSub;
-  StreamSubscription<void>? _completionSub;
 
-  /// Local file path of the active recording. Needed after stop() for upload
-  /// and preview playback.
-  String? _currentRecordingPath;
-
-  /// Last source we successfully prepared the player with. Used to short-
-  /// circuit re-prepare for the same source.
+  /// Last URL we successfully prepared the player with. Used to short-
+  /// circuit re-prepare when the user taps play/pause repeatedly.
   String? _preparedPlayerSource;
+
+  /// Local file path / blob URL of the just-finalized recording. Needed
+  /// after stop() for upload + as the fallback preview source.
+  String? _currentRecordingPath;
 
   bool _disposed = false;
 
-  /// Set to true once we've detected the audio plugin is unavailable on this
-  /// platform (web/desktop). All subsequent entry points fail fast.
+  /// Set to true the first time we detect the platform refuses to record
+  /// (web without permission, MissingPluginException on desktop, ?). We
+  /// surface a clear error and short-circuit subsequent attempts.
   bool _audioFeatureBroken = false;
 
-  // ---------------------------------------------------------------------------
-  // Web fallback playback (media_kit)
-  //
-  // On Flutter Web `audio_waveforms` is unsupported (the plugin only
-  // registers iOS / Android native channels). We can't record on Web - that
-  // would require Web Audio's MediaRecorder API which is a sizeable lift -
-  // but we DO want users to be able to listen to recordings that were
-  // previously uploaded from the iPad. media_kit ships a Web backend
-  // (libmpv-wasm + HTMLMediaElement fallback), so we plug it in for the
-  // preview-playback codepath.
-  //
-  // Lifecycle: the player is lazily created on the first preview, reused
-  // across sources (we just call player.open(...) for each new source), and
-  // disposed in [dispose].
-  // ---------------------------------------------------------------------------
-  mk.Player? _webPlayer;
-  StreamSubscription<bool>? _webPlayingSub;
-  StreamSubscription<Duration>? _webPositionSub;
-  StreamSubscription<Duration>? _webDurationSub;
-  StreamSubscription<bool>? _webCompletedSub;
-  String? _webPreparedSource;
-
-  // ---------------------------------------------------------------------------
-  // Friendly Chinese versions of every user-visible string. Defined as ASCII
-  // unicode escapes so this file stays binary-safe regardless of the editor /
-  // terminal codepage. The UI layer uses `fontFamily: 'PingFang SC'` so these
-  // render correctly on iOS / Android / desktop. On Flutter Web, where the
-  // browser may not have PingFang SC, the toast / banner widgets fall back to
-  // the system Chinese font which is bundled in the host OS.
-  //
-  // To add a new message: pick an ASCII identifier, then put the Chinese
-  // characters as `\u` escapes in the value. Use https://www.branah.com/unicode
-  // or `dart -e "print('\\u${'\u4f60'.codeUnits.first.toRadixString(16)}');"`
-  // (or just rely on a small helper script) to convert.
-  // ---------------------------------------------------------------------------
-
-  // "\u5f53\u524d\u5e73\u53f0\u6682\u4e0d\u652f\u6301\u5f55\u97f3\uff0c\u8bf7\u5728 iPad / \u79fb\u52a8\u7aef\u4f7f\u7528\u3002"
+  // ?? Localized message bank (Unicode-escaped to stay binary-safe) ??????
   static const _zhUnsupported =
       '\u5f53\u524d\u5e73\u53f0\u6682\u4e0d\u652f\u6301\u5f55\u97f3\uff0c\u8bf7\u5728 iPad / \u79fb\u52a8\u7aef\u4f7f\u7528\u3002';
-  // "\u52a0\u8f7d\u5f55\u97f3\u5217\u8868\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5"
   static const _zhLoadListFailed =
       '\u52a0\u8f7d\u5f55\u97f3\u5217\u8868\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5';
-  // "\u52a0\u8f7d\u6587\u4ef6\u5939\u5931\u8d25"
   static const _zhLoadFoldersFailed = '\u52a0\u8f7d\u6587\u4ef6\u5939\u5931\u8d25';
-  // "\u52a0\u8f7d\u5f55\u97f3\u5931\u8d25"
   static const _zhLoadRecordingsFailed = '\u52a0\u8f7d\u5f55\u97f3\u5931\u8d25';
-  // "\u5207\u6362\u5206\u7c7b\u5931\u8d25"
   static const _zhSwitchCategoryFailed = '\u5207\u6362\u5206\u7c7b\u5931\u8d25';
-  // "\u8fd4\u56de\u6587\u4ef6\u5939\u5217\u8868\u5931\u8d25"
-  static const _zhBackToFoldersFailed = '\u8fd4\u56de\u6587\u4ef6\u5939\u5217\u8868\u5931\u8d25';
-  // "\u8bf7\u8f93\u5165\u5206\u7c7b\u540d\u79f0"
+  static const _zhBackToFoldersFailed =
+      '\u8fd4\u56de\u6587\u4ef6\u5939\u5217\u8868\u5931\u8d25';
   static const _zhEnterCategoryName = '\u8bf7\u8f93\u5165\u5206\u7c7b\u540d\u79f0';
-  // "\u65b0\u5efa\u5206\u7c7b\u5931\u8d25"
   static const _zhCreateCategoryFailed = '\u65b0\u5efa\u5206\u7c7b\u5931\u8d25';
-  // "\u5220\u9664\u5206\u7c7b\u5931\u8d25"
   static const _zhDeleteCategoryFailed = '\u5220\u9664\u5206\u7c7b\u5931\u8d25';
-  // "\u91cd\u547d\u540d\u5206\u7c7b\u5931\u8d25"
   static const _zhRenameCategoryFailed = '\u91cd\u547d\u540d\u5206\u7c7b\u5931\u8d25';
-  // "\u65e0\u6548\u7684\u5206\u7c7b"
   static const _zhInvalidCategory = '\u65e0\u6548\u7684\u5206\u7c7b';
-  // "\u8bf7\u8f93\u5165\u6587\u4ef6\u5939\u540d\u79f0"
   static const _zhEnterFolderName = '\u8bf7\u8f93\u5165\u6587\u4ef6\u5939\u540d\u79f0';
-  // "\u8bf7\u5148\u9009\u62e9\u4e00\u4e2a\u5206\u7c7b"
-  static const _zhPickCategoryFirst = '\u8bf7\u5148\u9009\u62e9\u4e00\u4e2a\u5206\u7c7b';
-  // "\u65b0\u5efa\u6587\u4ef6\u5939\u5931\u8d25"
+  static const _zhPickCategoryFirst =
+      '\u8bf7\u5148\u9009\u62e9\u4e00\u4e2a\u5206\u7c7b';
   static const _zhCreateFolderFailed = '\u65b0\u5efa\u6587\u4ef6\u5939\u5931\u8d25';
-  // "\u91cd\u547d\u540d\u6587\u4ef6\u5939\u5931\u8d25"
   static const _zhRenameFolderFailed = '\u91cd\u547d\u540d\u6587\u4ef6\u5939\u5931\u8d25';
-  // "\u5220\u9664\u6587\u4ef6\u5939\u5931\u8d25"
   static const _zhDeleteFolderFailed = '\u5220\u9664\u6587\u4ef6\u5939\u5931\u8d25';
-  // "\u65e0\u6548\u7684\u6587\u4ef6\u5939"
   static const _zhInvalidFolder = '\u65e0\u6548\u7684\u6587\u4ef6\u5939';
-  // "\u8bf7\u5728\u8bbe\u7f6e\u4e2d\u6388\u4e88\u9ea6\u514b\u98ce\u6743\u9650"
   static const _zhMicPermission =
       '\u8bf7\u5728\u8bbe\u7f6e\u4e2d\u6388\u4e88\u9ea6\u514b\u98ce\u6743\u9650';
-  // "\u5f00\u59cb\u5f55\u97f3\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u9ea6\u514b\u98ce\u6743\u9650"
   static const _zhStartRecordingFailed =
       '\u5f00\u59cb\u5f55\u97f3\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u9ea6\u514b\u98ce\u6743\u9650';
-  // "\u5f00\u59cb\u5f55\u97f3\u5931\u8d25"
   static const _zhStartRecordingFailedShort = '\u5f00\u59cb\u5f55\u97f3\u5931\u8d25';
-  // "\u6682\u505c\u5f55\u97f3\u5931\u8d25"
   static const _zhPauseRecordingFailed = '\u6682\u505c\u5f55\u97f3\u5931\u8d25';
-  // "\u7ee7\u7eed\u5f55\u97f3\u5931\u8d25"
   static const _zhResumeRecordingFailed = '\u7ee7\u7eed\u5f55\u97f3\u5931\u8d25';
-  // "\u5f55\u5236\u65f6\u957f\u4e0d\u80fd\u5c11\u4e8e 5 \u79d2"
-  static const _zhMinFiveSeconds = '\u5f55\u5236\u65f6\u957f\u4e0d\u80fd\u5c11\u4e8e 5 \u79d2';
-  // "\u8bf7\u5148\u5f55\u5236\u4e00\u6bb5\u97f3\u9891"
-  static const _zhRecordSomethingFirst = '\u8bf7\u5148\u5f55\u5236\u4e00\u6bb5\u97f3\u9891';
-  // "\u672a\u751f\u6210\u6709\u6548\u7684\u5f55\u97f3\u6587\u4ef6\uff0c\u8bf7\u91cd\u8bd5"
+  static const _zhMinFiveSeconds =
+      '\u5f55\u5236\u65f6\u957f\u4e0d\u80fd\u5c11\u4e8e 5 \u79d2';
+  static const _zhRecordSomethingFirst =
+      '\u8bf7\u5148\u5f55\u5236\u4e00\u6bb5\u97f3\u9891';
   static const _zhNoValidRecording =
       '\u672a\u751f\u6210\u6709\u6548\u7684\u5f55\u97f3\u6587\u4ef6\uff0c\u8bf7\u91cd\u8bd5';
-  // "\u7ed3\u675f\u5f55\u97f3\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5"
   static const _zhFinishRecordingFailed =
       '\u7ed3\u675f\u5f55\u97f3\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5';
-  // "\u8bfb\u53d6\u5f55\u97f3\u6587\u4ef6\u5931\u8d25"
   static const _zhReadRecordingFailed = '\u8bfb\u53d6\u5f55\u97f3\u6587\u4ef6\u5931\u8d25';
-  // "\u5f55\u97f3\u6587\u4ef6\u4e3a\u7a7a\uff0c\u8bf7\u91cd\u65b0\u5f55\u5236"
   static const _zhRecordingEmpty =
       '\u5f55\u97f3\u6587\u4ef6\u4e3a\u7a7a\uff0c\u8bf7\u91cd\u65b0\u5f55\u5236';
-  // "\u672a\u547d\u540d\u5f55\u97f3"
   static const _zhDefaultRecordingName = '\u672a\u547d\u540d\u5f55\u97f3';
-  // "\u5f55\u97f3"
   static const _zhRecordingPrefix = '\u5f55\u97f3';
-  // "\u6ca1\u6709\u53ef\u64ad\u653e\u7684\u5f55\u97f3\u6587\u4ef6"
-  static const _zhNoSourceToPlay = '\u6ca1\u6709\u53ef\u64ad\u653e\u7684\u5f55\u97f3\u6587\u4ef6';
-  // "\u52a0\u8f7d\u5f55\u97f3\u6587\u4ef6\u5931\u8d25"
+  static const _zhNoSourceToPlay =
+      '\u6ca1\u6709\u53ef\u64ad\u653e\u7684\u5f55\u97f3\u6587\u4ef6';
   static const _zhLoadAudioFailed = '\u52a0\u8f7d\u5f55\u97f3\u6587\u4ef6\u5931\u8d25';
-  // "\u64ad\u653e\u5931\u8d25"
   static const _zhPlayFailed = '\u64ad\u653e\u5931\u8d25';
-  // "\u8df3\u8f6c\u5931\u8d25"
   static const _zhSeekFailed = '\u8df3\u8f6c\u5931\u8d25';
-  // "\u6ca1\u6709\u53ef\u4fdd\u5b58\u7684\u5f55\u97f3\u6587\u4ef6"
   static const _zhNoRecordingToSave =
       '\u6ca1\u6709\u53ef\u4fdd\u5b58\u7684\u5f55\u97f3\u6587\u4ef6';
-  // "\u8bf7\u9009\u62e9\u4e00\u4e2a\u5206\u7c7b"
   static const _zhPickCategory = '\u8bf7\u9009\u62e9\u4e00\u4e2a\u5206\u7c7b';
-  // "\u8bf7\u8f93\u5165\u4f5c\u54c1\u540d\u79f0"
   static const _zhEnterTitle = '\u8bf7\u8f93\u5165\u4f5c\u54c1\u540d\u79f0';
-  // "\u4e0a\u4f20\u5f55\u97f3\u6587\u4ef6\u5931\u8d25"
   static const _zhUploadFailed = '\u4e0a\u4f20\u5f55\u97f3\u6587\u4ef6\u5931\u8d25';
-  // "\u4e0a\u4f20\u6210\u529f\u4f46\u672a\u8fd4\u56de\u6587\u4ef6\u8def\u5f84"
   static const _zhUploadNoPath =
       '\u4e0a\u4f20\u6210\u529f\u4f46\u672a\u8fd4\u56de\u6587\u4ef6\u8def\u5f84';
-  // "\u4fdd\u5b58\u5f55\u97f3\u5931\u8d25"
   static const _zhSaveRecordingFailed = '\u4fdd\u5b58\u5f55\u97f3\u5931\u8d25';
-  // "\u5220\u9664\u5f55\u97f3\u5931\u8d25"
   static const _zhDeleteRecordingFailed = '\u5220\u9664\u5f55\u97f3\u5931\u8d25';
-  // "\u65e0\u6548\u7684\u5f55\u97f3\u4f5c\u54c1"
   static const _zhInvalidRecording = '\u65e0\u6548\u7684\u5f55\u97f3\u4f5c\u54c1';
-  // "\u5f55\u97f3\u6587\u4ef6\u8def\u5f84\u7f3a\u5931"
   static const _zhRecordingPathMissing = '\u5f55\u97f3\u6587\u4ef6\u8def\u5f84\u7f3a\u5931';
-  // "\u91cd\u547d\u540d\u5931\u8d25"
   static const _zhRenameFailed = '\u91cd\u547d\u540d\u5931\u8d25';
-  // "\u8bf7\u5148\u4fdd\u5b58\u5f55\u97f3\u518d\u5206\u4eab"
   static const _zhSaveBeforeShare = '\u8bf7\u5148\u4fdd\u5b58\u5f55\u97f3\u518d\u5206\u4eab';
-  // "\u52a0\u8f7d\u73ed\u7ea7\u5217\u8868\u5931\u8d25"
   static const _zhLoadClassesFailed = '\u52a0\u8f7d\u73ed\u7ea7\u5217\u8868\u5931\u8d25';
-  // "\u8bf7\u9009\u62e9\u81f3\u5c11\u4e00\u4e2a\u73ed\u7ea7"
   static const _zhPickAtLeastOneClass =
       '\u8bf7\u9009\u62e9\u81f3\u5c11\u4e00\u4e2a\u73ed\u7ea7';
-  // "\u5206\u4eab\u5931\u8d25"
   static const _zhShareFailed = '\u5206\u4eab\u5931\u8d25';
 
-  // ---------------------------------------------------------------------------
-  // Public API
-  // ---------------------------------------------------------------------------
+  // ?????????????????????????????????????????????????????????????????????
+  // List / folder / category catalog (unchanged from the previous
+  // implementation ? this is purely metadata fetching, no audio engine).
+  // ?????????????????????????????????????????????????????????????????????
 
   Future<void> refresh() async {
     try {
@@ -268,7 +215,6 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       if (!mounted) {
         return;
       }
-
       state = state.copyWith(
         loading: false,
         categories: categories,
@@ -301,17 +247,13 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
             : _fallbackMessage(folderResponse.msg, _zhLoadFoldersFailed),
       );
     } catch (_) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       state = state.copyWith(loading: false, errorMessage: _zhLoadListFailed);
     }
   }
 
   Future<void> selectCategory(int id) async {
-    if (id == state.selectedCategoryId) {
-      return;
-    }
+    if (id == state.selectedCategoryId) return;
     try {
       _preparedPlayerSource = null;
       state = state.copyWith(
@@ -325,9 +267,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
         items: const <RecordingEntry>[],
       );
       final response = await _repository.getFolderList(categoryId: id);
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       state = state.copyWith(
         loading: false,
         folders: _parseFolders(response.data, id),
@@ -343,9 +283,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
             : _fallbackMessage(response.msg, _zhLoadFoldersFailed),
       );
     } catch (_) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       state = state.copyWith(
         loading: false,
         errorMessage: _zhSwitchCategoryFailed,
@@ -354,9 +292,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
   }
 
   Future<void> openFolder(RecordingFolderItem folder) async {
-    if (folder.id <= 0) {
-      return;
-    }
+    if (folder.id <= 0) return;
     try {
       _preparedPlayerSource = null;
       state = state.copyWith(
@@ -371,9 +307,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
         folder.categoryId,
         folderId: folder.id,
       );
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       state = state.copyWith(
         loading: false,
         items: _parseRecordings(response.data, folder.categoryId),
@@ -388,9 +322,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
             : _fallbackMessage(response.msg, _zhLoadRecordingsFailed),
       );
     } catch (_) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       state = state.copyWith(
         loading: false,
         errorMessage: _zhLoadRecordingsFailed,
@@ -422,9 +354,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
         items: const <RecordingEntry>[],
       );
       final response = await _repository.getFolderList(categoryId: categoryId);
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       state = state.copyWith(
         loading: false,
         folders: _parseFolders(response.data, categoryId),
@@ -433,9 +363,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
             : _fallbackMessage(response.msg, _zhLoadFoldersFailed),
       );
     } catch (_) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       state = state.copyWith(
         loading: false,
         errorMessage: _zhBackToFoldersFailed,
@@ -444,13 +372,9 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
   }
 
   Future<void> _reloadFolders(int categoryId) async {
-    if (categoryId <= 0) {
-      return;
-    }
+    if (categoryId <= 0) return;
     final response = await _repository.getFolderList(categoryId: categoryId);
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
     state = state.copyWith(
       folders: response.isSuccess
           ? _parseFolders(response.data, categoryId)
@@ -464,9 +388,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
 
   Future<String?> addCategory(String name) async {
     final trimmed = name.trim();
-    if (trimmed.isEmpty) {
-      return _zhEnterCategoryName;
-    }
+    if (trimmed.isEmpty) return _zhEnterCategoryName;
     state = state.copyWith(busy: true, clearError: true);
     final response = await _repository.addCategory(trimmed);
     state = state.copyWith(busy: false);
@@ -488,16 +410,10 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     return null;
   }
 
-  /// Backend's `recordingCategorySave` doubles as create/update: when id > 0
-  /// it updates by id.
   Future<String?> renameCategory(int id, String name) async {
     final trimmed = name.trim();
-    if (trimmed.isEmpty) {
-      return _zhEnterCategoryName;
-    }
-    if (id <= 0) {
-      return _zhInvalidCategory;
-    }
+    if (trimmed.isEmpty) return _zhEnterCategoryName;
+    if (id <= 0) return _zhInvalidCategory;
     state = state.copyWith(busy: true, clearError: true);
     final response = await _repository.renameCategory(id, trimmed);
     state = state.copyWith(busy: false);
@@ -508,17 +424,11 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     return null;
   }
 
-  // ?? Folder CRUD ????????????????????????????????????????????????????????????
-
   Future<String?> addFolder(String name) async {
     final trimmed = name.trim();
-    if (trimmed.isEmpty) {
-      return _zhEnterFolderName;
-    }
+    if (trimmed.isEmpty) return _zhEnterFolderName;
     final categoryId = state.selectedCategoryId;
-    if (categoryId <= 0) {
-      return _zhPickCategoryFirst;
-    }
+    if (categoryId <= 0) return _zhPickCategoryFirst;
     state = state.copyWith(busy: true, clearError: true);
     final response = await _repository.addFolder(
       categoryId: categoryId,
@@ -534,12 +444,8 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
 
   Future<String?> renameFolder(RecordingFolderItem folder, String name) async {
     final trimmed = name.trim();
-    if (trimmed.isEmpty) {
-      return _zhEnterFolderName;
-    }
-    if (folder.id <= 0) {
-      return _zhInvalidFolder;
-    }
+    if (trimmed.isEmpty) return _zhEnterFolderName;
+    if (folder.id <= 0) return _zhInvalidFolder;
     state = state.copyWith(busy: true, clearError: true);
     final response = await _repository.renameFolder(
       categoryId: folder.categoryId,
@@ -555,9 +461,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
   }
 
   Future<String?> deleteFolder(RecordingFolderItem folder) async {
-    if (folder.id <= 0) {
-      return _zhInvalidFolder;
-    }
+    if (folder.id <= 0) return _zhInvalidFolder;
     state = state.copyWith(busy: true, clearError: true);
     final response = await _repository.deleteFolder(folder.id);
     state = state.copyWith(busy: false);
@@ -568,13 +472,14 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     return null;
   }
 
-  /// Leave the recording / preview pages and reset to the list home. Native
-  /// resources are released in the background.
+  // ?????????????????????????????????????????????????????????????????????
+  // View transitions
+  // ?????????????????????????????????????????????????????????????????????
+
+  /// Leave the recording / preview pages and reset to the list home.
   Future<void> enterListHome() async {
     await abandonActiveSession();
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
     state = state.copyWith(
       viewMode: RecordingViewMode.list,
       recordingPhase: RecordingPhase.idle,
@@ -592,14 +497,13 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     );
   }
 
+  /// Open the "record" stage with a fresh canvas.
   Future<void> openNewRecording() async {
-    await _safeAsync(() async {
-      if (playerController.playerState != PlayerState.stopped) {
-        await playerController.stopPlayer();
-      }
-    });
+    await _stopPreviewPlayback();
+    await _stopRecorder(discard: true);
     _preparedPlayerSource = null;
-    _resetRecorderWaveform();
+    _resetWaveform();
+    _resetTimers();
     state = state.copyWith(
       viewMode: RecordingViewMode.record,
       recordingPhase: RecordingPhase.idle,
@@ -619,19 +523,14 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       pendingTitle: '',
       selectedEffectIndex: 0,
       previewCollected: false,
-      // On Web, surface the unsupported notice up-front so the user doesn't
-      // tap the record button only to be told nothing happens. On native we
-      // start fresh with no error.
-      errorMessage: kIsWeb ? _zhUnsupported : null,
-      clearError: !kIsWeb,
+      clearError: true,
     );
   }
 
   Future<void> resetRecording() async {
-    if (recorderController.recorderState != RecorderState.stopped) {
-      await _safeAsync(() => recorderController.stop());
-    }
-    _resetRecorderWaveform();
+    await _stopRecorder(discard: true);
+    _resetWaveform();
+    _resetTimers();
     _currentRecordingPath = null;
     state = state.copyWith(
       recordingPhase: RecordingPhase.idle,
@@ -647,10 +546,9 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     );
   }
 
-  /// Leave the recording / preview pages: UI snaps back to list immediately,
-  /// native cleanup happens in the background. We deliberately don't await
-  /// the cleanup because cancel/pause on iPad can take a beat and we don't
-  /// want the user to feel the back button is stuck.
+  /// Snap the UI back to the list immediately; the engine cleanup happens
+  /// in the background. We deliberately don't await ? iPad pause/cancel
+  /// can take a beat and we don't want the back button feeling stuck.
   Future<void> backToList() async {
     if (mounted) {
       state = state.copyWith(
@@ -672,94 +570,123 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     unawaited(abandonActiveSession());
   }
 
-  /// Tear down all native resources for both recorder and player. Called when
-  /// the page is disposed or when the app goes to background / locks.
+  /// Tear down all native engine state: stop the recorder, stop the
+  /// player, drop the prepared source. Called on page dispose / app
+  /// background. Doesn't dispose the AudioRecorder/AudioPlayer instances
+  /// themselves ? we keep them around for the next session to skip the
+  /// platform-channel cold start.
   Future<void> abandonActiveSession() async {
-    if (recorderController.recorderState != RecorderState.stopped) {
-      await _safeAsync(() => recorderController.stop());
-    }
-    _resetRecorderWaveform();
+    await _stopRecorder(discard: true);
+    _resetWaveform();
+    _resetTimers();
     _currentRecordingPath = null;
 
-    if (playerController.playerState != PlayerState.stopped) {
-      await _safeAsync(() => playerController.stopPlayer());
+    final player = _player;
+    if (player != null) {
+      await _safeAsync(player.pause);
+      await _safeAsync(() => player.seek(Duration.zero));
     }
     _preparedPlayerSource = null;
-
-    // Web player: pause + reset position. Don't dispose() yet - reuse it
-    // for the next preview to avoid the multi-second media_kit cold-start.
-    final webPlayer = _webPlayer;
-    if (webPlayer != null) {
-      await _safeAsync(() => webPlayer.pause());
-      await _safeAsync(() => webPlayer.seek(Duration.zero));
+    if (mounted && state.previewPlaying) {
+      state = state.copyWith(previewPlaying: false);
     }
+    previewPositionMs.value = 0;
+  }
+
+  // ?????????????????????????????????????????????????????????????????????
+  // Recording engine
+  // ?????????????????????????????????????????????????????????????????????
+
+  AudioRecorder _ensureRecorder() {
+    final existing = _recorder;
+    if (existing != null) return existing;
+    final created = AudioRecorder();
+    _recorder = created;
+    _recordStateSub?.cancel();
+    // We attach an onStateChanged subscription mainly to keep the platform
+    // channel hot (some platforms don't deliver amplitude events until
+    // somebody is listening) and to swallow late events without crashing.
+    // We DO NOT mirror RecordState into the Riverpod phase: our phase is
+    // driven by explicit user intent (start/pause/resume tapped), and a
+    // stale platform notification during a stop->start race could
+    // otherwise flip the UI back into "recording" right after a stop.
+    _recordStateSub = created.onStateChanged().listen(
+      (_) {},
+      onError: (_) {},
+    );
+    return created;
   }
 
   Future<String?> startRecording() async {
-    if (kIsWeb || _audioFeatureBroken) {
-      return _zhUnsupported;
-    }
+    if (_audioFeatureBroken) return _zhUnsupported;
     try {
-      // Defensive cleanup: if a previous session didn't close cleanly the
-      // recorder might still be in recording / paused state, in which case
-      // record() will throw. Force-stop first.
-      if (recorderController.recorderState != RecorderState.stopped) {
-        await _safeAsync(() => recorderController.stop());
-      }
-      _resetRecorderWaveform();
+      final recorder = _ensureRecorder();
 
-      final hasPermission = await recorderController.checkPermission();
-      if (!hasPermission) {
-        return _zhMicPermission;
+      // Defensive: if the previous session didn't close cleanly, force-
+      // stop before requesting a new recording. record() will throw
+      // PlatformException("already recording") otherwise.
+      if (await recorder.isRecording() || await recorder.isPaused()) {
+        await _safeAsync(recorder.stop);
       }
-      // audio_waveforms records mpeg4 + AAC by default on iOS / Android.
-      // The file extension MUST be .m4a, otherwise iOS AVAudioPlayer can't
-      // recognize the container during preview playback.
-      final tmpPath = _buildRecordingPath();
-      _currentRecordingPath = tmpPath;
-      await recorderController.record(
-        path: tmpPath,
-        recorderSettings: const RecorderSettings(
-          sampleRate: 44100,
+      _resetWaveform();
+      _resetTimers();
+
+      final hasPermission = await recorder.hasPermission();
+      if (!hasPermission) return _zhMicPermission;
+
+      // Encoder: AAC-LC ? .m4a on every native platform we ship to. The
+      // browser MediaRecorder will silently fall back to opus/webm on
+      // platforms where AAC isn't available; the upload step below
+      // resolves the actual extension from the path returned by stop().
+      final encoder = kIsWeb ? AudioEncoder.opus : AudioEncoder.aacLc;
+      final path = _buildRecordingPath();
+      _currentRecordingPath = path;
+      await recorder.start(
+        RecordConfig(
+          encoder: encoder,
           bitRate: 128000,
+          sampleRate: 44100,
+          numChannels: 1,
         ),
+        // record's web shim ignores the path argument; native uses it.
+        path: path,
       );
-      // Flip recordingPhase to recording. The stopwatch / wave panel
-      // subscribe to recorderController directly via AnimatedBuilder, so this
-      // single state.copyWith only triggers a low-frequency rebuild of the
-      // outer view shell.
+
+      // Wire up amplitude + stopwatch only AFTER start() resolves, so we
+      // don't leak listeners on a recorder that never actually went hot.
+      _amplitudeSub = recorder
+          .onAmplitudeChanged(_kAmplitudePollInterval)
+          .listen(_onAmplitude, onError: (_) {});
+      _startStopwatch();
+
       state = state.copyWith(
         recordingPhase: RecordingPhase.recording,
         clearError: true,
+        elapsedMs: 0,
+        liveWaveform: const <double>[],
       );
       _preparedPlayerSource = null;
       return null;
     } on MissingPluginException {
       _audioFeatureBroken = true;
-      if (mounted) {
-        state = state.copyWith(recordingPhase: RecordingPhase.idle);
-      }
+      if (mounted) state = state.copyWith(recordingPhase: RecordingPhase.idle);
       return _zhUnsupported;
     } on PlatformException catch (error) {
-      if (mounted) {
-        state = state.copyWith(recordingPhase: RecordingPhase.idle);
-      }
+      if (mounted) state = state.copyWith(recordingPhase: RecordingPhase.idle);
       return _platformMessage(error, _zhStartRecordingFailed);
     } catch (error) {
-      // Last-resort cleanup so the UI returns to idle and the user can try
-      // again.
-      await _safeAsync(() => recorderController.stop());
-      _resetRecorderWaveform();
-      if (mounted) {
-        state = state.copyWith(recordingPhase: RecordingPhase.idle);
-      }
+      await _stopRecorder(discard: true);
+      if (mounted) state = state.copyWith(recordingPhase: RecordingPhase.idle);
       return '$_zhStartRecordingFailedShort: $error';
     }
   }
 
   Future<String?> pauseRecording() async {
+    final recorder = _recorder;
+    if (recorder == null) return null;
     try {
-      await recorderController.pause();
+      await recorder.pause();
+      _stopwatch?.stop();
       state = state.copyWith(recordingPhase: RecordingPhase.paused);
       return null;
     } on PlatformException catch (error) {
@@ -770,10 +697,11 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
   }
 
   Future<String?> resumeRecording() async {
+    final recorder = _recorder;
+    if (recorder == null) return null;
     try {
-      // RecorderController.record() called without a path resumes from where
-      // it left off when in paused state.
-      await recorderController.record();
+      await recorder.resume();
+      _stopwatch?.start();
       state = state.copyWith(recordingPhase: RecordingPhase.recording);
       return null;
     } on PlatformException catch (error) {
@@ -783,18 +711,17 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     }
   }
 
-  Future<String?> finishRecording() async {
+  Future<String?> finishRecording() {
     return _finalizeRecordingToPreview(minElapsedMs: 5000);
   }
 
-  /// "Listen now" button: lower threshold (1s) so the user can hear what they
-  /// just recorded before deciding to keep going or re-record.
-  Future<String?> finalizeRecordingForListening() async {
+  /// "Listen now" button: lower threshold (1s) so the user can hear what
+  /// they just recorded before deciding to keep going or re-record.
+  Future<String?> finalizeRecordingForListening() {
     return _finalizeRecordingToPreview(minElapsedMs: 1000);
   }
 
-  /// Open the "save recording" dialog. Wired to the Save button on the
-  /// preview page header.
+  /// Manually open the save dialog from the preview header.
   void requestSaveDialog() {
     state = state.copyWith(showSaveDialog: true);
   }
@@ -802,50 +729,55 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
   Future<String?> _finalizeRecordingToPreview({
     required int minElapsedMs,
   }) async {
-    final elapsedMs = recorderController.elapsedDuration.inMilliseconds;
-    if (elapsedMs < minElapsedMs) {
+    final stopwatch = _stopwatch;
+    final recorder = _recorder;
+    final elapsedFromStopwatch = stopwatch?.elapsedMilliseconds ?? 0;
+    final elapsedMillis = elapsedFromStopwatch > 0
+        ? elapsedFromStopwatch
+        : elapsedMs.value;
+
+    if (elapsedMillis < minElapsedMs) {
       return minElapsedMs >= 5000 ? _zhMinFiveSeconds : _zhRecordSomethingFirst;
     }
+
     String? resolvedSource;
     try {
-      // RecorderController.stop() can return null on iOS in edge cases; fall
-      // back to the path we passed into record().
-      final source = await recorderController.stop();
-      resolvedSource = source ?? _currentRecordingPath;
+      final stopped = await recorder?.stop();
+      resolvedSource = (stopped != null && stopped.isNotEmpty)
+          ? stopped
+          : _currentRecordingPath;
     } on PlatformException catch (error) {
+      _resetTimers();
       return _platformMessage(error, _zhFinishRecordingFailed);
     } catch (error) {
+      _resetTimers();
       return '$_zhFinishRecordingFailed: $error';
     }
+
+    // Stop wallclock + amplitude listeners now that the engine is stopped.
+    _resetTimers();
+    await _amplitudeSub?.cancel();
+    _amplitudeSub = null;
 
     if (resolvedSource == null || resolvedSource.isEmpty) {
       return _zhNoValidRecording;
     }
 
-    // Read the recorded bytes for upload + as a fallback source for preview.
-    // loadRecordedBytes handles both bare paths and file:// URIs.
-    Uint8ListBytes bytesResult;
+    Uint8List bytes;
     try {
-      bytesResult = Uint8ListBytes(await loadRecordedBytes(resolvedSource));
+      bytes = await loadRecordedBytes(resolvedSource);
     } on FileSystemException catch (error) {
       return '$_zhReadRecordingFailed: ${error.osError?.message ?? error.message}';
     } catch (error) {
       return '$_zhReadRecordingFailed: $error';
     }
-    if (bytesResult.bytes.isEmpty) {
-      return _zhRecordingEmpty;
-    }
+    if (bytes.isEmpty) return _zhRecordingEmpty;
 
-    final durationMs = elapsedMs;
-    // Snapshot the live amplitude data into an unmodifiable list so the
-    // RecordingEntry can carry it forward. If empty (rare) we fall back to a
-    // seeded pseudo-random waveform so the list card never shows a flat line.
-    final waveformSnapshot = recorderController.waveData.isEmpty
+    final waveformSnapshot = _amplitudeHistory.isEmpty
         ? _fallbackWaveform(resolvedSource.hashCode)
-        : List<double>.unmodifiable(recorderController.waveData);
-    _resetRecorderWaveform();
+        : List<double>.unmodifiable(_amplitudeHistory);
 
-    final durationLabel = _formatDurationLabel(durationMs);
+    final durationLabel = _formatDurationLabel(elapsedMillis);
     final defaultName = _zhDefaultRecordingName;
     final draft = RecordingEntry(
       id: -1,
@@ -863,25 +795,30 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       },
       isLocalDraft: true,
     );
-    // Pre-prepare the player so AudioFileWaveforms has maxDuration / waveform
-    // ready as soon as the preview view builds. If prepare fails we still
-    // proceed - the user will get a clear error toast when they tap play.
+
+    // Prepare the player off the just-finalized source. We don't surface
+    // errors here ? the user gets a clear toast on the explicit play tap.
     await _preparePreviewPlayer(resolvedSource);
+
     final now = DateTime.now();
     final autoTitle =
         '$_zhRecordingPrefix${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
+
+    previewDurationMs.value = elapsedMillis;
+    previewPositionMs.value = 0;
+
     state = state.copyWith(
       viewMode: RecordingViewMode.preview,
       recordingPhase: RecordingPhase.idle,
-      elapsedMs: durationMs,
+      elapsedMs: elapsedMillis,
       liveWaveform: waveformSnapshot,
       previewItem: draft,
       previewSource: resolvedSource,
-      previewDurationMs: durationMs,
+      previewDurationMs: elapsedMillis,
       previewPositionMs: 0,
       previewPlaying: false,
       previewPlaybackRate: 1,
-      recordedBytes: bytesResult.bytes,
+      recordedBytes: bytes,
       showSaveDialog: false,
       selectedSaveCategoryId: draft.categoryId,
       pendingTitle: draft.name == defaultName ? autoTitle : draft.name,
@@ -889,10 +826,123 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     return null;
   }
 
+  void _onAmplitude(Amplitude amp) {
+    if (_disposed) return;
+    final normalized = _normalizeAmplitudeDb(amp.current);
+    _amplitudeHistory.add(normalized);
+
+    // Update the live notifier with the most recent N samples. We allocate
+    // a fresh List so equality comparison fires the listener.
+    final history = _amplitudeHistory;
+    final start = history.length > _kLiveWaveSampleCap
+        ? history.length - _kLiveWaveSampleCap
+        : 0;
+    liveAmplitudes.value = List<double>.unmodifiable(history.sublist(start));
+  }
+
+  void _startStopwatch() {
+    _stopwatchTicker?.cancel();
+    final sw = _stopwatch ?? Stopwatch();
+    sw
+      ..reset()
+      ..start();
+    _stopwatch = sw;
+    elapsedMs.value = 0;
+    _stopwatchTicker = Timer.periodic(_kStopwatchTickInterval, (_) {
+      if (_disposed) return;
+      final ms = sw.elapsedMilliseconds;
+      if (ms != elapsedMs.value) {
+        elapsedMs.value = ms;
+      }
+    });
+  }
+
+  void _resetTimers() {
+    _stopwatchTicker?.cancel();
+    _stopwatchTicker = null;
+    _stopwatch?.stop();
+    _stopwatch?.reset();
+    elapsedMs.value = 0;
+  }
+
+  void _resetWaveform() {
+    _amplitudeHistory.clear();
+    if (liveAmplitudes.value.isNotEmpty) {
+      liveAmplitudes.value = const <double>[];
+    }
+  }
+
+  Future<void> _stopRecorder({bool discard = false}) async {
+    final recorder = _recorder;
+    await _amplitudeSub?.cancel();
+    _amplitudeSub = null;
+    if (recorder == null) return;
+    try {
+      final isActive = await recorder.isRecording() || await recorder.isPaused();
+      if (!isActive) return;
+      if (discard) {
+        await recorder.cancel();
+      } else {
+        await recorder.stop();
+      }
+    } catch (_) {}
+  }
+
+  // ?????????????????????????????????????????????????????????????????????
+  // Preview / playback (just_audio)
+  // ?????????????????????????????????????????????????????????????????????
+
+  AudioPlayer _ensurePlayer() {
+    final existing = _player;
+    if (existing != null) return existing;
+    final player = AudioPlayer();
+    _player = player;
+
+    _positionSub = player.positionStream.listen((duration) {
+      if (_disposed || !mounted) return;
+      final ms = duration.inMilliseconds;
+      if (previewPositionMs.value != ms) previewPositionMs.value = ms;
+    }, onError: (_) {});
+
+    _durationSub = player.durationStream.listen((duration) {
+      if (_disposed || !mounted) return;
+      if (duration == null) return;
+      final ms = duration.inMilliseconds;
+      if (ms <= 0) return;
+      if (previewDurationMs.value != ms) previewDurationMs.value = ms;
+      if (state.previewDurationMs != ms) {
+        state = state.copyWith(previewDurationMs: ms);
+      }
+    }, onError: (_) {});
+
+    _playerStateSub = player.playerStateStream.listen((playerState) async {
+      if (_disposed || !mounted) return;
+      final playing = playerState.playing &&
+          playerState.processingState != ProcessingState.completed;
+      if (state.previewPlaying != playing) {
+        state = state.copyWith(previewPlaying: playing);
+      }
+      if (playerState.processingState == ProcessingState.completed) {
+        // Snap back to the start, leave paused. Match the iOS feel users
+        // expect from a one-shot voice memo player.
+        await _safeAsync(() => player.pause());
+        await _safeAsync(() => player.seek(Duration.zero));
+        if (mounted && state.previewPlaying) {
+          state = state.copyWith(previewPlaying: false);
+        }
+        previewPositionMs.value = 0;
+      }
+    }, onError: (_) {});
+
+    return player;
+  }
+
   Future<void> openPreview(RecordingEntry item) async {
     await _stopPreviewPlayback();
     final resolved = _resolveMediaUrl(item.url);
     final initialDuration = _parseDuration(item.durationLabel);
+    previewPositionMs.value = 0;
+    previewDurationMs.value = initialDuration;
     state = state.copyWith(
       viewMode: RecordingViewMode.preview,
       previewItem: item,
@@ -907,48 +957,31 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       showShareDialog: false,
       shareClasses: const <RecordingShareClass>[],
     );
-    if (kIsWeb) {
-      // Web: pre-open the source in media_kit so the duration / metadata is
-      // ready by the time the user taps play. Errors are intentionally
-      // swallowed - they'll surface clearly on the explicit play tap.
-      unawaited(() async {
-        try {
-          final player = _ensureWebPlayer();
-          await player.open(mk.Media(resolved), play: false);
-          _webPreparedSource = resolved;
-        } catch (_) {}
-      }());
-      return;
-    }
-    // Native: prepare audio_waveforms player so AudioFileWaveforms has the
-    // extracted waveform ready when the user taps play.
+    // Pre-buffer so the user gets near-instant playback on tap. Fire and
+    // forget; errors surface on the actual play tap.
     unawaited(_preparePreviewPlayer(resolved));
   }
 
-  /// Toggle preview play/pause. On iOS / Android backed by audio_waveforms
-  /// (native AVPlayer / ExoPlayer); on Web backed by media_kit's Player which
-  /// internally uses HTMLAudioElement.
+  /// Toggle preview play/pause. Same code path on every platform now.
   Future<void> togglePreviewPlayback() async {
     final source = state.previewSource;
-    if (source == null || source.isEmpty) {
-      return;
-    }
-    if (kIsWeb) {
-      await _toggleWebPlayback(source);
-      return;
-    }
+    if (source == null || source.isEmpty) return;
     final prepareError = await _preparePreviewPlayerForUI(source);
     if (prepareError != null) {
-      if (mounted) {
-        state = state.copyWith(errorMessage: prepareError);
-      }
+      if (mounted) state = state.copyWith(errorMessage: prepareError);
       return;
     }
+    final player = _ensurePlayer();
     try {
-      if (playerController.playerState == PlayerState.playing) {
-        await playerController.pausePlayer();
+      if (player.playing) {
+        await player.pause();
       } else {
-        await playerController.startPlayer();
+        // If we already played to the end, seek to 0 first so the user
+        // tapping play after completion actually replays.
+        if (player.processingState == ProcessingState.completed) {
+          await player.seek(Duration.zero);
+        }
+        await player.play();
       }
     } on PlatformException catch (error) {
       if (mounted) {
@@ -957,51 +990,35 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
         );
       }
     } catch (error) {
-      if (mounted) {
-        state = state.copyWith(errorMessage: '$_zhPlayFailed: $error');
-      }
+      if (mounted) state = state.copyWith(errorMessage: '$_zhPlayFailed: $error');
     }
   }
 
-  /// Seek by [deltaMs] from the current position.
+  /// Seek by [deltaMs] from current position.
   Future<void> seekPreviewBy(int deltaMs) async {
-    if (kIsWeb) {
-      final base = state.previewPositionMs;
-      return seekPreviewTo(base + deltaMs);
-    }
-    int base;
-    try {
-      base = await playerController.getDuration(DurationType.current);
-    } catch (_) {
-      base = 0;
-    }
-    if (base < 0) base = 0;
+    final base = previewPositionMs.value;
     return seekPreviewTo(base + deltaMs);
   }
 
-  /// Seek to an absolute position [targetMs] (clamped to [0, maxDuration]).
+  /// Seek to absolute [targetMs] (clamped to [0, maxDuration]).
   Future<void> seekPreviewTo(int targetMs) async {
     final source = state.previewSource;
-    if (source == null || source.isEmpty) {
-      return;
-    }
-    if (kIsWeb) {
-      await _seekWebPlayback(source, targetMs);
-      return;
-    }
+    if (source == null || source.isEmpty) return;
     final prepareError = await _preparePreviewPlayerForUI(source);
     if (prepareError != null) {
-      if (mounted) {
-        state = state.copyWith(errorMessage: prepareError);
-      }
+      if (mounted) state = state.copyWith(errorMessage: prepareError);
       return;
     }
-    final maxDur = playerController.maxDuration > 0
-        ? playerController.maxDuration
-        : state.previewDurationMs;
-    final clamped = targetMs.clamp(0, math.max(maxDur, 0)).toInt();
+    final player = _ensurePlayer();
+    final maxMs = previewDurationMs.value > 0
+        ? previewDurationMs.value
+        : (player.duration?.inMilliseconds ?? state.previewDurationMs);
+    final clamped = targetMs.clamp(0, math.max(maxMs, 0)).toInt();
     try {
-      await playerController.seekTo(clamped);
+      await player.seek(Duration(milliseconds: clamped));
+      if (previewPositionMs.value != clamped) {
+        previewPositionMs.value = clamped;
+      }
     } on PlatformException catch (error) {
       if (mounted) {
         state = state.copyWith(
@@ -1009,11 +1026,64 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
         );
       }
     } catch (error) {
-      if (mounted) {
-        state = state.copyWith(errorMessage: '$_zhSeekFailed: $error');
-      }
+      if (mounted) state = state.copyWith(errorMessage: '$_zhSeekFailed: $error');
     }
   }
+
+  Future<void> _stopPreviewPlayback() async {
+    final player = _player;
+    if (player == null) return;
+    await _safeAsync(player.pause);
+    await _safeAsync(() => player.seek(Duration.zero));
+    if (mounted && state.previewPlaying) {
+      state = state.copyWith(previewPlaying: false);
+    }
+    if (previewPositionMs.value != 0) previewPositionMs.value = 0;
+  }
+
+  /// UI-facing prepare. Returns null on success, or a localized error.
+  Future<String?> _preparePreviewPlayerForUI(String source) async {
+    if (source.isEmpty) return _zhNoSourceToPlay;
+    if (_audioFeatureBroken) return _zhUnsupported;
+    if (_preparedPlayerSource == source) return null;
+    final player = _ensurePlayer();
+    try {
+      await player.stop();
+      // setUrl resolves the duration and surfaces it via durationStream.
+      // It accepts http(s), file://, blob: ? everything we ever put in
+      // `previewSource`.
+      final dur = await player.setUrl(source);
+      _preparedPlayerSource = source;
+      if (dur != null) {
+        final ms = dur.inMilliseconds;
+        if (ms > 0) {
+          previewDurationMs.value = ms;
+          if (mounted && state.previewDurationMs != ms) {
+            state = state.copyWith(previewDurationMs: ms);
+          }
+        }
+      }
+      return null;
+    } on MissingPluginException {
+      _audioFeatureBroken = true;
+      return _zhUnsupported;
+    } on PlatformException catch (error) {
+      return _platformMessage(error, _zhLoadAudioFailed);
+    } on PlayerException catch (error) {
+      return '$_zhLoadAudioFailed: ${error.message ?? error.code}';
+    } catch (error) {
+      return '$_zhLoadAudioFailed: $error';
+    }
+  }
+
+  Future<bool> _preparePreviewPlayer(String source) async {
+    final error = await _preparePreviewPlayerForUI(source);
+    return error == null;
+  }
+
+  // ?????????????????????????????????????????????????????????????????????
+  // Save / delete / rename / share (unchanged business logic)
+  // ?????????????????????????????????????????????????????????????????????
 
   void closeSaveDialog() {
     state = state.copyWith(showSaveDialog: false);
@@ -1035,62 +1105,47 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     state = state.copyWith(previewCollected: !state.previewCollected);
   }
 
-  /// Upload the in-memory recording bytes and persist a recordingSave row.
-  /// On success returns null, on any failure returns a localized error string.
+  /// Upload + persist the active draft. On success returns null; on any
+  /// failure returns a localized error string.
   ///
-  /// IMPORTANT - this method intentionally does NOT close the save dialog or
-  /// flip `viewMode` back to list. Doing both inside one call has been the
-  /// source of the iPad save crash ("This exception was thrown because the
-  /// deactivated widget's ancestor was looked up..."): tearing down the
-  /// dialog AND the parent _RecordingStage at the same time leaves the
-  /// dialog mid-rebuild on an already-deactivated tree.
-  ///
-  /// Cleanup is the UI's responsibility:
-  ///   1. await saveCurrentRecording() -> message
-  ///   2. if message == null: controller.closeSaveDialog()
-  ///   3. addPostFrameCallback(() => controller.finishSaveAndReturnToList())
-  /// See `_DialogActionButton` for the actual choreography.
+  /// IMPORTANT ? this method intentionally does NOT close the save dialog
+  /// or flip viewMode back to list. Doing both inside one call has been
+  /// the source of the historical iPad save crash ("This exception was
+  /// thrown because the deactivated widget's ancestor was looked up...").
+  /// Cleanup is the UI's responsibility (see `_DialogActionButton`):
+  ///   1. await saveCurrentRecording() ? message
+  ///   2. if message == null: closeSaveDialog()
+  ///   3. addPostFrameCallback(() => finishSaveAndReturnToList())
   Future<String?> saveCurrentRecording() async {
-    // Re-entrancy guard: if the user double-taps the confirm button, ignore
-    // the second tap rather than firing a second upload + saveRecording
-    // (would create a duplicate row).
-    if (state.busy) {
-      return null;
-    }
+    if (state.busy) return null; // re-entrancy guard for double-tap
     final bytes = state.recordedBytes;
     final categoryId = state.selectedSaveCategoryId;
-    if (bytes == null || bytes.isEmpty) {
-      return _zhNoRecordingToSave;
-    }
-    if (categoryId <= 0) {
-      return _zhPickCategory;
-    }
+    if (bytes == null || bytes.isEmpty) return _zhNoRecordingToSave;
+    if (categoryId <= 0) return _zhPickCategory;
 
     final title = state.pendingTitle.trim();
-    if (title.isEmpty) {
-      return _zhEnterTitle;
-    }
+    if (title.isEmpty) return _zhEnterTitle;
 
     state = state.copyWith(busy: true, clearError: true);
     try {
+      // Pick a server-friendly filename. Native records as .m4a (AAC-LC),
+      // Web's MediaRecorder produces opus inside webm ? use .webm there
+      // so playback later picks the right MIME type / codec.
+      final ext = kIsWeb ? 'webm' : 'm4a';
+      final filename =
+          'recording_${DateTime.now().millisecondsSinceEpoch}.$ext';
+
       final uploadResponse = await _repository.uploadRecording(
         bytes: bytes,
-        filename: 'recording_${DateTime.now().millisecondsSinceEpoch}.m4a',
+        filename: filename,
       );
       if (!uploadResponse.isSuccess) {
-        if (mounted) {
-          state = state.copyWith(busy: false);
-        }
+        if (mounted) state = state.copyWith(busy: false);
         return _fallbackMessage(uploadResponse.msg, _zhUploadFailed);
       }
-      // Backend returns both `path` (relative, like app/upload/.../xxx.m4a)
-      // and `url` (absolute URL). The save endpoint wants the relative path,
-      // not the URL.
       final filePath = parseUploadResult(uploadResponse.data).savable;
       if (filePath.isEmpty) {
-        if (mounted) {
-          state = state.copyWith(busy: false);
-        }
+        if (mounted) state = state.copyWith(busy: false);
         return _zhUploadNoPath;
       }
 
@@ -1102,40 +1157,26 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
         folderId: state.currentFolderId,
       );
       if (!saveResponse.isSuccess) {
-        if (mounted) {
-          state = state.copyWith(busy: false);
-        }
+        if (mounted) state = state.copyWith(busy: false);
         return _fallbackMessage(saveResponse.msg, _zhSaveRecordingFailed);
       }
 
-      // Success: just clear busy. The UI will close the dialog and call
-      // finishSaveAndReturnToList() in the next frame.
-      if (mounted) {
-        state = state.copyWith(busy: false);
-      }
+      if (mounted) state = state.copyWith(busy: false);
       return null;
     } on PlatformException catch (error) {
-      if (mounted) {
-        state = state.copyWith(busy: false);
-      }
+      if (mounted) state = state.copyWith(busy: false);
       return _platformMessage(error, _zhSaveRecordingFailed);
     } catch (error) {
-      if (mounted) {
-        state = state.copyWith(busy: false);
-      }
+      if (mounted) state = state.copyWith(busy: false);
       return '$_zhSaveRecordingFailed: $error';
     }
   }
 
-  /// Called by the UI ONE FRAME AFTER a successful save (see
-  /// _DialogActionButton). Switches back to the list view and reloads the
-  /// folder / category contents so the new recording shows up.
-  ///
-  /// The deferral via `addPostFrameCallback` is essential: the dialog
-  /// dismissal animation triggered by `closeSaveDialog()` needs at least
-  /// one frame to start before we tear down the parent _RecordingStage by
-  /// flipping `viewMode` to list. Doing both in the same frame is what
-  /// caused the iPad "deactivated widget's ancestor" exception.
+  /// Called by the UI ONE FRAME AFTER a successful save. Switches back to
+  /// the list view and reloads the folder/category contents so the new
+  /// recording shows up. Deferring via `addPostFrameCallback` matters:
+  /// the dialog dismissal animation needs at least one frame to start
+  /// before we tear down the parent _RecordingStage by flipping viewMode.
   Future<void> finishSaveAndReturnToList() async {
     final folderId = state.currentFolderId;
     final categoryId = state.selectedSaveCategoryId > 0
@@ -1169,22 +1210,17 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     } else if (categoryId > 0 && categoryId != state.selectedCategoryId) {
       await selectCategory(categoryId);
     } else if (categoryId > 0) {
-      // Same category, just reload its folder list so the new file's
-      // counter (if any) refreshes.
       await _reloadFolders(categoryId);
     }
   }
 
   Future<String?> deleteRecording(RecordingEntry item) async {
-    // Local draft (not yet uploaded): just clear local state, don't hit the
-    // backend.
     if (item.id <= 0 || item.isLocalDraft) {
       await _stopPreviewPlayback();
       _preparedPlayerSource = null;
       await openNewRecording();
       return null;
     }
-
     state = state.copyWith(busy: true, clearError: true);
     final response = await _repository.deleteRecording(item.id);
     state = state.copyWith(busy: false);
@@ -1205,25 +1241,14 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     return null;
   }
 
-  /// Rename an existing recording. Backend uses the same `recordingSave`
-  /// endpoint - id > 0 means update. We carry forward filePath / duration /
-  /// folderId / paramN from the original payload and only swap the name.
   Future<String?> renameRecording(RecordingEntry item, String name) async {
     final trimmed = name.trim();
-    if (trimmed.isEmpty) {
-      return _zhEnterTitle;
-    }
-    if (trimmed == item.name) {
-      return null;
-    }
-    if (item.id <= 0) {
-      return _zhInvalidRecording;
-    }
+    if (trimmed.isEmpty) return _zhEnterTitle;
+    if (trimmed == item.name) return null;
+    if (item.id <= 0) return _zhInvalidRecording;
     final payload = item.payload;
     final filePath = (payload['filePath'] ?? payload['url'] ?? '').toString();
-    if (filePath.isEmpty) {
-      return _zhRecordingPathMissing;
-    }
+    if (filePath.isEmpty) return _zhRecordingPathMissing;
     final duration = (payload['duration'] ?? item.durationLabel).toString();
     final folderId = _toInt(payload['folderId']);
     state = state.copyWith(busy: true, clearError: true);
@@ -1259,9 +1284,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
 
   Future<String?> openShare() async {
     final target = state.previewItem;
-    if (target == null || target.isLocalDraft) {
-      return _zhSaveBeforeShare;
-    }
+    if (target == null || target.isLocalDraft) return _zhSaveBeforeShare;
     state = state.copyWith(busy: true, clearError: true);
     final response = await _repository.getClassList();
     state = state.copyWith(busy: false);
@@ -1270,14 +1293,10 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     }
     final classes = <RecordingShareClass>[];
     for (final raw in response.data as List) {
-      if (raw is! Map<String, dynamic>) {
-        continue;
-      }
+      if (raw is! Map<String, dynamic>) continue;
       final id = _toIdString(raw['id']);
       final name = raw['name']?.toString().trim() ?? '';
-      if (id.isEmpty || name.isEmpty) {
-        continue;
-      }
+      if (id.isEmpty || name.isEmpty) continue;
       classes.add(RecordingShareClass(id: id, name: name));
     }
     state = state.copyWith(showShareDialog: true, shareClasses: classes);
@@ -1294,9 +1313,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
   void toggleShareClass(String id) {
     state = state.copyWith(
       shareClasses: state.shareClasses.map((item) {
-        if (item.id != id) {
-          return item;
-        }
+        if (item.id != id) return item;
         return item.copyWith(selected: !item.selected);
       }).toList(),
     );
@@ -1304,13 +1321,9 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
 
   Future<String?> sendShare() async {
     final target = state.previewItem;
-    if (target == null || target.isLocalDraft) {
-      return _zhSaveBeforeShare;
-    }
+    if (target == null || target.isLocalDraft) return _zhSaveBeforeShare;
     final selected = state.shareClasses.where((item) => item.selected).toList();
-    if (selected.isEmpty) {
-      return _zhPickAtLeastOneClass;
-    }
+    if (selected.isEmpty) return _zhPickAtLeastOneClass;
     state = state.copyWith(busy: true, clearError: true);
     for (final item in selected) {
       final response = await _repository.shareRecording(
@@ -1330,250 +1343,33 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     return null;
   }
 
-  /// Wraps a Future-returning native call. audio_waveforms throws
-  /// MissingPluginException on web / desktop; this swallows it so the UI
-  /// never crashes.
+  // ?????????????????????????????????????????????????????????????????????
+  // Helpers
+  // ?????????????????????????????????????????????????????????????????????
+
   Future<void> _safeAsync(Future<dynamic> Function() op) async {
     try {
       await op();
     } catch (_) {}
   }
 
-  /// Clears RecorderController.waveData / labels so the next session starts
-  /// from an empty canvas.
-  void _resetRecorderWaveform() {
-    try {
-      recorderController.reset();
-    } catch (_) {}
-  }
-
-  Future<void> _stopPreviewPlayback() async {
-    if (kIsWeb) {
-      final player = _webPlayer;
-      if (player == null) {
-        return;
-      }
-      await _safeAsync(() => player.pause());
-      await _safeAsync(() => player.seek(Duration.zero));
-      if (mounted && state.previewPlaying) {
-        state = state.copyWith(previewPlaying: false, previewPositionMs: 0);
-      } else if (mounted && state.previewPositionMs != 0) {
-        state = state.copyWith(previewPositionMs: 0);
-      }
-      return;
-    }
-    if (playerController.playerState == PlayerState.stopped) {
-      return;
-    }
-    await _safeAsync(() => playerController.pausePlayer());
-    await _safeAsync(() => playerController.seekTo(0));
-  }
-
-  // ---------------------------------------------------------------------------
-  // Web playback helpers (media_kit)
-  // ---------------------------------------------------------------------------
-
-  /// Lazily create the media_kit player and bind its low-frequency state
-  /// streams (playing / position / duration / completion) into Riverpod
-  /// state. Position is mirrored at media_kit's default 250ms tick which is
-  /// fine for a preview cursor (we don't render a high-FPS waveform on Web).
-  mk.Player _ensureWebPlayer() {
-    final existing = _webPlayer;
-    if (existing != null) {
-      return existing;
-    }
-    final player = mk.Player();
-    _webPlayer = player;
-    _webPlayingSub = player.stream.playing.listen((playing) {
-      if (_disposed || !mounted) return;
-      if (state.previewPlaying != playing) {
-        state = state.copyWith(previewPlaying: playing);
-      }
-    });
-    _webPositionSub = player.stream.position.listen((position) {
-      if (_disposed || !mounted) return;
-      final ms = position.inMilliseconds;
-      if (state.previewPositionMs != ms) {
-        state = state.copyWith(previewPositionMs: ms);
-      }
-    });
-    _webDurationSub = player.stream.duration.listen((duration) {
-      if (_disposed || !mounted) return;
-      final ms = duration.inMilliseconds;
-      // Only adopt the player-reported duration when we don't already have a
-      // sensible one from the backend - otherwise the brief "0ms" tick that
-      // media_kit emits between source switches would shrink the seek bar.
-      if (ms > 0 && state.previewDurationMs <= 0) {
-        state = state.copyWith(previewDurationMs: ms);
-      }
-    });
-    _webCompletedSub = player.stream.completed.listen((completed) async {
-      if (!completed || _disposed) return;
-      // Match the iOS / Android behaviour: snap back to start, leave paused.
-      await _safeAsync(() => player.seek(Duration.zero));
-      if (mounted) {
-        state = state.copyWith(previewPlaying: false, previewPositionMs: 0);
-      }
-    });
-    return player;
-  }
-
-  Future<void> _toggleWebPlayback(String source) async {
-    try {
-      final player = _ensureWebPlayer();
-      if (_webPreparedSource != source) {
-        // Open the new source paused; the user's tap will start playback
-        // immediately after via the play() call below.
-        await player.open(mk.Media(source), play: false);
-        _webPreparedSource = source;
-      }
-      if (player.state.playing) {
-        await player.pause();
-      } else {
-        await player.play();
-      }
-    } catch (error) {
-      if (mounted) {
-        state = state.copyWith(errorMessage: '$_zhPlayFailed: $error');
-      }
-    }
-  }
-
-  Future<void> _seekWebPlayback(String source, int targetMs) async {
-    try {
-      final player = _ensureWebPlayer();
-      if (_webPreparedSource != source) {
-        await player.open(mk.Media(source), play: false);
-        _webPreparedSource = source;
-      }
-      final maxMs = state.previewDurationMs > 0
-          ? state.previewDurationMs
-          : player.state.duration.inMilliseconds;
-      final clamped = targetMs.clamp(0, math.max(maxMs, 0)).toInt();
-      await player.seek(Duration(milliseconds: clamped));
-      if (mounted) {
-        state = state.copyWith(previewPositionMs: clamped);
-      }
-    } catch (error) {
-      if (mounted) {
-        state = state.copyWith(errorMessage: '$_zhSeekFailed: $error');
-      }
-    }
-  }
-
-  /// UI-facing prepare. Returns null on success, or a user-displayable error
-  /// message (already localized) on failure.
-  ///
-  /// CRITICAL FIX: setFinishMode(pause) MUST be called AFTER each prepare.
-  /// audio_waveforms's native AudioPlayer is lazy-created on first
-  /// preparePlayer call, so any setFinishMode call before that is a no-op.
-  /// And the default FinishMode is `stop`, which releases the native player
-  /// after the first playback completes - meaning the user hears it once,
-  /// then subsequent play taps do nothing. Setting `pause` keeps the player
-  /// alive so it can be replayed.
-  Future<String?> _preparePreviewPlayerForUI(String source) async {
-    if (source.isEmpty) {
-      return _zhNoSourceToPlay;
-    }
-    if (kIsWeb || _audioFeatureBroken) {
-      return _zhUnsupported;
-    }
-    if (_preparedPlayerSource == source &&
-        playerController.playerState != PlayerState.stopped) {
-      return null;
-    }
-    if (_preparedPlayerSource != null && _preparedPlayerSource != source) {
-      await _safeAsync(() => playerController.stopPlayer());
-      await _safeAsync(() => playerController.release());
-      _preparedPlayerSource = null;
-    }
-    try {
-      await playerController.preparePlayer(
-        path: source,
-        shouldExtractWaveform: true,
-        noOfSamples: 160,
-      );
-      _preparedPlayerSource = source;
-      // Apply pause finish mode AFTER the native player exists; otherwise
-      // the call is a no-op and the player gets disposed after first play.
-      await _safeAsync(
-        () => playerController.setFinishMode(finishMode: FinishMode.pause),
-      );
-      return null;
-    } on MissingPluginException {
-      _audioFeatureBroken = true;
-      return _zhUnsupported;
-    } on PlatformException catch (error) {
-      return _platformMessage(error, _zhLoadAudioFailed);
-    } catch (error) {
-      return '$_zhLoadAudioFailed: $error';
-    }
-  }
-
-  /// finalize-time prepare: doesn't surface errors directly to UI; the user
-  /// will see a clear error if they tap play later.
-  Future<bool> _preparePreviewPlayer(String source) async {
-    final error = await _preparePreviewPlayerForUI(source);
-    return error == null;
-  }
-
-  /// Mirror low-frequency player state (previewPlaying) into Riverpod state.
-  /// High-frequency position is consumed directly by AnimatedBuilder /
-  /// StreamBuilder in the UI, never via state.copyWith.
-  void _bindPlayerStreams() {
-    _playerStateSub?.cancel();
-    _completionSub?.cancel();
-
-    _playerStateSub = playerController.onPlayerStateChanged.listen((s) {
-      if (_disposed) {
-        return;
-      }
-      final playing = s == PlayerState.playing;
-      if (state.previewPlaying != playing) {
-        state = state.copyWith(previewPlaying: playing);
-      }
-    });
-
-    // FinishMode.pause already seeks back to 0 + pauses on completion. We do
-    // a defensive re-seek so the progress bar visibly snaps to 0.
-    _completionSub = playerController.onCompletion.listen((_) async {
-      if (_disposed) {
-        return;
-      }
-      await _safeAsync(() => playerController.seekTo(0));
-      if (mounted && state.previewPlaying) {
-        state = state.copyWith(previewPlaying: false);
-      }
-    });
-  }
-
-  /// Build a temp file path for the new recording. audio_waveforms records
-  /// m4a (mpeg4 + AAC) by default, so the suffix MUST be .m4a or both record
-  /// and preview playback will fail.
   String _buildRecordingPath() {
+    if (kIsWeb) return ''; // record's web shim ignores path
     final base = buildTemporaryRecordingPath();
+    if (base.isEmpty) return base;
     final dot = base.lastIndexOf('.');
-    if (dot < 0) {
-      return '$base.m4a';
-    }
+    if (dot < 0) return '$base.m4a';
     return '${base.substring(0, dot)}.m4a';
   }
 
   List<RecordingCategoryItem> _parseCategories(dynamic data) {
-    if (data is! List) {
-      return const <RecordingCategoryItem>[];
-    }
+    if (data is! List) return const <RecordingCategoryItem>[];
     final result = <RecordingCategoryItem>[];
     for (final raw in data) {
-      if (raw is! Map<String, dynamic>) {
-        continue;
-      }
+      if (raw is! Map<String, dynamic>) continue;
       final id = _toInt(raw['id']);
       final name = raw['name']?.toString().trim() ?? '';
-      if (id <= 0 || name.isEmpty) {
-        continue;
-      }
-      // Different backend versions return the count under different keys.
+      if (id <= 0 || name.isEmpty) continue;
       final count = _toInt(
         raw['count'] ??
             raw['recordingCount'] ??
@@ -1586,8 +1382,6 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     return result;
   }
 
-  /// recordingFolderList may return either a plain List or
-  /// `{ records: [...] }` envelope. Tolerate both.
   List<RecordingFolderItem> _parseFolders(dynamic data, int categoryId) {
     final sourceList = switch (data) {
       final List<dynamic> list => list,
@@ -1597,14 +1391,10 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     };
     final result = <RecordingFolderItem>[];
     for (final raw in sourceList) {
-      if (raw is! Map<String, dynamic>) {
-        continue;
-      }
+      if (raw is! Map<String, dynamic>) continue;
       final id = _toInt(raw['id']);
       final name = raw['name']?.toString().trim() ?? '';
-      if (id <= 0 || name.isEmpty) {
-        continue;
-      }
+      if (id <= 0 || name.isEmpty) continue;
       final count = _toInt(
         raw['count'] ??
             raw['recordingCount'] ??
@@ -1632,19 +1422,12 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     return result;
   }
 
-  /// Format `2026-04-07 12:34:56`-style timestamps as `2026.04.07` to match
-  /// the cloud drive folder card style.
   String _formatFolderDate(String raw) {
     final trimmed = raw.trim();
-    if (trimmed.isEmpty) {
-      return '';
-    }
-    final match = RegExp(r'^(\d{4})[-./](\d{1,2})[-./](\d{1,2})').firstMatch(
-      trimmed,
-    );
-    if (match == null) {
-      return trimmed;
-    }
+    if (trimmed.isEmpty) return '';
+    final match = RegExp(r'^(\d{4})[-./](\d{1,2})[-./](\d{1,2})')
+        .firstMatch(trimmed);
+    if (match == null) return trimmed;
     final y = match.group(1)!;
     final m = match.group(2)!.padLeft(2, '0');
     final d = match.group(3)!.padLeft(2, '0');
@@ -1660,19 +1443,12 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     };
     final result = <RecordingEntry>[];
     for (final raw in sourceList) {
-      if (raw is! Map<String, dynamic>) {
-        continue;
-      }
+      if (raw is! Map<String, dynamic>) continue;
       final id = _toInt(raw['id']);
       final name = raw['name']?.toString().trim() ?? '';
-      // recordingList stores the relative path under `filePath` (e.g.
-      // `app/upload/.../xxx.m4a`); older backends use `url`. Accept both.
       final rawPath = (raw['filePath'] ?? raw['url'] ?? '').toString();
       final url = _resolveMediaUrl(rawPath);
-      if (id <= 0 || name.isEmpty || url.isEmpty) {
-        continue;
-      }
-      // Prefer the categoryId returned by the backend; fall back to current.
+      if (id <= 0 || name.isEmpty || url.isEmpty) continue;
       final ownerCategoryId = _toInt(raw['categoryId']);
       result.add(
         RecordingEntry(
@@ -1691,8 +1467,6 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     return result;
   }
 
-  /// File size from the backend is sometimes a numeric string (e.g. "507914")
-  /// and sometimes already-formatted (e.g. "1.2MB"). Both are accepted.
   String _resolveSizeLabel(Map<String, dynamic> item) {
     final candidates = <dynamic>[
       item['sizeLabel'],
@@ -1702,9 +1476,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     ];
     for (final candidate in candidates) {
       final value = candidate?.toString().trim() ?? '';
-      if (value.isEmpty || value == 'null') {
-        continue;
-      }
+      if (value.isEmpty || value == 'null') continue;
       final asNumber = double.tryParse(value);
       if (asNumber != null && !value.contains(RegExp(r'[a-zA-Z]'))) {
         return _formatBytesLabel(asNumber);
@@ -1714,8 +1486,6 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     return '';
   }
 
-  /// Normalize createTime / createDate / updateTime to MM.dd.yyyy to match
-  /// the cloud drive file card style.
   String _resolveDateLabel(Map<String, dynamic> item) {
     final candidates = <dynamic>[
       item['createTime'],
@@ -1724,9 +1494,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     ];
     for (final candidate in candidates) {
       final raw = candidate?.toString().trim() ?? '';
-      if (raw.isEmpty || raw == 'null') {
-        continue;
-      }
+      if (raw.isEmpty || raw == 'null') continue;
       final normalized = raw.contains(' ') && !raw.contains('T')
           ? raw.replaceFirst(' ', 'T')
           : raw;
@@ -1742,9 +1510,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
   }
 
   String _formatBytesLabel(double bytes) {
-    if (bytes <= 0) {
-      return '0KB';
-    }
+    if (bytes <= 0) return '0KB';
     const kb = 1024.0;
     const mb = kb * 1024.0;
     const gb = mb * 1024.0;
@@ -1764,17 +1530,13 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     List<RecordingCategoryItem> categories,
     int currentId,
   ) {
-    if (categories.any((item) => item.id == currentId)) {
-      return currentId;
-    }
+    if (categories.any((item) => item.id == currentId)) return currentId;
     return categories.firstOrNull?.id ?? 0;
   }
 
   int _parseDuration(String raw) {
     final cleaned = raw.trim();
-    if (cleaned.isEmpty) {
-      return 0;
-    }
+    if (cleaned.isEmpty) return 0;
     final dotMatch = RegExp(r'^(\d+):(\d+)\.(\d+)$').firstMatch(cleaned);
     if (dotMatch != null) {
       final minutes = int.tryParse(dotMatch.group(1)!) ?? 0;
@@ -1782,7 +1544,6 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       final centiseconds = int.tryParse(dotMatch.group(3)!) ?? 0;
       return minutes * 60000 + seconds * 1000 + centiseconds * 10;
     }
-
     final parts = cleaned.split(':');
     if (parts.length == 3) {
       final minutes = int.tryParse(parts[0]) ?? 0;
@@ -1802,10 +1563,8 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     final totalSeconds = milliseconds ~/ 1000;
     final minutes = (totalSeconds ~/ 60).toString().padLeft(2, '0');
     final seconds = (totalSeconds % 60).toString().padLeft(2, '0');
-    final centiseconds = ((milliseconds % 1000) ~/ 10).toString().padLeft(
-      2,
-      '0',
-    );
+    final centiseconds =
+        ((milliseconds % 1000) ~/ 10).toString().padLeft(2, '0');
     return '$minutes:$seconds.$centiseconds';
   }
 
@@ -1818,9 +1577,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
   }
 
   int _toInt(dynamic value) {
-    if (value is int) {
-      return value;
-    }
+    if (value is int) return value;
     return int.tryParse(value?.toString() ?? '') ?? 0;
   }
 
@@ -1837,8 +1594,6 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     return trimmed.isEmpty ? fallback : trimmed;
   }
 
-  /// Translate a PlatformException into a user-friendly message: prefer the
-  /// plugin-provided message / details, fall back to the supplied label.
   String _platformMessage(PlatformException error, String fallback) {
     final candidates = <String?>[
       error.message,
@@ -1859,34 +1614,44 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
   @override
   void dispose() {
     _disposed = true;
-    // StateNotifier.dispose is sync; we can't await any of these cancels.
-    // try-catch guards each one so super.dispose still runs.
+    try {
+      _stopwatchTicker?.cancel();
+    } catch (_) {}
+    try {
+      _stopwatch?.stop();
+    } catch (_) {}
+    try {
+      _amplitudeSub?.cancel();
+    } catch (_) {}
+    try {
+      _recordStateSub?.cancel();
+    } catch (_) {}
+    try {
+      _positionSub?.cancel();
+    } catch (_) {}
+    try {
+      _durationSub?.cancel();
+    } catch (_) {}
     try {
       _playerStateSub?.cancel();
     } catch (_) {}
     try {
-      _completionSub?.cancel();
+      _recorder?.dispose();
     } catch (_) {}
     try {
-      _webPlayingSub?.cancel();
+      _player?.dispose();
     } catch (_) {}
     try {
-      _webPositionSub?.cancel();
+      elapsedMs.dispose();
     } catch (_) {}
     try {
-      _webDurationSub?.cancel();
+      liveAmplitudes.dispose();
     } catch (_) {}
     try {
-      _webCompletedSub?.cancel();
+      previewPositionMs.dispose();
     } catch (_) {}
     try {
-      recorderController.dispose();
-    } catch (_) {}
-    try {
-      playerController.dispose();
-    } catch (_) {}
-    try {
-      _webPlayer?.dispose();
+      previewDurationMs.dispose();
     } catch (_) {}
     super.dispose();
   }
@@ -1894,12 +1659,4 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
 
 extension _FirstOrNull<T> on Iterable<T> {
   T? get firstOrNull => isEmpty ? null : first;
-}
-
-/// Lightweight wrapper used inside _finalizeRecordingToPreview so the
-/// `late` local variable's type inference works cleanly across the try/catch
-/// boundary on older Dart analyzer versions.
-class Uint8ListBytes {
-  const Uint8ListBytes(this.bytes);
-  final Uint8List bytes;
 }

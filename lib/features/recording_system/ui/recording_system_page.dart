@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:audio_waveforms/audio_waveforms.dart' as aw;
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -1643,15 +1642,16 @@ class _RecordingEmpty extends StatelessWidget {
 
 /// 录音「录制」视图。
 ///
-/// 性能要点（audio_waveforms 重写版）：
-/// - 录制中所有高频更新——波形 / 秒表 / 进度条——全部由
-///   [aw.RecorderController]（一个 `ChangeNotifier`）驱动。本视图外层
-///   只依赖低频字段（`recordingPhase` / `errorMessage`），所以外层结构
-///   只在用户操作（开始 / 暂停 / 继续 / 出错）时重建。
-/// - 波形面板用 [aw.AudioWaveforms] 自带的 `AnimatedBuilder` 内部局部
-///   重绘；秒表 capsule、底部 scrubber 进度条、右侧「完成」按钮的可用
-///   态也都各自包在 [AnimatedBuilder] 里，仅自己那一小块重建，整页
-///   stage 骨架（含返回按钮、标题栏、左侧 pill、中间大圆按钮）保持不动。
+/// 性能要点（record + just_audio 重写版）：
+/// - 高频更新——秒表 / 实时波形 / 滚动进度条——全部由 controller 暴露的
+///   两个 [ValueNotifier]（`elapsedMs` / `liveAmplitudes`）驱动，UI 用
+///   [ValueListenableBuilder] 局部订阅。本视图外层只读 Riverpod 的低频
+///   字段（`recordingPhase` / `errorMessage`），开始 / 暂停 / 继续等手势
+///   才会触发整页骨架重建。
+/// - 波形面板内部由自绘 [_LiveWavePainter] 渲染最近 N 个振幅样本，画在
+///   一层 [RepaintBoundary] 里，外层 stage（含返回按钮、标题栏、左右
+///   pill、中间大圆按钮）始终不进 raster 任务，避开了之前用户反馈的
+///   "录制时整页 jank"。
 class _RecordingEditorView extends ConsumerWidget {
   const _RecordingEditorView({required this.state});
 
@@ -1661,7 +1661,6 @@ class _RecordingEditorView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final controller = ref.read(recordingSystemControllerProvider.notifier);
     final phase = state.recordingPhase;
-    final recorder = controller.recorderController;
 
     // 左侧 pill：idle 状态展示「暂停」白底胶囊（视觉占位、不可点）；
     // 录制 / 暂停状态展示「继续」红字胶囊（仅在 paused 时点击恢复）。
@@ -1720,13 +1719,12 @@ class _RecordingEditorView extends ConsumerWidget {
       onBack: controller.backToList,
       headerActions: const [],
       body: _RecordingStageBody(
-        wavePanel: _LiveDarkWavePanel(recorderController: recorder),
-        // 进度滚动条：跟随 elapsedDuration 变化，AnimatedBuilder 只让
-        // _DarkScrubberPanel 这一小块重建。
-        scrubberPanel: AnimatedBuilder(
-          animation: recorder,
-          builder: (context, _) {
-            final elapsedMs = recorder.elapsedDuration.inMilliseconds;
+        // 实时波形：订阅 controller.liveAmplitudes，仅波形面板这一格重建。
+        wavePanel: _LiveDarkWavePanel(samples: controller.liveAmplitudes),
+        // 进度滚动条：订阅 controller.elapsedMs，仅 scrubber 重建。
+        scrubberPanel: ValueListenableBuilder<int>(
+          valueListenable: controller.elapsedMs,
+          builder: (context, elapsedMs, _) {
             final displayDurationMs = math.max(elapsedMs, 8000);
             final progressRatio = (elapsedMs / displayDurationMs)
                 .clamp(0.0, 1.0)
@@ -1738,19 +1736,16 @@ class _RecordingEditorView extends ConsumerWidget {
             );
           },
         ),
-        // 秒表 capsule：跟随 elapsedDuration，单个 Text 子树重建。
-        timerCapsule: AnimatedBuilder(
-          animation: recorder,
-          builder: (context, _) => _GraniteTimerCapsule(
-            label: _formatClock(recorder.elapsedDuration.inMilliseconds),
-          ),
+        // 秒表 capsule：订阅 controller.elapsedMs，单个 Text 子树重建。
+        timerCapsule: ValueListenableBuilder<int>(
+          valueListenable: controller.elapsedMs,
+          builder: (context, elapsedMs, _) =>
+              _GraniteTimerCapsule(label: _formatClock(elapsedMs)),
         ),
-        // 底部提示 + 试听按钮：根据 elapsedDuration 切两个状态，仍然
-        // 用 AnimatedBuilder 包以便文案随时长跳变。
-        bottomCenter: AnimatedBuilder(
-          animation: recorder,
-          builder: (context, _) {
-            final elapsedMs = recorder.elapsedDuration.inMilliseconds;
+        // 底部提示 + 试听按钮：根据 elapsedMs 切两个状态。
+        bottomCenter: ValueListenableBuilder<int>(
+          valueListenable: controller.elapsedMs,
+          builder: (context, elapsedMs, _) {
             final canListenWhileRecording =
                 elapsedMs >= 1000 &&
                 elapsedMs < 5000 &&
@@ -1799,12 +1794,11 @@ class _RecordingEditorView extends ConsumerWidget {
         ),
         leftPill: leftPill,
         centerControls: centerControls,
-        // 右侧「完成」按钮：可用态依赖 elapsedDuration ≥ 5s。
-        rightPill: AnimatedBuilder(
-          animation: recorder,
-          builder: (context, _) {
-            final canFinish =
-                recorder.elapsedDuration.inMilliseconds >= 5000;
+        // 右侧「完成」按钮：可用态依赖 elapsedMs ≥ 5s。
+        rightPill: ValueListenableBuilder<int>(
+          valueListenable: controller.elapsedMs,
+          builder: (context, elapsedMs, _) {
+            final canFinish = elapsedMs >= 5000;
             return _SoundControlButton(
               asset: AppAssets.soundFinishButton,
               onTap: canFinish
@@ -1834,11 +1828,11 @@ class _RecordingPreviewView extends ConsumerWidget {
     final controller = ref.read(recordingSystemControllerProvider.notifier);
     final ui = DashboardScaleScope.of(context).ui;
     final item = state.previewItem;
-    final player = controller.playerController;
-    // 试听页底层换成 audio_waveforms：position / cursor / 进度条全部由
-    // [aw.PlayerController] 驱动，AudioFileWaveforms 自己渲染波形 + 拖动光标。
-    // 外层视图只读低频 state（previewItem / previewPlaying / errorMessage），
-    // 不再每帧重建。
+    // 试听页 position / duration 都由 controller 暴露的 ValueNotifier 驱动
+    // （内部由 just_audio 的 positionStream / durationStream 灌进去），
+    // UI 这边纯粹用 ValueListenableBuilder 局部订阅，不再走 audio_waveforms
+    // 双引擎 / kIsWeb 分支那一套。本视图外层只读 Riverpod 的低频字段
+    // （previewItem / previewPlaying / errorMessage）。
     final fallbackTotalMs = state.previewDurationMs > 0
         ? state.previewDurationMs
         : _parseDurationLabel(item?.durationLabel ?? '00:00.00');
@@ -1916,89 +1910,58 @@ class _RecordingPreviewView extends ConsumerWidget {
       ),
     ];
 
-    // 试听阶段总时长：原生端优先取 PlayerController 抽取出的真实 maxDuration，
-    // Web 端没有 audio_waveforms PlayerController，直接用 state.previewDurationMs
-    // （后端 duration 字符串解析得到，或 finalize 录音时记录的实际时长）。
-    int liveMaxDurationMs() {
-      if (kIsWeb) {
-        return state.previewDurationMs > 0
-            ? state.previewDurationMs
+    // 波形面板：用录音时捕获的振幅快照（已保存的作品退而求其次用 seed
+    // 生成的占位波形），叠加一个跟随 previewPositionMs 移动的进度光标。
+    // 同一份代码 native + web 通用，省掉了之前 kIsWeb 双分支。
+    final wavePanel = _PreviewDarkWavePanel(
+      waveform: item?.waveform ?? const <double>[],
+      positionMs: controller.previewPositionMs,
+      durationMs: controller.previewDurationMs,
+      fallbackDurationMs: fallbackTotalMs,
+      onSeekRatio: (ratio) {
+        final dur = controller.previewDurationMs.value > 0
+            ? controller.previewDurationMs.value
             : fallbackTotalMs;
-      }
-      final maxDur = player.maxDuration;
-      if (maxDur > 0) return maxDur;
-      return fallbackTotalMs;
-    }
+        if (dur <= 0) return;
+        controller.seekPreviewTo((dur * ratio).round());
+      },
+    );
 
-    // Web: audio_waveforms 没有 Web 后端，PlayerController.onCurrentDurationChanged
-    // 永远不会发数据。改用 controller 端的 media_kit fallback，把 position /
-    // duration / playing 写到 Riverpod state，UI 这边读 state 即可。
-    // 波形区也换成静态占位（previewItem.waveform 是录音时采样过的数组），
-    // 不再调 audio_waveforms 的原生波形抽取。
-    Widget buildWavePanel() {
-      if (kIsWeb) {
-        return _PreviewWavePlaceholder(
-          waveform: item?.waveform ?? const <double>[],
+    final scrubber = ValueListenableBuilder<int>(
+      valueListenable: controller.previewPositionMs,
+      builder: (context, positionMs, _) {
+        return ValueListenableBuilder<int>(
+          valueListenable: controller.previewDurationMs,
+          builder: (context, durationMs, _) {
+            final totalMs = durationMs > 0 ? durationMs : fallbackTotalMs;
+            final clampedTotalMs = math.max(totalMs, 8000);
+            final progressRatio = totalMs <= 0
+                ? 0.0
+                : (positionMs / totalMs).clamp(0.0, 1.0).toDouble();
+            return _DarkScrubberPanel(
+              progressRatio: progressRatio,
+              startLabel: _formatSecondsClock(positionMs),
+              endLabel: _formatSecondsClock(clampedTotalMs),
+            );
+          },
         );
-      }
-      return _PreviewDarkWavePanel(playerController: player);
-    }
+      },
+    );
 
-    Widget buildScrubber() {
-      if (kIsWeb) {
-        final positionMs = state.previewPositionMs;
-        final totalMs = liveMaxDurationMs();
-        final clampedTotalMs = math.max(totalMs, 8000);
-        final progressRatio = totalMs <= 0
-            ? 0.0
-            : (positionMs / totalMs).clamp(0.0, 1.0).toDouble();
-        return _DarkScrubberPanel(
-          progressRatio: progressRatio,
-          startLabel: _formatSecondsClock(positionMs),
-          endLabel: _formatSecondsClock(clampedTotalMs),
-        );
-      }
-      return StreamBuilder<int>(
-        stream: player.onCurrentDurationChanged,
-        builder: (context, snapshot) {
-          final positionMs = snapshot.data ?? 0;
-          final totalMs = liveMaxDurationMs();
-          final clampedTotalMs = math.max(totalMs, 8000);
-          final progressRatio = totalMs <= 0
-              ? 0.0
-              : (positionMs / totalMs).clamp(0.0, 1.0).toDouble();
-          return _DarkScrubberPanel(
-            progressRatio: progressRatio,
-            startLabel: _formatSecondsClock(positionMs),
-            endLabel: _formatSecondsClock(clampedTotalMs),
-          );
-        },
-      );
-    }
-
-    Widget buildTimer() {
-      if (kIsWeb) {
-        return _GraniteTimerCapsule(
-          label: _formatClock(state.previewPositionMs),
-        );
-      }
-      return StreamBuilder<int>(
-        stream: player.onCurrentDurationChanged,
-        builder: (context, snapshot) {
-          final positionMs = snapshot.data ?? 0;
-          return _GraniteTimerCapsule(label: _formatClock(positionMs));
-        },
-      );
-    }
+    final timer = ValueListenableBuilder<int>(
+      valueListenable: controller.previewPositionMs,
+      builder: (context, positionMs, _) =>
+          _GraniteTimerCapsule(label: _formatClock(positionMs)),
+    );
 
     return _RecordingStage(
       title: '音频录制',
       onBack: controller.backToList,
       headerActions: headerActions,
       body: _RecordingStageBody(
-        wavePanel: buildWavePanel(),
-        scrubberPanel: buildScrubber(),
-        timerCapsule: buildTimer(),
+        wavePanel: wavePanel,
+        scrubberPanel: scrubber,
+        timerCapsule: timer,
         bottomCenter: Text(
           '录制不能低于5秒',
           textAlign: TextAlign.center,
@@ -2425,208 +2388,291 @@ class _RecordingStageBody extends StatelessWidget {
   }
 }
 
-/// 录制中的暗色波形面板：保留外层金属边框 + 暗色渐变底色，内部用
-/// [aw.AudioWaveforms] 渲染实时滚动波形。组件自带 `AnimatedBuilder` +
-/// `CustomPainter.shouldRepaint`，重绘只发生在它内部那张 raster 图层
-/// 里，外层框架不会跟着进 raster 任务（这是用户反馈「波形卡顿」的
-/// 主要原因，详见 [RecordingSystemController] 顶部注释）。
+// ===========================================================================
+// 暗色波形面板（自绘版）
+//
+// 替代 audio_waveforms 的 AudioWaveforms / AudioFileWaveforms：内部
+// 用 [CustomPainter] 直接画振幅条 + 进度光标，外层视觉（金属边框、暗色
+// 渐变底色、12px 圆角）与原版完全一致。两块面板都包了一层
+// [RepaintBoundary] —— 重绘只发生在它内部那张 raster 图层里，外层
+// stage 不会跟着进 raster 任务，性能开销与 audio_waveforms 持平甚至
+// 更轻（少一个平台通道往返）。
+// ===========================================================================
+
+/// 暗色波形面板的统一外框。两个具体面板复用这套金属边 / 暗色渐变 /
+/// 内圈描边，所以视觉与原 audio_waveforms 版本完全对齐。
+class _DarkWaveFrame extends StatelessWidget {
+  const _DarkWaveFrame({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      padding: EdgeInsets.all(ui(3)),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(ui(20)),
+        border: Border.all(color: const Color(0xFFC3C3C3), width: ui(3)),
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: <Color>[Color(0xFF353535), Color(0xFF141414)],
+          ),
+          borderRadius: BorderRadius.circular(ui(16)),
+          border: Border.all(color: const Color(0xFF161616), width: ui(6)),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(ui(10)),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+/// 录制中的暗色波形面板。订阅 [samples]（来自 controller.liveAmplitudes，
+/// 由 `record` 包的 onAmplitudeChanged 灌进去），用 [_LiveWavePainter]
+/// 把最近 N 个振幅样本画成滚动柱状波形，新样本始终从右往左推进。
 class _LiveDarkWavePanel extends StatelessWidget {
-  const _LiveDarkWavePanel({required this.recorderController});
+  const _LiveDarkWavePanel({required this.samples});
 
-  final aw.RecorderController recorderController;
+  final ValueListenable<List<double>> samples;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      padding: EdgeInsets.all(ui(3)),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(ui(20)),
-        border: Border.all(color: const Color(0xFFC3C3C3), width: ui(3)),
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: <Color>[Color(0xFF353535), Color(0xFF141414)],
-          ),
-          borderRadius: BorderRadius.circular(ui(16)),
-          border: Border.all(color: const Color(0xFF161616), width: ui(6)),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(ui(10)),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              return RepaintBoundary(
-                child: aw.AudioWaveforms(
+    return _DarkWaveFrame(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return RepaintBoundary(
+            child: ValueListenableBuilder<List<double>>(
+              valueListenable: samples,
+              builder: (context, snapshot, _) {
+                return CustomPaint(
                   size: Size(constraints.maxWidth, constraints.maxHeight),
-                  recorderController: recorderController,
-                  enableGesture: false,
-                  waveStyle: aw.WaveStyle(
-                    waveColor: const Color(0xFFB791FF),
-                    showMiddleLine: false,
-                    extendWaveform: true,
-                    waveThickness: ui(2),
+                  painter: _LiveWavePainter(
+                    samples: snapshot,
+                    barWidth: ui(2),
                     spacing: ui(5),
-                    scaleFactor: 90,
-                    showBottom: true,
-                    showTop: true,
                   ),
-                ),
-              );
-            },
-          ),
-        ),
+                );
+              },
+            ),
+          );
+        },
       ),
     );
   }
 }
 
-/// 试听阶段的暗色波形面板：内部用 [aw.AudioFileWaveforms] 渲染从音频
-/// 文件抽取出的真实波形 + 自带可拖动光标。`enableSeekGesture: true`
-/// 让用户直接在波形上拖动定位，不需要再叠一层我们自己的 GestureDetector。
+/// 试听阶段的暗色波形面板。
+///
+/// 把 [waveform]（录制阶段实时采样得到的振幅快照；或服务端已存录音的
+/// seed 占位）画成静态柱状条，并叠一根跟随 [positionMs] / [durationMs]
+/// 移动的进度光标——光标左侧的条用紫色亮起，右侧灰色。整片面板支持
+/// 拖动 / 点击定位，触摸 ratio 通过 [onSeekRatio] 回到 controller。
 class _PreviewDarkWavePanel extends StatelessWidget {
-  const _PreviewDarkWavePanel({required this.playerController});
-
-  final aw.PlayerController playerController;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      padding: EdgeInsets.all(ui(3)),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(ui(20)),
-        border: Border.all(color: const Color(0xFFC3C3C3), width: ui(3)),
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: <Color>[Color(0xFF353535), Color(0xFF141414)],
-          ),
-          borderRadius: BorderRadius.circular(ui(16)),
-          border: Border.all(color: const Color(0xFF161616), width: ui(6)),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(ui(10)),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              return RepaintBoundary(
-                child: aw.AudioFileWaveforms(
-                  size: Size(constraints.maxWidth, constraints.maxHeight),
-                  playerController: playerController,
-                  enableSeekGesture: true,
-                  waveformType: aw.WaveformType.fitWidth,
-                  playerWaveStyle: aw.PlayerWaveStyle(
-                    fixedWaveColor: const Color(0xFF555555),
-                    liveWaveColor: const Color(0xFFA773FF),
-                    showSeekLine: true,
-                    seekLineColor: const Color(0xFFA773FF),
-                    seekLineThickness: ui(2),
-                    waveThickness: ui(2),
-                    spacing: ui(5),
-                    scaleFactor: 90,
-                    showTop: true,
-                    showBottom: true,
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// 试听阶段的暗色波形占位（仅 Web）。audio_waveforms 没有 Web 后端，所以
-/// `aw.AudioFileWaveforms` 在 Web 上无法渲染真实波形。这里读取保存在
-/// [RecordingEntry.waveform] 里的振幅快照，画一组静态柱状条，配色 / 边框跟
-/// 原生端 [_PreviewDarkWavePanel] 保持一致，视觉上对齐。
-class _PreviewWavePlaceholder extends StatelessWidget {
-  const _PreviewWavePlaceholder({required this.waveform});
+  const _PreviewDarkWavePanel({
+    required this.waveform,
+    required this.positionMs,
+    required this.durationMs,
+    required this.fallbackDurationMs,
+    required this.onSeekRatio,
+  });
 
   final List<double> waveform;
+  final ValueListenable<int> positionMs;
+  final ValueListenable<int> durationMs;
+  final int fallbackDurationMs;
+  final ValueChanged<double> onSeekRatio;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      padding: EdgeInsets.all(ui(3)),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(ui(20)),
-        border: Border.all(color: const Color(0xFFC3C3C3), width: ui(3)),
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: <Color>[Color(0xFF353535), Color(0xFF141414)],
-          ),
-          borderRadius: BorderRadius.circular(ui(16)),
-          border: Border.all(color: const Color(0xFF161616), width: ui(6)),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(ui(10)),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              return RepaintBoundary(
-                child: CustomPaint(
-                  size: Size(constraints.maxWidth, constraints.maxHeight),
-                  painter: _StaticWavePainter(samples: waveform),
-                ),
-              );
-            },
-          ),
-        ),
+    return _DarkWaveFrame(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final size = Size(constraints.maxWidth, constraints.maxHeight);
+          return RepaintBoundary(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapDown: (details) {
+                final ratio = (details.localPosition.dx / size.width)
+                    .clamp(0.0, 1.0)
+                    .toDouble();
+                onSeekRatio(ratio);
+              },
+              onHorizontalDragUpdate: (details) {
+                final ratio = (details.localPosition.dx / size.width)
+                    .clamp(0.0, 1.0)
+                    .toDouble();
+                onSeekRatio(ratio);
+              },
+              child: ValueListenableBuilder<int>(
+                valueListenable: positionMs,
+                builder: (context, positionValue, _) {
+                  return ValueListenableBuilder<int>(
+                    valueListenable: durationMs,
+                    builder: (context, durationValue, _) {
+                      final total = durationValue > 0
+                          ? durationValue
+                          : fallbackDurationMs;
+                      final ratio = total <= 0
+                          ? 0.0
+                          : (positionValue / total)
+                              .clamp(0.0, 1.0)
+                              .toDouble();
+                      return CustomPaint(
+                        size: size,
+                        painter: _PreviewWavePainter(
+                          samples: waveform,
+                          progressRatio: ratio,
+                          barWidth: ui(2),
+                          spacing: ui(5),
+                          cursorThickness: ui(2),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          );
+        },
       ),
     );
   }
 }
 
-class _StaticWavePainter extends CustomPainter {
-  _StaticWavePainter({required this.samples});
+/// Live 录制波形 painter：最近 N 个样本，从左到右线性铺满。
+class _LiveWavePainter extends CustomPainter {
+  _LiveWavePainter({
+    required this.samples,
+    required this.barWidth,
+    required this.spacing,
+  });
 
   final List<double> samples;
+  final double barWidth;
+  final double spacing;
+
+  static const _liveColor = Color(0xFFB791FF);
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (size.width <= 0 || size.height <= 0) {
+    if (size.width <= 0 || size.height <= 0) return;
+    final centerY = size.height / 2;
+    final paint = Paint()
+      ..color = _liveColor
+      ..strokeWidth = barWidth
+      ..strokeCap = StrokeCap.round;
+
+    if (samples.isEmpty) {
+      canvas.drawLine(
+        Offset(0, centerY),
+        Offset(size.width, centerY),
+        paint..strokeWidth = math.max(barWidth - 1, 1),
+      );
       return;
     }
-    final centerY = size.height / 2;
-    final waveColor = const Color(0xFF555555);
 
-    // 没有振幅数据时画一根细横线，避免空白让用户以为坏了。
+    final maxBars = math.max(1, (size.width / spacing).floor());
+    final start = samples.length > maxBars ? samples.length - maxBars : 0;
+    final visible = samples.sublist(start);
+
+    // Right-anchor the latest sample; older samples slide off the left.
+    final stride = spacing;
+    final firstX = size.width - (visible.length * stride) + stride / 2;
+    for (var i = 0; i < visible.length; i++) {
+      final amp = visible[i].clamp(0.05, 1.0);
+      final halfH = (size.height / 2 - 4) * amp;
+      final x = firstX + i * stride;
+      if (x < 0) continue;
+      canvas.drawLine(
+        Offset(x, centerY - halfH),
+        Offset(x, centerY + halfH),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _LiveWavePainter oldDelegate) {
+    return !identical(oldDelegate.samples, samples) ||
+        oldDelegate.barWidth != barWidth ||
+        oldDelegate.spacing != spacing;
+  }
+}
+
+/// 试听波形 painter：静态柱状 + 紫色已播放区 + 灰色未播放区 + 光标线。
+class _PreviewWavePainter extends CustomPainter {
+  _PreviewWavePainter({
+    required this.samples,
+    required this.progressRatio,
+    required this.barWidth,
+    required this.spacing,
+    required this.cursorThickness,
+  });
+
+  final List<double> samples;
+  final double progressRatio;
+  final double barWidth;
+  final double spacing;
+  final double cursorThickness;
+
+  static const _activeColor = Color(0xFFA773FF);
+  static const _idleColor = Color(0xFF555555);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.width <= 0 || size.height <= 0) return;
+    final centerY = size.height / 2;
+
     if (samples.isEmpty) {
       final paint = Paint()
-        ..color = waveColor
-        ..strokeWidth = 2
+        ..color = _idleColor
+        ..strokeWidth = math.max(barWidth - 1, 1)
         ..strokeCap = StrokeCap.round;
       canvas.drawLine(
         Offset(0, centerY),
         Offset(size.width, centerY),
         paint,
       );
+      // Even with no samples, still draw the cursor so the user can see
+      // playback is moving.
+      final cursorX = (size.width * progressRatio).clamp(0.0, size.width);
+      final cursorPaint = Paint()
+        ..color = _activeColor
+        ..strokeWidth = cursorThickness
+        ..strokeCap = StrokeCap.round;
+      canvas.drawLine(
+        Offset(cursorX, 4),
+        Offset(cursorX, size.height - 4),
+        cursorPaint,
+      );
       return;
     }
 
-    final barCount = math.min(samples.length, 160);
-    final spacing = size.width / barCount;
-    final barWidth = math.max(spacing - 1.0, 1.5);
+    final maxBars = math.max(1, (size.width / spacing).floor());
+    final barCount = math.min(samples.length, maxBars);
+    final stride = size.width / barCount;
     final maxAmp = samples.fold<double>(
       0.0,
       (acc, v) => math.max(acc, v.abs()),
     );
-    // 振幅大多在 0~1 之间；若全是 < 0.05 的小值，按 max 归一化避免线太扁。
     final normalizer = maxAmp > 0.05 ? maxAmp : 1.0;
+    final cursorX = (size.width * progressRatio).clamp(0.0, size.width);
 
-    final paint = Paint()
-      ..color = waveColor
+    final activePaint = Paint()
+      ..color = _activeColor
+      ..strokeWidth = barWidth
+      ..strokeCap = StrokeCap.round;
+    final idlePaint = Paint()
+      ..color = _idleColor
       ..strokeWidth = barWidth
       ..strokeCap = StrokeCap.round;
 
@@ -2634,14 +2680,33 @@ class _StaticWavePainter extends CustomPainter {
       final sample = samples[(i * samples.length) ~/ barCount];
       final amp = (sample.abs() / normalizer).clamp(0.05, 1.0);
       final halfH = (size.height / 2 - 4) * amp;
-      final x = i * spacing + spacing / 2;
-      canvas.drawLine(Offset(x, centerY - halfH), Offset(x, centerY + halfH), paint);
+      final x = i * stride + stride / 2;
+      final paint = x <= cursorX ? activePaint : idlePaint;
+      canvas.drawLine(
+        Offset(x, centerY - halfH),
+        Offset(x, centerY + halfH),
+        paint,
+      );
     }
+
+    final cursorPaint = Paint()
+      ..color = _activeColor
+      ..strokeWidth = cursorThickness
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(
+      Offset(cursorX, 4),
+      Offset(cursorX, size.height - 4),
+      cursorPaint,
+    );
   }
 
   @override
-  bool shouldRepaint(covariant _StaticWavePainter oldDelegate) {
-    return !identical(oldDelegate.samples, samples);
+  bool shouldRepaint(covariant _PreviewWavePainter oldDelegate) {
+    return !identical(oldDelegate.samples, samples) ||
+        oldDelegate.progressRatio != progressRatio ||
+        oldDelegate.barWidth != barWidth ||
+        oldDelegate.spacing != spacing ||
+        oldDelegate.cursorThickness != cursorThickness;
   }
 }
 

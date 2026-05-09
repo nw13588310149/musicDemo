@@ -49,18 +49,26 @@ dependencies:
   media_kit_video: ^1.3.0
   media_kit_libs_video: ^1.0.5
   flutter_soloud: ^4.0.2
+  # 录音系统统一选用以下两个最成熟的纯音频插件，全平台单一代码路径：
+  #
+  # - `record`        ：录音端。AudioRecorder 实例提供
+  #                       onStateChanged() / onAmplitudeChanged() 两条
+  #                       低频流，原生端写 .m4a 临时文件，Web 端走
+  #                       MediaRecorder 输出 blob URL。stop() 返回的
+  #                       路径 / URL 由我们自己读 bytes 上传。
+  # - `just_audio`    ：播放端。AudioPlayer 跨平台一致：iOS/macOS 走
+  #                       AVPlayer、Android 走 ExoPlayer、Web 走
+  #                       HTMLAudioElement。setUrl() 同时接受 https
+  #                       URL、file:// 路径和 blob: URL，省掉了
+  #                       原本「native + media_kit fallback」的双引擎
+  #                       负担。
+  #
+  # 抛弃的依赖：`audio_waveforms` —— 该插件 iPad 上 setFinishMode 生命
+  # 周期、AudioFileWaveforms 在 Web 上没有后端、preparePlayer 频繁报
+  # MissingPluginException 等问题反复触发用户痛点，已在重构中替换为
+  # 自绘 CustomPainter（live amplitudes + preview 静态条 + 进度光标）。
   record: ^6.1.2
-  # 录音系统专用：Simform 团队维护的成熟波形组件库。
-  # - RecorderController：iOS / Android 原生录音 + 实时振幅采样，自带
-  #   ChangeNotifier，UI 用 AnimatedBuilder 局部订阅，秒表 / 波形互不
-  #   影响（替换原本基于 record + Timer.periodic 的 10Hz 全树重建路径）。
-  # - PlayerController + AudioFileWaveforms：试听阶段直接抽取文件波形
-  #   并渲染，自带可拖动光标，告别我们手写的 _DarkWavePainter + 自制
-  #   光标 + 时间刻度三件套（这是用户反馈"卡顿"的最大来源）。
-  # 该插件目前仅注册 android / ios 平台通道：Windows / macOS 桌面调试
-  # 模式下调用会抛 MissingPluginException——controller 里所有调用都
-  # 包了 try/catch，桌面模式不会崩，只是录音 / 试听不可用。
-  audio_waveforms: ^2.0.2
+  just_audio: ^0.10.5
   pitch_detector_dart: ^0.0.7
   web: ^1.1.1
   photo_view: ^0.15.0
