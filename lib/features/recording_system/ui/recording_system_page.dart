@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/foundation.dart' show ValueListenable, debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -3137,8 +3137,21 @@ class _SaveRecordingDialog extends ConsumerWidget {
                           //      pop 动画需要至少一帧再拆 viewMode 对应的
                           //      Stage widget，否则父子树同帧 dispose 再次
                           //      触发 deactivated ancestor lookup
-                          final message = await controller
-                              .saveCurrentRecording();
+                          //
+                          // 最外层再裹一层 try-catch 兜底：万一 controller
+                          // 内部还有未捕获到的同步 / 异步异常逃出来，也不
+                          // 让它通过 Future error 冒泡到 framework，更不让
+                          // toast 显示一坨英文 stack。原文走 debugPrint。
+                          String? message;
+                          try {
+                            message = await controller.saveCurrentRecording();
+                          } catch (error, stack) {
+                            debugPrint(
+                              '[recording] save dialog uncaught: '
+                              '$error\n$stack',
+                            );
+                            message = '保存录音失败，请稍后重试';
+                          }
                           if (!context.mounted) {
                             return;
                           }
@@ -3493,7 +3506,19 @@ class _ShareRecordingDialog extends ConsumerWidget {
                       label: '确认分享',
                       primary: true,
                       onTap: () async {
-                        final message = await controller.sendShare();
+                        // 与保存对话框同款兜底：所有异常都收成中文 toast，
+                        // 不允许 framework / 网络层的英文 toString 直接
+                        // 显示给用户。
+                        String? message;
+                        try {
+                          message = await controller.sendShare();
+                        } catch (error, stack) {
+                          debugPrint(
+                            '[recording] share dialog uncaught: '
+                            '$error\n$stack',
+                          );
+                          message = '分享失败，请稍后重试';
+                        }
                         if (!context.mounted) {
                           return;
                         }

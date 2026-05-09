@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data' show Uint8List;
 
-import 'package:flutter/foundation.dart' show ValueNotifier, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show ValueNotifier, debugPrint, kIsWeb;
 import 'package:flutter/services.dart'
     show MissingPluginException, PlatformException;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -685,8 +686,9 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       return null;
     } on PlatformException catch (error) {
       return _platformMessage(error, _zhPauseRecordingFailed);
-    } catch (error) {
-      return '$_zhPauseRecordingFailed: $error';
+    } catch (error, stack) {
+      debugPrint('[recording] pauseRecording: $error\n$stack');
+      return _zhPauseRecordingFailed;
     }
   }
 
@@ -700,8 +702,9 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       return null;
     } on PlatformException catch (error) {
       return _platformMessage(error, _zhResumeRecordingFailed);
-    } catch (error) {
-      return '$_zhResumeRecordingFailed: $error';
+    } catch (error, stack) {
+      debugPrint('[recording] resumeRecording: $error\n$stack');
+      return _zhResumeRecordingFailed;
     }
   }
 
@@ -743,9 +746,10 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     } on PlatformException catch (error) {
       _resetTimers();
       return _platformMessage(error, _zhFinishRecordingFailed);
-    } catch (error) {
+    } catch (error, stack) {
       _resetTimers();
-      return '$_zhFinishRecordingFailed: $error';
+      debugPrint('[recording] finishRecording: $error\n$stack');
+      return _zhFinishRecordingFailed;
     }
 
     // Stop wallclock + amplitude listeners now that the engine is stopped.
@@ -760,8 +764,9 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     Uint8List bytes;
     try {
       bytes = await loadRecordedBytes(resolvedSource);
-    } catch (error) {
-      return '$_zhReadRecordingFailed: $error';
+    } catch (error, stack) {
+      debugPrint('[recording] loadRecordedBytes: $error\n$stack');
+      return _zhReadRecordingFailed;
     }
     if (bytes.isEmpty) return _zhRecordingEmpty;
 
@@ -979,9 +984,10 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
           errorMessage: _platformMessage(error, _zhPlayFailed),
         );
       }
-    } catch (error) {
+    } catch (error, stack) {
+      debugPrint('[recording] togglePreviewPlayback: $error\n$stack');
       if (mounted) {
-        state = state.copyWith(errorMessage: '$_zhPlayFailed: $error');
+        state = state.copyWith(errorMessage: _zhPlayFailed);
       }
     }
   }
@@ -1017,9 +1023,10 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
           errorMessage: _platformMessage(error, _zhSeekFailed),
         );
       }
-    } catch (error) {
+    } catch (error, stack) {
+      debugPrint('[recording] seekPreviewTo: $error\n$stack');
       if (mounted) {
-        state = state.copyWith(errorMessage: '$_zhSeekFailed: $error');
+        state = state.copyWith(errorMessage: _zhSeekFailed);
       }
     }
   }
@@ -1062,8 +1069,9 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       return _zhLoadAudioFailed;
     } on PlatformException catch (error) {
       return _platformMessage(error, _zhLoadAudioFailed);
-    } catch (error) {
-      return '$_zhLoadAudioFailed: $error';
+    } catch (error, stack) {
+      debugPrint('[recording] _preparePreviewPlayerForUI: $error\n$stack');
+      return _zhLoadAudioFailed;
     }
   }
 
@@ -1157,9 +1165,10 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     } on PlatformException catch (error) {
       if (mounted) state = state.copyWith(busy: false);
       return _platformMessage(error, _zhSaveRecordingFailed);
-    } catch (error) {
+    } catch (error, stack) {
       if (mounted) state = state.copyWith(busy: false);
-      return '$_zhSaveRecordingFailed: $error';
+      debugPrint('[recording] saveCurrentRecording: $error\n$stack');
+      return _zhSaveRecordingFailed;
     }
   }
 
@@ -1404,7 +1413,8 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
         text.contains('mediaDevices')) {
       return _zhWebSecureContext;
     }
-    return '$_zhStartRecordingFailedShort: $error';
+    debugPrint('[recording] startRecording fallback: $error');
+    return _zhStartRecordingFailedShort;
   }
 
   List<RecordingCategoryItem> _parseCategories(dynamic data) {
@@ -1638,9 +1648,52 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     return text;
   }
 
+  /// ??? / ??? msg ???????????
+  ///
+  /// - ???? -> ??????????? [fallback]?
+  /// - ??????????????????? dio ??? Flutter / Dart
+  ///   ?? toString ?? msg ???"This exception was thrown because the
+  ///   deactivated widget's ancestor was looked up..." / "FormatException:..."
+  ///   / "type 'Null' is not a subtype of..."?-> ???? [fallback]???
+  ///   ???????? framework ?????? debugPrint ????????
+  /// - ???????????
   String _fallbackMessage(String raw, String fallback) {
     final trimmed = raw.trim();
-    return trimmed.isEmpty ? fallback : trimmed;
+    if (trimmed.isEmpty) return fallback;
+    if (_looksLikeRuntimeException(trimmed)) {
+      debugPrint('[recording] suppressed raw msg -> "$trimmed"');
+      return fallback;
+    }
+    return trimmed;
+  }
+
+  /// ??????[text] ?????? Flutter / Dart / ????? toString?
+  /// ?????????????????????????? toString?
+  ///
+  /// - ???? framework / runtime ????
+  /// - ?? ASCII ??????????????????????????
+  bool _looksLikeRuntimeException(String text) {
+    final markers = <String>[
+      'This exception was thrown',
+      'FlutterError',
+      'is not a subtype of',
+      'NoSuchMethodError',
+      'StateError',
+      'RangeError',
+      'Bad state',
+      'Null check operator',
+      'Looking up a deactivated',
+      'deactivated widget',
+      'PlatformException',
+      'MissingPluginException',
+      'FormatException',
+    ];
+    for (final marker in markers) {
+      if (text.contains(marker)) return true;
+    }
+    final isAscii = text.codeUnits.every((c) => c < 128);
+    if (isAscii && text.length > 80) return true;
+    return false;
   }
 
   String _platformMessage(PlatformException error, String fallback) {
@@ -1651,9 +1704,14 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     ];
     for (final candidate in candidates) {
       final trimmed = candidate?.trim() ?? '';
-      if (trimmed.isNotEmpty && trimmed.toLowerCase() != 'null') {
-        return '$fallback: $trimmed';
+      if (trimmed.isEmpty || trimmed.toLowerCase() == 'null') continue;
+      // ?? framework / ????? toString????????? toast ?
+      // ????????? stack trace?debugPrint ????????
+      if (_looksLikeRuntimeException(trimmed)) {
+        debugPrint('[recording] suppressed PlatformException msg -> $trimmed');
+        continue;
       }
+      return '$fallback: $trimmed';
     }
     return fallback;
   }
