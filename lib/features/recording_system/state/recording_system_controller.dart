@@ -1310,6 +1310,13 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     );
   }
 
+  /// ? [saveCurrentRecording] ???????? **?** ???????
+  /// ????? controller ???? `showShareDialog: false`?UI ??
+  /// ? `ref.listen` ??? `Navigator.of(ctx).pop()` ? dialog ??
+  /// deactivate??? onTap ??? dialog ? BuildContext ? toast?
+  /// ???? "deactivated widget's ancestor was looked up..." ??
+  /// ???iPad ??????? dialog ?????? UI?? toast??
+  /// closeShareDialog?
   Future<String?> sendShare() async {
     final target = state.previewItem;
     if (target == null || target.isLocalDraft) return _zhSaveBeforeShare;
@@ -1322,15 +1329,11 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
         payload: target.payload,
       );
       if (!response.isSuccess) {
-        state = state.copyWith(busy: false);
+        if (mounted) state = state.copyWith(busy: false);
         return _fallbackMessage(response.msg, _zhShareFailed);
       }
     }
-    state = state.copyWith(
-      busy: false,
-      showShareDialog: false,
-      shareClasses: const <RecordingShareClass>[],
-    );
+    if (mounted) state = state.copyWith(busy: false);
     return null;
   }
 

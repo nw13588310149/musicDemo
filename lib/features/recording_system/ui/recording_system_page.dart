@@ -3123,13 +3123,20 @@ class _SaveRecordingDialog extends ConsumerWidget {
                         label: '确认',
                         primary: true,
                         onTap: () async {
-                          // 严格按这个顺序：1) 调保存接口；2) 失败 -> Toast，
-                          // 弹窗保持打开让用户重试；3) 成功 -> 关闭弹窗 + Toast
-                          // + 在下一帧再切回列表 + 刷新。最后这步必须延后到
-                          // postFrameCallback，否则 iPad 上 saveCurrentRecording
-                          // 一次性把 dialog 关掉 + viewMode 切到 list，会触发
-                          // "This exception was thrown because the deactivated
-                          // widget's ancestor was looked up..." 框架异常。
+                          // 严格按这个顺序，否则 iPad 必现框架异常
+                          // "This exception was thrown because the
+                          // deactivated widget's ancestor was looked up..."：
+                          //
+                          //   1) await saveCurrentRecording() -> 上传 + 入库
+                          //   2) 失败 -> Toast，弹窗保持打开让用户重试
+                          //   3) 成功 -> **先** Toast（此时 dialog 还在树上，
+                          //      `Overlay.maybeOf(context)` 能拿到 root
+                          //      Overlay），**再** closeSaveDialog 同步把
+                          //      dialog pop 掉
+                          //   4) 切回列表 + 刷新延迟到下一帧执行：dialog
+                          //      pop 动画需要至少一帧再拆 viewMode 对应的
+                          //      Stage widget，否则父子树同帧 dispose 再次
+                          //      触发 deactivated ancestor lookup
                           final message = await controller
                               .saveCurrentRecording();
                           if (!context.mounted) {
@@ -3139,8 +3146,8 @@ class _SaveRecordingDialog extends ConsumerWidget {
                             _showMessage(context, message);
                             return;
                           }
-                          controller.closeSaveDialog();
                           _showMessage(context, '录音已保存');
+                          controller.closeSaveDialog();
                           WidgetsBinding.instance.addPostFrameCallback((_) {
                             controller.finishSaveAndReturnToList();
                           });
@@ -3487,9 +3494,19 @@ class _ShareRecordingDialog extends ConsumerWidget {
                       primary: true,
                       onTap: () async {
                         final message = await controller.sendShare();
-                        if (context.mounted) {
-                          _showMessage(context, message ?? '分享成功');
+                        if (!context.mounted) {
+                          return;
                         }
+                        // 与保存对话框同样的 deactivated-context 防护：
+                        // 成功 -> 先 toast（dialog 还 mounted，能拿到
+                        // root Overlay），再 closeShareDialog；失败 ->
+                        // 直接 toast，dialog 保持打开让用户重试。
+                        if (message != null) {
+                          _showMessage(context, message);
+                          return;
+                        }
+                        _showMessage(context, '分享成功');
+                        controller.closeShareDialog();
                       },
                     ),
                   ),
