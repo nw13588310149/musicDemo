@@ -212,41 +212,108 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       await _openActiveTrack(play: true);
       return;
     }
-    // 应用户反馈：iPad 上点暂停 / 播放会出现"咔哒"杂音——这是 mpv 的
-    // 音频环形 buffer 在 pause/play 切换瞬间被截断造成的 click。在调用
-    // pause/play 前后短暂把音量降到 0、再恢复，可以把波形振幅过 0 的
-    // 那一帧"包"在静音区间里，听感上就没有 pop 了。
+    // 应用户反馈：iPad 上点暂停 / 播放、拖进度条时会出现"呲/咔哒"杂音，
+    // 上课接音响尤其明显。原因是 mpv 在 pause/play/seek 切点会让音频
+    // 输出环里的 PCM 出现不连续——任何一次振幅过 0 的硬切都会被喇叭
+    // 当成 step function 还原成 click。下面统一改成"音量渐变窗"：把
+    // 切点包在一段 fade-out → op → fade-in 里，让不连续落在静音区间。
     if (state.isPlaying) {
-      await _withSilencedAudio(player, () => player.pause());
+      await _withFadedAudio(player, () => player.pause());
     } else {
-      await _withSilencedAudio(player, () => player.play());
+      // 播放分支：当前是 paused 状态本来就无声，不需要 fade out（否则
+      // 白白延迟 ~80ms 才出声，按键体感发木）。直接把音量压到 0、
+      // 立刻 play、再 fade in，按键灵敏 + 无 click。
+      try {
+        await player.setVolume(0);
+      } catch (_) {}
+      try {
+        await player.play();
+      } catch (_) {}
+      if (!_disposed) {
+        await Future.delayed(const Duration(milliseconds: 25));
+      }
+      if (!_disposed) {
+        await _fadeVolume(player, 0, 100, durationMs: 90);
+      }
     }
   }
 
-  /// 临时把 `player` 的输出音量降为 0，调用 [op]，等 [op] 跑完并稍作等待
-  /// 后再把音量恢复到 100。配合 [_baseVolumeAt100] 使用。
+  /// 在 mpv 上做一次"音量渐变"：分 [steps] 步、在 [durationMs] 内
+  /// 用 smoothstep 曲线从 [from] 平滑过渡到 [to]。
   ///
-  /// 用途：iPad 上 mpv 在 pause/play/seek 等切点会产生短促 pop 声。把
-  /// 切点包在静音窗内，pop 落在 0 振幅区间——用户就听不到杂音了。
+  /// 为什么不能直接 `setVolume(0)` 硬切：
+  ///   1. mpv 的 setVolume 通过 IPC 异步送到 native 音频线程，await
+  ///      返回 ≠ 实际生效，中间还有 5–30ms 抖动；
+  ///   2. native 输出环里通常已经塞了 ~100ms 旧 PCM，硬切到 0 时这
+  ///      一段还是会被推到喇叭，pop 仍然听得到；
+  ///   3. 硬切自身就是 step function，振幅过 0 那一帧本身就是 click。
   ///
-  /// 静音持续时间 ~80ms（op 自身耗时 + 50ms 让 mpv 队列把新一帧音频
-  /// 推到输出环），对正常使用基本不可感知。
-  Future<void> _withSilencedAudio(
+  /// 多步小幅 setVolume + smoothstep 把 step 拆成连续小台阶，听感上
+  /// 就是平滑的"音量淡进淡出"，pop 被洗掉。
+  Future<void> _fadeVolume(
     Player player,
-    Future<void> Function() op,
-  ) async {
-    try {
-      await player.setVolume(0);
-    } catch (_) {}
+    double from,
+    double to, {
+    int durationMs = 80,
+    int steps = 8,
+  }) async {
+    if (_disposed) return;
+    if (steps <= 1 || (from - to).abs() < 0.5) {
+      try {
+        await player.setVolume(to.clamp(0, 100).toDouble());
+      } catch (_) {}
+      return;
+    }
+    final stepDelay = math.max(1, durationMs ~/ steps);
+    for (var i = 1; i <= steps; i++) {
+      if (_disposed) return;
+      final t = i / steps;
+      final eased = t * t * (3 - 2 * t);
+      final v = from + (to - from) * eased;
+      try {
+        await player.setVolume(v.clamp(0, 100).toDouble());
+      } catch (_) {}
+      if (i < steps) {
+        await Future.delayed(Duration(milliseconds: stepDelay));
+      }
+    }
+  }
+
+  /// 把任何会产生 pop 的切点（pause/play/seek 等）包进
+  /// 「fade-out → 等 mpv 输出环 drain → op → 等新帧 push 进来 → fade-in」
+  /// 这一整段静音窗里。替代原先硬切 mute 的做法，是 iPad 上消除"呲"声
+  /// 的关键。
+  ///
+  /// - [fadeOutMs] 渐隐时长，覆盖 mpv 当前帧到 0 振幅；
+  /// - [holdBeforeMs] 渐隐到底后再多压一会儿，让 native audio 输出环
+  ///   把"还在路上的"旧 PCM 全部推完；
+  /// - [op] 真正的切点操作（pause / play / seek...）；
+  /// - [holdAfterMs] op 后再静音一会儿，让 mpv 把目标位置的新 PCM 推
+  ///   到输出环；如果立刻 fade in 会先听到旧位置/静默残响，反而显眼；
+  /// - [fadeInMs] 渐升时长，让目标位置的音频从 0 平滑变响。
+  Future<void> _withFadedAudio(
+    Player player,
+    Future<void> Function() op, {
+    int fadeOutMs = 60,
+    int holdBeforeMs = 25,
+    int holdAfterMs = 70,
+    int fadeInMs = 90,
+  }) async {
+    await _fadeVolume(player, 100, 0, durationMs: fadeOutMs);
+    if (holdBeforeMs > 0 && !_disposed) {
+      await Future.delayed(Duration(milliseconds: holdBeforeMs));
+    }
     try {
       await op();
     } finally {
-      try {
-        await Future.delayed(const Duration(milliseconds: 50));
-        if (!_disposed) {
-          await player.setVolume(100);
+      if (!_disposed) {
+        if (holdAfterMs > 0) {
+          await Future.delayed(Duration(milliseconds: holdAfterMs));
         }
-      } catch (_) {}
+        if (!_disposed) {
+          await _fadeVolume(player, 0, 100, durationMs: fadeInMs);
+        }
+      }
     }
   }
 
@@ -416,15 +483,16 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       state = state.copyWith(position: target);
     }
 
-    // iPad 上拖进度条会持续产生 pop——同样用静音窗包住整段 seek 循环，
-    // 等用户松手、所有 pending 目标处理完再恢复音量。详见 [_withSilencedAudio]。
+    // iPad 上拖进度条会持续产生 pop——把整段 seek 循环包在一段
+    // fade-out → 反复 seek → 等输出环吐出目标位置 PCM → fade-in 的
+    // 静音窗里。比原先"硬切 setVolume(0)"更彻底：硬切对 mpv 的 IPC
+    // setVolume 来说不是即时生效（参见 [_fadeVolume] 的注释），输出
+    // 环里的旧帧仍会被推到喇叭；多步渐隐才能真正盖掉切点的 click。
     Player? mutedPlayer;
     try {
       mutedPlayer = _player;
       if (mutedPlayer != null) {
-        try {
-          await mutedPlayer.setVolume(0);
-        } catch (_) {}
+        await _fadeVolume(mutedPlayer, 100, 0, durationMs: 60);
       }
       while (true) {
         final player = _player;
@@ -451,14 +519,15 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       }
     } finally {
       _seekInFlight = false;
-      // 等 mpv 把目标位置的音频帧推到输出，再恢复音量；否则会先听到一下
-      // "啊—"再到目标位置的音乐，反而更明显。
+      // 用户松手后，再多压 ~120ms 让 mpv 把目标位置的新 PCM 推到输出
+      // 环；否则会先听到一段"啊—"或杂音再切到目标音乐，比原来的 pop
+      // 更刺耳。然后用 fade-in 平滑恢复，避免恢复瞬间又出 click。
       final p = mutedPlayer;
-      if (p != null) {
+      if (p != null && !_disposed) {
         try {
-          await Future.delayed(const Duration(milliseconds: 60));
+          await Future.delayed(const Duration(milliseconds: 120));
           if (!_disposed) {
-            await p.setVolume(100);
+            await _fadeVolume(p, 0, 100, durationMs: 90);
           }
         } catch (_) {}
       }
@@ -683,9 +752,14 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       if (isStale()) return;
       final player = _ensurePlayer();
       debugPrint('MusicPlay audio open: ${track.url}');
+      // 切歌前可能 seek/pause 的 fade 流程被 ticket 抢占或 dispose
+      // 中断，留下 setVolume 还停在 0 的状态。这里在新 track 打开前
+      // 显式回到 100，避免"切下一首没声音"的玄学 bug。
+      try {
+        await player.setVolume(100);
+      } catch (_) {}
       await player.open(Media(track.url), play: play);
       if (isStale()) return;
-      // 应用当前的速度/音高（用户在切歌前可能已经调过）。
       try {
         await player.setRate(state.speed);
       } catch (_) {}

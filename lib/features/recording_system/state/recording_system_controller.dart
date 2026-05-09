@@ -643,22 +643,46 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       final hasPermission = await recorder.hasPermission();
       if (!hasPermission) return _zhMicPermission;
 
-      final path = _buildRecordingPath();
-      _currentRecordingPath = path;
-      await recorder.start(path: path);
-
-      // Wire up amplitude + stopwatch only AFTER start() resolves, so we
-      // don't leak listeners on a recorder that never actually went hot.
-      _amplitudeSub = recorder.amplitudes.listen(_onAmplitude, onError: (_) {});
+      // Permission is granted at this point. iOS first-launch is the
+      // critical path: between `hasPermission` (which dismisses the
+      // system mic alert) and `recorder.start(...)` actually finishing,
+      // AVAudioSession needs to switch category + activate the input,
+      // which can take several hundred milliseconds. If we wait until
+      // start() resolves before flipping `recordingPhase` and starting
+      // the stopwatch, the user just sees the idle UI frozen for that
+      // entire window the first time they ever record. Show the
+      // recording UI + start the wallclock immediately so the user gets
+      // feedback the instant they tap "Allow", and roll back if the
+      // engine actually fails to come up.
+      if (mounted) {
+        state = state.copyWith(
+          recordingPhase: RecordingPhase.recording,
+          clearError: true,
+          elapsedMs: 0,
+          liveWaveform: const <double>[],
+        );
+      }
+      _preparedPlayerSource = null;
       _startStopwatch();
 
-      state = state.copyWith(
-        recordingPhase: RecordingPhase.recording,
-        clearError: true,
-        elapsedMs: 0,
-        liveWaveform: const <double>[],
-      );
-      _preparedPlayerSource = null;
+      final path = _buildRecordingPath();
+      _currentRecordingPath = path;
+      try {
+        await recorder.start(path: path);
+      } catch (error) {
+        // Engine actually failed to come up: roll the UI back so the
+        // user can retry, and let the outer catch surface a proper
+        // localized message.
+        _resetTimers();
+        if (mounted) {
+          state = state.copyWith(recordingPhase: RecordingPhase.idle);
+        }
+        rethrow;
+      }
+
+      // Wire up amplitude only AFTER start() resolves ? a stream
+      // attached on a recorder that never went hot would just leak.
+      _amplitudeSub = recorder.amplitudes.listen(_onAmplitude, onError: (_) {});
       return null;
     } on MissingPluginException {
       if (mounted) state = state.copyWith(recordingPhase: RecordingPhase.idle);

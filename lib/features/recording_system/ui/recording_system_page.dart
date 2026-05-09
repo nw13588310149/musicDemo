@@ -2474,8 +2474,10 @@ class _LiveDarkWavePanel extends StatelessWidget {
 /// 把 [waveform]（录制阶段实时采样得到的振幅快照；或服务端已存录音的
 /// seed 占位）画成静态柱状条，并叠一根跟随 [positionMs] / [durationMs]
 /// 移动的进度光标——光标左侧的条用紫色亮起，右侧灰色。整片面板支持
-/// 拖动 / 点击定位，触摸 ratio 通过 [onSeekRatio] 回到 controller。
-class _PreviewDarkWavePanel extends StatelessWidget {
+/// 拖动 / 点击定位：拖动期间 cursor 用本地手指 ratio 实时跟手，丝滑
+/// 不卡（不会每帧都 await 一次 just_audio 的 `seek`）；松手时一次性
+/// 把最终 ratio 通过 [onSeekRatio] commit 给 controller。
+class _PreviewDarkWavePanel extends StatefulWidget {
   const _PreviewDarkWavePanel({
     required this.waveform,
     required this.positionMs,
@@ -2491,6 +2493,20 @@ class _PreviewDarkWavePanel extends StatelessWidget {
   final ValueChanged<double> onSeekRatio;
 
   @override
+  State<_PreviewDarkWavePanel> createState() => _PreviewDarkWavePanelState();
+}
+
+class _PreviewDarkWavePanelState extends State<_PreviewDarkWavePanel> {
+  /// 拖拽期间的临时 cursor ratio（0..1）。`null` 表示当前没在拖，
+  /// cursor 跟随 [widget.positionMs] / [widget.durationMs]。
+  double? _dragRatio;
+
+  double _localToRatio(double dx, double width) {
+    if (width <= 0) return 0;
+    return (dx / width).clamp(0.0, 1.0).toDouble();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return _DarkWaveFrame(
@@ -2500,36 +2516,66 @@ class _PreviewDarkWavePanel extends StatelessWidget {
           return RepaintBoundary(
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
+              // 单击直接 commit seek 到目标位置。
               onTapDown: (details) {
-                final ratio = (details.localPosition.dx / size.width)
-                    .clamp(0.0, 1.0)
-                    .toDouble();
-                onSeekRatio(ratio);
+                widget.onSeekRatio(
+                  _localToRatio(details.localPosition.dx, size.width),
+                );
+              },
+              // 横向拖拽：每次只刷本地 _dragRatio（局部 setState
+              // 触发 cursor 重绘），不调 seek，避免 just_audio 在
+              // native 上 await 串行化 seek 让 cursor 卡顿。
+              onHorizontalDragStart: (details) {
+                setState(() {
+                  _dragRatio = _localToRatio(
+                    details.localPosition.dx,
+                    size.width,
+                  );
+                });
               },
               onHorizontalDragUpdate: (details) {
-                final ratio = (details.localPosition.dx / size.width)
-                    .clamp(0.0, 1.0)
-                    .toDouble();
-                onSeekRatio(ratio);
+                setState(() {
+                  _dragRatio = _localToRatio(
+                    details.localPosition.dx,
+                    size.width,
+                  );
+                });
+              },
+              onHorizontalDragEnd: (_) {
+                final ratio = _dragRatio;
+                if (ratio != null) {
+                  widget.onSeekRatio(ratio);
+                }
+                setState(() {
+                  _dragRatio = null;
+                });
+              },
+              onHorizontalDragCancel: () {
+                setState(() {
+                  _dragRatio = null;
+                });
               },
               child: ValueListenableBuilder<int>(
-                valueListenable: positionMs,
+                valueListenable: widget.positionMs,
                 builder: (context, positionValue, _) {
                   return ValueListenableBuilder<int>(
-                    valueListenable: durationMs,
+                    valueListenable: widget.durationMs,
                     builder: (context, durationValue, _) {
                       final total = durationValue > 0
                           ? durationValue
-                          : fallbackDurationMs;
-                      final ratio = total <= 0
-                          ? 0.0
-                          : (positionValue / total)
-                              .clamp(0.0, 1.0)
-                              .toDouble();
+                          : widget.fallbackDurationMs;
+                      // 拖拽中：用本地 _dragRatio；否则用真实播放
+                      // position 推算的 ratio。
+                      final ratio = _dragRatio ??
+                          (total <= 0
+                              ? 0.0
+                              : (positionValue / total)
+                                  .clamp(0.0, 1.0)
+                                  .toDouble());
                       return CustomPaint(
                         size: size,
                         painter: _PreviewWavePainter(
-                          samples: waveform,
+                          samples: widget.waveform,
                           progressRatio: ratio,
                           barWidth: ui(2),
                           spacing: ui(5),
@@ -2790,6 +2836,9 @@ class _DarkScrubberPanel extends StatelessWidget {
                       color: const Color(0xFF747474),
                       fontFamily: 'PingFang SC',
                       fontWeight: AppFont.w500,
+                      fontFeatures: const <FontFeature>[
+                        FontFeature.tabularFigures(),
+                      ],
                     ),
                   ),
                 ),
@@ -2803,6 +2852,9 @@ class _DarkScrubberPanel extends StatelessWidget {
                       color: const Color(0xFF747474),
                       fontFamily: 'PingFang SC',
                       fontWeight: AppFont.w500,
+                      fontFeatures: const <FontFeature>[
+                        FontFeature.tabularFigures(),
+                      ],
                     ),
                   ),
                 ),
@@ -2845,6 +2897,11 @@ class _GraniteTimerCapsule extends StatelessWidget {
       ),
       child: Text(
         label,
+        // 计时器以 33ms 频率刷新，"1"/"7" 比 "0"/"8" 窄，普通字体下
+        // Text 居中渲染会让整段文本宽度每次刷新都变化，肉眼看是数字
+        // 在水平方向高频左右抖动。`FontFeature.tabularFigures()` 强
+        // 制 OpenType "tnum"，每个数字字符占一致宽度（等宽），位置
+        // 锁死，整段文本不再因数值变化而抖。
         style: TextStyle(
           fontSize: ui(28),
           color: const Color(0xFFABA1B7),
@@ -2852,6 +2909,7 @@ class _GraniteTimerCapsule extends StatelessWidget {
           fontWeight: FontWeight.w600,
           height: 1.0,
           letterSpacing: 1.5,
+          fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
         ),
       ),
     );
