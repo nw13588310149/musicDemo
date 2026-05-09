@@ -2584,9 +2584,11 @@ class _LiveWavePainter extends CustomPainter {
     final start = samples.length > maxBars ? samples.length - maxBars : 0;
     final visible = samples.sublist(start);
 
-    // Right-anchor the latest sample; older samples slide off the left.
+    // Fill from left to right. Once the panel is full, keep the newest
+    // window but preserve chronological order: oldest visible on the left,
+    // newest visible on the right.
     final stride = spacing;
-    final firstX = size.width - (visible.length * stride) + stride / 2;
+    final firstX = stride / 2;
     for (var i = 0; i < visible.length; i++) {
       final amp = visible[i].clamp(0.05, 1.0);
       final halfH = (size.height / 2 - 4) * amp;
@@ -2677,7 +2679,7 @@ class _PreviewWavePainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
 
     for (var i = 0; i < barCount; i++) {
-      final sample = samples[(i * samples.length) ~/ barCount];
+      final sample = _bucketPeak(samples, i, barCount);
       final amp = (sample.abs() / normalizer).clamp(0.05, 1.0);
       final halfH = (size.height / 2 - 4) * amp;
       final x = i * stride + stride / 2;
@@ -2698,6 +2700,20 @@ class _PreviewWavePainter extends CustomPainter {
       Offset(cursorX, size.height - 4),
       cursorPaint,
     );
+  }
+
+  double _bucketPeak(List<double> values, int bucket, int bucketCount) {
+    final start = (bucket * values.length) ~/ bucketCount;
+    final end = math.max(
+      start + 1,
+      ((bucket + 1) * values.length) ~/ bucketCount,
+    );
+    var peak = 0.0;
+    for (var i = start; i < end && i < values.length; i++) {
+      final value = values[i].abs();
+      if (value > peak) peak = value;
+    }
+    return peak;
   }
 
   @override
