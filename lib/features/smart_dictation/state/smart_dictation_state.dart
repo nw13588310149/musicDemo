@@ -316,33 +316,42 @@ class SmartDictationState {
       'a2',
     ];
 
+    // 音程识别按钮文案：去掉「度」字 + 按用户提供的截图顺序排版。
+    // 顺序：纯一 / 纯八 / 大二 / 小二 / 大三 → 小三 / 纯四 / 增四减五
+    //       / 纯五 / 大六 → 小六 / 大七 / 小七。
+    // 这里的字面值同时被 [_intervalSemitoneMap] 当作 key 使用，两边
+    // 必须保持一致；改这里别忘了同步更新 controller 里的半音映射表。
     const intervalPool = <String>[
-      '纯一度',
-      '小二度',
-      '大二度',
-      '小三度',
-      '大三度',
-      '纯四度',
-      '增四度/减五度',
-      '纯五度',
-      '小六度',
-      '大六度',
-      '小七度',
-      '大七度',
-      '纯八度',
+      '纯一',
+      '纯八',
+      '大二',
+      '小二',
+      '大三',
+      '小三',
+      '纯四',
+      '增四/减五',
+      '纯五',
+      '大六',
+      '小六',
+      '大七',
+      '小七',
     ];
 
+    // 和弦识别按钮文案：去掉「和弦」二字，保留种类前缀。
+    // 顺序按用户截图：大三 / 小三 / 减三 / 增三 / 大六 → 小六 / 减六
+    //                / 大四六 / 小四六 / 减四六。
+    // 字面值同时是 [_chordIntervalMap] 的 key，改动需同步 controller。
     const chordPool = <String>[
-      '大三和弦',
-      '小三和弦',
-      '减三和弦',
-      '增三和弦',
-      '大六和弦',
-      '小六和弦',
-      '减六和弦',
-      '大四六和弦',
-      '小四六和弦',
-      '减四六和弦',
+      '大三',
+      '小三',
+      '减三',
+      '增三',
+      '大六',
+      '小六',
+      '减六',
+      '大四六',
+      '小四六',
+      '减四六',
     ];
 
     return const SmartDictationState(
@@ -371,7 +380,9 @@ class SmartDictationState {
         questionCount: 15,
         minNote: 'f',
         maxNote: 'a2',
-        intervalPlayMode: SmartIntervalPlayMode.melodic,
+        // 应用户要求：音程识别的"音程方式"默认值改为「和声音程」（同时奏响），
+        // 与和弦练习一致；旧版默认是「旋律音程」（先后奏响）。
+        intervalPlayMode: SmartIntervalPlayMode.harmonic,
       ),
       chordConfig: SmartPracticeConfig(
         optionPool: chordPool,

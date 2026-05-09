@@ -263,14 +263,30 @@ class CloudDriveController extends StateNotifier<CloudDriveState> {
   }
 
   void setSortType(CloudDriveSortType sortType) {
-    final sortAscending = state.sortType == sortType
-        ? !state.sortAscending
-        : true;
+    // 工具栏「排序」按钮会回传 `state.sortType`，所以默认状态（none）下点击
+    // 按钮等于 `setSortType(none)`。这种情况下 toggle ascending 是无效操作
+    // （none 永远保持接口顺序），因此把首次点击重定向到「名称升序」，让
+    // 排序按钮在默认态下也有真实的视觉反馈；后续点击则维持「同 sortType
+    // 切换升降序、不同 sortType 重置为升序」的既有交互。
+    CloudDriveSortType targetType = sortType;
+    bool sortAscending;
+    if (sortType == CloudDriveSortType.none) {
+      if (state.sortType == CloudDriveSortType.none) {
+        targetType = CloudDriveSortType.name;
+        sortAscending = true;
+      } else {
+        sortAscending = state.sortAscending;
+      }
+    } else if (state.sortType == sortType) {
+      sortAscending = !state.sortAscending;
+    } else {
+      sortAscending = true;
+    }
     state = state.copyWith(
-      sortType: sortType,
+      sortType: targetType,
       sortAscending: sortAscending,
-      files: _sortFiles(state.files, sortType, sortAscending),
-      folders: _sortFolders(state.folders, sortType, sortAscending),
+      files: _sortFiles(state.files, targetType, sortAscending),
+      folders: _sortFolders(state.folders, targetType, sortAscending),
     );
   }
 
@@ -1057,9 +1073,14 @@ class CloudDriveController extends StateNotifier<CloudDriveState> {
     CloudDriveSortType sortType,
     bool ascending,
   ) {
+    // 默认状态下不做客户端再排序，直接保留接口返回的顺序。
+    if (sortType == CloudDriveSortType.none) {
+      return <CloudFileItem>[...files];
+    }
     final sorted = <CloudFileItem>[...files];
     sorted.sort((a, b) {
       final result = switch (sortType) {
+        CloudDriveSortType.none => 0,
         CloudDriveSortType.name => a.title.compareTo(b.title),
         CloudDriveSortType.time => _parseDateValue(
           a.dateLabel,
@@ -1079,6 +1100,9 @@ class CloudDriveController extends StateNotifier<CloudDriveState> {
     CloudDriveSortType sortType,
     bool ascending,
   ) {
+    if (sortType == CloudDriveSortType.none) {
+      return <CloudFolderItem>[...folders];
+    }
     final sorted = <CloudFolderItem>[...folders];
     sorted.sort((a, b) {
       if (a.isCreateShortcut != b.isCreateShortcut) {
@@ -1096,6 +1120,7 @@ class CloudDriveController extends StateNotifier<CloudDriveState> {
     CloudDriveSortType sortType,
   ) {
     final primary = switch (sortType) {
+      CloudDriveSortType.none => 0,
       CloudDriveSortType.name => a.title.compareTo(b.title),
       CloudDriveSortType.time => _parseDateValue(
         a.dateLabel,

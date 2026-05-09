@@ -50,6 +50,17 @@ dependencies:
   media_kit_libs_video: ^1.0.5
   flutter_soloud: ^4.0.2
   record: ^6.1.2
+  # 录音系统专用：Simform 团队维护的成熟波形组件库。
+  # - RecorderController：iOS / Android 原生录音 + 实时振幅采样，自带
+  #   ChangeNotifier，UI 用 AnimatedBuilder 局部订阅，秒表 / 波形互不
+  #   影响（替换原本基于 record + Timer.periodic 的 10Hz 全树重建路径）。
+  # - PlayerController + AudioFileWaveforms：试听阶段直接抽取文件波形
+  #   并渲染，自带可拖动光标，告别我们手写的 _DarkWavePainter + 自制
+  #   光标 + 时间刻度三件套（这是用户反馈"卡顿"的最大来源）。
+  # 该插件目前仅注册 android / ios 平台通道：Windows / macOS 桌面调试
+  # 模式下调用会抛 MissingPluginException——controller 里所有调用都
+  # 包了 try/catch，桌面模式不会崩，只是录音 / 试听不可用。
+  audio_waveforms: ^2.0.2
   pitch_detector_dart: ^0.0.7
   web: ^1.1.1
   photo_view: ^0.15.0

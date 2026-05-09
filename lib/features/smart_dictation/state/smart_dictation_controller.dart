@@ -46,6 +46,13 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
   bool _cueInFlight = false;
   bool _resumeAfterExitDialog = false;
 
+  /// 已经成功拉过 `/app/user/smartDictationList` 的 track 缓存。
+  /// 用户进入页面时只拉默认 track（绝对音感）的列表；切到音程 / 和弦
+  /// tab 时再按需拉取，避免一进入就并行打 3 个接口。
+  /// 拉成功后写入这里，后续切回不再重复请求；只有 [_refreshTrackLessons]
+  /// 在闯关结算后会主动刷新（绕过缓存）。
+  final Set<SmartDictationTrack> _loadedTracks = <SmartDictationTrack>{};
+
   Future<void> bootstrap() async {
     state = state.copyWith(
       bootstrapping: true,
@@ -58,7 +65,9 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
       await Future.wait(<Future<void>>[
         _prepareAudio(),
         _loadVipInfo(),
-        refreshLessons(),
+        // 仅拉当前激活 track 的关卡列表（默认是绝对音感 type=0），
+        // 其它 track 等用户切到对应 tab 时再按需拉取。
+        _ensureTrackLessonsLoaded(state.activeTrack),
       ]);
     } catch (_) {
       state = state.copyWith(errorMessage: '智能听写初始化失败，请稍后重试');
@@ -67,25 +76,52 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
     state = state.copyWith(bootstrapping: false);
   }
 
+  /// 兼容旧调用：现在等价于"刷新当前激活 track 的列表"。
+  /// 历史上这里会并行拉 3 份接口，会让进入页面瞬间打 3 个 HTTP，
+  /// 现已收敛为单 track，按需 + 缓存。
   Future<void> refreshLessons() async {
+    await _loadTrackLessons(state.activeTrack);
+  }
+
+  /// 按需加载指定 track 的关卡列表：
+  /// - 已加载过则直接返回（[_loadedTracks] 命中）；
+  /// - 未加载则拉取一次，并将结果写回 state 与缓存。
+  /// 切换 track tab 时由 [setTrack] 调用，bootstrap 时由初始化逻辑调用。
+  Future<void> _ensureTrackLessonsLoaded(SmartDictationTrack track) async {
+    if (_loadedTracks.contains(track)) {
+      return;
+    }
+    await _loadTrackLessons(track);
+  }
+
+  /// 真正发起请求并把结果写回 state 的内部方法。
+  /// [track] → API 的 type 参数：absolute=0 / interval=1 / chord=2。
+  /// 成功后将 track 标记为 _loadedTracks，让后续切 tab 不再重复发请求。
+  Future<void> _loadTrackLessons(SmartDictationTrack track) async {
+    final type = switch (track) {
+      SmartDictationTrack.absolute => 0,
+      SmartDictationTrack.interval => 1,
+      SmartDictationTrack.chord => 2,
+    };
     state = state.copyWith(loadingLessons: true, clearErrorMessage: true);
     try {
-      final responses = await Future.wait<dynamic>(<Future<dynamic>>[
-        _repository.getSmartDictationList(type: 0),
-        _repository.getSmartDictationList(type: 1),
-        _repository.getSmartDictationList(type: 2),
-      ]);
-
-      final absolute = _parseLessons(responses[0].data);
-      final interval = _parseLessons(responses[1].data);
-      final chord = _parseLessons(responses[2].data);
-
-      state = state.copyWith(
-        loadingLessons: false,
-        absoluteLessons: absolute,
-        intervalLessons: interval,
-        chordLessons: chord,
-      );
+      final response = await _repository.getSmartDictationList(type: type);
+      final lessons = _parseLessons(response.data);
+      _loadedTracks.add(track);
+      switch (track) {
+        case SmartDictationTrack.absolute:
+          state = state.copyWith(
+            loadingLessons: false,
+            absoluteLessons: lessons,
+          );
+        case SmartDictationTrack.interval:
+          state = state.copyWith(
+            loadingLessons: false,
+            intervalLessons: lessons,
+          );
+        case SmartDictationTrack.chord:
+          state = state.copyWith(loadingLessons: false, chordLessons: lessons);
+      }
     } catch (_) {
       state = state.copyWith(
         loadingLessons: false,
@@ -146,6 +182,9 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
       clearErrorMessage: true,
       clearNoticeMessage: true,
     );
+    // 切到新的"闯关练习"时按需拉一次列表（已拉过则直接走缓存，
+    // 不会重复打接口）。这样进入页面瞬间不再并行触发 3 个 HTTP。
+    unawaited(_ensureTrackLessonsLoaded(track));
   }
 
   void setMode(SmartDictationMode mode) {
@@ -707,6 +746,9 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
     try {
       final response = await _repository.getSmartDictationList(type: type);
       final lessons = _parseLessons(response.data);
+      // 闯关结算后这里"静默"刷新该 track 的列表（不动 loadingLessons），
+      // 同时也保证 _loadedTracks 的命中标记仍然存在 / 被补上。
+      _loadedTracks.add(track);
       switch (track) {
         case SmartDictationTrack.absolute:
           state = state.copyWith(absoluteLessons: lessons);
@@ -741,7 +783,15 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
           _toBool(item['unlock']) || _toBool(item['unlocked']) || number == 1;
       final stars = _toInt(item['stars']);
       final pattern = _asString(item['param1']);
-      final optionsRaw = _asString(item['param2']);
+      // 后端字段约定（音程 / 和弦闯关接口）：
+      //   param1 → 题目音组（[F3,A3] 这种数组字面量）。
+      //   param2 → 「0 / 1」播放方式标记（旋律 / 和声），不是选项列表。
+      //   param3 → 该关卡允许出现的可选按键名（用逗号分隔，如「大二,小二」），
+      //            必须与 [SmartDictationState.initial] 里 intervalPool /
+      //            chordPool 的字面值完全一致才能在做题页正确点亮。
+      // 旧版误把 param2 当 optionsRaw 来读，于是切到闯关页时所有按键都
+      // 失效（playable = {"0"} / {"1"}，与任何按钮 label 都对不上）。
+      final optionsRaw = _asString(item['param3']);
 
       list.add(
         SmartDictationLesson(
@@ -1103,36 +1153,40 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
   }
 }
 
+// 音程 → 半音映射。key 与 [SmartDictationState.initial] 里 intervalPool
+// 的字面值保持一致（已去掉「度」字）。两边必须同步更新，否则随机出题
+// 时通过 `_intervalSemitoneMap[label]` 查不到值会回退为 0（纯一度）。
 const Map<String, int> _intervalSemitoneMap = <String, int>{
-  '纯一度': 0,
-  '小二度': 1,
-  '大二度': 2,
-  '小三度': 3,
-  '大三度': 4,
-  '纯四度': 5,
-  '增四度/减五度': 6,
-  '纯五度': 7,
-  '小六度': 8,
-  '大六度': 9,
-  '小七度': 10,
-  '大七度': 11,
-  '纯八度': 12,
+  '纯一': 0,
+  '小二': 1,
+  '大二': 2,
+  '小三': 3,
+  '大三': 4,
+  '纯四': 5,
+  '增四/减五': 6,
+  '纯五': 7,
+  '小六': 8,
+  '大六': 9,
+  '小七': 10,
+  '大七': 11,
+  '纯八': 12,
 };
 
 // 半音步长，对齐 the-road-of-music/pages/SmartDictation/data2.js 中的
 // dataAll[type].s1（在 [F3..D5] 低音上记录的实际音高）。前四个为
 // 原位三和弦，「六」为第一转位、「四六」为第二转位。
+// key 与 chordPool 的按钮文案保持一致（已去掉「和弦」二字）。
 const Map<String, List<int>> _chordIntervalMap = <String, List<int>>{
-  '大三和弦': <int>[0, 4, 7],
-  '小三和弦': <int>[0, 3, 7],
-  '减三和弦': <int>[0, 3, 6],
-  '增三和弦': <int>[0, 4, 8],
-  '大六和弦': <int>[0, 3, 8],
-  '小六和弦': <int>[0, 4, 9],
-  '减六和弦': <int>[0, 3, 9],
-  '大四六和弦': <int>[0, 5, 9],
-  '小四六和弦': <int>[0, 5, 8],
-  '减四六和弦': <int>[0, 6, 9],
+  '大三': <int>[0, 4, 7],
+  '小三': <int>[0, 3, 7],
+  '减三': <int>[0, 3, 6],
+  '增三': <int>[0, 4, 8],
+  '大六': <int>[0, 3, 8],
+  '小六': <int>[0, 4, 9],
+  '减六': <int>[0, 3, 9],
+  '大四六': <int>[0, 5, 9],
+  '小四六': <int>[0, 5, 8],
+  '减四六': <int>[0, 6, 9],
 };
 
 const List<String> _canonicalOrder = <String>[

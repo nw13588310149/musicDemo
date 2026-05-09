@@ -33,6 +33,9 @@ enum CloudFileType {
 enum CloudDriveViewMode { overview, files }
 
 enum CloudDriveSortType {
+  /// 默认状态：保持后端接口返回的原始顺序，不做客户端再排序。
+  /// 仅在用户主动点击「排序」按钮后才切换到下面的真实排序模式。
+  none('默认'),
   name('名称'),
   time('时间'),
   size('大小'),
@@ -202,7 +205,7 @@ class CloudDriveState {
     this.currentFolderId = 0,
     this.files = const [],
     this.selectedFileIds = const [],
-    this.sortType = CloudDriveSortType.size,
+    this.sortType = CloudDriveSortType.none,
     this.sortAscending = true,
     this.storageUsedBytes = 0,
     this.storageTotalBytes = 0,

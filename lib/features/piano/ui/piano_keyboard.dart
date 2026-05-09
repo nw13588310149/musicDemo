@@ -171,6 +171,10 @@ class _PianoKeyboardState extends State<PianoKeyboard> {
   /// 一个 octave 的键。这样的"键盘居中"符合用户对默认视图的预期；如果
   /// 改成把 C4 钉在视口正中（如旧实现），左侧只能露出 5–6 个白键、
   /// 右侧能露出 8–9 个，整个键盘视觉上会"偏左"。
+  ///
+  /// 在原始几何中点的基础上，按用户要求再向右平移一个白键宽度——
+  /// 这样默认视口显示的中央 C 会更贴近视觉正中，整体键盘在视觉上
+  /// 不再偏左。clamp 防止键盘宽度不足以滚动时越界。
   void _scrollToContentCenter({required double viewportWidth}) {
     final whiteKeyWidth = _whiteKeyWidth;
     if (whiteKeyWidth == null) {
@@ -179,7 +183,8 @@ class _PianoKeyboardState extends State<PianoKeyboard> {
     final contentWidth = widget.whiteKeys.length * whiteKeyWidth;
     final maxOffset = math.max(0.0, contentWidth - viewportWidth);
     if (_scroll.hasClients) {
-      _scroll.jumpTo(maxOffset / 2);
+      final target = (maxOffset / 2 + whiteKeyWidth).clamp(0.0, maxOffset);
+      _scroll.jumpTo(target);
     }
   }
 
@@ -1049,7 +1054,6 @@ class _PianoBlackKey extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 1),
       child: LayoutBuilder(
@@ -1080,9 +1084,6 @@ class _PianoBlackKey extends StatelessWidget {
           final offsetX = -(imgW - w) / 2;
           final offsetY = -(imgH - h) / 2;
 
-          // label 字号沿用"按 39.5px 设计宽缩放"的旧逻辑。
-          final scale = w / effectiveW;
-
           return Stack(
             clipBehavior: Clip.none,
             children: <Widget>[
@@ -1101,25 +1102,10 @@ class _PianoBlackKey extends StatelessWidget {
                   frameBuilder: _blackKeyFrameBuilder,
                 ),
               ),
-              if (showLabel)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  // 6 * scale 是切图设计稿原始位置，再额外上移 ui(10)
-                  // 让 F# / G# 等标签离键底有更舒服的呼吸距离。
-                  bottom: 6 * scale + ui(10),
-                  child: Text(
-                    spec.label,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.85),
-                      fontSize: 9 * scale,
-                      fontFamily: 'Manrope',
-                      fontWeight: FontWeight.w600,
-                      height: 1,
-                    ),
-                  ),
-                ),
+              // 黑键不再渲染 F# / G# 等音名标签：
+              // 用户要求打开"显示标签"开关时仅在白键上显示音名 / 简谱，
+              // 黑键保持纯键面，避免上方密集小字干扰阅读。[showLabel]
+              // 仍保留以兼容外部 API，这里有意忽略。
             ],
           );
         },

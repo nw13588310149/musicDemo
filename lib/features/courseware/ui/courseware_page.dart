@@ -30,6 +30,10 @@ class MyCloudDrivePage extends ConsumerStatefulWidget {
 class _MyCloudDrivePageState extends ConsumerState<MyCloudDrivePage> {
   late final TextEditingController _searchController;
   String _keyword = '';
+  CloudFileItem? _renamingFile;
+  TextEditingController? _fileRenameController;
+  FocusNode? _fileRenameFocusNode;
+  bool _fileRenameSubmitting = false;
 
   @override
   void initState() {
@@ -43,6 +47,8 @@ class _MyCloudDrivePageState extends ConsumerState<MyCloudDrivePage> {
     _searchController
       ..removeListener(_handleSearchChanged)
       ..dispose();
+    _fileRenameController?.dispose();
+    _fileRenameFocusNode?.dispose();
     super.dispose();
   }
 
@@ -54,6 +60,74 @@ class _MyCloudDrivePageState extends ConsumerState<MyCloudDrivePage> {
     setState(() {
       _keyword = value;
     });
+  }
+
+  void _openFileRenameOverlay(CloudFileItem item) {
+    _fileRenameController?.dispose();
+    _fileRenameFocusNode?.dispose();
+
+    final controller = TextEditingController(text: item.title);
+    controller.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: item.title.length,
+    );
+
+    final focusNode = FocusNode();
+    setState(() {
+      _renamingFile = item;
+      _fileRenameController = controller;
+      _fileRenameFocusNode = focusNode;
+      _fileRenameSubmitting = false;
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      focusNode.requestFocus();
+    });
+  }
+
+  void _closeFileRenameOverlay() {
+    final controller = _fileRenameController;
+    final focusNode = _fileRenameFocusNode;
+    setState(() {
+      _renamingFile = null;
+      _fileRenameController = null;
+      _fileRenameFocusNode = null;
+      _fileRenameSubmitting = false;
+    });
+    controller?.dispose();
+    focusNode?.dispose();
+  }
+
+  Future<void> _submitFileRenameOverlay() async {
+    final item = _renamingFile;
+    final inputController = _fileRenameController;
+    if (item == null || inputController == null || _fileRenameSubmitting) {
+      return;
+    }
+
+    final nextTitle = inputController.text.trim();
+    if (nextTitle.isEmpty) {
+      _showMessage('请输入新的资料标题');
+      return;
+    }
+    if (nextTitle == item.title) {
+      _closeFileRenameOverlay();
+      return;
+    }
+
+    setState(() {
+      _fileRenameSubmitting = true;
+    });
+    final driveController = ref.read(cloudDriveControllerProvider.notifier);
+    final message = await driveController.renameCourseware(item.id, nextTitle);
+    if (!mounted) {
+      return;
+    }
+    _closeFileRenameOverlay();
+    _showMessage(message ?? '资料标题已更新');
   }
 
   @override
@@ -163,6 +237,18 @@ class _MyCloudDrivePageState extends ConsumerState<MyCloudDrivePage> {
                           ),
                         ),
                       ),
+                    ),
+                  ),
+                if (_renamingFile != null &&
+                    _fileRenameController != null &&
+                    _fileRenameFocusNode != null)
+                  Positioned.fill(
+                    child: _FileRenameInlineOverlay(
+                      controller: _fileRenameController!,
+                      focusNode: _fileRenameFocusNode!,
+                      submitting: _fileRenameSubmitting,
+                      onCancel: _closeFileRenameOverlay,
+                      onConfirm: _submitFileRenameOverlay,
                     ),
                   ),
               ],
@@ -318,21 +404,7 @@ class _MyCloudDrivePageState extends ConsumerState<MyCloudDrivePage> {
         controller.openPreview(item);
         break;
       case _CloudFileAction.rename:
-        final nextTitle = await showTextInputDialog(
-          context: context,
-          title: '重命名资料',
-          hintText: '请输入新的资料标题',
-          initialValue: item.title,
-          confirmLabel: '保存',
-        );
-        if (nextTitle == null || nextTitle.isEmpty || nextTitle == item.title) {
-          return;
-        }
-        final message = await controller.renameCourseware(item.id, nextTitle);
-        if (!mounted) {
-          return;
-        }
-        _showMessage(message ?? '资料标题已更新');
+        _openFileRenameOverlay(item);
         break;
       case _CloudFileAction.share:
         final classes = await controller.fetchShareClasses();
@@ -444,6 +516,135 @@ class _MyCloudDrivePageState extends ConsumerState<MyCloudDrivePage> {
 
   void _showMessage(String message) {
     AppToast.show(context, message, duration: const Duration(seconds: 2));
+  }
+}
+
+class _FileRenameInlineOverlay extends StatelessWidget {
+  const _FileRenameInlineOverlay({
+    required this.controller,
+    required this.focusNode,
+    required this.submitting,
+    required this.onCancel,
+    required this.onConfirm,
+  });
+
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final bool submitting;
+  final VoidCallback onCancel;
+  final Future<void> Function() onConfirm;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Material(
+      color: Colors.black.withValues(alpha: 0.18),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: ui(420)),
+          child: Material(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(ui(24)),
+            clipBehavior: Clip.antiAlias,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(ui(24), ui(28), ui(24), ui(20)),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '重命名资料',
+                    style: TextStyle(
+                      fontSize: ui(18),
+                      color: const Color(0xFF0B081A),
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w600,
+                    ),
+                  ),
+                  SizedBox(height: ui(20)),
+                  SizedBox(
+                    height: ui(45),
+                    child: TextField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      autofocus: true,
+                      enabled: !submitting,
+                      keyboardType: TextInputType.text,
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: (_) {
+                        if (!submitting) {
+                          onConfirm();
+                        }
+                      },
+                      textAlignVertical: TextAlignVertical.center,
+                      cursorColor: const Color(0xFF8741FF),
+                      cursorWidth: 1.5,
+                      cursorHeight: ui(16),
+                      style: TextStyle(
+                        fontSize: ui(14),
+                        color: const Color(0xFF0B081A),
+                        fontFamily: 'PingFang SC',
+                        fontWeight: AppFont.w400,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: '请输入新的资料标题',
+                        counterText: '',
+                        hintStyle: TextStyle(
+                          fontSize: ui(14),
+                          color: const Color(0xFFB6B5BB),
+                          fontFamily: 'PingFang SC',
+                          fontWeight: AppFont.w400,
+                          height: 12 / 14,
+                        ),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: ui(13),
+                          vertical: ui(12),
+                        ),
+                        filled: true,
+                        fillColor: Colors.white,
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(ui(12)),
+                          borderSide: BorderSide(
+                            color: const Color(0xFFF3F2F3),
+                            width: ui(1),
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(ui(12)),
+                          borderSide: BorderSide(
+                            color: const Color(0xFFD9C7FF),
+                            width: ui(1),
+                          ),
+                        ),
+                        disabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(ui(12)),
+                          borderSide: BorderSide(
+                            color: const Color(0xFFF3F2F3),
+                            width: ui(1),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: ui(24)),
+                  AppDialogActionBar(
+                    cancelLabel: '取消',
+                    confirmLabel: submitting ? '保存中...' : '保存',
+                    confirmEnabled: !submitting,
+                    onCancel: submitting ? () {} : onCancel,
+                    onConfirm: () {
+                      if (!submitting) {
+                        onConfirm();
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -1909,10 +2110,11 @@ class _PreviewHeaderBar extends StatelessWidget {
                       ),
                     ),
                     SizedBox(width: ui(6)),
-                    Icon(
-                      Icons.edit_outlined,
-                      size: ui(14),
-                      color: const Color(0xFF8741FF),
+                    Image.asset(
+                      AppAssets.homeRename,
+                      width: ui(20),
+                      height: ui(20),
+                      fit: BoxFit.contain,
                     ),
                   ],
                 ),

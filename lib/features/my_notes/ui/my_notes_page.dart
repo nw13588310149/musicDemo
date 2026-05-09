@@ -62,6 +62,7 @@ class _MyNotesPageState extends ConsumerState<MyNotesPage> {
         onPanStart: _handlePanStart,
         onPanUpdate: _handlePanUpdate,
         onPanEnd: _handlePanEnd,
+        onPanCancel: _handlePanCancel,
         onSave: _saveEditorImage,
       ),
     };
@@ -206,6 +207,16 @@ class _MyNotesPageState extends ConsumerState<MyNotesPage> {
   void _handlePanEnd(DragEndDetails details) {
     if (_activeStroke.length >= 2) {
       ref.read(myNotesControllerProvider.notifier).addStroke(_activeStroke);
+    }
+    setState(() => _activeStroke = const <Offset>[]);
+  }
+
+  /// 多指落下时（≥2 根手指）由 [_NoteEditorView] 主动调用：丢弃此前
+  /// 单指开启的半截笔画，把绘制权让给 [InteractiveViewer] 的缩放手势，
+  /// 避免 iPad 上"两指捏合 = 顺手画一道"。
+  void _handlePanCancel() {
+    if (_activeStroke.isEmpty) {
+      return;
     }
     setState(() => _activeStroke = const <Offset>[]);
   }
@@ -1015,7 +1026,7 @@ class _TemplatePreviewCard extends StatelessWidget {
   }
 }
 
-class _NoteEditorView extends StatelessWidget {
+class _NoteEditorView extends StatefulWidget {
   const _NoteEditorView({
     required this.boundaryKey,
     required this.state,
@@ -1028,6 +1039,7 @@ class _NoteEditorView extends StatelessWidget {
     required this.onPanStart,
     required this.onPanUpdate,
     required this.onPanEnd,
+    required this.onPanCancel,
     required this.onSave,
   });
 
@@ -1042,12 +1054,83 @@ class _NoteEditorView extends StatelessWidget {
   final GestureDragStartCallback onPanStart;
   final GestureDragUpdateCallback onPanUpdate;
   final GestureDragEndCallback onPanEnd;
+
+  /// 多指落下时由 [_NoteEditorViewState] 主动调用：让父级丢弃半截笔画，
+  /// 把绘制权让给 [InteractiveViewer] 接管的缩放手势。
+  final VoidCallback onPanCancel;
   final Future<void> Function() onSave;
+
+  @override
+  State<_NoteEditorView> createState() => _NoteEditorViewState();
+}
+
+class _NoteEditorViewState extends State<_NoteEditorView> {
+  /// 当前在画布命中区域内按下的指针数。等于 1 时按"绘制"处理；≥ 2 时
+  /// 主动废弃笔画并把 2 指捏合 / 平移交给 [InteractiveViewer]。
+  int _pointerCount = 0;
+
+  /// 缩放视图自带的状态控制器。仅用来在面板里读取/重置 transform，
+  /// 后续如果想加"恢复 100%"按钮直接 `.reset()` 即可。
+  late final TransformationController _viewerController =
+      TransformationController();
+
+  @override
+  void dispose() {
+    _viewerController.dispose();
+    super.dispose();
+  }
+
+  void _onPointerDown(PointerDownEvent event) {
+    _pointerCount += 1;
+    if (_pointerCount >= 2) {
+      // 第二根手指落下：立刻让父级清掉单指刚刚记录到一半的笔画——
+      // [GestureDetector] 自身的 pan 会在 [InteractiveViewer] 的 scale
+      // 赢下手势竞技场后被 cancel（不会再发 onPanEnd），不在这里清就会
+      // 留下一个半截 stroke。
+      widget.onPanCancel();
+    }
+  }
+
+  void _onPointerUp(PointerUpEvent event) {
+    if (_pointerCount > 0) {
+      _pointerCount -= 1;
+    }
+  }
+
+  void _onPointerCancel(PointerCancelEvent event) {
+    if (_pointerCount > 0) {
+      _pointerCount -= 1;
+    }
+  }
+
+  /// 单指态才转发给父级；多指态直接吞掉，避免在 InteractiveViewer 还没
+  /// 抢下手势之前的过渡帧里继续往笔画里塞点。
+  void _handlePanStart(DragStartDetails details) {
+    if (_pointerCount >= 2) {
+      return;
+    }
+    widget.onPanStart(details);
+  }
+
+  void _handlePanUpdate(DragUpdateDetails details) {
+    if (_pointerCount >= 2) {
+      return;
+    }
+    widget.onPanUpdate(details);
+  }
+
+  void _handlePanEnd(DragEndDetails details) {
+    if (_pointerCount >= 2) {
+      return;
+    }
+    widget.onPanEnd(details);
+  }
 
   @override
   Widget build(BuildContext context) {
     final scale = DashboardScaleScope.of(context);
     final ui = scale.ui;
+    final state = widget.state;
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -1060,7 +1143,10 @@ class _NoteEditorView extends StatelessWidget {
             height: ui(44),
             child: Row(
               children: [
-                _RoundIconButton(icon: Icons.arrow_back_rounded, onTap: onBack),
+                _RoundIconButton(
+                  icon: Icons.arrow_back_rounded,
+                  onTap: widget.onBack,
+                ),
                 const Spacer(),
                 Text(
                   state.draftTitle,
@@ -1075,7 +1161,7 @@ class _NoteEditorView extends StatelessWidget {
                   label: '保存',
                   icon: Icons.save_outlined,
                   busy: state.busy,
-                  onPressed: state.busy ? null : onSave,
+                  onPressed: state.busy ? null : widget.onSave,
                 ),
               ],
             ),
@@ -1085,38 +1171,67 @@ class _NoteEditorView extends StatelessWidget {
             child: Stack(
               children: [
                 Positioned.fill(
-                  child: RepaintBoundary(
-                    key: boundaryKey,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(ui(18)),
-                      child: DecoratedBox(
-                        decoration: const BoxDecoration(color: Colors.white),
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            CustomPaint(
-                              painter: _NotePaperPainter(type: state.paperType),
+                  // Listener 负责"指头数量统计"，InteractiveViewer 负责
+                  // "≥2 指捏合时的缩放/平移"。两层都包在 RepaintBoundary 外面：
+                  //   - InteractiveViewer 只是给 child 套了一层 Transform，
+                  //     缩放发生时 RepaintBoundary 内部的渲染坐标系不变，
+                  //     `boundary.toImage()` 仍然能拿到"未缩放"的整张画布，
+                  //     不会因为用户当前正放大着就只导出可见部分。
+                  //   - Listener 在最外层，能可靠收到用户所有指头的按下/抬起，
+                  //     不受 InteractiveViewer 内部手势竞技场的影响。
+                  child: Listener(
+                    onPointerDown: _onPointerDown,
+                    onPointerUp: _onPointerUp,
+                    onPointerCancel: _onPointerCancel,
+                    child: InteractiveViewer(
+                      transformationController: _viewerController,
+                      // 单指拖动是"绘画"，绝不能被 InteractiveViewer 当成
+                      // 平移；2 指捏合走 scale 分支，scaleEnabled = true 即可。
+                      panEnabled: false,
+                      scaleEnabled: true,
+                      minScale: 1.0,
+                      maxScale: 4.0,
+                      child: RepaintBoundary(
+                        key: widget.boundaryKey,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(ui(18)),
+                          child: DecoratedBox(
+                            decoration: const BoxDecoration(
+                              color: Colors.white,
                             ),
-                            _buildOptionalRemoteImage(
-                              state.editorBackgroundImageUrl,
-                              fit: BoxFit.cover,
-                            ),
-                            GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onPanStart: onPanStart,
-                              onPanUpdate: onPanUpdate,
-                              onPanEnd: onPanEnd,
-                              child: CustomPaint(
-                                painter: _StrokePainter(
-                                  strokes: state.strokes,
-                                  activeStroke: activeStroke,
-                                  activeColor: state.selectedColor,
-                                  activeWidth: state.strokeWidth,
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                CustomPaint(
+                                  painter: _NotePaperPainter(
+                                    type: state.paperType,
+                                  ),
                                 ),
-                                child: const SizedBox.expand(),
-                              ),
+                                _buildOptionalRemoteImage(
+                                  state.editorBackgroundImageUrl,
+                                  fit: BoxFit.cover,
+                                ),
+                                GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  // 这三个回调里都先做 _pointerCount 检查，
+                                  // 多指态下直接吞掉，避免 scale 还没赢之前的
+                                  // 过渡帧里继续往笔画里塞点。
+                                  onPanStart: _handlePanStart,
+                                  onPanUpdate: _handlePanUpdate,
+                                  onPanEnd: _handlePanEnd,
+                                  child: CustomPaint(
+                                    painter: _StrokePainter(
+                                      strokes: state.strokes,
+                                      activeStroke: widget.activeStroke,
+                                      activeColor: state.selectedColor,
+                                      activeWidth: state.strokeWidth,
+                                    ),
+                                    child: const SizedBox.expand(),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
@@ -1147,7 +1262,9 @@ class _NoteEditorView extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           IconButton(
-                            onPressed: state.strokes.isEmpty ? null : onUndo,
+                            onPressed: state.strokes.isEmpty
+                                ? null
+                                : widget.onUndo,
                             icon: const Icon(Icons.undo_rounded),
                           ),
                           Container(
@@ -1159,7 +1276,7 @@ class _NoteEditorView extends StatelessWidget {
                           ..._editorColors.map((color) {
                             final active = color == state.selectedColor;
                             return GestureDetector(
-                              onTap: () => onColorSelected(color),
+                              onTap: () => widget.onColorSelected(color),
                               child: Container(
                                 width: ui(22),
                                 height: ui(22),
@@ -1203,7 +1320,7 @@ class _NoteEditorView extends StatelessWidget {
                               max: 32,
                               activeColor: const Color(0xFF8B5CFF),
                               inactiveColor: const Color(0xFFE8EAF4),
-                              onChanged: onStrokeWidthChanged,
+                              onChanged: widget.onStrokeWidthChanged,
                             ),
                           ),
                           Container(
@@ -1213,7 +1330,7 @@ class _NoteEditorView extends StatelessWidget {
                           ),
                           SizedBox(width: ui(8)),
                           TextButton.icon(
-                            onPressed: onClear,
+                            onPressed: widget.onClear,
                             icon: const Icon(Icons.auto_fix_off_outlined),
                             label: const Text('清空画布'),
                             style: TextButton.styleFrom(

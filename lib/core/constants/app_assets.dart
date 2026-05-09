@@ -141,6 +141,10 @@ abstract final class AppAssets {
   static const homeUserMenuProfile = 'assets/images/home/2.png';
   static const homeUserMenuLogout = 'assets/images/home/3.png';
 
+  /// 文件预览页顶部「重命名」按钮图标（紫色铅笔，替代原本的 Material
+  /// `Icons.edit_outlined`，统一视觉风格）。
+  static const homeRename = 'assets/images/home/rename.png';
+
   // 首页九宫格新图标 home1.png ~ home9.png
   static const homeBtn1 = 'assets/images/home/home1.png';
   static const homeBtn2 = 'assets/images/home/home2.png';
@@ -207,6 +211,20 @@ abstract final class AppAssets {
   /// 首页右侧周课表「今日」日期卡片的渐变背景图（≈ 64×88，#8640FF→#B68EFF
   /// 顶到底的紫渐变，自带 12 圆角）。替代 [_WeekCard] 中写死的 LinearGradient。
   static const homeWeekTodayBg = 'assets/images/home/bgc.png';
+  /// 视唱播放页（MusicPlayPage）的「上一首」按钮图标。
+  /// 替代旧的 [home/left.png] 倒退 5s 图标——仅在多课程视唱场景启用。
+  static const homeShang = 'assets/images/home/shang.png';
+  /// 视唱播放页（MusicPlayPage）的「下一首」按钮图标。
+  /// 替代旧的 [home/right.png] 快进 5s 图标——仅在多课程视唱场景启用。
+  static const homeXia = 'assets/images/home/xia.png';
+  /// 多曲目播放器进度条右侧的循环模式图标——「随机播放」（紫色洗牌箭头）。
+  static const homeShufflePlayMode = 'assets/images/home/sj.png';
+  /// 多曲目播放器进度条右侧的循环模式图标——「顺序循环」（灰色循环箭头）。
+  static const homeLoopPlayMode = 'assets/images/home/xh.png';
+  /// 多曲目播放器进度条右侧的循环模式图标——「单曲循环」（紫色循环箭头 + "1"）。
+  static const homeSingleLoopPlayMode = 'assets/images/home/dq.png';
+  /// 多曲目播放器进度条右侧的「音频列表」图标（紫色音符 + 列表横线）。
+  static const homePlaylistIcon = 'assets/images/home/list.png';
   static const homeSearchIcon = 'assets/images/home/search.png';
   static const emptyCoursePlaceholder = 'assets/images/404/kc.png';
   static const homeV2InstrumentCardBg =

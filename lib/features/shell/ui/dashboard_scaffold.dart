@@ -13,6 +13,7 @@ class DashboardScaffold extends StatelessWidget {
     this.backgroundColor = const Color(0xFFEFF3FC),
     this.contentPadding = const EdgeInsets.all(16),
     this.contentGap = 16,
+    this.resizeToAvoidBottomInset = true,
   });
 
   final Widget sidebar;
@@ -23,6 +24,14 @@ class DashboardScaffold extends StatelessWidget {
   final Color backgroundColor;
   final EdgeInsets contentPadding;
   final double contentGap;
+
+  /// 透传给底层 [Scaffold.resizeToAvoidBottomInset]。
+  ///
+  /// 默认 true，弹出软键盘时整个 body 会相应收缩，方便像 AI 助手等输入页
+  /// 把光标贴在键盘上方。但对于"播放器/视频"这类不依赖输入的页面，
+  /// 业务希望键盘弹出时整页保持不动（Scaffold 不收缩），所以由路由层在
+  /// 这些页面把这个参数置为 false，避免播放条被键盘整体顶起来。
+  final bool resizeToAvoidBottomInset;
 
   @override
   Widget build(BuildContext context) {
@@ -45,6 +54,7 @@ class DashboardScaffold extends StatelessWidget {
             // 顶部仍保留 SafeArea，避免状态栏遮挡 topBar；底部由 contentPadding
             // 提供 16px 的视觉外间距，正常机型下不会与系统手势条冲突。
             extendBody: true,
+            resizeToAvoidBottomInset: resizeToAvoidBottomInset,
             body: ColoredBox(
               color: backgroundColor,
               child: SafeArea(

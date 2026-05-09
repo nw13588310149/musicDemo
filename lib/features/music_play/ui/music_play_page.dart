@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/image_gallery_viewer.dart';
 import '../../piano/ui/piano_keyboard.dart';
@@ -94,6 +95,14 @@ class _MusicPlayPageState extends ConsumerState<MusicPlayPage> {
       'assets/images/home/play1.png',
       'assets/images/home/left.png',
       'assets/images/home/right.png',
+      // 视唱多课程列表的「上一首 / 下一首」按钮图。
+      'assets/images/home/shang.png',
+      'assets/images/home/xia.png',
+      // 多曲目（节奏 / 和弦）专属：循环模式 + 音频列表 chip 用的纯图标。
+      AppAssets.homeShufflePlayMode,
+      AppAssets.homeLoopPlayMode,
+      AppAssets.homeSingleLoopPlayMode,
+      AppAssets.homePlaylistIcon,
       'assets/images/home/chevron-down.png',
       'assets/images/home/feng.png',
       'assets/images/home/dictation/8.png',
@@ -170,9 +179,11 @@ class _MusicPlayPageState extends ConsumerState<MusicPlayPage> {
               SizedBox(height: ui(18)),
               _PlaybackBar(
                 state: state,
-                onSkipBackward: () => _skipSeconds(controller, state, -5),
+                onSkipBackward: _resolveLeftAction(controller, state),
                 onTogglePlay: controller.togglePlay,
-                onSkipForward: () => _skipSeconds(controller, state, 5),
+                onSkipForward: _resolveRightAction(controller, state),
+                leftAsset: _resolveLeftAsset(state),
+                rightAsset: _resolveRightAsset(state),
                 onSeekRatio: (ratio) {
                   final target = Duration(
                     milliseconds: (state.duration.inMilliseconds * ratio)
@@ -266,9 +277,11 @@ class _MusicPlayPageState extends ConsumerState<MusicPlayPage> {
         SizedBox(height: ui(18)),
         _PlaybackBar(
           state: state,
-          onSkipBackward: () => _skipSeconds(controller, state, -5),
+          onSkipBackward: _resolveLeftAction(controller, state),
           onTogglePlay: controller.togglePlay,
-          onSkipForward: () => _skipSeconds(controller, state, 5),
+          onSkipForward: _resolveRightAction(controller, state),
+          leftAsset: _resolveLeftAsset(state),
+          rightAsset: _resolveRightAsset(state),
           onSeekRatio: (ratio) {
             final target = Duration(
               milliseconds: (state.duration.inMilliseconds * ratio).round(),
@@ -296,6 +309,50 @@ class _MusicPlayPageState extends ConsumerState<MusicPlayPage> {
         : math.max(0, currentMs + deltaSeconds * 1000);
     await controller.seek(Duration(milliseconds: targetMs));
   }
+
+  /// 左/右按钮是否升级为「上一首 / 下一首」：两类场景启用。
+  ///   1. 视唱（多课程）：父页透传 `allLessonIds`，按 id 列表切歌；
+  ///   2. 多曲目课件（节奏 / 和弦，`file1` 为数组）：按曲目内部索引切歌。
+  /// 其它入口（听写 / 声乐 / 器乐 单曲目）保持 ±5s 快进/倒退语义。
+  ///
+  /// `previous` / `next` 的实现已经分别处理了这两类：当 allLessonIds 不为
+  /// 空时走 `_switchLesson`，否则按 `tracks` 内部 index 切。
+  bool _useLessonNavigation(MusicPlayState state) {
+    if (state.args.allLessonIds.isNotEmpty) {
+      return true;
+    }
+    return (state.detail?.tracks.length ?? 0) > 1;
+  }
+
+  Future<void> Function() _resolveLeftAction(
+    MusicPlayController controller,
+    MusicPlayState state,
+  ) {
+    if (_useLessonNavigation(state)) {
+      return controller.previous;
+    }
+    return () => _skipSeconds(controller, state, -5);
+  }
+
+  Future<void> Function() _resolveRightAction(
+    MusicPlayController controller,
+    MusicPlayState state,
+  ) {
+    if (_useLessonNavigation(state)) {
+      return controller.next;
+    }
+    return () => _skipSeconds(controller, state, 5);
+  }
+
+  String _resolveLeftAsset(MusicPlayState state) =>
+      _useLessonNavigation(state)
+          ? 'assets/images/home/shang.png'
+          : 'assets/images/home/left.png';
+
+  String _resolveRightAsset(MusicPlayState state) =>
+      _useLessonNavigation(state)
+          ? 'assets/images/home/xia.png'
+          : 'assets/images/home/right.png';
 
   Future<void> _showShareDialog(
     BuildContext context,
@@ -1199,6 +1256,8 @@ class _PlaybackBar extends StatelessWidget {
     required this.onToggleFavorite,
     required this.onTogglePlayMode,
     required this.onSelectTrack,
+    this.leftAsset = 'assets/images/home/left.png',
+    this.rightAsset = 'assets/images/home/right.png',
   });
 
   final MusicPlayState state;
@@ -1208,6 +1267,14 @@ class _PlaybackBar extends StatelessWidget {
   final ValueChanged<double> onSeekRatio;
   final ValueChanged<double> onSpeedChanged;
   final Future<void> Function() onToggleFavorite;
+
+  /// 播放按钮左侧图标资源。默认为 ±5s 倒退；视唱多课程场景由父级覆盖为
+  /// [AppAssets.homeShang]（上一首）。
+  final String leftAsset;
+
+  /// 播放按钮右侧图标资源。默认为 ±5s 快进；视唱多课程场景由父级覆盖为
+  /// [AppAssets.homeXia]（下一首）。
+  final String rightAsset;
 
   /// 切换循环模式（顺序 / 单曲 / 随机）。
   final VoidCallback onTogglePlayMode;
@@ -1256,17 +1323,21 @@ class _PlaybackBar extends StatelessWidget {
           SizedBox(width: ui(12)),
           // 多曲目时主标题切换为"当前音频文件名"，副标题降级显示教材名；
           // 单曲目场景沿用旧的"教材名 + 听写/曲目名"。
-          // 应用户要求：标题完整显示、不截断省略——这里去掉 maxLines/ellipsis，
-          // 改用 IntrinsicWidth + softWrap=false 让 Column 按内容宽度撑开。
-          IntrinsicWidth(
+          //
+          // 旧实现用 IntrinsicWidth + softWrap=false 让标题按内容宽度
+          // 自由撑开——用户反馈这种写法在副标题很长（"四分、二八、二分、附点二分"）
+          // 时会把右侧的进度条压扁；现在改成给整列加一个上限宽度（180）+
+          // 单行省略号，长副标题溢出显示 "…"，进度条保持原宽度。
+          ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: ui(180)),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   _resolvePrimaryTitle(detail, track),
-                  softWrap: false,
-                  overflow: TextOverflow.visible,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: const Color(0xFF0B081A),
                     fontSize: ui(15),
@@ -1277,8 +1348,8 @@ class _PlaybackBar extends StatelessWidget {
                 SizedBox(height: ui(6)),
                 Text(
                   _resolveSecondaryTitle(detail, track),
-                  softWrap: false,
-                  overflow: TextOverflow.visible,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: const Color(0xFFB6B5BB),
                     fontSize: ui(12),
@@ -1292,7 +1363,7 @@ class _PlaybackBar extends StatelessWidget {
           ),
           SizedBox(width: ui(16)),
           _InlineImageIcon(
-            asset: 'assets/images/home/left.png',
+            asset: leftAsset,
             onTap: onSkipBackward,
             size: 24,
           ),
@@ -1325,7 +1396,7 @@ class _PlaybackBar extends StatelessWidget {
           ),
           SizedBox(width: ui(8)),
           _InlineImageIcon(
-            asset: 'assets/images/home/right.png',
+            asset: rightAsset,
             onTap: onSkipForward,
             size: 24,
           ),
@@ -1403,14 +1474,31 @@ class _PlaybackBar extends StatelessWidget {
     return detail?.title ?? '未命名音频';
   }
 
-  /// 副标题：多曲目时降级展示教材名，单曲目时保留原本的"曲目名 / 听写"逻辑，
-  /// 避免主副两行重复显示同一个字符串。
+  /// 副标题：直接对齐课件详情接口的 `shortText*` 字段。
+  ///
+  ///  - 多曲目（`file1` 是 [{url, filename}, ...] 数组、典型场景节奏 / 和弦）：
+  ///    `shortText2 → shortText1 → "音频1"`
+  ///  - 单曲目（`file1` 只有一条 mp3，典型场景听写）：
+  ///    `shortText2 → "音频1"`（此场景下 shortText1 接口几乎都是空，按需求
+  ///    跳过它，免得偶发的旧数据把主副标题挤成重复内容）
+  ///
+  /// 兜底字符串 "音频1" 与 1.0 设计稿一致；副标题永远不为空，避免播放条
+  /// 因一行高度突变出现"标题往下漂移"。
   String _resolveSecondaryTitle(MusicPlayDetail? detail, MusicPlayTrack? track) {
-    if (detail != null && detail.tracks.length > 1) {
-      return detail.title;
+    if (detail == null) {
+      return '音频1';
     }
-    final fallback = track?.title.trim() ?? '';
-    return fallback.isEmpty ? '听写' : fallback;
+    final shortText2 = detail.shortText2.trim();
+    if (shortText2.isNotEmpty) {
+      return shortText2;
+    }
+    if (detail.tracks.length > 1) {
+      final shortText1 = detail.shortText1.trim();
+      if (shortText1.isNotEmpty) {
+        return shortText1;
+      }
+    }
+    return '音频1';
   }
 
   String _formatDuration(Duration value) {
@@ -2533,54 +2621,72 @@ class _LoopModeChip extends StatelessWidget {
   static String _label(MusicPlayMode mode) {
     switch (mode) {
       case MusicPlayMode.sequence:
-        return '顺序播放';
+        return '顺序循环';
       case MusicPlayMode.single:
         return '单曲循环';
       case MusicPlayMode.shuffle:
-        return '随机循环';
+        return '随机播放';
     }
   }
 
-  static IconData _icon(MusicPlayMode mode) {
+  /// 应用户要求：循环模式按钮换成设计稿提供的纯图（紫色洗牌 / 灰色循环 /
+  /// 紫色单曲循环），不再使用 Material Icons 字体图标。三种模式都各自带有
+  /// 设计师指定的颜色与高亮信息，因此这里不再附加染色背景，整体保持透明，
+  /// 只让图自己说话。
+  static String _asset(MusicPlayMode mode) {
     switch (mode) {
       case MusicPlayMode.sequence:
-        return Icons.repeat_rounded;
+        return AppAssets.homeLoopPlayMode;
       case MusicPlayMode.single:
-        return Icons.repeat_one_rounded;
+        return AppAssets.homeSingleLoopPlayMode;
       case MusicPlayMode.shuffle:
-        return Icons.shuffle_rounded;
+        return AppAssets.homeShufflePlayMode;
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    // 顺序播放视为"默认态"，其他两档视觉上染紫，方便用户一眼分辨。
-    final tinted = mode != MusicPlayMode.sequence;
-    final fg = tinted ? const Color(0xFF8741FF) : const Color(0xFF7F7F7F);
     return Tooltip(
       message: _label(mode),
       waitDuration: const Duration(milliseconds: 400),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        child: Container(
+        child: SizedBox(
           height: ui(28),
           width: ui(28),
-          decoration: BoxDecoration(
-            color: tinted ? const Color(0xFFF5F2FF) : Colors.white,
-            borderRadius: BorderRadius.circular(ui(8)),
+          child: Center(
+            child: Image.asset(
+              _asset(mode),
+              width: ui(20),
+              height: ui(20),
+              fit: BoxFit.contain,
+              filterQuality: FilterQuality.medium,
+            ),
           ),
-          alignment: Alignment.center,
-          child: Icon(_icon(mode), size: ui(18), color: fg),
         ),
       ),
     );
   }
 }
 
-/// 播放列表 chip：点击后从按钮上方弹出曲目菜单，菜单复用与 [_SpeedChip]
-/// 一致的卡片样式；当前播放项染紫并在右侧标记一个紫色"正在播放"小点。
+/// 播放列表 chip：点击后从 APP 左侧弹出抽屉（与左侧导航同宽，盖在导航之上）。
+///
+/// 设计变化（旧版 → 新版）：
+///   旧版 v1：按钮上方一个 220×260 的浮动卡片，整张通过 showGeneralDialog
+///            出现，barrier 透明但仍然吃点击事件，所以一旦菜单弹出，右侧
+///            播放器的暂停 / 切歌都点不动了。
+///   旧版 v2：手动 OverlayEntry + didUpdateWidget 里 markNeedsBuild。父级
+///            播放条因为 position 流每 ~100ms rebuild，频繁 markNeedsBuild
+///            和点击 [onSelect] 触发的同帧 setState 叠加在一起，偶发会让
+///            抽屉里的 builder 抛断言（"setState/markNeedsBuild called when
+///            widget tree was locked"），iPad 上肉眼会闪一帧 ErrorWidget；
+///            紧接着布局重算时播放条重叠成两条。
+///   新版 v3：改用 [OverlayPortal.targetsRootOverlay]——抽屉的生命周期由
+///            Flutter 自己接管：父级 rebuild 自动同步、dispose 时自动清理，
+///            不再需要手动 OverlayEntry / markNeedsBuild。这条链路 Flutter
+///            内部已经处理了所有"在 build 锁期间触发重建"的边界情况。
 class _PlaylistChip extends StatefulWidget {
   const _PlaylistChip({
     required this.tracks,
@@ -2597,203 +2703,259 @@ class _PlaylistChip extends StatefulWidget {
 }
 
 class _PlaylistChipState extends State<_PlaylistChip> {
-  bool _open = false;
+  /// `OverlayPortalController` 由 Flutter 维护抽屉的可见性。show / hide /
+  /// toggle 都安全可重入；isShowing 即时返回是否在显示。
+  final OverlayPortalController _portal = OverlayPortalController();
 
-  Future<void> _showMenu(BuildContext context) async {
+  void _toggle() {
     if (widget.tracks.isEmpty) return;
-    final scale = DashboardScaleScope.of(context);
-    final ui = scale.ui;
-    final RenderBox box = context.findRenderObject() as RenderBox;
-    final Offset topLeft = box.localToGlobal(Offset.zero);
-    final Size size = box.size;
-    // 列表项更宽，要容纳曲名（最多一行 + 省略号）。
-    final double menuWidth = ui(220);
-    final double itemHeight = ui(40);
-    final double padding = ui(6);
-    const int maxVisible = 6;
-    final int visibleCount = math.min(widget.tracks.length, maxVisible);
-    final double menuHeight = visibleCount * itemHeight + padding * 2;
-    final double gap = ui(8);
+    setState(() {
+      if (_portal.isShowing) {
+        _portal.hide();
+      } else {
+        _portal.show();
+      }
+    });
+  }
 
-    final overlay =
-        Overlay.of(context, rootOverlay: true).context.findRenderObject()
-            as RenderBox;
-    final Size overlaySize = overlay.size;
-
-    // 默认让菜单的右边缘贴近按钮右边缘，避免菜单跨出工具栏右侧。
-    double left = topLeft.dx + size.width - menuWidth;
-    left = left.clamp(ui(8), overlaySize.width - menuWidth - ui(8));
-    final double topAbove = topLeft.dy - menuHeight - gap;
-    final double topBelow = topLeft.dy + size.height + gap;
-    final bool above = topAbove >= ui(8);
-    final double top = above ? topAbove : topBelow;
-
-    setState(() => _open = true);
-
-    final selected = await showGeneralDialog<int>(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: 'playlist_menu',
-      barrierColor: Colors.transparent,
-      transitionDuration: const Duration(milliseconds: 180),
-      pageBuilder: (dialogContext, animation, secondary) {
-        return DashboardScaleScope(
-          data: scale,
-          child: Stack(
-            children: [
-              Positioned(
-                left: left,
-                top: top,
-                width: menuWidth,
-                height: menuHeight,
-                child: _PlaylistMenuCard(
-                  tracks: widget.tracks,
-                  activeIndex: widget.activeIndex,
-                  itemHeight: itemHeight,
-                  padding: padding,
-                  onPick: (value) => Navigator.of(dialogContext).pop(value),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-      transitionBuilder: (context, animation, secondary, child) {
-        final curved = CurvedAnimation(
-          parent: animation,
-          curve: Curves.easeOutCubic,
-        );
-        final offsetTween = above
-            ? Tween<Offset>(begin: const Offset(0, 0.04), end: Offset.zero)
-            : Tween<Offset>(begin: const Offset(0, -0.04), end: Offset.zero);
-        return FadeTransition(
-          opacity: curved,
-          child: SlideTransition(
-            position: offsetTween.animate(curved),
-            child: child,
-          ),
-        );
-      },
-    );
-
-    if (!mounted) {
-      return;
-    }
-    setState(() => _open = false);
-    if (selected != null) {
-      widget.onSelect(selected);
-    }
+  void _close() {
+    if (!_portal.isShowing) return;
+    setState(() {
+      _portal.hide();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final fg = _open
-        ? const Color(0xFF8741FF)
-        : const Color(0xFF7F7F7F);
-    return Tooltip(
-      message: '播放列表',
-      waitDuration: const Duration(milliseconds: 400),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => _showMenu(context),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          curve: Curves.easeOut,
-          height: ui(28),
-          width: ui(28),
-          decoration: BoxDecoration(
-            color: _open ? const Color(0xFFF5F2FF) : Colors.white,
-            borderRadius: BorderRadius.circular(ui(8)),
+    final open = _portal.isShowing;
+    // OverlayPortal 把 [overlayChildBuilder] 渲染到根 Overlay 的 Stack 里，
+    // 与本 chip 的 build 在同一棵元素树里关联——父级 rebuild 时它会"自动"
+    // 跟着 rebuild 拿到最新的 widget.tracks/activeIndex，不需要手动
+    // markNeedsBuild。点击抽屉外部不会触发它收起（无 barrier）。
+    return OverlayPortal.targetsRootOverlay(
+      controller: _portal,
+      overlayChildBuilder: (overlayContext) {
+        return _PlaylistDrawer(
+          tracks: widget.tracks,
+          activeIndex: widget.activeIndex,
+          // 点击曲目只切歌、不再自动收起；用户需要时再点 chip 或抽屉关闭
+          // 按钮才会收起，长列表里连续试听无需反复展开/收起。
+          onSelect: widget.onSelect,
+          onClose: _close,
+        );
+      },
+      child: Tooltip(
+        message: '音频列表',
+        waitDuration: const Duration(milliseconds: 400),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _toggle,
+          child: SizedBox(
+            height: ui(28),
+            width: ui(28),
+            child: Center(
+              // 设计稿提供的 list.png 自带紫色音符 + 列表线条，整体已经是带
+              // 颜色的图标；这里只在打开态外面加一层淡淡的圆角紫底暗示"已激活"。
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 140),
+                curve: Curves.easeOut,
+                height: ui(24),
+                width: ui(24),
+                decoration: BoxDecoration(
+                  color: open ? const Color(0xFFF5F2FF) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(ui(6)),
+                ),
+                alignment: Alignment.center,
+                child: Image.asset(
+                  AppAssets.homePlaylistIcon,
+                  width: ui(20),
+                  height: ui(20),
+                  fit: BoxFit.contain,
+                  filterQuality: FilterQuality.medium,
+                ),
+              ),
+            ),
           ),
-          alignment: Alignment.center,
-          child: Icon(Icons.queue_music_rounded, size: ui(18), color: fg),
         ),
       ),
     );
   }
 }
 
-class _PlaylistMenuCard extends StatefulWidget {
-  const _PlaylistMenuCard({
+/// 左侧抽屉的实际渲染件：一个 178 dp 宽、覆盖屏幕左侧整高的卡片，进场
+/// 自带左滑入动画。该 widget 故意不放在 Stack 顶层覆盖整屏，而是使用
+/// `Positioned(left:0, top:0, bottom:0, width: sidebarWidth)`，因此除了
+/// 抽屉自身覆盖到的 178 dp 区域，其余像素事件原样穿透到下方的 ShellScaffold
+/// （播放器、设置、悬浮气泡均可正常响应）。
+class _PlaylistDrawer extends StatefulWidget {
+  const _PlaylistDrawer({
     required this.tracks,
     required this.activeIndex,
-    required this.itemHeight,
-    required this.padding,
-    required this.onPick,
+    required this.onSelect,
+    required this.onClose,
   });
 
   final List<MusicPlayTrack> tracks;
   final int activeIndex;
-  final double itemHeight;
-  final double padding;
-  final ValueChanged<int> onPick;
+  final ValueChanged<int> onSelect;
+  final VoidCallback onClose;
 
   @override
-  State<_PlaylistMenuCard> createState() => _PlaylistMenuCardState();
+  State<_PlaylistDrawer> createState() => _PlaylistDrawerState();
 }
 
-class _PlaylistMenuCardState extends State<_PlaylistMenuCard> {
-  late final ScrollController _scrollController;
+class _PlaylistDrawerState extends State<_PlaylistDrawer>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _slide;
+  late final ScrollController _scroll;
 
   @override
   void initState() {
     super.initState();
-    final initialOffset = widget.activeIndex < 0
+    _slide = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 220),
+    );
+    _slide.forward();
+
+    final initialIdx = widget.activeIndex;
+    final initialOffset = initialIdx < 0
         ? 0.0
-        : math.max(0.0, (widget.activeIndex - 2) * widget.itemHeight);
-    _scrollController = ScrollController(initialScrollOffset: initialOffset);
+        : math.max(0.0, (initialIdx - 4) * 44.0);
+    _scroll = ScrollController(initialScrollOffset: initialOffset);
   }
 
   @override
   void dispose() {
-    _scrollController.dispose();
+    _slide.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Material(
-      color: Colors.transparent,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(ui(12)),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF8741FF).withValues(alpha: 0.10),
-              blurRadius: ui(20),
-              spreadRadius: 0,
-              offset: Offset(0, ui(8)),
+    final scale = DashboardScaleScope.of(context);
+    final ui = scale.ui;
+    final width = ui(ShellLayoutSpec.sidebarWidth);
+    final mediaPad = MediaQuery.paddingOf(context);
+    return Positioned(
+      left: 0,
+      top: 0,
+      bottom: 0,
+      width: width,
+      // 让 drawer 自身的指针事件全部消化在 178 dp 内；抽屉以外的屏幕区域
+      // 由于这个 Positioned 不存在，事件原样穿透到下方播放器。
+      child: AnimatedBuilder(
+        animation: _slide,
+        builder: (ctx, child) {
+          final value = Curves.easeOutCubic.transform(_slide.value);
+          return Transform.translate(
+            offset: Offset(-width * (1 - value), 0),
+            child: Opacity(opacity: value, child: child),
+          );
+        },
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFFEFF3FC),
+              border: Border(
+                right: BorderSide(
+                  color: const Color(0xFFE4E1EC),
+                  width: 1,
+                ),
+              ),
+              boxShadow: [
+                // 仅给抽屉的右边缘加一道淡阴影，做出"浮在导航之上"的层次。
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  offset: const Offset(2, 0),
+                  blurRadius: 12,
+                ),
+              ],
             ),
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: ui(8),
-              spreadRadius: 0,
-              offset: Offset(0, ui(2)),
+            child: SafeArea(
+              right: false,
+              bottom: false,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Header：左侧标题，右侧关闭按钮，整体高度对齐顶栏 56。
+                  SizedBox(
+                    height: ui(56),
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        ui(16),
+                        0,
+                        ui(8),
+                        0,
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '音频列表',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: const Color(0xFF0B081A),
+                                fontSize: ui(16),
+                                fontFamily: 'PingFang SC',
+                                fontWeight: AppFont.w600,
+                                height: 1,
+                              ),
+                            ),
+                          ),
+                          GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: widget.onClose,
+                            child: SizedBox(
+                              width: ui(36),
+                              height: ui(36),
+                              child: Center(
+                                child: Icon(
+                                  Icons.close_rounded,
+                                  size: ui(20),
+                                  color: const Color(0xFF7F7F7F),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // List：使用与 [ShellLeftNav] 一致的 178 dp 宽度的窄行布局；
+                  // 选中态用紫色文字 + 浅紫底块，与左侧导航选中样式视觉对齐。
+                  Expanded(
+                    child: ScrollConfiguration(
+                      behavior: const _NoOverscrollBehavior(),
+                      child: ListView.builder(
+                        controller: _scroll,
+                        padding: EdgeInsets.fromLTRB(
+                          ui(8),
+                          ui(4),
+                          ui(8),
+                          mediaPad.bottom + ui(8),
+                        ),
+                        itemCount: widget.tracks.length,
+                        itemBuilder: (_, index) {
+                          final track = widget.tracks[index];
+                          final selected = index == widget.activeIndex;
+                          return _PlaylistDrawerItem(
+                            index: index,
+                            title: track.title,
+                            selected: selected,
+                            onTap: () => widget.onSelect(index),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ],
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: ScrollConfiguration(
-          behavior: const _NoOverscrollBehavior(),
-          child: ListView.builder(
-            controller: _scrollController,
-            padding: EdgeInsets.symmetric(vertical: widget.padding),
-            itemCount: widget.tracks.length,
-            itemExtent: widget.itemHeight,
-            itemBuilder: (_, index) {
-              final track = widget.tracks[index];
-              final selected = index == widget.activeIndex;
-              return _PlaylistMenuItem(
-                index: index,
-                title: track.title,
-                height: widget.itemHeight,
-                selected: selected,
-                onTap: () => widget.onPick(index),
-              );
-            },
           ),
         ),
       ),
@@ -2801,94 +2963,86 @@ class _PlaylistMenuCardState extends State<_PlaylistMenuCard> {
   }
 }
 
-class _PlaylistMenuItem extends StatefulWidget {
-  const _PlaylistMenuItem({
+/// 抽屉里的单条曲目。
+///
+/// 应用户反馈："切歌瞬间旧曲目会闪一下灰色"——这是先前实现的 hover/选中
+/// 高亮 [AnimatedContainer] 在 `#EDE6FF → Colors.transparent` 之间做颜色
+/// 插值时经过的"半透明灰紫"造成的。这里彻底去掉点击/悬浮态：
+///   - 去掉 hover 跟踪（StatefulWidget → StatelessWidget），抬手不再变色；
+///   - 去掉 [AnimatedContainer]，背景色直接根据 [selected] 即时切换，
+///     不再做 120ms 的颜色动画——切歌时一帧之内完成"旧项褪色 + 新项点亮"，
+///     视觉上不会产生任何过渡灰色。
+class _PlaylistDrawerItem extends StatelessWidget {
+  const _PlaylistDrawerItem({
     required this.index,
     required this.title,
-    required this.height,
     required this.selected,
     required this.onTap,
   });
 
   final int index;
   final String title;
-  final double height;
   final bool selected;
   final VoidCallback onTap;
 
   @override
-  State<_PlaylistMenuItem> createState() => _PlaylistMenuItemState();
-}
-
-class _PlaylistMenuItemState extends State<_PlaylistMenuItem> {
-  bool _hover = false;
-
-  @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final selected = widget.selected;
-    final highlighted = selected || _hover;
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hover = true),
-      onExit: (_) => setState(() => _hover = false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          height: widget.height,
-          margin: EdgeInsets.symmetric(horizontal: ui(6)),
-          padding: EdgeInsets.symmetric(horizontal: ui(10)),
-          decoration: BoxDecoration(
-            color: highlighted ? const Color(0xFFF5F2FF) : Colors.transparent,
-            borderRadius: BorderRadius.circular(ui(8)),
-          ),
-          child: Row(
-            children: [
-              SizedBox(
-                width: ui(20),
-                child: Text(
-                  '${widget.index + 1}',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: selected
-                        ? const Color(0xFF8741FF)
-                        : const Color(0xFFB6B5BB),
-                    fontSize: ui(12),
-                    fontFamily: 'Barlow',
-                    fontWeight: FontWeight.w600,
-                    height: 1,
-                  ),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        height: ui(40),
+        margin: EdgeInsets.symmetric(vertical: ui(2)),
+        padding: EdgeInsets.symmetric(horizontal: ui(10)),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFFEDE6FF) : Colors.transparent,
+          borderRadius: BorderRadius.circular(ui(8)),
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: ui(22),
+              child: Text(
+                '${index + 1}',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: selected
+                      ? const Color(0xFF8741FF)
+                      : const Color(0xFFB6B5BB),
+                  fontSize: ui(12),
+                  fontFamily: 'Barlow',
+                  fontWeight: FontWeight.w600,
+                  height: 1,
                 ),
               ),
-              SizedBox(width: ui(8)),
-              Expanded(
-                child: Text(
-                  widget.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: selected
-                        ? const Color(0xFF8741FF)
-                        : const Color(0xFF0B081A),
-                    fontSize: ui(13),
-                    fontFamily: 'PingFang SC',
-                    fontWeight: selected ? AppFont.w600 : AppFont.w400,
-                    height: 1,
-                  ),
+            ),
+            SizedBox(width: ui(6)),
+            Expanded(
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: selected
+                      ? const Color(0xFF8741FF)
+                      : const Color(0xFF0B081A),
+                  fontSize: ui(13),
+                  fontFamily: 'PingFang SC',
+                  fontWeight: selected ? AppFont.w600 : AppFont.w400,
+                  height: 1,
                 ),
               ),
-              if (selected) ...[
-                SizedBox(width: ui(4)),
-                Icon(
-                  Icons.equalizer_rounded,
-                  size: ui(14),
-                  color: const Color(0xFF8741FF),
-                ),
-              ],
+            ),
+            if (selected) ...[
+              SizedBox(width: ui(4)),
+              Icon(
+                Icons.equalizer_rounded,
+                size: ui(14),
+                color: const Color(0xFF8741FF),
+              ),
             ],
-          ),
+          ],
         ),
       ),
     );

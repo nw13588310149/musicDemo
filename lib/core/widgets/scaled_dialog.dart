@@ -311,11 +311,17 @@ Future<String?> showTextInputDialog({
   double multilineHeight = 152,
 }) async {
   final controller = TextEditingController(text: initialValue);
+  final focusNode = FocusNode();
   final result = await showScaledDialog<String>(
     context: context,
     barrierColor: Colors.black.withValues(alpha: 0.18),
     builder: (dialogContext) {
       final ui = DashboardScaleScope.of(dialogContext).ui;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (focusNode.canRequestFocus && !focusNode.hasFocus) {
+          focusNode.requestFocus();
+        }
+      });
       return Dialog(
         backgroundColor: Colors.transparent,
         insetPadding: EdgeInsets.symmetric(
@@ -347,6 +353,7 @@ Future<String?> showTextInputDialog({
                 height: multiline ? ui(multilineHeight) : ui(45),
                 child: TextField(
                   controller: controller,
+                  focusNode: focusNode,
                   autofocus: true,
                   maxLength: maxLength,
                   expands: multiline,
@@ -357,6 +364,12 @@ Future<String?> showTextInputDialog({
                   textInputAction: multiline
                       ? TextInputAction.newline
                       : TextInputAction.done,
+                  onSubmitted: multiline
+                      ? null
+                      : (_) => Navigator.of(
+                          dialogContext,
+                          rootNavigator: true,
+                        ).pop(controller.text.trim()),
                   textAlignVertical: multiline
                       ? TextAlignVertical.top
                       : TextAlignVertical.center,
@@ -406,9 +419,13 @@ Future<String?> showTextInputDialog({
               AppDialogActionBar(
                 cancelLabel: cancelLabel,
                 confirmLabel: confirmLabel,
-                onCancel: () => Navigator.of(dialogContext).pop(),
+                onCancel: () =>
+                    Navigator.of(dialogContext, rootNavigator: true).pop(),
                 onConfirm: () =>
-                    Navigator.of(dialogContext).pop(controller.text.trim()),
+                    Navigator.of(
+                      dialogContext,
+                      rootNavigator: true,
+                    ).pop(controller.text.trim()),
               ),
             ],
           ),
@@ -416,6 +433,7 @@ Future<String?> showTextInputDialog({
       );
     },
   );
+  focusNode.dispose();
   controller.dispose();
   return result;
 }

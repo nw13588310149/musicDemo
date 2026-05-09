@@ -330,16 +330,25 @@ Map<String, dynamic> _buildAnswerArgs(
   StudyCatalogState state,
   StudyCatalogLesson lesson,
 ) {
-  final usesAnswerEnd2 =
-      state.selectedMenuId == '63' || state.selectedMenuId == '64';
   // 试题 → answerEnd2：听写 / 乐理默认收起答案（题面）；「视唱」分类默认展开答案。
+  // 「视唱」也走 answerEnd2（即 MusicPlayPage），并且需要把同分类下所有题目的 id
+  // 列表透传过去（'all'），子页才能在「上一首 / 下一首」按钮里复用父页的数据，
+  // 不再重新调一遍列表接口。
   final menuName = state.selectedMenu?.name.trim() ?? '';
   final isSightSingingTab = menuName.contains('视唱');
+  final usesAnswerEnd2 =
+      state.selectedMenuId == '63' ||
+      state.selectedMenuId == '64' ||
+      isSightSingingTab;
 
   return <String, dynamic>{
     'id': lesson.id,
     if (!usesAnswerEnd2) 'answerEndMode': true,
     if (usesAnswerEnd2 && !isSightSingingTab) 'closedByDefault': true,
+    // 仅「视唱」分类需要 prev / next 切歌（type=3 与 sightSinging 主入口一致）。
+    if (isSightSingingTab) 'type': 3,
+    if (isSightSingingTab)
+      'all': state.flatLessons.map((item) => item.id).toList(growable: false),
   };
 }
 

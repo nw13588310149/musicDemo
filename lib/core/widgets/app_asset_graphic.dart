@@ -53,6 +53,24 @@ class AppAssetGraphic extends StatelessWidget {
       return true;
     }
 
+    // 这几个 .png 是真二进制 PNG（Figma 直接导出的 raster），但和它们同
+    // 目录下的图标多数其实是 svg 文本写在 .png 后缀里，所以一开始把整目录
+    // 都当矢量。结果这些 raster 走 SvgPicture.asset → flutter_svg 解析失败
+    // → 虽然 errorBuilder 会兜底回退到 Image.asset，但 vector_graphics
+    // 的 compute 仍然会向外抛 `Uncaught (in promise) XmlParserException`
+    // （Flutter web 调试模式下控制台会被刷屏，并且 dev 工具偶发卡顿）。
+    // 在这里显式列出来，让它们走 raster 路径。
+    const rasterPngOverrides = <String>{
+      'assets/images/shell/topbar_v2/help.png',
+      'assets/images/shell/topbar_v2/notice.png',
+      'assets/images/shell/topbar_v2/search.png',
+      'assets/images/shell/topbar_v2/setting.png',
+      'assets/images/aichat/ai_v2_intro_logo.png',
+    };
+    if (rasterPngOverrides.contains(asset)) {
+      return false;
+    }
+
     if (asset.contains('/shell/nav_v2/') ||
         asset.contains('/shell/topbar_v2/')) {
       return true;

@@ -192,10 +192,41 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       await _openActiveTrack(play: true);
       return;
     }
+    // 应用户反馈：iPad 上点暂停 / 播放会出现"咔哒"杂音——这是 mpv 的
+    // 音频环形 buffer 在 pause/play 切换瞬间被截断造成的 click。在调用
+    // pause/play 前后短暂把音量降到 0、再恢复，可以把波形振幅过 0 的
+    // 那一帧"包"在静音区间里，听感上就没有 pop 了。
     if (state.isPlaying) {
-      await player.pause();
+      await _withSilencedAudio(player, () => player.pause());
     } else {
-      await player.play();
+      await _withSilencedAudio(player, () => player.play());
+    }
+  }
+
+  /// 临时把 `player` 的输出音量降为 0，调用 [op]，等 [op] 跑完并稍作等待
+  /// 后再把音量恢复到 100。配合 [_baseVolumeAt100] 使用。
+  ///
+  /// 用途：iPad 上 mpv 在 pause/play/seek 等切点会产生短促 pop 声。把
+  /// 切点包在静音窗内，pop 落在 0 振幅区间——用户就听不到杂音了。
+  ///
+  /// 静音持续时间 ~80ms（op 自身耗时 + 50ms 让 mpv 队列把新一帧音频
+  /// 推到输出环），对正常使用基本不可感知。
+  Future<void> _withSilencedAudio(
+    Player player,
+    Future<void> Function() op,
+  ) async {
+    try {
+      await player.setVolume(0);
+    } catch (_) {}
+    try {
+      await op();
+    } finally {
+      try {
+        await Future.delayed(const Duration(milliseconds: 50));
+        if (!_disposed) {
+          await player.setVolume(100);
+        }
+      } catch (_) {}
     }
   }
 
@@ -358,7 +389,16 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       state = state.copyWith(position: target);
     }
 
+    // iPad 上拖进度条会持续产生 pop——同样用静音窗包住整段 seek 循环，
+    // 等用户松手、所有 pending 目标处理完再恢复音量。详见 [_withSilencedAudio]。
+    Player? mutedPlayer;
     try {
+      mutedPlayer = _player;
+      if (mutedPlayer != null) {
+        try {
+          await mutedPlayer.setVolume(0);
+        } catch (_) {}
+      }
       while (true) {
         final player = _player;
         if (player == null) {
@@ -384,6 +424,17 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       }
     } finally {
       _seekInFlight = false;
+      // 等 mpv 把目标位置的音频帧推到输出，再恢复音量；否则会先听到一下
+      // "啊—"再到目标位置的音乐，反而更明显。
+      final p = mutedPlayer;
+      if (p != null) {
+        try {
+          await Future.delayed(const Duration(milliseconds: 60));
+          if (!_disposed) {
+            await p.setVolume(100);
+          }
+        } catch (_) {}
+      }
     }
   }
 
@@ -413,6 +464,8 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
         type: detail.type,
         title: detail.title,
         subtitle: detail.subtitle,
+        shortText1: detail.shortText1,
+        shortText2: detail.shortText2,
         coverUrl: detail.coverUrl,
         favorite: nextFavorite,
         vipOnly: detail.vipOnly,
@@ -697,32 +750,51 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       unawaited(repository.saveStudyRecord(detail.id));
     }
 
+    // 视唱（multi-lesson playlist）的播放完毕策略：按用户要求一律「停在当前
+    // 课程」，不再自动切到下一首；用户需要主动点「下一首」按钮才会切歌。
+    // 这里直接复用单曲目的「seek 0 + pause」分支，所以走到下面的 fallback。
     if (state.args.allLessonIds.isNotEmpty) {
-      await _switchLesson(1);
+      final player = _player;
+      if (player != null) {
+        try {
+          await player.seek(Duration.zero);
+          await player.pause();
+        } catch (_) {}
+      }
+      if (mounted) {
+        state = state.copyWith(
+          isPlaying: false,
+          position: Duration.zero,
+        );
+      }
       return;
     }
 
     if (detail.tracks.length > 1) {
-      // 多曲目：完全对齐 1.0 中 `sxType` 的三段语义。
-      switch (state.playMode) {
-        case MusicPlayMode.single:
-          await selectTrack(state.activeTrackIndex);
-          return;
-        case MusicPlayMode.shuffle:
-          final length = detail.tracks.length;
-          int target = state.activeTrackIndex;
-          if (length > 1) {
-            final random = math.Random();
-            do {
-              target = random.nextInt(length);
-            } while (target == state.activeTrackIndex);
-          }
-          await selectTrack(target);
-          return;
-        case MusicPlayMode.sequence:
-          await next();
-          return;
+      // 按用户反馈：多曲目场景下"播完当前音频应该停住，不要自动切下一曲"。
+      //   - 单曲循环：仍然循环当前同一首（用户主动选择的"循环"语义）；
+      //   - 顺序 / 随机：完整放完当前一首就 pause + 回到 0，不再自动切歌；
+      //     用户通过页面上的「上一首 / 下一首」按钮（或音频列表）显式切。
+      // 这样多曲目播放器的"完成"语义和单曲目保持一致，避免一进列表就一路
+      // 自动放到底，给学习场景带来困扰。
+      if (state.playMode == MusicPlayMode.single) {
+        await selectTrack(state.activeTrackIndex);
+        return;
       }
+      final player = _player;
+      if (player != null) {
+        try {
+          await player.seek(Duration.zero);
+          await player.pause();
+        } catch (_) {}
+      }
+      if (mounted) {
+        state = state.copyWith(
+          isPlaying: false,
+          position: Duration.zero,
+        );
+      }
+      return;
     }
 
     final player = _player;
@@ -782,12 +854,22 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       }
     }
 
+    final shortText1 = raw['shortText1']?.toString().trim() ?? '';
+    final shortText2 = raw['shortText2']?.toString().trim() ?? '';
+    // 旧字段 [subtitle] 优先用 shortText2（列表的"主副标题"），落空时再
+    // 兜底 shortText1。各处分享 / 列表场景沿用这一兼容值；播放器条副标题
+    // 走 _resolveSecondaryTitle 的更细粒度逻辑（多曲目/单曲目分别处理）。
+    final compatSubtitle = shortText2.isNotEmpty
+        ? shortText2
+        : shortText1;
+
     return MusicPlayDetail(
       id: id,
       type: type,
       title: title,
-      subtitle:
-          raw['shortText1']?.toString() ?? raw['shortText2']?.toString() ?? '',
+      subtitle: compatSubtitle,
+      shortText1: shortText1,
+      shortText2: shortText2,
       coverUrl: coverUrl,
       favorite:
           raw['isFavorite'] == true ||

@@ -84,6 +84,8 @@ class MusicPlayDetail {
     required this.type,
     required this.title,
     required this.subtitle,
+    required this.shortText1,
+    required this.shortText2,
     required this.coverUrl,
     required this.favorite,
     required this.vipOnly,
@@ -97,7 +99,18 @@ class MusicPlayDetail {
   final int id;
   final int type;
   final String title;
+
+  /// 兼容字段：保留给老代码（分享、收藏入口等）继续读用。具体 UI 副标题
+  /// 走 [shortText1] / [shortText2] 的优先级逻辑（详见 _resolveSecondaryTitle）。
   final String subtitle;
+
+  /// 详情接口的 `shortText1` 字段；多曲目（节奏/和弦类）时通常是分组名，
+  /// 例如「均分型节奏」。单曲目场景一般为 null/空字符串。
+  final String shortText1;
+
+  /// 详情接口的 `shortText2` 字段；列表里直接展示给用户的副标题主选项，
+  /// 例如「标准音上下行二度内单音」「四分、二八、二分、附点二分」。
+  final String shortText2;
   final String coverUrl;
   final bool favorite;
   final bool vipOnly;

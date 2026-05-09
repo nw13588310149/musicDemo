@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:audio_waveforms/audio_waveforms.dart' as aw;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -1641,16 +1642,15 @@ class _RecordingEmpty extends StatelessWidget {
 
 /// 录音「录制」视图。
 ///
-/// 性能要点：
-/// - 录制中以 ~10Hz 更新的 `elapsedMs` / `liveWaveform` 已经从 [RecordingSystemState]
-///   迁移到 [RecordingSystemController.liveTick]（[ValueNotifier]）。本视图
-///   外层只依赖低频字段（`recordingPhase` / `errorMessage`），所以外层结构
+/// 性能要点（audio_waveforms 重写版）：
+/// - 录制中所有高频更新——波形 / 秒表 / 进度条——全部由
+///   [aw.RecorderController]（一个 `ChangeNotifier`）驱动。本视图外层
+///   只依赖低频字段（`recordingPhase` / `errorMessage`），所以外层结构
 ///   只在用户操作（开始 / 暂停 / 继续 / 出错）时重建。
-/// - 真正高频变化的部分——波形、时钟、底部时长门槛提示、右侧"完成"按钮
-///   的可用态——全部包在 [ValueListenableBuilder] 里。当 [liveTick] 推送
-///   新值时，只有 builder 里的那棵 [_RecordingStageBody] 子树会重建，外层
-///   的 `_RecordingStage`（含返回按钮、标题栏、底部白色容器）以及左侧
-///   pill / 中间录制按钮都不会被波及。
+/// - 波形面板用 [aw.AudioWaveforms] 自带的 `AnimatedBuilder` 内部局部
+///   重绘；秒表 capsule、底部 scrubber 进度条、右侧「完成」按钮的可用
+///   态也都各自包在 [AnimatedBuilder] 里，仅自己那一小块重建，整页
+///   stage 骨架（含返回按钮、标题栏、左侧 pill、中间大圆按钮）保持不动。
 class _RecordingEditorView extends ConsumerWidget {
   const _RecordingEditorView({required this.state});
 
@@ -1660,6 +1660,7 @@ class _RecordingEditorView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final controller = ref.read(recordingSystemControllerProvider.notifier);
     final phase = state.recordingPhase;
+    final recorder = controller.recorderController;
 
     // 左侧 pill：idle 状态展示「暂停」白底胶囊（视觉占位、不可点）；
     // 录制 / 暂停状态展示「继续」红字胶囊（仅在 paused 时点击恢复）。
@@ -1692,9 +1693,6 @@ class _RecordingEditorView extends ConsumerWidget {
     }
 
     // 中间大圆形按钮：图标表示「当前状态」、点击切换到对应动作。
-    // - idle    → 待开始（空心紫圆，#15）→ 开始录制
-    // - recording → 录制中（紫圆+▶，#12，象征"在跑"）→ 暂停
-    // - paused   → 暂停中（紫圆+⏸，#14，象征"已停"）→ 继续
     final centerAsset = switch (phase) {
       RecordingPhase.idle => AppAssets.soundRecordIdle,
       RecordingPhase.recording => AppAssets.soundPlayCircle,
@@ -1720,47 +1718,62 @@ class _RecordingEditorView extends ConsumerWidget {
       title: '音频录制',
       onBack: controller.backToList,
       headerActions: const [],
-      body: ValueListenableBuilder<RecordingLiveTick>(
-        valueListenable: controller.liveTick,
-        builder: (context, tick, _) {
-          final canFinish = tick.elapsedMs >= 5000;
-          final canListenWhileRecording =
-              tick.elapsedMs >= 1000 &&
-              tick.elapsedMs < 5000 &&
-              (phase == RecordingPhase.recording ||
-                  phase == RecordingPhase.paused);
-          final displayDurationMs = math.max(tick.elapsedMs, 8000);
-          final progressRatio = (tick.elapsedMs / displayDurationMs)
-              .clamp(0.0, 1.0)
-              .toDouble();
-          return _RecordingStageBody(
-            bars: tick.bars.isEmpty
-                ? _buildFallbackBars(120, seed: 9)
-                : _stretchBars(tick.bars, 120),
-            progressRatio: progressRatio,
-            cursorRatio: 0.5,
-            durationMs: displayDurationMs,
-            elapsedClock: _formatClock(tick.elapsedMs),
-            progressClock: _formatSecondsClock(tick.elapsedMs),
-            totalClock: _formatSecondsClock(displayDurationMs),
-            leftPill: leftPill,
-            centerControls: centerControls,
-            rightPill: _SoundControlButton(
-              asset: AppAssets.soundFinishButton,
-              onTap: canFinish
-                  ? () async {
-                      final message = await controller.finishRecording();
-                      if (message != null && context.mounted) {
-                        _showMessage(context, message);
-                      }
-                    }
-                  : null,
-            ),
-            bottomTip: canListenWhileRecording
+      body: _RecordingStageBody(
+        wavePanel: _LiveDarkWavePanel(recorderController: recorder),
+        // 进度滚动条：跟随 elapsedDuration 变化，AnimatedBuilder 只让
+        // _DarkScrubberPanel 这一小块重建。
+        scrubberPanel: AnimatedBuilder(
+          animation: recorder,
+          builder: (context, _) {
+            final elapsedMs = recorder.elapsedDuration.inMilliseconds;
+            final displayDurationMs = math.max(elapsedMs, 8000);
+            final progressRatio = (elapsedMs / displayDurationMs)
+                .clamp(0.0, 1.0)
+                .toDouble();
+            return _DarkScrubberPanel(
+              progressRatio: progressRatio,
+              startLabel: _formatSecondsClock(elapsedMs),
+              endLabel: _formatSecondsClock(displayDurationMs),
+            );
+          },
+        ),
+        // 秒表 capsule：跟随 elapsedDuration，单个 Text 子树重建。
+        timerCapsule: AnimatedBuilder(
+          animation: recorder,
+          builder: (context, _) => _GraniteTimerCapsule(
+            label: _formatClock(recorder.elapsedDuration.inMilliseconds),
+          ),
+        ),
+        // 底部提示 + 试听按钮：根据 elapsedDuration 切两个状态，仍然
+        // 用 AnimatedBuilder 包以便文案随时长跳变。
+        bottomCenter: AnimatedBuilder(
+          animation: recorder,
+          builder: (context, _) {
+            final elapsedMs = recorder.elapsedDuration.inMilliseconds;
+            final canListenWhileRecording =
+                elapsedMs >= 1000 &&
+                elapsedMs < 5000 &&
+                (phase == RecordingPhase.recording ||
+                    phase == RecordingPhase.paused);
+            final tipText = canListenWhileRecording
                 ? '未满 5 秒可先试听当前录音（将结束本条录制）'
-                : '录制不能低于5秒',
-            bottomAccessory: canListenWhileRecording
-                ? TextButton(
+                : '录制不能低于5秒';
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  tipText,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: DashboardScaleScope.of(context).ui(12),
+                    color: const Color(0xFFB6B5BB),
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w400,
+                  ),
+                ),
+                if (canListenWhileRecording) ...[
+                  SizedBox(height: DashboardScaleScope.of(context).ui(8)),
+                  TextButton(
                     onPressed: () async {
                       final message =
                           await controller.finalizeRecordingForListening();
@@ -1777,11 +1790,34 @@ class _RecordingEditorView extends ConsumerWidget {
                         fontWeight: AppFont.w600,
                       ),
                     ),
-                  )
-                : null,
-            errorMessage: errorMessage,
-          );
-        },
+                  ),
+                ],
+              ],
+            );
+          },
+        ),
+        leftPill: leftPill,
+        centerControls: centerControls,
+        // 右侧「完成」按钮：可用态依赖 elapsedDuration ≥ 5s。
+        rightPill: AnimatedBuilder(
+          animation: recorder,
+          builder: (context, _) {
+            final canFinish =
+                recorder.elapsedDuration.inMilliseconds >= 5000;
+            return _SoundControlButton(
+              asset: AppAssets.soundFinishButton,
+              onTap: canFinish
+                  ? () async {
+                      final message = await controller.finishRecording();
+                      if (message != null && context.mounted) {
+                        _showMessage(context, message);
+                      }
+                    }
+                  : null,
+            );
+          },
+        ),
+        errorMessage: errorMessage,
       ),
     );
   }
@@ -1797,16 +1833,14 @@ class _RecordingPreviewView extends ConsumerWidget {
     final controller = ref.read(recordingSystemControllerProvider.notifier);
     final ui = DashboardScaleScope.of(context).ui;
     final item = state.previewItem;
-    final bars = item == null
-        ? _buildFallbackBars(120, seed: 4)
-        : _stretchBars(item.waveform, 120);
-    final totalMs = state.previewDurationMs > 0
+    final player = controller.playerController;
+    // 试听页底层换成 audio_waveforms：position / cursor / 进度条全部由
+    // [aw.PlayerController] 驱动，AudioFileWaveforms 自己渲染波形 + 拖动光标。
+    // 外层视图只读低频 state（previewItem / previewPlaying / errorMessage），
+    // 不再每帧重建。
+    final fallbackTotalMs = state.previewDurationMs > 0
         ? state.previewDurationMs
         : _parseDurationLabel(item?.durationLabel ?? '00:00.00');
-    final progressRatio = totalMs <= 0
-        ? 0.0
-        : (state.previewPositionMs / totalMs).clamp(0.0, 1.0);
-    final clampedTotalMs = math.max(totalMs, 8000);
 
     // 「音频录制」播放页：草稿试听与已保存回放共用同一套布局。
     // - 顶部：本地草稿显示「保存」（手动打开保存弹窗）；已入库作品不显示。
@@ -1881,34 +1915,61 @@ class _RecordingPreviewView extends ConsumerWidget {
       ),
     ];
 
+    // 试听阶段总时长：优先取 PlayerController 抽取出的真实 maxDuration，
+    // 没有就回退到 RecordingEntry 的 durationLabel。
+    int liveMaxDurationMs() {
+      final maxDur = player.maxDuration;
+      if (maxDur > 0) return maxDur;
+      return fallbackTotalMs;
+    }
+
     return _RecordingStage(
       title: '音频录制',
       onBack: controller.backToList,
       headerActions: headerActions,
       body: _RecordingStageBody(
-        bars: bars,
-        progressRatio: progressRatio,
-        cursorRatio: progressRatio,
-        durationMs: clampedTotalMs,
-        elapsedClock: _formatClock(state.previewPositionMs),
-        progressClock: _formatSecondsClock(state.previewPositionMs),
-        totalClock: _formatSecondsClock(clampedTotalMs),
-        // 顶部波形可视化区：点按 / 水平拖动 → 跳转到对应进度。
-        // 用 totalMs（实际可用时长）反算目标毫秒，clampedTotalMs 仅是
-        // UI 展示下限（避免短录音坐标轴看起来挤），不参与 seek 逻辑。
-        onWaveSeek: totalMs <= 0
-            ? null
-            : (ratio) {
-                controller.seekPreviewTo((ratio * totalMs).round());
-              },
-        // 左/右 pill 留空：按设计稿三键 [-15 ▶ +15] 整体居中、互相间距 52。
+        wavePanel: _PreviewDarkWavePanel(playerController: player),
+        // 进度滚动条：跟随 onCurrentDurationChanged 流，AnimatedBuilder
+        // 也行（PlayerController 是 ChangeNotifier），但流的频率更可控。
+        scrubberPanel: StreamBuilder<int>(
+          stream: player.onCurrentDurationChanged,
+          builder: (context, snapshot) {
+            final positionMs = snapshot.data ?? 0;
+            final totalMs = liveMaxDurationMs();
+            final clampedTotalMs = math.max(totalMs, 8000);
+            final progressRatio = totalMs <= 0
+                ? 0.0
+                : (positionMs / totalMs).clamp(0.0, 1.0).toDouble();
+            return _DarkScrubberPanel(
+              progressRatio: progressRatio,
+              startLabel: _formatSecondsClock(positionMs),
+              endLabel: _formatSecondsClock(clampedTotalMs),
+            );
+          },
+        ),
+        timerCapsule: StreamBuilder<int>(
+          stream: player.onCurrentDurationChanged,
+          builder: (context, snapshot) {
+            final positionMs = snapshot.data ?? 0;
+            return _GraniteTimerCapsule(label: _formatClock(positionMs));
+          },
+        ),
+        bottomCenter: Text(
+          '录制不能低于5秒',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: ui(12),
+            color: const Color(0xFFB6B5BB),
+            fontFamily: 'PingFang SC',
+            fontWeight: AppFont.w400,
+          ),
+        ),
         leftPill: const SizedBox.shrink(),
         rightPill: const SizedBox.shrink(),
         centerControls: Row(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: <Widget>[
-            // -15s 跳转：32×32
             _SoundIconButton(
               asset: AppAssets.soundSeekBack15,
               size: ui(32),
@@ -1916,6 +1977,8 @@ class _RecordingPreviewView extends ConsumerWidget {
             ),
             SizedBox(width: ui(52)),
             // 正中央：大紫色播放 / 暂停按钮（设计稿 72×72，#8741FF）。
+            // previewPlaying 是低频字段，由 PlayerController 状态变化驱动
+            // Riverpod state 同步，外层 state 触发本视图重建即可。
             _SoundIconButton(
               asset: state.previewPlaying
                   ? AppAssets.soundPauseCircle
@@ -1924,7 +1987,6 @@ class _RecordingPreviewView extends ConsumerWidget {
               onTap: controller.togglePreviewPlayback,
             ),
             SizedBox(width: ui(52)),
-            // +15s 跳转：32×32
             _SoundIconButton(
               asset: AppAssets.soundSeekForward15,
               size: ui(32),
@@ -1932,7 +1994,6 @@ class _RecordingPreviewView extends ConsumerWidget {
             ),
           ],
         ),
-        bottomTip: '录制不能低于5秒',
         errorMessage: state.errorMessage,
       ),
     );
@@ -1979,13 +2040,22 @@ class _RecordingStageState extends ConsumerState<_RecordingStage> {
 
   @override
   void dispose() {
-    if (_saveDialogContext != null) {
-      Navigator.of(_saveDialogContext!).pop();
-      _saveDialogContext = null;
+    // dispose 阶段对话框可能已经被 Riverpod / Navigator 收掉了，pop 会抛
+    // "looking up a deactivated widget's ancestor" 类异常。每一段都吞掉，
+    // 保证 super.dispose 一定能跑到，不会让外层 Stage widget 半个状态退出。
+    final saveCtx = _saveDialogContext;
+    _saveDialogContext = null;
+    if (saveCtx != null) {
+      try {
+        Navigator.of(saveCtx).pop();
+      } catch (_) {}
     }
-    if (_shareDialogContext != null) {
-      Navigator.of(_shareDialogContext!).pop();
-      _shareDialogContext = null;
+    final shareCtx = _shareDialogContext;
+    _shareDialogContext = null;
+    if (shareCtx != null) {
+      try {
+        Navigator.of(shareCtx).pop();
+      } catch (_) {}
     }
     super.dispose();
   }
@@ -2199,43 +2269,46 @@ class _LightHeaderButton extends StatelessWidget {
   }
 }
 
+/// 录制 / 试听页的共用骨架。布局保持原样（暗色波形面板、scrubber、
+/// 秒表 capsule、底部三段控件），但所有「内容会变」的位置都改成
+/// 由调用方传入 [Widget] 的 slot 模式：调用方决定要不要包
+/// [AnimatedBuilder] / [StreamBuilder] 做局部重建，本骨架只负责定位。
 class _RecordingStageBody extends StatelessWidget {
   const _RecordingStageBody({
-    required this.bars,
-    required this.progressRatio,
-    required this.cursorRatio,
-    required this.durationMs,
-    required this.elapsedClock,
-    required this.progressClock,
-    required this.totalClock,
+    required this.wavePanel,
+    required this.scrubberPanel,
+    required this.timerCapsule,
+    required this.bottomCenter,
     required this.leftPill,
     required this.rightPill,
-    required this.bottomTip,
     required this.errorMessage,
     this.centerControls,
-    this.onWaveSeek,
-    this.bottomAccessory,
   });
 
-  final List<double> bars;
-  final double progressRatio;
-  final double cursorRatio;
-  final int durationMs;
-  final String elapsedClock;
-  final String progressClock;
-  final String totalClock;
+  /// 顶部暗色波形面板：录制中传 [_LiveDarkWavePanel]，试听时传
+  /// [_PreviewDarkWavePanel]——内部各自包了 audio_waveforms 组件。
+  final Widget wavePanel;
+
+  /// 暗色 scrubber 进度条：包 [AnimatedBuilder] / [StreamBuilder]
+  /// 局部跟随 elapsed / position 变化重建。
+  final Widget scrubberPanel;
+
+  /// 秒表 capsule（紫色边框、白底 + 时间文字）：同上局部重建。
+  final Widget timerCapsule;
+
+  /// 底部居中区域（提示文案 + 可选「试听」按钮等）：同上。
+  final Widget bottomCenter;
+
+  /// 左下、右下两枚控制 pill：根据 phase / 时长可用态变化，调用方决定
+  /// 是否包 [AnimatedBuilder]。
   final Widget leftPill;
   final Widget rightPill;
-  final String bottomTip;
+
+  /// 错误 banner 内容；为空 / 空字符串时不显示。
   final String? errorMessage;
-  // 可选的「中间控制组」：录制态的 -15/▶/+15 或大圆按钮等。传入后
-  // 底部会变成 [left | center | right] 三段式布局。
+
+  /// 中间「主控件」（录制时为大圆按钮，试听时为 -15 / ▶ / +15 三键）。
   final Widget? centerControls;
-  // 波形区点按 / 拖动时回调（0..1 比例），传入则启用 seek 交互；
-  // 录制中页面不传，保持只读展示。
-  final void Function(double ratio)? onWaveSeek;
-  /// 显示在 bottomTip 下方的可选控件（如录制页的「试听」按钮）。
-  final Widget? bottomAccessory;
 
   @override
   Widget build(BuildContext context) {
@@ -2263,56 +2336,26 @@ class _RecordingStageBody extends StatelessWidget {
               right: ui(8),
               top: waveTop,
               height: ui(190),
-              child: _DarkWavePanel(
-                bars: bars,
-                progressRatio: progressRatio,
-                cursorRatio: cursorRatio,
-                durationMs: durationMs,
-                onSeek: onWaveSeek,
-              ),
+              child: wavePanel,
             ),
             Positioned(
               left: ui(8),
               right: ui(8),
               top: scrubberTop,
               height: ui(80),
-              child: _DarkScrubberPanel(
-                progressRatio: progressRatio,
-                startLabel: progressClock,
-                endLabel: totalClock,
-              ),
+              child: scrubberPanel,
             ),
             Positioned(
               left: 0,
               right: 0,
               top: timerTop,
-              child: Center(child: _GraniteTimerCapsule(label: elapsedClock)),
+              child: Center(child: timerCapsule),
             ),
             Positioned(
               left: 0,
               right: 0,
               top: timerTop + ui(74),
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      bottomTip,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: ui(12),
-                        color: const Color(0xFFB6B5BB),
-                        fontFamily: 'PingFang SC',
-                        fontWeight: AppFont.w400,
-                      ),
-                    ),
-                    if (bottomAccessory != null) ...[
-                      SizedBox(height: ui(8)),
-                      bottomAccessory!,
-                    ],
-                  ],
-                ),
-              ),
+              child: Center(child: bottomCenter),
             ),
             Positioned(
               left: ui(22),
@@ -2337,24 +2380,15 @@ class _RecordingStageBody extends StatelessWidget {
   }
 }
 
-class _DarkWavePanel extends StatelessWidget {
-  const _DarkWavePanel({
-    required this.bars,
-    required this.progressRatio,
-    required this.cursorRatio,
-    required this.durationMs,
-    this.onSeek,
-  });
+/// 录制中的暗色波形面板：保留外层金属边框 + 暗色渐变底色，内部用
+/// [aw.AudioWaveforms] 渲染实时滚动波形。组件自带 `AnimatedBuilder` +
+/// `CustomPainter.shouldRepaint`，重绘只发生在它内部那张 raster 图层
+/// 里，外层框架不会跟着进 raster 任务（这是用户反馈「波形卡顿」的
+/// 主要原因，详见 [RecordingSystemController] 顶部注释）。
+class _LiveDarkWavePanel extends StatelessWidget {
+  const _LiveDarkWavePanel({required this.recorderController});
 
-  final List<double> bars;
-  final double progressRatio;
-  final double cursorRatio;
-  final int durationMs;
-
-  /// 接收用户在波形区上的点按 / 水平拖动产生的进度比例 (0..1)。
-  /// 传入时，整个波形区会被一个透明的 [GestureDetector] 覆盖；
-  /// 不传则保持只读展示（比如录制中页不应允许拖动 seek）。
-  final void Function(double ratio)? onSeek;
+  final aw.RecorderController recorderController;
 
   @override
   Widget build(BuildContext context) {
@@ -2379,56 +2413,22 @@ class _DarkWavePanel extends StatelessWidget {
           borderRadius: BorderRadius.circular(ui(10)),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final width = constraints.maxWidth;
-              // [RepaintBoundary] 把整个波形 + 光标 + 时间刻度独立成一张
-              // 缓存图层。录制中 [_DarkWavePainter] 一秒会被替换 ~10 次触发
-              // 内部 repaint，没有这层 boundary 的话外层暗色框架（含两层
-              // `Container` 的 [Border] 和上下渐变背景）会跟着进同一次
-              // raster 任务，是录制页"卡顿"的另一处放大器。
-              final stack = RepaintBoundary(
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: CustomPaint(
-                        painter: _DarkWavePainter(
-                          bars: bars,
-                          playedRatio: progressRatio,
-                        ),
-                      ),
-                    ),
-                    // 光标只是装饰：用 IgnorePointer 让它不拦截手势，
-                    // 否则用户拖到光标头部那两个小圆点上就 seek 不到了。
-                    IgnorePointer(
-                      child: _Cursor(
-                        width: width,
-                        progressRatio: cursorRatio,
-                      ),
-                    ),
-                    Positioned(
-                      left: ui(12),
-                      right: ui(12),
-                      bottom: ui(8),
-                      child: IgnorePointer(
-                        child: _TimeScale(durationMs: durationMs),
-                      ),
-                    ),
-                  ],
+              return RepaintBoundary(
+                child: aw.AudioWaveforms(
+                  size: Size(constraints.maxWidth, constraints.maxHeight),
+                  recorderController: recorderController,
+                  enableGesture: false,
+                  waveStyle: aw.WaveStyle(
+                    waveColor: const Color(0xFFB791FF),
+                    showMiddleLine: false,
+                    extendWaveform: true,
+                    waveThickness: ui(2),
+                    spacing: ui(5),
+                    scaleFactor: 90,
+                    showBottom: true,
+                    showTop: true,
+                  ),
                 ),
-              );
-              if (onSeek == null) {
-                return stack;
-              }
-              double ratioFromDx(double dx) =>
-                  (dx / math.max(width, 1)).clamp(0.0, 1.0);
-              return GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTapDown: (details) =>
-                    onSeek!(ratioFromDx(details.localPosition.dx)),
-                onHorizontalDragStart: (details) =>
-                    onSeek!(ratioFromDx(details.localPosition.dx)),
-                onHorizontalDragUpdate: (details) =>
-                    onSeek!(ratioFromDx(details.localPosition.dx)),
-                child: stack,
               );
             },
           ),
@@ -2438,56 +2438,60 @@ class _DarkWavePanel extends StatelessWidget {
   }
 }
 
-class _Cursor extends StatelessWidget {
-  const _Cursor({required this.width, required this.progressRatio});
+/// 试听阶段的暗色波形面板：内部用 [aw.AudioFileWaveforms] 渲染从音频
+/// 文件抽取出的真实波形 + 自带可拖动光标。`enableSeekGesture: true`
+/// 让用户直接在波形上拖动定位，不需要再叠一层我们自己的 GestureDetector。
+class _PreviewDarkWavePanel extends StatelessWidget {
+  const _PreviewDarkWavePanel({required this.playerController});
 
-  final double width;
-  final double progressRatio;
+  final aw.PlayerController playerController;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final clampedRatio = progressRatio.clamp(0.0, 1.0);
-    final cursorX = (width - ui(8)) * clampedRatio;
-    return Positioned(
-      left: cursorX + ui(2),
-      top: ui(8),
-      bottom: ui(28),
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Container(
-            width: ui(2),
-            decoration: BoxDecoration(
-              color: const Color(0xFFA773FF),
-              borderRadius: BorderRadius.circular(ui(1)),
-            ),
+    return Container(
+      padding: EdgeInsets.all(ui(3)),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(ui(20)),
+        border: Border.all(color: const Color(0xFFC3C3C3), width: ui(3)),
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: <Color>[Color(0xFF353535), Color(0xFF141414)],
           ),
-          Positioned(
-            left: -ui(4),
-            top: -ui(4),
-            child: Container(
-              width: ui(10),
-              height: ui(10),
-              decoration: const BoxDecoration(
-                color: Color(0xFFA773FF),
-                shape: BoxShape.circle,
-              ),
-            ),
+          borderRadius: BorderRadius.circular(ui(16)),
+          border: Border.all(color: const Color(0xFF161616), width: ui(6)),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(ui(10)),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return RepaintBoundary(
+                child: aw.AudioFileWaveforms(
+                  size: Size(constraints.maxWidth, constraints.maxHeight),
+                  playerController: playerController,
+                  enableSeekGesture: true,
+                  waveformType: aw.WaveformType.fitWidth,
+                  playerWaveStyle: aw.PlayerWaveStyle(
+                    fixedWaveColor: const Color(0xFF555555),
+                    liveWaveColor: const Color(0xFFA773FF),
+                    showSeekLine: true,
+                    seekLineColor: const Color(0xFFA773FF),
+                    seekLineThickness: ui(2),
+                    waveThickness: ui(2),
+                    spacing: ui(5),
+                    scaleFactor: 90,
+                    showTop: true,
+                    showBottom: true,
+                  ),
+                ),
+              );
+            },
           ),
-          Positioned(
-            left: -ui(4),
-            bottom: -ui(4),
-            child: Container(
-              width: ui(10),
-              height: ui(10),
-              decoration: const BoxDecoration(
-                color: Color(0xFFA773FF),
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -2577,86 +2581,6 @@ class _DarkScrubberPanel extends StatelessWidget {
             );
           },
         ),
-      ),
-    );
-  }
-}
-
-class _DarkWavePainter extends CustomPainter {
-  const _DarkWavePainter({required this.bars, required this.playedRatio});
-
-  final List<double> bars;
-  final double playedRatio;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final grid = Paint()
-      ..color = const Color(0x883E3E3E)
-      ..strokeWidth = 1;
-    canvas.drawLine(
-      Offset(0, size.height * 0.18),
-      Offset(size.width, size.height * 0.18),
-      grid,
-    );
-    canvas.drawLine(
-      Offset(0, size.height * 0.78),
-      Offset(size.width, size.height * 0.78),
-      grid,
-    );
-    final spacing = size.width / math.max(bars.length, 1);
-    final played = Paint()
-      ..color = const Color(0xFFA676FF)
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = 1.6;
-    final idle = Paint()
-      ..color = const Color(0xFFE6E6E6)
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = 1.6;
-    for (var i = 0; i < bars.length; i++) {
-      final x = spacing * i + spacing / 2;
-      final amp = bars[i].clamp(0.05, 1.0);
-      final h = amp * size.height * 0.55;
-      final cy = size.height * 0.46;
-      final paint = i / math.max(bars.length - 1, 1) <= playedRatio
-          ? played
-          : idle;
-      canvas.drawLine(Offset(x, cy - h / 2), Offset(x, cy + h / 2), paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _DarkWavePainter oldDelegate) {
-    return oldDelegate.bars != bars || oldDelegate.playedRatio != playedRatio;
-  }
-}
-
-class _TimeScale extends StatelessWidget {
-  const _TimeScale({required this.durationMs});
-
-  final int durationMs;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    final totalSeconds = math.max(1, durationMs ~/ 1000);
-    const divisions = 9;
-    return SizedBox(
-      height: ui(20),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: List<Widget>.generate(divisions, (index) {
-          final seconds = ((totalSeconds / (divisions - 1)) * index).round();
-          return Text(
-            '0:${seconds.toString().padLeft(2, '0')}',
-            style: TextStyle(
-              fontSize: ui(11),
-              color: const Color(0xFF747474),
-              fontFamily: 'Montserrat',
-              fontStyle: FontStyle.italic,
-              fontWeight: FontWeight.w400,
-            ),
-          );
-        }),
       ),
     );
   }
@@ -2841,10 +2765,22 @@ class _SaveRecordingDialog extends ConsumerWidget {
       AppAssets.soundEffectConcert,
     ];
 
+    // 关键修复：iPad / iPhone 上键盘弹出时，老实现是 Center 直接居中
+    // 在全屏空间，键盘直接盖住"作品名称"输入框，用户看不到自己在输入
+    // 什么。把对话框包在一层 viewInsets.bottom 的底部 padding 里，键盘
+    // 弹起时整个 Center 区域上移，作品名称输入框始终在键盘上方可见。
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
     return Material(
       color: const Color(0xCC000000),
-      child: Center(
-        child: Container(
+      child: AnimatedPadding(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+        padding: EdgeInsets.only(bottom: keyboardInset),
+        child: Center(
+          child: SingleChildScrollView(
+            // 极端短屏（外接键盘 / 浮窗模式）下兜底：键盘 + 弹窗高度 >
+            // 屏幕高度时也能滚动到底部，避免内容被裁掉。
+            child: Container(
           width: ui(428),
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
@@ -2971,6 +2907,8 @@ class _SaveRecordingDialog extends ConsumerWidget {
               ],
             ),
           ),
+            ),
+          ),
         ),
       ),
     );
@@ -3057,6 +2995,12 @@ class _SaveTitleFieldState extends State<_SaveTitleField> {
       child: TextField(
         controller: _controller,
         onChanged: widget.onChanged,
+        // 关键修复：保存录音弹窗一打开就让作品名称输入框拿到焦点。
+        // 老实现没有 autofocus，iPad 上键盘不会自动弹起，用户多次点
+        // 输入框看不到光标会以为弹窗坏了。同时 textInputAction.done
+        // 让虚拟键盘上出现"完成"键，回车直接收键盘。
+        autofocus: true,
+        textInputAction: TextInputAction.done,
         cursorColor: const Color(0xFF8741FF),
         cursorWidth: 1.5,
         cursorHeight: ui(16),
@@ -3321,28 +3265,6 @@ enum _RecordingItemAction { preview, rename, share, delete }
 // ===========================================================================
 // 工具方法
 // ===========================================================================
-
-List<double> _stretchBars(List<double> source, int targetLength) {
-  if (source.isEmpty) {
-    return _buildFallbackBars(targetLength, seed: 3);
-  }
-  if (source.length == targetLength) {
-    return source;
-  }
-  return List<double>.generate(targetLength, (index) {
-    final mapped = (index / targetLength) * source.length;
-    final sourceIndex = mapped.floor().clamp(0, source.length - 1);
-    return source[sourceIndex].clamp(0.05, 1.0).toDouble();
-  });
-}
-
-List<double> _buildFallbackBars(int count, {required int seed}) {
-  final random = math.Random(seed);
-  return List<double>.generate(
-    count,
-    (index) => 0.12 + random.nextDouble() * (index % 7 == 0 ? 0.65 : 0.34),
-  );
-}
 
 int _parseDurationLabel(String raw) {
   final cleaned = raw.trim();

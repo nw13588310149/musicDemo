@@ -266,9 +266,18 @@ class _ContentPanel extends StatelessWidget {
 
   String _targetRoute(StudyCatalogState state) {
     if (state.config.key == StudyCatalogConfig.answerQuestions.key) {
-      return state.selectedMenuId == '63' || state.selectedMenuId == '64'
-          ? RoutePaths.answerEnd2
-          : RoutePaths.answerEnd;
+      // 试题模块的子分类：
+      //  - 听写 / 乐理（id=63 / 64）原本就走 answerEnd2 → MusicPlayPage；
+      //  - 视唱按用户要求一并切到 answerEnd2 → MusicPlayPage（拥有 prev/next
+      //    切题能力，并复用父页的题目列表，不再走 answerEnd → TheoryPage）。
+      final menuName = state.selectedMenu?.name.trim() ?? '';
+      final isSightSingingTab = menuName.contains('视唱');
+      if (state.selectedMenuId == '63' ||
+          state.selectedMenuId == '64' ||
+          isSightSingingTab) {
+        return RoutePaths.answerEnd2;
+      }
+      return RoutePaths.answerEnd;
     }
     return state.config.targetRoute;
   }
@@ -699,15 +708,21 @@ class _LessonArtwork extends StatelessWidget {
   }
 
   /// 封面最终展示文案。
-  /// - 大多数学科采用"头部\n下半行"两行排版；
+  /// - 大多数学科采用"头部\n下半行"两行排版（如 "听写\n音组"、"视唱\n基础"）；
   /// - 乐理特殊：下半行本身已是完整词组（章节讲义 / 专项练习 / 音乐常识），
   ///   不再叠加"乐理"前缀；为了与其他封面保持两行视觉，再按"前半\n后半"等长拆分
   ///   （4 字 → 2+2，例如 "章节\n讲义"）。
+  /// - 试题特殊：设计稿要求文案是"听写试题 / 视唱试题 / 乐理试题"——下半行是
+  ///   学科（听写/视唱/乐理），上半行才是"试题"。这里把头尾倒置一下，其余学科
+  ///   仍走"head\nbody"。
   String _coverText() {
     final head = _headLabel();
     final body = _artLabel();
     if (head.isEmpty) {
       return _splitToTwoLines(body);
+    }
+    if (label == StudyCatalogArtworkLabel.answer) {
+      return '$body\n$head';
     }
     return '$head\n$body';
   }
@@ -762,7 +777,7 @@ class _LessonArtwork extends StatelessWidget {
         // "乐理\n章节讲义 / 专项练习 / 音乐常识"
         return const ['章节讲义', '专项练习', '音乐常识', '章节讲义', '专项练习', '音乐常识'];
       case StudyCatalogArtworkLabel.answer:
-        // "试题听写 / 试题视唱 / 试题乐理"
+        // 封面文案 "听写试题 / 视唱试题 / 乐理试题"——下半行学科匹配关键词。
         return const ['听写', '视唱', '乐理'];
       case StudyCatalogArtworkLabel.voice:
       case StudyCatalogArtworkLabel.instrumental:
