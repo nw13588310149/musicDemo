@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 
 import '../constants/app_constants.dart';
 import '../storage/app_storage.dart';
@@ -143,6 +145,39 @@ class ApiClient {
     if (body is Map<String, dynamic>) {
       return ApiResponse.fromJson(body);
     }
+    // dio 默认会按响应的 Content-Type 解析：服务端如果给上传接口返
+    // 回的是 `text/plain` / `text/html`（部分网关上传场景遇到），
+    // dio 拿到的就是原始 JSON 字符串而不是 Map。这里再走一次 String
+    // -> jsonDecode 兜底，保证 `{code, msg, data}` 这类标准响应不会
+    // 因为 Content-Type 一栏的差异而被误判成"接口数据格式错误"。
+    if (body is String) {
+      final trimmed = body.trim();
+      if (trimmed.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(trimmed);
+          if (decoded is Map<String, dynamic>) {
+            return ApiResponse.fromJson(decoded);
+          }
+          if (decoded is Map) {
+            return ApiResponse.fromJson(
+              decoded.map(
+                (key, value) => MapEntry(key.toString(), value),
+              ),
+            );
+          }
+        } catch (error) {
+          debugPrint('[api] _toApiResponse: not JSON string -> $error');
+        }
+      }
+    }
+    if (body is Map) {
+      return ApiResponse.fromJson(
+        body.map((key, value) => MapEntry(key.toString(), value)),
+      );
+    }
+    debugPrint(
+      '[api] _toApiResponse: unsupported body type=${body.runtimeType}',
+    );
     return ApiResponse.failure('接口数据格式错误');
   }
 

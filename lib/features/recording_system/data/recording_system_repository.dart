@@ -26,12 +26,17 @@ class RecordingSystemRepository {
 
   // ── Upload ─────────────────────────────────────────────────────────────────
 
-  // 候选上传端点（按优先级排列，首个成功即返回，与云盘保持一致）。
-  static const _kUploadCandidates = <String>[
-    '/app/common/v2/fileUpload',
-    '/app/user/fileUpload',
-    '/app/common/fileUpload',
-  ];
+  /// 服务端唯一可用的录音上传端点。
+  ///
+  /// 历史上这里维护过一份候选列表（`/app/user/fileUpload`、
+  /// `/app/common/fileUpload` 作为 fallback），但服务端实际只暴露
+  /// `/app/common/v2/fileUpload`，其他两个固定 404。fallback 还会在
+  /// 主端点业务失败（HTTP 200 但 code != 0）时继续尝试 fallback，
+  /// 把"主端点的真实业务失败 msg"覆盖成"fallback 端点的 404"，
+  /// 让上层 toast 显示成无意义的 "Http status error [404]"。
+  /// 现在只保留主端点，主端点失败即直接把它的 ApiResponse 透传给
+  /// controller，由 `_fallbackMessage` 决定展示策略。
+  static const _kUploadEndpoint = '/app/common/v2/fileUpload';
 
   Future<ApiResponse> uploadRecording({
     required Uint8List bytes,
@@ -42,38 +47,30 @@ class RecordingSystemRepository {
       '[recording] uploadRecording start: filename=$filename '
       'bytes=${bytes.length} mime=${mediaType.mimeType}',
     );
-    ApiResponse last = ApiResponse.failure('上传失败');
-    for (final path in _kUploadCandidates) {
-      // FormData 是流，每次重试都必须重新构造。
-      // 显式声明 contentType：iPad/iOS 录音是 .m4a，dio 默认推断
-      // 不到 mime 时会回退到 application/octet-stream，部分网关
-      // 会拦截"未知二进制"上传导致 400，这里把准确的 audio mime
-      // 钉死，让后端按音频文件入库。
-      final form = FormData.fromMap(<String, dynamic>{
-        'file': MultipartFile.fromBytes(
-          bytes,
-          filename: filename,
-          contentType: mediaType,
-        ),
-      });
-      try {
-        final resp = await client.postFormData(path, data: form);
-        last = resp;
-        debugPrint(
-          '[recording] uploadRecording $path -> '
-          'success=${resp.isSuccess} code=${resp.code} '
-          'msg="${resp.msg}"',
-        );
-        if (resp.isSuccess) {
-          return resp;
-        }
-      } catch (error, stack) {
-        debugPrint(
-          '[recording] uploadRecording $path threw: $error\n$stack',
-        );
-      }
+    // 显式声明 contentType：iPad/iOS 录音是 .m4a，dio 默认推断不到
+    // mime 时会回退到 application/octet-stream，部分网关会拦截
+    // "未知二进制"上传导致 400，这里把准确的 audio mime 钉死，让
+    // 后端按音频文件入库。
+    final form = FormData.fromMap(<String, dynamic>{
+      'file': MultipartFile.fromBytes(
+        bytes,
+        filename: filename,
+        contentType: mediaType,
+      ),
+    });
+    try {
+      final resp = await client.postFormData(_kUploadEndpoint, data: form);
+      debugPrint(
+        '[recording] uploadRecording -> success=${resp.isSuccess} '
+        'code=${resp.code} msg="${resp.msg}" data=${resp.data}',
+      );
+      return resp;
+    } catch (error, stack) {
+      debugPrint(
+        '[recording] uploadRecording threw: $error\n$stack',
+      );
+      return ApiResponse.failure('上传失败');
     }
-    return last;
   }
 
   /// 选择上传录音用的 multipart Content-Type。

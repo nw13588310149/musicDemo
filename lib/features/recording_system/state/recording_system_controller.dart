@@ -1672,27 +1672,30 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
   ///
   /// - ???? framework / runtime ????
   /// - ?? ASCII ??????????????????????????
+  // Heuristic: does [text] look like a Flutter / Dart / native exception
+  // toString rather than a backend-friendly user message? Hits any of the
+  // markers below means yes.
+  //
+  // We deliberately do NOT bucket "all-ASCII and longer than N chars" as
+  // a runtime exception any more, because it false-positives on legit
+  // backend messages such as "Login required, please re-login" or
+  // "File type not allowed for upload". Only the marker list below
+  // suppresses the raw msg.
   bool _looksLikeRuntimeException(String text) {
-    final markers = <String>[
+    const markers = <String>[
       'This exception was thrown',
       'FlutterError',
-      'is not a subtype of',
-      'NoSuchMethodError',
-      'StateError',
-      'RangeError',
-      'Bad state',
-      'Null check operator',
       'Looking up a deactivated',
       'deactivated widget',
-      'PlatformException',
-      'MissingPluginException',
-      'FormatException',
+      'NoSuchMethodError',
+      'Null check operator',
+      'is not a subtype of',
+      'PlatformException(',
+      'MissingPluginException(',
     ];
     for (final marker in markers) {
       if (text.contains(marker)) return true;
     }
-    final isAscii = text.codeUnits.every((c) => c < 128);
-    if (isAscii && text.length > 80) return true;
     return false;
   }
 
