@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:audio_waveforms/audio_waveforms.dart' as aw;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -1915,12 +1916,79 @@ class _RecordingPreviewView extends ConsumerWidget {
       ),
     ];
 
-    // 试听阶段总时长：优先取 PlayerController 抽取出的真实 maxDuration，
-    // 没有就回退到 RecordingEntry 的 durationLabel。
+    // 试听阶段总时长：原生端优先取 PlayerController 抽取出的真实 maxDuration，
+    // Web 端没有 audio_waveforms PlayerController，直接用 state.previewDurationMs
+    // （后端 duration 字符串解析得到，或 finalize 录音时记录的实际时长）。
     int liveMaxDurationMs() {
+      if (kIsWeb) {
+        return state.previewDurationMs > 0
+            ? state.previewDurationMs
+            : fallbackTotalMs;
+      }
       final maxDur = player.maxDuration;
       if (maxDur > 0) return maxDur;
       return fallbackTotalMs;
+    }
+
+    // Web: audio_waveforms 没有 Web 后端，PlayerController.onCurrentDurationChanged
+    // 永远不会发数据。改用 controller 端的 media_kit fallback，把 position /
+    // duration / playing 写到 Riverpod state，UI 这边读 state 即可。
+    // 波形区也换成静态占位（previewItem.waveform 是录音时采样过的数组），
+    // 不再调 audio_waveforms 的原生波形抽取。
+    Widget buildWavePanel() {
+      if (kIsWeb) {
+        return _PreviewWavePlaceholder(
+          waveform: item?.waveform ?? const <double>[],
+        );
+      }
+      return _PreviewDarkWavePanel(playerController: player);
+    }
+
+    Widget buildScrubber() {
+      if (kIsWeb) {
+        final positionMs = state.previewPositionMs;
+        final totalMs = liveMaxDurationMs();
+        final clampedTotalMs = math.max(totalMs, 8000);
+        final progressRatio = totalMs <= 0
+            ? 0.0
+            : (positionMs / totalMs).clamp(0.0, 1.0).toDouble();
+        return _DarkScrubberPanel(
+          progressRatio: progressRatio,
+          startLabel: _formatSecondsClock(positionMs),
+          endLabel: _formatSecondsClock(clampedTotalMs),
+        );
+      }
+      return StreamBuilder<int>(
+        stream: player.onCurrentDurationChanged,
+        builder: (context, snapshot) {
+          final positionMs = snapshot.data ?? 0;
+          final totalMs = liveMaxDurationMs();
+          final clampedTotalMs = math.max(totalMs, 8000);
+          final progressRatio = totalMs <= 0
+              ? 0.0
+              : (positionMs / totalMs).clamp(0.0, 1.0).toDouble();
+          return _DarkScrubberPanel(
+            progressRatio: progressRatio,
+            startLabel: _formatSecondsClock(positionMs),
+            endLabel: _formatSecondsClock(clampedTotalMs),
+          );
+        },
+      );
+    }
+
+    Widget buildTimer() {
+      if (kIsWeb) {
+        return _GraniteTimerCapsule(
+          label: _formatClock(state.previewPositionMs),
+        );
+      }
+      return StreamBuilder<int>(
+        stream: player.onCurrentDurationChanged,
+        builder: (context, snapshot) {
+          final positionMs = snapshot.data ?? 0;
+          return _GraniteTimerCapsule(label: _formatClock(positionMs));
+        },
+      );
     }
 
     return _RecordingStage(
@@ -1928,32 +1996,9 @@ class _RecordingPreviewView extends ConsumerWidget {
       onBack: controller.backToList,
       headerActions: headerActions,
       body: _RecordingStageBody(
-        wavePanel: _PreviewDarkWavePanel(playerController: player),
-        // 进度滚动条：跟随 onCurrentDurationChanged 流，AnimatedBuilder
-        // 也行（PlayerController 是 ChangeNotifier），但流的频率更可控。
-        scrubberPanel: StreamBuilder<int>(
-          stream: player.onCurrentDurationChanged,
-          builder: (context, snapshot) {
-            final positionMs = snapshot.data ?? 0;
-            final totalMs = liveMaxDurationMs();
-            final clampedTotalMs = math.max(totalMs, 8000);
-            final progressRatio = totalMs <= 0
-                ? 0.0
-                : (positionMs / totalMs).clamp(0.0, 1.0).toDouble();
-            return _DarkScrubberPanel(
-              progressRatio: progressRatio,
-              startLabel: _formatSecondsClock(positionMs),
-              endLabel: _formatSecondsClock(clampedTotalMs),
-            );
-          },
-        ),
-        timerCapsule: StreamBuilder<int>(
-          stream: player.onCurrentDurationChanged,
-          builder: (context, snapshot) {
-            final positionMs = snapshot.data ?? 0;
-            return _GraniteTimerCapsule(label: _formatClock(positionMs));
-          },
-        ),
+        wavePanel: buildWavePanel(),
+        scrubberPanel: buildScrubber(),
+        timerCapsule: buildTimer(),
         bottomCenter: Text(
           '录制不能低于5秒',
           textAlign: TextAlign.center,
@@ -2494,6 +2539,109 @@ class _PreviewDarkWavePanel extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// 试听阶段的暗色波形占位（仅 Web）。audio_waveforms 没有 Web 后端，所以
+/// `aw.AudioFileWaveforms` 在 Web 上无法渲染真实波形。这里读取保存在
+/// [RecordingEntry.waveform] 里的振幅快照，画一组静态柱状条，配色 / 边框跟
+/// 原生端 [_PreviewDarkWavePanel] 保持一致，视觉上对齐。
+class _PreviewWavePlaceholder extends StatelessWidget {
+  const _PreviewWavePlaceholder({required this.waveform});
+
+  final List<double> waveform;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      padding: EdgeInsets.all(ui(3)),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(ui(20)),
+        border: Border.all(color: const Color(0xFFC3C3C3), width: ui(3)),
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: <Color>[Color(0xFF353535), Color(0xFF141414)],
+          ),
+          borderRadius: BorderRadius.circular(ui(16)),
+          border: Border.all(color: const Color(0xFF161616), width: ui(6)),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(ui(10)),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return RepaintBoundary(
+                child: CustomPaint(
+                  size: Size(constraints.maxWidth, constraints.maxHeight),
+                  painter: _StaticWavePainter(samples: waveform),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StaticWavePainter extends CustomPainter {
+  _StaticWavePainter({required this.samples});
+
+  final List<double> samples;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.width <= 0 || size.height <= 0) {
+      return;
+    }
+    final centerY = size.height / 2;
+    final waveColor = const Color(0xFF555555);
+
+    // 没有振幅数据时画一根细横线，避免空白让用户以为坏了。
+    if (samples.isEmpty) {
+      final paint = Paint()
+        ..color = waveColor
+        ..strokeWidth = 2
+        ..strokeCap = StrokeCap.round;
+      canvas.drawLine(
+        Offset(0, centerY),
+        Offset(size.width, centerY),
+        paint,
+      );
+      return;
+    }
+
+    final barCount = math.min(samples.length, 160);
+    final spacing = size.width / barCount;
+    final barWidth = math.max(spacing - 1.0, 1.5);
+    final maxAmp = samples.fold<double>(
+      0.0,
+      (acc, v) => math.max(acc, v.abs()),
+    );
+    // 振幅大多在 0~1 之间；若全是 < 0.05 的小值，按 max 归一化避免线太扁。
+    final normalizer = maxAmp > 0.05 ? maxAmp : 1.0;
+
+    final paint = Paint()
+      ..color = waveColor
+      ..strokeWidth = barWidth
+      ..strokeCap = StrokeCap.round;
+
+    for (var i = 0; i < barCount; i++) {
+      final sample = samples[(i * samples.length) ~/ barCount];
+      final amp = (sample.abs() / normalizer).clamp(0.05, 1.0);
+      final halfH = (size.height / 2 - 4) * amp;
+      final x = i * spacing + spacing / 2;
+      canvas.drawLine(Offset(x, centerY - halfH), Offset(x, centerY + halfH), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _StaticWavePainter oldDelegate) {
+    return !identical(oldDelegate.samples, samples);
   }
 }
 
