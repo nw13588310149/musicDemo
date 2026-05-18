@@ -95,7 +95,7 @@ BEGIN
             VALUE "InternalName", "the_road_of_music_flutter" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.yyzl. All rights reserved." "\0"
             VALUE "OriginalFilename", "the_road_of_music_flutter.exe" "\0"
-            VALUE "ProductName", "the_road_of_music_flutter" "\0"
+            VALUE "ProductName", "音乐之路" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

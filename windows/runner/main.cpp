@@ -27,7 +27,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
-  if (!window.Create(L"the_road_of_music_flutter", origin, size)) {
+  if (!window.Create(L"\u97f3\u4e50\u4e4b\u8def", origin, size)) {
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);
