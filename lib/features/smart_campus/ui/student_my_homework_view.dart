@@ -46,12 +46,16 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/network/media_url.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
+import 'student_homework_submission_preview.dart';
 import '../../courseware/state/cloud_drive_controller.dart';
 import '../../courseware/ui/courseware_file_picker.dart';
 import '../../shell/ui/shell_layout.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
+
+import '../data/student_repository.dart';
 
 const Color _kCardBg = Colors.white;
 const Color _kPageBg = Color(0xFFEFF3FC);
@@ -77,6 +81,156 @@ const Color _kRiseGreen = Color(0xFF12CE51);
 const Color _kVocalTagBgRed = Color(0xFFFEE4E8);
 const Color _kVocalTagFgRed = Color(0xFFFF386B);
 
+DateTime? _tryParseStudentHwDate(String? raw) {
+  if (raw == null) return null;
+  final t = raw.trim();
+  if (t.isEmpty) return null;
+  final normalized = t.contains('T') ? t : t.replaceFirst(RegExp(r'\s+'), 'T');
+  return DateTime.tryParse(normalized);
+}
+
+/// 列表分页：`data` 为 `records` / `list` / `rows` 或数组。
+List<Map<dynamic, dynamic>> _extractStudentHomeworkRows(dynamic data) {
+  if (data is List) {
+    return data.whereType<Map<dynamic, dynamic>>().toList();
+  }
+  if (data is Map) {
+    for (final key in ['records', 'list', 'rows']) {
+      final v = data[key];
+      if (v is List) {
+        return v.whereType<Map<dynamic, dynamic>>().toList();
+      }
+    }
+  }
+  return [];
+}
+
+/// 学生作业行状态：`homeworkStudentStatus` 或嵌套 `homeworkStudent.status` 优先，
+/// 否则回退顶层 `status`。
+int _homeworkStudentRowStatus(Map<dynamic, dynamic> m) {
+  final flat = m['homeworkStudentStatus'];
+  if (flat != null) return int.tryParse(flat.toString()) ?? 0;
+  final nested = m['homeworkStudent'];
+  if (nested is Map && nested['status'] != null) {
+    return int.tryParse(nested['status'].toString()) ?? 0;
+  }
+  return int.tryParse(m['status']?.toString() ?? '') ?? 0;
+}
+
+/// 仅「待提交且已过截止仍未交」计逾期；若在截止时间前（含同时刻前）已提交则不计逾期。
+bool _studentHomeworkOverdue({
+  required int rowStatus,
+  required DateTime? deadline,
+  required String submitTimeRaw,
+}) {
+  if (rowStatus != 0 || deadline == null) return false;
+  final sub = _tryParseStudentHwDate(submitTimeRaw.trim().isEmpty ? null : submitTimeRaw);
+  if (sub != null) {
+    return sub.isAfter(deadline);
+  }
+  return DateTime.now().isAfter(deadline);
+}
+
+/// 学生作业详情：`data` 含 `homework` + `homeworkStudent` 时合并为单层字段供 [mergeDetail] 使用。
+/// 教师作业要求保留在 `description`；学生提交说明在 `studentSubmitDescription`。
+Map<dynamic, dynamic> _flattenStudentHomeworkDetail(Map<dynamic, dynamic> m) {
+  final hw = m['homework'];
+  final hs = m['homeworkStudent'];
+  final out = <dynamic, dynamic>{};
+
+  if (hw is Map) {
+    out.addAll(Map<dynamic, dynamic>.from(hw));
+  }
+
+  if (hs is Map) {
+    final hsm = Map<dynamic, dynamic>.from(hs);
+    final sid = hsm['id']?.toString().trim();
+    if (sid != null && sid.isNotEmpty) {
+      out['homeworkStudentId'] = sid;
+    }
+    if (hsm['status'] != null) {
+      out['homeworkStudentStatus'] = hsm['status'];
+    }
+    if (hsm['submitTime'] != null) {
+      out['submitTime'] = hsm['submitTime'];
+    }
+    if (hsm.containsKey('score')) out['score'] = hsm['score'];
+    if (hsm.containsKey('feedback')) out['feedback'] = hsm['feedback'];
+    if (hsm['studentParam1'] != null) {
+      out['studentParam1'] = hsm['studentParam1'];
+    }
+    if (hsm['studentParam2'] != null) {
+      out['studentParam2'] = hsm['studentParam2'];
+    }
+    if (hsm['studentParam3'] != null) {
+      out['studentParam3'] = hsm['studentParam3'];
+    }
+    out['studentSubmitDescription'] = hsm['description']?.toString() ?? '';
+  }
+
+  final subj = m['subject'];
+  if (subj is Map) {
+    final sm = Map<dynamic, dynamic>.from(subj);
+    final name = sm['name']?.toString();
+    if (name != null && name.isNotEmpty) {
+      out['subjectName'] = name;
+    }
+    if (sm['id'] != null) {
+      out['subjectId'] = sm['id'];
+    }
+  }
+
+  if (m['classInfo'] != null) {
+    out['classInfo'] = m['classInfo'];
+  }
+
+  for (final e in m.entries) {
+    final k = e.key;
+    if (k == 'homework' || k == 'homeworkStudent' || k == 'subject' || k == 'classInfo') {
+      continue;
+    }
+    out.putIfAbsent(k, () => e.value);
+  }
+
+  if (out.isEmpty) {
+    return m;
+  }
+  return out;
+}
+
+String _studentHwDeadlineLabel(String? endRaw) {
+  final d = _tryParseStudentHwDate(endRaw);
+  if (d == null) return endRaw?.trim().isNotEmpty == true ? endRaw!.trim() : '—';
+  return '${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')} '
+      '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+}
+
+String _expectedExtCn(String raw) {
+  switch (raw.trim().toLowerCase()) {
+    case 'audio':
+      return '音频';
+    case 'video':
+      return '视频';
+    case 'doc':
+    case 'document':
+      return '文档';
+    case 'image':
+      return '图片';
+    default:
+      final t = raw.trim();
+      return t.isEmpty ? '附件' : t;
+  }
+}
+
+_HomeworkSubject _subjectPillFromApi(String? subjectName, int? subjectId) {
+  final n = (subjectName ?? '').toLowerCase();
+  if (n.contains('声乐')) {
+    final alt = (subjectId ?? 0) & 1;
+    return alt == 0 ? _HomeworkSubject.vocal : _HomeworkSubject.vocalRed;
+  }
+  return _HomeworkSubject.music;
+}
+
 class StudentMyHomeworkView extends ConsumerStatefulWidget {
   const StudentMyHomeworkView({super.key, required this.onBack});
 
@@ -90,69 +244,88 @@ class StudentMyHomeworkView extends ConsumerStatefulWidget {
 class _StudentMyHomeworkViewState extends ConsumerState<StudentMyHomeworkView> {
   _StatusTab _selectedTab = _StatusTab.all;
   _ChartGroup _chartGroup = _ChartGroup.bySubject;
-  late List<_HomeworkData> _records;
+  List<_HomeworkData> _records = const [];
+  bool _loadingList = false;
+  bool _initialLoad = true;
 
   @override
   void initState() {
     super.initState();
-    _records = List<_HomeworkData>.from(_kDemoHomework);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadList());
   }
 
-  List<_HomeworkData> get _visible {
-    switch (_selectedTab) {
-      case _StatusTab.all:
-        return _records;
-      case _StatusTab.pending:
-        return _records
-            .where(
-              (r) =>
-                  r.status == _HomeworkStatus.pending ||
-                  r.status == _HomeworkStatus.overdue,
-            )
-            .toList();
-      case _StatusTab.submitted:
-        return _records
-            .where((r) => r.status == _HomeworkStatus.submitted)
-            .toList();
-      case _StatusTab.reviewed:
-        return _records
-            .where((r) => r.status == _HomeworkStatus.reviewed)
-            .toList();
+  Future<void> _loadList() async {
+    final showFullSpinner = _initialLoad && _records.isEmpty;
+    if (showFullSpinner) {
+      setState(() => _loadingList = true);
+    }
+    final int? statusParam = switch (_selectedTab) {
+      _StatusTab.all => null,
+      _StatusTab.pending => 0,
+      _StatusTab.submitted => 1,
+      _StatusTab.reviewed => 2,
+    };
+    final res = await ref.read(studentRepositoryProvider).studentHomeworkList(
+          current: 1,
+          size: 50,
+          status: statusParam,
+        );
+    if (!mounted) return;
+    if (res.isSuccess) {
+      final rows = _extractStudentHomeworkRows(res.data);
+      setState(() {
+        _records = rows.map(_HomeworkData.fromStudentListMap).toList();
+        _loadingList = false;
+        _initialLoad = false;
+      });
+    } else {
+      setState(() {
+        _records = [];
+        _loadingList = false;
+        _initialLoad = false;
+      });
+      AppToast.show(context, res.msg.isNotEmpty ? res.msg : '作业列表加载失败');
     }
   }
 
+  void _onStatusTabChanged(_StatusTab t) {
+    if (t == _selectedTab) return;
+    setState(() => _selectedTab = t);
+    _loadList();
+  }
+
   Future<void> _onSubmit(_HomeworkData data) async {
-    final result = await showScaledDialog<_SubmitHomeworkResult>(
+    if (data.recordId.isEmpty) {
+      AppToast.show(context, '缺少作业记录编号，无法提交');
+      return;
+    }
+    final ok = await showScaledDialog<bool>(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.18),
       builder: (dialogCtx) => _SubmitHomeworkDialog(data: data),
     );
-    if (!mounted || result == null) return;
-
-    setState(() {
-      _records = [
-        for (final r in _records)
-          if (identical(r, data) ||
-              (r.title == data.title && r.deadline == data.deadline))
-            r.copyWith(
-              status: _HomeworkStatus.submitted,
-              bodyType: _HomeworkBodyType.submittedReviewing,
-              submittedFile: '${result.kindLabel} ·${result.fileName}',
-            )
-          else
-            r,
-      ];
-    });
-
+    if (!mounted || ok != true) return;
+    await _loadList();
+    if (!mounted) return;
     AppToast.show(context, '作业已提交，等待教师批阅');
   }
 
   Future<void> _onDetail(_HomeworkData data) async {
+    final snapshot = _latestHomeworkSnapshot(data);
     await showScaledDialog<void>(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.18),
-      builder: (dialogCtx) => _HomeworkDetailDialog(data: data),
+      builder: (dialogCtx) => _HomeworkDetailDialog(data: snapshot),
     );
+  }
+
+  /// 用列表中最新的项打开详情（提交后列表已刷新时可拿到最新状态）。
+  _HomeworkData _latestHomeworkSnapshot(_HomeworkData data) {
+    if (data.recordId.isEmpty) return data;
+    for (final r in _records) {
+      if (r.recordId == data.recordId) return r;
+    }
+    return data;
   }
 
   @override
@@ -160,31 +333,56 @@ class _StudentMyHomeworkViewState extends ConsumerState<StudentMyHomeworkView> {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
       color: _kPageBg,
-      child: SingleChildScrollView(
-        padding: EdgeInsets.only(bottom: ui(24)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _HomeworkBanner(onBack: widget.onBack),
-            SizedBox(height: ui(16)),
-            _OverviewStatsRow(),
-            SizedBox(height: ui(16)),
-            _DualPanelRow(
-              chartGroup: _chartGroup,
-              onChartGroupChanged: (g) => setState(() => _chartGroup = g),
-            ),
-            SizedBox(height: ui(16)),
-            _StatusTabsRow(
-              selected: _selectedTab,
-              onSelected: (t) => setState(() => _selectedTab = t),
-            ),
-            SizedBox(height: ui(10)),
-            _HomeworkGrid(
-              records: _visible,
-              onSubmit: _onSubmit,
-              onDetail: _onDetail,
-            ),
-          ],
+      child: RefreshIndicator(
+        onRefresh: _loadList,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: EdgeInsets.only(bottom: ui(24)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _HomeworkBanner(onBack: widget.onBack),
+              SizedBox(height: ui(16)),
+              _OverviewStatsRow(),
+              SizedBox(height: ui(16)),
+              _DualPanelRow(
+                chartGroup: _chartGroup,
+                onChartGroupChanged: (g) => setState(() => _chartGroup = g),
+              ),
+              SizedBox(height: ui(16)),
+              _StatusTabsRow(
+                selected: _selectedTab,
+                onSelected: _onStatusTabChanged,
+              ),
+              SizedBox(height: ui(10)),
+              if (_loadingList && _records.isEmpty)
+                SizedBox(
+                  height: ui(200),
+                  child: const Center(child: CircularProgressIndicator()),
+                )
+              else if (!_loadingList && _records.isEmpty)
+                SizedBox(
+                  height: ui(120),
+                  child: Center(
+                    child: Text(
+                      '暂无作业',
+                      style: TextStyle(
+                        fontSize: ui(14),
+                        color: _kTextHint,
+                        fontFamily: 'PingFang SC',
+                        fontWeight: AppFont.w400,
+                      ),
+                    ),
+                  ),
+                )
+              else
+                _HomeworkGrid(
+                  records: _records,
+                  onSubmit: _onSubmit,
+                  onDetail: _onDetail,
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -909,7 +1107,7 @@ class _StatusTabsRow extends StatelessWidget {
     (_StatusTab.all, '全部'),
     (_StatusTab.pending, '待提交'),
     (_StatusTab.submitted, '已提交'),
-    (_StatusTab.reviewed, '已批阅'),
+    (_StatusTab.reviewed, '已评分'),
   ];
 
   @override
@@ -1066,6 +1264,7 @@ enum _ReviewMediaType { audio, video, none }
 
 class _HomeworkData {
   const _HomeworkData({
+    this.recordId = '',
     required this.title,
     required this.subject,
     required this.status,
@@ -1077,8 +1276,18 @@ class _HomeworkData {
     this.reviewMedia = _ReviewMediaType.none,
     this.reviewMediaDuration,
     this.reviewText,
+    this.requirementText = '',
+    this.teacherFeedback = '',
+    this.submitTimeDisplay = '',
+    this.mediumLabel = '',
+    this.studentSubmitDescription = '',
+    this.submitAttachmentName = '',
+    this.submitTypeTag = '',
+    this.submitFileUrl = '',
   });
 
+  /// 学生作业记录 id（列表 **`homeworkStudentId`**），用于详情 / 提交接口。
+  final String recordId;
   final String title;
   final _HomeworkSubject subject;
   final _HomeworkStatus status;
@@ -1090,8 +1299,228 @@ class _HomeworkData {
   final _ReviewMediaType reviewMedia;
   final String? reviewMediaDuration;
   final String? reviewText;
+  /// 教师发布的作业要求（列表或详情接口 `description`）。
+  final String requirementText;
+  /// 教师评语（接口 `feedback` / `teacherFeedback`）。
+  final String teacherFeedback;
+  /// 提交时间展示字符串。
+  final String submitTimeDisplay;
+  /// 期望提交格式（`expectedExt` → 中文，如 音频 / 文档）。
+  final String mediumLabel;
+  /// 学生提交作业时在接口里填的说明（`homeworkStudent.description`，与教师 `homework.description` 不同）。
+  final String studentSubmitDescription;
+  /// 提交文件名 `studentParam2`。
+  final String submitAttachmentName;
+  /// 提交类型标签 `studentParam3`（如 音频）。
+  final String submitTypeTag;
+  /// 提交文件完整 URL（由 `studentParam1` 经 [MediaUrl.resolve] 得到），用于预览。
+  final String submitFileUrl;
+
+  static _HomeworkData fromStudentListMap(Map<dynamic, dynamic> m) {
+    final recordId = m['homeworkStudentId']?.toString().trim() ??
+        m['studentHomeworkId']?.toString().trim() ??
+        '';
+    final hw = m['homework'];
+    Map<dynamic, dynamic>? hwm;
+    if (hw is Map) {
+      hwm = Map<dynamic, dynamic>.from(hw);
+    }
+
+    String pick(String k) {
+      final top = m[k];
+      if (top != null && top.toString().trim().isNotEmpty) return top.toString();
+      final nested = hwm?[k];
+      return nested?.toString() ?? '';
+    }
+
+    final title = pick('title').isNotEmpty ? pick('title') : '作业';
+    final description = pick('description');
+    final endRaw = pick('endTime');
+    final deadline = _studentHwDeadlineLabel(endRaw.isNotEmpty ? endRaw : null);
+    final teacher = pick('teacherName').isNotEmpty
+        ? pick('teacherName')
+        : (pick('teacher').isNotEmpty ? pick('teacher') : '—');
+
+    final rowStatus = _homeworkStudentRowStatus(m);
+    final submitTime = m['submitTime']?.toString().trim() ?? '';
+    final hasSubmitTime = submitTime.isNotEmpty;
+
+    final parsedEnd = _tryParseStudentHwDate(endRaw.isNotEmpty ? endRaw : null);
+    final overdue = _studentHomeworkOverdue(
+      rowStatus: rowStatus,
+      deadline: parsedEnd,
+      submitTimeRaw: submitTime,
+    );
+
+    late final _HomeworkStatus st;
+    if (rowStatus == 2) {
+      st = _HomeworkStatus.reviewed;
+    } else if (rowStatus == 1) {
+      st = _HomeworkStatus.submitted;
+    } else if (overdue) {
+      st = _HomeworkStatus.overdue;
+    } else {
+      st = _HomeworkStatus.pending;
+    }
+
+    late final _HomeworkBodyType body;
+    if (rowStatus == 2) {
+      body = _HomeworkBodyType.reviewed;
+    } else if (rowStatus == 1) {
+      body = _HomeworkBodyType.submittedReviewing;
+    } else {
+      body = _HomeworkBodyType.pending;
+    }
+
+    final scoreRaw = m['score'];
+    final String? score = (scoreRaw != null && scoreRaw.toString().trim().isNotEmpty)
+        ? '$scoreRaw分'
+        : null;
+
+    final subjName = pick('subjectName');
+    final subjId = int.tryParse(pick('subjectId'));
+    final subject = _subjectPillFromApi(subjName.isNotEmpty ? subjName : null, subjId);
+
+    final ext = pick('expectedExt');
+    final mediumLabel = _expectedExtCn(ext);
+    final fileName = pick('fileName').isNotEmpty
+        ? pick('fileName')
+        : (pick('studentParam2').isNotEmpty ? pick('studentParam2') : '');
+    final String? submittedFile = fileName.isNotEmpty
+        ? '${_expectedExtCn(ext)} ·$fileName'
+        : (hasSubmitTime ? '${_expectedExtCn(ext)} ·已提交' : null);
+
+    final fb = pick('feedback').isNotEmpty ? pick('feedback') : pick('teacherFeedback');
+    final reviewText = fb.isNotEmpty ? fb : null;
+
+    return _HomeworkData(
+      recordId: recordId,
+      title: title,
+      subject: subject,
+      status: st,
+      bodyType: body,
+      teacher: teacher,
+      deadline: deadline,
+      score: score,
+      submittedFile: submittedFile,
+      reviewMedia: _ReviewMediaType.none,
+      reviewText: reviewText,
+      requirementText: description,
+      teacherFeedback: fb,
+      submitTimeDisplay: submitTime,
+      mediumLabel: mediumLabel,
+    );
+  }
+
+  /// 用详情接口返回覆盖列表摘要。
+  static _HomeworkData mergeDetail(_HomeworkData base, Map<dynamic, dynamic> raw) {
+    final m = _flattenStudentHomeworkDetail(Map<dynamic, dynamic>.from(raw));
+    String pick(String k) => m[k]?.toString() ?? '';
+
+    final title = pick('title');
+    final description = pick('description');
+    final feedback = pick('feedback').isNotEmpty ? pick('feedback') : pick('teacherFeedback');
+    final submitTime = pick('submitTime');
+    final endRaw = pick('endTime');
+    final deadline = endRaw.isNotEmpty ? _studentHwDeadlineLabel(endRaw) : base.deadline;
+    final teacher = pick('teacherName').isNotEmpty
+        ? pick('teacherName')
+        : (pick('teacher').isNotEmpty ? pick('teacher') : base.teacher);
+
+    final rowStatus = _homeworkStudentRowStatus(m);
+    final hasSubmitTime = submitTime.isNotEmpty;
+    final parsedEnd = _tryParseStudentHwDate(endRaw.isNotEmpty ? endRaw : null);
+    final overdue = _studentHomeworkOverdue(
+      rowStatus: rowStatus,
+      deadline: parsedEnd,
+      submitTimeRaw: submitTime,
+    );
+
+    late final _HomeworkStatus st;
+    if (rowStatus == 2) {
+      st = _HomeworkStatus.reviewed;
+    } else if (rowStatus == 1) {
+      st = _HomeworkStatus.submitted;
+    } else if (overdue) {
+      st = _HomeworkStatus.overdue;
+    } else {
+      st = _HomeworkStatus.pending;
+    }
+
+    late final _HomeworkBodyType body;
+    if (rowStatus == 2) {
+      body = _HomeworkBodyType.reviewed;
+    } else if (rowStatus == 1) {
+      body = _HomeworkBodyType.submittedReviewing;
+    } else {
+      body = _HomeworkBodyType.pending;
+    }
+
+    final scoreRaw = m['score'];
+    final String? score = (scoreRaw != null && scoreRaw.toString().trim().isNotEmpty)
+        ? '$scoreRaw分'
+        : base.score;
+
+    final ext = pick('expectedExt');
+    final fileName = pick('fileName').isNotEmpty
+        ? pick('fileName')
+        : (pick('studentParam2').isNotEmpty ? pick('studentParam2') : '');
+    final String? submittedFile = fileName.isNotEmpty
+        ? '${_expectedExtCn(ext)} ·$fileName'
+        : (hasSubmitTime ? '${_expectedExtCn(ext)} ·已提交' : base.submittedFile);
+
+    final subjName = pick('subjectName');
+    final subjId = int.tryParse(pick('subjectId'));
+    final subject = subjName.isNotEmpty || pick('subjectId').isNotEmpty
+        ? _subjectPillFromApi(subjName.isNotEmpty ? subjName : null, subjId)
+        : base.subject;
+
+    final mergedFeedback = feedback.isNotEmpty ? feedback : base.teacherFeedback;
+    final mergedReview = mergedFeedback.isNotEmpty ? mergedFeedback : base.reviewText;
+
+    final hid = pick('homeworkStudentId');
+    final extRaw = pick('expectedExt');
+    final mediumFromDetail = extRaw.isNotEmpty ? _expectedExtCn(extRaw) : '';
+
+    final studDesc = pick('studentSubmitDescription').trim();
+    final p1 = pick('studentParam1').trim();
+    final p2 = pick('studentParam2').trim();
+    final p3 = pick('studentParam3').trim();
+    final resolvedFile = p1.isNotEmpty ? MediaUrl.resolve(p1) : '';
+
+    // 仅 homeworkStudent 单条详情（无嵌套 homework）时，顶层 `description` 为学生提交说明。
+    final studentOnlyFlat =
+        pick('title').isEmpty && pick('endTime').isEmpty && p1.isNotEmpty;
+    final studentNote = studDesc.isNotEmpty
+        ? studDesc
+        : (studentOnlyFlat ? description.trim() : '');
+
+    return base.copyWith(
+      recordId: hid.isNotEmpty ? hid : null,
+      title: title.isNotEmpty ? title : null,
+      subject: subject,
+      status: st,
+      bodyType: body,
+      teacher: teacher,
+      deadline: deadline,
+      score: score,
+      submittedFile: submittedFile,
+      reviewText: mergedReview,
+      requirementText: studentOnlyFlat
+          ? null
+          : (description.isNotEmpty ? description : null),
+      teacherFeedback: mergedFeedback.isNotEmpty ? mergedFeedback : null,
+      submitTimeDisplay: submitTime.isNotEmpty ? submitTime : null,
+      mediumLabel: mediumFromDetail.isNotEmpty ? mediumFromDetail : null,
+      studentSubmitDescription: studentNote.isNotEmpty ? studentNote : null,
+      submitAttachmentName: p2.isNotEmpty ? p2 : null,
+      submitTypeTag: p3.isNotEmpty ? p3 : null,
+      submitFileUrl: resolvedFile.isNotEmpty ? resolvedFile : null,
+    );
+  }
 
   _HomeworkData copyWith({
+    String? recordId,
     String? title,
     _HomeworkSubject? subject,
     _HomeworkStatus? status,
@@ -1103,8 +1532,17 @@ class _HomeworkData {
     _ReviewMediaType? reviewMedia,
     String? reviewMediaDuration,
     String? reviewText,
+    String? requirementText,
+    String? teacherFeedback,
+    String? submitTimeDisplay,
+    String? mediumLabel,
+    String? studentSubmitDescription,
+    String? submitAttachmentName,
+    String? submitTypeTag,
+    String? submitFileUrl,
   }) {
     return _HomeworkData(
+      recordId: recordId ?? this.recordId,
       title: title ?? this.title,
       subject: subject ?? this.subject,
       status: status ?? this.status,
@@ -1116,6 +1554,14 @@ class _HomeworkData {
       reviewMedia: reviewMedia ?? this.reviewMedia,
       reviewMediaDuration: reviewMediaDuration ?? this.reviewMediaDuration,
       reviewText: reviewText ?? this.reviewText,
+      requirementText: requirementText ?? this.requirementText,
+      teacherFeedback: teacherFeedback ?? this.teacherFeedback,
+      submitTimeDisplay: submitTimeDisplay ?? this.submitTimeDisplay,
+      mediumLabel: mediumLabel ?? this.mediumLabel,
+      studentSubmitDescription: studentSubmitDescription ?? this.studentSubmitDescription,
+      submitAttachmentName: submitAttachmentName ?? this.submitAttachmentName,
+      submitTypeTag: submitTypeTag ?? this.submitTypeTag,
+      submitFileUrl: submitFileUrl ?? this.submitFileUrl,
     );
   }
 }
@@ -1195,6 +1641,7 @@ class _HomeworkCard extends StatelessWidget {
           _CardMetaRow(
             teacher: data.teacher,
             deadline: data.deadline,
+            mediumLabel: data.mediumLabel,
             deadlineHighlight:
                 data.status == _HomeworkStatus.pending ||
                 data.status == _HomeworkStatus.overdue,
@@ -1316,7 +1763,7 @@ class _StatusTag extends StatelessWidget {
         items.add((_kSubmittedGreenBg, _kSubmittedGreen, '已提交'));
         break;
       case _HomeworkStatus.reviewed:
-        items.add((_kSubmittedGreenBg, _kSubmittedGreen, '已提交'));
+        items.add((_kSubmittedGreenBg, _kSubmittedGreen, '已评分'));
         break;
     }
     return Row(
@@ -1352,51 +1799,73 @@ class _CardMetaRow extends StatelessWidget {
     required this.teacher,
     required this.deadline,
     required this.deadlineHighlight,
+    this.mediumLabel = '',
   });
 
   final String teacher;
   final String deadline;
+  final String mediumLabel;
   final bool deadlineHighlight;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Row(
+    final showMedium = mediumLabel.trim().isNotEmpty && mediumLabel != '附件';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          teacher,
-          style: TextStyle(
-            fontSize: ui(12),
-            color: _kTextDark,
-            fontFamily: 'PingFang SC',
-            fontWeight: AppFont.w400,
-            height: 1,
-          ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              teacher,
+              style: TextStyle(
+                fontSize: ui(12),
+                color: _kTextDark,
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w400,
+                height: 1,
+              ),
+            ),
+            SizedBox(width: ui(8)),
+            Container(width: 1, height: ui(10), color: _kTextHint),
+            SizedBox(width: ui(8)),
+            Text(
+              '截止时间：',
+              style: TextStyle(
+                fontSize: ui(12),
+                color: _kTextDark,
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w400,
+                height: 1,
+              ),
+            ),
+            Text(
+              deadline,
+              style: TextStyle(
+                fontSize: ui(12),
+                color: deadlineHighlight ? _kPurple : _kTextSecondary,
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w400,
+                height: 1,
+              ),
+            ),
+          ],
         ),
-        SizedBox(width: ui(8)),
-        Container(width: 1, height: ui(10), color: _kTextHint),
-        SizedBox(width: ui(8)),
-        Text(
-          '截止时间：',
-          style: TextStyle(
-            fontSize: ui(12),
-            color: _kTextDark,
-            fontFamily: 'PingFang SC',
-            fontWeight: AppFont.w400,
-            height: 1,
+        if (showMedium) ...[
+          SizedBox(height: ui(6)),
+          Text(
+            '建议提交：$mediumLabel',
+            style: TextStyle(
+              fontSize: ui(12),
+              color: _kTextSecondary,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w400,
+              height: 1,
+            ),
           ),
-        ),
-        Text(
-          deadline,
-          style: TextStyle(
-            fontSize: ui(12),
-            color: deadlineHighlight ? _kPurple : _kTextSecondary,
-            fontFamily: 'PingFang SC',
-            fontWeight: AppFont.w400,
-            height: 1,
-          ),
-        ),
+        ],
       ],
     );
   }
@@ -1410,27 +1879,36 @@ class _CardBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final desc = data.requirementText.trim();
+    final descStyle = TextStyle(
+      fontSize: ui(12),
+      color: _kTextDark,
+      fontFamily: 'PingFang SC',
+      fontWeight: AppFont.w400,
+      height: 1.35,
+    );
+    final hintStyle = TextStyle(
+      fontSize: ui(12),
+      color: _kTextHint,
+      fontFamily: 'PingFang SC',
+      fontWeight: AppFont.w400,
+      height: 1.35,
+    );
+
+    final Widget tail;
     switch (data.bodyType) {
       case _HomeworkBodyType.pending:
-        return Padding(
-          padding: EdgeInsets.only(top: ui(4), bottom: ui(8)),
-          child: Text(
-            '寒假回课状态好，咬字再收',
-            style: TextStyle(
-              fontSize: ui(12),
-              color: _kTextHint,
-              fontFamily: 'PingFang SC',
-              fontWeight: AppFont.w400,
-              height: 1,
-            ),
-          ),
-        );
+        tail = desc.isEmpty
+            ? Text('暂无作业说明', style: hintStyle)
+            : const SizedBox.shrink();
+        break;
       case _HomeworkBodyType.submittedReviewing:
-        return Column(
+        tail = Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _SubmittedFileRow(file: data.submittedFile ?? ''),
-            SizedBox(height: ui(8)),
+            if ((data.submittedFile ?? '').trim().isNotEmpty)
+              _SubmittedFileRow(file: data.submittedFile!.trim()),
+            if ((data.submittedFile ?? '').trim().isNotEmpty) SizedBox(height: ui(8)),
             Text(
               '教师批阅中，请留意通知',
               style: TextStyle(
@@ -1443,20 +1921,47 @@ class _CardBody extends StatelessWidget {
             ),
           ],
         );
+        break;
       case _HomeworkBodyType.reviewed:
-        return Column(
+        final reviewText = data.reviewText?.trim() ?? '';
+        final hasReviewContent =
+            reviewText.isNotEmpty || data.reviewMedia != _ReviewMediaType.none;
+        tail = Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _SubmittedFileRow(file: data.submittedFile ?? ''),
-            SizedBox(height: ui(8)),
-            _ReviewBubble(
-              media: data.reviewMedia,
-              duration: data.reviewMediaDuration ?? '',
-              text: data.reviewText ?? '',
-            ),
+            if ((data.submittedFile ?? '').trim().isNotEmpty)
+              _SubmittedFileRow(file: data.submittedFile!.trim()),
+            if (hasReviewContent) ...[
+              SizedBox(height: ui(8)),
+              _ReviewBubble(
+                media: data.reviewMedia,
+                duration: data.reviewMediaDuration ?? '',
+                text: reviewText,
+              ),
+            ],
           ],
         );
+        break;
     }
+
+    return Padding(
+      padding: EdgeInsets.only(top: ui(4), bottom: ui(8)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (desc.isNotEmpty) ...[
+            Text(
+              desc,
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
+              style: descStyle,
+            ),
+            SizedBox(height: ui(8)),
+          ],
+          tail,
+        ],
+      ),
+    );
   }
 }
 
@@ -1578,7 +2083,11 @@ class _ReviewBubble extends StatelessWidget {
                 ),
               ),
               child: Text(
-                '${media == _ReviewMediaType.video ? '视频' : '语音'} $duration',
+                '${switch (media) {
+                  _ReviewMediaType.video => '视频',
+                  _ReviewMediaType.audio => '语音',
+                  _ReviewMediaType.none => '语音',
+                }} $duration',
                 style: TextStyle(
                   fontSize: ui(10),
                   color: _kPurple,
@@ -1793,105 +2302,8 @@ class _SectionTitle extends StatelessWidget {
 }
 
 // =============================================================================
-// Demo 数据
-// =============================================================================
-
-const String _kDeadline = '04-02 22:00';
-
-const List<_HomeworkData> _kDemoHomework = [
-  _HomeworkData(
-    title: '音程听辨练习03',
-    subject: _HomeworkSubject.music,
-    status: _HomeworkStatus.overdue,
-    bodyType: _HomeworkBodyType.pending,
-    teacher: '陈老师',
-    deadline: _kDeadline,
-  ),
-  _HomeworkData(
-    title: '音程听辨练习03',
-    subject: _HomeworkSubject.vocal,
-    status: _HomeworkStatus.submitted,
-    bodyType: _HomeworkBodyType.submittedReviewing,
-    teacher: '陈老师',
-    deadline: _kDeadline,
-    submittedFile: '音频 ·vocal_practice_0331.mp3',
-  ),
-  _HomeworkData(
-    title: '音程听辨练习03',
-    subject: _HomeworkSubject.vocal,
-    status: _HomeworkStatus.submitted,
-    bodyType: _HomeworkBodyType.reviewed,
-    teacher: '陈老师',
-    deadline: _kDeadline,
-    submittedFile: '音频 ·vocal_practice_0331.mp3',
-    reviewMedia: _ReviewMediaType.audio,
-    reviewMediaDuration: '1:12',
-    reviewText: '节奏较稳，后半段可放松手腕；注意弱拍不要抢。',
-  ),
-  _HomeworkData(
-    title: '音程听辨练习03',
-    subject: _HomeworkSubject.vocal,
-    status: _HomeworkStatus.reviewed,
-    bodyType: _HomeworkBodyType.reviewed,
-    teacher: '陈老师',
-    deadline: _kDeadline,
-    score: '88分',
-    submittedFile: '音频 ·vocal_practice_0331.mp3',
-    reviewMedia: _ReviewMediaType.video,
-    reviewMediaDuration: '1:12',
-    reviewText: '节奏较稳，后半段可放松手腕；注意弱拍不要抢。',
-  ),
-  _HomeworkData(
-    title: '音程听辨练习03',
-    subject: _HomeworkSubject.vocalRed,
-    status: _HomeworkStatus.submitted,
-    bodyType: _HomeworkBodyType.reviewed,
-    teacher: '陈老师',
-    deadline: _kDeadline,
-    submittedFile: '音频 ·vocal_practice_0331.mp3',
-    reviewMedia: _ReviewMediaType.audio,
-    reviewMediaDuration: '1:12',
-    reviewText: '节奏较稳，后半段可放松手腕；注意弱拍不要抢。',
-  ),
-  _HomeworkData(
-    title: '音程听辨练习03',
-    subject: _HomeworkSubject.vocalRed,
-    status: _HomeworkStatus.submitted,
-    bodyType: _HomeworkBodyType.reviewed,
-    teacher: '陈老师',
-    deadline: _kDeadline,
-    submittedFile: '音频 ·vocal_practice_0331.mp3',
-    reviewMedia: _ReviewMediaType.video,
-    reviewMediaDuration: '1:12',
-    reviewText: '节奏较稳，后半段可放松手腕；注意弱拍不要抢。',
-  ),
-];
-
-// =============================================================================
 // 弹窗：提交作业
 // =============================================================================
-
-/// 提交作业弹窗的提交结果（确认按钮 = 已上传 + 已校验）。
-class _SubmitHomeworkResult {
-  const _SubmitHomeworkResult({
-    required this.kind,
-    required this.fileName,
-    required this.note,
-    this.remoteUrl,
-  });
-
-  final _SubmitKind kind;
-  final String fileName;
-  final String note;
-  final String? remoteUrl;
-
-  String get kindLabel => switch (kind) {
-    _SubmitKind.video => '视频',
-    _SubmitKind.audio => '音频',
-    _SubmitKind.photo => '照片',
-    _SubmitKind.doc => '文档',
-  };
-}
 
 enum _SubmitKind { video, audio, photo, doc }
 
@@ -2000,17 +2412,35 @@ class _SubmitHomeworkDialogState extends ConsumerState<_SubmitHomeworkDialog> {
     });
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     if (!_ready || _picked == null) return;
+    if (widget.data.recordId.isEmpty) {
+      AppToast.show(context, '缺少作业记录编号，无法提交');
+      return;
+    }
     setState(() => _submitting = true);
-    Navigator.of(context).pop(
-      _SubmitHomeworkResult(
-        kind: _kind,
-        fileName: _picked!.name,
-        note: _noteCtrl.text.trim(),
-        remoteUrl: _remotePath,
-      ),
-    );
+    final note = _noteCtrl.text.trim();
+    final desc = note.isNotEmpty ? note : '提交了：${_picked!.name}';
+    final kindLabel = switch (_kind) {
+      _SubmitKind.video => '视频',
+      _SubmitKind.audio => '音频',
+      _SubmitKind.photo => '照片',
+      _SubmitKind.doc => '文档',
+    };
+    final res = await ref.read(studentRepositoryProvider).studentHomeworkSubmit(
+          id: widget.data.recordId,
+          description: desc,
+          studentParam1: _remotePath ?? '',
+          studentParam2: _picked!.name,
+          studentParam3: kindLabel,
+        );
+    if (!mounted) return;
+    setState(() => _submitting = false);
+    if (res.isSuccess) {
+      Navigator.of(context).pop(true);
+    } else {
+      AppToast.show(context, res.msg.isNotEmpty ? res.msg : '提交失败');
+    }
   }
 
   @override
@@ -2024,8 +2454,10 @@ class _SubmitHomeworkDialogState extends ConsumerState<_SubmitHomeworkDialog> {
       contentPadding: EdgeInsets.fromLTRB(ui(24), ui(60), ui(24), ui(20)),
       actionBar: AppDialogActionBar(
         cancelLabel: '取消',
-        confirmLabel: _uploading ? '上传中…' : '确认',
-        confirmEnabled: _ready,
+        confirmLabel: _submitting
+            ? '提交中…'
+            : (_uploading ? '上传中…' : '确认'),
+        confirmEnabled: _ready && !_submitting,
         onCancel: () => Navigator.of(context).pop(),
         onConfirm: _submit,
       ),
@@ -2054,6 +2486,35 @@ class _SubmitHomeworkDialogState extends ConsumerState<_SubmitHomeworkDialog> {
               height: 20 / 12,
             ),
           ),
+          if (widget.data.mediumLabel.trim().isNotEmpty &&
+              widget.data.mediumLabel != '附件') ...[
+            SizedBox(height: ui(4)),
+            Text(
+              '建议提交：${widget.data.mediumLabel}',
+              style: TextStyle(
+                fontSize: ui(12),
+                color: _kTextSecondary,
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w400,
+                height: 20 / 12,
+              ),
+            ),
+          ],
+          if (widget.data.requirementText.trim().isNotEmpty) ...[
+            SizedBox(height: ui(6)),
+            Text(
+              widget.data.requirementText.trim(),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: ui(12),
+                color: _kTextDark,
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w400,
+                height: 1.35,
+              ),
+            ),
+          ],
           SizedBox(height: ui(12)),
           _DialogLabel('提交类型'),
           SizedBox(height: ui(8)),
@@ -2380,30 +2841,71 @@ class _NoteInput extends StatelessWidget {
 // 弹窗：作业详情
 // =============================================================================
 
-class _HomeworkDetailDialog extends StatelessWidget {
+class _HomeworkDetailDialog extends ConsumerStatefulWidget {
   const _HomeworkDetailDialog({required this.data});
 
   final _HomeworkData data;
 
-  String get _statusLabel => switch (data.status) {
+  @override
+  ConsumerState<_HomeworkDetailDialog> createState() => _HomeworkDetailDialogState();
+}
+
+class _HomeworkDetailDialogState extends ConsumerState<_HomeworkDetailDialog> {
+  late _HomeworkData _d;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _d = widget.data;
+    if (widget.data.recordId.isEmpty) {
+      _loading = false;
+    } else {
+      _loadDetail();
+    }
+  }
+
+  Future<void> _loadDetail() async {
+    if (!mounted) return;
+    setState(() => _loading = true);
+    final id = _d.recordId.isNotEmpty ? _d.recordId : widget.data.recordId;
+    final res = await ref
+        .read(studentRepositoryProvider)
+        .studentHomeworkDetail(id: id);
+    if (!mounted) return;
+    if (res.isSuccess && res.data is Map) {
+      setState(() {
+        _d = _HomeworkData.mergeDetail(_d, res.data as Map);
+        _loading = false;
+      });
+    } else {
+      setState(() => _loading = false);
+      if (mounted) {
+        AppToast.show(context, res.msg.isNotEmpty ? res.msg : '详情加载失败');
+      }
+    }
+  }
+
+  String _statusLabel(_HomeworkData data) => switch (data.status) {
     _HomeworkStatus.pending => '待提交',
     _HomeworkStatus.overdue => '已逾期',
     _HomeworkStatus.submitted => '已提交',
-    _HomeworkStatus.reviewed => '已批阅',
+    _HomeworkStatus.reviewed => '已评分',
   };
 
-  String? get _submittedAt {
+  String? _submittedAt(_HomeworkData data) {
     if (data.bodyType == _HomeworkBodyType.pending) return null;
-    return data.deadline;
+    if (data.submitTimeDisplay.isNotEmpty) return data.submitTimeDisplay;
+    return null;
   }
 
-  String get _requirement => switch (data.subject) {
-    _HomeworkSubject.music => '完成本节音程听辨练习曲目，注意大小三度区分。',
-    _HomeworkSubject.vocal ||
-    _HomeworkSubject.vocalRed => '录制指定练声曲+一首艺术歌曲主歌，注意气息与咬字。',
-  };
+  String _requirement(_HomeworkData data) {
+    final t = data.requirementText.trim();
+    return t.isNotEmpty ? t : '—';
+  }
 
-  String get _feedback {
+  String _feedback(_HomeworkData data) {
+    if (data.teacherFeedback.isNotEmpty) return data.teacherFeedback;
     if (data.bodyType == _HomeworkBodyType.reviewed &&
         (data.reviewText?.isNotEmpty ?? false)) {
       return data.reviewText!;
@@ -2430,12 +2932,37 @@ class _HomeworkDetailDialog extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.zero,
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                foregroundColor: _kPurple,
+              ),
+              onPressed: _loading ? null : _loadDetail,
+              child: Text(
+                '刷新',
+                style: TextStyle(
+                  fontSize: ui(12),
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w400,
+                ),
+              ),
+            ),
+          ),
+          if (_loading) ...[
+            SizedBox(height: ui(4)),
+            LinearProgressIndicator(minHeight: ui(2)),
+          ],
+          SizedBox(height: ui(8)),
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Expanded(
                 child: Text(
-                  data.title,
+                  _d.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -2448,41 +2975,98 @@ class _HomeworkDetailDialog extends StatelessWidget {
                 ),
               ),
               SizedBox(width: ui(8)),
-              _SubjectTag(subject: data.subject),
+              _SubjectTag(subject: _d.subject),
               SizedBox(width: ui(8)),
-              _DetailStatusTag(label: _statusLabel),
+              _DetailStatusTag(label: _statusLabel(_d)),
             ],
           ),
           SizedBox(height: ui(12)),
-          _DetailKeyValueRow(label: '发布老师', value: data.teacher),
+          _DetailKeyValueRow(label: '发布老师', value: _d.teacher),
           SizedBox(height: ui(12)),
-          _DetailKeyValueRow(label: '截止时间', value: data.deadline),
+          _DetailKeyValueRow(label: '截止时间', value: _d.deadline),
+          if (_d.mediumLabel.trim().isNotEmpty && _d.mediumLabel != '附件') ...[
+            SizedBox(height: ui(12)),
+            _DetailKeyValueRow(label: '建议提交', value: _d.mediumLabel),
+          ],
           SizedBox(height: ui(12)),
           _DetailGrayPanel(
             label: '作业要求',
-            children: [_DetailGrayLine(text: _requirement, primary: true)],
+            children: [_DetailGrayLine(text: _requirement(_d), primary: true)],
           ),
           SizedBox(height: ui(12)),
           _DetailGrayPanel(
             label: '提交情况',
             children: [
               _DetailGrayLine(
-                text: data.submittedFile?.isNotEmpty == true
-                    ? data.submittedFile!
-                    : '尚未提交',
-                primary: data.submittedFile?.isNotEmpty == true,
+                text: _d.submittedFile?.isNotEmpty == true ? _d.submittedFile! : '尚未提交',
+                primary: _d.submittedFile?.isNotEmpty == true,
               ),
-              if (_submittedAt != null) ...[
+              if (_submittedAt(_d) != null) ...[
                 SizedBox(height: ui(6)),
-                _DetailGrayLine(text: '提交时间：${_submittedAt!}'),
+                _DetailGrayLine(text: '提交时间：${_submittedAt(_d)!}'),
               ],
             ],
           ),
+          if (_d.submitFileUrl.trim().isNotEmpty ||
+              _d.submitAttachmentName.trim().isNotEmpty ||
+              _d.submitTypeTag.trim().isNotEmpty ||
+              _d.studentSubmitDescription.trim().isNotEmpty) ...[
+            SizedBox(height: ui(12)),
+            _DetailGrayPanel(
+              label: '我的提交',
+              children: [
+                if (_d.submitTypeTag.trim().isNotEmpty)
+                  _DetailGrayLine(text: '提交类型：${_d.submitTypeTag}', primary: true),
+                if (_d.submitAttachmentName.trim().isNotEmpty) ...[
+                  SizedBox(height: ui(6)),
+                  _DetailGrayLine(text: '文件：${_d.submitAttachmentName}', primary: true),
+                ],
+                if (_d.studentSubmitDescription.trim().isNotEmpty) ...[
+                  SizedBox(height: ui(6)),
+                  _DetailGrayLine(text: '说明：${_d.studentSubmitDescription}', primary: false),
+                ],
+                if (_d.submitFileUrl.trim().isNotEmpty) ...[
+                  SizedBox(height: ui(8)),
+                  InkWell(
+                    onTap: () => showStudentHomeworkSubmissionPreview(
+                      context,
+                      ref: ref,
+                      fileUrl: _d.submitFileUrl,
+                      title: _d.submitAttachmentName,
+                      typeTag: _d.submitTypeTag,
+                      mediumLabel: _d.mediumLabel,
+                      attachmentName: _d.submitAttachmentName,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.open_in_new_rounded, size: ui(16), color: _kBlueLink),
+                        SizedBox(width: ui(6)),
+                        Text(
+                          '预览提交文件',
+                          style: TextStyle(
+                            fontSize: ui(13),
+                            color: _kBlueLink,
+                            fontFamily: 'PingFang SC',
+                            fontWeight: AppFont.w500,
+                            decoration: TextDecoration.underline,
+                            decorationColor: _kBlueLink,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
           SizedBox(height: ui(12)),
           _DetailGrayPanel(
             label: '教师反馈',
             children: [
-              _DetailGrayLine(text: _feedback, primary: _feedback != '无'),
+              _DetailGrayLine(
+                text: _feedback(_d),
+                primary: _feedback(_d) != '无',
+              ),
             ],
           ),
         ],
@@ -2505,7 +3089,7 @@ class _DetailStatusTag extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final (bg, fg) = switch (label) {
-      '已提交' || '已批阅' => (_kSubmittedGreenBg, _kSubmittedGreen),
+      '已提交' || '已批阅' || '已评分' => (_kSubmittedGreenBg, _kSubmittedGreen),
       '已逾期' => (_kOverdueRedBg, _kOverdueRed),
       _ => (_kPendingOrangeBg, _kPendingOrange),
     };

@@ -22,7 +22,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
-import '../state/class_notice_controller.dart';
+import '../data/teacher_repository.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 const Color _kPanelBg = Colors.white;
@@ -40,6 +40,114 @@ const Color _kYellow = Color(0xFFDBEE49);
 const Color _kBorderSoft = Color(0xFFF3F2F3);
 const Color _kAnnounceBg = Color(0xFFF0E8FC);
 
+// ---- 班级通知数据模型（来自 API）----------------------------------------
+
+class _NoticeItem {
+  const _NoticeItem({
+    required this.id,
+    required this.title,
+    required this.content,
+    required this.date,
+  });
+
+  final String id;
+  final String title;
+  final String content;
+  final String date;
+
+  factory _NoticeItem.fromMap(Map<dynamic, dynamic> m) {
+    final raw = m['createTime']?.toString() ?? '';
+    final date = raw.length >= 10 ? raw.substring(5, 10) : raw;
+    return _NoticeItem(
+      id: m['id']?.toString() ?? '',
+      title: m['title']?.toString() ?? '',
+      content: m['content']?.toString() ?? '',
+      date: date,
+    );
+  }
+}
+
+// ---- 学生管理数据模型（来自 API）-----------------------------------------
+
+class _StudentManageData {
+  const _StudentManageData({
+    required this.id,
+    required this.name,
+    required this.studentId,
+    required this.dorm,
+    required this.phone,
+    required this.parentName,
+    required this.parentPhone,
+    required this.gender,
+    this.role,
+    this.remark,
+    this.tags,
+    this.tag,
+    this.tagColor,
+    this.tagTextColor,
+    this.avatarUrl,
+  });
+
+  /// 后端数值 id，用于调用 studentDetail / studentUpdate 接口。
+  final int id;
+  final String name;
+  final String studentId;
+  final String? role;
+  final String dorm;
+  final String phone;
+  final String parentName;
+  final String parentPhone;
+  final String? remark;
+  final String? tags;
+  final String? tag;
+  final Color? tagColor;
+  final Color? tagTextColor;
+  final String gender;
+  final String? avatarUrl;
+
+  factory _StudentManageData.fromMap(Map<dynamic, dynamic> m) {
+    final tagsRaw = m['tags']?.toString() ?? '';
+    final firstTag = tagsRaw.split(',').where((t) => t.trim().isNotEmpty).firstOrNull?.trim();
+    return _StudentManageData(
+      id: int.tryParse(m['id']?.toString() ?? '') ?? 0,
+      name: m['realname']?.toString() ?? m['nickname']?.toString() ?? '—',
+      studentId: m['studentNo']?.toString() ?? m['code']?.toString() ?? '',
+      gender: m['gender']?.toString() == '1' ? '男' : '女',
+      dorm: m['dormitory']?.toString() ?? m['dorm']?.toString() ?? '—',
+      phone: m['mobile']?.toString() ?? m['phone']?.toString() ?? '—',
+      parentName: m['parentName']?.toString() ?? m['guardianName']?.toString() ?? '—',
+      parentPhone: m['parentMobile']?.toString() ?? m['guardianMobile']?.toString() ?? '—',
+      role: m['classRole']?.toString() ?? m['role']?.toString(),
+      remark: m['remark']?.toString(),
+      tags: tagsRaw,
+      tag: firstTag,
+      tagColor: firstTag != null ? _kPurple : null,
+      tagTextColor: firstTag != null ? Colors.white : null,
+      avatarUrl: m['headUrl']?.toString() ?? m['avatar']?.toString(),
+    );
+  }
+
+  _StudentManageData copyWith({String? remark, String? tags}) {
+    return _StudentManageData(
+      id: id,
+      name: name,
+      studentId: studentId,
+      gender: gender,
+      dorm: dorm,
+      phone: phone,
+      parentName: parentName,
+      parentPhone: parentPhone,
+      role: role,
+      remark: remark ?? this.remark,
+      tags: tags ?? this.tags,
+      tag: (tags ?? this.tags)?.split(',').where((t) => t.trim().isNotEmpty).firstOrNull?.trim(),
+      tagColor: tagColor,
+      tagTextColor: tagTextColor,
+      avatarUrl: avatarUrl,
+    );
+  }
+}
+
 enum _WorkbenchTab { overview, students, grades }
 
 extension on _WorkbenchTab {
@@ -55,37 +163,112 @@ extension on _WorkbenchTab {
   }
 }
 
-class TeacherClassWorkbenchView extends StatefulWidget {
+class TeacherClassWorkbenchView extends ConsumerStatefulWidget {
   const TeacherClassWorkbenchView({super.key, required this.onBack});
 
   final VoidCallback onBack;
 
   @override
-  State<TeacherClassWorkbenchView> createState() =>
+  ConsumerState<TeacherClassWorkbenchView> createState() =>
       _TeacherClassWorkbenchViewState();
 }
 
-class _TeacherClassWorkbenchViewState extends State<TeacherClassWorkbenchView> {
+class _TeacherClassWorkbenchViewState
+    extends ConsumerState<TeacherClassWorkbenchView> {
   _WorkbenchTab _tab = _WorkbenchTab.overview;
+
+  // 当前班级（从 classList 接口获取第一个班级）；id 用字符串避免雪花精度丢失。
+  String _classId = '0';
+  String _className = '';
+  bool _loadingClass = true;
+  String _classError = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadClass();
+  }
+
+  Future<void> _loadClass() async {
+    final res = await ref.read(teacherRepositoryProvider).classList();
+    if (!mounted) return;
+    if (res.isSuccess) {
+      final list = res.data is List ? res.data as List : [];
+      if (list.isNotEmpty) {
+        final first = list.first as Map;
+        setState(() {
+          _classId =
+              first['id']?.toString() ??
+              first['classId']?.toString() ??
+              '0';
+          _className = first['name']?.toString() ?? '';
+          _loadingClass = false;
+        });
+        return;
+      }
+    }
+    if (mounted) {
+      setState(() {
+        _loadingClass = false;
+        _classError = res.msg.isNotEmpty ? res.msg : '暂无绑定班级';
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+
+    final banner = _WorkbenchBanner(
+      tab: _tab,
+      onTabChanged: (t) => setState(() => _tab = t),
+      onBack: widget.onBack,
+    );
+
+    if (_loadingClass) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          banner,
+          SizedBox(height: ui(80)),
+          Center(
+            child: CircularProgressIndicator(
+              color: _kPurple,
+              strokeWidth: 2,
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (_classError.isNotEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          banner,
+          SizedBox(height: ui(60)),
+          Center(
+            child: Text(
+              _classError,
+              style: TextStyle(fontSize: ui(14), color: _kTextHint),
+            ),
+          ),
+        ],
+      );
+    }
+
     return SingleChildScrollView(
       padding: EdgeInsets.only(bottom: ui(20)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _WorkbenchBanner(
-            tab: _tab,
-            onTabChanged: (t) => setState(() => _tab = t),
-            onBack: widget.onBack,
-          ),
+          banner,
           SizedBox(height: ui(16)),
           // 不同 Tab 的主体——保持 banner 一致，下方切换内容。
           switch (_tab) {
-            _WorkbenchTab.overview => const _OverviewTab(),
-            _WorkbenchTab.students => const _StudentsTab(),
+            _WorkbenchTab.overview =>
+              _OverviewTab(classId: _classId, className: _className),
+            _WorkbenchTab.students => _StudentsTab(classId: _classId),
             _WorkbenchTab.grades => const _GradesTab(),
           },
         ],
@@ -245,7 +428,10 @@ class _SegmentItem extends StatelessWidget {
 // =============================================================================
 
 class _OverviewTab extends StatelessWidget {
-  const _OverviewTab();
+  const _OverviewTab({required this.classId, required this.className});
+
+  final String classId;
+  final String className;
 
   @override
   Widget build(BuildContext context) {
@@ -253,10 +439,7 @@ class _OverviewTab extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 「班级通知」位于双列布局之上，跨整行展示。班主任视角下显示「发布
-        // 通知」按钮 + 每张卡片右上角"×"删除按钮；列表与学生「我的班级」
-        // 共享 classNoticeControllerProvider，发布/删除会即时同步到学生端。
-        const _NoticeSection(),
+        _NoticeSection(classId: classId),
         SizedBox(height: ui(20)),
         LayoutBuilder(
           builder: (context, c) {
@@ -417,18 +600,59 @@ class _SectionTitleWithAction extends StatelessWidget {
 // 加一个"发布通知"按钮和卡片右上角"×"删除按钮。卡片样式与学生视角一致
 // （紫底 #F0E8FC，左侧紫色方块 highlight，下方日期）。
 
-class _NoticeSection extends ConsumerWidget {
-  const _NoticeSection();
+class _NoticeSection extends ConsumerStatefulWidget {
+  const _NoticeSection({required this.classId});
+
+  final String classId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_NoticeSection> createState() => _NoticeSectionState();
+}
+
+class _NoticeSectionState extends ConsumerState<_NoticeSection> {
+  List<_NoticeItem> _notices = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNotices();
+  }
+
+  Future<void> _loadNotices() async {
+    if (!mounted) return;
+    setState(() => _loading = true);
+    final res = await ref.read(teacherRepositoryProvider).schoolClassNoticeList(
+      classId: widget.classId,
+      size: 20,
+    );
+    if (!mounted) return;
+    if (res.isSuccess) {
+      final raw = res.data;
+      final list = (raw is Map ? raw['records'] ?? raw['list'] ?? raw : raw);
+      if (list is List) {
+        _notices = list
+            .whereType<Map>()
+            .map(_NoticeItem.fromMap)
+            .toList();
+      }
+    }
+    setState(() => _loading = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final notices = ref.watch(classNoticeControllerProvider);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _NoticeSectionHeader(
-          onPublish: () => _showPublishNoticeDialog(context, ref),
+          onPublish: () => _showPublishNoticeDialog(
+            context,
+            ref,
+            classId: widget.classId,
+            onPublished: _loadNotices,
+          ),
         ),
         SizedBox(height: ui(12)),
         Container(
@@ -438,7 +662,17 @@ class _NoticeSection extends ConsumerWidget {
             color: _kPanelBg,
             borderRadius: BorderRadius.circular(ui(16)),
           ),
-          child: notices.isEmpty
+          child: _loading
+              ? Padding(
+                  padding: EdgeInsets.symmetric(vertical: ui(20)),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      color: _kPurple,
+                      strokeWidth: 2,
+                    ),
+                  ),
+                )
+              : _notices.isEmpty
               ? Padding(
                   padding: EdgeInsets.symmetric(vertical: ui(20)),
                   child: Center(
@@ -455,30 +689,21 @@ class _NoticeSection extends ConsumerWidget {
                   ),
                 )
               : LayoutBuilder(
-                  builder: (context, c) {
-                    // 班主任视角下条数可变；用 LayoutBuilder + Wrap 自适应：
-                    //   宽度 ≥ ui(820)：3 列；
-                    //   ui(560) ≤ 宽度 < ui(820)：2 列；
-                    //   宽度 < ui(560)：1 列。
+                  builder: (ctx, c) {
                     final w = c.maxWidth;
-                    final cols = w >= ui(820)
-                        ? 3
-                        : w >= ui(560)
-                        ? 2
-                        : 1;
+                    final cols = w >= ui(820) ? 3 : w >= ui(560) ? 2 : 1;
                     final gap = ui(8);
                     final cardWidth = (w - gap * (cols - 1)) / cols;
                     return Wrap(
                       spacing: gap,
                       runSpacing: gap,
                       children: [
-                        for (final n in notices)
+                        for (final n in _notices)
                           SizedBox(
                             width: cardWidth,
                             child: _NoticeCardEditable(
                               notice: n,
-                              onDelete: () =>
-                                  _confirmDeleteNotice(context, ref, n),
+                              onDelete: () => _confirmDeleteNoticeItem(ctx, n),
                             ),
                           ),
                       ],
@@ -488,6 +713,67 @@ class _NoticeSection extends ConsumerWidget {
         ),
       ],
     );
+  }
+
+  void _confirmDeleteNoticeItem(BuildContext ctx, _NoticeItem notice) async {
+    final ok = await showScaledDialog<bool>(
+      context: ctx,
+      barrierColor: Colors.black.withValues(alpha: 0.80),
+      builder: (dialogContext) {
+        final ui = DashboardScaleScope.of(dialogContext).ui;
+        return GradientHeaderDialog(
+          title: '删除班级通知',
+          titleFontSize: 24,
+          titleFontWeight: FontWeight.w500,
+          titlePaddingTop: 40,
+          width: 420,
+          contentPadding: EdgeInsets.fromLTRB(ui(40), ui(30), ui(40), ui(30)),
+          actionBar: AppDialogActionBar(
+            confirmLabel: '删除',
+            cancelLabel: '取消',
+            onCancel: () => Navigator.of(dialogContext).pop(false),
+            onConfirm: () => Navigator.of(dialogContext).pop(true),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '删除后学生端「我的班级」也会同步移除该通知，操作不可撤回。',
+                style: TextStyle(
+                  fontSize: ui(14),
+                  color: _kTextSecondary,
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w400,
+                  height: 22 / 14,
+                ),
+              ),
+              SizedBox(height: ui(12)),
+              Container(
+                padding: EdgeInsets.all(ui(10)),
+                decoration: BoxDecoration(
+                  color: _kAnnounceBg,
+                  borderRadius: BorderRadius.circular(ui(8)),
+                ),
+                child: Text(
+                  notice.title.isNotEmpty ? notice.title : notice.content,
+                  style: TextStyle(
+                    fontSize: ui(13),
+                    color: _kTextDark,
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w500,
+                    height: 20 / 13,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (ok == true && mounted) {
+      setState(() => _notices.removeWhere((n) => n.id == notice.id));
+    }
   }
 }
 
@@ -542,7 +828,7 @@ class _NoticeSectionHeader extends StatelessWidget {
 class _NoticeCardEditable extends StatelessWidget {
   const _NoticeCardEditable({required this.notice, required this.onDelete});
 
-  final ClassNotice notice;
+  final _NoticeItem notice;
   final VoidCallback onDelete;
 
   @override
@@ -561,23 +847,24 @@ class _NoticeCardEditable extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (notice.highlighted) ...[
-                SizedBox(
-                  width: ui(12),
-                  height: ui(20),
-                  child: Center(
-                    child: Container(
-                      width: ui(10),
-                      height: ui(10),
+              SizedBox(
+                width: ui(12),
+                height: ui(20),
+                child: Center(
+                  child: Container(
+                    width: ui(8),
+                    height: ui(8),
+                    decoration: BoxDecoration(
                       color: _kPurple,
+                      shape: BoxShape.circle,
                     ),
                   ),
                 ),
-                SizedBox(width: ui(8)),
-              ],
+              ),
+              SizedBox(width: ui(6)),
               Expanded(
                 child: Text(
-                  notice.text,
+                  notice.title.isNotEmpty ? notice.title : notice.content,
                   style: TextStyle(
                     fontSize: ui(13),
                     color: _kTextDark,
@@ -588,7 +875,6 @@ class _NoticeCardEditable extends StatelessWidget {
                 ),
               ),
               SizedBox(width: ui(4)),
-              // 删除按钮：紫色透明 hover；点击弹出确认弹窗。
               InkWell(
                 onTap: onDelete,
                 borderRadius: BorderRadius.circular(ui(10)),
@@ -609,9 +895,27 @@ class _NoticeCardEditable extends StatelessWidget {
               ),
             ],
           ),
+          if (notice.title.isNotEmpty && notice.content.isNotEmpty) ...[
+            SizedBox(height: ui(4)),
+            Padding(
+              padding: EdgeInsets.only(left: ui(18)),
+              child: Text(
+                notice.content,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: ui(12),
+                  color: _kTextSecondary,
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w400,
+                  height: 16 / 12,
+                ),
+              ),
+            ),
+          ],
           SizedBox(height: ui(4)),
           Padding(
-            padding: EdgeInsets.only(left: notice.highlighted ? ui(20) : 0),
+            padding: EdgeInsets.only(left: ui(18)),
             child: Text(
               notice.date,
               style: TextStyle(
@@ -633,10 +937,13 @@ class _NoticeCardEditable extends StatelessWidget {
 
 Future<void> _showPublishNoticeDialog(
   BuildContext context,
-  WidgetRef ref,
-) async {
-  final controller = TextEditingController();
-  final result = await showScaledDialog<String>(
+  WidgetRef ref, {
+  required String classId,
+  required VoidCallback onPublished,
+}) async {
+  final titleCtrl = TextEditingController();
+  final contentCtrl = TextEditingController();
+  final result = await showScaledDialog<({String title, String content})>(
     context: context,
     barrierColor: Colors.black.withValues(alpha: 0.80),
     builder: (dialogContext) {
@@ -652,8 +959,12 @@ Future<void> _showPublishNoticeDialog(
           confirmLabel: '发布',
           cancelLabel: '取消',
           onCancel: () => Navigator.of(dialogContext).pop(),
-          onConfirm: () =>
-              Navigator.of(dialogContext).pop(controller.text.trim()),
+          onConfirm: () {
+            final t = titleCtrl.text.trim();
+            final c = contentCtrl.text.trim();
+            if (t.isEmpty || c.isEmpty) return;
+            Navigator.of(dialogContext).pop((title: t, content: c));
+          },
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -669,7 +980,55 @@ Future<void> _showPublishNoticeDialog(
                 height: 20 / 13,
               ),
             ),
-            SizedBox(height: ui(15)),
+            SizedBox(height: ui(16)),
+            Text(
+              '通知标题',
+              style: TextStyle(
+                fontSize: ui(14),
+                color: _kTextDark,
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w500,
+                height: 20 / 14,
+              ),
+            ),
+            SizedBox(height: ui(8)),
+            Container(
+              height: ui(44),
+              padding: EdgeInsets.symmetric(horizontal: ui(16)),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(ui(8)),
+                border: Border.all(color: _kBorderSoft, width: 1),
+              ),
+              alignment: Alignment.centerLeft,
+              child: TextField(
+                controller: titleCtrl,
+                autofocus: true,
+                maxLines: 1,
+                cursorColor: _kPurple,
+                cursorWidth: 1.5,
+                cursorHeight: ui(16),
+                style: TextStyle(
+                  fontSize: ui(14),
+                  color: _kTextDark,
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w400,
+                ),
+                decoration: InputDecoration(
+                  hintText: '示例：本周五合唱排练通知',
+                  hintStyle: TextStyle(
+                    fontSize: ui(14),
+                    color: _kTextHintLight,
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w400,
+                  ),
+                  border: InputBorder.none,
+                  isCollapsed: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ),
+            SizedBox(height: ui(12)),
             Text(
               '通知内容',
               style: TextStyle(
@@ -680,9 +1039,9 @@ Future<void> _showPublishNoticeDialog(
                 height: 20 / 14,
               ),
             ),
-            SizedBox(height: ui(10)),
+            SizedBox(height: ui(8)),
             Container(
-              height: ui(120),
+              height: ui(100),
               padding: EdgeInsets.symmetric(
                 horizontal: ui(16),
                 vertical: ui(12),
@@ -693,8 +1052,7 @@ Future<void> _showPublishNoticeDialog(
                 border: Border.all(color: _kBorderSoft, width: 1),
               ),
               child: TextField(
-                controller: controller,
-                autofocus: true,
+                controller: contentCtrl,
                 maxLines: null,
                 expands: true,
                 textAlignVertical: TextAlignVertical.top,
@@ -729,84 +1087,22 @@ Future<void> _showPublishNoticeDialog(
     },
   );
 
-  if (result != null && result.isNotEmpty) {
-    ref.read(classNoticeControllerProvider.notifier).publish(text: result);
-    if (context.mounted) {
-      AppToast.show(context, '班级通知已发布（演示）');
+  if (result != null && context.mounted) {
+    final res = await ref.read(teacherRepositoryProvider).schoolClassNoticeSave(
+      classId: classId,
+      title: result.title,
+      content: result.content,
+    );
+    if (!context.mounted) return;
+    if (res.isSuccess) {
+      AppToast.show(context, '班级通知已发布');
+      onPublished();
+    } else {
+      AppToast.show(context, res.msg.isNotEmpty ? res.msg : '发布失败，请重试');
     }
   }
 }
 
-// —— 删除通知确认弹窗 ——————————————————————————————————————————
-
-Future<void> _confirmDeleteNotice(
-  BuildContext context,
-  WidgetRef ref,
-  ClassNotice notice,
-) async {
-  final ok = await showScaledDialog<bool>(
-    context: context,
-    barrierColor: Colors.black.withValues(alpha: 0.80),
-    builder: (dialogContext) {
-      final ui = DashboardScaleScope.of(dialogContext).ui;
-      return GradientHeaderDialog(
-        title: '删除班级通知',
-        titleFontSize: 24,
-        titleFontWeight: FontWeight.w500,
-        titlePaddingTop: 40,
-        width: 420,
-        contentPadding: EdgeInsets.fromLTRB(ui(40), ui(30), ui(40), ui(30)),
-        actionBar: AppDialogActionBar(
-          confirmLabel: '删除',
-          cancelLabel: '取消',
-          onCancel: () => Navigator.of(dialogContext).pop(false),
-          onConfirm: () => Navigator.of(dialogContext).pop(true),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '删除后学生端「我的班级」也会同步移除该通知，操作不可撤回。',
-              style: TextStyle(
-                fontSize: ui(14),
-                color: _kTextSecondary,
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w400,
-                height: 22 / 14,
-              ),
-            ),
-            SizedBox(height: ui(12)),
-            Container(
-              padding: EdgeInsets.all(ui(10)),
-              decoration: BoxDecoration(
-                color: _kAnnounceBg,
-                borderRadius: BorderRadius.circular(ui(8)),
-              ),
-              child: Text(
-                notice.text,
-                style: TextStyle(
-                  fontSize: ui(13),
-                  color: _kTextDark,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w500,
-                  height: 20 / 13,
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    },
-  );
-
-  if (ok == true) {
-    ref.read(classNoticeControllerProvider.notifier).remove(notice.id);
-    if (context.mounted) {
-      AppToast.show(context, '班级通知已删除（演示）');
-    }
-  }
-}
 
 // ----- 我的班级 卡片 -----
 
@@ -1983,22 +2279,68 @@ class _TimelineSubtitle extends StatelessWidget {
 // 学生管理 Tab
 // =============================================================================
 
-class _StudentsTab extends StatefulWidget {
-  const _StudentsTab();
+class _StudentsTab extends ConsumerStatefulWidget {
+  const _StudentsTab({required this.classId});
+
+  final String classId;
 
   @override
-  State<_StudentsTab> createState() => _StudentsTabState();
+  ConsumerState<_StudentsTab> createState() => _StudentsTabState();
 }
 
-class _StudentsTabState extends State<_StudentsTab> {
+class _StudentsTabState extends ConsumerState<_StudentsTab> {
   String _query = '';
+  List<_StudentManageData> _allStudents = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStudents();
+  }
+
+  Future<void> _loadStudents() async {
+    final res = await ref.read(teacherRepositoryProvider).studentList(
+      classId: widget.classId,
+      size: 1000,
+    );
+    if (!mounted) return;
+    if (res.isSuccess) {
+      final raw = res.data;
+      final list = (raw is Map ? raw['records'] ?? raw['list'] ?? raw : raw);
+      if (list is List) {
+        _allStudents = list
+            .whereType<Map>()
+            .map(_StudentManageData.fromMap)
+            .toList();
+      }
+    }
+    setState(() => _loading = false);
+  }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+
+    if (_loading) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _StudentsHeader(
+            total: 0,
+            onQueryChanged: (v) => setState(() => _query = v),
+          ),
+          SizedBox(height: ui(40)),
+          Center(
+            child: CircularProgressIndicator(color: _kPurple, strokeWidth: 2),
+          ),
+        ],
+      );
+    }
+
     final filtered = _query.trim().isEmpty
-        ? _kStudents
-        : _kStudents.where((s) {
+        ? _allStudents
+        : _allStudents.where((s) {
             final q = _query.toLowerCase();
             return s.name.toLowerCase().contains(q) ||
                 s.studentId.toLowerCase().contains(q) ||
@@ -2006,46 +2348,60 @@ class _StudentsTabState extends State<_StudentsTab> {
                 s.phone.contains(q) ||
                 s.parentPhone.contains(q);
           }).toList();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _StudentsHeader(onQueryChanged: (v) => setState(() => _query = v)),
-        SizedBox(height: ui(16)),
-        LayoutBuilder(
-          builder: (context, c) {
-            // 学生卡按最小卡宽自适应：≥ ~280 即多列；与考试记录用同一思路，
-            // 避免阈值被 DashboardScale 放大后退化成单列。
-            final gap = ui(12);
-            final minCardW = ui(280);
-            final cols = math.max(
-              1,
-              math.min(3, ((c.maxWidth + gap) / (minCardW + gap)).floor()),
-            );
-            final cardW = (c.maxWidth - gap * (cols - 1)) / cols;
-            return Wrap(
-              spacing: gap,
-              runSpacing: gap,
-              children: [
-                for (final s in filtered)
-                  SizedBox(
-                    width: cardW,
-                    child: _StudentManageCard(
-                      data: s,
-                      onTap: () => _showStudentDetail(context, s),
-                    ),
-                  ),
-              ],
-            );
-          },
+        _StudentsHeader(
+          total: _allStudents.length,
+          onQueryChanged: (v) => setState(() => _query = v),
         ),
+        SizedBox(height: ui(16)),
+        if (filtered.isEmpty)
+          Center(
+            child: Padding(
+              padding: EdgeInsets.only(top: ui(40)),
+              child: Text(
+                _query.isEmpty ? '暂无学生数据' : '未找到匹配学生',
+                style: TextStyle(fontSize: ui(14), color: _kTextHint),
+              ),
+            ),
+          )
+        else
+          LayoutBuilder(
+            builder: (context, c) {
+              final gap = ui(12);
+              final minCardW = ui(280);
+              final cols = math.max(
+                1,
+                math.min(3, ((c.maxWidth + gap) / (minCardW + gap)).floor()),
+              );
+              final cardW = (c.maxWidth - gap * (cols - 1)) / cols;
+              return Wrap(
+                spacing: gap,
+                runSpacing: gap,
+                children: [
+                  for (final s in filtered)
+                    SizedBox(
+                      width: cardW,
+                      child: _StudentManageCard(
+                        data: s,
+                        onTap: () => _showStudentDetail(context, s),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
       ],
     );
   }
 }
 
 class _StudentsHeader extends StatelessWidget {
-  const _StudentsHeader({required this.onQueryChanged});
+  const _StudentsHeader({required this.onQueryChanged, required this.total});
   final ValueChanged<String> onQueryChanged;
+  final int total;
 
   @override
   Widget build(BuildContext context) {
@@ -2061,7 +2417,9 @@ class _StudentsHeader extends StatelessWidget {
               const _SectionTitle('学生管理'),
               SizedBox(height: ui(4)),
               Text(
-                '共42人在籍·本页演示14人·学生及家长信息仅查看;可编辑职务、标签与备注(本机保存)',
+                total > 0
+                    ? '共 $total 名学生 · 学生及家长信息仅查看，可编辑标签与备注'
+                    : '学生及家长信息仅查看，可编辑标签与备注',
                 style: TextStyle(
                   fontSize: ui(12),
                   color: _kTextHint,
@@ -2120,140 +2478,6 @@ class _StudentsHeader extends StatelessWidget {
   }
 }
 
-class _StudentManageData {
-  const _StudentManageData({
-    required this.name,
-    required this.studentId,
-    required this.dorm,
-    required this.phone,
-    required this.parentName,
-    required this.parentPhone,
-    required this.gender,
-    this.role,
-    this.tag,
-    this.tagColor,
-    this.tagTextColor,
-  });
-  final String name;
-  final String studentId;
-  final String? role;
-  final String dorm;
-  final String phone;
-  final String parentName;
-  final String parentPhone;
-  final String? tag;
-  final Color? tagColor;
-  final Color? tagTextColor;
-  final String gender;
-}
-
-const List<_StudentManageData> _kStudents = [
-  _StudentManageData(
-    name: '王晴',
-    studentId: 'G3030201',
-    role: '班长',
-    gender: '女',
-    dorm: '女生公寓 A-602',
-    phone: '13126245985',
-    parentName: '王丽',
-    parentPhone: '13126245985',
-    tag: '心理关注',
-    tagColor: _kPurple,
-    tagTextColor: Colors.white,
-  ),
-  _StudentManageData(
-    name: '韩露',
-    studentId: 'G3030202',
-    gender: '女',
-    dorm: '女生公寓 A-602',
-    phone: '13126245985',
-    parentName: '韩志远',
-    parentPhone: '13126245985',
-    tag: '出勤预警',
-    tagColor: _kYellow,
-    tagTextColor: _kTextDark,
-  ),
-  _StudentManageData(
-    name: '黎芭乐',
-    studentId: 'G3030203',
-    gender: '女',
-    dorm: '女生公寓 A-603',
-    phone: '13126245985',
-    parentName: '黎建华',
-    parentPhone: '13126245985',
-    tag: null,
-  ),
-  _StudentManageData(
-    name: '李铮辉',
-    studentId: 'G3030204',
-    role: '学习委员',
-    gender: '男',
-    dorm: '男生公寓 B-201',
-    phone: '13126245985',
-    parentName: '李宏伟',
-    parentPhone: '13126245985',
-    tag: '心理关注',
-    tagColor: _kPurple,
-    tagTextColor: Colors.white,
-  ),
-  _StudentManageData(
-    name: '陈江凯',
-    studentId: 'G3030205',
-    gender: '男',
-    dorm: '男生公寓 B-201',
-    phone: '13126245985',
-    parentName: '陈学勤',
-    parentPhone: '13126245985',
-    tag: '出勤预警',
-    tagColor: _kYellow,
-    tagTextColor: _kTextDark,
-  ),
-  _StudentManageData(
-    name: '林雅琪',
-    studentId: 'G3030206',
-    gender: '女',
-    dorm: '女生公寓 A-604',
-    phone: '13126245985',
-    parentName: '林国强',
-    parentPhone: '13126245985',
-    tag: null,
-  ),
-  _StudentManageData(
-    name: '苏文博',
-    studentId: 'G3030207',
-    role: '文艺委员',
-    gender: '男',
-    dorm: '男生公寓 B-203',
-    phone: '13126245985',
-    parentName: '苏振东',
-    parentPhone: '13126245985',
-    tag: '心理关注',
-    tagColor: _kPurple,
-    tagTextColor: Colors.white,
-  ),
-  _StudentManageData(
-    name: '高梓涵',
-    studentId: 'G3030208',
-    gender: '女',
-    dorm: '女生公寓 A-605',
-    phone: '13126245985',
-    parentName: '高峰',
-    parentPhone: '13126245985',
-    tag: '出勤预警',
-    tagColor: _kYellow,
-    tagTextColor: _kTextDark,
-  ),
-  _StudentManageData(
-    name: '周锐',
-    studentId: 'G3030209',
-    gender: '男',
-    dorm: '男生公寓 B-205',
-    phone: '13126245985',
-    parentName: '周建',
-    parentPhone: '13126245985',
-    tag: null,
-  ),
-];
 
 class _StudentManageCard extends StatelessWidget {
   const _StudentManageCard({required this.data, this.onTap});
@@ -3432,17 +3656,18 @@ Future<void> _showStudentDetail(BuildContext context, _StudentManageData data) {
   );
 }
 
-class _StudentDetailPanel extends StatefulWidget {
+class _StudentDetailPanel extends ConsumerStatefulWidget {
   const _StudentDetailPanel({required this.data});
   final _StudentManageData data;
 
   @override
-  State<_StudentDetailPanel> createState() => _StudentDetailPanelState();
+  ConsumerState<_StudentDetailPanel> createState() =>
+      _StudentDetailPanelState();
 }
 
-class _StudentDetailPanelState extends State<_StudentDetailPanel> {
-  // 班主任标签：第 0 项默认选中（紫底白字），其余灰底；最后一项「新建标签」是紫色描边按钮。
-  static const List<String> _kTags = [
+class _StudentDetailPanelState extends ConsumerState<_StudentDetailPanel> {
+  // 班主任标签集合；来自 API tags 字段（逗号分隔），合并已知预设。
+  static const List<String> _kPresetTags = [
     '合唱团',
     '声乐部',
     '钢琴组',
@@ -3450,9 +3675,99 @@ class _StudentDetailPanelState extends State<_StudentDetailPanel> {
     '校宣部',
     '社团骨干',
   ];
-  int _selectedTagIdx = 0;
 
-  late final String _classRole = widget.data.role ?? '班长';
+  late List<String> _selectedTags;
+  late final TextEditingController _remarkCtrl;
+  bool _saving = false;
+  bool _loadingDetail = false;
+
+  // 从 API 补充的详细信息（覆盖 widget.data 中的占位数据）
+  Map<String, dynamic> _detailExtra = {};
+
+  @override
+  void initState() {
+    super.initState();
+    final tagsStr = widget.data.tags ?? '';
+    _selectedTags = tagsStr
+        .split(',')
+        .map((t) => t.trim())
+        .where((t) => t.isNotEmpty)
+        .toList();
+    _remarkCtrl = TextEditingController(text: widget.data.remark ?? '');
+    if (widget.data.id > 0) _loadDetail();
+  }
+
+  @override
+  void dispose() {
+    _remarkCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadDetail() async {
+    setState(() => _loadingDetail = true);
+    final res = await ref.read(teacherRepositoryProvider).studentDetail(
+      id: widget.data.id,
+    );
+    if (!mounted) return;
+    if (res.isSuccess && res.data is Map) {
+      setState(() {
+        _detailExtra = Map<String, dynamic>.from(res.data as Map);
+        final tagsRaw = _detailExtra['tags']?.toString() ?? '';
+        if (tagsRaw.isNotEmpty) {
+          _selectedTags = tagsRaw
+              .split(',')
+              .map((t) => t.trim())
+              .where((t) => t.isNotEmpty)
+              .toList();
+        }
+        final remarkRaw = _detailExtra['remark']?.toString() ?? '';
+        if (remarkRaw.isNotEmpty) {
+          _remarkCtrl.text = remarkRaw;
+        }
+      });
+    }
+    if (mounted) setState(() => _loadingDetail = false);
+  }
+
+  Future<void> _saveChanges() async {
+    if (widget.data.id <= 0) {
+      Navigator.of(context).maybePop();
+      return;
+    }
+    setState(() => _saving = true);
+    final tags = _selectedTags.join(',');
+    final remark = _remarkCtrl.text.trim();
+    final res = await ref.read(teacherRepositoryProvider).studentUpdate(
+      studentId: widget.data.id,
+      remark: remark,
+      tags: tags,
+    );
+    if (!mounted) return;
+    setState(() => _saving = false);
+    if (res.isSuccess) {
+      AppToast.show(context, '修改已保存');
+      Navigator.of(context).maybePop();
+    } else {
+      AppToast.show(context, res.msg.isNotEmpty ? res.msg : '保存失败，请重试');
+    }
+  }
+
+  void _toggleTag(String tag) {
+    setState(() {
+      if (_selectedTags.contains(tag)) {
+        _selectedTags.remove(tag);
+      } else {
+        _selectedTags.add(tag);
+      }
+    });
+  }
+
+  String _detailField(String apiKey, String fallback) {
+    final v = _detailExtra[apiKey]?.toString().trim() ?? '';
+    return v.isNotEmpty ? v : fallback;
+  }
+
+  late final String _classRole = widget.data.role ?? '';
 
   @override
   Widget build(BuildContext context) {
@@ -3588,204 +3903,274 @@ class _StudentDetailPanelState extends State<_StudentDetailPanel> {
               ),
               // ----- 滚动主体 -----
               Expanded(
-                child: SingleChildScrollView(
-                  padding: EdgeInsets.fromLTRB(ui(20), ui(16), ui(20), ui(20)),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _DetailGroupCard(
-                        title: '本人信息',
-                        children: [
-                          _DetailFieldRow(
-                            children: [
-                              _DetailField(label: '性别：', value: data.gender),
-                              _DetailField(label: '住宿：', value: data.dorm),
-                              _DetailField(label: '本人手机：', value: data.phone),
-                              const _DetailField(
-                                label: '常住地址：',
-                                value: '17656287947',
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: ui(12)),
-                      _DetailGroupCard(
-                        title: '家长与监护人',
-                        children: [
-                          _DetailFieldRow(
-                            children: [
-                              _DetailField(
-                                label: '监护人一：',
-                                value: data.parentName,
-                              ),
-                              const _DetailField(label: '关系：', value: '母女'),
-                              _DetailField(
-                                label: '手机：',
-                                value: data.parentPhone,
-                              ),
-                              const _DetailField(
-                                label: '',
-                                value: '',
-                                invisible: true,
-                              ),
-                            ],
-                          ),
-                          SizedBox(height: ui(8)),
-                          _DetailFieldRow(
-                            children: [
-                              const _DetailField(label: '监护人二：', value: '苏西坡'),
-                              const _DetailField(label: '关系：', value: '父女'),
-                              _DetailField(
-                                label: '手机：',
-                                value: data.parentPhone,
-                              ),
-                              const _DetailField(
-                                label: '',
-                                value: '',
-                                invisible: true,
-                              ),
-                            ],
-                          ),
-                          SizedBox(height: ui(8)),
-                          _DetailFieldRow(
-                            children: [
-                              const _DetailField(label: '紧急联系人：', value: '苏西坡'),
-                              const _DetailField(
-                                label: '',
-                                value: '',
-                                invisible: true,
-                              ),
-                              _DetailField(
-                                label: '手机：',
-                                value: data.parentPhone,
-                              ),
-                              const _DetailField(
-                                label: '',
-                                value: '',
-                                invisible: true,
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: ui(16)),
-                      _detailLabel(context, '班主任备注'),
-                      SizedBox(height: ui(8)),
-                      Container(
-                        height: ui(60),
+                child: _loadingDetail
+                    ? Center(
+                        child: CircularProgressIndicator(
+                          color: _kPurple,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : SingleChildScrollView(
                         padding: EdgeInsets.fromLTRB(
+                          ui(20),
                           ui(16),
-                          ui(12),
-                          ui(16),
-                          ui(14),
+                          ui(20),
+                          ui(20),
                         ),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(ui(8)),
-                          border: Border.all(color: _kInnerGray),
-                        ),
-                        alignment: Alignment.topLeft,
-                        child: Text(
-                          '说明题目范围、命名规则、提交格式等',
-                          style: TextStyle(
-                            fontSize: ui(14),
-                            color: _kTextHint,
-                            fontWeight: FontWeight.w400,
-                            height: 20 / 14,
-                          ),
-                        ),
-                      ),
-                      SizedBox(height: ui(16)),
-                      _detailLabel(context, '班级职务'),
-                      SizedBox(height: ui(8)),
-                      Container(
-                        height: ui(48),
-                        padding: EdgeInsets.symmetric(
-                          horizontal: ui(16),
-                          vertical: ui(14),
-                        ),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(ui(8)),
-                          border: Border.all(color: _kInnerGray),
-                        ),
-                        child: Row(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(
-                              child: Text(
-                                _classRole,
+                            _DetailGroupCard(
+                              title: '本人信息',
+                              children: [
+                                _DetailFieldRow(
+                                  children: [
+                                    _DetailField(
+                                      label: '性别：',
+                                      value: _detailField('gender', data.gender == '1' ? '男' : data.gender),
+                                    ),
+                                    _DetailField(
+                                      label: '住宿：',
+                                      value: _detailField('dormitory', data.dorm),
+                                    ),
+                                    _DetailField(
+                                      label: '本人手机：',
+                                      value: _detailField('mobile', data.phone),
+                                    ),
+                                    _DetailField(
+                                      label: '常住地址：',
+                                      value: _detailField('address', '—'),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: ui(12)),
+                            _DetailGroupCard(
+                              title: '家长与监护人',
+                              children: [
+                                _DetailFieldRow(
+                                  children: [
+                                    _DetailField(
+                                      label: '监护人一：',
+                                      value: _detailField(
+                                        'guardianName',
+                                        _detailField('parentName', data.parentName),
+                                      ),
+                                    ),
+                                    _DetailField(
+                                      label: '关系：',
+                                      value: _detailField('guardianRelation', '—'),
+                                    ),
+                                    _DetailField(
+                                      label: '手机：',
+                                      value: _detailField(
+                                        'guardianMobile',
+                                        _detailField('parentMobile', data.parentPhone),
+                                      ),
+                                    ),
+                                    const _DetailField(
+                                      label: '',
+                                      value: '',
+                                      invisible: true,
+                                    ),
+                                  ],
+                                ),
+                                if (_detailExtra['guardian2Name'] != null) ...[
+                                  SizedBox(height: ui(8)),
+                                  _DetailFieldRow(
+                                    children: [
+                                      _DetailField(
+                                        label: '监护人二：',
+                                        value: _detailField('guardian2Name', '—'),
+                                      ),
+                                      _DetailField(
+                                        label: '关系：',
+                                        value: _detailField('guardian2Relation', '—'),
+                                      ),
+                                      _DetailField(
+                                        label: '手机：',
+                                        value: _detailField('guardian2Mobile', '—'),
+                                      ),
+                                      const _DetailField(
+                                        label: '',
+                                        value: '',
+                                        invisible: true,
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                                if (_detailExtra['emergencyContact'] != null) ...[
+                                  SizedBox(height: ui(8)),
+                                  _DetailFieldRow(
+                                    children: [
+                                      _DetailField(
+                                        label: '紧急联系人：',
+                                        value: _detailField('emergencyContact', '—'),
+                                      ),
+                                      const _DetailField(
+                                        label: '',
+                                        value: '',
+                                        invisible: true,
+                                      ),
+                                      _DetailField(
+                                        label: '手机：',
+                                        value: _detailField(
+                                          'emergencyMobile',
+                                          '—',
+                                        ),
+                                      ),
+                                      const _DetailField(
+                                        label: '',
+                                        value: '',
+                                        invisible: true,
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ],
+                            ),
+                            SizedBox(height: ui(16)),
+                            _detailLabel(context, '班主任备注'),
+                            SizedBox(height: ui(8)),
+                            Container(
+                              constraints: BoxConstraints(minHeight: ui(60)),
+                              padding: EdgeInsets.fromLTRB(
+                                ui(16),
+                                ui(12),
+                                ui(16),
+                                ui(12),
+                              ),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(ui(8)),
+                                border: Border.all(color: _kInnerGray),
+                              ),
+                              child: TextField(
+                                controller: _remarkCtrl,
+                                maxLines: null,
+                                cursorColor: _kPurple,
+                                cursorWidth: 1.5,
+                                cursorHeight: ui(16),
                                 style: TextStyle(
                                   fontSize: ui(14),
                                   color: _kTextDark,
                                   fontWeight: FontWeight.w400,
                                   height: 20 / 14,
                                 ),
+                                decoration: InputDecoration(
+                                  hintText: '为该学生添加备注…',
+                                  hintStyle: TextStyle(
+                                    fontSize: ui(14),
+                                    color: _kTextHint,
+                                    fontWeight: FontWeight.w400,
+                                  ),
+                                  border: InputBorder.none,
+                                  isCollapsed: true,
+                                  contentPadding: EdgeInsets.zero,
+                                ),
                               ),
                             ),
-                            Icon(
-                              Icons.keyboard_arrow_down_rounded,
-                              size: ui(16),
-                              color: _kTextDark,
+                            if (_classRole.isNotEmpty) ...[
+                              SizedBox(height: ui(16)),
+                              _detailLabel(context, '班级职务'),
+                              SizedBox(height: ui(8)),
+                              Container(
+                                height: ui(48),
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: ui(16),
+                                  vertical: ui(14),
+                                ),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(ui(8)),
+                                  border: Border.all(color: _kInnerGray),
+                                ),
+                                child: Text(
+                                  _classRole,
+                                  style: TextStyle(
+                                    fontSize: ui(14),
+                                    color: _kTextDark,
+                                    fontWeight: FontWeight.w400,
+                                    height: 20 / 14,
+                                  ),
+                                ),
+                              ),
+                            ],
+                            SizedBox(height: ui(16)),
+                            _detailLabel(context, '班主任标签'),
+                            SizedBox(height: ui(8)),
+                            Wrap(
+                              spacing: ui(10),
+                              runSpacing: ui(10),
+                              children: [
+                                for (final tag in _kPresetTags)
+                                  _TeacherTagChip(
+                                    text: tag,
+                                    selected: _selectedTags.contains(tag),
+                                    onTap: () => _toggleTag(tag),
+                                  ),
+                              ],
+                            ),
+                            SizedBox(height: ui(20)),
+                            InkWell(
+                              onTap: _saving ? null : _saveChanges,
+                              borderRadius: BorderRadius.circular(ui(12)),
+                              child: Container(
+                                width: double.infinity,
+                                height: ui(48),
+                                padding: EdgeInsets.all(ui(10)),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(ui(12)),
+                                  gradient: LinearGradient(
+                                    begin: Alignment.centerRight,
+                                    end: Alignment.centerLeft,
+                                    colors: _saving
+                                        ? [
+                                            const Color(0xFFB68EFF)
+                                                .withValues(alpha: 0.5),
+                                            const Color(0xFF8640FF)
+                                                .withValues(alpha: 0.5),
+                                          ]
+                                        : const [
+                                            Color(0xFFB68EFF),
+                                            Color(0xFF8640FF),
+                                          ],
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    if (_saving)
+                                      SizedBox(
+                                        width: ui(16),
+                                        height: ui(16),
+                                        child: const CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    else
+                                      Icon(
+                                        Icons.check_rounded,
+                                        size: ui(16),
+                                        color: Colors.white,
+                                      ),
+                                    SizedBox(width: ui(8)),
+                                    Text(
+                                      _saving ? '保存中…' : '确认修改',
+                                      style: TextStyle(
+                                        fontSize: ui(14),
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w500,
+                                        height: 24 / 14,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ],
                         ),
                       ),
-                      SizedBox(height: ui(16)),
-                      _detailLabel(context, '班主任标签'),
-                      SizedBox(height: ui(8)),
-                      Wrap(
-                        spacing: ui(12),
-                        runSpacing: ui(12),
-                        children: [
-                          for (var i = 0; i < _kTags.length; i++)
-                            _TeacherTagChip(
-                              text: _kTags[i],
-                              selected: i == _selectedTagIdx,
-                              onTap: () => setState(() => _selectedTagIdx = i),
-                            ),
-                          const _TeacherTagChip(text: '新建标签', outlined: true),
-                        ],
-                      ),
-                      SizedBox(height: ui(20)),
-                      InkWell(
-                        onTap: () => Navigator.of(context).maybePop(),
-                        borderRadius: BorderRadius.circular(ui(12)),
-                        child: Container(
-                          width: double.infinity,
-                          height: ui(48),
-                          padding: EdgeInsets.all(ui(10)),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(ui(12)),
-                            gradient: const LinearGradient(
-                              begin: Alignment.centerRight,
-                              end: Alignment.centerLeft,
-                              colors: [Color(0xFFB68EFF), Color(0xFF8640FF)],
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.check_rounded,
-                                size: ui(16),
-                                color: Colors.white,
-                              ),
-                              SizedBox(width: ui(8)),
-                              Text(
-                                '确认修改',
-                                style: TextStyle(
-                                  fontSize: ui(14),
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w500,
-                                  height: 24 / 14,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
               ),
             ],
           ),
@@ -3917,12 +4302,10 @@ class _TeacherTagChip extends StatelessWidget {
   const _TeacherTagChip({
     required this.text,
     this.selected = false,
-    this.outlined = false,
     this.onTap,
   });
   final String text;
   final bool selected;
-  final bool outlined;
   final VoidCallback? onTap;
 
   @override
@@ -3930,19 +4313,12 @@ class _TeacherTagChip extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     final Color bg;
     final Color textColor;
-    final Border? border;
-    if (outlined) {
-      bg = Colors.transparent;
-      textColor = _kPurpleSoft;
-      border = Border.all(color: _kPurpleSoft, width: 1);
-    } else if (selected) {
+    if (selected) {
       bg = _kPurpleSoft;
       textColor = Colors.white;
-      border = null;
     } else {
       bg = _kInnerGray;
       textColor = _kTextSecondary;
-      border = null;
     }
     return InkWell(
       onTap: onTap,
@@ -3956,7 +4332,6 @@ class _TeacherTagChip extends StatelessWidget {
         decoration: BoxDecoration(
           color: bg,
           borderRadius: BorderRadius.circular(ui(8)),
-          border: border,
         ),
         child: Text(
           text,

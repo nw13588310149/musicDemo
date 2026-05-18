@@ -33,10 +33,13 @@
 //      #FF6A00 待审核 / #0CAC40·#12CE51 已通过
 // =============================================================================
 
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_response.dart';
+import '../../../core/widgets/app_date_time_pickers.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/popup_selector_field.dart';
 import '../../../core/widgets/scaled_dialog.dart';
@@ -122,6 +125,15 @@ class _AdminScheduleManagementViewState
   String? _selectedClassId;
   String _selectedClassName = '加载中…';
 
+  /// 「小课申请审核」用的字典：申请记录里只有 ID（classId / classroomId /
+  /// subjectId / teacherId），需要查字典还原成名称才能在卡片上显示。
+  /// 字典加载与申请列表解耦：失败 / 慢都不会阻断 schedule 主网格渲染；
+  /// 出问题时申请卡上对应字段会回落到「—」。
+  Map<String, String> _classNameById = const {};
+  Map<int, String> _classroomNameById = const {};
+  Map<int, String> _subjectNameById = const {};
+  Map<String, String> _teacherNameById = const {};
+
   /// 课表网格的实际数据（[7 天][N 节] → 多张课卡）。null 表示尚未加载。
   List<List<List<_ScheduleCardData>>>? _serverCells;
   bool _scheduleLoading = false;
@@ -178,18 +190,7 @@ class _AdminScheduleManagementViewState
       helpText: '选择教学日期',
       cancelText: '取消',
       confirmText: '确定',
-      builder: (ctx, child) {
-        return Theme(
-          data: Theme.of(ctx).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: _kPurple,
-              onPrimary: Colors.white,
-              onSurface: _kTextDark,
-            ),
-          ),
-          child: child ?? const SizedBox.shrink(),
-        );
-      },
+      builder: appPickerDialogTheme,
     );
     if (picked == null) return;
     final newMonday = _mondayOf(picked);
@@ -397,7 +398,12 @@ class _AdminScheduleManagementViewState
           _selectedClassName = _classes.first.name;
         });
       }
-      await _loadTimeConfig();
+      // 申请审核字典与时间表 / 课表并行：失败不阻断 schedule 渲染，只是
+      // 申请卡上对应字段会回落到「—」。字典就绪前先开 _loadApplies()
+      // 也无所谓 —— 申请字段会在 _loadApplyDirectories() setState 后随
+      // 下一次 _loadApplies() 自然补齐（实际场景里 _loadApplies 在字典
+      // ready 之后再跑，所以一次到位）。
+      await Future.wait([_loadTimeConfig(), _loadApplyDirectories()]);
       if (!mounted) return;
       _loadSchedule();
       _loadApplies();
@@ -452,15 +458,101 @@ class _AdminScheduleManagementViewState
     if (!mounted || !resp.isSuccess) return;
     final rows = _extractList(resp);
     final list = <({String id, String name})>[];
+    final nameById = <String, String>{};
     for (final m in rows) {
       final id = _pickString(m, ['id', 'classId'], '');
       final name = _pickString(m, ['name', 'className', 'fullName'], '');
       if (id.isNotEmpty && name.isNotEmpty) {
         list.add((id: id, name: name));
+        nameById[id] = name;
       }
     }
     if (!mounted) return;
-    setState(() => _classes = list);
+    setState(() {
+      _classes = list;
+      _classNameById = nameById;
+    });
+  }
+
+  /// 拉「小课申请审核」要用的字典 —— 教室 / 教师 / 科目（per 班级）。
+  /// 与主流程解耦：失败不会阻断 schedule / apply 列表渲染。
+  ///
+  /// - 教室走 admin `classroomList`（全校公共，一次拉全量）；
+  /// - 教师走 admin `teacherList`（按 schoolId 拉全量，每个雪花长 id →
+  ///   `realname` / `nickname` 兜底）；
+  /// - 科目走 user `subjectList(classId)`，必须按班级查 —— 接口不传 classId
+  ///   实测不返回全量。所以这里按 `_classNameById` 里每个班级并行发 N 个
+  ///   请求，结果合并。`_classes` 通常 < 30 个，单次开页面成本可控。
+  Future<void> _loadApplyDirectories() async {
+    final adminRepo = ref.read(adminRepositoryProvider);
+    final schoolRepo = ref.read(schoolRepositoryProvider);
+
+    final classIds = _classNameById.keys.toList();
+    final classroomFuture = adminRepo.classroomList();
+    final teacherFuture = adminRepo.teacherList();
+    final subjectFutures = <Future<ApiResponse>>[
+      for (final cid in classIds) schoolRepo.subjectList(classId: cid),
+    ];
+
+    final classroomResp = await classroomFuture;
+    final teacherResp = await teacherFuture;
+    final subjectResps = await Future.wait(subjectFutures);
+    if (!mounted) return;
+
+    final classroomMap = <int, String>{};
+    if (classroomResp.isSuccess) {
+      for (final m in _extractList(classroomResp)) {
+        final rawId = m['id'] ?? m['classroomId'] ?? m['roomId'];
+        final id = rawId is int
+            ? rawId
+            : int.tryParse(rawId?.toString() ?? '');
+        final name = _pickString(m, [
+          'name',
+          'classroomName',
+          'roomName',
+        ], '');
+        if (id != null && name.isNotEmpty) classroomMap[id] = name;
+      }
+    }
+
+    final teacherMap = <String, String>{};
+    if (teacherResp.isSuccess) {
+      for (final m in _extractList(teacherResp)) {
+        // teacherId 是雪花 long → 必须以 String 承载，外层 JSON 已经引号
+        // 包裹，这里 _pickString 直接拿原文即可。
+        final id = _pickString(m, ['id', 'teacherId'], '');
+        final name = _pickString(m, [
+          'realname',
+          'realName',
+          'nickname',
+          'name',
+        ], '');
+        if (id.isNotEmpty && name.isNotEmpty) teacherMap[id] = name;
+      }
+    }
+
+    final subjectMap = <int, String>{};
+    for (final resp in subjectResps) {
+      if (!resp.isSuccess) continue;
+      for (final m in _extractList(resp)) {
+        final rawId = m['id'] ?? m['subjectId'];
+        final id = rawId is int
+            ? rawId
+            : int.tryParse(rawId?.toString() ?? '');
+        final name = _pickString(m, [
+          'name',
+          'subjectName',
+        ], '');
+        if (id != null && name.isNotEmpty) subjectMap[id] = name;
+      }
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _classroomNameById = classroomMap;
+      _teacherNameById = teacherMap;
+      _subjectNameById = subjectMap;
+    });
   }
 
   Future<void> _loadSchedule() async {
@@ -777,7 +869,15 @@ class _AdminScheduleManagementViewState
     final rows = _extractList(listResp);
     final parsed = <_ApplyRecord>[];
     for (final m in rows) {
-      final r = _ApplyRecord.fromJson(m);
+      // 把当前字典快照传进去做 ID → 名称反查；字典还没就绪也 OK，
+      // _ApplyRecord.fromJson 会让对应字段回落到「—」。
+      final r = _ApplyRecord.fromJson(
+        m,
+        classNameById: _classNameById,
+        classroomNameById: _classroomNameById,
+        subjectNameById: _subjectNameById,
+        teacherNameById: _teacherNameById,
+      );
       if (r.id.isNotEmpty) parsed.add(r);
     }
 
@@ -826,7 +926,15 @@ class _AdminScheduleManagementViewState
         _pickString(map, ['id'], '').isEmpty) {
       map = Map<String, dynamic>.from(map['data'] as Map);
     }
-    final record = map != null ? _ApplyRecord.fromJson(map) : preview;
+    final record = map != null
+        ? _ApplyRecord.fromJson(
+            map,
+            classNameById: _classNameById,
+            classroomNameById: _classroomNameById,
+            subjectNameById: _subjectNameById,
+            teacherNameById: _teacherNameById,
+          )
+        : preview;
 
     await showScaledDialog<void>(
       context: context,
@@ -2897,8 +3005,10 @@ class _AdminEditCourseDrawerState
 
   Future<void> _loadOptions() async {
     final repo = ref.read(adminRepositoryProvider);
+    // 编辑大课 → 班级下拉只展示大班（type=0），过滤掉小班，避免管理员误把
+    // 大课排进小班；小班的课表走「小课申请审核」走另一套流程。
     final results = await Future.wait([
-      repo.classList(),
+      repo.classList(type: 0),
       repo.classroomList(),
       repo.teacherList(),
     ]);
@@ -3592,48 +3702,117 @@ class _ApplyRecord {
   final String note;
   final _ApplyStatus status;
 
-  factory _ApplyRecord.fromJson(Map<String, dynamic> json) {
+  /// 后端响应结构（`schoolSmallCourseApplyList` 实测）：
+  /// ```
+  /// {
+  ///   id, schoolId, classId, teacherId, subjectId, lineNum, color,
+  ///   classroomId, status, reason, createTime, auditTime, auditTeacherId,
+  ///   startDate, endDate,
+  ///   courseData: "[{classId,classroomId,color,date,lineNum,
+  ///                  subjectId,teacherId}, ...]"   // JSON 字符串
+  /// }
+  /// ```
+  /// 卡片上要显示的「班级 / 教室 / 教师 / 科目」全是 ID，需要外部字典反查；
+  /// 字典还没就绪 / 命中不到时回落到「—」，不会让卡片报错。
+  ///
+  /// `dateLabel` 不再依赖 `dateLabel` / `date` 等已废弃 key，统一用顶层
+  /// `startDate ~ endDate` 拼一个区间。`courseData` 解析出来的「次数」额
+  /// 外拼到末尾，方便管理员一眼看到这条申请覆盖了多少节课。
+  factory _ApplyRecord.fromJson(
+    Map<String, dynamic> json, {
+    Map<String, String>? classNameById,
+    Map<int, String>? classroomNameById,
+    Map<int, String>? subjectNameById,
+    Map<String, String>? teacherNameById,
+  }) {
     final id = _pickString(json, ['id', 'applyId', 'recordId'], '');
-    final title = _pickString(json, [
-      'subjectName',
-      'subject',
-      'courseName',
-      'name',
-      'title',
-    ], '考前加练小班课');
-    final teacher = _pickString(json, [
-      'teacherRealname',
-      'teacherName',
-      'realname',
-      'realName',
-      'teacherNickname',
-      'teacher',
-      'applicantName',
-    ], '');
-    final classroom = _pickString(json, [
-      'classroomName',
-      'roomName',
-      'classroom',
-    ], '');
+
+    // —— 名称回查（字典 miss 时统一回落到「—」）——
+    final classroomIdRaw = json['classroomId'];
+    final classroomId = classroomIdRaw is int
+        ? classroomIdRaw
+        : int.tryParse(classroomIdRaw?.toString() ?? '');
+    final subjectIdRaw = json['subjectId'];
+    final subjectId = subjectIdRaw is int
+        ? subjectIdRaw
+        : int.tryParse(subjectIdRaw?.toString() ?? '');
+    final classIdStr = _pickString(json, ['classId'], '');
+    final teacherIdStr = _pickString(json, ['teacherId'], '');
+
+    // 标题：优先显示 班级 + 科目，例如「视唱1班 · 视唱」；都拿不到时再
+    // 回退到接口可能下发的 subjectName / title 字段，再不行用通用文案。
+    final className = classNameById?[classIdStr] ?? '';
+    final subjectName = subjectId != null
+        ? (subjectNameById?[subjectId] ?? '')
+        : '';
+    final titleParts = <String>[];
+    if (className.isNotEmpty) titleParts.add(className);
+    if (subjectName.isNotEmpty) titleParts.add(subjectName);
+    final title = titleParts.isNotEmpty
+        ? titleParts.join(' · ')
+        : _pickString(json, [
+            'subjectName',
+            'subject',
+            'courseName',
+            'name',
+            'title',
+          ], '考前加练小班课');
+
+    final teacher = teacherIdStr.isNotEmpty
+        ? (teacherNameById?[teacherIdStr] ??
+              _pickString(json, [
+                'teacherRealname',
+                'teacherName',
+                'realname',
+                'realName',
+                'teacherNickname',
+                'teacher',
+                'applicantName',
+              ], ''))
+        : '';
+
+    final classroom = classroomId != null
+        ? (classroomNameById?[classroomId] ??
+              _pickString(json, [
+                'classroomName',
+                'roomName',
+                'classroom',
+              ], ''))
+        : '';
+
+    // —— 备注：reason 是后端约定字段，待审核时通常为 null，已驳回 / 通过
+    //          才会有内容。空时显示「无」。——
     final note = _pickString(json, [
+      'reason',
       'remark',
       'note',
-      'reason',
       'description',
     ], '');
-    final dateLabel = _pickString(json, [
-      'dateLabel',
-      'classDate',
-      'date',
-      'applyDate',
-    ], '');
-    final lineLabel = _pickString(json, [
-      'lineLabel',
-      'lineNumLabel',
-      'lessonLabel',
-    ], '');
-    final lineNum = json['lineNum'];
-    final lineFallback = lineNum is int && lineNum > 0 ? '第 $lineNum 节' : '';
+
+    // —— 日期：startDate ~ endDate 区间；若相等只显示一个；若能从
+    //         courseData 解出 N (>1) 个具体日期，末尾拼「· 共 N 次」。——
+    final startDate = _pickString(json, ['startDate'], '');
+    final endDate = _pickString(json, ['endDate'], '');
+    String dateLabel;
+    if (startDate.isEmpty && endDate.isEmpty) {
+      dateLabel = '—';
+    } else if (startDate.isEmpty || endDate.isEmpty || startDate == endDate) {
+      dateLabel = startDate.isNotEmpty ? startDate : endDate;
+    } else {
+      dateLabel = '$startDate ~ $endDate';
+    }
+    final occurrenceCount = _countCourseDataOccurrences(json['courseData']);
+    if (occurrenceCount > 1 && dateLabel != '—') {
+      dateLabel = '$dateLabel · 共 $occurrenceCount 次';
+    }
+
+    // —— 节次：顶层 lineNum 是 int；按 admin 端原有展示规则「第 N 节」。——
+    final lineNumRaw = json['lineNum'];
+    final lineNum = lineNumRaw is int
+        ? lineNumRaw
+        : int.tryParse(lineNumRaw?.toString() ?? '') ?? 0;
+    final lineLabel = lineNum > 0 ? '第 $lineNum 节' : '';
+
     final applyTime = _pickString(json, [
       'createTime',
       'applyTime',
@@ -3659,11 +3838,27 @@ class _ApplyRecord {
       teacher: teacher,
       location: classroom,
       applyTime: applyTime,
-      dateLabel: dateLabel.isEmpty ? '—' : dateLabel,
-      lineLabel: lineLabel.isEmpty ? lineFallback : lineLabel,
+      dateLabel: dateLabel,
+      lineLabel: lineLabel,
       note: note.isEmpty ? '无' : note,
       status: status,
     );
+  }
+
+  /// 解析 `courseData` JSON 字符串里的子项数量。字段缺失 / 不是字符串 /
+  /// 解析失败时统一返回 0。
+  static int _countCourseDataOccurrences(dynamic raw) {
+    if (raw is List) return raw.length;
+    if (raw is! String || raw.isEmpty) return 0;
+    try {
+      // 雪花长 ID 这里仅需要数 List 长度，不读取具体 id，所以即便 Web
+      // 上数值精度被截也不影响计数；不必再做 _preserveLongIds 预处理。
+      final decoded = jsonDecode(raw);
+      if (decoded is List) return decoded.length;
+    } catch (_) {
+      /* swallow */
+    }
+    return 0;
   }
 
   String get subline {

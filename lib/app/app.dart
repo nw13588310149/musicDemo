@@ -5,9 +5,13 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/config/app_config_repository.dart';
+import '../core/network/chat_socket_service.dart';
+import '../core/permissions/first_launch_permission_host.dart';
 import '../core/providers/app_providers.dart';
+import '../core/push/push_notification_service.dart';
 import '../core/theme/app_theme.dart';
 import '../core/utils/keyboard_dismisser.dart';
+import '../features/auth/data/auth_repository.dart';
 import 'router/app_router.dart';
 import 'router/route_paths.dart';
 
@@ -19,6 +23,8 @@ class MyApp extends ConsumerStatefulWidget {
 }
 
 class _MyAppState extends ConsumerState<MyApp> {
+  StreamSubscription<String>? _cidSubscription;
+
   @override
   void initState() {
     super.initState();
@@ -28,7 +34,34 @@ class _MyAppState extends ConsumerState<MyApp> {
     if (storage.token.isNotEmpty) {
       final repo = ref.read(appConfigRepositoryProvider);
       unawaited(repo.refreshFileBaseUrl());
+      // 同步建立全局 WebSocket 长连接：承担 AI 助手 + 系统事件 + 群聊推送。
+      // 游客 token（"youke"）也尝试连接，由后端按需放行/拒绝。
+      ref.read(chatSocketServiceProvider).connect();
     }
+    // GeTui CID 是异步回调拿到的：登录早于 CID 到达 / CID 在运行时
+    // 变更（极少见但官方支持）时，下面这个监听负责把最新 CID 上报到
+    // `/app/user/reportCid`。AuthController 的 `_reportCidIfNeeded` 只
+    // 处理"登录时已经有 CID"的快路径，慢路径靠这里兜底。
+    _cidSubscription = ref
+        .read(pushNotificationServiceProvider)
+        .clientIdStream
+        .listen((cid) async {
+          if (cid.isEmpty) return;
+          final token = ref.read(appStorageProvider).token;
+          if (token.isEmpty) return; // 未登录时不上报；登录后会自动重试。
+          final authRepo = ref.read(authRepositoryProvider);
+          try {
+            await authRepo.reportCid(cid);
+          } catch (_) {
+            // 接口失败不影响业务；下次 CID 到达 / 重新登录会再试一次。
+          }
+        });
+  }
+
+  @override
+  void dispose() {
+    unawaited(_cidSubscription?.cancel());
+    super.dispose();
   }
 
   @override
@@ -81,9 +114,11 @@ class _MyAppState extends ConsumerState<MyApp> {
               applyHeightToFirstAscent: false,
               applyHeightToLastDescent: false,
             ),
-            child: GlobalKeyboardFocusSentinel(
-              child: _TapOutsideToDismissKeyboard(
-                child: child ?? const SizedBox.shrink(),
+            child: FirstLaunchPermissionHost(
+              child: GlobalKeyboardFocusSentinel(
+                child: _TapOutsideToDismissKeyboard(
+                  child: child ?? const SizedBox.shrink(),
+                ),
               ),
             ),
           ),

@@ -50,13 +50,20 @@
 // =============================================================================
 
 import 'dart:async';
-import 'dart:math' as math;
+import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/router/route_paths.dart';
+import '../../../core/network/chat_socket_service.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/image_gallery_viewer.dart';
 import '../../../core/widgets/scaled_dialog.dart';
+import '../../recording_system/audio/recording_bytes_loader.dart';
+import '../../recording_system/audio/recording_capture.dart';
+import '../../recording_system/audio/recording_playback.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/chat_repository.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -110,7 +117,16 @@ class GroupChatView extends ConsumerStatefulWidget {
   ConsumerState<GroupChatView> createState() => _GroupChatViewState();
 }
 
-class _GroupChatViewState extends ConsumerState<GroupChatView> {
+/// `msgList` / `syncMsg` 每页拉的条数。后端默认 20，前端保持一致。
+const int _kChatPageSize = 20;
+
+/// 触发"加载更多旧消息"的滚动距离阈值。reverse:true 下用户滚到列表
+/// 视觉顶端时 `position.maxScrollExtent - pixels` 会接近 0，留 120px 余
+/// 量提前发起请求避免硬卡顿。
+const double _kLoadOlderTriggerPx = 120;
+
+class _GroupChatViewState extends ConsumerState<GroupChatView>
+    with WidgetsBindingObserver {
   // —— 会话 ——————————————————————————————————————————————————————
   /// `null` = 加载中；空 List = 已加载但接口返回空。
   List<_Conversation>? _conversations;
@@ -121,12 +137,44 @@ class _GroupChatViewState extends ConsumerState<GroupChatView> {
   bool _loadingMessages = false;
   int _msgLoadSeq = 0;
 
+  // —— 消息分页 ————————————————————————————————————————————
+  /// 当前会话还能不能继续往上翻：上次拉到不足一页时置 false。
+  bool _hasMoreOlder = false;
+
+  /// 正在拉旧消息时短暂为 true，避免滚动事件多次触发。
+  bool _loadingOlder = false;
+
+  /// 当前会话已加载的「最旧消息」的 id（即 `_messages.first.id`），
+  /// 下次拉旧消息时作为 `offsetMsgId` 传给 `msgList`。
+  String? _oldestMsgId;
+
+  /// `msgList` 用的 ScrollController（reverse:true 模式下 offset=0 = 列表底
+  /// = 最新一条消息）。切换会话时不重建，保留 attached 状态。
+  final ScrollController _messagesController = ScrollController();
+
+  /// `syncMsg` 跨会话维护的最大 offsetMsgId —— 每次 sync 完用响应里
+  /// 最大的 msgId 更新它，下次只拉「之后」的消息。'0' 表示首次同步。
+  String _syncOffsetMsgId = '0';
+
+  /// 防止 sync 与初次 classList / app resume 并发触发自身。
+  bool _syncing = false;
+
+  /// 全局长连接订阅：收到 `chatNewMessage` / `chatMessageDeleted`
+  /// / `chatAnnouncementUpdated` 时触发刷新或局部更新。
+  StreamSubscription<ChatSocketEvent>? _wsSubscription;
+
   // —— 群详情（公告 / 成员数 / 免打扰 / 是否班主任） ——————————————————
   String _announcement = '';
   String _announcementUpdatedAt = '';
   bool _canEditAnnouncement = false;
   int? _detailMemberCount;
   int _detailLoadSeq = 0;
+
+  // 班级详情抽屉（教师 / 学生列表 / 班主任 / 班级名）
+  _MemberInfo? _detailHeadTeacher;
+  List<_MemberInfo> _detailTeachers = const [];
+  List<_MemberInfo> _detailStudents = const [];
+  String _detailClassName = '';
 
   // —— 发送 / 撤回 / 公告 / 免打扰 提交锁 ——————————————————————————
   bool _sending = false;
@@ -144,33 +192,110 @@ class _GroupChatViewState extends ConsumerState<GroupChatView> {
   // _voiceMode：mic icon 切换到语音输入模式后，输入栏被替换为大按钮。
   // _recording：长按"按住说话"时为 true，松手即结束。
   // _willCancel：录音过程中手指上滑超过阈值，进入"松开取消"状态。
-  // _recordSeconds：当前录音时长秒数（每秒 +1，UI 用作 demo 文案）。
-  // _liveWaveform：录音时滚动更新的随机波形采样，长度固定 _kLiveWaveLen。
+  // _recordSeconds：当前录音时长秒数（每秒 +1）。
+  // _liveWaveform：录音时滚动更新的波形采样（来自真实麦克风振幅）。
   bool _voiceMode = false;
   bool _recording = false;
   bool _willCancel = false;
   int _recordSeconds = 0;
   late List<double> _liveWaveform;
-  Timer? _recordTimer;
-  final math.Random _rng = math.Random();
+  Timer? _recordTimer; // 用于计秒（1s 间隔）
   static const int _kLiveWaveLen = 56;
 
   /// 上滑取消的阈值（dy 小于该值即视为进入"松开取消"区域）。
   static const double _kCancelThresholdY = -56;
 
+  // —— 真实录音 / 播放服务 —————————————————————————————————————
+  RecordingCapture? _capture;
+  StreamSubscription<double>? _captureSub; // 麦克风振幅流
+
+  RecordingPlayback? _audioPlayer; // just_audio 播放实例
+  StreamSubscription<RecordingPlaybackStatus>? _playerStatusSub;
+  StreamSubscription<int>? _playerPositionSub;
+  int? _playerDurationMs;
+
   @override
   void initState() {
     super.initState();
     _liveWaveform = List<double>.filled(_kLiveWaveLen, 0.18);
-    // 进入页面后立即拉群聊列表；后续 didChangeDependencies 不再重复触发。
-    Future.microtask(_loadConversations);
+    // 监听滚动：列表滚到视觉顶端附近时自动拉一页更早的消息。
+    _messagesController.addListener(_onMessagesScroll);
+    // App 切回前台 / 重连 → didChangeAppLifecycleState 调 _syncMessages。
+    WidgetsBinding.instance.addObserver(this);
+    // 订阅全局 WS：服务端推群聊新消息 / 撤回 / 公告变更时实时刷新。
+    final socket = ref.read(chatSocketServiceProvider);
+    _wsSubscription = socket.events.listen(_handleSocketEvent);
+    // 确保连接可用（幂等：已连上则什么也不做）。
+    socket.connect();
+    // 进入页面后立即拉群聊列表；接着会触发一次 syncMsg 把离线消息补齐。
+    Future.microtask(() async {
+      await _loadConversations();
+      if (!mounted) return;
+      unawaited(_syncMessages());
+    });
   }
 
   @override
   void dispose() {
+    unawaited(_wsSubscription?.cancel());
+    _wsSubscription = null;
     _inputController.dispose();
     _recordTimer?.cancel();
+    _captureSub?.cancel();
+    _capture?.dispose();
+    _playerStatusSub?.cancel();
+    _playerPositionSub?.cancel();
+    _audioPlayer?.dispose();
+    _messagesController.removeListener(_onMessagesScroll);
+    _messagesController.dispose();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  /// 处理全局 WS 下行事件。
+  ///
+  /// 兜底策略：服务端事件 payload 可能完整、也可能只携带 `classId` 信号位。
+  /// 我们统一调用 [_syncMessages]，由后端 `syncMsg` 接口按 offsetMsgId
+  /// 增量补齐 —— 既能覆盖"服务端只推信号"的情况，又能跟离线消息补齐路径
+  /// 共享同一份合并逻辑（dedupe + 时间排序 + 未读/活跃区分），不会重复实现。
+  ///
+  /// 性能：syncMsg 接口本身是轻量的 offset 查询，瞬时几十 ms；高频群聊
+  /// 时 _syncing 锁会自然合并并发请求，不会把后端打挂。
+  void _handleSocketEvent(ChatSocketEvent event) {
+    if (!mounted) return;
+    switch (event.type) {
+      case ChatSocketEventType.chatNewMessage:
+      case ChatSocketEventType.chatMessageDeleted:
+        unawaited(_syncMessages());
+        break;
+      case ChatSocketEventType.chatAnnouncementUpdated:
+        // 公告变更：若刚好是当前会话，重新拉一次群详情；其它会话等用户
+        // 切换进去再拉，不主动打扰。
+        final classId = (event.payload['classId'] ?? event.payload['cId'] ?? '')
+            .toString();
+        if (classId.isEmpty) break;
+        final convs = _conversations;
+        if (convs == null) break;
+        if (classId == _selectedConvId) {
+          final hit = convs.where((c) => c.id == classId);
+          if (hit.isNotEmpty) {
+            unawaited(_loadGroupDetail(hit.first));
+          }
+        }
+        break;
+      default:
+        break;
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // 切回前台时按 swagger 描述："登录 / 重连 / 切回前台时调用一次同步"，
+    // 不做轮询。
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_syncMessages());
+    }
   }
 
   // ===========================================================================
@@ -214,13 +339,22 @@ class _GroupChatViewState extends ConsumerState<GroupChatView> {
       });
       return;
     }
-    final detail = _parseGroupDetail(res.data, conv);
+    final detail = _parseGroupDetail(
+      res.data,
+      conv,
+      currentUserId: widget.currentUserId,
+    );
     setState(() {
       _announcement = detail.announcement;
       _announcementUpdatedAt = detail.announcementUpdatedAt;
       _canEditAnnouncement = detail.canEditAnnouncement;
       _detailMemberCount = detail.memberCount;
       _muted = detail.doNotDisturb;
+      _detailHeadTeacher = detail.headTeacher;
+      _detailTeachers = detail.teachers;
+      _detailStudents = detail.students;
+      _detailClassName =
+          detail.className.isNotEmpty ? detail.className : conv.name;
     });
   }
 
@@ -229,18 +363,261 @@ class _GroupChatViewState extends ConsumerState<GroupChatView> {
     setState(() {
       _loadingMessages = true;
       _messages = const [];
+      _hasMoreOlder = false;
+      _loadingOlder = false;
+      _oldestMsgId = null;
     });
-    final res = await _repo.msgList(classId: classId);
+    final res = await _repo.msgList(
+      classId: classId,
+      offsetMsgId: '0',
+      size: _kChatPageSize,
+    );
     if (!mounted || seq != _msgLoadSeq) return;
     if (res.code != 0) {
       setState(() => _loadingMessages = false);
       AppToast.show(context, res.msg.isEmpty ? '消息加载失败' : res.msg);
       return;
     }
+    final parsed = _parseMessages(res.data);
+    final pageCount = _countRawMessages(res.data);
     setState(() {
-      _messages = _parseMessages(res.data);
+      _messages = parsed;
       _loadingMessages = false;
+      _oldestMsgId = parsed.isNotEmpty ? parsed.first.id : null;
+      // 后端按降序返回一页（默认 20）。返回数 < 页面大小说明已无更早消息。
+      _hasMoreOlder = pageCount >= _kChatPageSize;
     });
+    _scheduleScrollToBottom();
+  }
+
+  /// 用户在消息区滚到视觉顶端时（reverse:true → maxScrollExtent 附近），
+  /// 用 `_oldestMsgId` 作为 offsetMsgId 再拉一页。
+  Future<void> _loadOlderMessages() async {
+    final classId = _selectedConvId;
+    if (classId == null) return;
+    if (_loadingOlder || !_hasMoreOlder) return;
+    final offset = _oldestMsgId;
+    if (offset == null) return;
+    setState(() => _loadingOlder = true);
+    final seq = _msgLoadSeq; // 切换会话期间废弃当前请求
+    final res = await _repo.msgList(
+      classId: classId,
+      offsetMsgId: offset,
+      size: _kChatPageSize,
+    );
+    if (!mounted || seq != _msgLoadSeq) return;
+    if (res.code != 0) {
+      setState(() => _loadingOlder = false);
+      AppToast.show(context, res.msg.isEmpty ? '加载更多失败' : res.msg);
+      return;
+    }
+    final older = _parseMessages(res.data);
+    final pageCount = _countRawMessages(res.data);
+    if (older.isEmpty) {
+      setState(() {
+        _hasMoreOlder = false;
+        _loadingOlder = false;
+      });
+      return;
+    }
+    // 去重：同一 msgId 不再插入。older 是按时间升序的（_parseMessages 已排序）。
+    final existing = {for (final m in _messages) m.id};
+    final dedup = older.where((m) => !existing.contains(m.id)).toList();
+    setState(() {
+      _messages = [...dedup, ..._messages];
+      _oldestMsgId = _messages.isNotEmpty ? _messages.first.id : _oldestMsgId;
+      _hasMoreOlder = pageCount >= _kChatPageSize;
+      _loadingOlder = false;
+    });
+  }
+
+  /// 滚动到「最新一条消息」位置：reverse:true 下即 offset 0。
+  /// 调用方一般用 [_scheduleScrollToBottom] 排到下一帧，等 ListView 完成布局。
+  void _scrollToBottom({bool animated = false}) {
+    if (!_messagesController.hasClients) return;
+    if (animated) {
+      _messagesController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
+    } else {
+      _messagesController.jumpTo(0);
+    }
+  }
+
+  void _scheduleScrollToBottom({bool animated = false}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _scrollToBottom(animated: animated);
+    });
+  }
+
+  void _onMessagesScroll() {
+    if (!_messagesController.hasClients) return;
+    if (_loadingOlder || !_hasMoreOlder) return;
+    final pos = _messagesController.position;
+    // reverse:true → 越靠近 maxScrollExtent 越接近列表「视觉顶端 / 最早消息」。
+    final remaining = pos.maxScrollExtent - pos.pixels;
+    if (remaining <= _kLoadOlderTriggerPx) {
+      unawaited(_loadOlderMessages());
+    }
+  }
+
+  /// `syncMsg`：登录 / 重连 / 切回前台时把离线消息批量补齐。`offsetMsgId`
+  /// 起始用 `'0'`，之后用响应里看到的最大 msgId 增量同步。
+  ///
+  /// 解析后按 `classId` 分桶：
+  ///   - 命中当前激活会话 → 直接 append 到 `_messages`（去重，按时间升序）
+  ///     并自动滚到底部；
+  ///   - 其它会话 → 更新会话列表的 `lastMessage` / `lastTime` / `unread`。
+  Future<void> _syncMessages() async {
+    if (_syncing) return;
+    _syncing = true;
+    try {
+      final res = await _repo.syncMsg(
+        offsetMsgId: _syncOffsetMsgId,
+        size: 100,
+      );
+      if (!mounted || res.code != 0) return;
+      final raw = res.data;
+      final list = raw is List
+          ? raw
+          : (raw is Map ? _asList(raw['records'] ?? raw['list']) : const []);
+      if (list.isEmpty) return;
+      // 按 classId 分桶：每条 sync 出来的消息都带 classId。
+      final bucket = <String, List<Map<String, dynamic>>>{};
+      String maxMsgId = _syncOffsetMsgId;
+      for (final item in list) {
+        if (item is! Map) continue;
+        final m = item.map((k, v) => MapEntry(k.toString(), v));
+        final classId = (m['classId'] ?? m['cId'] ?? '').toString();
+        if (classId.isEmpty) continue;
+        bucket.putIfAbsent(classId, () => []).add(m);
+        final id = (m['id'] ?? m['msgId'] ?? '').toString();
+        if (id.isNotEmpty && _compareSnowflakeIds(id, maxMsgId) > 0) {
+          maxMsgId = id;
+        }
+      }
+      _syncOffsetMsgId = maxMsgId;
+
+      // 当前激活会话：把解析后的消息合并到 `_messages` 末尾，去重 + 按时间升序。
+      final activeId = _selectedConvId;
+      var didMergeIntoActive = false;
+      if (activeId != null && bucket.containsKey(activeId)) {
+        final newOnes = _parseMessages(bucket[activeId]);
+        if (newOnes.isNotEmpty) {
+          final existing = {for (final m in _messages) m.id};
+          final dedup = newOnes.where((m) => !existing.contains(m.id)).toList();
+          if (dedup.isNotEmpty) {
+            final merged = [..._messages, ...dedup]
+              ..sort((a, b) => a.sentAt.compareTo(b.sentAt));
+            setState(() {
+              _messages = merged;
+            });
+            didMergeIntoActive = true;
+          }
+        }
+        // 激活会话不算未读，徽章清零。
+        _bumpConversation(activeId, bucket[activeId]!, addUnread: false);
+      }
+
+      // 其它会话：bump 未读 + 更新 lastMessage / lastTime。
+      for (final entry in bucket.entries) {
+        if (entry.key == activeId) continue;
+        _bumpConversation(entry.key, entry.value, addUnread: true);
+      }
+
+      if (didMergeIntoActive) {
+        _scheduleScrollToBottom(animated: true);
+      }
+    } finally {
+      _syncing = false;
+    }
+  }
+
+  /// 19 位雪花 id 用字符串语义比较：长度优先，相同长度按字典序。
+  /// 避免直接 int.parse 在 Web 端损失精度。
+  int _compareSnowflakeIds(String a, String b) {
+    if (a.length != b.length) return a.length.compareTo(b.length);
+    return a.compareTo(b);
+  }
+
+  /// 把 sync 拉到的一组 raw 消息 reflect 到会话列表 cell（最近一条摘要 +
+  /// 时间 + 未读计数）。raw 列表里取时间最新的一条作为 last。
+  void _bumpConversation(
+    String classId,
+    List<Map<String, dynamic>> rawMessages, {
+    required bool addUnread,
+  }) {
+    final convs = _conversations;
+    if (convs == null) return;
+    final idx = convs.indexWhere((c) => c.id == classId);
+    if (idx < 0) return;
+    Map<String, dynamic>? latest;
+    DateTime? latestAt;
+    for (final m in rawMessages) {
+      final at = _parseDateTime(
+        m['createTime'] ?? m['sentAt'] ?? m['time'] ?? m['msgTime'],
+      );
+      if (at == null) continue;
+      if (latestAt == null || at.isAfter(latestAt)) {
+        latestAt = at;
+        latest = m;
+      }
+    }
+    if (latest == null) return;
+    final summary = _summaryFor(latest);
+    final addedUnread = addUnread ? rawMessages.length : 0;
+    final next = [...convs];
+    next[idx] = next[idx].copyWith(
+      lastMessage: summary,
+      lastTime: _formatLastTime(latestAt),
+      unread: convs[idx].unread + addedUnread,
+    );
+    setState(() => _conversations = next);
+  }
+
+  /// 把一条 raw 消息压成会话 cell 上的一行简介（图片/语音/文件给中文占位）。
+  String _summaryFor(Map<String, dynamic> m) {
+    final type = _asInt(m['type']) ?? 1;
+    switch (type) {
+      case 0:
+        return (m['text'] ?? m['content'] ?? '系统通知').toString();
+      case 1:
+        return (m['content'] ?? '').toString();
+      case 2:
+        return '[图片]';
+      case 3:
+        final p = (m['param1'] ?? '').toString();
+        switch (p) {
+          case 'voice':
+            return '[语音]';
+          case 'video':
+            return '[视频]';
+          case 'news':
+            return '[资讯]';
+          case 'book':
+          case 'kj':
+            return '[课程分享]';
+          case 'file':
+            return '[文件]';
+          default:
+            return '[消息]';
+        }
+      default:
+        return (m['content'] ?? '').toString();
+    }
+  }
+
+  /// 数页 raw count，与 `_parseMessages` 保持一致的 key 顺序。
+  int _countRawMessages(Object? raw) {
+    final l = raw is List
+        ? raw
+        : (raw is Map
+            ? _asList(raw['msgList'] ?? raw['records'] ?? raw['list'])
+            : const []);
+    return l.length;
   }
 
   // ===========================================================================
@@ -265,6 +642,16 @@ class _GroupChatViewState extends ConsumerState<GroupChatView> {
       _selectedConvId = id;
       _playingVoiceId = null;
       _abortRecording();
+      // 进入会话即清零未读计数，与 IM 通用交互一致。
+      final list = _conversations;
+      if (list != null) {
+        final idx = list.indexWhere((c) => c.id == id);
+        if (idx >= 0 && list[idx].unread > 0) {
+          final next = [...list];
+          next[idx] = next[idx].copyWith(unread: 0);
+          _conversations = next;
+        }
+      }
     });
     if (conv != null && conv.name.isNotEmpty) {
       unawaited(_loadGroupDetail(conv));
@@ -273,14 +660,81 @@ class _GroupChatViewState extends ConsumerState<GroupChatView> {
   }
 
   void _toggleVoicePlay(String voiceMsgId) {
-    setState(() {
-      if (_playingVoiceId == voiceMsgId) {
-        _playingVoiceId = null;
-      } else {
-        _playingVoiceId = voiceMsgId;
-        _playingFraction = 0.32;
+    // 找到对应气泡
+    _VoiceBubble? bubble;
+    for (final m in _messages) {
+      if (m.id == voiceMsgId && m is _UserChatMessage && m.bubble is _VoiceBubble) {
+        bubble = m.bubble as _VoiceBubble;
+        break;
       }
+    }
+
+    // 如果点的是正在播放的，暂停
+    if (_playingVoiceId == voiceMsgId) {
+      _audioPlayer?.pause();
+      setState(() {
+        _playingVoiceId = null;
+        _playingFraction = 0;
+      });
+      return;
+    }
+
+    // 停止之前的播放
+    _audioPlayer?.stop();
+    _playerStatusSub?.cancel();
+    _playerPositionSub?.cancel();
+    _playerPositionSub = null;
+    _playerStatusSub = null;
+
+    setState(() {
+      _playingVoiceId = voiceMsgId;
+      _playingFraction = 0;
     });
+
+    final url = bubble?.url;
+    if (url == null || url.isEmpty) return; // 无 URL（尚未上传），仅切换 UI 状态
+
+    // 启动真实播放
+    unawaited(_startVoicePlayback(voiceMsgId, url, bubble?.durationSec ?? 0));
+  }
+
+  Future<void> _startVoicePlayback(String msgId, String url, int totalSec) async {
+    try {
+      final player = _audioPlayer ?? (_audioPlayer = createRecordingPlayback());
+      final isUrl = url.startsWith('http') || url.startsWith('blob:');
+      final durationMs = await player.setSource(url, isUrl: isUrl);
+      if (!mounted) return;
+
+      _playerDurationMs = durationMs;
+
+      _playerPositionSub?.cancel();
+      _playerPositionSub = player.positionMs.listen((ms) {
+        if (!mounted || _playingVoiceId != msgId) return;
+        final total = _playerDurationMs ?? (totalSec * 1000);
+        if (total <= 0) return;
+        setState(() => _playingFraction = (ms / total).clamp(0.0, 1.0));
+      });
+
+      _playerStatusSub?.cancel();
+      _playerStatusSub = player.status.listen((s) {
+        if (!mounted) return;
+        if (s.completed && _playingVoiceId == msgId) {
+          setState(() {
+            _playingVoiceId = null;
+            _playingFraction = 0;
+          });
+        }
+      });
+
+      await player.play();
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _playingVoiceId = null;
+          _playingFraction = 0;
+        });
+      }
+    }
   }
 
   Future<void> _send() async {
@@ -303,6 +757,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView> {
       _messages = [..._messages, optimistic];
       _inputController.clear();
     });
+    _scheduleScrollToBottom(animated: true);
     final res = await _repo.sendMsg(
       classId: classId,
       type: 1,
@@ -477,6 +932,70 @@ class _GroupChatViewState extends ConsumerState<GroupChatView> {
     );
   }
 
+  // —— 班级详情抽屉 ——————————————————————————————————————————————————
+
+  /// 右上角「列表」icon → 从右侧弹出班级详情抽屉。
+  void _openGroupDetailDrawer() {
+    if (_selectedConvId == null && _conversations?.isEmpty != false) return;
+    final conv = _conversations?.firstWhere(
+      (c) => c.id == _selectedConvId,
+      orElse: () => _conversations!.first,
+    );
+    if (conv == null) return;
+    // 在对话框打开前先捕获 DashboardScaleData，后续的 pageBuilder
+    // context 是新路由的 context，不继承 InheritedWidget 树。
+    final scaleData = DashboardScaleScope.maybeOf(context);
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: '关闭',
+      barrierColor: Colors.black.withValues(alpha: 0.4),
+      transitionDuration: const Duration(milliseconds: 280),
+      pageBuilder: (ctx, anim, secAnim) {
+        Widget drawer = _GroupDetailDrawer(
+          className: _detailClassName.isNotEmpty
+              ? _detailClassName
+              : conv.name,
+          announcement: _announcement,
+          headTeacher: _detailHeadTeacher,
+          teachers: _detailTeachers,
+          students: _detailStudents,
+          memberCount: _detailMemberCount ??
+              (_detailTeachers.length + _detailStudents.length),
+          muted: _muted,
+          onToggleMute: () {
+            Navigator.of(ctx).pop();
+            _toggleMute();
+          },
+          canEditAnnouncement: _canEditAnnouncement,
+          onEditAnnouncement: _canEditAnnouncement
+              ? () {
+                  Navigator.of(ctx).pop();
+                  // 等抽屉动画结束后再开编辑弹框
+                  WidgetsBinding.instance.addPostFrameCallback(
+                    (_) => _editAnnouncement(),
+                  );
+                }
+              : null,
+        );
+        // 把捕获的 scale data 重新注入到对话框子树。
+        if (scaleData != null) {
+          drawer = DashboardScaleScope(data: scaleData, child: drawer);
+        }
+        return Align(
+          alignment: Alignment.centerRight,
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(1, 0),
+              end: Offset.zero,
+            ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
+            child: drawer,
+          ),
+        );
+      },
+    );
+  }
+
   // —— 语音模式切换 / 录制 ———————————————————————————————————————
 
   /// 输入栏 mic icon 点击 → 切到语音输入模式（大"按住说话"按钮）；
@@ -489,29 +1008,61 @@ class _GroupChatViewState extends ConsumerState<GroupChatView> {
     });
   }
 
-  /// 长按按下时触发：开始录音；启动 80ms 定时器滚动更新波形 + 1s 计秒。
-  void _onRecordPressStart() {
+  /// 长按按下时触发：向用户请求麦克风权限后开始真实录音，
+  /// 同时订阅振幅流实时更新波形，并启动 1s 计秒定时器。
+  Future<void> _onRecordPressStart() async {
     if (_recording) return;
+    // 获取 / 复用 RecordingCapture 实例
+    final capture = _capture ?? (_capture = createRecordingCapture());
+    final hasPerm = await capture.hasPermission();
+    if (!mounted) return;
+    if (!hasPerm) {
+      AppToast.show(context, '请授权麦克风权限后重试');
+      return;
+    }
+    // 取消上一次订阅（防止重入）
+    await _captureSub?.cancel();
+    _captureSub = null;
     _recordTimer?.cancel();
+
+    final path = buildTemporaryRecordingPath();
+    try {
+      await capture.start(path: path);
+    } catch (_) {
+      if (!mounted) return;
+      AppToast.show(context, '无法启动录音，请检查麦克风权限');
+      return;
+    }
+    if (!mounted) return;
     setState(() {
       _recording = true;
       _willCancel = false;
       _recordSeconds = 0;
       _liveWaveform = List<double>.filled(_kLiveWaveLen, 0.18);
     });
-    var tickAcc = 0;
-    _recordTimer = Timer.periodic(const Duration(milliseconds: 80), (t) {
+    // 订阅麦克风振幅，滚动更新波形
+    _captureSub = capture.amplitudes.listen((amp) {
       if (!mounted || !_recording) return;
-      tickAcc++;
-      // 每 ~12.5 个 tick (~1s) 累加一秒；上限 60s（demo 阶段防御）。
-      final addSecond = tickAcc % 13 == 0;
+      // IO: dBFS (负数, 约 -50~0)；Web: 0.0~1.0。统一归一化到 0.1~1.0。
+      final bar = _normalizeAmplitude(amp);
       setState(() {
-        // 左移一格再 push 一个新采样，模拟实时音量。
-        final next = 0.25 + _rng.nextDouble() * 0.75;
-        _liveWaveform = [..._liveWaveform.skip(1), next];
-        if (addSecond && _recordSeconds < 60) _recordSeconds++;
+        _liveWaveform = [..._liveWaveform.skip(1), bar];
       });
     });
+    // 1 秒一次计秒（上限 60s）
+    _recordTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted || !_recording) return;
+      setState(() {
+        if (_recordSeconds < 60) _recordSeconds++;
+      });
+    });
+  }
+
+  /// 将麦克风振幅归一化为 [0.1, 1.0] 的波形高度。
+  /// IO: record 插件返回 dBFS（通常 -50~0）；Web: 0.0~1.0。
+  double _normalizeAmplitude(double amp) {
+    if (amp >= 0.0 && amp <= 1.0) return amp.clamp(0.1, 1.0);
+    return ((amp + 50.0) / 50.0).clamp(0.1, 1.0);
   }
 
   /// 长按拖动时调用：根据 LongPress 起点的纵向偏移更新"是否取消"。
@@ -523,51 +1074,176 @@ class _GroupChatViewState extends ConsumerState<GroupChatView> {
     }
   }
 
-  /// 松手：根据 _willCancel 决定丢弃或发送。
-  void _onRecordPressEnd() {
+  /// 松手：停止录音，上传语音文件，发送消息。
+  Future<void> _onRecordPressEnd() async {
     if (!_recording) return;
     if (_willCancel) {
       _abortRecording();
       return;
     }
-    final waveSnapshot = List<double>.from(_liveWaveform);
-    // 录音时长低于 1s 视为太短，按取消处理（与 1.0 微信常见交互一致）。
     if (_recordSeconds < 1) {
       _abortRecording();
+      if (mounted) AppToast.show(context, '录音时间太短');
       return;
     }
+    final waveSnapshot = List<double>.from(_liveWaveform);
     final duration = _recordSeconds;
-    // 把实时波形采样重采样到约 44 个柱（与气泡内 _kDemoWaveform* 视觉一致）。
     final downsampled = _downsampleWaveform(waveSnapshot, 44);
+
+    // 停止振幅订阅和计秒定时器
+    await _captureSub?.cancel();
+    _captureSub = null;
+    _recordTimer?.cancel();
+    _recordTimer = null;
+
+    // 停止录音，获取文件路径 / blob URL
+    String? path;
+    try {
+      path = await _capture?.stop();
+    } catch (_) {
+      path = null;
+    }
+
+    if (!mounted) return;
     setState(() {
-      _messages.add(
-        _UserChatMessage(
-          id: 'local-voice-${DateTime.now().microsecondsSinceEpoch}',
-          fromUserId: widget.currentUserId,
-          fromName: widget.currentUserName,
-          avatarUrl: widget.currentUserAvatarUrl,
-          avatarColor: const Color(0xFF8741FF),
-          sentAt: DateTime.now(),
-          bubble: _VoiceBubble(durationSec: duration, waveform: downsampled),
-        ),
-      );
       _recording = false;
       _willCancel = false;
     });
-    _recordTimer?.cancel();
-    _recordTimer = null;
+
+    final classId = _selectedConvId;
+    if (classId == null) return;
+
+    // 添加乐观消息（发送中）
+    final tempId = 'local-voice-${DateTime.now().microsecondsSinceEpoch}';
+    final optimistic = _UserChatMessage(
+      id: tempId,
+      fromUserId: widget.currentUserId,
+      fromName: widget.currentUserName,
+      avatarUrl: widget.currentUserAvatarUrl,
+      avatarColor: const Color(0xFF8741FF),
+      sentAt: DateTime.now(),
+      bubble: _VoiceBubble(durationSec: duration, waveform: downsampled),
+    );
+    setState(() => _messages = [..._messages, optimistic]);
+    _scheduleScrollToBottom(animated: true);
+
+    if (path != null && path.isNotEmpty) {
+      unawaited(
+        _uploadAndSendVoice(
+          path: path,
+          duration: duration,
+          waveform: downsampled,
+          classId: classId,
+          tempId: tempId,
+        ),
+      );
+    }
   }
 
   /// 中止录音：取消 / 短按 / 切换会话 / 切走 voice mode 时统一调用。
   void _abortRecording() {
+    _captureSub?.cancel();
+    _captureSub = null;
     _recordTimer?.cancel();
     _recordTimer = null;
+    _capture?.cancel();
     if (!_recording && !_willCancel) return;
     setState(() {
       _recording = false;
       _willCancel = false;
       _recordSeconds = 0;
     });
+  }
+
+  // ── 语音上传 & 发送 ────────────────────────────────────────────
+
+  /// 读取录音文件字节 → 上传 → sendMsg(type=3, param1='voice')。
+  /// 成功后用带 URL 的 _VoiceBubble 替换乐观消息；失败则移除乐观消息并提示。
+  Future<void> _uploadAndSendVoice({
+    required String path,
+    required int duration,
+    required List<double> waveform,
+    required String classId,
+    required String tempId,
+  }) async {
+    try {
+      // 平台通用：IO 读取文件字节，Web 读取 blob URL 字节
+      final Uint8List bytes = await loadRecordedBytes(path);
+
+      final isWebm = path.contains('.webm') || path.startsWith('blob:');
+      final ext = isWebm ? 'webm' : 'm4a';
+      final filename = 'voice_chat_${DateTime.now().millisecondsSinceEpoch}.$ext';
+
+      final uploadRes = await _repo.uploadVoice(bytes: bytes, filename: filename);
+      if (!mounted) return;
+      if (!uploadRes.isSuccess) {
+        _removeAndWarn(tempId, uploadRes.msg.isEmpty ? '语音上传失败' : uploadRes.msg);
+        return;
+      }
+
+      final url = _extractUploadUrl(uploadRes.data);
+      if (url == null || url.isEmpty) {
+        _removeAndWarn(tempId, '语音上传失败');
+        return;
+      }
+
+      final content = jsonEncode({'url': url, 'duration': duration});
+      final sendRes = await _repo.sendMsg(
+        classId: classId,
+        type: 3,
+        content: content,
+        param1: 'voice',
+      );
+      if (!mounted) return;
+      if (sendRes.isSuccess) {
+        final newId = _extractMsgId(sendRes.data) ?? tempId;
+        setState(() {
+          _messages = _messages.map((m) {
+            if (m.id != tempId || m is! _UserChatMessage) return m;
+            return _UserChatMessage(
+              id: newId,
+              sentAt: m.sentAt,
+              fromUserId: m.fromUserId,
+              fromName: m.fromName,
+              avatarUrl: m.avatarUrl,
+              avatarColor: m.avatarColor,
+              bubble: _VoiceBubble(
+                durationSec: duration,
+                waveform: waveform,
+                url: url,
+              ),
+            );
+          }).toList();
+        });
+      } else {
+        _removeAndWarn(tempId, sendRes.msg.isEmpty ? '发送失败' : sendRes.msg);
+      }
+    } catch (_) {
+      if (mounted) _removeAndWarn(tempId, '语音发送失败');
+    }
+  }
+
+  void _removeAndWarn(String tempId, String msg) {
+    setState(() => _messages = _messages.where((m) => m.id != tempId).toList());
+    AppToast.show(context, msg);
+  }
+
+  String? _extractUploadUrl(Object? data) {
+    if (data is String && data.startsWith('http')) return data;
+    if (data is Map) {
+      return (data['url'] ?? data['path'] ?? data['fileUrl'])?.toString();
+    }
+    return null;
+  }
+
+  String? _extractMsgId(Object? data) {
+    if (data == null) return null;
+    if (data is String && data.isNotEmpty) return data;
+    if (data is int) return data.toString();
+    if (data is Map) {
+      return (data['msgId'] ?? data['id'])?.toString();
+    }
+    return null;
   }
 
   /// 把任意长度的波形重采样为 [target] 个柱：取桶平均。
@@ -631,6 +1307,9 @@ class _GroupChatViewState extends ConsumerState<GroupChatView> {
         onSelectConv: _selectConversation,
         messages: _messages,
         loadingMessages: _loadingMessages,
+        loadingOlder: _loadingOlder,
+        hasMoreOlder: _hasMoreOlder,
+        messagesController: _messagesController,
         currentUserId: widget.currentUserId,
         playingVoiceId: _playingVoiceId,
         playingFraction: _playingFraction,
@@ -655,6 +1334,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView> {
         onRecordPressStart: _onRecordPressStart,
         onRecordPressMove: _onRecordPressMove,
         onRecordPressEnd: _onRecordPressEnd,
+        onShowDetail: _openGroupDetailDrawer,
       ),
     );
   }
@@ -744,6 +1424,9 @@ class _ChatLayout extends StatelessWidget {
     required this.onSelectConv,
     required this.messages,
     required this.loadingMessages,
+    required this.loadingOlder,
+    required this.hasMoreOlder,
+    required this.messagesController,
     required this.currentUserId,
     required this.playingVoiceId,
     required this.playingFraction,
@@ -768,6 +1451,7 @@ class _ChatLayout extends StatelessWidget {
     required this.onRecordPressStart,
     required this.onRecordPressMove,
     required this.onRecordPressEnd,
+    required this.onShowDetail,
   });
 
   final List<_Conversation> conversations;
@@ -780,6 +1464,16 @@ class _ChatLayout extends StatelessWidget {
   final ValueChanged<String> onSelectConv;
   final List<_ChatMessage> messages;
   final bool loadingMessages;
+
+  /// 是否正在拉「更早一页」消息：用作消息区顶端的 loader 显示。
+  final bool loadingOlder;
+
+  /// 是否还有更早消息可拉：上次返回不足一页时置 false，loader 不再显示。
+  final bool hasMoreOlder;
+
+  /// 消息 ListView 的 ScrollController（reverse:true，offset 0 = 最新一条）。
+  final ScrollController messagesController;
+
   final String currentUserId;
   final String? playingVoiceId;
   final double playingFraction;
@@ -806,6 +1500,7 @@ class _ChatLayout extends StatelessWidget {
   final VoidCallback onRecordPressStart;
   final ValueChanged<double> onRecordPressMove;
   final VoidCallback onRecordPressEnd;
+  final VoidCallback onShowDetail;
 
   @override
   Widget build(BuildContext context) {
@@ -835,6 +1530,9 @@ class _ChatLayout extends StatelessWidget {
                   onRecallMessage: onRecallMessage,
                   messages: messages,
                   loadingMessages: loadingMessages,
+                  loadingOlder: loadingOlder,
+                  hasMoreOlder: hasMoreOlder,
+                  messagesController: messagesController,
                   currentUserId: currentUserId,
                   playingVoiceId: playingVoiceId,
                   playingFraction: playingFraction,
@@ -853,6 +1551,7 @@ class _ChatLayout extends StatelessWidget {
                   onRecordPressStart: onRecordPressStart,
                   onRecordPressMove: onRecordPressMove,
                   onRecordPressEnd: onRecordPressEnd,
+                  onShowDetail: onShowDetail,
                 ),
               ),
             ],
@@ -881,6 +1580,9 @@ class _ChatLayout extends StatelessWidget {
                 onRecallMessage: onRecallMessage,
                 messages: messages,
                 loadingMessages: loadingMessages,
+                loadingOlder: loadingOlder,
+                hasMoreOlder: hasMoreOlder,
+                messagesController: messagesController,
                 currentUserId: currentUserId,
                 playingVoiceId: playingVoiceId,
                 playingFraction: playingFraction,
@@ -898,11 +1600,890 @@ class _ChatLayout extends StatelessWidget {
                 onRecordPressStart: onRecordPressStart,
                 onRecordPressMove: onRecordPressMove,
                 onRecordPressEnd: onRecordPressEnd,
+                onShowDetail: onShowDetail,
               ),
             ),
           ],
         );
       },
+    );
+  }
+}
+
+// =============================================================================
+// 班级详情抽屉（从右侧滑入）
+// =============================================================================
+
+class _GroupDetailDrawer extends StatelessWidget {
+  const _GroupDetailDrawer({
+    required this.className,
+    required this.announcement,
+    required this.headTeacher,
+    required this.teachers,
+    required this.students,
+    required this.memberCount,
+    required this.muted,
+    required this.onToggleMute,
+    this.canEditAnnouncement = false,
+    this.onEditAnnouncement,
+  });
+
+  final String className;
+  final String announcement;
+  final _MemberInfo? headTeacher;
+  final List<_MemberInfo> teachers;
+  final List<_MemberInfo> students;
+  final int memberCount;
+  final bool muted;
+  final VoidCallback onToggleMute;
+  final bool canEditAnnouncement;
+  final VoidCallback? onEditAnnouncement;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    // 学生头像区域：班主任不重复展示在「任课老师」列表里。
+    final teacherListExHead = headTeacher == null
+        ? teachers
+        : teachers.where((t) => t.id != headTeacher!.id).toList();
+    final effectiveMemberCount = memberCount > 0
+        ? memberCount
+        : teachers.length + students.length;
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        width: ui(520),
+        height: double.infinity,
+        color: _kCardBg,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _DetailDrawerHeader(
+              memberCount: effectiveMemberCount,
+              onClose: () => Navigator.of(context).pop(),
+            ),
+            Expanded(
+              child: Container(
+                color: _kBoardBg,
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.fromLTRB(ui(16), ui(16), ui(16), ui(20)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // 班级概要卡
+                      _DetailSummaryCard(
+                        className: className,
+                        memberCount: effectiveMemberCount,
+                        teacherCount: teachers.length,
+                        studentCount: students.length,
+                        muted: muted,
+                        onToggleMute: onToggleMute,
+                      ),
+
+                      // 班主任始终显示公告卡片（有内容展示内容，无内容展示空状态提示）
+                      if (canEditAnnouncement ||
+                          announcement.trim().isNotEmpty) ...[
+                        SizedBox(height: ui(12)),
+                        _DetailAnnouncementCard(
+                          text: announcement,
+                          canEdit: canEditAnnouncement,
+                          onEdit: onEditAnnouncement,
+                        ),
+                      ],
+
+                      if (headTeacher != null) ...[
+                        SizedBox(height: ui(12)),
+                        _DetailSectionCard(
+                          title: '班主任',
+                          children: [
+                            _MemberTile(
+                              member: headTeacher!,
+                              badge: '班主任',
+                            ),
+                          ],
+                        ),
+                      ],
+
+                      if (teacherListExHead.isNotEmpty) ...[
+                        SizedBox(height: ui(12)),
+                        _DetailSectionCard(
+                          title: '任课老师',
+                          count: teacherListExHead.length,
+                          children: [
+                            _MemberGrid(members: teacherListExHead),
+                          ],
+                        ),
+                      ],
+
+                      if (students.isNotEmpty) ...[
+                        SizedBox(height: ui(12)),
+                        _DetailSectionCard(
+                          title: '学生',
+                          count: students.length,
+                          children: [
+                            _MemberGrid(members: students),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 抽屉顶栏：左侧紫色窄竖条 + 标题 + 成员数小徽章 + 右侧关闭，与
+/// `_CheckInHistoryDrawer` / `_MakeupAuditDrawer` 一致。
+class _DetailDrawerHeader extends StatelessWidget {
+  const _DetailDrawerHeader({
+    required this.memberCount,
+    required this.onClose,
+  });
+
+  final int memberCount;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      height: ui(62),
+      padding: EdgeInsets.symmetric(horizontal: ui(12)),
+      decoration: const BoxDecoration(
+        color: _kCardBg,
+        border: Border(bottom: BorderSide(color: _kBorderSoft)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: ui(3.25),
+            height: ui(15),
+            decoration: BoxDecoration(
+              color: _kPurple,
+              borderRadius: BorderRadius.circular(ui(6)),
+            ),
+          ),
+          SizedBox(width: ui(8)),
+          Text(
+            '班级详情',
+            style: TextStyle(
+              fontSize: ui(16),
+              color: _kTextDark,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w600,
+              height: 1.2,
+            ),
+          ),
+          if (memberCount > 0) ...[
+            SizedBox(width: ui(8)),
+            Container(
+              padding: EdgeInsets.symmetric(
+                horizontal: ui(6),
+                vertical: ui(2),
+              ),
+              decoration: BoxDecoration(
+                color: _kPurple.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(ui(8)),
+              ),
+              child: Text(
+                '$memberCount 人',
+                style: TextStyle(
+                  fontSize: ui(11),
+                  color: _kPurple,
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w500,
+                  height: 1,
+                ),
+              ),
+            ),
+          ],
+          const Spacer(),
+          InkWell(
+            onTap: onClose,
+            borderRadius: BorderRadius.circular(ui(8)),
+            child: Padding(
+              padding: EdgeInsets.all(ui(8)),
+              child: Icon(
+                Icons.close_rounded,
+                size: ui(18),
+                color: _kTextSecondary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 班级概要卡：班级头像 + 名称 + 统计 + 免打扰开关。
+class _DetailSummaryCard extends StatelessWidget {
+  const _DetailSummaryCard({
+    required this.className,
+    required this.memberCount,
+    required this.teacherCount,
+    required this.studentCount,
+    required this.muted,
+    required this.onToggleMute,
+  });
+
+  final String className;
+  final int memberCount;
+  final int teacherCount;
+  final int studentCount;
+  final bool muted;
+  final VoidCallback onToggleMute;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      padding: EdgeInsets.all(ui(14)),
+      decoration: BoxDecoration(
+        color: _kCardBg,
+        borderRadius: BorderRadius.circular(ui(12)),
+        border: Border.all(color: _kBorderSoft),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: ui(44),
+                height: ui(44),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF8741FF), Color(0xFF3B6FFF)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(ui(10)),
+                ),
+                child: Icon(
+                  Icons.groups_rounded,
+                  color: Colors.white,
+                  size: ui(22),
+                ),
+              ),
+              SizedBox(width: ui(12)),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      className,
+                      style: TextStyle(
+                        fontSize: ui(15),
+                        color: _kTextDark,
+                        fontFamily: 'PingFang SC',
+                        fontWeight: AppFont.w600,
+                        height: 1.3,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    SizedBox(height: ui(4)),
+                    Row(
+                      children: [
+                        _SummaryChip(
+                          icon: Icons.people_alt_rounded,
+                          label: '$memberCount 人',
+                          color: _kPurple,
+                        ),
+                        SizedBox(width: ui(6)),
+                        _SummaryChip(
+                          icon: Icons.school_outlined,
+                          label: '老师 $teacherCount',
+                          color: const Color(0xFF325BFF),
+                        ),
+                        SizedBox(width: ui(6)),
+                        _SummaryChip(
+                          icon: Icons.school_rounded,
+                          label: '学生 $studentCount',
+                          color: const Color(0xFF12CE51),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: ui(12)),
+          Container(height: 0.5, color: _kBorderSoft),
+          SizedBox(height: ui(10)),
+          Row(
+            children: [
+              Icon(
+                muted
+                    ? Icons.notifications_off_rounded
+                    : Icons.notifications_active_rounded,
+                size: ui(16),
+                color: muted ? _kPurple : _kTextSecondary,
+              ),
+              SizedBox(width: ui(8)),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '消息免打扰',
+                      style: TextStyle(
+                        fontSize: ui(13),
+                        color: _kTextDark,
+                        fontFamily: 'PingFang SC',
+                        fontWeight: AppFont.w500,
+                        height: 1.2,
+                      ),
+                    ),
+                    SizedBox(height: ui(2)),
+                    Text(
+                      muted ? '该群消息不再提醒' : '开启后，新消息将静默接收',
+                      style: TextStyle(
+                        fontSize: ui(11),
+                        color: _kTextHint,
+                        fontFamily: 'PingFang SC',
+                        height: 1.2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              _MuteSwitch(value: muted, onTap: onToggleMute),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SummaryChip extends StatelessWidget {
+  const _SummaryChip({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: ui(8), vertical: ui(3)),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(ui(10)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: ui(11), color: color),
+          SizedBox(width: ui(3)),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: ui(11),
+              color: color,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w500,
+              height: 1,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MuteSwitch extends StatelessWidget {
+  const _MuteSwitch({required this.value, required this.onTap});
+
+  final bool value;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: ui(40),
+        height: ui(22),
+        padding: EdgeInsets.all(ui(2)),
+        decoration: BoxDecoration(
+          color: value ? _kPurple : const Color(0xFFCECED1),
+          borderRadius: BorderRadius.circular(ui(11)),
+        ),
+        child: Align(
+          alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+          child: Container(
+            width: ui(18),
+            height: ui(18),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.12),
+                  blurRadius: 2,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 公告卡：浅紫底铃铛 icon + 公告内容。
+class _DetailAnnouncementCard extends StatelessWidget {
+  const _DetailAnnouncementCard({
+    required this.text,
+    this.canEdit = false,
+    this.onEdit,
+  });
+
+  final String text;
+  final bool canEdit;
+  final VoidCallback? onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final isEmpty = text.trim().isEmpty;
+    Widget card = Container(
+      padding: EdgeInsets.all(ui(14)),
+      decoration: BoxDecoration(
+        color: _kAnnouncementBg,
+        borderRadius: BorderRadius.circular(ui(12)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 喇叭图标
+          Container(
+            width: ui(28),
+            height: ui(28),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.6),
+              borderRadius: BorderRadius.circular(ui(8)),
+            ),
+            child: Icon(
+              Icons.campaign_outlined,
+              size: ui(16),
+              color: _kPurple,
+            ),
+          ),
+          SizedBox(width: ui(10)),
+          // 标题 + 正文（或空状态提示）
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '群公告',
+                  style: TextStyle(
+                    fontSize: ui(12),
+                    color: _kPurple,
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w600,
+                    height: 1.2,
+                  ),
+                ),
+                SizedBox(height: ui(6)),
+                if (!isEmpty)
+                  Text(
+                    text,
+                    style: TextStyle(
+                      fontSize: ui(13),
+                      color: _kTextDark,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w400,
+                      height: 1.6,
+                    ),
+                  )
+                else
+                  Text(
+                    '暂无群公告，点击右侧按钮发布',
+                    style: TextStyle(
+                      fontSize: ui(12),
+                      color: _kTextHint,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w400,
+                      fontStyle: FontStyle.italic,
+                      height: 1.5,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          // 班主任专属编辑按钮
+          if (canEdit) ...[
+            SizedBox(width: ui(8)),
+            GestureDetector(
+              onTap: onEdit,
+              child: Container(
+                width: ui(28),
+                height: ui(28),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: _kPurple.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(ui(8)),
+                ),
+                child: Icon(
+                  Icons.edit_outlined,
+                  size: ui(15),
+                  color: _kPurple,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+
+    // 整张卡片可点击触发编辑（班主任）
+    if (canEdit) {
+      card = GestureDetector(onTap: onEdit, child: card);
+    }
+    return card;
+  }
+}
+
+/// 通用「分组卡」：白底圆角 + 顶部段落标题 + 子内容。
+class _DetailSectionCard extends StatelessWidget {
+  const _DetailSectionCard({
+    required this.title,
+    required this.children,
+    this.count,
+  });
+
+  final String title;
+  final int? count;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      padding: EdgeInsets.fromLTRB(ui(14), ui(14), ui(14), ui(14)),
+      decoration: BoxDecoration(
+        color: _kCardBg,
+        borderRadius: BorderRadius.circular(ui(12)),
+        border: Border.all(color: _kBorderSoft),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: ui(3),
+                height: ui(12),
+                decoration: BoxDecoration(
+                  color: _kPurple,
+                  borderRadius: BorderRadius.circular(ui(4)),
+                ),
+              ),
+              SizedBox(width: ui(6)),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: ui(13),
+                  color: _kTextDark,
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w600,
+                  height: 1.2,
+                ),
+              ),
+              if (count != null) ...[
+                SizedBox(width: ui(6)),
+                Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: ui(6),
+                    vertical: ui(1),
+                  ),
+                  decoration: BoxDecoration(
+                    color: _kBoardBg,
+                    borderRadius: BorderRadius.circular(ui(8)),
+                  ),
+                  child: Text(
+                    '$count',
+                    style: TextStyle(
+                      fontSize: ui(11),
+                      color: _kTextSecondary,
+                      fontFamily: 'Manrope',
+                      fontWeight: AppFont.w500,
+                      height: 1,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          SizedBox(height: ui(12)),
+          ...children,
+        ],
+      ),
+    );
+  }
+}
+
+/// 5 列头像网格，每格：圆形头像 + 姓名（最多 4 字截断）。
+class _MemberGrid extends StatelessWidget {
+  const _MemberGrid({required this.members});
+
+  final List<_MemberInfo> members;
+
+  static const int _cols = 5;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final rowCount = (members.length / _cols).ceil();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var row = 0; row < rowCount; row++) ...[
+          if (row > 0) SizedBox(height: ui(16)),
+          Row(
+            children: [
+              for (var col = 0; col < _cols; col++) ...[
+                if (col > 0) SizedBox(width: ui(8)),
+                Expanded(
+                  child: () {
+                    final idx = row * _cols + col;
+                    if (idx >= members.length) return const SizedBox();
+                    final m = members[idx];
+                    final headUrl = m.headUrl ?? '';
+                    final hasAvatar = headUrl.isNotEmpty;
+                    final fullUrl = headUrl.startsWith('http')
+                        ? headUrl
+                        : 'https://img.yyzl0931.com/$headUrl';
+                    final initial = m.displayName.isNotEmpty
+                        ? m.displayName.substring(0, 1)
+                        : '?';
+                    final color = _avatarColorFor(m.id);
+                    final label = m.displayName.length > 4
+                        ? '${m.displayName.substring(0, 4)}…'
+                        : m.displayName.isNotEmpty
+                            ? m.displayName
+                            : '未命名';
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(ui(22)),
+                          child: hasAvatar
+                              ? Image.network(
+                                  fullUrl,
+                                  width: ui(44),
+                                  height: ui(44),
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (ctx, err, st) =>
+                                      _InitialAvatar(
+                                        initial: initial,
+                                        color: color,
+                                        size: ui(44),
+                                      ),
+                                )
+                              : _InitialAvatar(
+                                  initial: initial,
+                                  color: color,
+                                  size: ui(44),
+                                ),
+                        ),
+                        SizedBox(height: ui(4)),
+                        Text(
+                          label,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: ui(11),
+                            color: _kTextDark,
+                            fontFamily: 'PingFang SC',
+                            fontWeight: AppFont.w400,
+                            height: 1.3,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    );
+                  }(),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _MemberTile extends StatelessWidget {
+  const _MemberTile({required this.member, this.badge});
+
+  final _MemberInfo member;
+  final String? badge;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final headUrl = member.headUrl ?? '';
+    final avatarColor = _avatarColorFor(member.id);
+    final initials = member.displayName.isNotEmpty
+        ? member.displayName.substring(0, 1)
+        : '?';
+    final hasAvatar = headUrl.isNotEmpty;
+    final fullUrl = headUrl.startsWith('http')
+        ? headUrl
+        : 'https://img.yyzl0931.com/$headUrl';
+    final hasNick = member.nickname.trim().isNotEmpty &&
+        member.nickname.trim() != member.displayName;
+    return Row(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(ui(20)),
+          child: hasAvatar
+              ? Image.network(
+                  fullUrl,
+                  width: ui(40),
+                  height: ui(40),
+                  fit: BoxFit.cover,
+                  errorBuilder: (ctx, err, st) => _InitialAvatar(
+                    initial: initials,
+                    color: avatarColor,
+                    size: ui(40),
+                  ),
+                )
+              : _InitialAvatar(
+                  initial: initials,
+                  color: avatarColor,
+                  size: ui(40),
+                ),
+        ),
+        SizedBox(width: ui(10)),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      member.displayName.isNotEmpty
+                          ? member.displayName
+                          : '未命名',
+                      style: TextStyle(
+                        fontSize: ui(13),
+                        color: _kTextDark,
+                        fontFamily: 'PingFang SC',
+                        fontWeight: AppFont.w500,
+                        height: 1.3,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (hasNick) ...[
+                    SizedBox(width: ui(4)),
+                    Flexible(
+                      child: Text(
+                        '（${member.nickname}）',
+                        style: TextStyle(
+                          fontSize: ui(11),
+                          color: _kTextHint,
+                          fontFamily: 'PingFang SC',
+                          height: 1.3,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                  if (badge != null) ...[
+                    SizedBox(width: ui(6)),
+                    Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: ui(5),
+                        vertical: ui(1),
+                      ),
+                      decoration: BoxDecoration(
+                        color: _kPurple.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(ui(4)),
+                      ),
+                      child: Text(
+                        badge!,
+                        style: TextStyle(
+                          fontSize: ui(10),
+                          color: _kPurple,
+                          fontFamily: 'PingFang SC',
+                          fontWeight: AppFont.w500,
+                          height: 1.2,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              if (member.mobile != null && member.mobile!.isNotEmpty) ...[
+                SizedBox(height: ui(2)),
+                Text(
+                  member.mobile!,
+                  style: TextStyle(
+                    fontSize: ui(11),
+                    color: _kTextHint,
+                    fontFamily: 'PingFang SC',
+                    height: 1.2,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _InitialAvatar extends StatelessWidget {
+  const _InitialAvatar({
+    required this.initial,
+    required this.color,
+    required this.size,
+  });
+
+  final String initial;
+  final Color color;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      color: color,
+      alignment: Alignment.center,
+      child: Text(
+        initial,
+        style: TextStyle(
+          fontSize: size * 0.44,
+          color: Colors.white,
+          fontFamily: 'PingFang SC',
+          fontWeight: AppFont.w600,
+        ),
+      ),
     );
   }
 }
@@ -1212,6 +2793,9 @@ class _ChatRightPane extends StatefulWidget {
     required this.onRecallMessage,
     required this.messages,
     required this.loadingMessages,
+    required this.loadingOlder,
+    required this.hasMoreOlder,
+    required this.messagesController,
     required this.currentUserId,
     required this.playingVoiceId,
     required this.playingFraction,
@@ -1229,6 +2813,7 @@ class _ChatRightPane extends StatefulWidget {
     required this.onRecordPressStart,
     required this.onRecordPressMove,
     required this.onRecordPressEnd,
+    required this.onShowDetail,
     this.outerCornerLeft = false,
   });
 
@@ -1242,6 +2827,16 @@ class _ChatRightPane extends StatefulWidget {
   final ValueChanged<_UserChatMessage> onRecallMessage;
   final List<_ChatMessage> messages;
   final bool loadingMessages;
+
+  /// 顶部「加载更多旧消息」loader 是否在转圈。
+  final bool loadingOlder;
+
+  /// 是否还有更早的消息可以继续向上翻。false 时不再显示 loader。
+  final bool hasMoreOlder;
+
+  /// 消息 ListView 的滚动控制器（reverse:true）。
+  final ScrollController messagesController;
+
   final String currentUserId;
   final String? playingVoiceId;
   final double playingFraction;
@@ -1262,6 +2857,7 @@ class _ChatRightPane extends StatefulWidget {
   final VoidCallback onRecordPressStart;
   final ValueChanged<double> onRecordPressMove;
   final VoidCallback onRecordPressEnd;
+  final VoidCallback onShowDetail;
 
   @override
   State<_ChatRightPane> createState() => _ChatRightPaneState();
@@ -1391,7 +2987,7 @@ class _ChatRightPaneState extends State<_ChatRightPane> {
             muted: widget.muted,
             onToggleMute: widget.onToggleMute,
             onBack: widget.onBack,
-            onShowDetail: () {},
+            onShowDetail: widget.onShowDetail,
           ),
           Expanded(
             // 用 Stack 让录音浮窗 / 表情面板悬浮在消息区底部，不挤压消息布局。
@@ -1401,6 +2997,9 @@ class _ChatRightPaneState extends State<_ChatRightPane> {
                   child: _ChatBodyBoard(
                     messages: widget.messages,
                     loading: widget.loadingMessages,
+                    loadingOlder: widget.loadingOlder,
+                    hasMoreOlder: widget.hasMoreOlder,
+                    scrollController: widget.messagesController,
                     hasSelection: widget.hasSelection,
                     announcement: widget.announcement,
                     announcementUpdatedAt: widget.announcementUpdatedAt,
@@ -1641,6 +3240,9 @@ class _ChatBodyBoard extends StatelessWidget {
   const _ChatBodyBoard({
     required this.messages,
     required this.loading,
+    required this.loadingOlder,
+    required this.hasMoreOlder,
+    required this.scrollController,
     required this.hasSelection,
     required this.announcement,
     required this.announcementUpdatedAt,
@@ -1655,6 +3257,16 @@ class _ChatBodyBoard extends StatelessWidget {
 
   final List<_ChatMessage> messages;
   final bool loading;
+
+  /// 是否正在拉「更早一页」消息：顶端 loader 显示转圈状态。
+  final bool loadingOlder;
+
+  /// 是否还有更早消息：决定顶端 loader 是否渲染。
+  final bool hasMoreOlder;
+
+  /// 列表 ScrollController（reverse:true，offset 0 = 最新消息位置）。
+  final ScrollController scrollController;
+
   final bool hasSelection;
   final String announcement;
   final String announcementUpdatedAt;
@@ -1717,11 +3329,45 @@ class _ChatBodyBoard extends StatelessWidget {
                       ),
                     )
                   : ListView.builder(
+                      controller: scrollController,
+                      reverse: true,
                       padding: EdgeInsets.zero,
-                      itemCount: messages.length,
+                      // reverse:true 下 i=0 是视觉底部（最新消息），i=length-1 是视觉
+                      // 顶部（最旧消息）；如果还能继续往上拉，再追加一个顶端 loader 行。
+                      itemCount: messages.length + (hasMoreOlder ? 1 : 0),
                       itemBuilder: (context, i) {
-                        final m = messages[i];
-                        final showDate = _shouldShowDateBar(messages, i);
+                        // 顶端 loader 行（仅当 hasMoreOlder=true 时存在，位于
+                        // itemCount 最后一项 → 视觉上在最上方）。
+                        if (i == messages.length) {
+                          return Padding(
+                            padding: EdgeInsets.symmetric(vertical: ui(8)),
+                            child: Center(
+                              child: loadingOlder
+                                  ? SizedBox(
+                                      width: ui(16),
+                                      height: ui(16),
+                                      child: const CircularProgressIndicator(
+                                        strokeWidth: 1.6,
+                                        color: _kPurple,
+                                      ),
+                                    )
+                                  : Text(
+                                      '上滑加载更多',
+                                      style: TextStyle(
+                                        fontSize: ui(11),
+                                        color: _kTextHint,
+                                        fontFamily: 'PingFang SC',
+                                        fontWeight: AppFont.w400,
+                                      ),
+                                    ),
+                            ),
+                          );
+                        }
+                        // 真实消息：reverse 后我们要让 i=0 显示 messages.last，
+                        // i=messages.length-1 显示 messages.first → 反向取值。
+                        final realIdx = messages.length - 1 - i;
+                        final m = messages[realIdx];
+                        final showDate = _shouldShowDateBar(messages, realIdx);
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
@@ -1900,6 +3546,40 @@ class _DateDivider extends StatelessWidget {
 // 消息行（系统提示 / 普通消息）
 // =============================================================================
 
+/// 撤回消息行：居中显示 "xxx 撤回了一条消息"，与 [_DateDivider] 视觉风格一致。
+class _RecallMessageRow extends StatelessWidget {
+  const _RecallMessageRow({required this.message});
+
+  final _RecallChatMessage message;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: ui(4)),
+      child: Center(
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: ui(10), vertical: ui(3)),
+          decoration: BoxDecoration(
+            color: const Color(0x14000000),
+            borderRadius: BorderRadius.circular(ui(10)),
+          ),
+          child: Text(
+            '${message.recallerName} 撤回了一条消息',
+            style: TextStyle(
+              fontSize: ui(12),
+              color: _kTextSecondary,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w400,
+              height: 1.4,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _MessageRowDispatcher extends StatelessWidget {
   const _MessageRowDispatcher({
     required this.message,
@@ -1920,6 +3600,9 @@ class _MessageRowDispatcher extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final m = message;
+    if (m is _RecallChatMessage) {
+      return _RecallMessageRow(message: m);
+    }
     if (m is _SystemChatMessage) {
       return _SystemMessageRow(message: m);
     }
@@ -2153,6 +3836,12 @@ class _BubbleDispatcher extends StatelessWidget {
     }
     if (b is _ImageBubble) {
       return _ImageBubbleView(bubble: b);
+    }
+    if (b is _SharedCardBubble) {
+      return GestureDetector(
+        onTap: () => _navigateSharedContent(context, b),
+        child: _SharedCardBubbleView(bubble: b),
+      );
     }
     return const SizedBox.shrink();
   }
@@ -2438,7 +4127,7 @@ class _Waveform extends StatelessWidget {
   }
 }
 
-// 图片气泡（占位）
+// 图片气泡：单击 / 双击均打开全屏查看器（photo_view + Hero 动画）
 class _ImageBubbleView extends StatelessWidget {
   const _ImageBubbleView({required this.bubble});
 
@@ -2447,20 +4136,187 @@ class _ImageBubbleView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(ui(8)),
-      child: Image.network(
-        bubble.url,
-        width: ui(160),
-        height: ui(160),
-        fit: BoxFit.cover,
-        errorBuilder: (ctx, err, st) => Container(
-          width: ui(160),
-          height: ui(160),
-          color: _kBoardBg,
-          alignment: Alignment.center,
-          child: Icon(Icons.image_outlined, color: _kTextHint, size: ui(24)),
+    final url = _resolveMediaUrl(bubble.url);
+    // hero tag 需与 showImageGallery 内部 tag 格式一致
+    // showImageGallery 使用 '${heroTagPrefix}_${image}_$index'
+    const prefix = 'chat_img';
+    final heroTag = '${prefix}_${url}_0';
+    return GestureDetector(
+      onTap: () => showImageGallery(context, images: [url], heroTagPrefix: prefix),
+      child: Hero(
+        tag: heroTag,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(ui(8)),
+          child: Image.network(
+            url,
+            width: ui(180),
+            height: ui(180),
+            fit: BoxFit.cover,
+            errorBuilder: (ctx, err, st) => Container(
+              width: ui(180),
+              height: ui(180),
+              decoration: BoxDecoration(
+                color: _kBoardBg,
+                borderRadius: BorderRadius.circular(ui(8)),
+              ),
+              child: Icon(
+                Icons.broken_image_outlined,
+                color: _kTextSecondary,
+                size: ui(32),
+              ),
+            ),
+            loadingBuilder: (ctx, child, progress) {
+              if (progress == null) return child;
+              return Container(
+                width: ui(180),
+                height: ui(180),
+                decoration: BoxDecoration(
+                  color: _kBoardBg,
+                  borderRadius: BorderRadius.circular(ui(8)),
+                ),
+                child: Center(
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: _kPurple,
+                    value: progress.expectedTotalBytes != null
+                        ? progress.cumulativeBytesLoaded /
+                            progress.expectedTotalBytes!
+                        : null,
+                  ),
+                ),
+              );
+            },
+          ),
         ),
+      ),
+    );
+  }
+}
+
+/// 补全相对路径媒体 URL。
+String _resolveMediaUrl(String? raw) {
+  if (raw == null || raw.isEmpty) return '';
+  if (raw.startsWith('http') || raw.startsWith('blob:')) return raw;
+  return 'https://img.yyzl0931.com/$raw';
+}
+
+/// 根据分享内容的子类型跳转到对应详情页。
+void _navigateSharedContent(BuildContext context, _SharedCardBubble b) {
+  final id = b.contentId;
+  switch (b.subtype) {
+    case 'news':
+      Navigator.pushNamed(
+        context,
+        RoutePaths.consultationDetail,
+        arguments: id == null ? 0 : (int.tryParse(id) ?? 0),
+      );
+    case 'video':
+      Navigator.pushNamed(
+        context,
+        RoutePaths.videoTutorial,
+        arguments: (id != null && id.isNotEmpty) ? {'openVideoId': id} : null,
+      );
+    case 'kj':
+      // 直接打开云盘课件预览页，并通过 route arguments 传入 previewItem
+      // MyCloudDrivePage.didChangeDependencies 会读取并调用 openPreview(item)
+      Navigator.pushNamed(
+        context,
+        RoutePaths.courseware,
+        arguments: <String, dynamic>{
+          'previewItem': <String, dynamic>{
+            'id': int.tryParse(id ?? '') ?? 0,
+            'title': b.title,
+            'typeValue': b.kjTypeValue ?? '3',
+            'audioUrl': b.kjAudioUrl ?? '',
+            'imageUrls': b.kjImageUrls,
+          },
+        },
+      );
+    default:
+      break;
+  }
+}
+
+// 富内容分享气泡（课件 / 视频 / 资讯 / 课程）
+class _SharedCardBubbleView extends StatelessWidget {
+  const _SharedCardBubbleView({required this.bubble});
+
+  final _SharedCardBubble bubble;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      width: ui(220),
+      padding: EdgeInsets.all(ui(10)),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(ui(8)),
+        border: Border.all(color: const Color(0xFFE8E8F0)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          if (bubble.coverUrl != null && bubble.coverUrl!.isNotEmpty) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(ui(4)),
+              child: Image.network(
+                bubble.coverUrl!,
+                width: ui(44),
+                height: ui(44),
+                fit: BoxFit.cover,
+                errorBuilder: (ctx, err, st) => Container(
+                  width: ui(44),
+                  height: ui(44),
+                  color: const Color(0xFFF3F2F3),
+                  alignment: Alignment.center,
+                  child: Icon(bubble.icon, color: bubble.iconColor, size: ui(20)),
+                ),
+              ),
+            ),
+            SizedBox(width: ui(8)),
+          ] else ...[
+            Container(
+              width: ui(36),
+              height: ui(36),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: bubble.iconColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(ui(6)),
+              ),
+              child: Icon(bubble.icon, color: bubble.iconColor, size: ui(18)),
+            ),
+            SizedBox(width: ui(8)),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  bubble.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: ui(12),
+                    color: _kTextDark,
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w500,
+                    height: 1.4,
+                  ),
+                ),
+                SizedBox(height: ui(2)),
+                Text(
+                  bubble.subtitle,
+                  style: TextStyle(
+                    fontSize: ui(11),
+                    color: _kTextHint,
+                    fontFamily: 'PingFang SC',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -3233,6 +5089,26 @@ class _Conversation {
   final Color avatarColor;
   // Demo 阶段不接入远程头像 url；统一走首字母彩色 fallback。
   String? get avatarUrl => null;
+
+  /// `syncMsg` 把离线消息回放到非激活会话时，更新摘要 + 时间 + 未读计数。
+  _Conversation copyWith({
+    String? lastMessage,
+    String? lastTime,
+    int? unread,
+    bool? muted,
+    int? memberCount,
+  }) {
+    return _Conversation(
+      id: id,
+      name: name,
+      lastMessage: lastMessage ?? this.lastMessage,
+      lastTime: lastTime ?? this.lastTime,
+      unread: unread ?? this.unread,
+      muted: muted ?? this.muted,
+      memberCount: memberCount ?? this.memberCount,
+      avatarColor: avatarColor,
+    );
+  }
 }
 
 abstract class _ChatMessage {
@@ -3253,6 +5129,17 @@ class _SystemChatMessage extends _ChatMessage {
 
   final String tagLabel; // 入群通知 / 群公告 ...
   final List<_RichSpan> segments;
+}
+
+/// 撤回消息（type=100）：居中显示 "xxx 撤回了一条消息"
+class _RecallChatMessage extends _ChatMessage {
+  _RecallChatMessage({
+    required super.id,
+    required super.sentAt,
+    required this.recallerName,
+  });
+
+  final String recallerName;
 }
 
 class _RichSpan {
@@ -3299,10 +5186,12 @@ class _ImageBubble extends _ChatBubble {
 }
 
 class _VoiceBubble extends _ChatBubble {
-  const _VoiceBubble({required this.durationSec, required this.waveform});
+  const _VoiceBubble({required this.durationSec, required this.waveform, this.url});
 
   final int durationSec;
   final List<double> waveform;
+  /// 远端 URL 或本地文件路径（发送后填充）；null 表示尚未上传。
+  final String? url;
 }
 
 class _FileBubble extends _ChatBubble {
@@ -3315,6 +5204,35 @@ class _FileBubble extends _ChatBubble {
   final String fileName;
   final String fileSize;
   final String fileType;
+}
+
+/// 课件 / 视频 / 资讯 / 课程等富内容分享气泡（type=3，param1=kj/video/news/book）。
+class _SharedCardBubble extends _ChatBubble {
+  const _SharedCardBubble({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.subtitle,
+    required this.subtype, // 'kj' / 'video' / 'news' / 'book'
+    this.coverUrl,
+    this.contentId, // 用于跳转详情页的 id
+    // 云盘课件（kj）专用预览数据
+    this.kjAudioUrl,
+    this.kjImageUrls = const [],
+    this.kjTypeValue, // '1'=音频 '2'=谱例 '3'=课件
+  });
+
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String subtitle;
+  final String subtype;
+  final String? coverUrl;
+  final String? contentId;
+
+  final String? kjAudioUrl;
+  final List<String> kjImageUrls;
+  final String? kjTypeValue;
 }
 
 // =============================================================================
@@ -3334,10 +5252,13 @@ class _FileBubble extends _ChatBubble {
 // socket / REST 时可以直接接入。这里把内部气泡树包成 dynamic 暴露，避免
 // 把私有类型直接写进 public API（library_private_types_in_public_api）。
 class GroupChatMessageParser {
-  const GroupChatMessageParser();
+  const GroupChatMessageParser({this.userMap = const {}});
+
+  // ignore: library_private_types_in_public_api
+  final Map<String, _MemberInfo> userMap;
 
   /// 返回内部 `_ChatMessage` 实例（动态类型暴露），调用方只需要把它放进
-  /// `messages` 列表即可（Demo 接口）。
+  /// `messages` 列表即可。
   dynamic parseRaw(Map<String, dynamic> raw) {
     return _parseInternal(raw);
   }
@@ -3349,50 +5270,140 @@ class GroupChatMessageParser {
     final time = _parseDate(
       raw['createTime'] ?? raw['sendTime'] ?? raw['msgTime'],
     );
-    final type = raw['type'];
+    final typeRaw = raw['type'];
+    final type = typeRaw is int ? typeRaw : int.tryParse(typeRaw?.toString() ?? '');
+
+    // ── type=0 系统消息 / type=100 撤回消息 ──────────────────────
     if (type == 0) {
-      // 1.0 系统消息只有 text 字段，这里 fallback 到 content。
-      final text = (raw['text'] ?? raw['content'] ?? '').toString();
+      final content = (raw['text'] ?? raw['content'] ?? '').toString();
       return _SystemChatMessage(
         id: id,
         sentAt: time,
         tagLabel: '系统消息',
-        segments: [_RichSpan(text)],
+        segments: [_RichSpan(content.isEmpty ? '系统消息' : content)],
       );
     }
+    if (type == 100) {
+      // type=100 撤回消息：fromUserId='0'（系统），param2=执行撤回的用户 ID
+      // 从 userMap 查找撤回人信息；同时兼容消息体内直接有 userName 的旧格式
+      final recallerId = raw['param2']?.toString() ?? '';
+      final recallerInfo = userMap[recallerId];
+      final recallerName = recallerInfo?.displayName.trim() ??
+          (raw['userName'] ?? raw['nickname'])?.toString().trim() ??
+          '';
+      return _RecallChatMessage(
+        id: id,
+        sentAt: time,
+        recallerName: recallerName.isEmpty ? '对方' : recallerName,
+      );
+    }
+
     final fromId = raw['fromUserId']?.toString() ?? '';
-    final fromName =
-        raw['userName']?.toString() ?? raw['nickname']?.toString() ?? '';
-    final avatar = raw['userHead']?.toString() ?? raw['headUrl']?.toString();
+    // 优先从 userMap 查找（API userList），不到则回退到消息内嵌字段
+    final userInfo = userMap[fromId];
+    final fromName = userInfo?.displayName.trim().isNotEmpty == true
+        ? userInfo!.displayName.trim()
+        : (raw['userName']?.toString().trim() ??
+                raw['nickname']?.toString().trim() ??
+                raw['realname']?.toString().trim() ??
+                (fromId.isNotEmpty ? '用户$fromId' : ''))
+            .trim();
+    // 头像：userMap 内已归一化；回退路径额外做 URL 补全
+    final avatar = userInfo?.headUrl?.isNotEmpty == true
+        ? userInfo!.headUrl
+        : _resolveMediaUrl(
+            raw['userHead']?.toString() ?? raw['headUrl']?.toString());
     final color = _avatarColorFor(fromId);
     _ChatBubble? bubble;
+
     if (type == 1) {
-      bubble = _TextBubble(text: raw['content']?.toString() ?? '');
+      // 去除富文本 HTML 标签（如 "<div><br></div>"）
+      final raw1 = raw['content']?.toString() ?? '';
+      bubble = _TextBubble(text: _stripHtml(raw1));
     } else if (type == 2) {
-      bubble = _ImageBubble(url: raw['content']?.toString() ?? '');
+      bubble = _ImageBubble(url: _resolveMediaUrl(raw['content']?.toString()));
     } else if (type == 3) {
-      // param1 子类
       final p1 = raw['param1']?.toString() ?? '';
-      // content 可能是字符串（JSON）或对象。
-      final content = raw['content'];
+      // content 通常是 JSON 字符串，先尝试解析
       Map<String, dynamic>? obj;
-      if (content is Map<String, dynamic>) obj = content;
-      // 这里只接 voice / file，其它子类（kj/video/news/book）忽略，
-      // 等到具体业务接入再补。
-      if (p1 == 'voice') {
-        final dur = (obj?['duration'] ?? 0).toString();
-        bubble = _VoiceBubble(
-          durationSec: int.tryParse(dur) ?? 0,
-          waveform: _kDemoWaveformIdle,
-        );
-      } else if (p1 == 'file') {
-        bubble = _FileBubble(
-          fileName: (obj?['name'] ?? '未命名文件').toString(),
-          fileSize: (obj?['size'] ?? '').toString(),
-          fileType: ((obj?['ext'] ?? 'pdf').toString()).toLowerCase(),
-        );
+      final contentRaw = raw['content'];
+      if (contentRaw is Map<String, dynamic>) {
+        obj = contentRaw;
+      } else if (contentRaw is String && contentRaw.startsWith('{')) {
+        try {
+          final decoded = _jsonDecodeQuiet(contentRaw);
+          if (decoded is Map<String, dynamic>) obj = decoded;
+        } catch (_) {}
+      }
+      switch (p1) {
+        case 'voice':
+          final dur = (obj?['duration'] ?? 0).toString();
+          bubble = _VoiceBubble(
+            durationSec: int.tryParse(dur) ?? 0,
+            waveform: _kDemoWaveformIdle,
+            url: obj?['url']?.toString(),
+          );
+          break;
+        case 'file':
+          bubble = _FileBubble(
+            fileName: (obj?['name'] ?? '未命名文件').toString(),
+            fileSize: (obj?['size'] ?? '').toString(),
+            fileType: ((obj?['ext'] ?? 'pdf').toString()).toLowerCase(),
+          );
+          break;
+        case 'kj':
+          // content JSON: {id, title, param1=typeValue, param2=audioUrl, param3=imageUrls(JSON)}
+          final kjAudio = (obj?['param2'] ?? '').toString();
+          List<String> kjImgs = const [];
+          final p3raw = obj?['param3'];
+          if (p3raw is String && p3raw.isNotEmpty) {
+            try {
+              final imgs = _jsonDecodeQuiet(p3raw);
+              if (imgs is List) kjImgs = imgs.cast<String>();
+            } catch (_) {}
+          }
+          bubble = _SharedCardBubble(
+            icon: Icons.menu_book_rounded,
+            iconColor: const Color(0xFF8741FF),
+            title: (obj?['title'] ?? '课件分享').toString(),
+            subtitle: '云盘课件',
+            subtype: 'kj',
+            coverUrl: kjImgs.isNotEmpty ? kjImgs.first : null,
+            contentId: obj?['id']?.toString(),
+            kjAudioUrl: kjAudio,
+            kjImageUrls: kjImgs,
+            kjTypeValue: obj?['param1']?.toString(),
+          );
+          break;
+        case 'video':
+          bubble = _SharedCardBubble(
+            icon: Icons.play_circle_outline_rounded,
+            iconColor: const Color(0xFFF59E0B),
+            title: (obj?['name'] ?? obj?['title'] ?? '视频分享').toString(),
+            subtitle: '视频 · ${obj?['duration'] ?? ''}',
+            subtype: 'video',
+            coverUrl: obj?['coverImg']?.toString(),
+            contentId: obj?['id']?.toString(),
+          );
+          break;
+        case 'news':
+          bubble = _SharedCardBubble(
+            icon: Icons.article_outlined,
+            iconColor: const Color(0xFF3B6FFF),
+            title: (obj?['title'] ?? '资讯').toString(),
+            subtitle: '资讯',
+            subtype: 'news',
+            coverUrl: obj?['coverImg']?.toString() ?? obj?['imgUrl']?.toString(),
+            contentId: obj?['id']?.toString(),
+          );
+          break;
+        default:
+          bubble = _TextBubble(
+            text: '[${p1.isEmpty ? '消息' : p1}] ${(obj?['title'] ?? obj?['name'] ?? '').toString()}',
+          );
       }
     }
+
     if (bubble == null) return null;
     return _UserChatMessage(
       id: id,
@@ -3403,6 +5414,30 @@ class GroupChatMessageParser {
       avatarColor: color,
       bubble: bubble,
     );
+  }
+
+  /// 去除 HTML 标签（含 &lt; &gt; 等常见实体）。
+  static String _stripHtml(String s) {
+    // 替换 <br> / <div><br></div> 类换行为空格
+    var out = s.replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), ' ');
+    // 去掉所有标签
+    out = out.replaceAll(RegExp(r'<[^>]*>'), '');
+    // 解码常见 HTML 实体
+    out = out
+        .replaceAll('&amp;', '&')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&nbsp;', ' ')
+        .replaceAll('&quot;', '"');
+    return out.trim();
+  }
+
+  static Object? _jsonDecodeQuiet(String s) {
+    try {
+      return jsonDecode(s);
+    } catch (_) {
+      return null;
+    }
   }
 
   DateTime _parseDate(Object? raw) {
@@ -3432,6 +5467,30 @@ class GroupChatMessageParser {
 // _parseGroupDetail），以及发送消息后从响应抽 msgId 的 helper。
 // =============================================================================
 
+/// 成员（老师 / 学生）信息，用于班级详情抽屉展示。
+class _MemberInfo {
+  const _MemberInfo({
+    required this.id,
+    required this.realname,
+    required this.nickname,
+    required this.role,
+    this.headUrl,
+    this.mobile,
+    this.gender,
+  });
+
+  final String id;
+  final String realname;
+  final String nickname;
+  final String role; // 'teacher' / 'student'
+  final String? headUrl;
+  final String? mobile;
+  final String? gender;
+
+  String get displayName =>
+      realname.trim().isNotEmpty ? realname.trim() : nickname.trim();
+}
+
 class _GroupDetail {
   const _GroupDetail({
     required this.announcement,
@@ -3439,6 +5498,10 @@ class _GroupDetail {
     required this.canEditAnnouncement,
     required this.memberCount,
     required this.doNotDisturb,
+    this.className = '',
+    this.headTeacher,
+    this.teachers = const [],
+    this.students = const [],
   });
 
   final String announcement;
@@ -3446,6 +5509,10 @@ class _GroupDetail {
   final bool canEditAnnouncement;
   final int? memberCount;
   final bool doNotDisturb;
+  final String className;
+  final _MemberInfo? headTeacher;
+  final List<_MemberInfo> teachers;
+  final List<_MemberInfo> students;
 }
 
 List<_Conversation> _parseConversations(Object? raw) {
@@ -3484,11 +5551,45 @@ List<_Conversation> _parseConversations(Object? raw) {
   return out;
 }
 
+/// 从 msgList 接口响应构建 userId→MemberInfo 查找表。
+///
+/// 响应结构：`{offsetMsgId, msgList:[...], userList:[...], classList:[...]}`
+/// userList 内的 headUrl 可能是相对路径，此处统一归一化。
+Map<String, _MemberInfo> _buildUserMap(Object? raw) {
+  if (raw is! Map) return const {};
+  final userListRaw = raw['userList'];
+  if (userListRaw is! List) return const {};
+  final map = <String, _MemberInfo>{};
+  for (final u in userListRaw) {
+    if (u is! Map) continue;
+    final uMap = u.map((k, v) => MapEntry(k.toString(), v));
+    final id = uMap['id']?.toString() ?? '';
+    if (id.isEmpty) continue;
+    map[id] = _MemberInfo(
+      id: id,
+      realname: (uMap['realname'] ?? '').toString().trim(),
+      nickname: (uMap['nickname'] ?? '').toString().trim(),
+      role: (uMap['role'] ?? '').toString(),
+      headUrl: _resolveMediaUrl(uMap['headUrl']?.toString()),
+      mobile: uMap['mobile']?.toString(),
+      gender: uMap['gender']?.toString(),
+    );
+  }
+  return map;
+}
+
 List<_ChatMessage> _parseMessages(Object? raw) {
-  // msgList 可能返回数组、{records: []}、{list: []} 等多种结构。
-  final list = _asList(raw is Map ? (raw['records'] ?? raw['list']) : raw);
+  // msgList 接口真实结构: {offsetMsgId, msgList:[...], userList:[...], classList:[...]}.
+  // 兼容 records / list / 裸数组 多种后端结构。
+  final list = _asList(
+    raw is Map
+        ? (raw['msgList'] ?? raw['records'] ?? raw['list'])
+        : raw,
+  );
   if (list.isEmpty) return const [];
-  const parser = GroupChatMessageParser();
+  // 构建用户查找表供 parser 使用
+  final userMap = _buildUserMap(raw);
+  final parser = GroupChatMessageParser(userMap: userMap);
   final out = <_ChatMessage>[];
   for (final item in list) {
     if (item is! Map) continue;
@@ -3501,7 +5602,37 @@ List<_ChatMessage> _parseMessages(Object? raw) {
   return out;
 }
 
-_GroupDetail _parseGroupDetail(Object? raw, _Conversation fallback) {
+_MemberInfo? _parseMemberInfo(Object? raw) {
+  if (raw is! Map) return null;
+  final m = raw.map((k, v) => MapEntry(k.toString(), v));
+  final id = m['id']?.toString() ?? '';
+  if (id.isEmpty) return null;
+  return _MemberInfo(
+    id: id,
+    realname: (m['realname'] ?? '').toString(),
+    nickname: (m['nickname'] ?? '').toString(),
+    role: (m['role'] ?? '').toString(),
+    headUrl: m['headUrl']?.toString(),
+    mobile: m['mobile']?.toString(),
+    gender: m['gender']?.toString(),
+  );
+}
+
+List<_MemberInfo> _parseMemberList(Object? raw) {
+  final list = raw is List ? raw : [];
+  final out = <_MemberInfo>[];
+  for (final item in list) {
+    final info = _parseMemberInfo(item);
+    if (info != null) out.add(info);
+  }
+  return out;
+}
+
+_GroupDetail _parseGroupDetail(
+  Object? raw,
+  _Conversation fallback, {
+  String currentUserId = '',
+}) {
   final m = raw is Map
       ? raw.map((k, v) => MapEntry(k.toString(), v))
       : <String, dynamic>{};
@@ -3510,8 +5641,12 @@ _GroupDetail _parseGroupDetail(Object? raw, _Conversation fallback) {
       ? schoolClass.map((k, v) => MapEntry(k.toString(), v))
       : const <String, dynamic>{};
 
+  // 班级公告 / 名称
+  final className = (classMap['name'] ?? m['name'] ?? fallback.name).toString();
   final announcement =
-      (m['announcement'] ?? classMap['announcement'] ?? '').toString();
+      (classMap['announcement'] ?? m['announcement'] ?? '').toString();
+
+  // 公告更新信息（该接口暂无 announcementTime，只展示存在性）
   final announcementBy =
       (m['announcementUserName'] ??
               m['announcementBy'] ??
@@ -3533,43 +5668,57 @@ _GroupDetail _parseGroupDetail(Object? raw, _Conversation fallback) {
     updatedAt = '更新于 $announcementBy';
   }
 
-  final memberCount = _asInt(
-    m['memberCount'] ?? m['userCount'] ?? classMap['memberCount'],
-  );
-  final canEdit =
+  // 教师 / 学生列表
+  final teachers = _parseMemberList(m['teacherList']);
+  final students = _parseMemberList(m['studentList']);
+  final headTeacher =
+      _parseMemberInfo(m['headTeacher']) ??
+      (teachers.isNotEmpty ? teachers.first : null);
+
+  // 成员总数 = 教师 + 学生（若后端没给则回退到列表长度之和）
+  final memberCount =
+      _asInt(m['memberCount'] ?? m['userCount'] ?? classMap['memberCount']) ??
+      (teachers.length + students.length).let((n) => n > 0 ? n : null);
+
+  // 判断当前登录用户是否有权编辑群公告：
+  // 1. 后端直接返回权限标志位；
+  // 2. 当前用户 ID 与班级的 headTeacherId 或 headTeacher.id 匹配；
+  // 3. 当前用户 ID 与解析得到的 headTeacher 成员 ID 匹配。
+  final headTeacherId =
+      (classMap['headTeacherId'] ?? m['headTeacherId'] ?? '').toString().trim();
+  final isHeadTeacher =
+      (currentUserId.isNotEmpty &&
+          (headTeacherId == currentUserId ||
+              headTeacher?.id == currentUserId)) ||
       m['isHeadTeacher'] == true ||
       m['canEditAnnouncement'] == true ||
       m['isManager'] == true ||
       m['isAdmin'] == true ||
       (m['role']?.toString() == 'headTeacher') ||
       (m['role']?.toString() == 'admin');
+  final canEdit = isHeadTeacher;
+
   final doNotDisturb =
       m['doNotDisturb'] == true ||
       m['muted'] == true ||
       (m['doNotDisturb'] is num && (m['doNotDisturb'] as num) != 0) ||
       fallback.muted;
+
   return _GroupDetail(
     announcement: announcement,
     announcementUpdatedAt: updatedAt,
     canEditAnnouncement: canEdit,
     memberCount: memberCount,
     doNotDisturb: doNotDisturb,
+    className: className,
+    headTeacher: headTeacher,
+    teachers: teachers,
+    students: students,
   );
 }
 
-/// 从 sendMsg 响应里把新消息 id 摘出来：data 可能是数字 / 字符串 /
-/// 含 `msgId` 的对象。
-String? _extractMsgId(Object? data) {
-  if (data == null) return null;
-  if (data is num) return data.toString();
-  if (data is String) return data.isEmpty ? null : data;
-  if (data is Map) {
-    final v = data['msgId'] ?? data['id'] ?? data['messageId'];
-    if (v == null) return null;
-    final s = v.toString();
-    return s.isEmpty ? null : s;
-  }
-  return null;
+extension _LetExt<T> on T {
+  R let<R>(R Function(T) f) => f(this);
 }
 
 /// 复用既有 _UserChatMessage，把临时 `local-...` id 替换为后端真实 msgId。

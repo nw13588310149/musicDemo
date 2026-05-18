@@ -9,6 +9,7 @@ class DashboardScaffold extends StatelessWidget {
     required this.child,
     super.key,
     this.floatingChild,
+    this.overlayChild,
     this.sidebarWidth = 178,
     this.backgroundColor = const Color(0xFFEFF3FC),
     this.contentPadding = const EdgeInsets.all(16),
@@ -20,6 +21,13 @@ class DashboardScaffold extends StatelessWidget {
   final Widget topBar;
   final Widget child;
   final Widget? floatingChild;
+
+  /// 全屏模态遮罩，盖在所有内容（含侧栏 / 顶栏 / 浮层）之上。
+  ///
+  /// 当前用于「绑定学校」强制弹窗（[SchoolBindingOverlay]）：只要传入
+  /// 非空 widget，就铺满 SafeArea 内的整页区域并 stretch 拦截所有手势，
+  /// 调用方负责实现拦截 / 模糊 / 内容渲染。`null` 时无任何影响。
+  final Widget? overlayChild;
   final double sidebarWidth;
   final Color backgroundColor;
   final EdgeInsets contentPadding;
@@ -89,6 +97,11 @@ class DashboardScaffold extends StatelessWidget {
                         bottom: scale.ui(18),
                         child: floatingChild!,
                       ),
+                    // overlayChild 放在 Stack 最后，确保 z-order 在所有
+                    // 业务内容（含 floatingChild）之上，且 Positioned.fill
+                    // 能拦截所有手势——绑定学校弹窗依赖这点做「不可关闭」。
+                    if (overlayChild != null)
+                      Positioned.fill(child: overlayChild!),
                   ],
                 ),
               ),

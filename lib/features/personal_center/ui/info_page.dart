@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/route_paths.dart';
+import '../../../core/widgets/app_date_time_pickers.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
@@ -545,23 +546,7 @@ Future<void> _editBirthday(
     helpText: '选择日期',
     cancelText: '取消',
     confirmText: '确定',
-    builder: (ctx, child) {
-      return Theme(
-        data: Theme.of(ctx).copyWith(
-          colorScheme: const ColorScheme.light(
-            primary: Color(0xFF8741FF),
-            onPrimary: Colors.white,
-            onSurface: Color(0xFF0B081A),
-          ),
-          textButtonTheme: TextButtonThemeData(
-            style: TextButton.styleFrom(
-              foregroundColor: const Color(0xFF8741FF),
-            ),
-          ),
-        ),
-        child: child ?? const SizedBox.shrink(),
-      );
-    },
+    builder: appPickerDialogTheme,
   );
   if (picked == null || !context.mounted) {
     return;

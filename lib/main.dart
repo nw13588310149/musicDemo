@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +8,7 @@ import 'package:media_kit/media_kit.dart';
 import 'app/app.dart';
 import 'core/network/media_url.dart';
 import 'core/providers/app_providers.dart';
+import 'core/push/push_notification_service.dart';
 import 'core/storage/app_storage.dart';
 
 Future<void> main() async {
@@ -36,10 +39,16 @@ Future<void> main() async {
     MediaUrl.setFileBaseUrl(cachedFileBase);
   }
 
+  // 创建一个根容器：既用来把 storage 注入 [appStorageProvider]，又能在
+  // [runApp] 之前预读 [pushNotificationServiceProvider] 把 GeTui SDK 的初始化
+  // 跑起来。原生平台异步申请通知权限 / 注册 deviceToken 期间不会阻塞 UI，
+  // Web 上则走 stub no-op 直接返回。
+  final container = ProviderContainer(
+    overrides: [appStorageProvider.overrideWithValue(storage)],
+  );
+  unawaited(container.read(pushNotificationServiceProvider).initialize());
+
   runApp(
-    ProviderScope(
-      overrides: [appStorageProvider.overrideWithValue(storage)],
-      child: const MyApp(),
-    ),
+    UncontrolledProviderScope(container: container, child: const MyApp()),
   );
 }

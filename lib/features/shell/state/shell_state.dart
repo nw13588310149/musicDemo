@@ -54,6 +54,7 @@ class ShellUser {
     this.province = '',
     this.role = '',
     this.identity = '',
+    this.vipExpireDate,
   });
 
   /// 后端 `myInfo.user.id`（雪花长整型）。**必须以字符串形式承载**，
@@ -74,6 +75,23 @@ class ShellUser {
   /// `myInfo` 接口的 `user.identity` 原文（中文身份），如「学生 / 老师 /
   /// 班主任 / 宿管 / 管理员」，作为 `role` 字段的兜底。
   final String identity;
+
+  /// `myInfo.user.vipExpireDate` 解析后的到期时间，单位为本地时间。
+  ///
+  /// 为 `null` 表示从未开通会员；非空但已早于 `DateTime.now()` 表示
+  /// 会员已过期。两种状态都按「未开通 / 已失效」处理，由 [isVipActive]
+  /// 统一对外暴露布尔结果。
+  final DateTime? vipExpireDate;
+
+  /// 是否有有效会员（VIP）。`true` 仅当 [vipExpireDate] 非空且晚于现
+  /// 在；`null` 或过期都返回 `false`。
+  bool get isVipActive {
+    final expire = vipExpireDate;
+    if (expire == null) {
+      return false;
+    }
+    return expire.isAfter(DateTime.now());
+  }
 
   String get displayName {
     if (nickname.isNotEmpty) {

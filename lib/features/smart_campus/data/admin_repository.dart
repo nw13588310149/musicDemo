@@ -43,11 +43,15 @@ class AdminRepository {
     return client.post('$_base/campusList');
   }
 
-  /// 班级列表。可按 `campusId` / `keyword` 过滤；空 body 拉全量。
-  Future<ApiResponse> classList({int? campusId, String? keyword}) {
+  /// 班级列表。可按 `campusId` / `keyword` / `type` 过滤；空 body 拉全量。
+  ///
+  /// - `type`: 班级类型，`0 = 大班`，`1 = 小班`；不传 = 全量。
+  ///   主要给「编辑大课」抽屉用，过滤掉小班避免误选。
+  Future<ApiResponse> classList({int? campusId, String? keyword, int? type}) {
     final body = <String, dynamic>{};
     if (campusId != null) body['campusId'] = campusId;
     if (keyword != null && keyword.isNotEmpty) body['keyword'] = keyword;
+    if (type != null) body['type'] = type;
     return client.post('$_base/classList', data: body);
   }
 
@@ -246,34 +250,34 @@ class AdminRepository {
 
   /// 小班课申请列表。
   ///
-  /// 对齐后端最新签名：
-  /// ```json
-  /// {
-  ///   "classId": "1798658711795392514",
-  ///   "current": 1,
-  ///   "size": 10,
-  ///   "status": 0,
-  ///   "teacherId": "1788178798952914945"
-  /// }
+  /// 对齐后端 BO（`AppSchoolSmallCourseApplyListBO`）：
+  /// ```
+  /// classId    int64   班级 id
+  /// current    int64   当前页, 默认 1
+  /// schoolId   int64   学校 id（由 ApiClient header 注入，不在 body）
+  /// size       int64   每页条数, 默认 10
+  /// status     int32   0-待审核 / 1-通过 / 2-不通过
+  /// teacherId  int64   老师 id
   /// ```
   ///
-  /// `schoolId` 由 [ApiClient] 通过 header 注入，不再手动传。
-  /// `classId` / `teacherId` 雪花 long → String。
+  /// 调用约定：除 `current` / `size` 外，未传值的字段统一以空串 `""`
+  /// 占位发送（后端把空串当作「不过滤」），保证 body 永远是完整的 6 字
+  /// 段（`schoolId` 走 header 不算）。`classId` / `teacherId` 是雪花 long
+  /// 必须以 String 形式承载，避免 web 端 JS Number 精度截断。
   Future<ApiResponse> schoolSmallCourseApplyList({
     int current = 1,
-    int size = 20,
+    int size = 10,
     int? status,
     String? classId,
     String? teacherId,
-    String? keyword,
   }) {
-    final body = <String, dynamic>{'current': current, 'size': size};
-    if (status != null) body['status'] = status;
-    if (classId != null && classId.isNotEmpty) body['classId'] = classId;
-    if (teacherId != null && teacherId.isNotEmpty) {
-      body['teacherId'] = teacherId;
-    }
-    if (keyword != null && keyword.isNotEmpty) body['keyword'] = keyword;
+    final body = <String, dynamic>{
+      'current': current,
+      'size': 10000,
+      'classId': "",
+      'teacherId': (teacherId == null || teacherId.isEmpty) ? '' : teacherId,
+      'status':  '',
+    };
     return client.post('$_base/schoolSmallCourseApplyList', data: body);
   }
 
@@ -298,6 +302,63 @@ class AdminRepository {
         'status': pass ? 1 : 2,
         if (reason != null && reason.isNotEmpty) 'reason': reason,
       },
+    );
+  }
+
+  // ============== 人脸库 ==============
+
+  /// 人脸库底库记录列表（`AppSchoolUserFaceListBO`）。
+  ///
+  /// `status`: 0=待审核 / 1=审核通过 / 2=审核失败；不传 = 全部。
+  Future<ApiResponse> schoolUserFaceList({
+    int current = 1,
+    int size = 200,
+    String? keyword,
+    int? status,
+  }) {
+    final body = <String, dynamic>{'current': current, 'size': size};
+    if (keyword != null && keyword.isNotEmpty) body['keyword'] = keyword;
+    if (status != null) body['status'] = status;
+    return client.post('$_base/schoolUserFaceList', data: body);
+  }
+
+  /// 人脸库统计：`status0Count` / `status1Count` / `status2Count`。
+  Future<ApiResponse> schoolUserFaceSum() {
+    return client.post('$_base/schoolUserFaceSum');
+  }
+
+  /// 人脸库详情。`id` 为雪花 long，用字符串承载。
+  Future<ApiResponse> schoolUserFaceDetail(String id) {
+    return client.post(
+      '$_base/schoolUserFaceDetail',
+      data: <String, dynamic>{'id': id},
+    );
+  }
+
+  /// 人脸库审核：`status` 1=通过 / 2=不通过。
+  Future<ApiResponse> schoolUserFaceAudit({
+    required String id,
+    required int status,
+    String? reason,
+  }) {
+    return client.post(
+      '$_base/schoolUserFaceAudit',
+      data: <String, dynamic>{
+        'id': id,
+        'status': status,
+        if (reason != null && reason.isNotEmpty) 'reason': reason,
+      },
+    );
+  }
+
+  /// 人脸库提交。`faceImg` 为上传接口返回的相对路径；`userId` 雪花 long。
+  Future<ApiResponse> schoolUserFaceSubmit({
+    required String faceImg,
+    required String userId,
+  }) {
+    return client.post(
+      '$_base/schoolUserFaceSubmit',
+      data: <String, dynamic>{'faceImg': faceImg, 'userId': userId},
     );
   }
 }

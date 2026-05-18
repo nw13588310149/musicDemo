@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/route_paths.dart';
+import '../../../core/network/chat_socket_service.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/storage/app_storage.dart';
 import '../data/shell_repository.dart';
+import 'school_binding_controller.dart';
 import 'shell_state.dart';
 
 final shellControllerProvider =
@@ -15,6 +17,7 @@ final shellControllerProvider =
       final controller = ShellController(
         repository: repository,
         storage: storage,
+        ref: ref,
       );
       return controller;
     });
@@ -23,14 +26,17 @@ class ShellController extends StateNotifier<ShellState> {
   ShellController({
     required ShellRepository repository,
     required AppStorage storage,
+    required Ref ref,
   }) : _repository = repository,
        _storage = storage,
+       _ref = ref,
        super(createInitialShellState(storage)) {
     _init();
   }
 
   final ShellRepository _repository;
   final AppStorage _storage;
+  final Ref _ref;
 
   Timer? _logoTimer;
   Timer? _noticeTimer;
@@ -54,6 +60,23 @@ class ShellController extends StateNotifier<ShellState> {
     await _storage.clearToken();
     await _storage.clearSchoolId();
     await _storage.clearMobile();
+    // 主动断开全局 WS（不再自动重连），并在下次登录成功后由 AuthController
+    // 触发 reconnect 重新握手。否则旧 token 的 WS 会持续在后台尝试重连，
+    // 不仅浪费连接，还可能让后端误把已登出用户当作在线状态。
+    _ref.read(chatSocketServiceProvider).disconnect();
+    // 清空本地用户态，特别是 vipExpireDate。否则下一次登录瞬间，
+    // ShellScaffold 在 myInfo 回包前会先看到上个账号的过期会员信息，
+    // 命中 VIP 网关把新用户错误地踢回 /personal-center。
+    state = state.copyWith(
+      user: const ShellUser(),
+      unreadCount: 0,
+      noticeItems: const [],
+      logoUrl: '',
+    );
+    // 销毁「绑定学校」轮询单例，下次重新登录时由 ShellScaffold 重新观察
+    // 时再创建一个全新实例（带新 token），避免旧 session 的轮询线程或
+    // 已经为 true 的 hasSchool 把新账号挡在外面。
+    _ref.invalidate(schoolBindingControllerProvider);
   }
 
   /// 演示用「白名单管理员」手机号：使用此号登录后，无论后端 `/myInfo`
@@ -122,6 +145,7 @@ class ShellController extends StateNotifier<ShellState> {
           province: userMap['province']?.toString() ?? '',
           role: role,
           identity: userMap['identity']?.toString() ?? '',
+          vipExpireDate: _parseVipExpireDate(userMap['vipExpireDate']),
         ),
       );
     }
@@ -270,6 +294,50 @@ class ShellController extends StateNotifier<ShellState> {
       return data['user'] as Map<String, dynamic>;
     }
     return const {};
+  }
+
+  /// 将 `myInfo.user.vipExpireDate` 字段（可能是 `null` / 时间字符串 /
+  /// 毫秒数）规整成 [DateTime?]。字符串遵循后端常见的 `yyyy-MM-dd HH:mm:ss`
+  /// 形式；解析失败时返回 `null`，由 [ShellUser.isVipActive] 一并视作未
+  /// 开通会员。
+  static DateTime? _parseVipExpireDate(dynamic raw) {
+    if (raw == null) {
+      return null;
+    }
+    if (raw is int) {
+      return DateTime.fromMillisecondsSinceEpoch(raw);
+    }
+    final text = raw.toString().trim();
+    if (text.isEmpty || text.toLowerCase() == 'null') {
+      return null;
+    }
+    return DateTime.tryParse(text.replaceFirst(' ', 'T'));
+  }
+
+  /// 「未开通会员 / 会员已过期」状态下仍允许访问的路由白名单。
+  ///
+  /// 设计目标：把用户限制在「个人中心 + 账号管理类页面」之内，让 ta
+  /// 能够查看资料、改资料、看协议、退出登录或前往开通会员，但**不能**
+  /// 进入首页、校园课件、视频中心等付费内容。
+  ///
+  /// 公共路由（login / register / forget）不在保护层，无需在此声明。
+  static const _vipExemptRoutes = <String>{
+    RoutePaths.personalCenter,
+    RoutePaths.info,
+    RoutePaths.set,
+    RoutePaths.helpFeedback,
+    RoutePaths.fankui,
+    RoutePaths.qrcode,
+    RoutePaths.email,
+    RoutePaths.verifie,
+    RoutePaths.xieyi,
+    RoutePaths.xieyi2,
+  };
+
+  /// 路由是否在 VIP 失效时仍可访问。供 [ShellScaffold] 在入口拦截与
+  /// 自动跳转判定共用。
+  static bool isRouteAllowedWithoutVip(String route) {
+    return _vipExemptRoutes.contains(route);
   }
 
   void _syncCampusBadge(int unreadCount) {

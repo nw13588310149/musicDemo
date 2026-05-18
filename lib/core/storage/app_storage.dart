@@ -17,6 +17,9 @@ class AppStorage {
   /// 上才能加载到。为空时回退到 `AppConstants.apiBaseUrl`。
   static const _fileBaseUrlKey = 'fileBaseUrl';
 
+  /// 是否已完成首次原生权限引导（麦克风 / 相机 / 相册 / 通知等）。
+  static const _nativePermissionsPrimedKey = 'native_permissions_primed_v1';
+
   final SharedPreferences _prefs;
 
   static Future<AppStorage> create() async {
@@ -33,6 +36,9 @@ class AppStorage {
   String get mobile => _prefs.getString(_mobileKey) ?? '';
 
   String get fileBaseUrl => _prefs.getString(_fileBaseUrlKey) ?? '';
+
+  bool get nativePermissionsPrimed =>
+      _prefs.getBool(_nativePermissionsPrimedKey) ?? false;
 
   bool get hasCheckStatus {
     if (_prefs.containsKey(_checkStatusKey)) {
@@ -86,6 +92,10 @@ class AppStorage {
       return;
     }
     await _prefs.setString(_fileBaseUrlKey, value);
+  }
+
+  Future<void> setNativePermissionsPrimed(bool value) async {
+    await _prefs.setBool(_nativePermissionsPrimedKey, value);
   }
 
   Future<void> saveCheckStatus(dynamic value) async {

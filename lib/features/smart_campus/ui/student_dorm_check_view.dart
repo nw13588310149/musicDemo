@@ -33,6 +33,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../../../core/widgets/app_date_time_pickers.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
@@ -934,19 +935,7 @@ class _DormResubmitDialogState extends State<_DormResubmitDialog> {
       helpText: '选择日期',
       cancelText: '取消',
       confirmText: '确认',
-      builder: (ctx, child) {
-        return Theme(
-          data: Theme.of(ctx).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: _kPurple,
-              onPrimary: Colors.white,
-              surface: Colors.white,
-              onSurface: _kTextDark,
-            ),
-          ),
-          child: child ?? const SizedBox.shrink(),
-        );
-      },
+      builder: appPickerDialogTheme,
     );
     if (!mounted || picked == null) return;
     setState(() => _date = picked);

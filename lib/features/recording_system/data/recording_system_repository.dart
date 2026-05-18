@@ -10,7 +10,7 @@ import '../../../core/network/api_response.dart';
 import '../../../core/providers/app_providers.dart';
 
 // 录音系统 v2 测试接口地址（与课件云盘保持一致；切换正式环境时修改此常量即可）
-const _kRecordingBase = 'https://test-api.yyzl0931.com:9443';
+const _kRecordingBase = 'https://api-v2.yyzl0931.com';
 
 final recordingSystemRepositoryProvider = Provider<RecordingSystemRepository>((
   ref,

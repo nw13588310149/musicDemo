@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/config/app_config_repository.dart';
+import '../../../core/network/chat_socket_service.dart';
 import '../data/auth_repository.dart';
 import 'auth_state.dart';
 
@@ -10,9 +11,11 @@ final authControllerProvider = StateNotifierProvider.autoDispose
     .family<AuthController, AuthState, AuthScene>((ref, scene) {
       final repository = ref.watch(authRepositoryProvider);
       final appConfigRepository = ref.watch(appConfigRepositoryProvider);
+      final chatSocket = ref.read(chatSocketServiceProvider);
       return AuthController(
         repository: repository,
         appConfigRepository: appConfigRepository,
+        chatSocket: chatSocket,
         scene: scene,
       );
     });
@@ -21,13 +24,16 @@ class AuthController extends StateNotifier<AuthState> {
   AuthController({
     required AuthRepository repository,
     required AppConfigRepository appConfigRepository,
+    required ChatSocketService chatSocket,
     required this.scene,
   }) : _repository = repository,
        _appConfigRepository = appConfigRepository,
+       _chatSocket = chatSocket,
        super(const AuthState());
 
   final AuthRepository _repository;
   final AppConfigRepository _appConfigRepository;
+  final ChatSocketService _chatSocket;
   final AuthScene scene;
 
   Timer? _timer;
@@ -113,6 +119,8 @@ class AuthController extends StateNotifier<AuthState> {
       await checkFuture;
       unawaited(_reportCidIfNeeded());
       unawaited(_appConfigRepository.refreshFileBaseUrl());
+      // 登录成功后用新 token 重新建立 WS 长连接，承担 AI / 系统 / 群聊消息推送。
+      _chatSocket.reconnect();
 
       return const AuthActionResult(success: true, message: '登录成功');
     } finally {
@@ -123,6 +131,8 @@ class AuthController extends StateNotifier<AuthState> {
   Future<AuthActionResult> submitGuestLogin() async {
     await _repository.persistToken('youke');
     unawaited(_appConfigRepository.refreshFileBaseUrl());
+    // 游客 token 也尝试连一次 WS，至少能收到系统级被踢 / 升级提示等下行事件。
+    _chatSocket.reconnect();
     return const AuthActionResult(success: true, message: '已进入游客模式');
   }
 
@@ -162,6 +172,8 @@ class AuthController extends StateNotifier<AuthState> {
       await _repository.persistMobile(state.mobile);
 
       unawaited(_appConfigRepository.refreshFileBaseUrl());
+      unawaited(_reportCidIfNeeded());
+      _chatSocket.reconnect();
 
       return const AuthActionResult(success: true, message: '注册成功');
     } finally {

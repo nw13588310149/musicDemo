@@ -47,6 +47,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../../../core/widgets/app_date_time_pickers.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/popup_selector_field.dart';
 import '../../../core/widgets/scaled_dialog.dart';
@@ -1498,12 +1499,18 @@ class _NotificationFormDrawerState extends State<_NotificationFormDrawer> {
       firstDate: DateTime(now.year - 1),
       lastDate: DateTime(now.year + 5),
       helpText: '选择发布日期',
+      cancelText: '取消',
+      confirmText: '确定',
+      builder: appPickerDialogTheme,
     );
     if (date == null || !mounted) return;
     final time = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.fromDateTime(base),
       helpText: '选择发布时间',
+      cancelText: '取消',
+      confirmText: '确定',
+      builder: appPickerDialogTheme,
     );
     if (time == null || !mounted) return;
     setState(() {

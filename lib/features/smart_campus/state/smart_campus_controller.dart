@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shell/state/shell_controller.dart';
+import '../data/teacher_repository.dart';
 import 'smart_campus_state.dart';
 
 /// SmartCampus 全局状态：刻意 **不** 用 `autoDispose`。
@@ -14,7 +15,8 @@ import 'smart_campus_state.dart';
 /// - 这里只持有几个 enum / bool，常驻成本极低，去掉 autoDispose 即可。
 final smartCampusControllerProvider =
     StateNotifierProvider<SmartCampusController, SmartCampusState>((ref) {
-      final controller = SmartCampusController();
+      final teacherRepo = ref.watch(teacherRepositoryProvider);
+      final controller = SmartCampusController(teacherRepo: teacherRepo);
 
       // 立即拿一次 shell user，并在变化时（仅 role/identity 变化触发）
       // 重新应用后端身份。这里用 select 避免每次 ShellState.copyWith 都触发，
@@ -33,7 +35,24 @@ final smartCampusControllerProvider =
     });
 
 class SmartCampusController extends StateNotifier<SmartCampusState> {
-  SmartCampusController() : super(const SmartCampusState());
+  SmartCampusController({required TeacherRepository teacherRepo})
+    : _teacherRepo = teacherRepo,
+      super(const SmartCampusState());
+
+  final TeacherRepository _teacherRepo;
+
+  /// 是否已经成功调用过 `/app/school/v2/teacher/teacherRole`。一次成功后
+  /// 缓存命中即直接复用 [SmartCampusState.availableRoles]，避免每次进入
+  /// 智慧校园都打一次接口。
+  ///
+  /// 由 [applyBackendRole] 在 shell 端 role 变化时（换号 / 登出登入）自动
+  /// 重置；同时配合 [_teacherRolesLoading] 做并发去重。
+  bool _teacherRolesLoaded = false;
+  bool _teacherRolesLoading = false;
+
+  /// 最近一次 [applyBackendRole] 命中的 shell role，作为缓存失效信号：
+  /// 切号会导致 myInfo.role 变化，对应的「老师多重身份」缓存需要重新拉取。
+  String _lastBackendRole = '';
 
   /// 管理员/校长可在所有身份间切换；其他角色只允许查看自己的视图。
   static const List<SmartCampusRole> _allRoles = [
@@ -42,6 +61,46 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
     SmartCampusRole.headTeacher,
     SmartCampusRole.dormManager,
     SmartCampusRole.admin,
+  ];
+
+  /// 后端 `AppSchoolTeacher.roles` 字段（CSV）单 token 到本地
+  /// [SmartCampusRole] 的映射。未识别 token 返回 `null` 直接丢弃，
+  /// 避免后端新增枚举时把 UI 拖垮。
+  ///
+  /// 与 [mapBackendRoleToCampus] 区别：那个走 `myInfo.role` 路径
+  /// （包含「principal / dormManager」等历史别名），这个只覆盖
+  /// `teacherRole` 接口实际下发的 5 个枚举。
+  static SmartCampusRole? _teacherRoleTokenToCampus(String token) {
+    switch (token.trim().toLowerCase()) {
+      case 'headmaster':
+      case 'manager':
+      case 'principal':
+      case 'admin':
+        return SmartCampusRole.admin;
+      case 'head_teacher':
+      case 'headteacher':
+        return SmartCampusRole.headTeacher;
+      case 'course_teacher':
+      case 'courseteacher':
+      case 'teacher':
+        return SmartCampusRole.teacher;
+      case 'dormitory':
+      case 'dorm':
+        return SmartCampusRole.dormManager;
+      case 'student':
+        return SmartCampusRole.student;
+    }
+    return null;
+  }
+
+  /// 展示优先级：admin > headTeacher > teacher > dormManager > student。
+  /// 用作多身份默认落地视图（兼具最高权限 + 最常用的工作台）。
+  static const List<SmartCampusRole> _rolePriority = [
+    SmartCampusRole.admin,
+    SmartCampusRole.headTeacher,
+    SmartCampusRole.teacher,
+    SmartCampusRole.dormManager,
+    SmartCampusRole.student,
   ];
 
   /// 根据后端返回的 `role` / `identity` 重新计算当前可用身份与默认身份。
@@ -57,6 +116,22 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
   ///   （这种情况下 `hasUserSelectedRole` 仍保持 false，下一次后端推送依旧
   ///   会按 mapped 锁定）。
   void applyBackendRole({required String role, required String identity}) {
+    // shell role 变化（换号 / 登出登入）→ 失效本地「老师多重身份」缓存，
+    // 下次 ensureTeacherRolesLoaded 会重新调接口。
+    if (_lastBackendRole != role) {
+      _teacherRolesLoaded = false;
+      _teacherRolesLoading = false;
+      _lastBackendRole = role;
+    }
+
+    // 已经从 teacherRole 接口拿到了权威的多重身份集合时，不再让 myInfo
+    // 的 30s 轮询通过 identity 字段的微小抖动把 availableRoles 打回单
+    // 一 [teacher]——「roles 中有几个身份就显示几个入口」是源自 teacherRole
+    // 的契约，myInfo 不应该覆盖它。
+    if (_teacherRolesLoaded) {
+      return;
+    }
+
     final mapped = mapBackendRoleToCampus(role, identity);
     final isAdmin = mapped == SmartCampusRole.admin;
     final available = isAdmin ? _allRoles : <SmartCampusRole>[mapped];
@@ -83,6 +158,102 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
     state = state.copyWith(
       selectedRole: nextSelected,
       availableRoles: available,
+    );
+  }
+
+  /// 当 `myInfo.role == 'teacher'` 时，拉取
+  /// `/app/school/v2/teacher/teacherRole` 解析该老师在校内的实际身份
+  /// 集合（校长 / 教务管理员 / 宿管 / 班主任 / 任课老师），扩展
+  /// [SmartCampusState.availableRoles]，让 dashboard 上的「身份切换」
+  /// tab 能展示真正可用的端，并把默认视图升级到最高优先级身份。
+  ///
+  /// - 幂等：同一登录态内重复调用只发一次请求；并发调用会被
+  ///   [_teacherRolesLoading] 直接丢弃后到的那次。
+  /// - 失败容错：网络异常或 `code != 0` 时不更新本地状态、不标记
+  ///   loaded，下一次进入智慧校园会自动重试。
+  /// - 角色去重 + 排序：用 [_rolePriority] 顺序输出，保证默认 selected
+  ///   始终是「权限最高、最常用」的那个（admin > headTeacher >
+  ///   teacher > dormManager）。
+  Future<void> ensureTeacherRolesLoaded() async {
+    if (_teacherRolesLoaded || _teacherRolesLoading) {
+      return;
+    }
+    _teacherRolesLoading = true;
+    try {
+      final response = await _teacherRepo.teacherRole();
+      if (response.code != 0) {
+        return;
+      }
+      final roles = _parseTeacherRoles(response.data);
+      _teacherRolesLoaded = true;
+      if (roles.isEmpty) {
+        // 接口正常但返回空数组 = 该老师暂未配置任何 school 身份；保留
+        // applyBackendRole 给出的默认（[teacher]）不动。
+        return;
+      }
+      _applyTeacherRoles(roles);
+    } catch (_) {
+      // 网络异常等，保持未 loaded 状态，下次进入页面会重试。
+    } finally {
+      _teacherRolesLoading = false;
+    }
+  }
+
+  /// 把后端 `AppSchoolTeacher` 列表中的 `roles` CSV 字段聚合 + 解析 +
+  /// 排序成 [SmartCampusRole] 列表。容忍：data 不是 List、item 不是
+  /// Map、roles 为空 / 非字符串、单条记录里有重复 token、跨校多条记录。
+  List<SmartCampusRole> _parseTeacherRoles(dynamic data) {
+    if (data is! List) {
+      return const [];
+    }
+    final tokens = <String>{};
+    for (final item in data) {
+      if (item is! Map) {
+        continue;
+      }
+      final raw = item['roles'];
+      if (raw is! String || raw.isEmpty) {
+        continue;
+      }
+      for (final token in raw.split(',')) {
+        final trimmed = token.trim();
+        if (trimmed.isNotEmpty) {
+          tokens.add(trimmed);
+        }
+      }
+    }
+    final mapped = <SmartCampusRole>{};
+    for (final token in tokens) {
+      final role = _teacherRoleTokenToCampus(token);
+      if (role != null) {
+        mapped.add(role);
+      }
+    }
+    return [
+      for (final role in _rolePriority)
+        if (mapped.contains(role)) role,
+    ];
+  }
+
+  /// 用 `teacherRole` 解析结果覆盖 [SmartCampusState.availableRoles]，
+  /// 并按以下规则选择 `selectedRole`：
+  /// - 用户已经主动在 dashboard tab 上切换过且当前选择仍在可用集合里
+  ///   → 保留用户选择；
+  /// - 否则取列表首个（即 [_rolePriority] 中最高优先级的那一个）。
+  void _applyTeacherRoles(List<SmartCampusRole> roles) {
+    final SmartCampusRole nextSelected;
+    if (state.hasUserSelectedRole && roles.contains(state.selectedRole)) {
+      nextSelected = state.selectedRole;
+    } else {
+      nextSelected = roles.first;
+    }
+    if (state.selectedRole == nextSelected &&
+        _sameRoleList(state.availableRoles, roles)) {
+      return;
+    }
+    state = state.copyWith(
+      selectedRole: nextSelected,
+      availableRoles: roles,
     );
   }
 
@@ -319,7 +490,7 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
 
   /// 管理员端「学生管理」入口：进入全量在籍学生总览页（banner + 标题/副标题
   /// + 4 张彩色渐变统计卡（在籍 / 住校 / 异动 / 名册总数）+ 学籍状态 5 tabs
-  /// (全部 / 在籍 / 休学 / 转学中 / 毕业) + 全部班级 dropdown + 搜索框
+  /// (全部 / 在籍 / 休学 / 转学 / 毕业) + 全部班级 dropdown + 搜索框
   /// + 当前结果 N 人 + 学生卡 3 列网格；点击卡片打开「学籍档案」弹窗）。
   void openStudentManagement() {
     if (state.mainView == SmartCampusMainView.studentManagement) {
@@ -420,6 +591,52 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
     state = state.copyWith(
       mainView: SmartCampusMainView.notificationManagement,
     );
+  }
+
+  /// 宿管端「按宿舍查寝」入口：进入今晚 / 今晨的按宿舍打卡作业页面。
+  ///   - banner（白→#F9EDFF 渐变）+ 标题 "按宿舍查寝" + 副标题
+  ///   - 当前查寝截止时间（如 "2026-04-22 23:00前"）顶置
+  ///   - 4 张统计卡（在册床位 / 正常口径 / 晚归 / 未打卡）
+  ///   - 多张宿舍卡：宿舍号 + 公寓·楼层 + N人·查寝场次·截止时间 +
+  ///     "一键打卡" 紫渐变按钮（全部已打则置灰）+ 3 列学生格子（头像 +
+  ///     姓名 + 学号 + 已打卡/未打卡 下拉）
+  ///   - 底部最近查寝历史 3 列卡片（紫白渐变 + 状态徽章 + 规定/打卡时间 + 备注）
+  void openDormCheckByRoom() {
+    if (state.mainView == SmartCampusMainView.dormCheckByRoom) {
+      return;
+    }
+    state = state.copyWith(mainView: SmartCampusMainView.dormCheckByRoom);
+  }
+
+  /// 宿管端「打卡管理」入口：宿管本人的到岗 / 下班打卡（GPS + 时间戳）。
+  ///   - banner（白→#F9EDFF 渐变）+ 标题 "打卡管理" + 副标题
+  ///   - 主面板（970×439 白卡）：左上小绿图标 + 「在责任区内 距考勤处约 850m」
+  ///     #12CE51 状态 + 「获取当前定位」白底胶囊按钮 + 中央 160×160 紫渐变
+  ///     圆形大按钮（"上班/下班打卡" + 实时时间 21:32:22）+ 背景柔和雷达圆
+  ///   - "我的打卡记录" 18/500 + 477 宽双列卡片（紫白渐变 + 16/500 标题 +
+  ///     绿色 "正常" 徽章 + 灰底块 "打卡时间 / 打卡位置"）
+  void openDormCheckInManagement() {
+    if (state.mainView == SmartCampusMainView.dormCheckInManagement) {
+      return;
+    }
+    state = state.copyWith(
+      mainView: SmartCampusMainView.dormCheckInManagement,
+    );
+  }
+
+  /// 管理员端「签课管理」入口：查看大课 / 小课的签到状态，处理补签审核。
+  ///
+  /// 视图（两个 tab）：
+  ///   - **大课管理**：按班级 + 日期查询课次列表；每节大课可展开查看学生签到
+  ///     情况，支持管理员逐人修改状态（正常 / 迟到 / 早退 / 请假 / 缺勤）。
+  ///   - **小课管理**：查看小课各阶段签到状态（老师上课签→学生上课签→老师
+  ///     下课签→学生下课签→学生评价→管理员确认）；待确认的小课卡底部出现
+  ///     "确认完成"按钮；如有补签申请则弹右侧抽屉审核（通过/驳回）。
+  void openSignManagement() {
+    if (state.mainView == SmartCampusMainView.signManagement) {
+      return;
+    }
+    state = state.copyWith(mainView: SmartCampusMainView.signManagement);
   }
 
   void backToDashboard() {

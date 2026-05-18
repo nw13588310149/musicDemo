@@ -6,6 +6,7 @@ import '../../../core/widgets/app_toast.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/smart_campus_dashboard_data.dart';
 import '../state/smart_campus_state.dart';
+import 'widgets/role_switcher_buttons.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 /// 用于尚未迁移完成的快捷按钮：弹一个轻提示，避免"点了没反应"。
@@ -47,6 +48,10 @@ class TeacherDashboardLayout extends StatefulWidget {
     required this.onOpenMyClass,
     required this.onOpenClassWorkbench,
     required this.onOpenMySchedule,
+    this.availableRoles = const [
+      SmartCampusRole.teacher,
+      SmartCampusRole.headTeacher,
+    ],
     this.onOpenCheckIn,
     this.onOpenMyHomework,
     this.onOpenMyGrades,
@@ -67,6 +72,12 @@ class TeacherDashboardLayout extends StatefulWidget {
   });
 
   final SmartCampusRole selectedRole;
+
+  /// 当前用户实际可用的全部身份。由 `SmartCampusState.availableRoles`
+  /// 提供，来自 `myInfo.role` + `/teacher/teacherRole` 的合并解析结果。
+  /// 决定右栏「身份切换」按钮组渲染哪些按钮（默认兜底为「任课老师 +
+  /// 班主任」两枚，保持以前的演示行为）。
+  final List<SmartCampusRole> availableRoles;
   final String shellDisplayName;
   final String avatarUrl;
   final VoidCallback onOpenPrincipalMailbox;
@@ -185,15 +196,20 @@ class _TeacherDashboardLayoutState extends State<TeacherDashboardLayout> {
   }
 
   void _selectTab(SmartCampusRole role) {
+    // 跨端身份（admin / dormManager / student）：本地预览没意义（教师
+    // dashboard 不能渲染管理员视图），直接交给 controller 切换 state，
+    // SmartCampusPage 会重新路由到目标身份的大 dashboard，本 widget 卸载。
     if (role != SmartCampusRole.teacher &&
         role != SmartCampusRole.headTeacher) {
+      widget.onSelectRole?.call(role);
       return;
     }
     if (_localTab == role) {
       return;
     }
     // 立刻给 UI 一个回应（任何账号都能点）；
-    // 同时把切换持久化给 controller：admin 会写入 state，普通教师被 ignore。
+    // 同时把切换持久化给 controller：admin / 多身份教师会写入 state，
+    // 单身份的普通教师被 ignore（仅保留本地预览效果）。
     setState(() {
       _localTab = role;
     });
@@ -265,6 +281,7 @@ class _TeacherDashboardLayoutState extends State<TeacherDashboardLayout> {
                   width: cw,
                   selectedTab: _localTab,
                   onTabSelected: _selectTab,
+                  availableRoles: widget.availableRoles,
                   shellDisplayName: widget.shellDisplayName,
                   avatarUrl: widget.avatarUrl,
                   fillHeight: false,
@@ -317,6 +334,7 @@ class _TeacherDashboardLayoutState extends State<TeacherDashboardLayout> {
                 width: sidebarWidth,
                 selectedTab: _localTab,
                 onTabSelected: _selectTab,
+                availableRoles: widget.availableRoles,
                 shellDisplayName: widget.shellDisplayName,
                 avatarUrl: widget.avatarUrl,
                 fillHeight: true,
@@ -886,16 +904,39 @@ class _TeacherSidebar extends StatelessWidget {
     required this.fillHeight,
     this.selectedTab,
     this.onTabSelected,
+    this.availableRoles = const [
+      SmartCampusRole.teacher,
+      SmartCampusRole.headTeacher,
+    ],
   });
 
   final SmartCampusDashboardData data;
   final double width;
-  // 学生端无任课/班主任切换：两者均为 null 时不渲染 _TeacherRoleTabs。
+  // 学生端无身份切换：两者均为 null 时整个切换区不渲染。
   final SmartCampusRole? selectedTab;
   final ValueChanged<SmartCampusRole>? onTabSelected;
+
+  /// 来自 [TeacherDashboardLayout.availableRoles]。当包含 teacher /
+  /// headTeacher 之外的身份（admin / dormManager / student）时，使用通
+  /// 用的 [RoleSwitcherButtons]；只剩任课老师 + 班主任两枚时退回原先的
+  /// 固定 2 Tab，保留单身份教师"本地预览"的演示体验。
+  final List<SmartCampusRole> availableRoles;
   final String shellDisplayName;
   final String avatarUrl;
   final bool fillHeight;
+
+  /// 判断是否需要走"通用多身份"切换器：只要 availableRoles 出现 teacher /
+  /// headTeacher 之外的成员（典型场景：管理员账户、跨端老师），就升级到
+  /// 全量按钮列表。
+  bool get _hasExtraRoles {
+    for (final role in availableRoles) {
+      if (role != SmartCampusRole.teacher &&
+          role != SmartCampusRole.headTeacher) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -929,10 +970,19 @@ class _TeacherSidebar extends StatelessWidget {
             if (selectedTab != null && onTabSelected != null) ...[
               Padding(
                 padding: EdgeInsets.symmetric(horizontal: ui(20)),
-                child: _TeacherRoleTabs(
-                  selected: selectedTab!,
-                  onChanged: onTabSelected!,
-                ),
+                // 多身份用户（admin / 跨端教师）走通用按钮组，按 availableRoles
+                // 渲染；普通"任课老师 + 班主任"仍走原 2 Tab 以保留单身份
+                // 教师在演示账号下"本地预览"班主任视图的体验。
+                child: _hasExtraRoles
+                    ? RoleSwitcherButtons(
+                        availableRoles: availableRoles,
+                        selectedRole: selectedTab!,
+                        onSelectRole: onTabSelected!,
+                      )
+                    : _TeacherRoleTabs(
+                        selected: selectedTab!,
+                        onChanged: onTabSelected!,
+                      ),
               ),
               SizedBox(height: ui(28)),
             ],

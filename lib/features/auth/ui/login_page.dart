@@ -6,6 +6,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../../../app/router/route_paths.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../features/shell/state/school_binding_controller.dart';
 import '../../../features/shell/state/shell_controller.dart';
 import '../state/auth_controller.dart';
 import '../state/auth_state.dart';
@@ -219,6 +220,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       // 登录成功后立即预热 ShellController（触发 myInfo/mySchool 并行请求），
       // 使菜单和头像在导航动画期间就已在飞，进入主框架时第一时间呈现。
       ref.read(shellControllerProvider.notifier).refreshUserAndSchool();
+      // 同步触发「绑定学校」轮询：构造控制器即开始 5s 一次的 schoolList
+      // 检查，未绑定时 ShellScaffold 进场即可弹出强制绑定遮罩。
+      ref.read(schoolBindingControllerProvider.notifier).refresh();
       Navigator.pushReplacementNamed(context, RoutePaths.home);
     }
   }

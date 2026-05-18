@@ -37,6 +37,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../../../core/widgets/app_date_time_pickers.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/popup_selector_field.dart';
 import '../../shell/ui/shell_layout.dart';
@@ -1292,25 +1293,6 @@ class _LeaveApplyDrawerState extends State<_LeaveApplyDrawer> {
     // 用项目主紫 #8741FF 覆盖 Material picker 的默认配色，与 dorm 端补卡
     // 表单保持视觉一致；同时把 day-period chip / hour-minute 按钮等用到的
     // primaryContainer 一并改成淡紫底，避免 Material 默认的 tonalSurface 色。
-    Widget themed(BuildContext ctx, Widget? child) {
-      return Theme(
-        data: Theme.of(ctx).copyWith(
-          colorScheme: const ColorScheme.light(
-            primary: _kPurple,
-            onPrimary: Colors.white,
-            surface: Colors.white,
-            onSurface: _kTextDark,
-            primaryContainer: Color(0xFFEFE5FF),
-            onPrimaryContainer: _kPurple,
-          ),
-          textButtonTheme: TextButtonThemeData(
-            style: TextButton.styleFrom(foregroundColor: _kPurple),
-          ),
-        ),
-        child: child ?? const SizedBox.shrink(),
-      );
-    }
-
     final pickedDate = await showDatePicker(
       context: context,
       initialDate: initial,
@@ -1319,7 +1301,7 @@ class _LeaveApplyDrawerState extends State<_LeaveApplyDrawer> {
       helpText: isStart ? '选择开始日期' : '选择结束日期',
       cancelText: '取消',
       confirmText: '确定',
-      builder: themed,
+      builder: appPickerDialogTheme,
     );
     if (pickedDate == null || !mounted) return;
     final pickedTime = await showTimePicker(
@@ -1328,7 +1310,7 @@ class _LeaveApplyDrawerState extends State<_LeaveApplyDrawer> {
       helpText: isStart ? '选择开始时间' : '选择结束时间',
       cancelText: '取消',
       confirmText: '确定',
-      builder: themed,
+      builder: appPickerDialogTheme,
     );
     if (pickedTime == null || !mounted) return;
     final dt = DateTime(

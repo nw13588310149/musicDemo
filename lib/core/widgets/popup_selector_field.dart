@@ -8,6 +8,71 @@ const Color _kPanelBorder = Color(0xFFF3F2F3);
 const Color _kTextDark = Color(0xFF0B081A);
 const Color _kPurple = Color(0xFF8741FF);
 
+/// 在 [anchorContext] 所代表的触发器**下方 4px** 锚定打开一个全局通用样式
+/// 的下拉弹层（[PopupSelectorPanel]），返回用户选中的值或 `null`（点击蒙层
+/// 关闭）。所有自定义触发器（pill / icon / 异形 chip）只要调用这一个助手，
+/// 就能拿到统一的弹层视觉与交互。
+///
+/// - [width]：弹层宽度。`null` 时使用触发器的实际宽度；触发器很窄（如 36
+///   高紫边胶囊）时通常需要显式指定一个更宽的值（推荐 ≥ 120）。
+/// - [maxWidth] / [minWidth]：可选的宽度区间，覆盖默认的 [width]。
+/// - 弹层会自动 dismiss（点击 barrier / 选中 / 调用 `Navigator.pop`）。
+Future<T?> showAppPopupSelector<T>({
+  required BuildContext anchorContext,
+  required List<T> items,
+  required T? value,
+  required String Function(T) itemLabel,
+  double? width,
+  double? minWidth,
+  double? maxWidth,
+}) async {
+  final renderBox = anchorContext.findRenderObject() as RenderBox?;
+  if (renderBox == null) return null;
+  final overlayBox =
+      Overlay.of(anchorContext, rootOverlay: true).context.findRenderObject()
+          as RenderBox?;
+  if (overlayBox == null) return null;
+  final origin = renderBox.localToGlobal(Offset.zero, ancestor: overlayBox);
+  final size = renderBox.size;
+  final scale = DashboardScaleScope.of(anchorContext);
+  final effectiveWidth = width ?? size.width;
+
+  return showMenu<T>(
+    context: anchorContext,
+    elevation: 0,
+    color: Colors.transparent,
+    shadowColor: Colors.transparent,
+    surfaceTintColor: Colors.transparent,
+    constraints: BoxConstraints(
+      minWidth: minWidth ?? effectiveWidth,
+      maxWidth: maxWidth ?? effectiveWidth,
+    ),
+    position: RelativeRect.fromLTRB(
+      origin.dx,
+      origin.dy + size.height + scale.ui(4),
+      overlayBox.size.width - origin.dx - size.width,
+      overlayBox.size.height - origin.dy - size.height,
+    ),
+    items: <PopupMenuEntry<T>>[
+      PopupMenuItem<T>(
+        enabled: false,
+        padding: EdgeInsets.zero,
+        child: DashboardScaleScope(
+          data: scale,
+          child: Builder(
+            builder: (panelCtx) => PopupSelectorPanel<T>(
+              items: items,
+              value: value,
+              itemLabel: itemLabel,
+              onSelected: (v) => Navigator.of(panelCtx).pop(v),
+            ),
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
 /// 项目内统一的「下拉选择」控件。
 ///
 /// 字段：48 高白底 + 1px `#F5F6FA` 边的按钮，14/400 黑字 + 18px chevron；
@@ -51,45 +116,12 @@ class _PopupSelectorFieldState<T> extends State<PopupSelectorField<T>> {
   Future<void> _openMenu() async {
     final fieldCtx = _fieldKey.currentContext;
     if (fieldCtx == null) return;
-    final renderBox = fieldCtx.findRenderObject() as RenderBox;
-    final overlayBox =
-        Overlay.of(context, rootOverlay: true).context.findRenderObject()
-            as RenderBox;
-    final origin = renderBox.localToGlobal(Offset.zero, ancestor: overlayBox);
-    final size = renderBox.size;
-    final scale = DashboardScaleScope.of(context);
-
     setState(() => _open = true);
-    final selected = await showMenu<T>(
-      context: context,
-      elevation: 0,
-      color: Colors.transparent,
-      shadowColor: Colors.transparent,
-      surfaceTintColor: Colors.transparent,
-      constraints: BoxConstraints.tightFor(width: size.width),
-      position: RelativeRect.fromLTRB(
-        origin.dx,
-        origin.dy + size.height + scale.ui(4),
-        overlayBox.size.width - origin.dx - size.width,
-        overlayBox.size.height - origin.dy - size.height,
-      ),
-      items: <PopupMenuEntry<T>>[
-        PopupMenuItem<T>(
-          enabled: false,
-          padding: EdgeInsets.zero,
-          child: DashboardScaleScope(
-            data: scale,
-            child: Builder(
-              builder: (panelCtx) => _PopupSelectorPanel<T>(
-                items: widget.items,
-                value: widget.value,
-                itemLabel: widget.itemLabel,
-                onSelected: (v) => Navigator.of(panelCtx).pop(v),
-              ),
-            ),
-          ),
-        ),
-      ],
+    final selected = await showAppPopupSelector<T>(
+      anchorContext: fieldCtx,
+      items: widget.items,
+      value: widget.value,
+      itemLabel: widget.itemLabel,
     );
     if (!mounted) return;
     setState(() => _open = false);
@@ -142,8 +174,19 @@ class _PopupSelectorFieldState<T> extends State<PopupSelectorField<T>> {
   }
 }
 
-class _PopupSelectorPanel<T> extends StatelessWidget {
-  const _PopupSelectorPanel({
+/// 全局通用「下拉弹层」面板。
+///
+/// 视觉：白底 12 圆角 + 1px `#F3F2F3` 边 + 多层柔和阴影；上下各 6px 边距；
+/// 每行 40 高、14/400 黑字；命中项使用 `#8741FF` 紫色 14/500 + 右侧紫色
+/// check。所有调起此面板的下拉控件（请假申请、班级筛选、查寝状态等）共用
+/// 同一份实现。
+///
+/// 多数情况下应使用 [showAppPopupSelector] 助手，它会负责锚定到触发器下方
+/// 4px、传递 `DashboardScaleScope` 并管理弹出/关闭。仅在需要自定义嵌入位置
+/// 时直接使用本组件。
+class PopupSelectorPanel<T> extends StatelessWidget {
+  const PopupSelectorPanel({
+    super.key,
     required this.items,
     required this.value,
     required this.itemLabel,
@@ -151,7 +194,7 @@ class _PopupSelectorPanel<T> extends StatelessWidget {
   });
 
   final List<T> items;
-  final T value;
+  final T? value;
   final String Function(T) itemLabel;
   final ValueChanged<T> onSelected;
 

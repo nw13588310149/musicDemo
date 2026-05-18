@@ -27,13 +27,13 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>音乐伴侣中的调音器需要访问麦克风来检测当前音高。</string>
+	<string>需要使用麦克风进行录音练习、语音消息、调音跟唱及课堂音频采集。</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>需要访问相册以选择并上传课件、图片和附件。</string>
+	<string>需要访问相册以选择并上传课件、作业、人脸照片及其他图片附件。</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>需要保存图片或文件到相册时使用。</string>
+	<string>需要将图片或文件保存到相册时使用。</string>
 	<key>NSCameraUsageDescription</key>
-	<string>需要访问相机以拍摄并上传图片附件。</string>
+	<string>需要使用相机拍摄人脸照片、作业图片及其他现场附件。</string>
 	<key>UIStatusBarHidden</key>
 	<true/>
 	<key>UIStatusBarHidden~ipad</key>

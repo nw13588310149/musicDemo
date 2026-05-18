@@ -34,12 +34,38 @@ class _MyCloudDrivePageState extends ConsumerState<MyCloudDrivePage> {
   TextEditingController? _fileRenameController;
   FocusNode? _fileRenameFocusNode;
   bool _fileRenameSubmitting = false;
+  bool _consumedRouteArgs = false;
 
   @override
   void initState() {
     super.initState();
     _searchController = TextEditingController();
     _searchController.addListener(_handleSearchChanged);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_consumedRouteArgs) return;
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is! Map) return;
+    final raw = args['previewItem'];
+    if (raw is! Map) return;
+    _consumedRouteArgs = true;
+    // 延迟到首帧渲染完成后再触发预览，避免在 build 期间触发 setState。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final item = CloudFileItem(
+        id: int.tryParse(raw['id']?.toString() ?? '') ?? 0,
+        title: raw['title']?.toString() ?? '',
+        type: CloudFileType.fromValue(raw['typeValue']),
+        audioUrl: raw['audioUrl']?.toString() ?? '',
+        imageUrls: (raw['imageUrls'] as List?)?.cast<String>() ?? const [],
+      );
+      if (item.id > 0 || item.audioUrl.isNotEmpty || item.imageUrls.isNotEmpty) {
+        ref.read(cloudDriveControllerProvider.notifier).openPreview(item);
+      }
+    });
   }
 
   @override

@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../shell/ui/shell_layout.dart';
+import '../state/smart_campus_state.dart';
+import 'widgets/role_switcher_buttons.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 /// 管理员智慧校园首页：970×~1100 双栏布局。
@@ -35,6 +37,9 @@ class AdminHomeView extends StatelessWidget {
     super.key,
     required this.shellDisplayName,
     required this.avatarUrl,
+    this.availableRoles = const [SmartCampusRole.admin],
+    this.selectedRole = SmartCampusRole.admin,
+    this.onSelectRole,
     this.onOpenGroupChat,
     this.onOpenPrincipalMailbox,
     this.onOpenSchoolCircle,
@@ -45,10 +50,25 @@ class AdminHomeView extends StatelessWidget {
     this.onOpenDormLeaveApproval,
     this.onOpenFaceLibrary,
     this.onOpenNotificationManagement,
+    this.onOpenSignManagement,
   });
 
   final String shellDisplayName;
   final String avatarUrl;
+
+  /// 当前用户在校内可切换的全部身份（admin / headTeacher / teacher /
+  /// dormManager / student 子集）。一般来自
+  /// `SmartCampusState.availableRoles`，由 `myInfo.role + teacherRole`
+  /// 接口共同决定。仅含 `[admin]` 时右栏隐藏「身份切换」区。
+  final List<SmartCampusRole> availableRoles;
+
+  /// 当前已选身份。用于让右栏切换按钮高亮当前所在的身份（admin 默认）。
+  final SmartCampusRole selectedRole;
+
+  /// 切换身份回调。一般直接传 `SmartCampusController.selectRole`，
+  /// state 写入后由 [SmartCampusPage] 重新路由到目标身份的大 dashboard。
+  /// 为 `null` 时右栏隐藏「身份切换」区。
+  final ValueChanged<SmartCampusRole>? onSelectRole;
 
   /// 「群聊」/ 「校长信箱」/ 「校圈治理」三个快捷入口共用全站对应页面：
   /// 由 [smartCampusPage] 传入对应的 `controller.openGroupChat` /
@@ -78,6 +98,9 @@ class AdminHomeView extends StatelessWidget {
   /// 「通知管理」管理端独立入口：进入 [AdminNotificationManagementView]。
   final VoidCallback? onOpenNotificationManagement;
 
+  /// 「签课管理」管理端独立入口：进入 [AdminSignManagementView]。
+  final VoidCallback? onOpenSignManagement;
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
@@ -106,6 +129,7 @@ class AdminHomeView extends StatelessWidget {
                   onOpenDormLeaveApproval: onOpenDormLeaveApproval,
                   onOpenFaceLibrary: onOpenFaceLibrary,
                   onOpenNotificationManagement: onOpenNotificationManagement,
+                  onOpenSignManagement: onOpenSignManagement,
                 ),
                 SizedBox(height: ui(24)),
                 const _SectionTitle(title: '数据看板'),
@@ -147,6 +171,9 @@ class AdminHomeView extends StatelessWidget {
             child: _AdminSidePanel(
               displayName: shellDisplayName,
               avatarUrl: avatarUrl,
+              availableRoles: availableRoles,
+              selectedRole: selectedRole,
+              onSelectRole: onSelectRole,
             ),
           ),
         ],
@@ -202,6 +229,7 @@ const _quickActions = <_QuickAction>[
   _QuickAction('教师管理', 'assets/images/adminHome/2.png'),
   _QuickAction('班级编辑', 'assets/images/adminHome/3.png'),
   _QuickAction('排课与课表', 'assets/images/adminHome/4.png'),
+  _QuickAction('签课管理', 'assets/images/adminHome/4.png'),
   _QuickAction('宿管请假审批', 'assets/images/adminHome/5.png'),
   _QuickAction('人脸库', 'assets/images/adminHome/6.png'),
   _QuickAction('通知管理', 'assets/images/adminHome/7.png'),
@@ -328,6 +356,7 @@ class _QuickActionsCard extends StatelessWidget {
     this.onOpenDormLeaveApproval,
     this.onOpenFaceLibrary,
     this.onOpenNotificationManagement,
+    this.onOpenSignManagement,
   });
 
   final VoidCallback? onOpenGroupChat;
@@ -340,10 +369,8 @@ class _QuickActionsCard extends StatelessWidget {
   final VoidCallback? onOpenDormLeaveApproval;
   final VoidCallback? onOpenFaceLibrary;
   final VoidCallback? onOpenNotificationManagement;
+  final VoidCallback? onOpenSignManagement;
 
-  /// 按 label 分发：群聊 / 校长信箱 / 校圈治理 三个入口跨身份共享；
-  /// 学生管理 / 教师管理 / 班级编辑 / 排课与课表 走管理端独立视图。
-  /// 其余暂未接入对应管理页，留空。
   VoidCallback? _resolveTap(String label) {
     switch (label) {
       case '群聊':
@@ -360,6 +387,8 @@ class _QuickActionsCard extends StatelessWidget {
         return onOpenClassManagement;
       case '排课与课表':
         return onOpenScheduleManagement;
+      case '签课管理':
+        return onOpenSignManagement;
       case '宿管请假审批':
         return onOpenDormLeaveApproval;
       case '人脸库':
@@ -373,7 +402,9 @@ class _QuickActionsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-
+    // 11 items → 5 + 5 + 1（末行左对齐，其余列用空白 Expanded 补位）
+    const rowSize = 5;
+    final rowCount = (_quickActions.length / rowSize).ceil();
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -382,33 +413,28 @@ class _QuickActionsCard extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: ui(24), vertical: ui(28)),
       child: Column(
         children: [
-          Row(
-            children: [
-              for (var i = 0; i < 5; i++) ...[
-                Expanded(
-                  child: _QuickActionCell(
-                    action: _quickActions[i],
-                    onTap: _resolveTap(_quickActions[i].label),
+          for (var ri = 0; ri < rowCount; ri++) ...[
+            if (ri > 0) SizedBox(height: ui(24)),
+            Row(
+              children: [
+                for (var ci = 0; ci < rowSize; ci++) ...[
+                  if (ci > 0) SizedBox(width: ui(12)),
+                  Expanded(
+                    child: () {
+                      final idx = ri * rowSize + ci;
+                      if (idx < _quickActions.length) {
+                        return _QuickActionCell(
+                          action: _quickActions[idx],
+                          onTap: _resolveTap(_quickActions[idx].label),
+                        );
+                      }
+                      return const SizedBox();
+                    }(),
                   ),
-                ),
-                if (i < 4) SizedBox(width: ui(12)),
+                ],
               ],
-            ],
-          ),
-          SizedBox(height: ui(24)),
-          Row(
-            children: [
-              for (var i = 5; i < 10; i++) ...[
-                Expanded(
-                  child: _QuickActionCell(
-                    action: _quickActions[i],
-                    onTap: _resolveTap(_quickActions[i].label),
-                  ),
-                ),
-                if (i < 9) SizedBox(width: ui(12)),
-              ],
-            ],
-          ),
+            ),
+          ],
         ],
       ),
     );
@@ -1002,14 +1028,28 @@ class _WorkReminderCard extends StatelessWidget {
 // ============================================================================
 
 class _AdminSidePanel extends StatelessWidget {
-  const _AdminSidePanel({required this.displayName, required this.avatarUrl});
+  const _AdminSidePanel({
+    required this.displayName,
+    required this.avatarUrl,
+    required this.availableRoles,
+    required this.selectedRole,
+    required this.onSelectRole,
+  });
 
   final String displayName;
   final String avatarUrl;
+  final List<SmartCampusRole> availableRoles;
+  final SmartCampusRole selectedRole;
+  final ValueChanged<SmartCampusRole>? onSelectRole;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    // 只有用户实际拥有 2+ 个身份（且上层传入了切换回调）时才显示「身份切换」
+    // 区块。单身份 admin（普通校长 / 教务管理员）下隐藏，避免出现"只能切到
+    // 自己"的无意义按钮。
+    final showRoleSwitcher =
+        onSelectRole != null && availableRoles.length > 1;
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -1022,6 +1062,25 @@ class _AdminSidePanel extends StatelessWidget {
           _ProfileHeader(displayName: displayName, avatarUrl: avatarUrl),
           SizedBox(height: ui(20)),
           const _ProfileInfoRows(),
+          if (showRoleSwitcher) ...[
+            SizedBox(height: ui(20)),
+            Text(
+              '身份切换',
+              style: TextStyle(
+                fontSize: ui(14),
+                height: 1.2,
+                fontWeight: AppFont.w500,
+                color: const Color(0xFF1A1A1A),
+                fontFamily: 'PingFang SC',
+              ),
+            ),
+            SizedBox(height: ui(10)),
+            RoleSwitcherButtons(
+              availableRoles: availableRoles,
+              selectedRole: selectedRole,
+              onSelectRole: onSelectRole!,
+            ),
+          ],
           SizedBox(height: ui(24)),
           Text(
             '校级通知',

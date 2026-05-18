@@ -12,8 +12,13 @@ import 'admin_face_library_view.dart';
 import 'admin_home_view.dart';
 import 'admin_notification_management_view.dart';
 import 'admin_schedule_management_view.dart';
+import 'admin_sign_management_view.dart';
 import 'admin_student_management_view.dart';
 import 'admin_teacher_management_view.dart';
+import 'dorm_manager_check_by_room_view.dart';
+import 'dorm_manager_check_history_view.dart';
+import 'dorm_manager_check_in_view.dart';
+import 'dorm_manager_home_view.dart';
 import 'group_chat_view.dart';
 import 'principal_mailbox_view.dart';
 import 'student_check_in_view.dart';
@@ -95,6 +100,19 @@ class SmartCampusPage extends ConsumerWidget {
     final state = ref.watch(smartCampusControllerProvider);
     final controller = ref.read(smartCampusControllerProvider.notifier);
     final shellState = ref.watch(shellControllerProvider);
+
+    // 「老师」身份用户进入智慧校园后，按需调用 /app/school/v2/teacher/teacherRole
+    // 取回其在校内的实际身份集合（校长 / 教务管理员 / 宿管 / 班主任 /
+    // 任课老师），由 controller 内部去重 + 排序后扩展 availableRoles，
+    // dashboard 上的身份切换 tab 才会出现真正可用的多端入口。
+    //
+    // 这里直接在 build 中触发：shellControllerProvider 上方已经 watch，
+    // myInfo 回包导致 role 变化时本 widget 会自然重 build；
+    // [SmartCampusController.ensureTeacherRolesLoaded] 自身用 loaded /
+    // loading 双标记做去重，重复 build 也只会发一次请求。
+    if (shellState.user.role.trim().toLowerCase() == 'teacher') {
+      controller.ensureTeacherRolesLoaded();
+    }
 
     final isTeacherOrHead =
         state.selectedRole == SmartCampusRole.teacher ||
@@ -182,10 +200,19 @@ class SmartCampusPage extends ConsumerWidget {
           onBack: controller.backToDashboard,
         );
       }
+      if (state.mainView == SmartCampusMainView.signManagement) {
+        return AdminSignManagementView(onBack: controller.backToDashboard);
+      }
       if (state.mainView == SmartCampusMainView.dashboard) {
         return AdminHomeView(
           shellDisplayName: shellState.user.displayName,
           avatarUrl: shellState.user.avatarUrl,
+          // 右侧栏「身份切换」按钮：让多端管理员 / 跨端教师可以从 admin
+          // 视图直接切到任课老师 / 班主任 / 宿管 / 学生 dashboard，
+          // 与教师 dashboard 的按钮组对齐。
+          availableRoles: state.availableRoles,
+          selectedRole: state.selectedRole,
+          onSelectRole: controller.selectRole,
           onOpenGroupChat: controller.openGroupChat,
           onOpenPrincipalMailbox: controller.openPrincipalMailbox,
           onOpenSchoolCircle: openSchoolCircle,
@@ -196,6 +223,7 @@ class SmartCampusPage extends ConsumerWidget {
           onOpenDormLeaveApproval: controller.openDormLeaveApproval,
           onOpenFaceLibrary: controller.openFaceLibrary,
           onOpenNotificationManagement: controller.openNotificationManagement,
+          onOpenSignManagement: controller.openSignManagement,
         );
       }
     }
@@ -279,6 +307,10 @@ class SmartCampusPage extends ConsumerWidget {
       }
       return TeacherDashboardLayout(
         selectedRole: state.selectedRole,
+        // 跨端老师（teacherRole 返回多个角色）/ admin 切到任课/班主任视图
+        // 时，把全量可切身份传下去，右侧栏的「身份切换」按钮组按它渲染，
+        // 让用户能从教师 dashboard 直接跳回 admin / 宿管 / 学生 端。
+        availableRoles: state.availableRoles,
         shellDisplayName: shellState.user.displayName,
         avatarUrl: shellState.user.avatarUrl,
         onOpenPrincipalMailbox: controller.openPrincipalMailbox,
@@ -361,6 +393,53 @@ class SmartCampusPage extends ConsumerWidget {
         onOpenLeaveManagement: controller.openLeaveManagement,
         onOpenDormCheck: controller.openDormCheck,
       );
+    }
+
+    // 宿管端：复用 admin / 教师端的「群聊 / 校长信箱 / 校圈」全站入口，
+    // 「按宿舍查寝 / 查寝历史 / 打卡管理」已接入独立视图，其余 1 项
+    // 「宿管请假」目前先保留占位回调，待对应独立视图就位后再接入。
+    if (state.selectedRole == SmartCampusRole.dormManager) {
+      if (state.mainView == SmartCampusMainView.principalMailbox) {
+        return PrincipalMailboxView(onBack: controller.backToDashboard);
+      }
+      if (state.mainView == SmartCampusMainView.groupChat) {
+        return GroupChatView(
+          onBack: controller.backToDashboard,
+          currentUserId: shellState.user.id,
+          currentUserName: shellState.user.displayName,
+          currentUserAvatarUrl: shellState.user.avatarUrl,
+        );
+      }
+      if (state.mainView == SmartCampusMainView.dormCheckByRoom) {
+        return DormManagerCheckByRoomView(
+          onBack: controller.backToDashboard,
+        );
+      }
+      if (state.mainView == SmartCampusMainView.dormHistory) {
+        return DormManagerCheckHistoryView(
+          onBack: controller.backToDashboard,
+        );
+      }
+      if (state.mainView == SmartCampusMainView.dormCheckInManagement) {
+        return DormManagerCheckInView(
+          onBack: controller.backToDashboard,
+        );
+      }
+      if (state.mainView == SmartCampusMainView.dashboard) {
+        return DormManagerHomeView(
+          shellDisplayName: shellState.user.displayName,
+          avatarUrl: shellState.user.avatarUrl,
+          availableRoles: state.availableRoles,
+          selectedRole: state.selectedRole,
+          onSelectRole: controller.selectRole,
+          onOpenGroupChat: controller.openGroupChat,
+          onOpenPrincipalMailbox: controller.openPrincipalMailbox,
+          onOpenSchoolCircle: openSchoolCircle,
+          onOpenDormCheckByRoom: controller.openDormCheckByRoom,
+          onOpenDormCheckHistory: controller.openDormHistory,
+          onOpenCheckInManagement: controller.openDormCheckInManagement,
+        );
+      }
     }
 
     return _SmartCampusPlaceholder(state: state, controller: controller);
@@ -509,6 +588,10 @@ class _SmartCampusPlaceholder extends StatelessWidget {
         return '查寝动态';
       case SmartCampusMainView.dormHistory:
         return '查寝历史';
+      case SmartCampusMainView.dormCheckByRoom:
+        return '按宿舍查寝';
+      case SmartCampusMainView.dormCheckInManagement:
+        return '打卡管理';
       case SmartCampusMainView.homeSchool:
         return '家校沟通';
       case SmartCampusMainView.classAttendance:
@@ -533,6 +616,8 @@ class _SmartCampusPlaceholder extends StatelessWidget {
         return '人脸库';
       case SmartCampusMainView.notificationManagement:
         return '通知管理';
+      case SmartCampusMainView.signManagement:
+        return '签课管理';
     }
   }
 }

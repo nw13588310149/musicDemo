@@ -18,6 +18,10 @@
 //      4 主题课卡 + 时间冻结列 + 横滚日期区。左侧时间列由
 //      `schoolTimeConfigList` 接口返回；课表数据来自任课老师端
 //      `/app/school/v2/teacher/courseList`，已按 token 过滤为当前老师的课。
+//      同时并行拉 `/app/school/v2/teacher/schoolSmallCourseApplyList`，把
+//      「待审核 / 已驳回」的小课申请以幽灵卡形式叠到对应日期 / 节次格子里
+//      （已通过的申请因 courseList 已包含，做 (classId,date,lineNum) 去重
+//      避免双显示）。这些幽灵卡右上角用对应颜色徽章替代默认「小课」pill。
 //   4. 编辑模式：
 //      - 大课（紫）原样展示，不可编辑（与 admin 端不同：admin 端可拖动）；
 //      - 小课（橙 / 蓝）变可点击；
@@ -31,13 +35,17 @@
 //      #B6B5BB 提示 / #774B09 橙文 / #0D3A6D 蓝文 / #7535BE 紫文
 // =============================================================================
 
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_response.dart';
+import '../../../core/widgets/app_date_time_pickers.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/popup_selector_field.dart';
 import '../../school/data/school_repository.dart';
+import '../../shell/state/shell_controller.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/admin_repository.dart';
 import '../data/teacher_repository.dart';
@@ -66,12 +74,23 @@ const Color _kBigTitle = Color(0xFF7535BE);
 const Color _kStatusGreen = Color(0xFF0CAC40);
 const Color _kStatusPurple = Color(0xFFA773FF);
 
+// 「我的小课申请」状态色（与 admin schedule 端 _kPendingBg/Fg 等保持一致），
+// 用于课卡右上角的状态徽章替代默认「小课」pill。
+const Color _kApplyPendingBg = Color(0xFFFFEDD3);
+const Color _kApplyPendingFg = Color(0xFFFF6A00);
+const Color _kApplyRejectedBg = Color(0xFFFFE5E5);
+const Color _kApplyRejectedFg = Color(0xFFE83A3A);
+
 // 列与行尺寸
 const double _kTimeColWidth = 120;
 const double _kDayColWidth = 200;
 const double _kHeaderHeight = 60;
 
 enum _ScheduleMode { view, edit }
+
+/// 「我的小课申请」状态：与后端 `status` 字段双向映射 —— 1 通过 / 2 驳回 /
+/// 0 / null 待审核。和 admin schedule 端 `_ApplyStatus` 完全一致。
+enum _ApplyStatus { pending, passed, rejected }
 
 // ---- 数据模型 -----------------------------------------------------------
 
@@ -86,6 +105,8 @@ class _ScheduleCardData {
     this.capacity,
     this.bgColor,
     this.raw,
+    this.applyStatus,
+    this.apply,
   });
 
   final _CardKind kind;
@@ -99,6 +120,50 @@ class _ScheduleCardData {
 
   /// `courseList` 单条原始记录（保留以备后续扩展，例如详情弹窗等）。
   final Map<String, dynamic>? raw;
+
+  /// 非空 = 这张卡来自「我的小课申请」(schoolSmallCourseApplyList)，
+  /// 不是已生效的真实课表项。卡片右上角会用对应颜色徽章替换默认的
+  /// 「小课」pill 提示当前审核状态。
+  ///
+  /// 已通过(`passed`) 的申请不会落到这里 —— 后端 `courseList` 会同步
+  /// 返回它作为真实排课，避免双重渲染。
+  final _ApplyStatus? applyStatus;
+
+  /// 当 [applyStatus] 非空时一并存这条申请的回看上下文：申请 id、驳回理由、
+  /// 原始 classroomId / subjectId / color / lineNum / date 等 —— 点击卡片时
+  /// 弹详情对话框、以及「重新申请」打开申请抽屉时预填都靠它。
+  final _ApplyContext? apply;
+}
+
+/// 「我的小课申请」幽灵卡的回看上下文，封装一条申请的关键参数 + 状态 / 理由。
+///
+/// 字段直接对应 `schoolSmallCourseApplyList` 接口里每条记录的核心字段（含
+/// `courseData` 解开后的 child）。详情弹窗 / 重新申请抽屉都从这里取值，
+/// 避免把 raw map 在多个调用点重新解析一次。
+class _ApplyContext {
+  const _ApplyContext({
+    required this.applyId,
+    required this.status,
+    required this.classId,
+    required this.lineNum,
+    required this.dateIso,
+    this.reason,
+    this.classroomId,
+    this.subjectId,
+    this.colorHex,
+  });
+
+  final String applyId;
+  final _ApplyStatus status;
+  final String classId;
+  final int lineNum;
+  final String dateIso;
+
+  /// 驳回理由（仅 [_ApplyStatus.rejected] 时通常有值）。
+  final String? reason;
+  final int? classroomId;
+  final int? subjectId;
+  final String? colorHex;
 }
 
 class _TimeSlotData {
@@ -177,10 +242,21 @@ class _TeacherLessonScheduleViewState
 
   _ScheduleMode _mode = _ScheduleMode.view;
 
-  /// 班级列表第一项 id（来自 admin `classList`）。仅用于驱动
-  /// `schoolTimeConfigList` 拉对应班级的节次时间表 + 抽屉默认班级回填。
-  /// 抽屉自身会再调一次 `classList` 拿最新选项，无需在这里整张缓存。
+  /// 班级列表第一项 id（来自 teacher `/teacher/classList`，已基于 token
+  /// 过滤为「我教的班级」）。仅用于驱动 `schoolTimeConfigList` 拉对应班级
+  /// 的节次时间表 + 抽屉默认班级回填。抽屉自身会再调一次 `classList`
+  /// (带 type:1) 拿最新的我的小班列表，无需在这里整张缓存。
   String? _firstClassId;
+
+  /// 课表数据字典（id → 名称），仅给「我的小课申请」幽灵卡用 ——
+  /// 申请记录里只有 id，没有 name / realname 等字段；要在画卡前把名字
+  /// 补齐才能显示班级 / 教室 / 科目。
+  ///
+  /// 真实课表项（`courseList` 接口）后端已经把这些字段平铺好了，所以这套
+  /// 字典只服务申请合并路径，不影响主流程。
+  Map<String, String> _classNameById = const {};
+  Map<int, String> _classroomNameById = const {};
+  Map<int, String> _subjectNameById = const {};
 
   /// 课表左侧节次时间表（按 `lineNum` 升序）。
   List<_TimeConfig> _timeConfigs = const [];
@@ -236,18 +312,7 @@ class _TeacherLessonScheduleViewState
       helpText: '选择教学日期',
       cancelText: '取消',
       confirmText: '确定',
-      builder: (ctx, child) {
-        return Theme(
-          data: Theme.of(ctx).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: _kPurple,
-              onPrimary: Colors.white,
-              onSurface: _kTextDark,
-            ),
-          ),
-          child: child ?? const SizedBox.shrink(),
-        );
-      },
+      builder: appPickerDialogTheme,
     );
     if (picked == null || !mounted) return;
     final newWeekStart = _mondayOf(picked);
@@ -264,10 +329,12 @@ class _TeacherLessonScheduleViewState
     super.initState();
     _weekStart = _mondayOf(DateTime.now());
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // 先拉班级列表（驱动 timeConfig 用），再拉时间表 + 课表。
+      // 先拉班级列表（驱动 timeConfig 用），再并行拉时间表 + 字典
+      // （教室 / 科目，给申请幽灵卡补名字），最后拉课表。字典失败不会
+      // 阻断 schedule 渲染，只是申请卡上的字段会缺。
       await _loadClasses();
       if (!mounted) return;
-      await _loadTimeConfig();
+      await Future.wait([_loadTimeConfig(), _loadDirectories()]);
       if (!mounted) return;
       _loadSchedule();
     });
@@ -276,20 +343,92 @@ class _TeacherLessonScheduleViewState
   // —— 数据加载 ————————————————————————————————————————————————
 
   Future<void> _loadClasses() async {
-    final repo = ref.read(adminRepositoryProvider);
+    // 任课老师身份进入授课课表页 → 走 teacher 端 classList，后端基于 token
+    // 自动过滤为「我教的班级」（含大班 + 小班），与 admin 端 classList 区分开。
+    final repo = ref.read(teacherRepositoryProvider);
     final resp = await repo.classList();
     if (!mounted || !resp.isSuccess) return;
     final rows = _extractList(resp);
     String? firstId;
+    final nameById = <String, String>{};
     for (final m in rows) {
       final id = _pickString(m, ['id', 'classId'], '');
-      if (id.isNotEmpty) {
-        firstId = id;
-        break;
-      }
+      if (id.isEmpty) continue;
+      firstId ??= id;
+      final name = _pickString(m, [
+        'name',
+        'className',
+        'fullName',
+      ], '');
+      if (name.isNotEmpty) nameById[id] = name;
     }
     if (!mounted) return;
-    setState(() => _firstClassId = firstId);
+    setState(() {
+      _firstClassId = firstId;
+      _classNameById = nameById;
+    });
+  }
+
+  /// 拉教室 / 科目字典 —— 仅给「我的小课申请」幽灵卡补齐展示字段，与课表
+  /// 主流程解耦：失败 / 慢都不会阻断 schedule 渲染。
+  ///
+  /// - 教室走 admin `classroomList`（教室是全校公共资源，与身份无关），
+  ///   一次拿全量；
+  /// - 科目走 user `subjectList(classId)`，必须按班级查 —— 接口不传 classId
+  ///   后端实测不返回全量。所以这里对 `_classNameById` 里的每个班级并行
+  ///   发 N 个请求，结果合并成一张大字典。教师通常只教若干班级 (<20)，
+  ///   单次开页面的成本可控。
+  Future<void> _loadDirectories() async {
+    final adminRepo = ref.read(adminRepositoryProvider);
+    final schoolRepo = ref.read(schoolRepositoryProvider);
+
+    final classIds = _classNameById.keys.toList();
+    final classroomFuture = adminRepo.classroomList();
+    final subjectFutures = <Future<ApiResponse>>[
+      for (final cid in classIds) schoolRepo.subjectList(classId: cid),
+    ];
+
+    final classroomResp = await classroomFuture;
+    final subjectResps = await Future.wait(subjectFutures);
+    if (!mounted) return;
+
+    final classroomMap = <int, String>{};
+    if (classroomResp.isSuccess) {
+      for (final m in _extractList(classroomResp)) {
+        final rawId = m['id'] ?? m['classroomId'] ?? m['roomId'];
+        final id = rawId is int
+            ? rawId
+            : int.tryParse(rawId?.toString() ?? '');
+        final name = _pickString(m, [
+          'name',
+          'classroomName',
+          'roomName',
+        ], '');
+        if (id != null && name.isNotEmpty) classroomMap[id] = name;
+      }
+    }
+
+    final subjectMap = <int, String>{};
+    for (final resp in subjectResps) {
+      if (!resp.isSuccess) continue;
+      for (final m in _extractList(resp)) {
+        final rawId = m['id'] ?? m['subjectId'];
+        final id = rawId is int
+            ? rawId
+            : int.tryParse(rawId?.toString() ?? '');
+        final name = _pickString(m, [
+          'name',
+          'subjectName',
+        ], '');
+        if (id != null && name.isNotEmpty) subjectMap[id] = name;
+      }
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _classroomNameById = classroomMap;
+      _subjectNameById = subjectMap;
+    });
   }
 
   /// 取课表左侧时间列表。`schoolTimeConfigList` 接口要求 `classId` 必填，
@@ -327,12 +466,21 @@ class _TeacherLessonScheduleViewState
     final repo = ref.read(teacherRepositoryProvider);
     final start = _weekStart;
     final end = start.add(const Duration(days: 6));
-    final resp = await repo.courseList(
-      beginDate: _isoDate(start),
-      endDate: _isoDate(end),
-    );
+    // 并行：① 真实课表（已排定）； ② 我的小课申请列表（含审核中 / 已驳回，
+    // 用来在课表上同步显示状态徽章）。已通过的申请会同步出现在 ① 里作为
+    // 真实排课，所以 ② 的 passed 记录会被跳过避免双显示。
+    //
+    // size: 100 兜底单个老师近期的全部申请（学期内极少超过 100 条），暂不
+    // 引入分页；超过时再加 current 循环。
+    final results = await Future.wait([
+      repo.courseList(beginDate: _isoDate(start), endDate: _isoDate(end)),
+      repo.schoolSmallCourseApplyList(current: 1, size: 100),
+    ]);
     if (!mounted) return;
-    if (!resp.isSuccess) {
+    final courseResp = results[0];
+    final applyResp = results[1];
+
+    if (!courseResp.isSuccess) {
       setState(() {
         _serverCells = _emptyCells();
         _scheduleLoading = false;
@@ -342,8 +490,13 @@ class _TeacherLessonScheduleViewState
 
     final cells = _emptyCells();
     final configs = _activeTimeConfigs;
-    final rows = _extractCourseRows(resp);
+    final rows = _extractCourseRows(courseResp);
     final smallSeq = <int, int>{};
+    // 去重 key：'classId|date|lineNum'。courseList 已经吃掉的格子，apply
+    // 列表里若有同 key 的项（理论上是 passed，但用 key 兜底更鲁棒）就不
+    // 再叠一张幽灵卡上去。
+    final realCourseKeys = <String>{};
+
     for (final entry in rows) {
       final m = entry.row;
       final dateStr = entry.dateKey.isNotEmpty
@@ -366,12 +519,222 @@ class _TeacherLessonScheduleViewState
       final card = _parseCourseCard(m, smallSeq[cellKey] ?? 0);
       smallSeq[cellKey] = (smallSeq[cellKey] ?? 0) + 1;
       cells[dayIdx][slotIdx].add(card);
+
+      // 记录已有排课的 (classId,date,lineNum)，给申请列表去重。
+      final cid = _pickString(m, ['classId', 'cId'], '');
+      final cdate = (dateStr.split('T').first);
+      if (cid.isNotEmpty && cdate.isNotEmpty) {
+        realCourseKeys.add('$cid|$cdate|$lineNum');
+      }
+    }
+
+    if (applyResp.isSuccess) {
+      _mergeApplyRecords(
+        applyResp,
+        cells: cells,
+        smallSeq: smallSeq,
+        realCourseKeys: realCourseKeys,
+      );
     }
 
     setState(() {
       _serverCells = cells;
       _scheduleLoading = false;
     });
+  }
+
+  /// 解析「我的小课申请」分页响应，把待审核 / 已驳回的项以幽灵卡形式插入
+  /// [cells]，并通过 [realCourseKeys] 去重已经落地的项。
+  ///
+  /// 后端返回结构（实测 swagger 一致）：
+  /// ```
+  /// data.records: [
+  ///   {
+  ///     id, schoolId, classId, teacherId, subjectId, lineNum, color,
+  ///     classroomId, status, reason, createTime, auditTime,
+  ///     startDate, endDate,
+  ///     courseData: "[{classId,classroomId,color,date,lineNum,
+  ///                    subjectId,teacherId}, ...]"   // ← JSON 字符串
+  ///   }
+  /// ]
+  /// ```
+  /// `courseData` 是 **字符串化的 JSON 数组**，复用方式（本学期 / 后续 4 周
+  /// / 后续 8 周）会展开成多条 child，按 child.date 落到对应日期 / 节次格。
+  void _mergeApplyRecords(
+    ApiResponse resp, {
+    required List<List<List<_ScheduleCardData>>> cells,
+    required Map<int, int> smallSeq,
+    required Set<String> realCourseKeys,
+  }) {
+    final raw = resp.data;
+    // 分页响应：data 通常是 {records: [...], total: N} 也可能直接是 List。
+    List<dynamic> rows = const [];
+    if (raw is Map) {
+      final r = raw['records'] ?? raw['list'] ?? raw['data'];
+      if (r is List) rows = r;
+    } else if (raw is List) {
+      rows = raw;
+    }
+    if (rows.isEmpty) return;
+
+    final configs = _activeTimeConfigs;
+    for (final item in rows) {
+      if (item is! Map) continue;
+      final apply = item.cast<String, dynamic>();
+      final status = _parseApplyStatus(apply['status']);
+      // 课表里只画「待审核」幽灵卡：
+      //   - 已通过：courseList 已经返回真实排课，不重复渲染；
+      //   - 已驳回：被驳回的不再占用课表格子，避免视觉污染；
+      //     用户可以在右上角「申请记录」面板里看全部状态 + 重新申请。
+      if (status != _ApplyStatus.pending) continue;
+
+      // `courseData` 是 JSON 字符串；`courseList` 留作前向兼容（万一后端某
+      // 个版本改成结构化数组）。两者都没有时退化为顶层 startDate + lineNum
+      // 单点占位。
+      //
+      // 解码前先把雪花长 ID（>= 2^53，等价于长度 >= 16 的纯数字字面量）
+      // 包成字符串：Dart Web 上 int = JS Number(double)，未引号大数会被
+      // jsonDecode 截到相邻偶数，导致后面用 classId 反查班级名永远失败。
+      final children = <Map<String, dynamic>>[];
+      final cdRaw = apply['courseData'];
+      if (cdRaw is String && cdRaw.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(_preserveLongIds(cdRaw));
+          if (decoded is List) {
+            for (final c in decoded) {
+              if (c is Map) children.add(c.cast<String, dynamic>());
+            }
+          }
+        } catch (_) {
+          // 静默忽略：坏数据不应让整条申请挂掉，下方 fallback 至少画一张
+          // 顶层占位卡。
+        }
+      } else if (cdRaw is List) {
+        for (final c in cdRaw) {
+          if (c is Map) children.add(c.cast<String, dynamic>());
+        }
+      } else {
+        final legacy = apply['courseList'];
+        if (legacy is List) {
+          for (final c in legacy) {
+            if (c is Map) children.add(c.cast<String, dynamic>());
+          }
+        }
+      }
+      if (children.isEmpty) {
+        children.add(<String, dynamic>{
+          'date': _pickString(apply, ['startDate', 'applyDate'], ''),
+          'lineNum': apply['lineNum'],
+        });
+      }
+
+      for (final cm in children) {
+        final dateStr = _pickString(cm, [
+          'date',
+          'classDate',
+          'courseDate',
+        ], '');
+        final dayIdx = _dayIndex(dateStr);
+        if (dayIdx < 0) continue;
+
+        final lnRaw = cm['lineNum'] ?? apply['lineNum'];
+        final lineNum = lnRaw is int
+            ? lnRaw
+            : (int.tryParse(lnRaw?.toString() ?? '') ?? 0);
+        if (lineNum < 1) continue;
+        var slotIdx = configs.indexWhere((c) => c.lineNum == lineNum);
+        if (slotIdx < 0) {
+          slotIdx = (lineNum - 1).clamp(0, configs.length - 1);
+        }
+
+        // 去重：同 (classId,date,lineNum) 已有真实排课就跳过（多数是 passed
+        // 走 courseList，少数极端场景下后端可能在 apply 列表里也回这条）。
+        final cid = _pickString(cm, [
+          'classId',
+          'cId',
+        ], _pickString(apply, ['classId'], ''));
+        final cdate = dateStr.split('T').first;
+        if (cid.isNotEmpty && cdate.isNotEmpty) {
+          if (realCourseKeys.contains('$cid|$cdate|$lineNum')) continue;
+        }
+
+        // 合并外层（顶层 apply）+ 内层 child：内层 date/lineNum/classId 优先。
+        // 同时强制 type=2 → 走小课卡解析分支，保证视觉是小课色 + 小课形状。
+        final merged = <String, dynamic>{
+          ...apply,
+          ...cm,
+          'type': 2,
+        };
+
+        // 用字典补齐展示字段：申请记录仅含 id，没有名称，需要按
+        // (classId, classroomId, subjectId, teacherId) 反查字典。
+        // 已有同名 key 时不覆盖（极少数 courseData 已自带的字段保留原值）。
+        final className = _classNameById[cid];
+        if (className != null && className.isNotEmpty) {
+          merged.putIfAbsent('className', () => className);
+        }
+        final classroomIdRaw = cm['classroomId'] ?? apply['classroomId'];
+        final classroomIdInt = classroomIdRaw is int
+            ? classroomIdRaw
+            : int.tryParse(classroomIdRaw?.toString() ?? '');
+        if (classroomIdInt != null) {
+          final classroomName = _classroomNameById[classroomIdInt];
+          if (classroomName != null && classroomName.isNotEmpty) {
+            merged.putIfAbsent('classroomName', () => classroomName);
+          }
+        }
+        final subjectIdRaw = cm['subjectId'] ?? apply['subjectId'];
+        final subjectIdInt = subjectIdRaw is int
+            ? subjectIdRaw
+            : int.tryParse(subjectIdRaw?.toString() ?? '');
+        if (subjectIdInt != null) {
+          final subjectName = _subjectNameById[subjectIdInt];
+          if (subjectName != null && subjectName.isNotEmpty) {
+            merged.putIfAbsent('subjectName', () => subjectName);
+          }
+        }
+        // 教师：申请人就是当前登录的任课老师，直接走 shell 的 user 兜底；
+        // 极端场景下 teacherId 与 shell.user.id 不一致也无所谓，因为这本
+        // 来就是「我的申请」列表，UI 字段只是辅助显示。
+        final shellUser = ref.read(shellControllerProvider).user;
+        final teacherDisplayName = shellUser.realname.isNotEmpty
+            ? shellUser.realname
+            : shellUser.nickname;
+        if (teacherDisplayName.isNotEmpty) {
+          merged.putIfAbsent('teacherRealname', () => teacherDisplayName);
+        }
+
+        // 构造回看上下文，给详情对话框 + 重新申请抽屉用。classId 取已经
+        // 做过雪花精度保留的 cid（_preserveLongIds 已处理过 courseData），
+        // classroom / subject / color 兜底到外层 apply 字段。
+        final applyId = _pickString(apply, ['id', 'applyId'], '');
+        final applyReason = _pickString(apply, ['reason'], '');
+        final applyCtx = _ApplyContext(
+          applyId: applyId,
+          status: status,
+          classId: cid.isNotEmpty
+              ? cid
+              : _pickString(apply, ['classId'], ''),
+          lineNum: lineNum,
+          dateIso: cdate,
+          reason: applyReason.isEmpty ? null : applyReason,
+          classroomId: classroomIdInt,
+          subjectId: subjectIdInt,
+          colorHex: _pickString(merged, ['color'], ''),
+        );
+
+        final cellKey = dayIdx * 1000 + slotIdx;
+        final smallIdx = smallSeq[cellKey] ?? 0;
+        final card = _parseCourseCard(
+          merged,
+          smallIdx,
+          applyStatus: status,
+          apply: applyCtx,
+        );
+        smallSeq[cellKey] = smallIdx + 1;
+        cells[dayIdx][slotIdx].add(card);
+      }
+    }
   }
 
   /// `courseList` 的 `data` 既可能是按日期分组的 Map（新格式：
@@ -465,10 +828,16 @@ class _TeacherLessonScheduleViewState
   ///
   /// `type == 2` → 小课（同一格里第 0 张橙、第 1 张蓝循环）；其它值 → 大课。
   /// `color` 是 hex（含 `#`），存到卡片做背景覆盖；标题色按 kind 走语义色。
+  ///
+  /// 当 [applyStatus] 非空时，表示这条来自「我的小课申请」列表，会被透传
+  /// 到 [_ScheduleCardData.applyStatus] 给卡片画状态徽章用；同时 [apply]
+  /// 用来回看上下文（详情弹窗 / 重新申请抽屉预填）。
   _ScheduleCardData _parseCourseCard(
     Map<String, dynamic> json,
-    int smallIdxInCell,
-  ) {
+    int smallIdxInCell, {
+    _ApplyStatus? applyStatus,
+    _ApplyContext? apply,
+  }) {
     final typeRaw = json['type'];
     final type = typeRaw is int
         ? typeRaw
@@ -517,6 +886,8 @@ class _TeacherLessonScheduleViewState
         capacity: cap,
         bgColor: colorOverride,
         raw: rawCopy,
+        applyStatus: applyStatus,
+        apply: apply,
       );
     }
     return _ScheduleCardData(
@@ -528,6 +899,8 @@ class _TeacherLessonScheduleViewState
           : (className.isEmpty ? teacher : '$teacher-$className'),
       bgColor: colorOverride,
       raw: rawCopy,
+      applyStatus: applyStatus,
+      apply: apply,
     );
   }
 
@@ -580,6 +953,133 @@ class _TeacherLessonScheduleViewState
   int _lineNumOf(int slotIdx) {
     final configs = _activeTimeConfigs;
     return configs[slotIdx.clamp(0, configs.length - 1)].lineNum;
+  }
+
+  /// 给「已驳回 / 待审核」申请幽灵卡拼一句只读时间标签：
+  /// `第N节 HH:MM-HH:MM· 周X yyyy-MM-dd`。lineNum 在时间配置里找不到时
+  /// 就直接用 `第${lineNum}节`，避免误导。dateIso 已是 yyyy-MM-dd。
+  String _slotLabelForApply(_ApplyContext ctx) {
+    final cfg = _activeTimeConfigs.firstWhere(
+      (c) => c.lineNum == ctx.lineNum,
+      orElse: () => _TimeConfig(lineNum: ctx.lineNum, start: '', end: ''),
+    );
+    final timeSegment = cfg.start.isNotEmpty && cfg.end.isNotEmpty
+        ? ' ${cfg.start}-${cfg.end}'
+        : '';
+    String weekdayLabel = '';
+    try {
+      final d = DateTime.parse(ctx.dateIso);
+      const labels = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+      // DateTime.weekday：周一=1 .. 周日=7
+      weekdayLabel = labels[(d.weekday - 1).clamp(0, 6)];
+    } catch (_) {
+      weekdayLabel = '';
+    }
+    final prefix = weekdayLabel.isEmpty ? '' : '· $weekdayLabel ';
+    return '第${ctx.lineNum}节$timeSegment$prefix${ctx.dateIso}';
+  }
+
+  /// 打开「我的小课申请记录」右侧抽屉：
+  ///   - 列出我所有状态的申请（待审核 / 通过 / 驳回）
+  ///   - 「驳回」记录可点击「重新申请」复用原参数二次提交
+  ///   - 抽屉关闭后若提交过新申请，回到课表会重新拉一次课表 + 申请列表
+  Future<void> _openApplyRecords() async {
+    final scaleData =
+        DashboardScaleScope.maybeOf(context) ??
+        DashboardScaleScope.fromSize(MediaQuery.sizeOf(context));
+    final reapplied = await showGeneralDialog<bool>(
+      context: context,
+      barrierLabel: '关闭',
+      barrierDismissible: true,
+      barrierColor: Colors.black.withValues(alpha: 0.18),
+      transitionDuration: const Duration(milliseconds: 240),
+      pageBuilder: (ctx, animation, secondary) {
+        return DashboardScaleScope(
+          data: scaleData,
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: Material(
+              color: Colors.transparent,
+              child: _ApplyRecordsDrawer(
+                classNameById: _classNameById,
+                classroomNameById: _classroomNameById,
+                subjectNameById: _subjectNameById,
+                onClose: () => Navigator.of(ctx).maybePop(),
+                onRequestReapply: (apply) async {
+                  Navigator.of(ctx).pop(true);
+                  await _reapplySmallLesson(apply);
+                },
+              ),
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (ctx, animation, secondary, child) {
+        return SlideTransition(
+          position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
+              .animate(
+                CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+              ),
+          child: child,
+        );
+      },
+    );
+
+    if (reapplied == true && mounted) {
+      await _loadSchedule();
+    }
+  }
+
+  /// 重新申请：以驳回申请的 classId / classroomId / subjectId / color /
+  /// lineNum / date 作为初始值打开 [_ApplySmallLessonDrawer]，用户可以
+  /// 直接点提交（同一参数），也可以微调日期 / 节次 / 复用方式后再交。
+  Future<void> _reapplySmallLesson(_ApplyContext apply) async {
+    final scaleData =
+        DashboardScaleScope.maybeOf(context) ??
+        DashboardScaleScope.fromSize(MediaQuery.sizeOf(context));
+    final submitted = await showGeneralDialog<bool>(
+      context: context,
+      barrierLabel: '关闭',
+      barrierDismissible: true,
+      barrierColor: Colors.black.withValues(alpha: 0.18),
+      transitionDuration: const Duration(milliseconds: 240),
+      pageBuilder: (ctx, animation, secondary) {
+        return DashboardScaleScope(
+          data: scaleData,
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: Material(
+              color: Colors.transparent,
+              child: _ApplySmallLessonDrawer(
+                slotLabel: _slotLabelForApply(apply),
+                baseDateIso: apply.dateIso,
+                lineNum: apply.lineNum,
+                currentWeek: _currentWeek,
+                initialClassId: apply.classId,
+                initialClassroomId: apply.classroomId?.toString(),
+                initialSubjectId: apply.subjectId?.toString(),
+                initialColorHex: apply.colorHex,
+                onCancel: () => Navigator.of(ctx).maybePop(),
+                onSubmitted: () => Navigator.of(ctx).pop(true),
+              ),
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (ctx, animation, secondary, child) {
+        return SlideTransition(
+          position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
+              .animate(
+                CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+              ),
+          child: child,
+        );
+      },
+    );
+
+    if (submitted != true || !mounted) return;
+    AppToast.show(context, '已提交教务审核');
+    await _loadSchedule();
   }
 
   /// 编辑模式下点击空格 → 弹右侧 [_ApplySmallLessonDrawer]，提交时调
@@ -656,6 +1156,7 @@ class _TeacherLessonScheduleViewState
               onBack: widget.onBack,
               mode: _mode,
               onModeChanged: (m) => setState(() => _mode = m),
+              onOpenApplyRecords: _openApplyRecords,
             ),
             Padding(
               padding: EdgeInsets.fromLTRB(ui(20), ui(0), ui(20), ui(12)),
@@ -713,11 +1214,16 @@ class _TeacherScheduleHeader extends StatelessWidget {
     required this.onBack,
     required this.mode,
     required this.onModeChanged,
+    required this.onOpenApplyRecords,
   });
 
   final VoidCallback onBack;
   final _ScheduleMode mode;
   final ValueChanged<_ScheduleMode> onModeChanged;
+
+  /// 顶部右上「申请记录」按钮回调，打开「我的小课申请记录」抽屉，
+  /// 内容由父页面注入完整字典（班级 / 教室 / 科目）+ 「重新申请」连接。
+  final VoidCallback onOpenApplyRecords;
 
   @override
   Widget build(BuildContext context) {
@@ -777,9 +1283,61 @@ class _TeacherScheduleHeader extends StatelessWidget {
           Positioned(
             right: ui(20),
             top: ui(18),
-            child: _ViewEditSegment(mode: mode, onChanged: onModeChanged),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _ApplyRecordsButton(onTap: onOpenApplyRecords),
+                SizedBox(width: ui(10)),
+                _ViewEditSegment(mode: mode, onChanged: onModeChanged),
+              ],
+            ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ApplyRecordsButton extends StatelessWidget {
+  const _ApplyRecordsButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(ui(8)),
+      child: Container(
+        height: ui(32),
+        padding: EdgeInsets.symmetric(horizontal: ui(12)),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(ui(8)),
+          border: Border.all(color: _kBorderSoft),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.assignment_outlined,
+              size: ui(14),
+              color: const Color(0xFF1C274C),
+            ),
+            SizedBox(width: ui(6)),
+            Text(
+              '申请记录',
+              style: TextStyle(
+                fontSize: ui(12),
+                color: _kTextDark,
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w500,
+                height: 1,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1679,9 +2237,14 @@ class _ClassCard extends StatelessWidget {
             ),
             if (data.kind != _CardKind.bigExtended)
               Positioned(
-                left: ui(126),
+                left: ui(108),
                 top: ui(6),
-                child: _ClassKindTag(isSmall: theme.isSmall, outlined: false),
+                // 申请态卡片 → 用「待审核 / 已驳回」徽章替换默认小课 pill；
+                // 已通过的申请不会跑到这里（_loadSchedule 已过滤掉），所以
+                // 申请徽章只可能是这两种态。
+                child: data.applyStatus != null
+                    ? _ApplyStatusBadge(status: data.applyStatus!)
+                    : _ClassKindTag(isSmall: theme.isSmall, outlined: false),
               ),
             Positioned(
               left: ui(4),
@@ -1849,6 +2412,46 @@ class _ClassKindTag extends StatelessWidget {
   }
 }
 
+/// 「我的小课申请」状态徽章（替换课卡右上角的「小课」pill）。
+/// 颜色与 admin schedule 审核 tab 的 `_ApplyStatusBadge` 一致：
+///   - 待审核：橙底橙字 (#FFEDD3 / #FF6A00)
+///   - 已驳回：红底红字 (#FFE5E5 / #E83A3A)
+/// 已通过的申请不会画到课表上（_loadSchedule 已去重），所以这里只覆盖
+/// pending / rejected 两种态。
+class _ApplyStatusBadge extends StatelessWidget {
+  const _ApplyStatusBadge({required this.status});
+
+  final _ApplyStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final (label, bg, fg) = switch (status) {
+      _ApplyStatus.pending => ('待审核', _kApplyPendingBg, _kApplyPendingFg),
+      _ApplyStatus.rejected => ('已驳回', _kApplyRejectedBg, _kApplyRejectedFg),
+      // 不会渲染，留作 fallback 保证 switch 穷举。
+      _ApplyStatus.passed => ('已通过', _kApplyPendingBg, _kApplyPendingFg),
+    };
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: ui(6), vertical: ui(2)),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(ui(4)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: ui(12),
+          color: fg,
+          fontFamily: 'PingFang SC',
+          fontWeight: AppFont.w400,
+          height: 15.24 / 12,
+        ),
+      ),
+    );
+  }
+}
+
 class _CardTheme {
   const _CardTheme({
     required this.bg,
@@ -1861,6 +2464,520 @@ class _CardTheme {
   final bool isSmall;
 }
 
+class _DetailLine extends StatelessWidget {
+  const _DetailLine({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: ui(40),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: ui(13),
+              color: _kTextHint,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w400,
+              height: 20 / 13,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(
+              fontSize: ui(13),
+              color: _kTextDark,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w400,
+              height: 20 / 13,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DialogButton extends StatelessWidget {
+  const _DialogButton({
+    required this.label,
+    required this.primary,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool primary;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(ui(8)),
+      child: Container(
+        height: ui(36),
+        padding: EdgeInsets.symmetric(horizontal: ui(18)),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: primary ? const Color(0xFFA894EB) : Colors.white,
+          borderRadius: BorderRadius.circular(ui(8)),
+          border: primary ? null : Border.all(color: _kBorderSoft),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: ui(13),
+            color: primary ? Colors.white : _kTextDark,
+            fontFamily: 'PingFang SC',
+            fontWeight: AppFont.w500,
+            height: 18 / 13,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// 「我的小课申请记录」右侧抽屉
+//
+// 入口：授课课表右上角「申请记录」按钮 → _openApplyRecords →
+//      showGeneralDialog 右滑入场 → 本抽屉。
+//
+// 设计：宽 520，全高，白底；顶部 62 高 _DrawerHeader（3×15 紫竖条 + 标题
+// 「我的小课申请记录」+ 关闭 X，底部 1px #F3F2F3 边）；表体为
+// `teacherRepo.schoolSmallCourseApplyList(current:1,size:100)` 返回的记录列表，
+// 一条申请一张卡片，按 `createTime` 倒序显示。每张卡片包含：
+//   - 顶行：状态徽章（橙待审核 / 绿通过 / 红驳回）+ 班级 · 科目
+//   - 时间：startDate ~ endDate · 共 N 次 · 第 lineNum 节
+//   - 教室
+//   - 申请时间（createTime）
+//   - 驳回时额外渲染红底块「驳回理由：…」+ 右侧「重新申请」紫底按钮
+//     点击「重新申请」会带着原 classId / classroomId / subjectId / color /
+//     lineNum / 首次 date 打开 _ApplySmallLessonDrawer，用户可直接提交。
+// =============================================================================
+class _ApplyRecordsDrawer extends ConsumerStatefulWidget {
+  const _ApplyRecordsDrawer({
+    required this.classNameById,
+    required this.classroomNameById,
+    required this.subjectNameById,
+    required this.onClose,
+    required this.onRequestReapply,
+  });
+
+  /// 父页面缓存的班级 id → 名称字典（classId 是 String，雪花）。
+  final Map<String, String> classNameById;
+
+  /// 父页面缓存的教室 id → 名称字典（classroomId 是 int）。
+  final Map<int, String> classroomNameById;
+
+  /// 父页面缓存的科目 id → 名称字典（subjectId 是 int）。
+  final Map<int, String> subjectNameById;
+
+  final VoidCallback onClose;
+
+  /// 「重新申请」按钮回调，参数即驳回申请的回看上下文；
+  /// 父页面收到后会先关本抽屉、再打开申请抽屉预填同参数。
+  final ValueChanged<_ApplyContext> onRequestReapply;
+
+  @override
+  ConsumerState<_ApplyRecordsDrawer> createState() =>
+      _ApplyRecordsDrawerState();
+}
+
+class _ApplyRecordsDrawerState extends ConsumerState<_ApplyRecordsDrawer> {
+  bool _loading = true;
+  String? _error;
+  List<_ApplyRecordItem> _records = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    final repo = ref.read(teacherRepositoryProvider);
+    final resp = await repo.schoolSmallCourseApplyList(current: 1, size: 100);
+    if (!mounted) return;
+    if (!resp.isSuccess) {
+      setState(() {
+        _loading = false;
+        _error = resp.msg.isEmpty ? '加载失败' : resp.msg;
+      });
+      return;
+    }
+    final raw = resp.data;
+    List<dynamic> rows = const [];
+    if (raw is Map) {
+      final r = raw['records'] ?? raw['list'] ?? raw['data'];
+      if (r is List) rows = r;
+    } else if (raw is List) {
+      rows = raw;
+    }
+    final items = <_ApplyRecordItem>[];
+    for (final r in rows) {
+      if (r is! Map) continue;
+      final m = r.cast<String, dynamic>();
+      final item = _ApplyRecordItem.fromJson(m);
+      if (item != null) items.add(item);
+    }
+    // 按 createTime 倒序：最新提交的排最前。createTime 字符串可直接字典序比较
+    // （`yyyy-MM-dd HH:mm:ss`），无 createTime 的兜底排到最后。
+    items.sort((a, b) => b.createTime.compareTo(a.createTime));
+    setState(() {
+      _records = items;
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      width: ui(520),
+      height: double.infinity,
+      decoration: const BoxDecoration(color: Colors.white),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _DrawerHeader(title: '我的小课申请记录', onClose: widget.onClose),
+          Expanded(child: _buildBody(context, ui)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBody(BuildContext context, double Function(double) ui) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+    }
+    if (_error != null) {
+      return Center(
+        child: Text(
+          _error!,
+          style: TextStyle(
+            fontSize: ui(13),
+            color: _kTextSecondary,
+            fontFamily: 'PingFang SC',
+          ),
+        ),
+      );
+    }
+    if (_records.isEmpty) {
+      return Center(
+        child: Text(
+          '暂无申请记录',
+          style: TextStyle(
+            fontSize: ui(13),
+            color: _kTextHint,
+            fontFamily: 'PingFang SC',
+          ),
+        ),
+      );
+    }
+    return ListView.separated(
+      padding: EdgeInsets.fromLTRB(ui(20), ui(16), ui(20), ui(20)),
+      itemCount: _records.length,
+      separatorBuilder: (_, _) => SizedBox(height: ui(12)),
+      itemBuilder: (ctx, i) {
+        final r = _records[i];
+        return _ApplyRecordCard(
+          record: r,
+          classNameById: widget.classNameById,
+          classroomNameById: widget.classroomNameById,
+          subjectNameById: widget.subjectNameById,
+          onReapply: () => widget.onRequestReapply(r.toReapplyContext()),
+        );
+      },
+    );
+  }
+}
+
+/// 「我的小课申请记录」抽屉一张卡片对应的数据模型。
+/// 字段一对一对应 `schoolSmallCourseApplyList` 单条记录里我们用得到的部分。
+class _ApplyRecordItem {
+  const _ApplyRecordItem({
+    required this.id,
+    required this.status,
+    required this.classId,
+    required this.classroomId,
+    required this.subjectId,
+    required this.lineNum,
+    required this.startDate,
+    required this.endDate,
+    required this.occurrences,
+    required this.firstDateIso,
+    required this.colorHex,
+    required this.reason,
+    required this.createTime,
+  });
+
+  final String id;
+  final _ApplyStatus status;
+  final String classId;
+  final int? classroomId;
+  final int? subjectId;
+  final int lineNum;
+  final String startDate;
+  final String endDate;
+  final int occurrences;
+
+  /// `courseData` 第一条的 date；为空时退化为 [startDate]。
+  /// 「重新申请」会用它作为申请抽屉的 baseDateIso。
+  final String firstDateIso;
+  final String colorHex;
+  final String reason;
+  final String createTime;
+
+  static _ApplyRecordItem? fromJson(Map<String, dynamic> m) {
+    final id = _pickString(m, ['id', 'applyId'], '');
+    if (id.isEmpty) return null;
+    final statusRaw = m['status'];
+    final status = _parseApplyStatus(statusRaw);
+    final classId = _pickString(m, ['classId', 'cId'], '');
+    final lineRaw = m['lineNum'];
+    final lineNum = lineRaw is int
+        ? lineRaw
+        : (int.tryParse(lineRaw?.toString() ?? '') ?? 0);
+    final classroomRaw = m['classroomId'];
+    final classroomId = classroomRaw is int
+        ? classroomRaw
+        : int.tryParse(classroomRaw?.toString() ?? '');
+    final subjectRaw = m['subjectId'];
+    final subjectId = subjectRaw is int
+        ? subjectRaw
+        : int.tryParse(subjectRaw?.toString() ?? '');
+    final startDate = _pickString(m, ['startDate'], '');
+    final endDate = _pickString(m, ['endDate'], '');
+    final colorHex = _pickString(m, ['color'], '');
+    final reason = _pickString(m, ['reason'], '');
+    final createTime = _pickString(m, ['createTime'], '');
+
+    // 解 courseData 拿到「共 N 次」和 firstDateIso。雪花 ID 走 _preserveLongIds
+    // 包成字符串再 decode，避免 Web 端 JS number 53bit 截断。
+    int occurrences = 0;
+    String firstDateIso = startDate;
+    final cdRaw = m['courseData'];
+    List<dynamic>? children;
+    if (cdRaw is String && cdRaw.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(_preserveLongIds(cdRaw));
+        if (decoded is List) children = decoded;
+      } catch (_) {}
+    } else if (cdRaw is List) {
+      children = cdRaw;
+    }
+    if (children != null) {
+      occurrences = children.length;
+      if (children.isNotEmpty && children.first is Map) {
+        final first = (children.first as Map).cast<String, dynamic>();
+        final d = _pickString(first, ['date'], '');
+        if (d.isNotEmpty) firstDateIso = d;
+      }
+    }
+
+    return _ApplyRecordItem(
+      id: id,
+      status: status,
+      classId: classId,
+      classroomId: classroomId,
+      subjectId: subjectId,
+      lineNum: lineNum,
+      startDate: startDate,
+      endDate: endDate,
+      occurrences: occurrences,
+      firstDateIso: firstDateIso,
+      colorHex: colorHex,
+      reason: reason,
+      createTime: createTime,
+    );
+  }
+
+  _ApplyContext toReapplyContext() {
+    return _ApplyContext(
+      applyId: id,
+      status: status,
+      classId: classId,
+      lineNum: lineNum,
+      dateIso: firstDateIso,
+      reason: reason.isEmpty ? null : reason,
+      classroomId: classroomId,
+      subjectId: subjectId,
+      colorHex: colorHex,
+    );
+  }
+}
+
+class _ApplyRecordCard extends StatelessWidget {
+  const _ApplyRecordCard({
+    required this.record,
+    required this.classNameById,
+    required this.classroomNameById,
+    required this.subjectNameById,
+    required this.onReapply,
+  });
+
+  final _ApplyRecordItem record;
+  final Map<String, String> classNameById;
+  final Map<int, String> classroomNameById;
+  final Map<int, String> subjectNameById;
+
+  /// 仅 rejected 卡片底部「重新申请」按钮才会调用；其它状态不展示按钮。
+  final VoidCallback onReapply;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final isRejected = record.status == _ApplyStatus.rejected;
+    final className = classNameById[record.classId] ?? '';
+    final classroomName = record.classroomId == null
+        ? ''
+        : (classroomNameById[record.classroomId!] ?? '');
+    final subjectName = record.subjectId == null
+        ? ''
+        : (subjectNameById[record.subjectId!] ?? '');
+    final headRow = <String>[
+      if (className.isNotEmpty) className,
+      if (subjectName.isNotEmpty) subjectName,
+    ].join(' · ');
+    final dateLabel = _composeDateLabel();
+    final timeRow = <String>[
+      if (dateLabel.isNotEmpty) dateLabel,
+      if (record.lineNum > 0) '第${record.lineNum}节',
+    ].join(' · ');
+
+    return Container(
+      padding: EdgeInsets.fromLTRB(ui(16), ui(14), ui(16), ui(14)),
+      decoration: BoxDecoration(
+        color: _kInnerGray,
+        borderRadius: BorderRadius.circular(ui(12)),
+        border: Border.all(color: _kBorderSoft),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _ApplyStatusBadge(status: record.status),
+              SizedBox(width: ui(8)),
+              Expanded(
+                child: Text(
+                  headRow.isEmpty ? '—' : headRow,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: ui(14),
+                    color: _kTextDark,
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w600,
+                    height: 20 / 14,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (timeRow.isNotEmpty) ...[
+            SizedBox(height: ui(10)),
+            _DetailLine(label: '时间', value: timeRow),
+          ],
+          if (classroomName.isNotEmpty) ...[
+            SizedBox(height: ui(6)),
+            _DetailLine(label: '教室', value: classroomName),
+          ],
+          if (record.createTime.isNotEmpty) ...[
+            SizedBox(height: ui(6)),
+            _DetailLine(label: '提交', value: record.createTime),
+          ],
+          if (isRejected && record.reason.isNotEmpty) ...[
+            SizedBox(height: ui(12)),
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.symmetric(
+                horizontal: ui(12),
+                vertical: ui(10),
+              ),
+              decoration: BoxDecoration(
+                color: _kApplyRejectedBg,
+                borderRadius: BorderRadius.circular(ui(8)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '驳回理由',
+                    style: TextStyle(
+                      fontSize: ui(12),
+                      color: _kApplyRejectedFg,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w500,
+                      height: 16 / 12,
+                    ),
+                  ),
+                  SizedBox(height: ui(4)),
+                  Text(
+                    record.reason,
+                    style: TextStyle(
+                      fontSize: ui(13),
+                      color: _kTextDark,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w400,
+                      height: 20 / 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if (isRejected) ...[
+            SizedBox(height: ui(12)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                _DialogButton(label: '重新申请', primary: true, onTap: onReapply),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// `startDate ~ endDate · 共 N 次`；单次或起止相同时简化为 `date · 共 1 次`。
+  String _composeDateLabel() {
+    final s = record.startDate;
+    final e = record.endDate;
+    final n = record.occurrences;
+    String dateSeg;
+    if (s.isEmpty && e.isEmpty) {
+      dateSeg = '';
+    } else if (s.isEmpty) {
+      dateSeg = e;
+    } else if (e.isEmpty || s == e) {
+      dateSeg = s;
+    } else {
+      dateSeg = '$s ~ $e';
+    }
+    if (n > 0) {
+      return dateSeg.isEmpty ? '共 $n 次' : '$dateSeg · 共 $n 次';
+    }
+    return dateSeg;
+  }
+}
+
 // =============================================================================
 // 申请「小课」右侧抽屉
 //
@@ -1870,7 +2987,8 @@ class _CardTheme {
 // 设计：宽 600，全高，白底；顶部 62 高 _DrawerHeader（3×15 紫竖条 + "申请小课"
 // 16/600 标题 + 关闭 X，底部 1px #F3F2F3 边）；表单 6 段：
 //   1. 课程时间：只读 #F5F6FA 灰底 48 高
-//   2. 班级：调 admin.classList，String id 下拉
+//   2. 班级：调 teacher.classList(type: 1)，String id 下拉 ——
+//          仅展示「我的小班」（type=1），避免把小课申请挂到大班上。
 //   3. 教室：调 admin.classroomList，int id 下拉
 //   4. 科目：调 user.subjectList(classId)，int id 下拉
 //   5. 颜色：13 色色板 + 当前 hex chip
@@ -1895,7 +3013,8 @@ class _CardTheme {
 //       "subjectId": 1,
 //       "color": "#xxxxxx",
 //       "date": "2026-05-08",
-//       "lineNum": 1
+//       "lineNum": 1,
+//       "teacherId": "..."   // String，当前任课老师 id（雪花）
 //     }
 //   ]
 // }
@@ -1913,6 +3032,9 @@ class _ApplySmallLessonDrawer extends ConsumerStatefulWidget {
     required this.onCancel,
     required this.onSubmitted,
     this.initialClassId,
+    this.initialClassroomId,
+    this.initialSubjectId,
+    this.initialColorHex,
   });
 
   /// 抽屉顶部只读"课程时间"展示，例如
@@ -1930,6 +3052,18 @@ class _ApplySmallLessonDrawer extends ConsumerStatefulWidget {
 
   /// 父页面已知的默认班级（班级列表第一项）；非空时直接预选。
   final String? initialClassId;
+
+  /// 「重新申请」场景下用驳回申请的原 classroomId 预选；
+  /// 普通申请走列表第 1 项兜底。
+  final String? initialClassroomId;
+
+  /// 「重新申请」场景下用驳回申请的原 subjectId 预选；
+  /// 等 _loadSubjects 拉完后会校验该 id 是否在当前班级科目里。
+  final String? initialSubjectId;
+
+  /// 「重新申请」场景下用驳回申请的原颜色（hex，含或不含 #）预选；
+  /// 解析失败 / 为空则走默认 _palette[1]。
+  final String? initialColorHex;
 
   final VoidCallback onCancel;
   final VoidCallback onSubmitted;
@@ -1982,15 +3116,35 @@ class _ApplySmallLessonDrawerState
   @override
   void initState() {
     super.initState();
+    // 「重新申请」入口会把驳回申请的颜色透传过来；解析成功就预选这色，
+    // 失败 / 空就保留默认 _palette[1]。
+    final initialColor = _parseHexToColor(widget.initialColorHex);
+    if (initialColor != null) _color = initialColor;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadOptions();
     });
   }
 
+  /// `#A894EB` / `A894EB` / `#FF0000` → Color；不合法返回 null。
+  Color? _parseHexToColor(String? hex) {
+    if (hex == null) return null;
+    var s = hex.trim();
+    if (s.isEmpty) return null;
+    if (s.startsWith('#')) s = s.substring(1);
+    if (s.length == 6) s = 'FF$s';
+    if (s.length != 8) return null;
+    final v = int.tryParse(s, radix: 16);
+    if (v == null) return null;
+    return Color(v);
+  }
+
   Future<void> _loadOptions() async {
+    // 班级走 teacher.classList(type: 1) → 仅返回我担任教师的小班；
+    // 教室仍走 admin.classroomList，因为教室是全校公共资源不区分身份。
+    final teacherRepo = ref.read(teacherRepositoryProvider);
     final adminRepo = ref.read(adminRepositoryProvider);
     final results = await Future.wait([
-      adminRepo.classList(),
+      teacherRepo.classList(type: 1),
       adminRepo.classroomList(),
     ]);
     if (!mounted) return;
@@ -2014,7 +3168,22 @@ class _ApplySmallLessonDrawerState
       } else {
         _classId ??= _classes.isNotEmpty ? _classes.first.id : null;
       }
-      _classroomId ??= _classrooms.isNotEmpty ? _classrooms.first.id : null;
+      // 「重新申请」预填教室：用驳回申请的原 classroomId；不在当前列表里
+      // 就回退到列表第 1 项，避免提交时引用一个不存在的 id。
+      final initialRoom = widget.initialClassroomId;
+      if (initialRoom != null &&
+          initialRoom.isNotEmpty &&
+          _classrooms.any((c) => c.id == initialRoom)) {
+        _classroomId = initialRoom;
+      } else {
+        _classroomId ??= _classrooms.isNotEmpty ? _classrooms.first.id : null;
+      }
+      // 科目还没拉，先把「重新申请」希望预选的 id 兜在 _subjectId 里，
+      // _loadSubjects 拉完后会校验它是否在当前班级科目里 → 不在就回退。
+      if (widget.initialSubjectId != null &&
+          widget.initialSubjectId!.isNotEmpty) {
+        _subjectId = widget.initialSubjectId;
+      }
     });
     _loadSubjects(_classId);
   }
@@ -2039,6 +3208,8 @@ class _ApplySmallLessonDrawerState
     );
     setState(() {
       _subjects = list;
+      // _subjectId 已被 _loadOptions 兜成「重新申请」希望预选的 id 时，
+      // 这里校验是否在当前班级的科目列表里 —— 不在 / 为空就回退到第 1 项。
       if (_subjectId == null || !list.any((s) => s.id == _subjectId)) {
         _subjectId = list.isNotEmpty ? list.first.id : null;
       }
@@ -2117,9 +3288,14 @@ class _ApplySmallLessonDrawerState
     }
     setState(() => _submitting = true);
 
-    // classroomId / subjectId 后端期望 int；雪花长 classId 走 String。
+    // classroomId / subjectId 后端期望 int；雪花长 classId / teacherId 走 String。
     final classroomNum = int.tryParse(_classroomId!);
     final subjectNum = int.tryParse(_subjectId!);
+
+    // teacherId 取自当前登录的任课老师（shellState.user.id 是 myInfo.user.id 原文，
+    // 雪花长以 String 承载，避免 web 端 JS Number 精度截断）。空串时省略，
+    // 让后端按 token 自行解析。
+    final teacherId = ref.read(shellControllerProvider).user.id;
 
     final dates = _computeReuseDates();
     final color = _hexLabel;
@@ -2132,6 +3308,7 @@ class _ApplySmallLessonDrawerState
           'color': color,
           'date': _ymd(d),
           'lineNum': widget.lineNum,
+          if (teacherId.isNotEmpty) 'teacherId': teacherId,
         },
     ];
 
@@ -2607,6 +3784,16 @@ class _SubmitGradientButton extends StatelessWidget {
 // 通用 helpers（与 admin / 学生端一致的解析函数）
 // =============================================================================
 
+/// `status`: 1 = 已通过；2 = 已驳回；0 / null / 其他 = 待审核。
+/// 顶层 helper：申请记录抽屉的 `_ApplyRecordItem.fromJson` 是静态工厂方法，
+/// 没法访问 state 的实例方法，所以放成 top-level。
+_ApplyStatus _parseApplyStatus(dynamic raw) {
+  final n = raw is int ? raw : int.tryParse(raw?.toString() ?? '') ?? 0;
+  if (n == 1) return _ApplyStatus.passed;
+  if (n == 2) return _ApplyStatus.rejected;
+  return _ApplyStatus.pending;
+}
+
 String _pickString(
   Map<String, dynamic> json,
   List<String> keys,
@@ -2619,6 +3806,23 @@ String _pickString(
     if (s.isNotEmpty) return s;
   }
   return fallback;
+}
+
+/// 在 `jsonDecode` 前把字符串里未加引号、长度 >= 16 的纯整数字面量补上引号。
+///
+/// 场景：雪花长 ID（19 位）超过 2^53，Dart Web 经 JS `Number` 解码会截到
+/// 相邻偶数（精度丢失）；包成字符串后 jsonDecode 当 String 保留原样。
+///
+/// 正则要点：
+/// - 前置 lookbehind `[:,\[\s]`：保证数字串紧跟在 `:` / `,` / `[` / 空白
+///   后，排除已经被引号或属于其它 token 的数字串；
+/// - 后置 lookahead  `[,}\]\s]`：保证数字串紧贴 `,` / `}` / `]` / 空白结
+///   束，同理。
+String _preserveLongIds(String input) {
+  return input.replaceAllMapped(
+    RegExp(r'(?<=[:,\[\s])(\d{16,})(?=[,}\]\s])'),
+    (m) => '"${m.group(1)}"',
+  );
 }
 
 List<Map<String, dynamic>> _extractList(ApiResponse resp) {

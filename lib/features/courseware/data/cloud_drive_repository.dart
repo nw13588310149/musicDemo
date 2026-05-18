@@ -8,7 +8,7 @@ import '../../../core/network/api_response.dart';
 import '../../../core/providers/app_providers.dart';
 
 // 校园课件测试接口地址（后续改为生产地址时修改此常量即可）
-const _kCoursewareBase = 'https://test-api.yyzl0931.com:9443';
+const _kCoursewareBase = 'https://api-v2.yyzl0931.com';
 
 final cloudDriveRepositoryProvider = Provider<CloudDriveRepository>((ref) {
   final client = ref.watch(apiClientProvider);

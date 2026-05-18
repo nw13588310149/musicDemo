@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_client.dart';
@@ -134,6 +137,34 @@ class ChatRepository {
       '$_base/deleteMsg',
       data: <String, dynamic>{'msgId': msgId},
     );
+  }
+
+  // ============== 文件上传 ==============
+
+  /// 上传语音文件（用于群聊语音消息），返回 `data` 为可访问的 URL 字符串。
+  ///
+  /// 使用与录音系统相同的上传端点 `/app/common/v2/fileUpload`。
+  Future<ApiResponse> uploadVoice({
+    required Uint8List bytes,
+    required String filename,
+  }) {
+    final lower = filename.toLowerCase();
+    final DioMediaType mime;
+    if (lower.endsWith('.webm')) {
+      mime = DioMediaType('audio', 'webm');
+    } else if (lower.endsWith('.wav')) {
+      mime = DioMediaType('audio', 'wav');
+    } else {
+      mime = DioMediaType('audio', 'mp4'); // .m4a / .aac
+    }
+    final form = FormData.fromMap(<String, dynamic>{
+      'file': MultipartFile.fromBytes(
+        bytes,
+        filename: filename,
+        contentType: mime,
+      ),
+    });
+    return client.postFormData('/app/common/v2/fileUpload', data: form);
   }
 
   // ============== 群设置 ==============

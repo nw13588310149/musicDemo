@@ -1,10 +1,7 @@
-// 教师模型上的「部门 / 任课方向 / 工号 / 手机 / 入职 / 备注」均为带默认值的
-// 命名参数，部分演示条目未覆盖；analyzer 误报为 unused_element_parameter，整体忽略。
-// ignore_for_file: unused_element_parameter
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/network/media_url.dart';
 import '../../../core/widgets/popup_selector_field.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
@@ -26,7 +23,7 @@ const Color _kBorder = Color(0xFFF3F2F3);
 const Color _kHeadTeacherTagBg = Color(0xFFDBEE49);
 
 // ============================================================================
-// 数据模型 + 演示数据
+// 数据模型
 // ============================================================================
 
 enum _TeacherStatus { onDuty, leave, maternity }
@@ -89,13 +86,17 @@ class _Teacher {
     required this.subjectInfo,
     required this.roleInfo,
     required this.status,
+    this.avatarUrl = '',
+    this.nickname = '',
+    this.gender = '',
+    this.introduce = '',
     this.isHeadTeacher = false,
-    this.department = '音乐专业部',
-    this.subjects = '乐理 / 视唱练耳 / 和声基础',
+    this.department = '',
+    this.subjects = '',
     this.headTeacherClass = '',
-    this.phone = '17656287947',
-    this.entryDate = '2018-09-01',
-    this.remark = '专业稳定，本学期承担乐理与视唱练耳跨班教学。',
+    this.phone = '',
+    this.entryDate = '',
+    this.remark = '',
   });
 
   final String name;
@@ -103,12 +104,23 @@ class _Teacher {
   /// 工号 / 教师编号。
   final String teacherId;
 
+  /// 头像 URL。来自 `headUrl` 字段，已通过 [MediaUrl.resolve] 拼到完整地址；
+  /// 空串表示后端未配置头像，UI 走「首字母占位」兜底。
+  final String avatarUrl;
+
   /// 卡片中段「主任课方向」一句话：音乐专业部·乐理·视唱练耳·和声基础。
+  /// 当后端没有部门 / 学科字段时回落到 [introduce]，再退到 "—"。
   final String subjectInfo;
 
   /// 卡片底部「角色 + 带班」一句话：任课·班主任·高三音乐实验班。
+  /// 当前后端 teacherList 接口暂不下发角色集合，默认仅展示 "任课"。
   final String roleInfo;
   final _TeacherStatus status;
+
+  /// 直接来自后端的字段，主要用于「教师档案」弹窗展示，未参与卡片渲染。
+  final String nickname;
+  final String gender;
+  final String introduce;
 
   final bool isHeadTeacher;
 
@@ -120,7 +132,9 @@ class _Teacher {
   final String remark;
 
   factory _Teacher.fromJson(Map<String, dynamic> json) {
-    // 后端实际返回 realname / nickname / no / teacherStatus（小写驼峰）。
+    // 后端实际返回 realname / nickname / no / teacherStatus / headUrl 等。
+    // 命名取首位非空字段，提供少量历史别名兜底（旧接口曾出现 realName /
+    // teacherNo 这类大小写不一致的形式）。所有 fallback 一律 ''，不填演示值。
     final name = _pickString(json, [
       'realname',
       'realName',
@@ -143,7 +157,7 @@ class _Teacher {
       'deptName',
       'dept',
       'majorDepartment',
-    ], '音乐专业部');
+    ], '');
     final subjects = _pickString(json, [
       'subjects',
       'subjectName',
@@ -164,13 +178,39 @@ class _Teacher {
       'rolesText',
       'positionName',
     ], '');
+    final introduce = _pickString(json, [
+      'introduce',
+      'intro',
+      'bio',
+      'description',
+    ], '');
+    final nickname = _pickString(json, ['nickname', 'nickName'], '');
+    final gender = _pickString(json, ['gender', 'sex'], '');
 
-    // 顶部主任课方向：把「部门」和「学科」拼接，分隔符 ·
+    final rawHeadUrl = _pickString(json, [
+      'headUrl',
+      'avatarUrl',
+      'avatar',
+      'headImg',
+      'photoUrl',
+    ], '');
+    final avatarUrl = rawHeadUrl.isEmpty ? '' : MediaUrl.resolve(rawHeadUrl);
+
+    // 顶部主任课方向：把「部门」和「学科」拼接，分隔符 ·。
+    // 都没有时退回 introduce，再退到 "—"；不再硬塞 "音乐专业部" 这类占位。
     final subjectInfoBuf = StringBuffer();
     if (department.isNotEmpty) subjectInfoBuf.write(department);
     if (subjects.isNotEmpty) {
       if (subjectInfoBuf.isNotEmpty) subjectInfoBuf.write('·');
       subjectInfoBuf.write(subjects);
+    }
+    final String subjectInfo;
+    if (subjectInfoBuf.isNotEmpty) {
+      subjectInfo = subjectInfoBuf.toString();
+    } else if (introduce.isNotEmpty) {
+      subjectInfo = introduce;
+    } else {
+      subjectInfo = '—';
     }
 
     final isHeadTeacher =
@@ -180,7 +220,7 @@ class _Teacher {
         json['isClassTeacher'] == true ||
         headTeacherClass.isNotEmpty;
 
-    // 底部角色行：任课 + 可选「班主任·班级」/ 教研角色
+    // 底部角色行：默认 "任课"，命中班主任 / 教研角色 / 班级时按 · 追加。
     final roleParts = <String>['任课'];
     if (isHeadTeacher) {
       roleParts.add('班主任');
@@ -194,14 +234,18 @@ class _Teacher {
     return _Teacher(
       name: name,
       teacherId: no,
-      subjectInfo: subjectInfoBuf.isEmpty ? '—' : subjectInfoBuf.toString(),
+      avatarUrl: avatarUrl,
+      subjectInfo: subjectInfo,
       roleInfo: roleInfo,
       status: _parseTeacherStatus(
         json['teacherStatus'] ?? json['status'] ?? json['workStatus'],
       ),
+      nickname: nickname,
+      gender: gender,
+      introduce: introduce,
       isHeadTeacher: isHeadTeacher,
       department: department,
-      subjects: subjects.isEmpty ? '—' : subjects,
+      subjects: subjects,
       headTeacherClass: headTeacherClass,
       phone: _pickString(json, ['phone', 'mobile', 'tel'], ''),
       entryDate: _pickString(json, ['entryDate', 'hireDate', 'joinDate'], ''),
@@ -224,89 +268,8 @@ String _pickString(
   return fallback;
 }
 
-const List<_Teacher> _demoTeachers = [
-  _Teacher(
-    name: '孙向明',
-    teacherId: 'G3030201',
-    subjectInfo: '音乐专业部·乐理·视唱练耳·和声基础',
-    roleInfo: '任课·班主任·高三音乐实验班',
-    status: _TeacherStatus.onDuty,
-    isHeadTeacher: true,
-    headTeacherClass: '高三音乐实验班',
-  ),
-  _Teacher(
-    name: '钱淋西',
-    teacherId: 'G3030202',
-    subjectInfo: '音乐专业部·乐理·视唱练耳·和声基础',
-    roleInfo: '任课',
-    status: _TeacherStatus.onDuty,
-  ),
-  _Teacher(
-    name: '孙韬',
-    teacherId: 'G3030203',
-    subjectInfo: '音乐专业部·乐理·视唱练耳·和声基础',
-    roleInfo: '任课',
-    status: _TeacherStatus.maternity,
-  ),
-  _Teacher(
-    name: '郑思雅',
-    teacherId: 'G3030204',
-    subjectInfo: '音乐专业部·乐理·视唱练耳·和声基础',
-    roleInfo: '任课·教研副组长',
-    status: _TeacherStatus.maternity,
-  ),
-  _Teacher(
-    name: '何炜亭',
-    teacherId: 'G3030205',
-    subjectInfo: '音乐专业部·乐理·视唱练耳·和声基础',
-    roleInfo: '任课·教研副组长',
-    status: _TeacherStatus.leave,
-  ),
-  _Teacher(
-    name: '王溪蕾',
-    teacherId: 'G3030206',
-    subjectInfo: '音乐专业部·乐理·视唱练耳·和声基础',
-    roleInfo: '任课',
-    status: _TeacherStatus.onDuty,
-  ),
-  _Teacher(
-    name: '孙子函',
-    teacherId: 'G3030207',
-    subjectInfo: '音乐专业部·乐理·视唱练耳·和声基础',
-    roleInfo: '任课',
-    status: _TeacherStatus.onDuty,
-  ),
-  _Teacher(
-    name: '周缙绅',
-    teacherId: 'G3030208',
-    subjectInfo: '音乐专业部·乐理·视唱练耳·和声基础',
-    roleInfo: '任课',
-    status: _TeacherStatus.onDuty,
-  ),
-  _Teacher(
-    name: '王誉玲',
-    teacherId: 'G3030209',
-    subjectInfo: '音乐专业部·乐理·视唱练耳·和声基础',
-    roleInfo: '任课',
-    status: _TeacherStatus.onDuty,
-  ),
-  _Teacher(
-    name: '何馨',
-    teacherId: 'G3030210',
-    subjectInfo: '音乐专业部·乐理·视唱练耳·和声基础',
-    roleInfo: '任课',
-    status: _TeacherStatus.onDuty,
-  ),
-];
-
 const _kAllClasses = '全部班级';
-const _kFallbackClassOptions = <String>[
-  _kAllClasses,
-  '高三音乐实验班',
-  '高二音乐班',
-  '高一声乐(1)班',
-  '高一器乐(2)班',
-];
+const _kBaseClassOptions = <String>[_kAllClasses];
 
 // ============================================================================
 // 入口视图
@@ -335,9 +298,10 @@ const _kFallbackClassOptions = <String>[
 /// `AppDialogActionBar`。
 ///
 /// 数据接入：进入页面立即并发拉
-///   - `POST /app/school1/v2/manager/classList`  → 「全部班级」dropdown
-///   - `POST /app/school1/v2/manager/teacherList` → 教师卡列表
-/// 班级 / 关键字变化时只重新拉 `teacherList`；接口失败 / 空时回退到内置 demo。
+///   - `POST /app/school/v2/manager/classList`  → 「全部班级」dropdown
+///   - `POST /app/school/v2/manager/teacherList` → 教师卡列表
+/// 班级 / 关键字变化时只重新拉 `teacherList`；不再注入任何模拟教师 / 班级
+/// 兜底数据：接口失败或返回空数组直接走「暂无符合条件的教师」空态。
 class AdminTeacherManagementView extends ConsumerStatefulWidget {
   const AdminTeacherManagementView({super.key, required this.onBack});
 
@@ -353,8 +317,10 @@ class _AdminTeacherManagementViewState
   String _classFilter = _kAllClasses;
   String _searchKw = '';
 
-  List<String> _classOptions = _kFallbackClassOptions;
+  List<String> _classOptions = _kBaseClassOptions;
 
+  /// 服务端拉到的教师列表；初始 `null` 表示「还没拉到结果」，与「拉到了
+  /// 但是空数组」做区分（前者不渲染统计/卡片，后者落到「暂无教师」空态）。
   List<_Teacher>? _serverTeachers;
 
   bool _loadingTeachers = true;
@@ -446,26 +412,17 @@ class _AdminTeacherManagementViewState
     });
   }
 
-  List<_Teacher> get _teachers => _serverTeachers ?? _demoTeachers;
+  /// 当前生效的教师列表。`null` → 还没回包；空数组 → 接口返回 0 条。
+  List<_Teacher> get _teachers => _serverTeachers ?? const <_Teacher>[];
 
-  /// 班级过滤本地兜底（teacherList 接口无 classId 参数支持时仍能筛选）。
+  /// 班级过滤本地兜底（teacherList 接口暂不支持 classId 直接筛选，
+  /// 通过 `roleInfo` / `headTeacherClass` 字面匹配实现前端过滤）。
   List<_Teacher> get _filtered {
-    final base = _teachers;
-    return base.where((t) {
+    return _teachers.where((t) {
       if (_classFilter != _kAllClasses &&
           !t.roleInfo.contains(_classFilter) &&
           t.headTeacherClass != _classFilter) {
         return false;
-      }
-      // 服务端已 keyword 过滤；demo 兜底时本地再过一遍。
-      if (_serverTeachers == null && _searchKw.trim().isNotEmpty) {
-        final kw = _searchKw.trim();
-        final hit =
-            t.name.contains(kw) ||
-            t.teacherId.contains(kw) ||
-            t.subjectInfo.contains(kw) ||
-            t.subjects.contains(kw);
-        if (!hit) return false;
       }
       return true;
     }).toList();
@@ -958,7 +915,7 @@ class _TeacherCard extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _Avatar(name: teacher.name),
+                  _Avatar(name: teacher.name, avatarUrl: teacher.avatarUrl),
                   SizedBox(width: ui(8)),
                   Expanded(
                     child: Column(
@@ -1100,17 +1057,23 @@ class _TeacherCard extends StatelessWidget {
 }
 
 class _Avatar extends StatelessWidget {
-  const _Avatar({required this.name});
+  const _Avatar({required this.name, this.avatarUrl = '', this.size = 40});
 
   final String name;
+
+  /// 后端 `headUrl` 经 [MediaUrl.resolve] 解析的完整地址。空串走首字母兜底。
+  final String avatarUrl;
+
+  /// 默认 40 配卡片缩略图；档案弹窗里用 56 / 64 等也可复用。
+  final double size;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final initial = name.isEmpty ? '·' : name.characters.first;
-    return Container(
-      width: ui(40),
-      height: ui(40),
+    final placeholder = Container(
+      width: ui(size),
+      height: ui(size),
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: const Color(0xFFDAD2FF),
@@ -1119,12 +1082,26 @@ class _Avatar extends StatelessWidget {
       child: Text(
         initial,
         style: TextStyle(
-          fontSize: ui(16),
+          fontSize: ui(size * 0.4),
           height: 1.0,
           fontWeight: AppFont.w600,
           color: _kPurple,
           fontFamily: 'PingFang SC',
         ),
+      ),
+    );
+    if (avatarUrl.isEmpty) {
+      return placeholder;
+    }
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(ui(8)),
+      child: Image.network(
+        avatarUrl,
+        width: ui(size),
+        height: ui(size),
+        fit: BoxFit.cover,
+        // 404 / CORS / 离线时退回首字母占位，避免出现"问号 / 黑块"。
+        errorBuilder: (_, _, _) => placeholder,
       ),
     );
   }
@@ -1163,7 +1140,11 @@ class _TeacherProfileDialog extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              _Avatar(name: teacher.name),
+              _Avatar(
+                name: teacher.name,
+                avatarUrl: teacher.avatarUrl,
+                size: 56,
+              ),
               SizedBox(width: ui(12)),
               Expanded(
                 child: Column(
@@ -1220,57 +1201,67 @@ class _TeacherProfileDialog extends StatelessWidget {
                         ),
                       ],
                     ),
-                    SizedBox(height: ui(4)),
-                    Text(
-                      teacher.department,
-                      style: TextStyle(
-                        fontSize: ui(12),
-                        height: 1.2,
-                        color: _kTextSub,
-                        fontFamily: 'PingFang SC',
+                    if (teacher.nickname.isNotEmpty &&
+                        teacher.nickname != teacher.name) ...[
+                      SizedBox(height: ui(4)),
+                      Text(
+                        '昵称：${teacher.nickname}',
+                        style: TextStyle(
+                          fontSize: ui(12),
+                          height: 1.2,
+                          color: _kTextSub,
+                          fontFamily: 'PingFang SC',
+                        ),
                       ),
-                    ),
-                    SizedBox(height: ui(2)),
-                    Text(
-                      teacher.teacherId,
-                      style: TextStyle(
-                        fontSize: ui(12),
-                        height: 1.2,
-                        color: _kTextHint,
-                        fontFamily: 'PingFang SC',
+                    ],
+                    if (teacher.teacherId.isNotEmpty) ...[
+                      SizedBox(height: ui(2)),
+                      Text(
+                        '工号 ${teacher.teacherId}',
+                        style: TextStyle(
+                          fontSize: ui(12),
+                          height: 1.2,
+                          color: _kTextHint,
+                          fontFamily: 'PingFang SC',
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
             ],
           ),
           SizedBox(height: ui(20)),
-          _ProfileRow(label: '部门：', value: teacher.department),
-          _ProfileRow(label: '任课方向：', value: teacher.subjects),
-          _ProfileRow(
-            label: '教研角色：',
-            value: teacher.roleInfo.isEmpty ? '任课' : teacher.roleInfo,
-          ),
-          _ProfileRow(
-            label: '带班：',
-            value: teacher.headTeacherClass.isEmpty
-                ? '—'
-                : teacher.headTeacherClass,
-          ),
-          _ProfileRow(
-            label: '联系电话：',
-            value: teacher.phone.isEmpty ? '—' : teacher.phone,
-          ),
-          _ProfileRow(
-            label: '入职日期：',
-            value: teacher.entryDate.isEmpty ? '—' : teacher.entryDate,
-          ),
-          _ProfileRow(
-            label: '备注：',
-            value: teacher.remark.isEmpty ? '—' : teacher.remark,
-            multiline: true,
-          ),
+          // 仅渲染后端 teacherList 实际下发的字段；其它字段（部门 / 联系
+          // 电话 / 入职日期 / 备注）等后端补齐之后再放出来，目前不再用占位
+          // 假数据糊。
+          if (teacher.gender.isNotEmpty)
+            _ProfileRow(label: '性别：', value: teacher.gender),
+          if (teacher.teacherId.isNotEmpty)
+            _ProfileRow(label: '工号：', value: teacher.teacherId),
+          _ProfileRow(label: '状态：', value: teacher.status.label),
+          if (teacher.department.isNotEmpty)
+            _ProfileRow(label: '部门：', value: teacher.department),
+          if (teacher.subjects.isNotEmpty)
+            _ProfileRow(label: '任课方向：', value: teacher.subjects),
+          if (teacher.headTeacherClass.isNotEmpty)
+            _ProfileRow(label: '带班：', value: teacher.headTeacherClass),
+          if (teacher.phone.isNotEmpty)
+            _ProfileRow(label: '联系电话：', value: teacher.phone),
+          if (teacher.entryDate.isNotEmpty)
+            _ProfileRow(label: '入职日期：', value: teacher.entryDate),
+          if (teacher.introduce.isNotEmpty)
+            _ProfileRow(
+              label: '个人简介：',
+              value: teacher.introduce,
+              multiline: true,
+            ),
+          if (teacher.remark.isNotEmpty)
+            _ProfileRow(
+              label: '备注：',
+              value: teacher.remark,
+              multiline: true,
+            ),
         ],
       ),
     );

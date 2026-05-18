@@ -32,9 +32,16 @@
 // 字体：PingFang SC（标题 14/16/600 / 正文 11/12/14）+ Barlow（数值 32）
 // =============================================================================
 
-import 'package:flutter/material.dart';
+import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/network/media_url.dart';
+import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
+import '../data/teacher_repository.dart';
 import '../../shell/ui/shell_layout.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
@@ -55,6 +62,7 @@ const Color _kVerifyBlue = Color(0xFF325BFF);
 
 class _Student {
   const _Student({
+    required this.apiId,
     required this.id,
     required this.name,
     required this.dorm,
@@ -62,9 +70,16 @@ class _Student {
     required this.isMale,
     required this.tags,
     required this.badges,
+    this.headUrl,
+    this.mobile,
+    this.parentPhone,
+    this.subtitle,
   });
 
-  /// 工号 / 学号，例：G3030201。
+  /// 后端学生主键（雪花字符串），用于 [TeacherRepository.studentDetail]。
+  final String apiId;
+
+  /// 工号 / 学号展示。
   final String id;
   final String name;
   final String dorm;
@@ -73,233 +88,253 @@ class _Student {
   final int avatarSeed;
   final bool isMale;
 
-  /// 灰底 tag（高三音乐实验班 / 声乐回课 等任课方向）。
+  /// 灰底 tag（班级名 / 班级职务等）。
   final List<String> tags;
 
   /// 紫底 tag（住校 / 合唱团 等身份徽标）。
   final List<String> badges;
-}
 
-class _ClassOption {
-  const _ClassOption(this.label);
-  final String label;
+  /// 头像完整 URL；为空时用首字渐变。
+  final String? headUrl;
+
+  final String? mobile;
+  final String? parentPhone;
+  final String? subtitle;
+
+  factory _Student.fromMap(Map<dynamic, dynamic> m) {
+    final name = (m['realname']?.toString().trim().isNotEmpty == true)
+        ? m['realname'].toString().trim()
+        : ((m['nickname']?.toString().trim().isNotEmpty == true)
+            ? m['nickname'].toString().trim()
+            : '—');
+    final sid = m['id']?.toString().trim() ?? '';
+    final studentNo = m['studentNo']?.toString().trim().isNotEmpty == true
+        ? m['studentNo'].toString().trim()
+        : (m['code']?.toString().trim() ?? '');
+    final display = studentNo.isNotEmpty ? studentNo : sid;
+    final rawHead =
+        m['headUrl']?.toString().trim() ?? m['avatar']?.toString().trim() ?? '';
+    final headUrl = rawHead.isEmpty ? null : MediaUrl.resolve(rawHead);
+    final g = m['gender']?.toString().trim() ?? '';
+    final isMale = g == '1' || g == '男';
+    final dorm = m['dormitory']?.toString().trim().isNotEmpty == true
+        ? m['dormitory'].toString().trim()
+        : (m['dorm']?.toString().trim().isNotEmpty == true
+            ? m['dorm'].toString().trim()
+            : '—');
+    final className = m['className']?.toString().trim() ?? '';
+    final tags = <String>[];
+    if (className.isNotEmpty) tags.add(className);
+    final role =
+        m['classRole']?.toString().trim() ?? m['role']?.toString().trim() ?? '';
+    if (role.isNotEmpty) tags.add(role);
+    final tagsRaw = m['tags']?.toString().trim() ?? '';
+    final badges = tagsRaw
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    final st = m['studentStatus']?.toString().trim() ?? '';
+    if (st.isNotEmpty && !badges.contains(st)) {
+      badges.insert(0, st);
+    }
+    return _Student(
+      apiId: sid,
+      id: display.isEmpty ? '—' : display,
+      name: name,
+      dorm: dorm,
+      avatarSeed: name.isNotEmpty ? name.codeUnitAt(0) % 3 : 0,
+      isMale: isMale,
+      tags: tags,
+      badges: badges,
+      headUrl: headUrl,
+      mobile: m['mobile']?.toString().trim(),
+      parentPhone: m['parentMobile']?.toString().trim().isNotEmpty == true
+          ? m['parentMobile'].toString().trim()
+          : m['guardianMobile']?.toString().trim(),
+      subtitle: m['major']?.toString().trim().isNotEmpty == true
+          ? m['major'].toString().trim()
+          : m['introduce']?.toString().trim(),
+    );
+  }
 }
 
 const _kAllClassesLabel = '全部班级';
-const List<_ClassOption> _kClassOptions = [
-  _ClassOption(_kAllClassesLabel),
-  _ClassOption('高三音乐实验班'),
-  _ClassOption('高三声乐回课'),
-  _ClassOption('高二音乐实验班'),
-  _ClassOption('高一(2)班'),
-];
+
+class _RosterClassOption {
+  const _RosterClassOption({required this.id, required this.label});
+  final String id;
+  final String label;
+}
+
+List<Map<dynamic, dynamic>> _coerceRecords(dynamic raw) {
+  if (raw is Map) {
+    final inner = raw['records'] ?? raw['list'] ?? raw['data'];
+    if (inner is List) {
+      return inner.whereType<Map>().toList();
+    }
+    return const [];
+  }
+  if (raw is List) return raw.whereType<Map>().toList();
+  return const [];
+}
+
+String? _nonEmptyStr(dynamic v) {
+  final s = v?.toString().trim();
+  return (s != null && s.isNotEmpty) ? s : null;
+}
+
+Map<String, dynamic>? _mapDataToStringKeyed(dynamic raw) {
+  if (raw is! Map) return null;
+  return Map<String, dynamic>.from(
+    raw.map((k, v) => MapEntry(k.toString(), v)),
+  );
+}
+
+String _detailPick(
+  Map<String, dynamic>? m,
+  List<String> keys, [
+  String fallback = '',
+]) {
+  if (m == null) return fallback;
+  for (final k in keys) {
+    final v = _nonEmptyStr(m[k]);
+    if (v != null) return v;
+  }
+  return fallback;
+}
+
+String? _resolveHeadUrl(_Student row, Map<String, dynamic>? d) {
+  final raw = _nonEmptyStr(d?['headUrl']) ?? _nonEmptyStr(d?['avatar']);
+  if (raw != null) return MediaUrl.resolve(raw);
+  return row.headUrl;
+}
 
 // =============================================================================
-// 入口 view：StatefulWidget（filter / query / 班级选择）
+// 入口 view
 // =============================================================================
 
-class TeacherStudentRosterView extends StatefulWidget {
+class TeacherStudentRosterView extends ConsumerStatefulWidget {
   const TeacherStudentRosterView({super.key, required this.onBack});
 
   final VoidCallback onBack;
 
   @override
-  State<TeacherStudentRosterView> createState() =>
+  ConsumerState<TeacherStudentRosterView> createState() =>
       _TeacherStudentRosterViewState();
 }
 
-class _TeacherStudentRosterViewState extends State<TeacherStudentRosterView> {
-  String _classFilter = _kAllClassesLabel;
+class _TeacherStudentRosterViewState extends ConsumerState<TeacherStudentRosterView> {
+  static const int _pageSize = 50;
   String _query = '';
+  String _debouncedKeyword = '';
+  Timer? _searchDebounce;
 
-  // 与 Figma 一致：当前列表 18，其中男 4 / 女 14；以下 demo 数据满足该总数与男女比。
-  final List<_Student> _all = const [
-    _Student(
-      id: 'G3030201',
-      name: '李铮辉',
-      dorm: '女生公寓 A-602',
-      avatarSeed: 0,
-      isMale: false,
-      tags: ['高三音乐实验班', '声乐回课'],
-      badges: ['住校', '合唱团'],
-    ),
-    _Student(
-      id: 'G3030202',
-      name: '陈雨菲',
-      dorm: '女生公寓 A-603',
-      avatarSeed: 1,
-      isMale: false,
-      tags: ['高三音乐实验班'],
-      badges: ['住校', '合唱团'],
-    ),
-    _Student(
-      id: 'G3030203',
-      name: '林一诺',
-      dorm: '女生公寓 A-604',
-      avatarSeed: 2,
-      isMale: false,
-      tags: ['高三音乐实验班', '声乐回课'],
-      badges: ['住校'],
-    ),
-    _Student(
-      id: 'G3030204',
-      name: '宋知瑶',
-      dorm: '女生公寓 A-605',
-      avatarSeed: 0,
-      isMale: false,
-      tags: ['高三音乐实验班', '声乐回课'],
-      badges: ['住校'],
-    ),
-    _Student(
-      id: 'G3030205',
-      name: '苏沐之',
-      dorm: '女生公寓 A-606',
-      avatarSeed: 1,
-      isMale: false,
-      tags: ['高三音乐实验班', '声乐回课'],
-      badges: ['住校'],
-    ),
-    _Student(
-      id: 'G3030206',
-      name: '周晚晴',
-      dorm: '女生公寓 A-607',
-      avatarSeed: 2,
-      isMale: false,
-      tags: ['高三音乐实验班', '声乐回课'],
-      badges: [],
-    ),
-    _Student(
-      id: 'G3030207',
-      name: '徐若曦',
-      dorm: '女生公寓 A-608',
-      avatarSeed: 0,
-      isMale: false,
-      tags: ['高三音乐实验班', '声乐回课'],
-      badges: ['住校'],
-    ),
-    _Student(
-      id: 'G3030208',
-      name: '黄歆悦',
-      dorm: '女生公寓 A-609',
-      avatarSeed: 1,
-      isMale: false,
-      tags: ['高三音乐实验班', '声乐回课'],
-      badges: ['住校'],
-    ),
-    _Student(
-      id: 'G3030209',
-      name: '何嘉怡',
-      dorm: '女生公寓 A-610',
-      avatarSeed: 2,
-      isMale: false,
-      tags: ['高三音乐实验班', '声乐回课'],
-      badges: ['合唱团'],
-    ),
-    _Student(
-      id: 'G3030210',
-      name: '罗思颖',
-      dorm: '女生公寓 A-611',
-      avatarSeed: 0,
-      isMale: false,
-      tags: ['高三音乐实验班', '声乐回课'],
-      badges: ['住校'],
-    ),
-    _Student(
-      id: 'G3030211',
-      name: '高梓童',
-      dorm: '女生公寓 A-612',
-      avatarSeed: 1,
-      isMale: false,
-      tags: ['高三音乐实验班', '声乐回课'],
-      badges: ['住校'],
-    ),
-    _Student(
-      id: 'G3030212',
-      name: '韩可心',
-      dorm: '女生公寓 A-613',
-      avatarSeed: 2,
-      isMale: false,
-      tags: ['高三音乐实验班', '声乐回课'],
-      badges: ['住校'],
-    ),
-    _Student(
-      id: 'G3030213',
-      name: '邓乐瑶',
-      dorm: '女生公寓 A-614',
-      avatarSeed: 0,
-      isMale: false,
-      tags: ['高三音乐实验班', '声乐回课'],
-      badges: ['合唱团'],
-    ),
-    _Student(
-      id: 'G3030214',
-      name: '叶笙歌',
-      dorm: '女生公寓 A-615',
-      avatarSeed: 1,
-      isMale: false,
-      tags: ['高三音乐实验班', '声乐回课'],
-      badges: ['住校'],
-    ),
-    _Student(
-      id: 'G3030215',
-      name: '张子轩',
-      dorm: '男生公寓 B-201',
-      avatarSeed: 2,
-      isMale: true,
-      tags: ['高三音乐实验班', '声乐回课'],
-      badges: ['住校'],
-    ),
-    _Student(
-      id: 'G3030216',
-      name: '王皓宇',
-      dorm: '男生公寓 B-202',
-      avatarSeed: 0,
-      isMale: true,
-      tags: ['高三音乐实验班', '声乐回课'],
-      badges: ['住校', '合唱团'],
-    ),
-    _Student(
-      id: 'G3030217',
-      name: '刘景行',
-      dorm: '男生公寓 B-203',
-      avatarSeed: 1,
-      isMale: true,
-      tags: ['高三音乐实验班', '声乐回课'],
-      badges: ['住校'],
-    ),
-    _Student(
-      id: 'G3030218',
-      name: '赵泽阳',
-      dorm: '男生公寓 B-204',
-      avatarSeed: 2,
-      isMale: true,
-      tags: ['高三音乐实验班', '声乐回课'],
-      badges: ['住校'],
-    ),
+  List<_RosterClassOption> _classOptions = [
+    const _RosterClassOption(id: '0', label: _kAllClassesLabel),
   ];
+  String _selectedClassId = '0';
+  String _selectedClassLabel = _kAllClassesLabel;
 
-  List<_Student> get _filtered {
-    final q = _query.trim();
-    return _all.where((s) {
-      // 班级筛选：tags 命中即可（"全部班级" 不过滤）。
-      if (_classFilter != _kAllClassesLabel && !s.tags.contains(_classFilter)) {
-        return false;
+  List<_Student> _all = [];
+  int _listTotal = 0;
+  bool _loadingClasses = true;
+  bool _loadingStudents = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadClasses());
+  }
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadClasses() async {
+    setState(() => _loadingClasses = true);
+    final res = await ref.read(teacherRepositoryProvider).classList();
+    if (!mounted) return;
+    final opts = <_RosterClassOption>[
+      const _RosterClassOption(id: '0', label: _kAllClassesLabel),
+    ];
+    if (res.isSuccess) {
+      final raw = res.data;
+      final list = raw is Map ? (raw['records'] ?? raw['list'] ?? raw['data']) : raw;
+      if (list is List) {
+        for (final row in list.whereType<Map>()) {
+          final id = row['id']?.toString().trim() ?? row['classId']?.toString().trim() ?? '';
+          final name = row['name']?.toString().trim() ?? '';
+          if (id.isNotEmpty && name.isNotEmpty) {
+            opts.add(_RosterClassOption(id: id, label: name));
+          }
+        }
       }
-      if (q.isEmpty) return true;
-      // 姓名 / 工号 / 任课方向（tags） 任一命中。
-      if (s.name.contains(q)) return true;
-      if (s.id.toLowerCase().contains(q.toLowerCase())) return true;
-      if (s.tags.any((t) => t.contains(q))) return true;
-      return false;
-    }).toList();
+    }
+    setState(() {
+      _classOptions = opts;
+      _loadingClasses = false;
+    });
+    await _loadStudents();
+  }
+
+  Future<void> _loadStudents() async {
+    if (!mounted) return;
+    setState(() => _loadingStudents = true);
+    final res = await ref.read(teacherRepositoryProvider).studentList(
+          classId: _selectedClassId,
+          current: 1,
+          size: _pageSize,
+          keyword: _debouncedKeyword,
+        );
+    if (!mounted) return;
+    var rows = <Map<dynamic, dynamic>>[];
+    var total = 0;
+    if (res.isSuccess) {
+      final raw = res.data;
+      if (raw is Map) {
+        total = int.tryParse(raw['total']?.toString() ?? '') ?? 0;
+        rows = _coerceRecords(raw);
+      } else {
+        rows = _coerceRecords(raw);
+      }
+    } else if (res.msg.isNotEmpty) {
+      AppToast.show(context, res.msg);
+    }
+    setState(() {
+      _all = rows.map(_Student.fromMap).toList();
+      _listTotal = total > 0 ? total : _all.length;
+      _loadingStudents = false;
+    });
+  }
+
+  void _onClassPicked(_RosterClassOption opt) {
+    setState(() {
+      _selectedClassId = opt.id;
+      _selectedClassLabel = opt.label;
+    });
+    _loadStudents();
+  }
+
+  void _onQueryChanged(String v) {
+    setState(() => _query = v);
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 400), () {
+      if (!mounted) return;
+      setState(() => _debouncedKeyword = v.trim());
+      _loadStudents();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final list = _filtered;
+    final list = _all;
     final maleCount = list.where((s) => s.isMale).length;
     final femaleCount = list.length - maleCount;
+    final totalForStats = _listTotal > 0 ? _listTotal : list.length;
 
     return SingleChildScrollView(
       padding: EdgeInsets.only(bottom: ui(24)),
@@ -309,15 +344,40 @@ class _TeacherStudentRosterViewState extends State<TeacherStudentRosterView> {
           _RosterBanner(onBack: widget.onBack),
           SizedBox(height: ui(16)),
           _FilterRow(
-            classFilter: _classFilter,
-            onClassChanged: (v) => setState(() => _classFilter = v),
+            classOptions: _classOptions,
+            selectedLabel: _selectedClassLabel,
+            onClassPicked: _onClassPicked,
             query: _query,
-            onQueryChanged: (v) => setState(() => _query = v),
+            onQueryChanged: _onQueryChanged,
           ),
           SizedBox(height: ui(16)),
-          _StatsRow(total: list.length, male: maleCount, female: femaleCount),
+          _StatsRow(total: totalForStats, male: maleCount, female: femaleCount),
           SizedBox(height: ui(20)),
-          _StudentCardsGrid(students: list),
+          if (_loadingClasses || (_loadingStudents && list.isEmpty))
+            Center(
+              child: Padding(
+                padding: EdgeInsets.only(top: ui(48)),
+                child: CircularProgressIndicator(
+                  color: _kPurple,
+                  strokeWidth: 2,
+                ),
+              ),
+            )
+          else if (!_loadingStudents && list.isEmpty)
+            Center(
+              child: Padding(
+                padding: EdgeInsets.only(top: ui(48)),
+                child: Text(
+                  '暂无学生数据',
+                  style: TextStyle(fontSize: ui(14), color: _kTextHint),
+                ),
+              ),
+            )
+          else
+            _StudentCardsGrid(
+              students: list,
+              onOpenStudentDetail: (s) => _openStudentDetailDrawer(context, s),
+            ),
         ],
       ),
     );
@@ -397,14 +457,16 @@ class _RosterBanner extends StatelessWidget {
 
 class _FilterRow extends StatelessWidget {
   const _FilterRow({
-    required this.classFilter,
-    required this.onClassChanged,
+    required this.classOptions,
+    required this.selectedLabel,
+    required this.onClassPicked,
     required this.query,
     required this.onQueryChanged,
   });
 
-  final String classFilter;
-  final ValueChanged<String> onClassChanged;
+  final List<_RosterClassOption> classOptions;
+  final String selectedLabel;
+  final ValueChanged<_RosterClassOption> onClassPicked;
   final String query;
   final ValueChanged<String> onQueryChanged;
 
@@ -416,9 +478,9 @@ class _FilterRow extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         _ClassFilterButton(
-          value: classFilter,
-          options: _kClassOptions,
-          onChanged: onClassChanged,
+          value: selectedLabel,
+          options: classOptions,
+          onChanged: onClassPicked,
         ),
         SizedBox(
           width: ui(324),
@@ -437,8 +499,8 @@ class _ClassFilterButton extends StatefulWidget {
   });
 
   final String value;
-  final List<_ClassOption> options;
-  final ValueChanged<String> onChanged;
+  final List<_RosterClassOption> options;
+  final ValueChanged<_RosterClassOption> onChanged;
 
   @override
   State<_ClassFilterButton> createState() => _ClassFilterButtonState();
@@ -461,7 +523,7 @@ class _ClassFilterButtonState extends State<_ClassFilterButton> {
     final ui = scale.ui;
 
     setState(() => _open = true);
-    final selected = await showMenu<String>(
+    final selected = await showMenu<_RosterClassOption>(
       context: context,
       elevation: 0,
       color: Colors.transparent,
@@ -475,8 +537,8 @@ class _ClassFilterButtonState extends State<_ClassFilterButton> {
         overlayBox.size.width - origin.dx - ui(180),
         overlayBox.size.height - origin.dy - size.height,
       ),
-      items: <PopupMenuEntry<String>>[
-        PopupMenuItem<String>(
+      items: <PopupMenuEntry<_RosterClassOption>>[
+        PopupMenuItem<_RosterClassOption>(
           enabled: false,
           padding: EdgeInsets.zero,
           child: DashboardScaleScope(
@@ -484,14 +546,14 @@ class _ClassFilterButtonState extends State<_ClassFilterButton> {
             child: _ClassFilterMenuPanel(
               options: widget.options,
               value: widget.value,
-              onPick: (v) => Navigator.of(context).pop<String>(v),
+              onPick: (opt) => Navigator.of(context).pop<_RosterClassOption>(opt),
             ),
           ),
         ),
       ],
     );
     if (mounted) setState(() => _open = false);
-    if (selected != null && selected != widget.value) {
+    if (selected != null && selected.label != widget.value) {
       widget.onChanged(selected);
     }
   }
@@ -551,9 +613,9 @@ class _ClassFilterMenuPanel extends StatelessWidget {
     required this.onPick,
   });
 
-  final List<_ClassOption> options;
+  final List<_RosterClassOption> options;
   final String value;
-  final ValueChanged<String> onPick;
+  final ValueChanged<_RosterClassOption> onPick;
 
   @override
   Widget build(BuildContext context) {
@@ -579,7 +641,7 @@ class _ClassFilterMenuPanel extends StatelessWidget {
             _ClassFilterMenuRow(
               label: opt.label,
               selected: opt.label == value,
-              onTap: () => onPick(opt.label),
+              onTap: () => onPick(opt),
             ),
         ],
       ),
@@ -863,9 +925,13 @@ class _StatTrioCard extends StatelessWidget {
 // =============================================================================
 
 class _StudentCardsGrid extends StatelessWidget {
-  const _StudentCardsGrid({required this.students});
+  const _StudentCardsGrid({
+    required this.students,
+    required this.onOpenStudentDetail,
+  });
 
   final List<_Student> students;
+  final ValueChanged<_Student> onOpenStudentDetail;
 
   @override
   Widget build(BuildContext context) {
@@ -888,7 +954,10 @@ class _StudentCardsGrid extends StatelessWidget {
             for (final s in students)
               SizedBox(
                 width: cardWidth,
-                child: _StudentCard(data: s),
+                child: _StudentCard(
+                  data: s,
+                  onOpenDetail: () => onOpenStudentDetail(s),
+                ),
               ),
           ],
         );
@@ -932,9 +1001,10 @@ class _RosterEmptyState extends StatelessWidget {
 }
 
 class _StudentCard extends StatelessWidget {
-  const _StudentCard({required this.data});
+  const _StudentCard({required this.data, required this.onOpenDetail});
 
   final _Student data;
+  final VoidCallback onOpenDetail;
 
   @override
   Widget build(BuildContext context) {
@@ -952,7 +1022,11 @@ class _StudentCard extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _StudentAvatar(seed: data.avatarSeed, name: data.name),
+          _StudentAvatar(
+            seed: data.avatarSeed,
+            name: data.name,
+            imageUrl: data.headUrl,
+          ),
           SizedBox(width: ui(8)),
           Expanded(
             child: Column(
@@ -990,9 +1064,7 @@ class _StudentCard extends StatelessWidget {
                       ),
                     ),
                     SizedBox(width: ui(8)),
-                    _DetailLink(
-                      onTap: () => _openStudentDetailDrawer(context, data),
-                    ),
+                    _DetailLink(onTap: onOpenDetail),
                   ],
                 ),
                 SizedBox(height: ui(6)),
@@ -1032,12 +1104,17 @@ class _StudentCard extends StatelessWidget {
   }
 }
 
-/// 40×40 头像（placeholder 圆角方块；按 seed 选三种渐变之一，再叠首字）。
+/// 40×40 头像（有 URL 时网络图；否则首字渐变）。
 class _StudentAvatar extends StatelessWidget {
-  const _StudentAvatar({required this.seed, required this.name});
+  const _StudentAvatar({
+    required this.seed,
+    required this.name,
+    this.imageUrl,
+  });
 
   final int seed;
   final String name;
+  final String? imageUrl;
 
   static const List<List<Color>> _kPalette = [
     [Color(0xFFE7DCFF), Color(0xFFCBB1FF)], // 紫
@@ -1050,6 +1127,30 @@ class _StudentAvatar extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     final colors = _kPalette[seed % _kPalette.length];
     final initial = name.isEmpty ? '·' : name.characters.first;
+    final url = imageUrl?.trim();
+    if (url != null && url.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(ui(8)),
+        child: SizedBox(
+          width: ui(40),
+          height: ui(40),
+          child: CachedNetworkImage(
+            imageUrl: url,
+            fit: BoxFit.cover,
+            placeholder: (_, _) => _avatarPlaceholder(ui, colors, initial),
+            errorWidget: (_, _, _) => _avatarPlaceholder(ui, colors, initial),
+          ),
+        ),
+      );
+    }
+    return _avatarPlaceholder(ui, colors, initial);
+  }
+
+  Widget _avatarPlaceholder(
+    double Function(double) ui,
+    List<Color> colors,
+    String initial,
+  ) {
     return Container(
       width: ui(40),
       height: ui(40),
@@ -1226,16 +1327,17 @@ void _openStudentDetailDrawer(BuildContext context, _Student data) {
   );
 }
 
-class _StudentDetailDrawer extends StatefulWidget {
+class _StudentDetailDrawer extends ConsumerStatefulWidget {
   const _StudentDetailDrawer({required this.data});
 
   final _Student data;
 
   @override
-  State<_StudentDetailDrawer> createState() => _StudentDetailDrawerState();
+  ConsumerState<_StudentDetailDrawer> createState() =>
+      _StudentDetailDrawerState();
 }
 
-class _StudentDetailDrawerState extends State<_StudentDetailDrawer> {
+class _StudentDetailDrawerState extends ConsumerState<_StudentDetailDrawer> {
   // 0 = 声乐 / 1 = 乐理（与 Figma toggle 顺序一致）。
   int _subjectIdx = 0;
 
@@ -1247,10 +1349,42 @@ class _StudentDetailDrawerState extends State<_StudentDetailDrawer> {
 
   static const List<String> _kPeriods = ['2月', '3月', '4月', '5月', '期中', '6月'];
 
+  Map<String, dynamic>? _detail;
+  bool _detailLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDetail();
+  }
+
+  Future<void> _loadDetail() async {
+    final id = widget.data.apiId.trim();
+    if (id.isEmpty) return;
+    setState(() => _detailLoading = true);
+    final res = await ref.read(teacherRepositoryProvider).studentDetail(id: id);
+    if (!mounted) return;
+    if (res.isSuccess && res.data is Map) {
+      setState(() {
+        _detailLoading = false;
+        _detail = _mapDataToStringKeyed(res.data);
+      });
+    } else {
+      setState(() => _detailLoading = false);
+      if (!res.isSuccess) {
+        AppToast.show(
+          context,
+          res.msg.isNotEmpty ? res.msg : '加载学生详情失败',
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final data = widget.data;
+    final d = _detail;
     return Material(
       color: Colors.transparent,
       child: SizedBox(
@@ -1259,46 +1393,66 @@ class _StudentDetailDrawerState extends State<_StudentDetailDrawer> {
         child: Container(
           color: Colors.white,
           child: SafeArea(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.only(bottom: ui(24)),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _DrawerTitleBar(),
-                  SizedBox(height: ui(16)),
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: ui(20)),
-                    child: _ProfileBlock(data: data),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_detailLoading)
+                  LinearProgressIndicator(
+                    minHeight: ui(2),
+                    color: _kPurple,
+                    backgroundColor: _kPageBgChip,
                   ),
-                  SizedBox(height: ui(16)),
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: ui(20)),
-                    child: _InfoList(data: data),
-                  ),
-                  SizedBox(height: ui(20)),
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: ui(20)),
-                    child: _TeacherRemarksBlock(),
-                  ),
-                  SizedBox(height: ui(12)),
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: ui(20)),
-                    child: _ScoreChartBlock(
-                      subjectIdx: _subjectIdx,
-                      onSubjectChanged: (i) => setState(() => _subjectIdx = i),
-                      values: _kSubjectScores[_subjectIdx]!,
-                      periods: _kPeriods,
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.only(bottom: ui(24)),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _DrawerTitleBar(),
+                        SizedBox(height: ui(16)),
+                        Padding(
+                          padding: EdgeInsets.symmetric(horizontal: ui(20)),
+                          child: _ProfileBlock(data: data, detail: d),
+                        ),
+                        SizedBox(height: ui(16)),
+                        Padding(
+                          padding: EdgeInsets.symmetric(horizontal: ui(20)),
+                          child: _InfoList(data: data, detail: d),
+                        ),
+                        SizedBox(height: ui(20)),
+                        Padding(
+                          padding: EdgeInsets.symmetric(horizontal: ui(20)),
+                          child: _TeacherRemarksBlock(
+                            remark: _detailPick(d, const ['remark'], ''),
+                          ),
+                        ),
+                        SizedBox(height: ui(12)),
+                        Padding(
+                          padding: EdgeInsets.symmetric(horizontal: ui(20)),
+                          child: _ScoreChartBlock(
+                            subjectIdx: _subjectIdx,
+                            onSubjectChanged: (i) =>
+                                setState(() => _subjectIdx = i),
+                            values: _kSubjectScores[_subjectIdx]!,
+                            periods: _kPeriods,
+                          ),
+                        ),
+                        SizedBox(height: ui(20)),
+                        Padding(
+                          padding: EdgeInsets.symmetric(horizontal: ui(20)),
+                          child: _ContactParentButton(
+                            onTap: () => _showParentContactDialog(
+                              context,
+                              data,
+                              detail: d,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  SizedBox(height: ui(20)),
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: ui(20)),
-                    child: _ContactParentButton(
-                      onTap: () => _showParentContactDialog(context, data),
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
@@ -1345,17 +1499,33 @@ class _DrawerTitleBar extends StatelessWidget {
 }
 
 class _ProfileBlock extends StatelessWidget {
-  const _ProfileBlock({required this.data});
+  const _ProfileBlock({required this.data, this.detail});
 
   final _Student data;
+  final Map<String, dynamic>? detail;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final d = detail;
+    final displayName = _nonEmptyStr(d?['realname']) ??
+        _nonEmptyStr(d?['nickname']) ??
+        data.name;
+    final idLine = _nonEmptyStr(d?['studentNo']) ??
+        _nonEmptyStr(d?['code']) ??
+        data.id;
+    final subtitle = _nonEmptyStr(d?['major']) ??
+        _nonEmptyStr(d?['introduce']) ??
+        _nonEmptyStr(data.subtitle);
+    final head = _resolveHeadUrl(data, d);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        _StudentAvatar(seed: data.avatarSeed, name: data.name),
+        _StudentAvatar(
+          seed: data.avatarSeed,
+          name: displayName,
+          imageUrl: head,
+        ),
         SizedBox(width: ui(12)),
         Expanded(
           child: Column(
@@ -1366,7 +1536,7 @@ class _ProfileBlock extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Text(
-                    data.name,
+                    displayName,
                     style: TextStyle(
                       fontSize: ui(16),
                       color: Colors.black,
@@ -1377,7 +1547,7 @@ class _ProfileBlock extends StatelessWidget {
                   ),
                   SizedBox(width: ui(8)),
                   Text(
-                    data.id,
+                    idLine,
                     style: TextStyle(
                       fontSize: ui(12),
                       color: _kTextHint,
@@ -1390,7 +1560,7 @@ class _ProfileBlock extends StatelessWidget {
               ),
               SizedBox(height: ui(6)),
               Text(
-                '声乐 · 民族唱法',
+                subtitle ?? '—',
                 style: TextStyle(
                   fontSize: ui(12),
                   color: _kTextSecondary,
@@ -1408,28 +1578,85 @@ class _ProfileBlock extends StatelessWidget {
 }
 
 class _InfoList extends StatelessWidget {
-  const _InfoList({required this.data});
+  const _InfoList({required this.data, this.detail});
 
   final _Student data;
+  final Map<String, dynamic>? detail;
+
+  String _genderLine() {
+    final g = _nonEmptyStr(detail?['gender']) ?? '';
+    if (g == '1' || g == '男' || g == 'm' || g == 'M') return '男';
+    if (g == '2' || g == '女' || g == 'f' || g == 'F') return '女';
+    return data.isMale ? '男' : '女';
+  }
+
+  String _dormLine() {
+    final v = _detailPick(
+      detail,
+      const ['dormitory', 'dorm'],
+      data.dorm,
+    );
+    return v.trim().isEmpty ? '—' : v;
+  }
+
+  List<String> _classTags() {
+    final d = detail;
+    final cn = _nonEmptyStr(d?['className']);
+    if (cn != null) {
+      final role =
+          _nonEmptyStr(d?['classRole']) ?? _nonEmptyStr(d?['role']);
+      return role != null ? <String>[cn, role] : <String>[cn];
+    }
+    return data.tags;
+  }
+
+  List<String> _badgeTags() {
+    final raw = _nonEmptyStr(detail?['tags']);
+    if (raw != null) {
+      return raw
+          .split(',')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+    }
+    return data.badges;
+  }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final d = detail;
+    final mobile = _detailPick(
+      d,
+      const ['mobile', 'phone'],
+      data.mobile ?? '—',
+    );
+    final parentPhone = _detailPick(
+      d,
+      const ['parentMobile', 'guardianMobile', 'parentPhone'],
+      data.parentPhone ?? '—',
+    );
+    final classTags = _classTags();
+    final badges = _badgeTags();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _InfoRow(label: '性别：', value: data.isMale ? '男' : '女'),
+        _InfoRow(label: '性别：', value: _genderLine()),
         SizedBox(height: ui(8)),
-        _InfoRow(label: '住宿：', value: data.dorm),
+        _InfoRow(label: '住宿：', value: _dormLine()),
         SizedBox(height: ui(8)),
-        _InfoRow(label: '本人手机：', value: '13172032514'),
+        _InfoRow(label: '本人手机：', value: mobile.isEmpty ? '—' : mobile),
         SizedBox(height: ui(8)),
-        _InfoRow(label: '家长手机：', value: '17656287947'),
+        _InfoRow(
+          label: '家长手机：',
+          value: parentPhone.isEmpty ? '—' : parentPhone,
+        ),
         SizedBox(height: ui(8)),
-        _InfoTagRow(label: '所在班级：', tags: data.tags, isAccent: false),
-        SizedBox(height: ui(8)),
-        if (data.badges.isNotEmpty)
-          _InfoTagRow(label: '标签：', tags: data.badges, isAccent: true),
+        if (classTags.isNotEmpty)
+          _InfoTagRow(label: '所在班级：', tags: classTags, isAccent: false),
+        if (classTags.isNotEmpty) SizedBox(height: ui(8)),
+        if (badges.isNotEmpty)
+          _InfoTagRow(label: '标签：', tags: badges, isAccent: true),
       ],
     );
   }
@@ -1560,9 +1787,14 @@ class _DrawerTagPill extends StatelessWidget {
 }
 
 class _TeacherRemarksBlock extends StatelessWidget {
+  const _TeacherRemarksBlock({required this.remark});
+
+  final String remark;
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final text = remark.trim().isEmpty ? '暂无教师备注。' : remark.trim();
     return Container(
       width: double.infinity,
       padding: EdgeInsets.all(ui(12)),
@@ -1586,7 +1818,7 @@ class _TeacherRemarksBlock extends StatelessWidget {
           ),
           SizedBox(height: ui(8)),
           Text(
-            '专业主项稳定，文化科需跟进英语作文。',
+            text,
             style: TextStyle(
               fontSize: ui(14),
               color: _kTextSecondary,
@@ -1988,12 +2220,34 @@ class _ContactParentButton extends StatelessWidget {
 //      纯展示弹窗，点击遮罩关闭，不带任何操作按钮。
 // =============================================================================
 
-void _showParentContactDialog(BuildContext context, _Student data) {
-  // demo：家长姓 = 学生姓；关系固定 "父亲"；电话与抽屉内 "家长手机：" 行同步。
-  final parentSurname = data.name.isEmpty ? '家' : data.name.characters.first;
-  final parentName = '$parentSurname先生';
-  const parentRelation = '父亲';
-  const parentPhone = '17656287947';
+void _showParentContactDialog(
+  BuildContext context,
+  _Student data, {
+  Map<String, dynamic>? detail,
+}) {
+  final d = detail;
+  final pickedName = _detailPick(
+    d,
+    const ['guardianName', 'parentName', 'contactName'],
+    '',
+  ).trim();
+  final parentName = pickedName.isNotEmpty
+      ? pickedName
+      : () {
+          final parentSurname =
+              data.name.isEmpty ? '家' : data.name.characters.first;
+          return '$parentSurname家长';
+        }();
+  final parentRelation = _detailPick(
+    d,
+    const ['guardianRelation', 'parentRelation', 'relation'],
+    '家长',
+  );
+  final parentPhone = _detailPick(
+    d,
+    const ['parentMobile', 'guardianMobile', 'parentPhone'],
+    data.parentPhone ?? '—',
+  );
   // 弹窗使用 root navigator + showScaledDialog，自动堆叠在右抽屉之上，
   // 关闭时不会连带关掉抽屉。
   showScaledDialog<void>(
@@ -2013,7 +2267,11 @@ void _showParentContactDialog(BuildContext context, _Student data) {
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                _StudentAvatar(seed: data.avatarSeed, name: data.name),
+                _StudentAvatar(
+                  seed: data.avatarSeed,
+                  name: data.name,
+                  imageUrl: data.headUrl,
+                ),
                 SizedBox(width: ui(12)),
                 Expanded(
                   child: Column(

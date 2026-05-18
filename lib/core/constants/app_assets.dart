@@ -145,6 +145,14 @@ abstract final class AppAssets {
   /// `Icons.edit_outlined`，统一视觉风格）。
   static const homeRename = 'assets/images/home/rename.png';
 
+  /// 「绑定学校」弹窗左上角徽章背景图（紫色渐变气泡）。
+  /// 用于 initial（同学你还没）/ pending（同学您当前）两种状态。
+  static const homeTipsBadge = 'assets/images/home/ts.png';
+
+  /// 「绑定学校」弹窗左上角徽章背景图（红色气泡）。
+  /// 用于 rejected（同学未通过）状态，与 [homeTipsBadge] 形状一致仅颜色不同。
+  static const homeTipsBadgeError = 'assets/images/home/tserror.png';
+
   // 首页九宫格新图标 home1.png ~ home9.png
   static const homeBtn1 = 'assets/images/home/home1.png';
   static const homeBtn2 = 'assets/images/home/home2.png';

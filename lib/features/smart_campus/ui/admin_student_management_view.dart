@@ -33,7 +33,7 @@ enum _StudentStatus { enrolled, suspended, transferring, graduated }
 /// 把后端 `status` 字段（数字 / 字符串 / 中文）兜底映射到本地枚举：
 /// - 1 / 'enrolled' / '在籍' → enrolled
 /// - 2 / 'suspended' / '休学' → suspended
-/// - 3 / 'transferring' / '转学中' → transferring
+/// - 3 / 'transferring' / '转学' → transferring
 /// - 4 / 'graduated' / '毕业' → graduated
 /// - 其它（含 null）→ enrolled（最常见，作为安全默认）
 _StudentStatus _parseStudentStatus(dynamic raw) {
@@ -277,7 +277,7 @@ const _kFallbackClassOptions = <String>[_kAllClasses];
 ///    渐变 (#E7DCFF / #FFF0DC / #DCFFE7 / #FFE2DC) + 14/500 标题
 ///    + 32/Barlow/500 大数字。
 /// 3. **筛选行**：左侧白色 pill 容器内 5 个状态 tab（全部 / 在籍 / 休学 /
-///    转学中 / 毕业，黑底白字 active）；右侧并排 [PopupSelectorField]
+///    转学 / 毕业，黑底白字 active）；右侧并排 [PopupSelectorField]
 ///    「全部班级」+ 324×44 搜索框（占位 "搜索姓名、学号、手机、宿舍、家长"）。
 /// 4. **结果条**：「当前结果 X 人」12 #0B081A。
 /// 5. **学生卡 3 列网格**（315×78 白卡，12 gap）：左 40 头像 + 右上学号 +
@@ -430,11 +430,8 @@ class _AdminStudentManagementViewState
     final resp = await repo.studentList(
       classId: _classIdMap[_classFilter],
       keyword: _searchKw.trim().isEmpty ? null : _searchKw.trim(),
-      // 后端入参重命名：status → studentStatus；本地枚举 index+1 仍是
-      // 1=在籍 / 2=休学 / 3=转学中 / 4=毕业，与服务端约定一致。
-      studentStatus: _statusFilter == null
-          ? null
-          : '${_statusFilter!.index + 1}',
+      // studentStatus 传中文：在籍 / 休学 / 转学 / 毕业（与 tab 文案一致）。
+      studentStatus: _statusFilter?.label,
     );
     if (!mounted || token != _searchToken) return;
 
@@ -820,10 +817,7 @@ class _FilterRowState extends State<_FilterRow> {
 
     final tabs = <(String, _StudentStatus?)>[
       ('全部', null),
-      ('在籍', _StudentStatus.enrolled),
-      ('休学', _StudentStatus.suspended),
-      ('转学中', _StudentStatus.transferring),
-      ('毕业', _StudentStatus.graduated),
+      ..._StudentStatus.values.map((s) => (s.label, s)),
     ];
 
     return Row(

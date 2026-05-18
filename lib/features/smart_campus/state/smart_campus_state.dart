@@ -15,6 +15,12 @@ enum SmartCampusMainView {
   dormCheck,
   dormDynamic,
   dormHistory,
+  // 宿管端「按宿舍查寝」：banner + 日期 + 4 张统计卡 + 每个宿舍 1 张卡
+  // （房号 + 一键打卡 + 学生格子）+ 底部最近查寝历史。
+  dormCheckByRoom,
+  // 宿管端「打卡管理」：banner + 大圆形上/下班打卡按钮 + 责任区/定位状态 +
+  // 「我的打卡记录」2 列卡片网格（紫白渐变 + 状态徽章 + 打卡时间/位置）。
+  dormCheckInManagement,
   homeSchool,
   classAttendance,
   studentRoster,
@@ -27,6 +33,7 @@ enum SmartCampusMainView {
   dormLeaveApproval,
   faceLibrary,
   notificationManagement,
+  signManagement,
 }
 
 enum TeacherScheduleMode { view, edit }
