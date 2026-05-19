@@ -23,18 +23,19 @@ class FaceCapturedPhoto {
   int get sizeBytes => bytes.length;
 }
 
-/// 弹出系统文件选择器，让用户从本地选取一张图片（仅图片）。
+/// 弹出系统文件选择器选取图片，并进入证件照裁切页输出标准尺寸。
 /// 用户取消或读取失败时返回 `null`。
-Future<FaceCapturedPhoto?> pickFacePhotoFromFile() =>
-    pickFacePhotoFromFileImpl();
+Future<FaceCapturedPhoto?> pickFacePhotoFromFile(BuildContext context) =>
+    pickFacePhotoFromFileImpl(context);
 
 /// 调起摄像头预览并截取一张正脸照片。
 ///
 /// - **Web**：会先 `navigator.mediaDevices.getUserMedia` 申请权限，
 ///   然后弹出预览对话框，用户按「拍摄」截取当前帧。
-/// - **其它平台**：暂未支持，立即返回 `null`，调用方应回退到上传照片。
+/// - **iOS / Android**：打开 [FaceIdCameraPage] 证件照取景相机，裁切框内区域。
+/// - **桌面**：暂未支持，立即返回 `null`，调用方应回退到上传照片。
 Future<FaceCapturedPhoto?> captureFacePhotoFromCamera(BuildContext context) =>
     captureFacePhotoFromCameraImpl(context);
 
-/// 当前平台是否支持摄像头采集。Web 返回 true（仍需用户授权），其它平台 false。
+/// Web 与 iOS/Android 返回 true；桌面端 false。
 bool get isCameraCaptureSupported => isCameraCaptureSupportedImpl;

@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 
+import '../../music_companion/audio/shared_soloud_piano_pool.dart';
 import 'web_note_audio_player_base.dart';
 import 'web_note_audio_player_stub.dart'
     if (dart.library.html) 'web_note_audio_player_web.dart';
@@ -13,8 +14,8 @@ class SmartDictationAudioEngine {
     : _soLoud = soLoud ?? SoLoud.instance;
 
   final SoLoud _soLoud;
+  final SharedSoLoudPianoPool _pianoPool = SharedSoLoudPianoPool.instance;
   final WebNoteAudioPlayer _webPlayer = createWebNoteAudioPlayer();
-  final Map<String, AudioSource> _sourcesByCanonical = <String, AudioSource>{};
   final List<SoundHandle> _activeHandles = <SoundHandle>[];
   final StreamController<List<double>> _frequencyController =
       StreamController<List<double>>.broadcast();
@@ -22,8 +23,7 @@ class SmartDictationAudioEngine {
   Timer? _visualTicker;
   Future<void>? _initTask;
 
-  bool get isReady =>
-      kIsWeb ? _webPlayer.isReady : _sourcesByCanonical.isNotEmpty;
+  bool get isReady => kIsWeb ? _webPlayer.isReady : _pianoPool.isLoaded;
 
   Stream<List<double>> get frequencyBands =>
       kIsWeb ? _webPlayer.frequencyBands : _frequencyController.stream;
@@ -37,27 +37,14 @@ class SmartDictationAudioEngine {
       await _webPlayer.prepare(_assetByCanonical.values);
       return;
     }
+    await _pianoPool.ensureLoaded();
     if (!_soLoud.isInitialized) {
-      await _soLoud.init(bufferSize: 1024, channels: Channels.mono);
+      return;
     }
     _soLoud.setVisualizationEnabled(true);
     _soLoud.setFftSmoothing(0.82);
     _audioData ??= AudioData(GetSamplesKind.linear);
-
     _soLoud.setMaxActiveVoiceCount(256);
-
-    for (final source in _sourcesByCanonical.values) {
-      await _soLoud.disposeSource(source);
-    }
-    _sourcesByCanonical.clear();
-
-    for (final entry in _assetByCanonical.entries) {
-      final source = await _soLoud.loadAsset(
-        entry.value,
-        mode: LoadMode.memory,
-      );
-      _sourcesByCanonical[entry.key] = source;
-    }
   }
 
   Future<void> playToken(String token, {double volume = 1}) async {
@@ -74,7 +61,7 @@ class SmartDictationAudioEngine {
       await _webPlayer.playAsset(asset, volume: volume);
       return;
     }
-    final source = _sourcesByCanonical[canonical];
+    final source = _pianoPool.sourceForNote(canonical);
     if (source == null) {
       return;
     }
@@ -91,10 +78,13 @@ class SmartDictationAudioEngine {
       await _webPlayer.activateByUserGesture();
       return;
     }
-    if (_sourcesByCanonical.isEmpty) {
+    if (!_pianoPool.isLoaded) {
       return;
     }
-    final probe = _sourcesByCanonical.values.first;
+    final probe = _pianoPool.sourceForNote('C4');
+    if (probe == null) {
+      return;
+    }
     // A near-silent probe play is enough to unlock most Web Audio contexts.
     _soLoud.play(probe, volume: 0.0001);
   }
@@ -116,7 +106,7 @@ class SmartDictationAudioEngine {
         }
         continue;
       }
-      final source = _sourcesByCanonical[canonical];
+      final source = _pianoPool.sourceForNote(canonical);
       if (source == null) {
         continue;
       }
@@ -142,7 +132,7 @@ class SmartDictationAudioEngine {
             await _webPlayer.playAsset(asset, volume: volume);
           }
         } else {
-          final source = _sourcesByCanonical[canonical];
+          final source = _pianoPool.sourceForNote(canonical);
           if (source != null) {
             final handle = _soLoud.play(source, volume: volume);
             _activeHandles.add(handle);
@@ -179,10 +169,6 @@ class SmartDictationAudioEngine {
       _initTask = null;
       return;
     }
-    for (final source in _sourcesByCanonical.values) {
-      await _soLoud.disposeSource(source);
-    }
-    _sourcesByCanonical.clear();
     _activeHandles.clear();
     _stopVisualTicker();
     _audioData?.dispose();

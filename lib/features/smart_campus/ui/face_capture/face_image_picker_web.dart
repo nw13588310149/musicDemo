@@ -18,6 +18,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/widgets/app_toast.dart';
 import '../../../../core/widgets/scaled_dialog.dart';
 import '../../../shell/ui/shell_layout.dart';
+import 'face_id_photo_flow.dart';
 import 'face_image_picker.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
@@ -27,7 +28,7 @@ bool get isCameraCaptureSupportedImpl => true;
 // 上传本地图片
 // ============================================================================
 
-Future<FaceCapturedPhoto?> pickFacePhotoFromFileImpl() {
+Future<FaceCapturedPhoto?> pickFacePhotoFromFileImpl(BuildContext context) {
   final input = html.FileUploadInputElement()
     ..accept = 'image/*'
     ..style.display = 'none';
@@ -59,13 +60,16 @@ Future<FaceCapturedPhoto?> pickFacePhotoFromFileImpl() {
       completeWith(null);
       return;
     }
-    completeWith(
-      FaceCapturedPhoto(
-        bytes: bytes,
-        name: file.name,
-        mimeType: file.type.isNotEmpty ? file.type : 'image/jpeg',
-      ),
+    if (!context.mounted) {
+      completeWith(null);
+      return;
+    }
+    final cropped = await openFaceIdPhotoCropFlow(
+      context,
+      sourceBytes: bytes,
+      sourceName: file.name.isNotEmpty ? file.name : 'album.jpg',
     );
+    completeWith(cropped);
   });
 
   // 取消按钮在大部分浏览器只触发 cancel，不会触发 onChange。
@@ -122,7 +126,14 @@ Future<FaceCapturedPhoto?> captureFacePhotoFromCameraImpl(
   );
 
   _stopStream(stream);
-  return result;
+  if (result == null || !context.mounted) return null;
+  return openFaceIdPhotoCropFlow(
+    context,
+    sourceBytes: result.bytes,
+    sourceName: result.name,
+    title: '确认证件照',
+    hint: '可拖动或缩放微调，将面部对准框内后确认',
+  );
 }
 
 void _stopStream(html.MediaStream stream) {

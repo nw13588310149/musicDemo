@@ -863,7 +863,7 @@ class _AdminFaceLibraryViewState extends ConsumerState<AdminFaceLibraryView> {
     if (_picking) return;
     setState(() => _picking = true);
     try {
-      final picked = await pickFacePhotoFromFile();
+      final picked = await pickFacePhotoFromFile(context);
       if (!mounted) return;
       if (picked == null) return;
       setState(() {

@@ -49,13 +49,25 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
   StreamSubscription<Uint8List>? _tunerSubscription;
 
   Future<void> _prepareAudio() async {
-    try {
-      await _audioEngine.ensureInitialized();
-      if (!mounted) return;
-      state = state.copyWith(audioReady: true);
-    } catch (_) {
-      if (!mounted) return;
-      state = state.copyWith(errorMessage: '音乐伴侣音频初始化失败，请稍后重试。');
+    const maxAttempts = 3;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        await _audioEngine.ensurePianoInitialized();
+        if (!mounted) return;
+        state = state.copyWith(audioReady: true, errorMessage: null);
+        return;
+      } catch (_) {
+        if (!mounted) return;
+        if (attempt < maxAttempts) {
+          await Future<void>.delayed(Duration(milliseconds: 280 * attempt));
+          if (!mounted) return;
+          continue;
+        }
+        state = state.copyWith(
+          audioReady: false,
+          errorMessage: '音乐伴侣音频初始化失败，请稍后重试。',
+        );
+      }
     }
   }
 
@@ -79,11 +91,12 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
 
   Future<void> activateAudio() async {
     try {
+      if (!state.audioReady) {
+        await _audioEngine.ensurePianoInitialized();
+      }
       await _audioEngine.activateByUserGesture();
       if (!mounted) return;
-      if (!state.audioReady) {
-        state = state.copyWith(audioReady: true);
-      }
+      state = state.copyWith(audioReady: true, errorMessage: null);
     } catch (_) {
       if (!mounted) return;
       state = state.copyWith(errorMessage: '音频尚未解锁，请再尝试一次。');
@@ -100,7 +113,12 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
 
     await activateAudio();
     if (!mounted) return;
-    await _audioEngine.playNote(note, volume: 1);
+    try {
+      await _audioEngine.playNote(note, volume: 1);
+    } catch (_) {
+      if (!mounted) return;
+      state = state.copyWith(errorMessage: '音频尚未解锁，请再尝试一次。');
+    }
   }
 
   void releasePianoKey(String note) {
@@ -178,6 +196,14 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
 
   Future<void> _startMetronome() async {
     await activateAudio();
+    if (!mounted) return;
+    try {
+      await _audioEngine.ensureMetronomeInitialized();
+    } catch (_) {
+      if (!mounted) return;
+      state = state.copyWith(errorMessage: '节拍器音频加载失败，请稍后重试。');
+      return;
+    }
     _stopMetronome(resetBeat: false);
 
     state = state.copyWith(
