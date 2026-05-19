@@ -2,8 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<key>CADisableMinimumFrameDuration</key>
 	<true/>
+	<key>UIDeviceFamily</key>
+	<array>
+		<integer>2</integer>
+	</array>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
@@ -35,8 +39,6 @@
 	<key>NSCameraUsageDescription</key>
 	<string>需要使用相机拍摄人脸照片、作业图片及其他现场附件。</string>
 	<key>UIStatusBarHidden</key>
-	<true/>
-	<key>UIStatusBarHidden~ipad</key>
 	<true/>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
