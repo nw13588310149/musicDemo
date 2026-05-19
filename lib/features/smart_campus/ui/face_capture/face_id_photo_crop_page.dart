@@ -32,13 +32,22 @@ class FaceIdPhotoCropPage extends StatefulWidget {
 }
 
 class _FaceIdPhotoCropPageState extends State<FaceIdPhotoCropPage> {
-  final TransformationController _transform = TransformationController();
+  late final Uint8List _displayBytes;
   late final Size _imageSize;
   late final bool _decodeFailed;
+
   Size _viewportSize = Size.zero;
   Rect _frameRect = Rect.zero;
+  double _scale = 1;
+  Offset _offset = Offset.zero;
+  double _minScale = 0.2;
+  double _maxScale = 8;
+
+  double _gestureStartScale = 1;
+  Offset _gestureStartOffset = Offset.zero;
+
   bool _busy = false;
-  bool _ready = false;
+  bool _layoutReady = false;
 
   @override
   void initState() {
@@ -46,45 +55,65 @@ class _FaceIdPhotoCropPageState extends State<FaceIdPhotoCropPage> {
     final decoded = img.decodeImage(widget.sourceBytes);
     if (decoded == null) {
       _decodeFailed = true;
+      _displayBytes = widget.sourceBytes;
       _imageSize = Size.zero;
       return;
     }
     _decodeFailed = false;
     final oriented = img.bakeOrientation(decoded);
+    _displayBytes = Uint8List.fromList(img.encodeJpg(oriented, quality: 92));
     _imageSize = Size(oriented.width.toDouble(), oriented.height.toDouble());
   }
 
-  @override
-  void dispose() {
-    _transform.dispose();
-    super.dispose();
-  }
-
-  void _applyCoverTransform(Size viewport) {
-    _transform.value = faceIdPhotoCoverTransform(
+  void _applyInitialTransform(Size viewport) {
+    final cover = faceIdPhotoCoverScale(
       imageSize: _imageSize,
       viewportSize: viewport,
     );
-    _ready = true;
+    _scale = cover;
+    _offset = Offset.zero;
+    _minScale = cover * 0.35;
+    _maxScale = cover * 6;
+    _layoutReady = true;
   }
 
-  void _onViewportLayout(Size size) {
-    if (size == _viewportSize) return;
+  void _onViewportSizeChanged(Size size) {
+    if (_decodeFailed || size == _viewportSize) return;
     _viewportSize = size;
     _frameRect = FaceIdPhotoSpec.frameRectInPreview(size);
-    if (!_ready && !_decodeFailed) {
-      _applyCoverTransform(size);
+    if (!_layoutReady) {
+      _applyInitialTransform(size);
     }
   }
+
+  void _onScaleStart(ScaleStartDetails details) {
+    _gestureStartScale = _scale;
+    _gestureStartOffset = _offset;
+  }
+
+  void _onScaleUpdate(ScaleUpdateDetails details) {
+    if (_viewportSize == Size.zero) return;
+    setState(() {
+      _scale = (_gestureStartScale * details.scale).clamp(_minScale, _maxScale);
+      _offset = _gestureStartOffset + details.focalPointDelta;
+    });
+  }
+
+  Matrix4 get _imageToViewport => faceIdPhotoTransformFromGesture(
+        imageSize: _imageSize,
+        viewportSize: _viewportSize,
+        scale: _scale,
+        offset: _offset,
+      );
 
   Future<void> _confirm() async {
     if (_busy || _frameRect == Rect.zero || _viewportSize == Size.zero) return;
     setState(() => _busy = true);
     try {
       final cropped = cropFaceIdPhotoFromViewport(
-        sourceBytes: widget.sourceBytes,
+        sourceBytes: _displayBytes,
         frameInViewport: _frameRect,
-        imageToViewport: _transform.value,
+        imageToViewport: _imageToViewport,
       );
       if (!mounted) return;
       if (cropped == null || cropped.isEmpty) {
@@ -93,8 +122,7 @@ class _FaceIdPhotoCropPageState extends State<FaceIdPhotoCropPage> {
         return;
       }
       final ext = _outputExtension(widget.sourceName);
-      final name =
-          'face-${DateTime.now().millisecondsSinceEpoch}$ext';
+      final name = 'face-${DateTime.now().millisecondsSinceEpoch}$ext';
       Navigator.of(context).pop(
         FaceCapturedPhoto(bytes: cropped, name: name, mimeType: 'image/jpeg'),
       );
@@ -114,7 +142,6 @@ class _FaceIdPhotoCropPageState extends State<FaceIdPhotoCropPage> {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final decodeFailed = _decodeFailed;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -165,7 +192,7 @@ class _FaceIdPhotoCropPageState extends State<FaceIdPhotoCropPage> {
                 padding: EdgeInsets.symmetric(horizontal: ui(20)),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(ui(12)),
-                  child: decodeFailed
+                  child: _decodeFailed
                       ? const Center(
                           child: Text(
                             '无法读取图片，请换一张重试',
@@ -178,34 +205,21 @@ class _FaceIdPhotoCropPageState extends State<FaceIdPhotoCropPage> {
                               constraints.maxWidth,
                               constraints.maxHeight,
                             );
-                            _onViewportLayout(size);
-                            return Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                InteractiveViewer(
-                                  transformationController: _transform,
-                                  minScale: 0.4,
-                                  maxScale: 6,
-                                  boundaryMargin: const EdgeInsets.all(240),
-                                  child: SizedBox(
-                                    width: _imageSize.width,
-                                    height: _imageSize.height,
-                                    child: Image.memory(
-                                      widget.sourceBytes,
-                                      fit: BoxFit.fill,
-                                      filterQuality: FilterQuality.high,
-                                    ),
-                                  ),
-                                ),
-                                IgnorePointer(
-                                  child: CustomPaint(
-                                    painter: FaceIdFramePainter(
-                                      frameRect: _frameRect,
-                                      previewSize: size,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                            if (size != _viewportSize) {
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                if (!mounted) return;
+                                setState(() => _onViewportSizeChanged(size));
+                              });
+                            }
+                            return _FaceIdCropViewport(
+                              displayBytes: _displayBytes,
+                              imageSize: _imageSize,
+                              viewportSize: size.isEmpty ? Size.zero : size,
+                              frameRect: _frameRect,
+                              scale: _scale,
+                              offset: _offset,
+                              onScaleStart: _onScaleStart,
+                              onScaleUpdate: _onScaleUpdate,
                             );
                           },
                         ),
@@ -218,13 +232,80 @@ class _FaceIdPhotoCropPageState extends State<FaceIdPhotoCropPage> {
               child: AppDialogActionBar(
                 cancelLabel: '取消',
                 confirmLabel: _busy ? '处理中…' : '确认裁切',
-                confirmEnabled: !_busy && !decodeFailed,
+                confirmEnabled: !_busy && !_decodeFailed && _layoutReady,
                 onCancel: _busy ? () {} : () => Navigator.of(context).pop(),
                 onConfirm: _confirm,
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// 裁切视口：居中缩放平移 + 证件照框（替代 InteractiveViewer，避免 iPad 大图错位）。
+class _FaceIdCropViewport extends StatelessWidget {
+  const _FaceIdCropViewport({
+    required this.displayBytes,
+    required this.imageSize,
+    required this.viewportSize,
+    required this.frameRect,
+    required this.scale,
+    required this.offset,
+    required this.onScaleStart,
+    required this.onScaleUpdate,
+  });
+
+  final Uint8List displayBytes;
+  final Size imageSize;
+  final Size viewportSize;
+  final Rect frameRect;
+  final double scale;
+  final Offset offset;
+  final GestureScaleStartCallback onScaleStart;
+  final GestureScaleUpdateCallback onScaleUpdate;
+
+  @override
+  Widget build(BuildContext context) {
+    if (viewportSize == Size.zero || imageSize == Size.zero) {
+      return const Center(child: CircularProgressIndicator(color: Colors.white));
+    }
+
+    final drawW = imageSize.width * scale;
+    final drawH = imageSize.height * scale;
+    final left = viewportSize.width / 2 + offset.dx - drawW / 2;
+    final top = viewportSize.height / 2 + offset.dy - drawH / 2;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onScaleStart: onScaleStart,
+      onScaleUpdate: onScaleUpdate,
+      child: Stack(
+        fit: StackFit.expand,
+        clipBehavior: Clip.hardEdge,
+        children: [
+          Positioned(
+            left: left,
+            top: top,
+            width: drawW,
+            height: drawH,
+            child: Image.memory(
+              displayBytes,
+              fit: BoxFit.fill,
+              filterQuality: FilterQuality.high,
+              gaplessPlayback: true,
+            ),
+          ),
+          IgnorePointer(
+            child: CustomPaint(
+              painter: FaceIdFramePainter(
+                frameRect: frameRect,
+                previewSize: viewportSize,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

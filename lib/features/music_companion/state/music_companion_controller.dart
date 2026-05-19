@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:typed_data';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pitch_detector_dart/pitch_detector.dart';
 import 'package:record/record.dart';
 
+import '../../../core/audio/native_playback_audio_session.dart';
 import '../audio/music_companion_audio_catalog.dart';
 import '../audio/music_companion_audio_engine.dart';
 import 'music_companion_state.dart';
@@ -52,14 +52,16 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
     const maxAttempts = 3;
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
+        await NativePlaybackAudioSession.ensurePlaybackActive();
         await _audioEngine.ensurePianoInitialized();
         if (!mounted) return;
         state = state.copyWith(audioReady: true, errorMessage: null);
         return;
-      } catch (_) {
+      } catch (error, stack) {
+        debugPrint('MusicCompanion _prepareAudio($attempt): $error\n$stack');
         if (!mounted) return;
         if (attempt < maxAttempts) {
-          await Future<void>.delayed(Duration(milliseconds: 280 * attempt));
+          await Future<void>.delayed(Duration(milliseconds: 320 * attempt));
           if (!mounted) return;
           continue;
         }
@@ -83,23 +85,36 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
     }
 
     if (tab == MusicCompanionTab.tuner) {
+      await NativePlaybackAudioSession.ensurePlayAndRecordActive();
       await startTuner();
     } else {
       await _stopTuner();
+      if (tab != MusicCompanionTab.metronome) {
+        unawaited(NativePlaybackAudioSession.ensurePlaybackActive());
+      }
     }
   }
 
   Future<void> activateAudio() async {
     try {
-      if (!state.audioReady) {
+      await NativePlaybackAudioSession.ensurePlaybackActive();
+      if (!_audioEngine.isPianoReady) {
         await _audioEngine.ensurePianoInitialized();
       }
-      await _audioEngine.activateByUserGesture();
+      if (!mounted) return;
+      if (!_audioEngine.tryPlayNoteFromUserGesture('C4', volume: 0.02)) {
+        await _audioEngine.activateByUserGesture();
+      }
       if (!mounted) return;
       state = state.copyWith(audioReady: true, errorMessage: null);
-    } catch (_) {
+    } catch (error, stack) {
+      debugPrint('MusicCompanion activateAudio: $error\n$stack');
       if (!mounted) return;
-      state = state.copyWith(errorMessage: '音频尚未解锁，请再尝试一次。');
+      state = state.copyWith(
+        errorMessage: state.audioReady
+            ? '播放失败，请再试一次'
+            : '音频尚未就绪，请稍候再试',
+      );
     }
   }
 
@@ -111,13 +126,35 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
       errorMessage: null,
     );
 
-    await activateAudio();
-    if (!mounted) return;
+    // iOS：必须在手势回调栈里同步 play，不能先 await 再 play。
+    if (_audioEngine.tryPlayNoteFromUserGesture(note)) {
+      if (!state.audioReady) {
+        state = state.copyWith(audioReady: true);
+      }
+      return;
+    }
+
     try {
-      await _audioEngine.playNote(note, volume: 1);
-    } catch (_) {
+      await NativePlaybackAudioSession.ensurePlaybackActive();
+      if (!_audioEngine.isPianoReady) {
+        await _audioEngine.ensurePianoInitialized();
+      }
       if (!mounted) return;
-      state = state.copyWith(errorMessage: '音频尚未解锁，请再尝试一次。');
+      if (_audioEngine.tryPlayNoteFromUserGesture(note)) {
+        state = state.copyWith(audioReady: true, errorMessage: null);
+        return;
+      }
+      await _audioEngine.playNote(note, volume: 1);
+      if (!mounted) return;
+      state = state.copyWith(audioReady: true, errorMessage: null);
+    } catch (error, stack) {
+      debugPrint('MusicCompanion pressPianoKey($note): $error\n$stack');
+      if (!mounted) return;
+      state = state.copyWith(
+        errorMessage: state.audioReady
+            ? '播放失败，请再按一次琴键'
+            : '音频加载中，请稍候再试',
+      );
     }
   }
 
@@ -195,15 +232,17 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
   }
 
   Future<void> _startMetronome() async {
-    await activateAudio();
-    if (!mounted) return;
     try {
+      await NativePlaybackAudioSession.ensurePlaybackActive();
       await _audioEngine.ensureMetronomeInitialized();
-    } catch (_) {
+      await activateAudio();
+    } catch (error, stack) {
+      debugPrint('MusicCompanion _startMetronome init: $error\n$stack');
       if (!mounted) return;
       state = state.copyWith(errorMessage: '节拍器音频加载失败，请稍后重试。');
       return;
     }
+    if (!mounted) return;
     _stopMetronome(resetBeat: false);
 
     state = state.copyWith(
@@ -238,12 +277,11 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
       _metronomeLastTickMs = elapsedMs - (sinceLastTickMs % beatIntervalMs);
       final beatIndex = _metronomeTickCount % state.activeSignature.numerator;
       state = state.copyWith(metronomeActiveBeat: beatIndex);
-      unawaited(
-        _audioEngine.playMetronomeCue(
-          _resolveMetronomeCue(beatIndex),
-          volume: beatIndex == 0 ? 1 : 0.92,
-        ),
-      );
+      final cue = _resolveMetronomeCue(beatIndex);
+      final vol = beatIndex == 0 ? 1.0 : 0.92;
+      if (!_audioEngine.tryPlayMetronomeCueFromUserGesture(cue, volume: vol)) {
+        unawaited(_audioEngine.playMetronomeCue(cue, volume: vol));
+      }
       _metronomeTickCount += 1;
     }
 

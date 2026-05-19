@@ -86,13 +86,41 @@ Matrix4 faceIdPhotoCoverTransform({
   required Size imageSize,
   required Size viewportSize,
 }) {
-  final scale = math.max(
+  final scale = faceIdPhotoCoverScale(
+    imageSize: imageSize,
+    viewportSize: viewportSize,
+  );
+  return faceIdPhotoTransformFromGesture(
+    imageSize: imageSize,
+    viewportSize: viewportSize,
+    scale: scale,
+    offset: Offset.zero,
+  );
+}
+
+double faceIdPhotoCoverScale({
+  required Size imageSize,
+  required Size viewportSize,
+}) {
+  return math.max(
     viewportSize.width / imageSize.width,
     viewportSize.height / imageSize.height,
   );
-  final dx = (viewportSize.width - imageSize.width * scale) / 2;
-  final dy = (viewportSize.height - imageSize.height * scale) / 2;
+}
+
+/// 平移 + 缩放：图片像素坐标 → 裁切视口坐标（与裁切页手势一致）。
+Matrix4 faceIdPhotoTransformFromGesture({
+  required Size imageSize,
+  required Size viewportSize,
+  required double scale,
+  required Offset offset,
+}) {
+  final cx = viewportSize.width / 2 + offset.dx;
+  final cy = viewportSize.height / 2 + offset.dy;
+  final ix = imageSize.width / 2;
+  final iy = imageSize.height / 2;
   return Matrix4.identity()
-    ..translateByDouble(dx, dy, 0, 1)
-    ..scaleByDouble(scale, scale, 1, 1);
+    ..translateByDouble(cx, cy, 0, 1)
+    ..scaleByDouble(scale, scale, 1, 1)
+    ..translateByDouble(-ix, -iy, 0, 1);
 }

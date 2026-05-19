@@ -3,19 +3,10 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 
+import '../../../core/audio/native_playback_audio_session.dart';
 import 'music_companion_audio_catalog.dart';
 
-/// 全应用唯一的 SoLoud 钢琴音源池。
-///
-/// iPad 上「音乐伴侣 / musicPlay / 智能听写」各自 new 一个
-/// [MusicCompanionAudioEngine] 或 [SmartDictationAudioEngine]，却共用
-/// [SoLoud.instance]。若页面 dispose 时 `disposeSource` 钢琴采样，其它
-/// 页面持有的 [AudioSource] 会立刻失效，表现为：
-/// - 刚进音乐伴侣：初始化失败；
-/// - 偶尔弹奏：音频尚未解锁 / 无声。
-///
-/// 钢琴 wav 只在此池里加载一次，页面退出时仅 stop 正在播放的 voice，
-/// 不在页面生命周期内销毁音源。
+/// 全应用唯一的 SoLoud 钢琴音源池（页面退出不销毁 wav）。
 class SharedSoLoudPianoPool {
   SharedSoLoudPianoPool._();
 
@@ -25,7 +16,6 @@ class SharedSoLoudPianoPool {
   final Map<String, AudioSource> _sourcesByNote = <String, AudioSource>{};
 
   Future<void>? _loadTask;
-  bool _gestureUnlocked = false;
 
   bool get isLoaded => _sourcesByNote.isNotEmpty;
 
@@ -37,8 +27,14 @@ class SharedSoLoudPianoPool {
 
   Future<void> _loadAllNotes() async {
     try {
+      await NativePlaybackAudioSession.ensurePlaybackActive();
+
       if (!_soLoud.isInitialized) {
-        await _soLoud.init();
+        await _soLoud.init(
+          sampleRate: 44100,
+          bufferSize: 2048,
+          channels: Channels.stereo,
+        );
       }
       _soLoud.setMaxActiveVoiceCount(256);
 
@@ -60,29 +56,26 @@ class SharedSoLoudPianoPool {
     }
   }
 
-  /// iOS 要求在用户手势回调链上有一次实际播放，后续按键才稳定出声。
-  Future<void> unlockByUserGesture() async {
-    if (kIsWeb || _gestureUnlocked) {
-      return;
+  /// 在用户点击的**同一调用栈**内同步发声（iOS 必须，不能先 await 再 play）。
+  bool tryPlayNote(String note, {double volume = 1}) {
+    if (kIsWeb || !_soLoud.isInitialized) {
+      return false;
     }
-    await ensureLoaded();
-    if (!_soLoud.isInitialized || _sourcesByNote.isEmpty) {
-      return;
+    final source = _sourcesByNote[note];
+    if (source == null) {
+      return false;
     }
     try {
-      final probe = _sourcesByNote.values.first;
-      final handle = _soLoud.play(probe, volume: 0.0001);
-      if (_soLoud.getIsValidVoiceHandle(handle)) {
-        await _soLoud.stop(handle);
-      }
-      _gestureUnlocked = true;
+      _soLoud.play(source, volume: volume);
+      return true;
     } catch (error, stack) {
-      debugPrint('SharedSoLoudPianoPool.unlockByUserGesture failed: $error\n$stack');
-      rethrow;
+      debugPrint('SharedSoLoudPianoPool.tryPlayNote($note): $error\n$stack');
+      return false;
     }
   }
 
-  void resetGestureUnlock() {
-    _gestureUnlocked = false;
+  /// 手势链上的解锁：同步播放极轻音，不 await stop。
+  bool tryUnlockProbe({String probeNote = 'C4'}) {
+    return tryPlayNote(probeNote, volume: 0.02);
   }
 }

@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 
+import '../../../core/audio/native_playback_audio_session.dart';
 import '../../music_companion/audio/shared_soloud_piano_pool.dart';
 import 'web_note_audio_player_base.dart';
 import 'web_note_audio_player_stub.dart'
@@ -78,15 +79,8 @@ class SmartDictationAudioEngine {
       await _webPlayer.activateByUserGesture();
       return;
     }
-    if (!_pianoPool.isLoaded) {
-      return;
-    }
-    final probe = _pianoPool.sourceForNote('C4');
-    if (probe == null) {
-      return;
-    }
-    // A near-silent probe play is enough to unlock most Web Audio contexts.
-    _soLoud.play(probe, volume: 0.0001);
+    await NativePlaybackAudioSession.ensurePlaybackActive();
+    _pianoPool.tryUnlockProbe();
   }
 
   Future<void> playTokensHarmonic(

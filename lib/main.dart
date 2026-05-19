@@ -10,6 +10,7 @@ import 'core/network/media_url.dart';
 import 'core/providers/app_providers.dart';
 import 'core/push/push_notification_service.dart';
 import 'core/storage/app_storage.dart';
+import 'features/music_companion/audio/music_companion_audio_engine.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,6 +18,8 @@ Future<void> main() async {
   imageCache.maximumSize = 120;
   imageCache.maximumSizeBytes = 80 << 20;
   MediaKit.ensureInitialized();
+  // 后台预热 SoLoud 钢琴池，避免首次进入音乐伴侣时 iOS 在手势链里 await 加载失败。
+  unawaited(warmupMusicCompanionPianoAudio());
   await SystemChrome.setPreferredOrientations(const [
     DeviceOrientation.landscapeLeft,
     DeviceOrientation.landscapeRight,

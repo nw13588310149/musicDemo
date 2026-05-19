@@ -7,11 +7,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/config/app_config_repository.dart';
 import '../core/network/chat_socket_service.dart';
 import '../core/permissions/first_launch_permission_host.dart';
-import '../core/providers/app_providers.dart';
+import '../core/providers/app_providers.dart' show appStorageProvider, bindApiUnauthorizedSessionCleanup;
 import '../core/push/push_notification_service.dart';
 import '../core/theme/app_theme.dart';
 import '../core/utils/keyboard_dismisser.dart';
 import '../features/auth/data/auth_repository.dart';
+import 'router/app_navigator.dart';
 import 'router/app_router.dart';
 import 'router/route_paths.dart';
 
@@ -28,6 +29,7 @@ class _MyAppState extends ConsumerState<MyApp> {
   @override
   void initState() {
     super.initState();
+    bindApiUnauthorizedSessionCleanup(ref);
     // 已经登录过的用户冷启动时，异步刷新一次文件服务器配置；游客 token
     // （如 "youke"）也走相同路径，确保拿到最新的 fileBaseUrl。
     final storage = ref.read(appStorageProvider);
@@ -72,6 +74,7 @@ class _MyAppState extends ConsumerState<MyApp> {
         : RoutePaths.home;
 
     return MaterialApp(
+      navigatorKey: rootNavigatorKey,
       title: '音乐之路',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,

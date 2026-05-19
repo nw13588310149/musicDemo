@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -7,9 +8,17 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import '../constants/app_constants.dart';
 import '../storage/app_storage.dart';
 import 'api_response.dart';
+import 'api_unauthorized_handler.dart';
 import 'media_url.dart';
 
 class ApiClient {
+  static const Set<String> _unauthorizedIgnoredPaths = <String>{
+    '/app/user/mobileLogin',
+    '/app/user/register',
+    '/app/user/resetPassword',
+    '/app/user/sendSmsCode',
+  };
+
   ApiClient({required AppStorage storage})
     : _storage = storage,
       _dio = Dio(
@@ -34,9 +43,12 @@ class ApiClient {
         path,
         options: _buildOptions(headers: headers, timeout: timeout),
       );
-      return _normalizeForPath(path, _toApiResponse(response.data));
+      return _finalizeResponse(
+        path,
+        _normalizeForPath(path, _toApiResponse(response.data)),
+      );
     } on DioException catch (error) {
-      return ApiResponse.failure(_extractDioMessage(error));
+      return _finalizeResponse(path, _fromDioException(path, error));
     } catch (_) {
       return ApiResponse.failure('网络异常，请稍后重试');
     }
@@ -54,9 +66,12 @@ class ApiClient {
         data: data,
         options: _buildOptions(headers: headers, timeout: timeout),
       );
-      return _normalizeForPath(path, _toApiResponse(response.data));
+      return _finalizeResponse(
+        path,
+        _normalizeForPath(path, _toApiResponse(response.data)),
+      );
     } on DioException catch (error) {
-      return ApiResponse.failure(_extractDioMessage(error));
+      return _finalizeResponse(path, _fromDioException(path, error));
     } catch (_) {
       return ApiResponse.failure('网络异常，请稍后重试');
     }
@@ -90,9 +105,9 @@ class ApiClient {
           receiveTimeout: timeout,
         ),
       );
-      return _toApiResponse(response.data);
+      return _finalizeResponse(path, _toApiResponse(response.data));
     } on DioException catch (error) {
-      return ApiResponse.failure(_extractDioMessage(error));
+      return _finalizeResponse(path, _fromDioException(path, error));
     } catch (_) {
       return ApiResponse.failure('网络异常，请稍后重试');
     }
@@ -220,9 +235,53 @@ class ApiClient {
     map[key] = MediaUrl.resolve(trimmed);
   }
 
+  bool _shouldHandleUnauthorized(String path) {
+    return !_unauthorizedIgnoredPaths.contains(path);
+  }
+
+  ApiResponse _finalizeResponse(String path, ApiResponse response) {
+    if (response.code != 401 || !_shouldHandleUnauthorized(path)) {
+      return response;
+    }
+    final toastMsg = response.msg.trim().isEmpty
+        ? ApiUnauthorizedHandler.defaultMessage
+        : response.msg;
+    unawaited(
+      ApiUnauthorizedHandler.instance.handle(
+        storage: _storage,
+        message: toastMsg,
+      ),
+    );
+    return ApiResponse.failure(toastMsg, code: 401);
+  }
+
+  ApiResponse _fromDioException(String path, DioException error) {
+    final statusCode = error.response?.statusCode;
+    final data = error.response?.data;
+    if (data is Map<String, dynamic>) {
+      final parsed = ApiResponse.fromJson(data);
+      if (parsed.code == 401 || statusCode == 401) {
+        return _finalizeResponse(path, parsed);
+      }
+    }
+    if (statusCode == 401) {
+      return _finalizeResponse(
+        path,
+        ApiResponse.failure(
+          _extractDioMessage(error),
+          code: 401,
+        ),
+      );
+    }
+    return ApiResponse.failure(_extractDioMessage(error));
+  }
+
   String _extractDioMessage(DioException error) {
     final data = error.response?.data;
     if (data is Map<String, dynamic> && data['msg'] != null) {
+      return data['msg'].toString();
+    }
+    if (data is Map && data['msg'] != null) {
       return data['msg'].toString();
     }
     if (error.message != null && error.message!.isNotEmpty) {

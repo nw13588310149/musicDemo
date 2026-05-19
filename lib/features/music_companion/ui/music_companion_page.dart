@@ -67,6 +67,7 @@ class _MusicCompanionV2PageState extends ConsumerState<MusicCompanionV2Page> {
                 child: switch (state.activeTab) {
                   MusicCompanionTab.piano => _VirtualPianoPane(
                     key: const ValueKey<String>('music_piano'),
+                    audioReady: state.audioReady,
                     activeNotes: state.activePianoNotes,
                     onPressKey: controller.pressPianoKey,
                     onReleaseKey: controller.releasePianoKey,
@@ -206,12 +207,14 @@ class _CompanionTabItem extends StatelessWidget {
 
 class _VirtualPianoPane extends StatelessWidget {
   const _VirtualPianoPane({
+    required this.audioReady,
     required this.activeNotes,
     required this.onPressKey,
     required this.onReleaseKey,
     super.key,
   });
 
+  final bool audioReady;
   final Set<String> activeNotes;
   final Future<void> Function(String token) onPressKey;
   final ValueChanged<String> onReleaseKey;
@@ -223,25 +226,48 @@ class _VirtualPianoPane extends StatelessWidget {
     // = 42) so its on-screen position is unchanged. The keyboard, in
     // contrast, fills the full pane width and butts up against the panel
     // bottom for the immersive look.
-    return Column(
+    return Stack(
       children: <Widget>[
-        Expanded(
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: ui(42)),
-            child: RepaintBoundary(
-              child: PianoVisualizer(activeNotes: activeNotes),
+        Column(
+          children: <Widget>[
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: ui(42)),
+                child: RepaintBoundary(
+                  child: PianoVisualizer(activeNotes: activeNotes),
+                ),
+              ),
+            ),
+            SizedBox(height: ui(18)),
+            RepaintBoundary(
+              child: PianoKeyboard(
+                activeNotes: activeNotes,
+                onPress: onPressKey,
+                onRelease: onReleaseKey,
+                height: 240,
+              ),
+            ),
+          ],
+        ),
+        if (!audioReady)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: ColoredBox(
+                color: const Color(0x660B081A),
+                child: Center(
+                  child: Text(
+                    '钢琴音频加载中…',
+                    style: TextStyle(
+                      fontSize: ui(14),
+                      color: Colors.white,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w500,
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
-        ),
-        SizedBox(height: ui(18)),
-        RepaintBoundary(
-          child: PianoKeyboard(
-            activeNotes: activeNotes,
-            onPress: onPressKey,
-            onRelease: onReleaseKey,
-            height: 240,
-          ),
-        ),
       ],
     );
   }

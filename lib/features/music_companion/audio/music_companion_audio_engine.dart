@@ -3,11 +3,23 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 
+import '../../../core/audio/native_playback_audio_session.dart';
 import 'music_companion_audio_catalog.dart';
 import 'music_companion_web_audio_player_base.dart';
 import 'music_companion_web_audio_player_stub.dart'
     if (dart.library.html) 'music_companion_web_audio_player_web.dart';
 import 'shared_soloud_piano_pool.dart';
+
+/// 应用启动后后台预热钢琴池（不阻塞首屏）。
+Future<void> warmupMusicCompanionPianoAudio() async {
+  if (kIsWeb) return;
+  try {
+    await NativePlaybackAudioSession.ensurePlaybackActive();
+    await SharedSoLoudPianoPool.instance.ensureLoaded();
+  } catch (error, stack) {
+    debugPrint('warmupMusicCompanionPianoAudio: $error\n$stack');
+  }
+}
 
 class MusicCompanionAudioEngine {
   MusicCompanionAudioEngine({SoLoud? soLoud})
@@ -63,8 +75,14 @@ class MusicCompanionAudioEngine {
       return;
     }
 
+    await NativePlaybackAudioSession.ensurePlaybackActive();
+
     if (!_soLoud.isInitialized) {
-      await _soLoud.init();
+      await _soLoud.init(
+        sampleRate: 44100,
+        bufferSize: 2048,
+        channels: Channels.stereo,
+      );
     }
     _soLoud.setMaxActiveVoiceCount(256);
 
@@ -81,13 +99,46 @@ class MusicCompanionAudioEngine {
     }
   }
 
+  /// 在用户手势的同一调用栈内同步弹奏（iOS 关键路径）。
+  bool tryPlayNoteFromUserGesture(String rawNote, {double volume = 1}) {
+    if (_disposed || kIsWeb) {
+      return false;
+    }
+    return _pianoPool.tryPlayNote(_normalizeNote(rawNote), volume: volume);
+  }
+
+  bool tryPlayMetronomeCueFromUserGesture(
+    MusicCompanionMetronomeCue cue, {
+    double volume = 1,
+  }) {
+    if (_disposed || kIsWeb || !_soLoud.isInitialized) {
+      return false;
+    }
+    final source = _metronomeSourcesByCue[cue];
+    if (source == null) {
+      return false;
+    }
+    try {
+      _registerHandle(_soLoud.play(source, volume: volume));
+      return true;
+    } catch (error, stack) {
+      debugPrint(
+        'tryPlayMetronomeCueFromUserGesture($cue): $error\n$stack',
+      );
+      return false;
+    }
+  }
+
   Future<void> activateByUserGesture() async {
+    await NativePlaybackAudioSession.ensurePlaybackActive();
     await ensurePianoInitialized();
     if (kIsWeb) {
       await _webPlayer.activateByUserGesture();
       return;
     }
-    await _pianoPool.unlockByUserGesture();
+    if (!_pianoPool.tryUnlockProbe()) {
+      throw StateError('SoLoud playback probe failed');
+    }
   }
 
   Future<void> playNote(String rawNote, {double volume = 1}) async {
