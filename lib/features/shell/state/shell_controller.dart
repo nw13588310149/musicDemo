@@ -60,6 +60,8 @@ class ShellController extends StateNotifier<ShellState> {
     await _storage.clearToken();
     await _storage.clearSchoolId();
     await _storage.clearMobile();
+    unawaited(_storage.clearAvatarUrl());
+    unawaited(_storage.clearNickname());
     // 主动断开全局 WS（不再自动重连），并在下次登录成功后由 AuthController
     // 触发 reconnect 重新握手。否则旧 token 的 WS 会持续在后台尝试重连，
     // 不仅浪费连接，还可能让后端误把已登出用户当作在线状态。
@@ -136,18 +138,23 @@ class ShellController extends StateNotifier<ShellState> {
       if (_adminMobileWhitelist.contains(_storage.mobile)) {
         role = 'admin';
       }
+      final avatarUrl = userMap['headUrl']?.toString() ?? '';
+      final nickname = userMap['nickname']?.toString() ?? '';
       state = state.copyWith(
         user: ShellUser(
           id: userMap['id']?.toString() ?? '',
-          nickname: userMap['nickname']?.toString() ?? '',
+          nickname: nickname,
           realname: userMap['realname']?.toString() ?? '',
-          avatarUrl: userMap['headUrl']?.toString() ?? '',
+          avatarUrl: avatarUrl,
           province: userMap['province']?.toString() ?? '',
           role: role,
           identity: userMap['identity']?.toString() ?? '',
           vipExpireDate: _parseVipExpireDate(userMap['vipExpireDate']),
         ),
       );
+      // 持久化头像与昵称，供下次启动/重新登录时在 API 回包前立刻渲染。
+      unawaited(_storage.saveAvatarUrl(avatarUrl));
+      unawaited(_storage.saveNickname(nickname));
     }
 
     if (schoolResponse.code == 0) {

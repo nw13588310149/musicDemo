@@ -93,6 +93,7 @@ class AdminRepository {
     if (archiveId != null && archiveId.isNotEmpty) {
       body['archiveId'] = archiveId;
     }
+    // classId 为雪花 long，body 中保持 String 类型，避免 JS number 精度截断。
     if (classId != null && classId.isNotEmpty) {
       body['classId'] = classId;
     }
@@ -101,6 +102,16 @@ class AdminRepository {
       body['studentStatus'] = studentStatus;
     }
     return client.post('$_base/studentList', data: body);
+  }
+
+  /// 学生详情。
+  ///
+  /// `id` 为 `studentList` 响应中每条记录的 `id` 字段（数据库主键，雪花 long），
+  /// 以字符串形态传输，避免 web 端 JS number 精度丢失。
+  Future<ApiResponse> studentDetail({required String id}) {
+    return client.post('$_base/studentDetail', data: <String, dynamic>{
+      'id': id,
+    });
   }
 
   /// 学生总览统计。`schoolId` 已由 [ApiClient] 通过 header 自动注入，
@@ -121,11 +132,31 @@ class AdminRepository {
     return client.post('$_base/studentSum');
   }
 
-  /// 教师下拉列表。
-  Future<ApiResponse> teacherList({String? keyword}) {
+  /// 教师列表。
+  ///
+  /// `classId` 为雪花 long，以字符串形态传输，避免 web 端 JS number 精度截断。
+  Future<ApiResponse> teacherList({String? classId, String? keyword}) {
     final body = <String, dynamic>{};
+    if (classId != null && classId.isNotEmpty) body['classId'] = classId;
     if (keyword != null && keyword.isNotEmpty) body['keyword'] = keyword;
     return client.post('$_base/teacherList', data: body);
+  }
+
+  /// 教师总览统计（全校口径）。
+  ///
+  /// 返回数据结构：
+  /// ```json
+  /// {
+  ///   "data": {
+  ///     "headTeacherCount": 0,  // 班主任数量
+  ///     "onDutyCount":      0,  // 在岗数量
+  ///     "onLeaveCount":     0,  // 请假人数
+  ///     "totalCount":       0   // 名册总数
+  ///   }
+  /// }
+  /// ```
+  Future<ApiResponse> teacherSum() {
+    return client.post('$_base/teacherSum');
   }
 
   // ============== 班级管理 ==============
@@ -359,6 +390,74 @@ class AdminRepository {
     return client.post(
       '$_base/schoolUserFaceSubmit',
       data: <String, dynamic>{'faceImg': faceImg, 'userId': userId},
+    );
+  }
+
+  // ============== 签课管理 ==============
+
+  /// 签课列表（大课 type=0 / 小课 type=1）。
+  ///
+  /// `classId` 雪花 long，必须以字符串传输。
+  Future<ApiResponse> courseSignManager({
+    required String classId,
+    required String date,
+    required int type,
+  }) {
+    return client.post(
+      '$_base/courseSignManager',
+      data: <String, dynamic>{
+        'classId': classId,
+        'date': date,
+        'type': type,
+      },
+    );
+  }
+
+  /// 大课签到统计（type=0）。
+  Future<ApiResponse> courseSignSum0({
+    required String classId,
+    required String date,
+  }) {
+    return client.post(
+      '$_base/courseSignSum0',
+      data: <String, dynamic>{
+        'classId': classId,
+        'date': date,
+        'type': 0,
+      },
+    );
+  }
+
+  /// 小课签到统计（type=1）。
+  Future<ApiResponse> courseSignSum1({
+    required String classId,
+    required String date,
+  }) {
+    return client.post(
+      '$_base/courseSignSum1',
+      data: <String, dynamic>{
+        'classId': classId,
+        'date': date,
+        'type': 1,
+      },
+    );
+  }
+
+  /// 修改单个学生签到状态。
+  ///
+  /// `status`: 0-出勤 1-缺勤 2-迟到 3-请假
+  Future<ApiResponse> courseSignUpdateSignStatus({
+    required String courseId,
+    required String studentId,
+    required int status,
+  }) {
+    return client.post(
+      '$_base/courseSignUpdateSignStatus',
+      data: <String, dynamic>{
+        'courseId': courseId,
+        'studentId': studentId,
+        'status': status,
+      },
     );
   }
 }

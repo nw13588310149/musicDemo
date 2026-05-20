@@ -33,9 +33,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/widgets/app_date_time_pickers.dart';
+import '../../../core/widgets/app_toast.dart';
 import '../../shell/ui/shell_layout.dart';
+import '../data/admin_repository.dart';
+import '../data/course_sign_data.dart';
+import 'widgets/course_sign_status_picker.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // ─── 调色板 ────────────────────────────────────────────────────────────────
@@ -75,7 +80,7 @@ class AdminSignManagementView extends StatefulWidget {
 
 class _AdminSignManagementViewState extends State<AdminSignManagementView> {
   _SignTab _tab = _SignTab.large;
-  int _pendingMakeupCount = 3;
+  int _pendingMakeupCount = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -93,10 +98,20 @@ class _AdminSignManagementViewState extends State<AdminSignManagementView> {
               ? _LargeClassTab(
                   pendingMakeupCount: _pendingMakeupCount,
                   onOpenMakeupAudit: _openMakeupAuditDrawer,
+                  onPendingMakeupChanged: (n) {
+                    if (_pendingMakeupCount != n) {
+                      setState(() => _pendingMakeupCount = n);
+                    }
+                  },
                 )
               : _SmallClassTab(
                   pendingMakeupCount: _pendingMakeupCount,
                   onOpenMakeupAudit: _openMakeupAuditDrawer,
+                  onPendingMakeupChanged: (n) {
+                    if (_pendingMakeupCount != n) {
+                      setState(() => _pendingMakeupCount = n);
+                    }
+                  },
                 ),
         ),
       ],
@@ -403,23 +418,142 @@ class _MakeupBadgeButton extends StatelessWidget {
 // 大课管理 Tab
 // =============================================================================
 
-class _LargeClassTab extends StatefulWidget {
+class _LargeClassTab extends ConsumerStatefulWidget {
   const _LargeClassTab({
     required this.pendingMakeupCount,
     required this.onOpenMakeupAudit,
+    required this.onPendingMakeupChanged,
   });
 
   final int pendingMakeupCount;
   final VoidCallback onOpenMakeupAudit;
+  final ValueChanged<int> onPendingMakeupChanged;
 
   @override
-  State<_LargeClassTab> createState() => _LargeClassTabState();
+  ConsumerState<_LargeClassTab> createState() => _LargeClassTabState();
 }
 
-class _LargeClassTabState extends State<_LargeClassTab> {
-  String _selectedClass = '音乐一班';
-  String _selectedDate = '2026-05-16';
+class _LargeClassTabState extends ConsumerState<_LargeClassTab> {
+  List<CourseSignClassOption> _classes = const [];
+  String? _selectedClassId;
+  String _selectedDate = todayIsoDate();
+  List<CourseSignSession> _sessions = const [];
+  CourseSignStats _stats = const CourseSignStats();
+  bool _loadingClasses = true;
+  bool _loadingData = false;
   int? _expandedIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadClasses());
+  }
+
+  Future<void> _loadClasses() async {
+    setState(() => _loadingClasses = true);
+    final repo = ref.read(adminRepositoryProvider);
+    final resp = await repo.classList(type: 0);
+    if (!mounted) return;
+
+    final classes = resp.isSuccess
+        ? parseCourseSignClassList(resp.data)
+        : const <CourseSignClassOption>[];
+    setState(() {
+      _classes = classes;
+      _selectedClassId =
+          classes.isNotEmpty ? classes.first.id : null;
+      _loadingClasses = false;
+    });
+    if (_selectedClassId != null) {
+      await _loadSignData();
+    }
+  }
+
+  Future<void> _loadSignData() async {
+    final classId = _selectedClassId;
+    if (classId == null || classId.isEmpty) return;
+    setState(() {
+      _loadingData = true;
+      _expandedIndex = null;
+    });
+    final repo = ref.read(adminRepositoryProvider);
+    final results = await Future.wait([
+      repo.courseSignSum0(classId: classId, date: _selectedDate),
+      repo.courseSignManager(
+        classId: classId,
+        date: _selectedDate,
+        type: 0,
+      ),
+    ]);
+    if (!mounted) return;
+
+    final sumResp = results[0];
+    final listResp = results[1];
+    if (!sumResp.isSuccess && sumResp.msg.isNotEmpty) {
+      AppToast.show(context, sumResp.msg, type: AppToastType.error);
+    }
+    if (!listResp.isSuccess && listResp.msg.isNotEmpty) {
+      AppToast.show(context, listResp.msg, type: AppToastType.error);
+    }
+
+    final stats = sumResp.isSuccess
+        ? CourseSignStats.fromJson(sumResp.data)
+        : const CourseSignStats();
+    final sessions = listResp.isSuccess
+        ? parseCourseSignSessionList(listResp.data)
+        : const <CourseSignSession>[];
+
+    widget.onPendingMakeupChanged(stats.pendingMakeupCount);
+    setState(() {
+      _stats = stats;
+      _sessions = sessions;
+      _loadingData = false;
+    });
+  }
+
+  Future<void> _refreshStats() async {
+    final classId = _selectedClassId;
+    if (classId == null || classId.isEmpty) return;
+    final repo = ref.read(adminRepositoryProvider);
+    final resp = await repo.courseSignSum0(
+      classId: classId,
+      date: _selectedDate,
+    );
+    if (!mounted || !resp.isSuccess) return;
+    final stats = CourseSignStats.fromJson(resp.data);
+    widget.onPendingMakeupChanged(stats.pendingMakeupCount);
+    setState(() => _stats = stats);
+  }
+
+  Future<void> _updateStudentStatus(
+    CourseSignSession session,
+    int studentIdx,
+    CourseSignStatus status,
+  ) async {
+    final student = session.students[studentIdx];
+    if (student.studentId.isEmpty) {
+      AppToast.show(context, '学生 ID 无效', type: AppToastType.error);
+      return;
+    }
+    final repo = ref.read(adminRepositoryProvider);
+    final resp = await repo.courseSignUpdateSignStatus(
+      courseId: session.courseId,
+      studentId: student.studentId,
+      status: status.code,
+    );
+    if (!mounted) return;
+    if (!resp.isSuccess) {
+      AppToast.show(
+        context,
+        resp.msg.isNotEmpty ? resp.msg : '修改失败',
+        type: AppToastType.error,
+      );
+      return;
+    }
+    setState(() => student.status = status);
+    AppToast.show(context, '签到状态已更新', type: AppToastType.success);
+    unawaited(_refreshStats());
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -429,46 +563,53 @@ class _LargeClassTabState extends State<_LargeClassTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 统计行
           _LargeClassStatsRow(
-            sessions: _kDemoLargeClassSessions,
+            stats: _stats,
             pendingMakeupCount: widget.pendingMakeupCount,
           ),
           SizedBox(height: ui(16)),
-          // 筛选栏
           _FilterBar(
-            selectedClass: _selectedClass,
+            selectedClassId: _selectedClassId,
             selectedDate: _selectedDate,
-            classOptions: const ['音乐一班', '乐理一班', '视唱一班'],
-            onClassChanged: (v) => setState(() {
-              _selectedClass = v;
-              _expandedIndex = null;
-            }),
-            onDateChanged: (v) => setState(() {
-              _selectedDate = v;
-              _expandedIndex = null;
-            }),
+            classOptions: _classes,
+            loading: _loadingClasses,
+            onClassChanged: (id) {
+              if (id == null || id == _selectedClassId) return;
+              setState(() => _selectedClassId = id);
+              unawaited(_loadSignData());
+            },
+            onDateChanged: (v) {
+              setState(() => _selectedDate = v);
+              unawaited(_loadSignData());
+            },
           ),
           SizedBox(height: ui(16)),
-          // 课次列表
-          for (var i = 0; i < _kDemoLargeClassSessions.length; i++) ...[
-            if (i > 0) SizedBox(height: ui(12)),
-            _LargeClassSessionCard(
-              session: _kDemoLargeClassSessions[i],
-              expanded: _expandedIndex == i,
-              onToggle: () => setState(
-                () => _expandedIndex = _expandedIndex == i ? null : i,
+          if (_loadingData)
+            Padding(
+              padding: EdgeInsets.symmetric(vertical: ui(40)),
+              child: const Center(child: CircularProgressIndicator()),
+            )
+          else if (_selectedClassId == null)
+            _EmptyHint(text: '暂无大班班级，请先在班级编组中创建')
+          else if (_sessions.isEmpty)
+            _EmptyHint(text: '所选日期暂无大课签到记录')
+          else
+            for (var i = 0; i < _sessions.length; i++) ...[
+              if (i > 0) SizedBox(height: ui(12)),
+              _LargeClassSessionCard(
+                session: _sessions[i],
+                expanded: _expandedIndex == i,
+                onToggle: () => setState(
+                  () => _expandedIndex = _expandedIndex == i ? null : i,
+                ),
+                onChangeStudentStatus: (studentIdx, status) {
+                  unawaited(
+                    _updateStudentStatus(_sessions[i], studentIdx, status),
+                  );
+                },
               ),
-              onChangeStudentStatus: (studentIdx, status) {
-                setState(() {
-                  _kDemoLargeClassSessions[i].students[studentIdx].status =
-                      status;
-                });
-              },
-            ),
-          ],
+            ],
           SizedBox(height: ui(16)),
-          // 补签入口行
           _PendingMakeupRow(
             count: widget.pendingMakeupCount,
             onTap: widget.onOpenMakeupAudit,
@@ -481,35 +622,20 @@ class _LargeClassTabState extends State<_LargeClassTab> {
 
 class _LargeClassStatsRow extends StatelessWidget {
   const _LargeClassStatsRow({
-    required this.sessions,
+    required this.stats,
     required this.pendingMakeupCount,
   });
 
-  final List<_LargeClassSession> sessions;
+  final CourseSignStats stats;
   final int pendingMakeupCount;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final total = sessions.length;
-    final signed = sessions
-        .where(
-          (s) =>
-              s.students.every((st) => st.status != _StudentSignStatus.unsigned),
-        )
-        .length;
-    final totalStudents = sessions.fold<int>(
-      0,
-      (acc, s) => acc + s.students.length,
-    );
-    final signedStudents = sessions.fold<int>(
-      0,
-      (acc, s) =>
-          acc +
-          s.students
-              .where((st) => st.status != _StudentSignStatus.unsigned)
-              .length,
-    );
+    final total = stats.courseCount;
+    final signed = stats.signedCourseCount;
+    final signedStudents = stats.studentSignedCount;
+    final totalStudents = stats.studentShouldCount;
     return Row(
       children: [
         _SignStatCard(
@@ -525,7 +651,9 @@ class _LargeClassStatsRow extends StatelessWidget {
         ),
         SizedBox(width: ui(12)),
         _SignStatCard(
-          value: '$signedStudents/$totalStudents',
+          value: totalStudents > 0
+              ? '$signedStudents/$totalStudents'
+              : '$signedStudents',
           label: '学生已签/应签',
           gradColors: const [Color(0xFFFBC06F), Color(0xFFF59E0B)],
         ),
@@ -548,17 +676,17 @@ class _LargeClassSessionCard extends StatelessWidget {
     required this.onChangeStudentStatus,
   });
 
-  final _LargeClassSession session;
+  final CourseSignSession session;
   final bool expanded;
   final VoidCallback onToggle;
-  final void Function(int studentIdx, _StudentSignStatus status)
-  onChangeStudentStatus;
+  final void Function(int studentIdx, CourseSignStatus status)
+      onChangeStudentStatus;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final signedCount = session.students
-        .where((s) => s.status != _StudentSignStatus.unsigned)
+        .where((s) => s.status != null)
         .length;
     final total = session.students.length;
     return Container(
@@ -676,8 +804,8 @@ class _StudentSignRow extends StatelessWidget {
     required this.onChangeStatus,
   });
 
-  final _StudentSignRecord student;
-  final ValueChanged<_StudentSignStatus> onChangeStatus;
+  final CourseSignStudent student;
+  final ValueChanged<CourseSignStatus> onChangeStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -708,7 +836,7 @@ class _StudentSignRow extends StatelessWidget {
                 ),
                 SizedBox(height: ui(2)),
                 Text(
-                  student.no,
+                  student.studentNo,
                   style: TextStyle(
                     fontSize: ui(11),
                     color: _kTextHint,
@@ -722,74 +850,18 @@ class _StudentSignRow extends StatelessWidget {
           ),
           _StudentStatusChip(
             status: student.status,
-            onTap: () => _showStatusPicker(context, student.status, onChangeStatus),
+            onTap: () async {
+              final picked = await showCourseSignStatusPicker(
+                context,
+                studentName: student.name,
+                studentNo: student.studentNo,
+                current: student.status,
+              );
+              if (picked != null) onChangeStatus(picked);
+            },
           ),
         ],
       ),
-    );
-  }
-
-  void _showStatusPicker(
-    BuildContext context,
-    _StudentSignStatus current,
-    ValueChanged<_StudentSignStatus> onPick,
-  ) {
-    final ui = DashboardScaleScope.of(context).ui;
-    showDialog<void>(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: Text(
-            '修改签到状态',
-            style: TextStyle(
-              fontSize: ui(15),
-              fontFamily: 'PingFang SC',
-              fontWeight: AppFont.w600,
-            ),
-          ),
-          contentPadding: EdgeInsets.symmetric(
-            vertical: ui(12),
-            horizontal: ui(4),
-          ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(ui(16)),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: _StudentSignStatus.values.map((s) {
-              final isSelected = s == current;
-              return ListTile(
-                dense: true,
-                leading: Container(
-                  width: ui(8),
-                  height: ui(8),
-                  decoration: BoxDecoration(
-                    color: _statusColor(s),
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                title: Text(
-                  s.label,
-                  style: TextStyle(
-                    fontSize: ui(13),
-                    fontFamily: 'PingFang SC',
-                    fontWeight:
-                        isSelected ? AppFont.w600 : AppFont.w400,
-                    color: isSelected ? _kPurple : _kTextDark,
-                  ),
-                ),
-                trailing: isSelected
-                    ? Icon(Icons.check_rounded, size: ui(16), color: _kPurple)
-                    : null,
-                onTap: () {
-                  Navigator.of(ctx).pop();
-                  onPick(s);
-                },
-              );
-            }).toList(),
-          ),
-        );
-      },
     );
   }
 }
@@ -797,14 +869,14 @@ class _StudentSignRow extends StatelessWidget {
 class _StudentStatusChip extends StatelessWidget {
   const _StudentStatusChip({required this.status, required this.onTap});
 
-  final _StudentSignStatus status;
+  final CourseSignStatus? status;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final color = _statusColor(status);
-    final bg = _statusBg(status);
+    final color = courseSignStatusFg(status);
+    final bg = courseSignStatusBg(status);
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(ui(6)),
@@ -818,7 +890,7 @@ class _StudentStatusChip extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              status.label,
+              courseSignStatusLabel(status),
               style: TextStyle(
                 fontSize: ui(12),
                 color: color,
@@ -836,60 +908,142 @@ class _StudentStatusChip extends StatelessWidget {
   }
 }
 
-Color _statusColor(_StudentSignStatus s) {
-  switch (s) {
-    case _StudentSignStatus.normal:
-      return _kGreen;
-    case _StudentSignStatus.late:
-      return _kOrange;
-    case _StudentSignStatus.earlyLeave:
-      return _kBlue;
-    case _StudentSignStatus.leave:
-      return const Color(0xFF6D6B75);
-    case _StudentSignStatus.absent:
-      return _kRed;
-    case _StudentSignStatus.unsigned:
-      return _kTextHint;
-  }
-}
-
-Color _statusBg(_StudentSignStatus s) {
-  switch (s) {
-    case _StudentSignStatus.normal:
-      return _kGreenBg;
-    case _StudentSignStatus.late:
-      return _kOrangeBg;
-    case _StudentSignStatus.earlyLeave:
-      return _kBlueBg;
-    case _StudentSignStatus.leave:
-      return const Color(0xFFF0F0F0);
-    case _StudentSignStatus.absent:
-      return _kRedBg;
-    case _StudentSignStatus.unsigned:
-      return _kPageBg;
-  }
-}
-
 // =============================================================================
 // 小课管理 Tab
 // =============================================================================
 
-class _SmallClassTab extends StatefulWidget {
+_SmallClassStep _deriveSmallClassStep(
+  CourseSignSession session, {
+  bool locallyConfirmed = false,
+}) {
+  if (locallyConfirmed || session.adminConfirmed) {
+    return _SmallClassStep.adminConfirmed;
+  }
+  final step = session.signStep;
+  if (step != null) {
+    const mapping = [
+      _SmallClassStep.notStarted,
+      _SmallClassStep.teacherCheckedIn,
+      _SmallClassStep.studentCheckedIn,
+      _SmallClassStep.teacherCheckedOut,
+      _SmallClassStep.studentCheckedOut,
+      _SmallClassStep.studentEvaluated,
+      _SmallClassStep.adminConfirmed,
+    ];
+    if (step >= 0 && step < mapping.length) return mapping[step];
+    if (step >= mapping.length) return _SmallClassStep.adminConfirmed;
+  }
+
+  if (session.teacherCheckInTime == null) {
+    return _SmallClassStep.notStarted;
+  }
+  final allStudentsIn = session.students.isNotEmpty &&
+      session.students.every((s) => s.checkInTime != null);
+  if (!allStudentsIn) return _SmallClassStep.studentCheckedIn;
+  if (session.teacherCheckOutTime == null) {
+    return _SmallClassStep.teacherCheckedOut;
+  }
+  final allStudentsOut =
+      session.students.every((s) => s.checkOutTime != null);
+  if (!allStudentsOut) return _SmallClassStep.studentCheckedOut;
+  final allEvaluated = session.students.every(
+    (s) =>
+        s.evaluationRating != null ||
+        (s.evaluationNote?.isNotEmpty ?? false),
+  );
+  if (!allEvaluated) return _SmallClassStep.studentCheckedOut;
+  return _SmallClassStep.studentEvaluated;
+}
+
+class _SmallClassTab extends ConsumerStatefulWidget {
   const _SmallClassTab({
     required this.pendingMakeupCount,
     required this.onOpenMakeupAudit,
+    required this.onPendingMakeupChanged,
   });
 
   final int pendingMakeupCount;
   final VoidCallback onOpenMakeupAudit;
+  final ValueChanged<int> onPendingMakeupChanged;
 
   @override
-  State<_SmallClassTab> createState() => _SmallClassTabState();
+  ConsumerState<_SmallClassTab> createState() => _SmallClassTabState();
 }
 
-class _SmallClassTabState extends State<_SmallClassTab> {
-  String _selectedClass = '全部班级';
-  String _selectedDate = '2026-05-16';
+class _SmallClassTabState extends ConsumerState<_SmallClassTab> {
+  List<CourseSignClassOption> _classes = const [];
+  String? _selectedClassId;
+  String _selectedDate = todayIsoDate();
+  List<CourseSignSession> _sessions = const [];
+  CourseSignStats _stats = const CourseSignStats();
+  final Set<String> _locallyConfirmedCourseIds = {};
+  bool _loadingClasses = true;
+  bool _loadingData = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadClasses());
+  }
+
+  Future<void> _loadClasses() async {
+    setState(() => _loadingClasses = true);
+    final repo = ref.read(adminRepositoryProvider);
+    final resp = await repo.classList(type: 1);
+    if (!mounted) return;
+
+    final classes = resp.isSuccess
+        ? parseCourseSignClassList(resp.data)
+        : const <CourseSignClassOption>[];
+    setState(() {
+      _classes = classes;
+      _selectedClassId =
+          classes.isNotEmpty ? classes.first.id : null;
+      _loadingClasses = false;
+    });
+    if (_selectedClassId != null) {
+      await _loadSignData();
+    }
+  }
+
+  Future<void> _loadSignData() async {
+    final classId = _selectedClassId;
+    if (classId == null || classId.isEmpty) return;
+    setState(() => _loadingData = true);
+    final repo = ref.read(adminRepositoryProvider);
+    final results = await Future.wait([
+      repo.courseSignSum1(classId: classId, date: _selectedDate),
+      repo.courseSignManager(
+        classId: classId,
+        date: _selectedDate,
+        type: 1,
+      ),
+    ]);
+    if (!mounted) return;
+
+    final sumResp = results[0];
+    final listResp = results[1];
+    if (!sumResp.isSuccess && sumResp.msg.isNotEmpty) {
+      AppToast.show(context, sumResp.msg, type: AppToastType.error);
+    }
+    if (!listResp.isSuccess && listResp.msg.isNotEmpty) {
+      AppToast.show(context, listResp.msg, type: AppToastType.error);
+    }
+
+    final stats = sumResp.isSuccess
+        ? CourseSignStats.fromJson(sumResp.data)
+        : const CourseSignStats();
+    final sessions = listResp.isSuccess
+        ? parseCourseSignSessionList(listResp.data)
+        : const <CourseSignSession>[];
+
+    widget.onPendingMakeupChanged(stats.pendingMakeupCount);
+    setState(() {
+      _stats = stats;
+      _sessions = sessions;
+      _loadingData = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -899,43 +1053,62 @@ class _SmallClassTabState extends State<_SmallClassTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 统计行
-          _SmallClassStatsRow(sessions: _kDemoSmallClassSessions),
+          _SmallClassStatsRow(stats: _stats),
           SizedBox(height: ui(16)),
-          // 说明条
           _SmallClassFlowHint(),
           SizedBox(height: ui(16)),
-          // 筛选栏
           _FilterBar(
-            selectedClass: _selectedClass,
+            selectedClassId: _selectedClassId,
             selectedDate: _selectedDate,
-            classOptions: const ['全部班级', '测试班级1', '视唱1班'],
-            onClassChanged: (v) => setState(() => _selectedClass = v),
-            onDateChanged: (v) => setState(() => _selectedDate = v),
+            classOptions: _classes,
+            loading: _loadingClasses,
+            onClassChanged: (id) {
+              if (id == null || id == _selectedClassId) return;
+              setState(() => _selectedClassId = id);
+              unawaited(_loadSignData());
+            },
+            onDateChanged: (v) {
+              setState(() => _selectedDate = v);
+              unawaited(_loadSignData());
+            },
           ),
           SizedBox(height: ui(16)),
-          // 小课列表
-          Wrap(
-            spacing: ui(16),
-            runSpacing: ui(16),
-            children: [
-              for (var i = 0; i < _kDemoSmallClassSessions.length; i++)
-                SizedBox(
-                  width: ui(460),
-                  child: _SmallClassSessionCard(
-                    session: _kDemoSmallClassSessions[i],
-                    onConfirm: () {
-                      setState(() {
-                        _kDemoSmallClassSessions[i].currentStep =
-                            _SmallClassStep.adminConfirmed;
-                      });
-                    },
-                    onViewEvaluation: () =>
-                        _showEvaluationDialog(context, _kDemoSmallClassSessions[i]),
+          if (_loadingData)
+            Padding(
+              padding: EdgeInsets.symmetric(vertical: ui(40)),
+              child: const Center(child: CircularProgressIndicator()),
+            )
+          else if (_selectedClassId == null)
+            _EmptyHint(text: '暂无小班班级，请先在班级编组中创建')
+          else if (_sessions.isEmpty)
+            _EmptyHint(text: '所选日期暂无小课签到记录')
+          else
+            Wrap(
+              spacing: ui(16),
+              runSpacing: ui(16),
+              children: [
+                for (final session in _sessions)
+                  SizedBox(
+                    width: ui(460),
+                    child: _SmallClassSessionCard(
+                      session: session,
+                      step: _deriveSmallClassStep(
+                        session,
+                        locallyConfirmed: _locallyConfirmedCourseIds
+                            .contains(session.courseId),
+                      ),
+                      onConfirm: () {
+                        setState(
+                          () => _locallyConfirmedCourseIds
+                              .add(session.courseId),
+                        );
+                      },
+                      onViewEvaluation: () =>
+                          _showEvaluationDialog(context, session),
+                    ),
                   ),
-                ),
-            ],
-          ),
+              ],
+            ),
           SizedBox(height: ui(16)),
           _PendingMakeupRow(
             count: widget.pendingMakeupCount,
@@ -946,11 +1119,15 @@ class _SmallClassTabState extends State<_SmallClassTab> {
     );
   }
 
-  void _showEvaluationDialog(BuildContext context, _SmallClassSession session) {
+  void _showEvaluationDialog(BuildContext context, CourseSignSession session) {
     final ui = DashboardScaleScope.of(context).ui;
     final evaluated = session.students
-        .where((s) => s.evaluation != null)
-        .toList();
+        .where(
+          (s) =>
+              s.evaluationRating != null ||
+              (s.evaluationNote?.isNotEmpty ?? false),
+        )
+        .length;
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -966,7 +1143,7 @@ class _SmallClassTabState extends State<_SmallClassTab> {
             ),
             SizedBox(width: ui(8)),
             Text(
-              '${evaluated.length}/${session.students.length}人已评',
+              '$evaluated/${session.students.length}人已评',
               style: TextStyle(
                 fontSize: ui(12),
                 color: _kTextHint,
@@ -986,7 +1163,12 @@ class _SmallClassTabState extends State<_SmallClassTab> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 for (var i = 0; i < session.students.length; i++) ...[
-                  if (i > 0) Divider(height: ui(20), thickness: 0.5, color: _kBorderSoft),
+                  if (i > 0)
+                    Divider(
+                      height: ui(20),
+                      thickness: 0.5,
+                      color: _kBorderSoft,
+                    ),
                   _StudentEvalBlock(student: session.students[i]),
                 ],
               ],
@@ -1008,21 +1190,19 @@ class _SmallClassTabState extends State<_SmallClassTab> {
 }
 
 class _SmallClassStatsRow extends StatelessWidget {
-  const _SmallClassStatsRow({required this.sessions});
+  const _SmallClassStatsRow({required this.stats});
 
-  final List<_SmallClassSession> sessions;
+  final CourseSignStats stats;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final total = sessions.length;
-    final completed = sessions
-        .where((s) => s.currentStep == _SmallClassStep.adminConfirmed)
-        .length;
-    final pendingAdmin = sessions
-        .where((s) => s.currentStep == _SmallClassStep.studentEvaluated)
-        .length;
-    final inProgress = total - completed - pendingAdmin;
+    final total = stats.courseCount;
+    final completed = stats.completedCount;
+    final pendingAdmin = stats.pendingAdminCount;
+    final inProgress = stats.inProgressCount > 0
+        ? stats.inProgressCount
+        : (total - completed - pendingAdmin).clamp(0, total);
     return Row(
       children: [
         _SignStatCard(
@@ -1097,18 +1277,19 @@ class _SmallClassFlowHint extends StatelessWidget {
 class _SmallClassSessionCard extends StatelessWidget {
   const _SmallClassSessionCard({
     required this.session,
+    required this.step,
     required this.onConfirm,
     required this.onViewEvaluation,
   });
 
-  final _SmallClassSession session;
+  final CourseSignSession session;
+  final _SmallClassStep step;
   final VoidCallback onConfirm;
   final VoidCallback onViewEvaluation;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final step = session.currentStep;
     final isConfirmed = step == _SmallClassStep.adminConfirmed;
     final canConfirm = step == _SmallClassStep.studentEvaluated;
     final hasEval = step.index >= _SmallClassStep.studentEvaluated.index;
@@ -1460,7 +1641,7 @@ class _TimelineLabel extends StatelessWidget {
 class _StudentTimeRow extends StatelessWidget {
   const _StudentTimeRow({required this.student});
 
-  final _SmallClassStudentRecord student;
+  final CourseSignStudent student;
 
   @override
   Widget build(BuildContext context) {
@@ -2142,25 +2323,27 @@ class _MakeupStatusBadge extends StatelessWidget {
 
 class _FilterBar extends StatelessWidget {
   const _FilterBar({
-    required this.selectedClass,
+    required this.selectedClassId,
     required this.selectedDate,
     required this.classOptions,
+    required this.loading,
     required this.onClassChanged,
     required this.onDateChanged,
   });
 
-  final String selectedClass;
+  final String? selectedClassId;
   final String selectedDate;
-  final List<String> classOptions;
-  final ValueChanged<String> onClassChanged;
+  final List<CourseSignClassOption> classOptions;
+  final bool loading;
+  final ValueChanged<String?> onClassChanged;
   final ValueChanged<String> onDateChanged;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final hasSelection = classOptions.any((c) => c.id == selectedClassId);
     return Row(
       children: [
-        // 班级 dropdown
         Container(
           height: ui(34),
           padding: EdgeInsets.symmetric(horizontal: ui(10)),
@@ -2170,15 +2353,23 @@ class _FilterBar extends StatelessWidget {
             border: Border.all(color: _kBorderSoft),
           ),
           child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: selectedClass,
+            child: DropdownButton<String?>(
+              value: hasSelection ? selectedClassId : null,
               isDense: true,
+              hint: Text(
+                loading ? '加载班级…' : '选择班级',
+                style: TextStyle(
+                  fontSize: ui(12),
+                  fontFamily: 'PingFang SC',
+                  color: _kTextHint,
+                ),
+              ),
               items: classOptions
                   .map(
                     (c) => DropdownMenuItem(
-                      value: c,
+                      value: c.id,
                       child: Text(
-                        c,
+                        c.name,
                         style: TextStyle(
                           fontSize: ui(12),
                           fontFamily: 'PingFang SC',
@@ -2188,9 +2379,7 @@ class _FilterBar extends StatelessWidget {
                     ),
                   )
                   .toList(),
-              onChanged: (v) {
-                if (v != null) onClassChanged(v);
-              },
+              onChanged: loading ? null : onClassChanged,
             ),
           ),
         ),
@@ -2248,6 +2437,30 @@ class _FilterBar extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _EmptyHint extends StatelessWidget {
+  const _EmptyHint({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(vertical: ui(48)),
+      alignment: Alignment.center,
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: ui(13),
+          color: _kTextHint,
+          fontFamily: 'PingFang SC',
+        ),
+      ),
     );
   }
 }
@@ -2458,16 +2671,18 @@ class _InfoLine extends StatelessWidget {
 class _StudentEvalBlock extends StatelessWidget {
   const _StudentEvalBlock({required this.student});
 
-  final _SmallClassStudentRecord student;
+  final CourseSignStudent student;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final eval = student.evaluation;
+    final rating = student.evaluationRating;
+    final hasEval = rating != null ||
+        (student.evaluationNote?.isNotEmpty ?? false) ||
+        (student.evaluationMastery?.isNotEmpty ?? false);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 学生信息行
         Row(
           children: [
             _MiniAvatar(seed: student.name, size: ui(28)),
@@ -2487,7 +2702,7 @@ class _StudentEvalBlock extends StatelessWidget {
                 ),
                 SizedBox(height: ui(2)),
                 Text(
-                  student.no,
+                  student.studentNo,
                   style: TextStyle(
                     fontSize: ui(11),
                     color: _kTextHint,
@@ -2498,12 +2713,12 @@ class _StudentEvalBlock extends StatelessWidget {
               ],
             ),
             const Spacer(),
-            if (eval != null)
+            if (rating != null)
               Row(
                 children: [
                   ...List.generate(5, (i) {
-                    final filled = i < eval.rating.floor();
-                    final half = !filled && i < eval.rating;
+                    final filled = i < rating.floor();
+                    final half = !filled && i < rating;
                     return Icon(
                       half ? Icons.star_half_rounded : Icons.star_rounded,
                       size: ui(14),
@@ -2512,7 +2727,7 @@ class _StudentEvalBlock extends StatelessWidget {
                   }),
                   SizedBox(width: ui(4)),
                   Text(
-                    '${eval.rating}',
+                    '$rating',
                     style: TextStyle(
                       fontSize: ui(13),
                       color: _kOrange,
@@ -2535,7 +2750,7 @@ class _StudentEvalBlock extends StatelessWidget {
               ),
           ],
         ),
-        if (eval != null) ...[
+        if (hasEval) ...[
           SizedBox(height: ui(8)),
           Container(
             width: double.infinity,
@@ -2547,10 +2762,18 @@ class _StudentEvalBlock extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _EvalRow(label: '掌握程度', value: eval.mastery),
-                if (eval.note.isNotEmpty) ...[
-                  SizedBox(height: ui(6)),
-                  _EvalRow(label: '评价备注', value: eval.note),
+                if (student.evaluationMastery?.isNotEmpty == true)
+                  _EvalRow(
+                    label: '掌握程度',
+                    value: student.evaluationMastery!,
+                  ),
+                if (student.evaluationNote?.isNotEmpty == true) ...[
+                  if (student.evaluationMastery?.isNotEmpty == true)
+                    SizedBox(height: ui(6)),
+                  _EvalRow(
+                    label: '评价备注',
+                    value: student.evaluationNote!,
+                  ),
                 ],
               ],
             ),
@@ -2601,60 +2824,8 @@ class _EvalRow extends StatelessWidget {
 }
 
 // =============================================================================
-// 数据模型
+// 数据模型（补签审核仍用本地占位数据，待后续接口接入）
 // =============================================================================
-
-enum _StudentSignStatus {
-  unsigned,
-  normal,
-  late,
-  earlyLeave,
-  leave,
-  absent;
-
-  String get label {
-    switch (this) {
-      case _StudentSignStatus.unsigned:
-        return '未签到';
-      case _StudentSignStatus.normal:
-        return '正常';
-      case _StudentSignStatus.late:
-        return '迟到';
-      case _StudentSignStatus.earlyLeave:
-        return '早退';
-      case _StudentSignStatus.leave:
-        return '请假';
-      case _StudentSignStatus.absent:
-        return '缺勤';
-    }
-  }
-}
-
-class _StudentSignRecord {
-  _StudentSignRecord({
-    required this.name,
-    required this.no,
-    required this.status,
-  });
-
-  final String name;
-  final String no;
-  _StudentSignStatus status;
-}
-
-class _LargeClassSession {
-  _LargeClassSession({
-    required this.courseName,
-    required this.timeRange,
-    required this.classroom,
-    required this.students,
-  });
-
-  final String courseName;
-  final String timeRange;
-  final String classroom;
-  final List<_StudentSignRecord> students;
-}
 
 enum _SmallClassStep {
   notStarted,
@@ -2664,63 +2835,6 @@ enum _SmallClassStep {
   studentCheckedOut,
   studentEvaluated,
   adminConfirmed,
-}
-
-class _SmallClassEvaluation {
-  const _SmallClassEvaluation({
-    required this.rating,
-    required this.mastery,
-    required this.note,
-  });
-
-  final double rating;
-  final String mastery;
-  final String note;
-}
-
-/// 小班课中每位学生的签到记录与课后评价。
-class _SmallClassStudentRecord {
-  _SmallClassStudentRecord({
-    required this.name,
-    required this.no,
-    this.checkInTime,
-    this.checkOutTime,
-    this.evaluation,
-  });
-
-  final String name;
-  final String no;
-  /// 上课签到时间，null 表示未签到。
-  String? checkInTime;
-  /// 下课签到时间，null 表示未签到。
-  String? checkOutTime;
-  /// 课后评价，null 表示尚未评价。
-  _SmallClassEvaluation? evaluation;
-}
-
-class _SmallClassSession {
-  _SmallClassSession({
-    required this.courseName,
-    required this.teacherName,
-    required this.timeRange,
-    required this.classroom,
-    required this.currentStep,
-    required this.students,
-    this.teacherCheckInTime,
-    this.teacherCheckOutTime,
-  });
-
-  final String courseName;
-  final String teacherName;
-  final String timeRange;
-  final String classroom;
-  _SmallClassStep currentStep;
-  /// 1 位教师 → N 位学生（小班课典型 1:2~1:4）。
-  final List<_SmallClassStudentRecord> students;
-  /// 教师上课签到时间，null 表示未签到。
-  String? teacherCheckInTime;
-  /// 教师下课签到时间，null 表示未签到。
-  String? teacherCheckOutTime;
 }
 
 enum _ClassType { large, small }
@@ -2751,149 +2865,6 @@ class _MakeupRecord {
   _MakeupStatus status;
   String? rejectReason;
 }
-
-// =============================================================================
-// Demo 数据
-// =============================================================================
-
-final _kDemoLargeClassSessions = <_LargeClassSession>[
-  _LargeClassSession(
-    courseName: '乐理基础',
-    timeRange: '08:00 - 08:45',
-    classroom: '艺术楼 101',
-    students: [
-      _StudentSignRecord(name: '郝江', no: '2026000001', status: _StudentSignStatus.normal),
-      _StudentSignRecord(name: '陈江凯', no: '2026000002', status: _StudentSignStatus.late),
-      _StudentSignRecord(name: '李梓燕', no: '2026000003', status: _StudentSignStatus.normal),
-      _StudentSignRecord(name: '王凯', no: '2026000004', status: _StudentSignStatus.unsigned),
-      _StudentSignRecord(name: '刘思远', no: '2026000005', status: _StudentSignStatus.leave),
-    ],
-  ),
-  _LargeClassSession(
-    courseName: '音乐史',
-    timeRange: '09:00 - 09:45',
-    classroom: '艺术楼 报告厅',
-    students: [
-      _StudentSignRecord(name: '郝江', no: '2026000001', status: _StudentSignStatus.normal),
-      _StudentSignRecord(name: '陈江凯', no: '2026000002', status: _StudentSignStatus.absent),
-      _StudentSignRecord(name: '赵敏', no: '2026000006', status: _StudentSignStatus.normal),
-    ],
-  ),
-  _LargeClassSession(
-    courseName: '视唱练耳',
-    timeRange: '10:10 - 10:55',
-    classroom: '艺术楼 排练厅',
-    students: [
-      _StudentSignRecord(name: '郝江', no: '2026000001', status: _StudentSignStatus.unsigned),
-      _StudentSignRecord(name: '李梓燕', no: '2026000003', status: _StudentSignStatus.unsigned),
-      _StudentSignRecord(name: '刘思远', no: '2026000005', status: _StudentSignStatus.unsigned),
-    ],
-  ),
-];
-
-final _kDemoSmallClassSessions = <_SmallClassSession>[
-  // 场景1：全流程完成，待管理员确认（3 名学生）
-  _SmallClassSession(
-    courseName: '古筝小组课',
-    teacherName: '宁为',
-    timeRange: '14:00 - 14:45',
-    classroom: '小琴房 301',
-    currentStep: _SmallClassStep.studentEvaluated,
-    teacherCheckInTime: '14:02',
-    teacherCheckOutTime: '14:47',
-    students: [
-      _SmallClassStudentRecord(
-        name: '郝江', no: '2026000001',
-        checkInTime: '14:05', checkOutTime: '14:46',
-        evaluation: const _SmallClassEvaluation(rating: 4.5, mastery: '良好', note: '指法进步明显'),
-      ),
-      _SmallClassStudentRecord(
-        name: '陈江凯', no: '2026000002',
-        checkInTime: '14:06', checkOutTime: '14:46',
-        evaluation: const _SmallClassEvaluation(rating: 4.0, mastery: '一般', note: '节奏还需加强练习'),
-      ),
-      _SmallClassStudentRecord(
-        name: '李梓燕', no: '2026000003',
-        checkInTime: '14:04', checkOutTime: '14:47',
-        evaluation: const _SmallClassEvaluation(rating: 5.0, mastery: '优秀', note: '完美掌握本节内容'),
-      ),
-    ],
-  ),
-  // 场景2：进行中——教师已下课签，等学生下课签（2 名学生）
-  _SmallClassSession(
-    courseName: '声乐小组课',
-    teacherName: '吴敏华',
-    timeRange: '15:00 - 15:45',
-    classroom: '录音室 B',
-    currentStep: _SmallClassStep.teacherCheckedOut,
-    teacherCheckInTime: '15:01',
-    teacherCheckOutTime: '15:48',
-    students: [
-      _SmallClassStudentRecord(
-        name: '王凯', no: '2026000004',
-        checkInTime: '15:03', checkOutTime: null,
-      ),
-      _SmallClassStudentRecord(
-        name: '刘思远', no: '2026000005',
-        checkInTime: '15:05', checkOutTime: null,
-      ),
-    ],
-  ),
-  // 场景3：已管理员确认完成（3 名学生）
-  _SmallClassSession(
-    courseName: '钢琴小组课',
-    teacherName: '张明远',
-    timeRange: '16:00 - 16:45',
-    classroom: '小琴房 205',
-    currentStep: _SmallClassStep.adminConfirmed,
-    teacherCheckInTime: '16:00',
-    teacherCheckOutTime: '16:46',
-    students: [
-      _SmallClassStudentRecord(
-        name: '李梓燕', no: '2026000003',
-        checkInTime: '16:02', checkOutTime: '16:45',
-        evaluation: const _SmallClassEvaluation(rating: 5.0, mastery: '优秀', note: '完成了第三章练习曲'),
-      ),
-      _SmallClassStudentRecord(
-        name: '赵敏', no: '2026000006',
-        checkInTime: '16:01', checkOutTime: '16:45',
-        evaluation: const _SmallClassEvaluation(rating: 4.5, mastery: '良好', note: '情感表达有进步'),
-      ),
-      _SmallClassStudentRecord(
-        name: '陈江凯', no: '2026000002',
-        checkInTime: '16:03', checkOutTime: '16:44',
-        evaluation: const _SmallClassEvaluation(rating: 4.0, mastery: '一般', note: '左手力度不稳，需重点练习'),
-      ),
-    ],
-  ),
-  // 场景4：尚未开始（2 名学生）
-  _SmallClassSession(
-    courseName: '竖笛小组课',
-    teacherName: '林小燕',
-    timeRange: '17:00 - 17:45',
-    classroom: '小琴房 102',
-    currentStep: _SmallClassStep.notStarted,
-    students: [
-      _SmallClassStudentRecord(name: '赵敏', no: '2026000006'),
-      _SmallClassStudentRecord(name: '郝江', no: '2026000001'),
-    ],
-  ),
-  // 场景5：进行中——学生已上课签，等教师下课签（4 名学生）
-  _SmallClassSession(
-    courseName: '乐团分组排练',
-    teacherName: '陈建国',
-    timeRange: '13:00 - 14:30',
-    classroom: '排练厅 A',
-    currentStep: _SmallClassStep.studentCheckedIn,
-    teacherCheckInTime: '13:01',
-    students: [
-      _SmallClassStudentRecord(name: '郝江', no: '2026000001', checkInTime: '13:05'),
-      _SmallClassStudentRecord(name: '李梓燕', no: '2026000003', checkInTime: '13:04'),
-      _SmallClassStudentRecord(name: '王凯', no: '2026000004', checkInTime: '13:07'),
-      _SmallClassStudentRecord(name: '刘思远', no: '2026000005', checkInTime: '13:10'),
-    ],
-  ),
-];
 
 final _kDemoMakeupRecords = <_MakeupRecord>[
   _MakeupRecord(

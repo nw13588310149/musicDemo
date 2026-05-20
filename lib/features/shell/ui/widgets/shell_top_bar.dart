@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -295,12 +296,13 @@ class ShellTopBar extends StatelessWidget {
       ),
     );
     final avatarWidget = state.user.avatarUrl.isNotEmpty
-        ? Image.network(
-            state.user.avatarUrl,
+        ? CachedNetworkImage(
+            imageUrl: state.user.avatarUrl,
             width: ui(36),
             height: ui(36),
             fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) => fallback,
+            placeholder: (context, url) => fallback,
+            errorWidget: (context, url, error) => fallback,
           )
         : fallback;
 

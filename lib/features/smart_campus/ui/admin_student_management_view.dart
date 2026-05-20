@@ -102,6 +102,7 @@ class _Student {
     required this.classInfo,
     required this.dormInfo,
     required this.status,
+    this.userId = '',
     this.major = '声乐',
     this.direction = '民族唱法',
     this.adminClass = '高三音乐实验班',
@@ -112,6 +113,9 @@ class _Student {
     this.remark = '专业主项稳定，文化科需跟进英语作文。',
   });
 
+  /// 后端数据库主键（雪花 id），用于调用 studentDetail；
+  /// 不同于 [studentId]（学号），两者含义不同。
+  final String userId;
   final String name;
   final String studentId;
   final String classInfo;
@@ -220,7 +224,12 @@ class _Student {
         ? (dormName.isEmpty ? '住校' : '住校·$dormName')
         : '走读';
 
+    // 后端主键（雪花 long）→ 强制转 String，保留精度。
+    final rawId = json['id'] ?? json['userId'] ?? json['stuId'];
+    final userId = rawId == null ? '' : '$rawId';
+
     return _Student(
+      userId: userId,
       name: name,
       studentId: studentNo,
       classInfo: classInfoBuf.isEmpty ? '—' : classInfoBuf.toString(),
@@ -1157,14 +1166,56 @@ class _Avatar extends StatelessWidget {
 // 学籍档案 弹窗
 // ============================================================================
 
-class _StudentProfileDialog extends StatelessWidget {
+/// 打开时立即以列表数据渲染，同时后台调用 `studentDetail` 接口补全详情。
+/// [student.userId] 不为空时才会发起详情请求；为空时仅展示列表数据。
+class _StudentProfileDialog extends ConsumerStatefulWidget {
   const _StudentProfileDialog({required this.student});
 
   final _Student student;
 
   @override
+  ConsumerState<_StudentProfileDialog> createState() =>
+      _StudentProfileDialogState();
+}
+
+class _StudentProfileDialogState
+    extends ConsumerState<_StudentProfileDialog> {
+  /// 详情接口返回的覆盖字段；null = 尚未返回 / 接口失败。
+  _Student? _detail;
+  bool _loadingDetail = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.student.userId.isNotEmpty) {
+      _fetchDetail();
+    }
+  }
+
+  Future<void> _fetchDetail() async {
+    setState(() => _loadingDetail = true);
+    final repo = ref.read(adminRepositoryProvider);
+    final resp = await repo.studentDetail(id: widget.student.userId);
+    if (!mounted) return;
+
+    if (resp.isSuccess && resp.data is Map) {
+      try {
+        final m = (resp.data as Map).cast<String, dynamic>();
+        setState(() {
+          _detail = _Student.fromJson(m);
+          _loadingDetail = false;
+        });
+        return;
+      } catch (_) {}
+    }
+    if (mounted) setState(() => _loadingDetail = false);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    // 优先使用详情接口数据，未就绪时使用列表数据。
+    final s = _detail ?? widget.student;
 
     return GradientHeaderDialog(
       title: '学籍档案',
@@ -1186,26 +1237,43 @@ class _StudentProfileDialog extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              _Avatar(name: student.name),
+              _Avatar(name: s.name),
               SizedBox(width: ui(12)),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      student.name,
-                      style: TextStyle(
-                        fontSize: ui(16),
-                        height: 1.2,
-                        fontWeight: AppFont.w600,
-                        color: Colors.black,
-                        fontFamily: 'PingFang SC',
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            s.name,
+                            style: TextStyle(
+                              fontSize: ui(16),
+                              height: 1.2,
+                              fontWeight: AppFont.w600,
+                              color: Colors.black,
+                              fontFamily: 'PingFang SC',
+                            ),
+                          ),
+                        ),
+                        if (_loadingDetail)
+                          SizedBox(
+                            width: ui(14),
+                            height: ui(14),
+                            child: const CircularProgressIndicator(
+                              strokeWidth: 1.5,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                _kPurple,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                     SizedBox(height: ui(4)),
                     Text(
-                      '${student.major} · ${student.direction}',
+                      '${s.major} · ${s.direction}',
                       style: TextStyle(
                         fontSize: ui(12),
                         height: 1.2,
@@ -1215,7 +1283,7 @@ class _StudentProfileDialog extends StatelessWidget {
                     ),
                     SizedBox(height: ui(2)),
                     Text(
-                      student.studentId,
+                      s.studentId,
                       style: TextStyle(
                         fontSize: ui(12),
                         height: 1.2,
@@ -1229,13 +1297,13 @@ class _StudentProfileDialog extends StatelessWidget {
             ],
           ),
           SizedBox(height: ui(20)),
-          _ProfileRow(label: '行政班：', value: student.adminClass),
-          _ProfileRow(label: '专业方向：', value: student.direction),
-          _ProfileRow(label: '住宿：', value: student.dorm),
-          _ProfileRow(label: '本人手机：', value: student.phone),
-          _ProfileRow(label: '家长手机：', value: student.parentPhone),
-          _ProfileRow(label: '最近异动：', value: student.recentChange),
-          _ProfileRow(label: '备注：', value: student.remark, multiline: true),
+          _ProfileRow(label: '行政班：', value: s.adminClass),
+          _ProfileRow(label: '专业方向：', value: s.direction),
+          _ProfileRow(label: '住宿：', value: s.dorm),
+          _ProfileRow(label: '本人手机：', value: s.phone),
+          _ProfileRow(label: '家长手机：', value: s.parentPhone),
+          _ProfileRow(label: '最近异动：', value: s.recentChange),
+          _ProfileRow(label: '备注：', value: s.remark, multiline: true),
         ],
       ),
     );

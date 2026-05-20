@@ -9,6 +9,7 @@ import '../constants/app_constants.dart';
 import '../storage/app_storage.dart';
 import 'api_response.dart';
 import 'api_unauthorized_handler.dart';
+import 'big_int_safe_transformer.dart';
 import 'media_url.dart';
 
 class ApiClient {
@@ -28,7 +29,7 @@ class ApiClient {
           receiveTimeout: const Duration(seconds: 60),
           contentType: Headers.jsonContentType,
         ),
-      );
+      )..transformer = const BigIntSafeTransformer();
 
   final AppStorage _storage;
   final Dio _dio;

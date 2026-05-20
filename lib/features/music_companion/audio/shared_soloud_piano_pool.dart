@@ -8,8 +8,13 @@ import 'music_companion_audio_catalog.dart';
 
 /// 全应用唯一的 SoLoud 钢琴音源池（页面退出不销毁 wav）。
 ///
-/// iPad：先 [ensurePlayable]（初始化 + C4），尽快去掉「加载中」遮罩；
-/// 全量 wav 在后台串行加载，避免并发 [loadAsset] 卡死。
+/// iPad 冷启动稳健性（相对 commit c3f7d2e 稳定版）：
+/// • [ensurePlayable] 只做 init + 解锁音 C4，供启动预热 / 进页快速可弹。
+/// • **不在** [ensurePlayable] 内触发全量加载——05b4715 曾在此
+///   `unawaited(ensureLoaded())`，与 C4 加载并发打 flutter_soloud 原生层，
+///   iPad 冷启动即闪退。
+/// • 全量 wav 仅在用户进入音乐伴侣等页面时，由 [ensureLoaded] 串行拉取。
+/// • 所有 SoLoud 原生调用经 [_enqueue] 串行，避免 loadAsset 竞态。
 class SharedSoLoudPianoPool {
   SharedSoLoudPianoPool._();
 
@@ -23,6 +28,9 @@ class SharedSoLoudPianoPool {
   Future<void>? _playableTask;
   Future<void>? _fullLoadTask;
 
+  /// SoLoud 原生 API 串行队列（init / loadAsset 不可并发）。
+  Future<void> _nativeQueue = Future<void>.value();
+
   /// 已可弹奏（至少解锁音 + SoLoud 已初始化）。
   bool get isPlayable =>
       !kIsWeb &&
@@ -35,32 +43,33 @@ class SharedSoLoudPianoPool {
 
   AudioSource? sourceForNote(String note) => _sourcesByNote[note];
 
-  /// 音乐伴侣进页：快速可弹，不等待 60+ wav 全部进内存。
+  /// 启动预热 / 进页：快速可弹，不拉全量 wav。
   Future<void> ensurePlayable() {
     return _playableTask ??= _loadPlayable();
   }
 
-  /// 智能听写等：需要完整音源表时调用。
+  /// 智能听写 / 音乐伴侣进页后：后台串行加载剩余音源。
   Future<void> ensureLoaded() {
     return _fullLoadTask ??= _loadAllNotes();
   }
 
-  /// 单键懒加载（后台批量尚未完成时）。
+  /// 单键懒加载（全量批量尚未完成时）。
   Future<void> ensureNote(String note) async {
     await ensurePlayable();
     if (_sourcesByNote.containsKey(note)) {
       return;
     }
-    await _loadNote(note);
+    await _enqueue(() => _loadNoteImpl(note));
   }
 
   Future<void> _loadPlayable() async {
     try {
-      await _ensureSoLoudInitialized();
+      await _enqueue(_ensureSoLoudInitializedImpl);
       if (!_sourcesByNote.containsKey(_unlockNote)) {
-        await _loadNote(_unlockNote);
+        await _enqueue(() => _loadNoteImpl(_unlockNote));
       }
-      unawaited(ensureLoaded());
+      // 注意：此处 deliberately 不触发 ensureLoaded()。
+      // 全量加载交给 MusicCompanionAudioEngine.ensurePianoInitialized。
     } catch (error, stack) {
       _playableTask = null;
       debugPrint('SharedSoLoudPianoPool.ensurePlayable failed: $error\n$stack');
@@ -70,7 +79,9 @@ class SharedSoLoudPianoPool {
 
   Future<void> _loadAllNotes() async {
     try {
-      await _loadAllNotesImpl().timeout(const Duration(seconds: 180));
+      await _enqueue(
+        () => _loadAllNotesImpl().timeout(const Duration(seconds: 180)),
+      );
     } catch (error, stack) {
       _fullLoadTask = null;
       debugPrint('SharedSoLoudPianoPool.ensureLoaded failed: $error\n$stack');
@@ -78,7 +89,14 @@ class SharedSoLoudPianoPool {
     }
   }
 
-  Future<void> _ensureSoLoudInitialized() async {
+  /// 把 fn 排进 SoLoud 原生调用队列，保证同一时刻只有一个 init/load 在执行。
+  Future<T> _enqueue<T>(Future<T> Function() fn) {
+    final task = _nativeQueue.then((_) => fn());
+    _nativeQueue = task.then((_) {}, onError: (_) {});
+    return task;
+  }
+
+  Future<void> _ensureSoLoudInitializedImpl() async {
     await NativePlaybackAudioSession.ensurePlaybackActive();
     if (!_soLoud.isInitialized) {
       await _soLoud.init(
@@ -91,7 +109,7 @@ class SharedSoLoudPianoPool {
   }
 
   Future<void> _loadAllNotesImpl() async {
-    await _ensureSoLoudInitialized();
+    await _ensureSoLoudInitializedImpl();
 
     final pending = kMusicCompanionPianoAssetByNote.entries
         .where((entry) => !_sourcesByNote.containsKey(entry.key))
@@ -100,20 +118,13 @@ class SharedSoLoudPianoPool {
       return;
     }
 
-    final batchSize = defaultTargetPlatform == TargetPlatform.iOS ? 1 : 4;
-    for (var i = 0; i < pending.length; i += batchSize) {
-      final batch = pending.skip(i).take(batchSize);
-      if (batchSize == 1) {
-        for (final entry in batch) {
-          await _loadNote(entry.key);
-        }
-      } else {
-        await Future.wait(batch.map((entry) => _loadNote(entry.key)));
-      }
+    // iOS：严格串行 loadAsset（与 c3f7d2e 稳定版一致，避免并发 native 崩溃）。
+    for (final entry in pending) {
+      await _loadNoteImpl(entry.key);
     }
   }
 
-  Future<void> _loadNote(String note) async {
+  Future<void> _loadNoteImpl(String note) async {
     final asset = kMusicCompanionPianoAssetByNote[note];
     if (asset == null || _sourcesByNote.containsKey(note)) {
       return;

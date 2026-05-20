@@ -49,11 +49,14 @@ class MusicCompanionAudioEngine {
   MusicCompanionWebAudioPlayer get _webPlayer => _webPool;
 
   /// 仅预热钢琴（进页 / 用户点琴键）。节拍器音源在首次播放时再加载。
-  Future<void> ensurePianoInitialized() {
+  Future<void> ensurePianoInitialized() async {
     if (kIsWeb) {
-      return _webPool.ensurePianoLoaded();
+      await _webPool.ensurePianoLoaded();
+      return;
     }
-    return _pianoPool.ensurePlayable();
+    await _pianoPool.ensurePlayable();
+    // 全量 wav 仅在用户真正进入音乐伴侣时后台拉取；启动预热只走 ensurePlayable。
+    unawaited(_pianoPool.ensureLoaded());
   }
 
   Future<void> ensureMetronomeInitialized() {

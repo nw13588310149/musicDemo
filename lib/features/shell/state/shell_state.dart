@@ -246,7 +246,12 @@ List<ShellNavItem> buildDefaultNavItems({
 }
 
 ShellState createInitialShellState(AppStorage storage) {
+  final cachedAvatar = storage.avatarUrl;
+  final cachedNickname = storage.nickname;
   return ShellState(
     navItems: buildDefaultNavItems(schoolCoursewareEnabled: false),
+    user: (cachedAvatar.isNotEmpty || cachedNickname.isNotEmpty)
+        ? ShellUser(avatarUrl: cachedAvatar, nickname: cachedNickname)
+        : const ShellUser(),
   );
 }

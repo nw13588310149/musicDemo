@@ -317,7 +317,16 @@ class _AdminTeacherManagementViewState
   String _classFilter = _kAllClasses;
   String _searchKw = '';
 
+  /// 班级 label → 后端 id（全部班级映射 null）。
+  /// id 为雪花 long，全程以 String 存储，避免 web JS number 精度截断。
+  Map<String, String?> _classIdMap = const <String, String?>{};
   List<String> _classOptions = _kBaseClassOptions;
+
+  /// `teacherSum` 接口返回的统计；-1 表示尚未拉到。
+  int _sumOnDuty = -1;
+  int _sumOnLeave = -1;
+  int _sumHeadTeacher = -1;
+  int _sumTotal = -1;
 
   /// 服务端拉到的教师列表；初始 `null` 表示「还没拉到结果」，与「拉到了
   /// 但是空数组」做区分（前者不渲染统计/卡片，后者落到「暂无教师」空态）。
@@ -331,6 +340,7 @@ class _AdminTeacherManagementViewState
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadClasses();
+      _loadSum();
       _loadTeachers();
     });
   }
@@ -349,7 +359,7 @@ class _AdminTeacherManagementViewState
               ? raw['records'] as List
               : const []);
 
-    final names = <String>[_kAllClasses];
+    final map = <String, String?>{_kAllClasses: null};
     for (final item in list) {
       if (item is! Map) continue;
       final m = item.cast<String, dynamic>();
@@ -361,15 +371,42 @@ class _AdminTeacherManagementViewState
         'classFullName',
       ], '');
       if (label.isEmpty) continue;
-      names.add(label);
+      // 班级 id 是雪花 long → 全程 String，禁止 int.parse。
+      final idRaw = m['id'] ?? m['classId'] ?? m['cId'];
+      final id = idRaw == null ? null : '$idRaw';
+      map[label] = (id != null && id.isNotEmpty) ? id : null;
     }
 
-    if (names.length <= 1) return;
+    if (map.length <= 1) return;
     setState(() {
-      _classOptions = names;
+      _classIdMap = map;
+      _classOptions = map.keys.toList();
       if (!_classOptions.contains(_classFilter)) {
         _classFilter = _kAllClasses;
       }
+    });
+  }
+
+  /// 拉教师统计（在岗 / 请假 / 班主任 / 总数）。
+  Future<void> _loadSum() async {
+    final repo = ref.read(adminRepositoryProvider);
+    final resp = await repo.teacherSum();
+    if (!mounted) return;
+
+    if (!resp.isSuccess || resp.data is! Map) return;
+    final m = (resp.data as Map).cast<String, dynamic>();
+    int? n(dynamic v) {
+      if (v == null) return null;
+      if (v is int) return v;
+      if (v is num) return v.toInt();
+      return int.tryParse(v.toString());
+    }
+
+    setState(() {
+      _sumOnDuty = n(m['onDutyCount']) ?? 0;
+      _sumOnLeave = n(m['onLeaveCount']) ?? 0;
+      _sumHeadTeacher = n(m['headTeacherCount']) ?? 0;
+      _sumTotal = n(m['totalCount']) ?? 0;
     });
   }
 
@@ -379,6 +416,7 @@ class _AdminTeacherManagementViewState
 
     final repo = ref.read(adminRepositoryProvider);
     final resp = await repo.teacherList(
+      classId: _classIdMap[_classFilter],
       keyword: _searchKw.trim().isEmpty ? null : _searchKw.trim(),
     );
     if (!mounted || token != _searchToken) return;
@@ -415,18 +453,7 @@ class _AdminTeacherManagementViewState
   /// 当前生效的教师列表。`null` → 还没回包；空数组 → 接口返回 0 条。
   List<_Teacher> get _teachers => _serverTeachers ?? const <_Teacher>[];
 
-  /// 班级过滤本地兜底（teacherList 接口暂不支持 classId 直接筛选，
-  /// 通过 `roleInfo` / `headTeacherClass` 字面匹配实现前端过滤）。
-  List<_Teacher> get _filtered {
-    return _teachers.where((t) {
-      if (_classFilter != _kAllClasses &&
-          !t.roleInfo.contains(_classFilter) &&
-          t.headTeacherClass != _classFilter) {
-        return false;
-      }
-      return true;
-    }).toList();
-  }
+  List<_Teacher> get _filtered => _teachers;
 
   void _openProfile(_Teacher t) {
     showScaledDialog<void>(
@@ -439,15 +466,12 @@ class _AdminTeacherManagementViewState
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final list = _filtered;
-    final all = _teachers;
 
-    final onDuty = all.where((t) => t.status == _TeacherStatus.onDuty).length;
-    final onLeave = all.where((t) => t.status == _TeacherStatus.leave).length;
-    final onMaternity = all
-        .where((t) => t.status == _TeacherStatus.maternity)
-        .length;
-    final headTeachers = all.where((t) => t.isHeadTeacher).length;
-    final total = all.length;
+    // 统计数据完全来自 teacherSum 接口；接口未返回时显示 0。
+    final onDuty = _sumOnDuty >= 0 ? _sumOnDuty : 0;
+    final onLeave = _sumOnLeave >= 0 ? _sumOnLeave : 0;
+    final headTeachers = _sumHeadTeacher >= 0 ? _sumHeadTeacher : 0;
+    final total = _sumTotal >= 0 ? _sumTotal : 0;
 
     return Container(
       color: _kBg,
@@ -461,7 +485,6 @@ class _AdminTeacherManagementViewState
             _StatsRow(
               onDuty: onDuty,
               onLeave: onLeave,
-              onMaternity: onMaternity,
               headTeachers: headTeachers,
               total: total,
             ),
@@ -603,14 +626,12 @@ class _StatsRow extends StatelessWidget {
   const _StatsRow({
     required this.onDuty,
     required this.onLeave,
-    required this.onMaternity,
     required this.headTeachers,
     required this.total,
   });
 
   final int onDuty;
   final int onLeave;
-  final int onMaternity;
   final int headTeachers;
   final int total;
 
@@ -633,18 +654,11 @@ class _StatsRow extends StatelessWidget {
         iconColor: const Color(0xFFFFB85C),
       ),
       _StatGradientCard(
-        label: '产假',
-        value: onMaternity,
-        gradientStart: const Color(0xFFDCFFE7),
-        icon: Icons.family_restroom_outlined,
-        iconColor: const Color(0xFF52C49A),
-      ),
-      _StatGradientCard(
         label: '班主任',
         value: headTeachers,
-        gradientStart: const Color(0xFFFFE2DC),
+        gradientStart: const Color(0xFFDCFFE7),
         icon: Icons.workspace_premium_outlined,
-        iconColor: const Color(0xFFFF8A75),
+        iconColor: const Color(0xFF52C49A),
       ),
       _StatGradientCard(
         label: '名册总数',

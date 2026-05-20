@@ -12,6 +12,11 @@ class AppStorage {
   // 为 admin。logout 时会清空。
   static const _mobileKey = 'mobile';
 
+  /// 登录后本地缓存的头像 URL 与昵称，供下次启动 / 重新登录时在 myInfo
+  /// 回包前立刻渲染正确头像与用户名，消除首帧「空头像 + 用户」闪烁。
+  static const _avatarUrlKey = 'avatar_url';
+  static const _nicknameKey = 'nickname';
+
   /// 通过 `/app/common/v2/configList` 拉取的「文件服务器域名」。所有
   /// 后端返回的相对路径（如 `app/upload/.../foo.png`）需要拼接到这个域名
   /// 上才能加载到。为空时回退到 `AppConstants.apiBaseUrl`。
@@ -34,6 +39,10 @@ class AppStorage {
   String get schoolId => _prefs.getString(_schoolIdKey) ?? '0';
 
   String get mobile => _prefs.getString(_mobileKey) ?? '';
+
+  String get avatarUrl => _prefs.getString(_avatarUrlKey) ?? '';
+
+  String get nickname => _prefs.getString(_nicknameKey) ?? '';
 
   String get fileBaseUrl => _prefs.getString(_fileBaseUrlKey) ?? '';
 
@@ -79,6 +88,30 @@ class AppStorage {
 
   Future<void> clearMobile() async {
     await _prefs.remove(_mobileKey);
+  }
+
+  Future<void> saveAvatarUrl(String url) async {
+    if (url.isEmpty) {
+      await _prefs.remove(_avatarUrlKey);
+    } else {
+      await _prefs.setString(_avatarUrlKey, url);
+    }
+  }
+
+  Future<void> clearAvatarUrl() async {
+    await _prefs.remove(_avatarUrlKey);
+  }
+
+  Future<void> saveNickname(String name) async {
+    if (name.isEmpty) {
+      await _prefs.remove(_nicknameKey);
+    } else {
+      await _prefs.setString(_nicknameKey, name);
+    }
+  }
+
+  Future<void> clearNickname() async {
+    await _prefs.remove(_nicknameKey);
   }
 
   Future<void> savePushId(String pushId) async {
