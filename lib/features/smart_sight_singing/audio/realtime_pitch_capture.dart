@@ -1,0 +1,47 @@
+import 'realtime_pitch_capture_stub.dart'
+    if (dart.library.io) 'realtime_pitch_capture_io.dart';
+
+/// 实时麦克风采样 → YIN 音高检测结果的事件流。
+abstract class RealtimePitchCapture {
+  /// 麦克风权限是否已授予。
+  Future<bool> hasPermission();
+
+  /// 申请权限（必要时弹系统提示）。
+  Future<bool> requestPermission();
+
+  /// 启动采样 + 检测。事件的最小间隔约等于一帧（≈ 46ms）。
+  Future<Stream<RealtimePitchEvent>> start();
+
+  /// 停止采样、关闭录音、释放资源。
+  Future<void> stop();
+
+  bool get isRunning;
+}
+
+/// 实时音高事件（单帧）。
+class RealtimePitchEvent {
+  const RealtimePitchEvent({
+    required this.frequencyHz,
+    required this.midi,
+    required this.confidence,
+    required this.amplitude,
+    required this.pitched,
+  });
+  final double frequencyHz;
+  final double midi;
+  final double confidence;
+  final double amplitude;
+  final bool pitched;
+
+  static const empty = RealtimePitchEvent(
+    frequencyHz: 0,
+    midi: -1,
+    confidence: 0,
+    amplitude: 0,
+    pitched: false,
+  );
+}
+
+/// 通过条件导入选择 io / web 实现。
+RealtimePitchCapture createRealtimePitchCapture() =>
+    createPlatformRealtimePitchCapture();

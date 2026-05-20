@@ -170,7 +170,7 @@ class _CompanionTabItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final label = switch (tab) {
-      MusicCompanionTab.piano => '虚拟钢琴1',
+      MusicCompanionTab.piano => '虚拟钢琴',
       MusicCompanionTab.metronome => '节拍器',
       MusicCompanionTab.tuner => '调音器',
     };

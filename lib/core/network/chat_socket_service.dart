@@ -112,10 +112,12 @@ class ChatSocketService {
     }
     final token = _storage.token;
     if (token.isEmpty) {
-      // 没有 token（首次进入 / 刚 logout）：什么都不做，等待登录后再 connect。
       return;
     }
     if (_connecting) {
+      return;
+    }
+    if (_channel != null) {
       return;
     }
 
@@ -126,7 +128,10 @@ class ChatSocketService {
 
     _connecting = true;
     try {
-      final channel = WebSocketChannel.connect(_wsUri());
+      // _wsUri() 含 Uri.parse —— apiBaseUrl 异常 / 网络栈异常都不能让启动
+      // 期同步抛出，全部捕获后走重连兜底。
+      final uri = _wsUri();
+      final channel = WebSocketChannel.connect(uri);
       _channel = channel;
       _subscription = channel.stream.listen(
         _handleRawMessage,
@@ -134,9 +139,14 @@ class ChatSocketService {
         onDone: _handleClosed,
         cancelOnError: true,
       );
-      channel.sink.add(
-        jsonEncode(<String, dynamic>{'type': 1000, 'token': token}),
-      );
+      try {
+        channel.sink.add(
+          jsonEncode(<String, dynamic>{'type': 1000, 'token': token}),
+        );
+      } catch (_) {
+        // sink 在 channel 还没就绪时偶发抛同步异常；交给底层 stream 的
+        // onError 关闭，不影响后续重连。
+      }
       _startHeartbeat();
     } catch (_) {
       _scheduleReconnect();
@@ -211,19 +221,19 @@ class ChatSocketService {
 
       final normalizedType = _normalizeWsType(map);
 
-      // AI 助手 —— 流式增量。
+      // AI 助手 —— 流式增量（type=1/10014 在协议里几乎全是 delta，整包只认 10005）。
       if (normalizedType == 0 ||
+          normalizedType == 1 ||
           normalizedType == 10004 ||
           normalizedType == 10013 ||
+          normalizedType == 10014 ||
           _isLikelyChatGptStreamChunk(map, normalizedType)) {
         _emit(ChatSocketEventType.stream, map);
         return;
       }
 
-      // AI 助手 —— 整包响应。
-      if (normalizedType == 1 ||
-          normalizedType == 10005 ||
-          normalizedType == 10014 ||
+      // AI 助手 —— 整包响应（仅 10005 或无 type 的 assistant envelope）。
+      if (normalizedType == 10005 ||
           _isAssistantFullPayload(map, normalizedType)) {
         _emit(ChatSocketEventType.full, map);
         return;
@@ -290,33 +300,44 @@ class ChatSocketService {
   }
 
   bool _isLikelyChatGptStreamChunk(Map<String, dynamic> json, int? type) {
-    if (type != 1 && type != 10014) {
+    if (type != null) {
       return false;
     }
-    final hasStringContent = json['content'] is String;
-    if (!hasStringContent) {
-      return false;
-    }
+    return _looksLikeAssistantStreamPayload(json);
+  }
 
-    // 流式增量帧典型形态：type ∈ {1, 10014}，content 为字符串。
-    //
-    // 历史教训：
-    // 1) 旧版要求 `sessionId == null && role == null`，但服务端在「新建会话
-    //    首条回复」上每片都带 sessionId，结果首轮整帧被误判到 full 分支后立刻
-    //    `_finishAiStream`，后续增量被丢弃 → 表现为「没有打字效果」。
-    // 2) 改成「必须带 replyId」之后，仍然有部分场景（首条回复、断线重连后的
-    //    第一片、deepseek 流的中段恢复包）服务端不下发 replyId，分片再次落入
-    //    full 分支，又出现「结束时一次渲染」。
-    //
-    // 因此这里采用最宽松、最符合 web 1.0 实际行为的规则：
-    // - type == 1：DeepSeek/小艺同学常规流式增量 type，**只要 content 是字符串
-    //   就当作流式分片**，不管 replyId 是否存在；
-    // - type == 10014：协议里同时承担「流式分片」与「最终 envelope」两种语义，
-    //   为了避免把 envelope 全量帧也当成 delta 累加，这里仍要求带 replyId。
-    if (type == 1) {
+  /// 无明确 type 但语义上像 AI 流式增量（delta / chunk / 短文本 content）。
+  bool _looksLikeAssistantStreamPayload(Map<String, dynamic> json) {
+    if (json['role'] == 'assistant' || json['role'] == 'ai') {
+      return false;
+    }
+    if (_hasOpenAiStyleDelta(json) || _hasOpenAiStyleDelta(json['content'])) {
       return true;
     }
-    return json['replyId'] != null;
+    if (json['delta'] != null || json['chunk'] != null) {
+      return true;
+    }
+    final content = json['content'];
+    if (content is String && content.isNotEmpty) {
+      return true;
+    }
+    return false;
+  }
+
+  bool _hasOpenAiStyleDelta(dynamic value) {
+    final map = _toMap(value);
+    if (map == null) {
+      return false;
+    }
+    if (map['delta'] != null || map['chunk'] != null) {
+      return true;
+    }
+    final choices = map['choices'];
+    if (choices is List && choices.isNotEmpty) {
+      final first = _toMap(choices.first);
+      return first?['delta'] != null || first?['message'] != null;
+    }
+    return false;
   }
 
   bool _isAssistantFullPayload(Map<String, dynamic> json, int? type) {

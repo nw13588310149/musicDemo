@@ -86,6 +86,18 @@ dependencies:
   permission_handler: ^12.0.1
   camera: ^0.11.1
   image: ^4.5.4
+  # ───────────────────────────────────────────────────────────────────────
+  # 智能视唱依赖（已暂时停用）：
+  # 原计划：`audio_decoder: ^0.8.0` 把 MP3 → PCM，配合 `pitch_detector_dart`
+  # 做帧级 YIN，得到 KTV 参考音高曲线。
+  # 实测：在 iOS iPad 上引入后会在应用启动阶段 `GeneratedPluginRegistrant`
+  # 注册原生插件时立即闪退（audio_decoder 0.8.0 为 2026-05 新发版插件，
+  # iOS 原生层与当前 deployment target=13.0 / Xcode 链路存在兼容问题）。
+  # 处置：左侧入口与路由 case 已隐藏；feature 代码保留但走 stub。等
+  # audio_decoder 升级或换用更成熟的 MP3 解码方案（如 flutter_soloud
+  # readSamplesFromFile）时再启用。
+  # audio_decoder: ^0.8.0
+  # ───────────────────────────────────────────────────────────────────────
 
 dev_dependencies:
   flutter_test:

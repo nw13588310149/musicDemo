@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/config/app_config_repository.dart';
 import '../features/music_companion/audio/music_companion_audio_engine.dart';
 import '../core/network/chat_socket_service.dart';
+import '../features/ai_chat/state/ai_chat_socket_dispatcher.dart';
 import '../core/permissions/first_launch_permission_host.dart';
 import '../core/providers/app_providers.dart' show appStorageProvider, bindApiUnauthorizedSessionCleanup;
 import '../core/push/push_notification_service.dart';
@@ -31,40 +32,78 @@ class _MyAppState extends ConsumerState<MyApp> {
   void initState() {
     super.initState();
     bindApiUnauthorizedSessionCleanup(ref);
-    // 首帧后再初始化推送 / 音频预热，避免 iOS 冷启动时在 Dart main 阶段
-    // 调用原生 SDK（个推、SoLoud）导致闪退。
+    // ────────────────────────────────────────────────────────────────────
+    // 启动稳健化：所有"可能触发原生 / 同步抛错"的副作用都挪到首帧后再执行。
+    //
+    // 历史教训：
+    //   • commit afc74d7（fix:修复闪退）把 GeTui startSdk / SoLoud 预热
+    //     从 main() 推迟到首帧后，治掉了一次 iPad 冷启动闪退。
+    //   • 之后又在 initState 同步阶段新增 `chatSocketServiceProvider.connect()`
+    //     + `aiChatSocketDispatcherProvider` 的 read，会在 Flutter Engine
+    //     渲染第一帧前同步建 TCP/TLS。iPad 在弱网 / VPN / 代理 / 企业网络
+    //     栈下，`WebSocketChannel.connect` 的同步前置握手有概率把 Dart
+    //     异常抛在 main-isolate 启动阶段，表现为应用图标点开"立马闪退"。
+    //
+    // 解决：把 WebSocket / 流式 dispatcher / fileBaseUrl 刷新统一放进
+    // postFrameCallback，并在内部 try-catch 兜底；启动期 dart 代码尽量
+    // 只做纯字段读 / 字符串拼接。
+    // ────────────────────────────────────────────────────────────────────
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(ref.read(pushNotificationServiceProvider).initialize());
-      unawaited(warmupMusicCompanionPianoAudio());
+      if (!mounted) return;
+      try {
+        unawaited(ref.read(pushNotificationServiceProvider).initialize());
+      } catch (e, st) {
+        debugPrint('pushNotificationService.initialize failed: $e\n$st');
+      }
+      try {
+        unawaited(warmupMusicCompanionPianoAudio());
+      } catch (e, st) {
+        debugPrint('warmupMusicCompanionPianoAudio failed: $e\n$st');
+      }
+
+      final storage = ref.read(appStorageProvider);
+      if (storage.token.isNotEmpty) {
+        try {
+          final repo = ref.read(appConfigRepositoryProvider);
+          unawaited(repo.refreshFileBaseUrl());
+        } catch (e, st) {
+          debugPrint('refreshFileBaseUrl failed: $e\n$st');
+        }
+        try {
+          // 全局 WebSocket 长连接：承担 AI 助手 + 系统事件 + 群聊推送。
+          ref.read(chatSocketServiceProvider).connect();
+        } catch (e, st) {
+          debugPrint('chatSocketService.connect failed: $e\n$st');
+        }
+        try {
+          // 预热 AI WS 分发器，确保登录后流式帧不会因页面未挂载而丢失。
+          ref.read(aiChatSocketDispatcherProvider);
+        } catch (e, st) {
+          debugPrint('aiChatSocketDispatcher init failed: $e\n$st');
+        }
+      }
+
+      // GeTui CID 监听同样推迟到首帧后挂载，避免 push service 构造与 stream
+      // 订阅落在启动期同步阶段。
+      try {
+        _cidSubscription = ref
+            .read(pushNotificationServiceProvider)
+            .clientIdStream
+            .listen((cid) async {
+              if (cid.isEmpty) return;
+              final token = ref.read(appStorageProvider).token;
+              if (token.isEmpty) return;
+              final authRepo = ref.read(authRepositoryProvider);
+              try {
+                await authRepo.reportCid(cid);
+              } catch (_) {
+                // 接口失败不影响业务。
+              }
+            });
+      } catch (e, st) {
+        debugPrint('clientIdStream listen failed: $e\n$st');
+      }
     });
-    // 已经登录过的用户冷启动时，异步刷新一次文件服务器配置；游客 token
-    // （如 "youke"）也走相同路径，确保拿到最新的 fileBaseUrl。
-    final storage = ref.read(appStorageProvider);
-    if (storage.token.isNotEmpty) {
-      final repo = ref.read(appConfigRepositoryProvider);
-      unawaited(repo.refreshFileBaseUrl());
-      // 同步建立全局 WebSocket 长连接：承担 AI 助手 + 系统事件 + 群聊推送。
-      // 游客 token（"youke"）也尝试连接，由后端按需放行/拒绝。
-      ref.read(chatSocketServiceProvider).connect();
-    }
-    // GeTui CID 是异步回调拿到的：登录早于 CID 到达 / CID 在运行时
-    // 变更（极少见但官方支持）时，下面这个监听负责把最新 CID 上报到
-    // `/app/user/reportCid`。AuthController 的 `_reportCidIfNeeded` 只
-    // 处理"登录时已经有 CID"的快路径，慢路径靠这里兜底。
-    _cidSubscription = ref
-        .read(pushNotificationServiceProvider)
-        .clientIdStream
-        .listen((cid) async {
-          if (cid.isEmpty) return;
-          final token = ref.read(appStorageProvider).token;
-          if (token.isEmpty) return; // 未登录时不上报；登录后会自动重试。
-          final authRepo = ref.read(authRepositoryProvider);
-          try {
-            await authRepo.reportCid(cid);
-          } catch (_) {
-            // 接口失败不影响业务；下次 CID 到达 / 重新登录会再试一次。
-          }
-        });
   }
 
   @override

@@ -195,6 +195,15 @@ List<ShellNavItem> buildDefaultNavItems({
       icon: AppAssets.leftNavTingxie,
       activeIcon: AppAssets.leftNavTingxie,
     ),
+    // 智能视唱：用户上传 MP3 + 跟唱评分（KTV 风格）。
+    // 暂时隐藏：所需的 audio_decoder 原生插件在 iPad 启动期注册阶段
+    // 导致闪退，已在 pubspec.yaml 中停用。修复后取消下面的注释即可恢复。
+    // const ShellNavItem(
+    //   label: '智能视唱',
+    //   route: RoutePaths.smartSightSinging,
+    //   icon: AppAssets.leftNavTingxie,
+    //   activeIcon: AppAssets.leftNavTingxie,
+    // ),
     const ShellNavItem(
       label: '\u97f3\u4e50\u4f34\u4fa3',
       route: RoutePaths.music,

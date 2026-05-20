@@ -6,35 +6,35 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/ai_chat_repository.dart';
 import '../data/ai_chat_socket_service.dart';
+import 'ai_chat_socket_dispatcher.dart';
 import 'ai_chat_state.dart';
 
 final aiChatControllerProvider =
-    StateNotifierProvider.autoDispose<AiChatController, AiChatState>((ref) {
+    StateNotifierProvider<AiChatController, AiChatState>((ref) {
       final repository = ref.watch(aiChatRepositoryProvider);
-      final socketService = ref.watch(aiChatSocketServiceProvider);
-      return AiChatController(
+      final dispatcher = ref.watch(aiChatSocketDispatcherProvider);
+      final controller = AiChatController(
         repository: repository,
-        socketService: socketService,
+        dispatcher: dispatcher,
       );
+      ref.onDispose(controller.detachSocketHandler);
+      return controller;
     });
 
 class AiChatController extends StateNotifier<AiChatState> {
   AiChatController({
     required AiChatRepository repository,
-    required AiChatSocketService socketService,
-  }) : _socketService = socketService,
+    required AiChatSocketDispatcher dispatcher,
+  }) : _dispatcher = dispatcher,
        _repository = repository,
        super(const AiChatState()) {
-    _socketService.connect();
-    _socketSubscription = _socketService.events.listen(_handleSocketEvent);
+    _dispatcher.setHandler(_handleSocketEvent);
     unawaited(_loadInitial());
   }
 
-  final AiChatSocketService _socketService;
+  final AiChatSocketDispatcher _dispatcher;
   final AiChatRepository _repository;
-  StreamSubscription<AiChatSocketEvent>? _socketSubscription;
   Timer? _streamFallbackTimer;
-  Timer? _streamIdleTimer;
   String? _streamingMessageId;
   String? _streamTargetSessionId;
   String? _streamCorrelationReplyId;
@@ -44,9 +44,13 @@ class AiChatController extends StateNotifier<AiChatState> {
 
   @override
   void dispose() {
+    detachSocketHandler();
     _clearStreamTimers();
-    unawaited(_socketSubscription?.cancel());
     super.dispose();
+  }
+
+  void detachSocketHandler() {
+    _dispatcher.clearHandler(_handleSocketEvent);
   }
 
   Future<void> _loadInitial() async {
@@ -395,14 +399,76 @@ class AiChatController extends StateNotifier<AiChatState> {
   }
 
   void _handleSocketEvent(AiChatSocketEvent event) {
-    if (_streamingMessageId == null || !mounted) {
+    if (!mounted) {
+      return;
+    }
+    _reopenStreamIfNeeded(event.payload);
+    if (_streamingMessageId == null) {
       return;
     }
     if (event.type == AiChatSocketEventType.stream) {
       _onWsChatGptStream(event.payload);
     } else if (event.type == AiChatSocketEventType.full) {
+      if (_shouldTreatFullPayloadAsStreamChunk(event.payload)) {
+        _onWsChatGptStream(event.payload);
+        return;
+      }
       _onWsChatGptFull(event.payload);
     }
+  }
+
+  /// 流式被误结束后，若同一轮回复仍有 WS 分片到达，则恢复 streaming 上下文。
+  void _reopenStreamIfNeeded(Map<String, dynamic> json) {
+    if (_streamingMessageId != null) {
+      return;
+    }
+    if (!state.waitingAssistant) {
+      return;
+    }
+    if (!_payloadBelongsToActiveStream(json)) {
+      return;
+    }
+    final streamMsg = state.messages
+        .where(
+          (item) =>
+              item.type == AiChatMessageType.ai &&
+              item.id.startsWith('ai-stream-'),
+        )
+        .lastOrNull;
+    if (streamMsg == null) {
+      return;
+    }
+    _streamingMessageId = streamMsg.id;
+    _streamTargetSessionId ??= state.activeSessionId;
+    _updateMessageById(
+      streamMsg.id,
+      (current) => current.copyWith(
+        streaming: true,
+        reasoningStreaming: _streamUsesReasoningUi && current.text.isEmpty,
+      ),
+    );
+    _resetStreamFallbackTimer();
+  }
+
+  /// 全局 WS 偶发把 type=1/10014 流式分片归到 full 分支时的兜底。
+  bool _shouldTreatFullPayloadAsStreamChunk(Map<String, dynamic> json) {
+    if (_streamingMessageId == null) {
+      return false;
+    }
+    final type = _wsNumericType(json);
+    if (type == 10005) {
+      return false;
+    }
+    if (type == 1 ||
+        type == 0 ||
+        type == 10004 ||
+        type == 10013 ||
+        type == 10014) {
+      return true;
+    }
+    final delta = _extractStreamDelta(json);
+    final reasoningDelta = _extractReasoningStreamDelta(json);
+    return delta.isNotEmpty || reasoningDelta.isNotEmpty;
   }
 
   void _onWsChatGptStream(Map<String, dynamic> json) {
@@ -429,13 +495,19 @@ class AiChatController extends StateNotifier<AiChatState> {
     }
     _applyStreamChunk(delta, reasoningDelta);
     _resetStreamFallbackTimer();
-    _scheduleStreamIdleFinish();
   }
 
   void _onWsChatGptFull(Map<String, dynamic> json) {
     if (!_matchesStreamSession(json)) {
       return;
     }
+    final type = _wsNumericType(json);
+    // 流式进行中：除 10005 外一律走增量，避免 JSON 分片被当成整包后立刻 finish。
+    if (_streamingMessageId != null && type != 10005) {
+      _onWsChatGptStream(json);
+      return;
+    }
+
     final envelope = _parseAssistantEnvelopeFromWs(json);
     final fullReply = envelope?.text.trim().isNotEmpty == true
         ? envelope!.text.trim()
@@ -537,64 +609,35 @@ class AiChatController extends StateNotifier<AiChatState> {
 
   void _resetStreamFallbackTimer() {
     _streamFallbackTimer?.cancel();
-    _streamFallbackTimer = Timer(const Duration(seconds: 18), () {
-      final sessionId = _streamTargetSessionId;
-      _cancelAiStream(removeStreamingMessage: true);
-      state = state.copyWith(waitingAssistant: false, sending: false);
-      if (sessionId != null) {
-        unawaited(_fetchMessages(sessionId, showLoading: false));
-      }
-    });
-  }
-
-  void _scheduleStreamIdleFinish() {
-    _streamIdleTimer?.cancel();
-    _streamIdleTimer = Timer(const Duration(milliseconds: 2200), () {
-      final streamId = _streamingMessageId;
-      if (streamId == null) {
-        return;
-      }
-      final current = state.messages.where((item) => item.id == streamId);
-      final message = current.isEmpty ? null : current.first;
-      if (message != null &&
-          _streamUsesReasoningUi &&
-          message.text.isEmpty &&
-          message.reasoning.isNotEmpty) {
-        return;
-      }
+    // 深度思考 / 长回答中间可能有数秒静默，不能用短 idle 误判结束。
+    _streamFallbackTimer = Timer(const Duration(minutes: 3), () async {
+      final sessionId = _streamTargetSessionId ?? state.activeSessionId;
       _finishAiStream();
+      if (sessionId != null && mounted) {
+        await _fetchMessages(sessionId, showLoading: false);
+      }
     });
   }
 
   void _clearStreamTimers() {
     _streamFallbackTimer?.cancel();
     _streamFallbackTimer = null;
-    _streamIdleTimer?.cancel();
-    _streamIdleTimer = null;
   }
 
   bool _matchesStreamSession(Map<String, dynamic> json) {
     if (_streamingMessageId == null) {
       return false;
     }
+    return _payloadBelongsToActiveStream(json);
+  }
+
+  bool _payloadBelongsToActiveStream(Map<String, dynamic> json) {
     final sid = _extractWsSessionId(json);
-    // 与当前选中会话或本轮发送锁定的会话任一匹配即可（避免极端情况下
-    // activeSessionId 与 WS 字段短暂不一致时丢掉首轮流式帧）。
-    if (sid != null) {
-      final okActive = _streamIdsEqual(sid, state.activeSessionId);
-      final okTarget = _streamIdsEqual(sid, _streamTargetSessionId);
-      if (!okActive && !okTarget) {
-        return false;
-      }
+    if (sid == null) {
+      return true;
     }
-    final replyId = json['replyId'];
-    if (replyId != null && _streamCorrelationReplyId != null) {
-      return _streamIdsEqual(replyId, _streamCorrelationReplyId);
-    }
-    if (replyId != null) {
-      return _streamIdsEqual(_streamTargetSessionId, state.activeSessionId);
-    }
-    return _streamIdsEqual(_streamTargetSessionId, state.activeSessionId);
+    return _streamIdsEqual(sid, state.activeSessionId) ||
+        _streamIdsEqual(sid, _streamTargetSessionId);
   }
 
   Object? _extractWsSessionId(Map<String, dynamic> json) {

@@ -24,6 +24,7 @@ class SchoolPageController extends StateNotifier<SchoolPageState> {
   final SchoolRepository _repository;
 
   Future<void> refresh() async {
+    if (!mounted) return;
     state = state.copyWith(loading: true, errorMessage: '');
 
     final responses = await Future.wait([
@@ -31,6 +32,9 @@ class SchoolPageController extends StateNotifier<SchoolPageState> {
       _repository.getLearningProgress(),
       _repository.getLatestInfo(),
     ]);
+
+    // 页面已退出（autoDispose）→ 不再写 state，避免 "after dispose" 异常。
+    if (!mounted) return;
 
     final schoolResponse = responses[0];
     final progressResponse = responses[1];
