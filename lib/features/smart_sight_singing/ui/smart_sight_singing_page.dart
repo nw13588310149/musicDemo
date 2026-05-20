@@ -117,46 +117,44 @@ class _TrialWatermark extends StatelessWidget {
           builder: (context, constraints) {
             final tileWidth = ui(210);
             final tileHeight = ui(112);
-            final columns = (constraints.maxWidth / tileWidth).ceil() + 2;
-            final rows = (constraints.maxHeight / tileHeight).ceil() + 2;
+            final columns = (constraints.maxWidth / tileWidth).ceil() + 1;
+            final rows = (constraints.maxHeight / tileHeight).ceil() + 1;
+            final textStyle = TextStyle(
+              fontSize: ui(20),
+              fontWeight: FontWeight.w600,
+              color: const Color(0xFF0B081A),
+              letterSpacing: ui(0.8),
+              fontFamily: 'PingFang SC',
+            );
 
-            return OverflowBox(
-              minWidth: constraints.maxWidth + tileWidth,
-              maxWidth: constraints.maxWidth + tileWidth,
-              minHeight: constraints.maxHeight + tileHeight,
-              maxHeight: constraints.maxHeight + tileHeight,
-              child: Opacity(
-                opacity: 0.13,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: List<Widget>.generate(rows, (row) {
-                    return Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: List<Widget>.generate(columns, (column) {
-                        return SizedBox(
-                          width: tileWidth,
-                          height: tileHeight,
+            return SizedBox(
+              width: constraints.maxWidth,
+              height: constraints.maxHeight,
+              child: Stack(
+                clipBehavior: Clip.hardEdge,
+                children: [
+                  for (var row = 0; row < rows; row++)
+                    for (var col = 0; col < columns; col++)
+                      Positioned(
+                        left: col * tileWidth,
+                        top: row * tileHeight,
+                        width: tileWidth,
+                        height: tileHeight,
+                        child: Opacity(
+                          opacity: 0.13,
                           child: Center(
                             child: Transform.rotate(
                               angle: -0.52,
                               child: Text(
                                 _text,
                                 textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: ui(20),
-                                  fontWeight: FontWeight.w600,
-                                  color: const Color(0xFF0B081A),
-                                  letterSpacing: ui(0.8),
-                                  fontFamily: 'PingFang SC',
-                                ),
+                                style: textStyle,
                               ),
                             ),
                           ),
-                        );
-                      }),
-                    );
-                  }),
-                ),
+                        ),
+                      ),
+                ],
               ),
             );
           },

@@ -30,7 +30,15 @@ class SmartDictationAudioEngine {
       kIsWeb ? _webPlayer.frequencyBands : _frequencyController.stream;
 
   Future<void> ensureInitialized() {
-    return _initTask ??= _initializeAndPreload();
+    return _initTask ??= () async {
+      try {
+        await _initializeAndPreload();
+      } catch (error, stack) {
+        _initTask = null;
+        debugPrint('SmartDictationAudioEngine init failed: $error\n$stack');
+        rethrow;
+      }
+    }();
   }
 
   Future<void> _initializeAndPreload() async {
@@ -107,6 +115,8 @@ class SmartDictationAudioEngine {
         }
         continue;
       }
+      await NativePlaybackAudioSession.ensurePlaybackActive();
+      await _pianoPool.ensureNote(canonical);
       final source = _pianoPool.sourceForNote(canonical);
       if (source == null) {
         continue;
@@ -133,6 +143,8 @@ class SmartDictationAudioEngine {
             await _webPlayer.playAsset(asset, volume: volume);
           }
         } else {
+          await NativePlaybackAudioSession.ensurePlaybackActive();
+          await _pianoPool.ensureNote(canonical);
           final source = _pianoPool.sourceForNote(canonical);
           if (source != null) {
             final handle = _soLoud.play(source, volume: volume);
