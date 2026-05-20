@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 
+import '../../../core/audio/native_playback_audio_session.dart';
 import 'music_companion_audio_catalog.dart';
 import 'music_companion_web_audio_player_base.dart';
 import 'music_companion_web_audio_player_stub.dart'
@@ -80,6 +81,11 @@ class MusicCompanionAudioEngine {
       return;
     }
 
+    // iOS 必须：先把 AVAudioSession 切到 playback，再 init SoLoud。
+    // media_kit (musicPlay) / 调音器 / 人脸相机会把 session 切到非 playback
+    // category，如果不在这里恢复，SoLoud.init() 在 iPad 上会卡住，页面就一直停
+    // 在「钢琴音频加载中…」。
+    await NativePlaybackAudioSession.ensurePlaybackActive();
     if (!_soLoud.isInitialized) {
       await _soLoud.init();
     }
@@ -106,6 +112,9 @@ class MusicCompanionAudioEngine {
       return;
     }
 
+    // 与 piano 同理：节拍器也走 SoLoud，必须先确保 AVAudioSession 是 playback，
+    // 否则 iPad 上 loadAsset 会直接抛 SoLoudException，触发「节拍器音频加载失败」。
+    await NativePlaybackAudioSession.ensurePlaybackActive();
     if (!_soLoud.isInitialized) {
       await _soLoud.init();
     }

@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 
+import '../../../core/audio/native_playback_audio_session.dart';
 import 'web_note_audio_player_base.dart';
 import 'web_note_audio_player_stub.dart'
     if (dart.library.html) 'web_note_audio_player_web.dart';
@@ -47,6 +48,11 @@ class SmartDictationAudioEngine {
       return;
     }
 
+    // iOS 必须：在 SoLoud.init() 之前先把 AVAudioSession 切到 playback。
+    // 否则 media_kit / 人脸相机 / 调音器等模块如果先把 session 切走，
+    // SoLoud 底层 miniaudio 会拿不到输出设备，iPad 上表现为
+    // init() 卡死或后续 loadAsset 直接抛错（即「智能听写音频引擎初始化失败」）。
+    await NativePlaybackAudioSession.ensurePlaybackActive();
     // 与音乐伴侣保持一致：仅在未初始化时 init()，避免重复 init 卸载对方音源。
     if (!_soLoud.isInitialized) {
       await _soLoud.init();
