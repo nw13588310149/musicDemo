@@ -23,15 +23,6 @@ import UIKit
 /// - 延后系统底部上滑手势，避免误触退出。
 @objc(RootFlutterViewController)
 class RootFlutterViewController: FlutterViewController {
-  init(engine: FlutterEngine, nibName: String?, bundle: Bundle?) {
-    super.init(engine: engine, nibName: nibName, bundle: bundle)
-  }
-
-  @available(*, unavailable)
-  required init(coder: NSCoder) {
-    fatalError("RootFlutterViewController must be created with an explicit FlutterEngine")
-  }
-
   /// 与 Info.plist 一致，仅横屏；竖握 iPad 时系统不旋转为竖屏 UI。
   override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
     return [.landscapeLeft, .landscapeRight]
