@@ -99,11 +99,10 @@ class SharedSoLoudPianoPool {
   Future<void> _ensureSoLoudInitializedImpl() async {
     await NativePlaybackAudioSession.ensurePlaybackActive();
     if (!_soLoud.isInitialized) {
-      await _soLoud.init(
-        sampleRate: 44100,
-        bufferSize: 2048,
-        channels: Channels.stereo,
-      );
+      // Keep the iOS init path aligned with the last known stable build.
+      // Explicit sample-rate/channel options have caused device-specific
+      // startup failures with flutter_soloud on iPad.
+      await _soLoud.init();
     }
     _soLoud.setMaxActiveVoiceCount(256);
   }

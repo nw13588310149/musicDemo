@@ -90,11 +90,7 @@ class MusicCompanionAudioEngine {
     await NativePlaybackAudioSession.ensurePlaybackActive();
 
     if (!_soLoud.isInitialized) {
-      await _soLoud.init(
-        sampleRate: 44100,
-        bufferSize: 2048,
-        channels: Channels.stereo,
-      );
+      await _soLoud.init();
     }
     _soLoud.setMaxActiveVoiceCount(256);
 

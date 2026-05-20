@@ -24,7 +24,7 @@ class SmartDictationAudioEngine {
   Timer? _visualTicker;
   Future<void>? _initTask;
 
-  bool get isReady => kIsWeb ? _webPlayer.isReady : _pianoPool.isLoaded;
+  bool get isReady => kIsWeb ? _webPlayer.isReady : _pianoPool.isPlayable;
 
   Stream<List<double>> get frequencyBands =>
       kIsWeb ? _webPlayer.frequencyBands : _frequencyController.stream;
@@ -38,7 +38,12 @@ class SmartDictationAudioEngine {
       await _webPlayer.prepare(_assetByCanonical.values);
       return;
     }
-    await _pianoPool.ensureLoaded();
+    await _pianoPool.ensurePlayable();
+    unawaited(
+      _pianoPool.ensureLoaded().catchError((Object error, StackTrace stack) {
+        debugPrint('SmartDictation piano preload failed: $error\n$stack');
+      }),
+    );
     if (!_soLoud.isInitialized) {
       return;
     }
@@ -62,6 +67,7 @@ class SmartDictationAudioEngine {
       await _webPlayer.playAsset(asset, volume: volume);
       return;
     }
+    await _pianoPool.ensureNote(canonical);
     final source = _pianoPool.sourceForNote(canonical);
     if (source == null) {
       return;

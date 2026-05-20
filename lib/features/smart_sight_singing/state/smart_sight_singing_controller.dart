@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 
@@ -51,9 +51,10 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     FilePickerResult? picked;
     try {
       picked = await FilePicker.platform.pickFiles(
-        type: FileType.audio,
+        type: FileType.custom,
+        allowedExtensions: const <String>['mp3', 'm4a', 'wav', 'aac'],
         allowMultiple: false,
-        withData: false,
+        withData: kIsWeb,
       );
     } catch (e) {
       if (!mounted) return;

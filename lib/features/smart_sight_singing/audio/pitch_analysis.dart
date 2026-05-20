@@ -58,11 +58,7 @@ abstract final class SightSingingPitchAnalyzer {
     await NativePlaybackAudioSession.ensurePlaybackActive();
     final soLoud = SoLoud.instance;
     if (!soLoud.isInitialized) {
-      await soLoud.init(
-        sampleRate: analysisSampleRate,
-        bufferSize: 2048,
-        channels: Channels.mono,
-      );
+      await soLoud.init();
     }
   }
 }
