@@ -4,9 +4,8 @@ import UIKit
 
 /// Low-latency short-note playback for iPad piano / dictation.
 ///
-/// Long audio stays in media_kit / just_audio. This class keeps a single
-/// AVAudioEngine running and caches Flutter assets as AVAudioPCMBuffer so key
-/// presses only schedule an in-memory buffer.
+/// Long audio stays in media_kit / just_audio. This class caches Flutter assets
+/// as AVAudioPCMBuffer and starts AVAudioEngine lazily on the first real note.
 final class LowLatencyNoteAudio {
   private let channel: FlutterMethodChannel
   private let engine = AVAudioEngine()
@@ -62,7 +61,6 @@ final class LowLatencyNoteAudio {
       guard let self = self else { return }
       do {
         try self.configureSession()
-        try self.ensureEngineRunning()
 
         var loaded = 0
         for (key, asset) in assets {
@@ -98,7 +96,6 @@ final class LowLatencyNoteAudio {
     queue.async { [weak self] in
       guard let self = self else { return }
       do {
-        try self.ensureEngineRunning()
         guard let buffer = self.buffersByKey[key] else {
           throw LowLatencyNoteAudioError.bufferNotPrepared(key)
         }
@@ -109,6 +106,7 @@ final class LowLatencyNoteAudio {
         self.engine.connect(node, to: self.engine.mainMixerNode, format: buffer.format)
         self.activeNodes.append(node)
 
+        try self.ensureEngineRunning()
         node.scheduleBuffer(buffer, at: nil, options: []) { [weak self, weak node] in
           guard let self = self, let node = node else { return }
           self.queue.async {
@@ -168,7 +166,6 @@ final class LowLatencyNoteAudio {
 
   private func ensureEngineRunning() throws {
     if !engine.isRunning {
-      engine.prepare()
       try engine.start()
     }
   }
