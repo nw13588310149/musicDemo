@@ -5,6 +5,7 @@ import UIKit
 /// 见 flutter/flutter#183900（ProMotion iPad VSyncClient SIGSEGV）。
 class SceneDelegate: UIResponder, UIWindowSceneDelegate {
   var window: UIWindow?
+  private var lowLatencyNoteAudio: LowLatencyNoteAudio?
 
   func scene(
     _ scene: UIScene,
@@ -33,6 +34,9 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     #endif
 
     GeneratedPluginRegistrant.register(with: flutterViewController)
+    lowLatencyNoteAudio = LowLatencyNoteAudio(
+      messenger: flutterViewController.binaryMessenger
+    )
 
     let window = UIWindow(windowScene: windowScene)
     window.rootViewController = flutterViewController

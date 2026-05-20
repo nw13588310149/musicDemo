@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
-import 'package:just_audio/just_audio.dart';
 
+import '../../../core/audio/low_latency_note_player.dart';
 import 'web_note_audio_player_base.dart';
 import 'web_note_audio_player_stub.dart'
     if (dart.library.html) 'web_note_audio_player_web.dart';
@@ -22,10 +22,7 @@ class SmartDictationAudioEngine {
   SmartDictationAudioEngine();
 
   final WebNoteAudioPlayer _webPlayer = createWebNoteAudioPlayer();
-  final Map<String, AudioPlayer> _playersByCanonical = <String, AudioPlayer>{};
-  final Map<String, Future<AudioPlayer?>> _inflightLoads =
-      <String, Future<AudioPlayer?>>{};
-  final Set<AudioPlayer> _activeOneShotPlayers = <AudioPlayer>{};
+  final LowLatencyNotePlayer _nativePlayer = createLowLatencyNotePlayer();
   final StreamController<List<double>> _frequencyController =
       StreamController<List<double>>.broadcast();
   Future<void>? _initTask;
@@ -36,7 +33,7 @@ class SmartDictationAudioEngine {
   Stream<List<double>> get frequencyBands =>
       kIsWeb ? _webPlayer.frequencyBands : _frequencyController.stream;
 
-  /// Web 端准备 WebAudio；native/iOS 走 just_audio 懒加载，不再等待 SoLoud。
+  /// Web 端准备 WebAudio；native/iOS 准备 AVAudioEngine buffer pool。
   Future<void> ensureInitialized() {
     return _initTask ??= _runEnsureInitialized();
   }
@@ -47,7 +44,7 @@ class SmartDictationAudioEngine {
         await _webPlayer.prepare(_assetByCanonical.values);
         return;
       }
-      // native/iOS: no-op. Each note is prepared lazily by just_audio.
+      await _nativePlayer.prepare(_assetByCanonical);
     } catch (error, stack) {
       _initTask = null;
       debugPrint(
@@ -55,43 +52,6 @@ class SmartDictationAudioEngine {
       );
       rethrow;
     }
-  }
-
-  Future<AudioPlayer?> _loadPlayerForCanonical(String canonical) async {
-    final cached = _playersByCanonical[canonical];
-    if (cached != null) return cached;
-    final inflight = _inflightLoads[canonical];
-    if (inflight != null) return inflight;
-
-    final asset = _assetByCanonical[canonical];
-    if (asset == null) return null;
-
-    final future = _createAssetPlayer(asset).then((player) {
-      if (_disposed) {
-        unawaited(player.dispose());
-        return null;
-      }
-      _playersByCanonical[canonical] = player;
-      return player;
-    }).whenComplete(() {
-      _inflightLoads.remove(canonical);
-    });
-    _inflightLoads[canonical] = future;
-    return future;
-  }
-
-  Future<AudioPlayer> _createAssetPlayer(String asset) async {
-    final player = AudioPlayer();
-    await player.setAsset(asset);
-    await player.setVolume(1);
-    return player;
-  }
-
-  Future<void> _playPreparedPlayer(AudioPlayer player, {double volume = 1}) async {
-    await player.setVolume(volume.clamp(0.0, 1.0));
-    await player.seek(Duration.zero);
-    await player.play();
-    _emitNativeVisualPulse();
   }
 
   Future<void> playToken(String token, {double volume = 1}) async {
@@ -116,21 +76,8 @@ class SmartDictationAudioEngine {
     try {
       await ensureInitialized();
       if (_disposed) return;
-      final asset = _assetByCanonical[canonical];
-      final player = await _loadPlayerForCanonical(canonical);
-      if (asset == null || player == null || _disposed) return;
-      if (player.playing) {
-        final oneShot = await _createAssetPlayer(asset);
-        _activeOneShotPlayers.add(oneShot);
-        unawaited(
-          _playPreparedPlayer(oneShot, volume: volume).whenComplete(() async {
-            _activeOneShotPlayers.remove(oneShot);
-            await oneShot.dispose();
-          }),
-        );
-        return;
-      }
-      await _playPreparedPlayer(player, volume: volume);
+      await _nativePlayer.play(canonical, volume: volume);
+      _emitNativeVisualPulse(tokenCount: 1);
     } catch (error, stack) {
       debugPrint(
         'SmartDictationAudioEngine.playToken $canonical failed: $error\n$stack',
@@ -149,7 +96,8 @@ class SmartDictationAudioEngine {
       // 这里允许失败：UI 层的「重试」会再次走一次。
       return;
     }
-    await playToken('a1', volume: 0.02);
+    // Native low-latency player is prepared above. Do not play a probe sound:
+    // entering a lesson / challenge must stay silent.
   }
 
   Future<void> playTokensHarmonic(
@@ -172,22 +120,9 @@ class SmartDictationAudioEngine {
       if (_disposed) return;
       final canonical = canonicalFromToken(token);
       if (canonical.isEmpty) continue;
-      final asset = _assetByCanonical[canonical];
-      final player = await _loadPlayerForCanonical(canonical);
-      if (asset == null || player == null || _disposed) continue;
+      if (!_assetByCanonical.containsKey(canonical)) continue;
       try {
-        if (player.playing) {
-          final oneShot = await _createAssetPlayer(asset);
-          _activeOneShotPlayers.add(oneShot);
-          unawaited(
-            _playPreparedPlayer(oneShot, volume: volume).whenComplete(() async {
-              _activeOneShotPlayers.remove(oneShot);
-              await oneShot.dispose();
-            }),
-          );
-        } else {
-          await _playPreparedPlayer(player, volume: volume);
-        }
+        unawaited(_nativePlayer.play(canonical, volume: volume));
       } catch (error, stack) {
         debugPrint(
           'SmartDictationAudioEngine harmonic $canonical failed: '
@@ -195,6 +130,7 @@ class SmartDictationAudioEngine {
         );
       }
     }
+    _emitNativeVisualPulse(tokenCount: tokens.length);
   }
 
   Future<void> playTokensMelodic(
@@ -217,11 +153,7 @@ class SmartDictationAudioEngine {
       await _webPlayer.stopAll();
       return;
     }
-    final players = <AudioPlayer>{
-      ..._playersByCanonical.values,
-      ..._activeOneShotPlayers,
-    };
-    await Future.wait(players.map((player) => player.stop().catchError((_) {})));
+    await _nativePlayer.stopAll();
     _frequencyController.add(const <double>[]);
   }
 
@@ -233,30 +165,23 @@ class SmartDictationAudioEngine {
       _initTask = null;
       return;
     }
-    for (final player in <AudioPlayer>{
-      ..._playersByCanonical.values,
-      ..._activeOneShotPlayers,
-    }) {
-      try {
-        await player.dispose();
-      } catch (_) {}
-    }
-    _playersByCanonical.clear();
-    _inflightLoads.clear();
-    _activeOneShotPlayers.clear();
+    await _nativePlayer.dispose();
     if (!_frequencyController.isClosed) {
       await _frequencyController.close();
     }
     _initTask = null;
   }
 
-  void _emitNativeVisualPulse() {
+  void _emitNativeVisualPulse({required int tokenCount}) {
     if (_frequencyController.isClosed) return;
     const bands = 46;
     final result = List<double>.filled(bands, 0);
+    final density = tokenCount.clamp(1, 4);
     for (var i = 0; i < bands; i++) {
       final wave = math.sin(i / bands * math.pi);
-      result[i] = (wave * 0.85).clamp(0.0, 1.0);
+      final ripple = math.sin((i + density * 3) / bands * math.pi * density);
+      result[i] = (wave * (0.55 + density * 0.1) + ripple.abs() * 0.18)
+          .clamp(0.0, 1.0);
     }
     _frequencyController.add(result);
     Future<void>.delayed(const Duration(milliseconds: 180), () {

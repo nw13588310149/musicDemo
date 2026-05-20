@@ -594,18 +594,24 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     if (_disposed) return;
     final active = Set<String>.from(state.activePianoNotes)..add(note);
     state = state.copyWith(activePianoNotes: active);
-    await _pianoEngine.ensurePianoInitialized();
-    if (!mounted || _disposed) {
+
+    if (_pianoEngine.tryPlayNoteFromUserGesture(note)) {
+      if (!state.ready && mounted && !_disposed) {
+        state = state.copyWith(ready: true);
+      }
       return;
     }
-    await _pianoEngine.activateByUserGesture();
+
+    await _pianoEngine.ensurePianoInitialized();
     if (!mounted || _disposed) {
       return;
     }
     if (!state.ready) {
       state = state.copyWith(ready: true);
     }
-    await _pianoEngine.playNote(note);
+    if (!_pianoEngine.tryPlayNoteFromUserGesture(note)) {
+      await _pianoEngine.playNote(note);
+    }
   }
 
   void releasePianoKey(String note) {

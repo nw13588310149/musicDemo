@@ -2687,12 +2687,14 @@ class _LessonTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: const Color(0xFFF5F6FA),
-      borderRadius: BorderRadius.circular(ui(12)),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(ui(12)),
-        onTap: onTap,
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: const Color(0xFFF5F6FA),
+          borderRadius: BorderRadius.circular(ui(12)),
+        ),
         child: Padding(
           padding: EdgeInsets.fromLTRB(ui(10), ui(10), ui(10), ui(10)),
           child: Row(
