@@ -1,8 +1,6 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
@@ -81,51 +79,6 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
   }
 
   /// 下载并解析在线音频地址，随后用同一 URL 进行跟唱播放。
-  Future<void> pickAudioFile() async {
-    if (state.stage == SightSingingStage.analyzing ||
-        state.stage == SightSingingStage.singing) {
-      return;
-    }
-    if (kIsWeb) {
-      state = state.copyWith(errorMessage: 'Web 端暂不支持本地音频跟唱，请在 iPad 客户端使用。');
-      return;
-    }
-
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: const <String>[
-          'mp3',
-          'm4a',
-          'wav',
-          'aac',
-          'flac',
-          'ogg',
-        ],
-        allowMultiple: false,
-      );
-      if (result == null || result.files.isEmpty) {
-        return;
-      }
-
-      final file = result.files.single;
-      final path = file.path;
-      if (path == null || path.trim().isEmpty) {
-        state = state.copyWith(errorMessage: '无法读取所选音频路径，请换一个文件试试。');
-        return;
-      }
-
-      await _analyzeFileAndPreparePlayback(
-        path: path,
-        formatHint: _inferExt(file.name),
-        displayName: file.name.trim().isEmpty ? _nameFromPath(path) : file.name,
-      );
-    } catch (e) {
-      if (!mounted) return;
-      state = state.copyWith(errorMessage: '选择音频失败：$e');
-    }
-  }
-
   Future<void> analyzeOnlineAudio(String rawUrl) async {
     if (state.stage == SightSingingStage.analyzing ||
         state.stage == SightSingingStage.singing) {
@@ -222,16 +175,11 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       errorMessage: null,
     );
 
-    // 解码 + 切帧 + YIN（在 isolate 中）。
+    // 解码 + 切帧 + YIN。
     try {
-      final durationHint = await _preparePlaybackAndReadDuration(mediaUri);
-      if (!mounted) return;
-      state = state.copyWith(analyzingProgress: 0.25);
-
       final track = await SightSingingPitchAnalyzer.analyzeBytes(
         bytes,
         formatHint: formatHint,
-        durationHint: durationHint,
       );
       if (!mounted) return;
       if (track.isEmpty) {

@@ -195,12 +195,13 @@ List<ShellNavItem> buildDefaultNavItems({
       icon: AppAssets.leftNavTingxie,
       activeIcon: AppAssets.leftNavTingxie,
     ),
-    const ShellNavItem(
-      label: '智能视唱',
-      route: RoutePaths.smartSightSinging,
-      icon: AppAssets.leftNavTingxie,
-      activeIcon: AppAssets.leftNavTingxie,
-    ),
+    // 智能视唱：功能保留，左侧菜单暂不开放。
+    // const ShellNavItem(
+    //   label: '智能视唱',
+    //   route: RoutePaths.smartSightSinging,
+    //   icon: AppAssets.leftNavTingxie,
+    //   activeIcon: AppAssets.leftNavTingxie,
+    // ),
     const ShellNavItem(
       label: '\u97f3\u4e50\u4f34\u4fa3',
       route: RoutePaths.music,

@@ -30,7 +30,7 @@ import '../../features/school/ui/school_video_tutorial_page.dart';
 import '../../features/shell/ui/shell_scaffold.dart';
 import '../../features/smart_campus/ui/smart_campus_page.dart';
 import '../../features/smart_dictation/ui/smart_dictation_page.dart';
-import '../../features/smart_sight_singing/ui/smart_sight_singing_page.dart';
+// import '../../features/smart_sight_singing/ui/smart_sight_singing_page.dart';
 import '../../features/study_catalog/ui/study_catalog_page.dart';
 import '../../features/theory/ui/theory_page.dart';
 import '../../features/video_tutorial/ui/video_tutorial_page.dart';
@@ -95,8 +95,8 @@ class AppRouter {
         return const VideoTutorialV2Page();
       case RoutePaths.smartDictation:
         return const SmartDictationV2Page();
-      case RoutePaths.smartSightSinging:
-        return const SmartSightSingingPage();
+      // case RoutePaths.smartSightSinging:
+      //   return const SmartSightSingingPage();
       case RoutePaths.music:
         return const MusicCompanionV2Page();
       case RoutePaths.smartCampus:
