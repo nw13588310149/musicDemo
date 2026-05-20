@@ -39,6 +39,12 @@ const String _kGetuiAppId = 'YOUR_GETUI_APP_ID';
 const String _kGetuiAppKey = 'YOUR_GETUI_APP_KEY';
 const String _kGetuiAppSecret = 'YOUR_GETUI_APP_SECRET';
 
+bool get _isGetuiConfigured {
+  bool valid(String value) =>
+      value.isNotEmpty && !value.startsWith('YOUR_GETUI_');
+  return valid(_kGetuiAppId) && valid(_kGetuiAppKey) && valid(_kGetuiAppSecret);
+}
+
 PushNotificationService createPushNotificationService({
   required AppStorage storage,
 }) {
@@ -83,6 +89,13 @@ class _GetuiPushNotificationService implements PushNotificationService {
   Future<void> initialize() async {
     if (_initialized) return;
     _initialized = true;
+
+    if (!_isGetuiConfigured) {
+      debugPrint(
+        'PushNotificationService: GeTui credentials not configured, skip SDK start',
+      );
+      return;
+    }
 
     try {
       Getuiflut().addEventHandler(

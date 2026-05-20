@@ -5,6 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/config/app_config_repository.dart';
+import '../features/music_companion/audio/music_companion_audio_engine.dart';
 import '../core/network/chat_socket_service.dart';
 import '../core/permissions/first_launch_permission_host.dart';
 import '../core/providers/app_providers.dart' show appStorageProvider, bindApiUnauthorizedSessionCleanup;
@@ -30,6 +31,12 @@ class _MyAppState extends ConsumerState<MyApp> {
   void initState() {
     super.initState();
     bindApiUnauthorizedSessionCleanup(ref);
+    // 首帧后再初始化推送 / 音频预热，避免 iOS 冷启动时在 Dart main 阶段
+    // 调用原生 SDK（个推、SoLoud）导致闪退。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(ref.read(pushNotificationServiceProvider).initialize());
+      unawaited(warmupMusicCompanionPianoAudio());
+    });
     // 已经登录过的用户冷启动时，异步刷新一次文件服务器配置；游客 token
     // （如 "youke"）也走相同路径，确保拿到最新的 fileBaseUrl。
     final storage = ref.read(appStorageProvider);
