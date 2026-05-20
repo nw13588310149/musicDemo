@@ -20,9 +20,41 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
       bundle: nil
     )
 
+    #if DEBUG
+    // Debug 包从桌面冷启动时 registrar 为 null，Swift 插件会 SIGSEGV（flutter#69011）。
+    // 分发到 TestFlight / 真机请用 Release；此处仅避免崩溃并提示。
+    if flutterViewController.registrar(forPlugin: "Runner") == nil {
+      let window = UIWindow(windowScene: windowScene)
+      window.rootViewController = DebugLaunchBlockedViewController()
+      window.makeKeyAndVisible()
+      self.window = window
+      return
+    }
+    #endif
+
+    GeneratedPluginRegistrant.register(with: flutterViewController)
+
     let window = UIWindow(windowScene: windowScene)
     window.rootViewController = flutterViewController
     window.makeKeyAndVisible()
     self.window = window
   }
 }
+
+#if DEBUG
+/// Debug 包未通过 flutter run / Xcode 调试启动时的占位页，避免插件注册空指针崩溃。
+private final class DebugLaunchBlockedViewController: UIViewController {
+  override func viewDidAppear(_ animated: Bool) {
+    super.viewDidAppear(animated)
+    guard presentedViewController == nil else { return }
+
+    let alert = UIAlertController(
+      title: "Debug 包无法独立启动",
+      message: "请改用 Codemagic Release 模式打包后再安装到 iPad，或通过 flutter run 进行调试。",
+      preferredStyle: .alert
+    )
+    alert.addAction(UIAlertAction(title: "知道了", style: .default))
+    present(alert, animated: true)
+  }
+}
+#endif
