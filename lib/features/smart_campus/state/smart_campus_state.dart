@@ -40,11 +40,6 @@ enum TeacherScheduleMode { view, edit }
 
 enum PrincipalMailboxMessageType { report, suggestion, other }
 
-/// 进入「校长信箱」时的默认分段：
-/// - `compose`  写信（默认）
-/// - `feedback` 需求反馈（个人中心「意见反馈」直达入口）
-enum PrincipalMailboxInitialMode { compose, feedback }
-
 extension SmartCampusRoleX on SmartCampusRole {
   String get label {
     switch (this) {
@@ -161,7 +156,6 @@ class SmartCampusState {
     this.selectedMailboxMessageType = PrincipalMailboxMessageType.suggestion,
     this.isMailboxAnonymous = true,
     this.teacherScheduleMode = TeacherScheduleMode.view,
-    this.principalMailboxInitialMode = PrincipalMailboxInitialMode.compose,
     this.availableRoles = const [
       SmartCampusRole.student,
       SmartCampusRole.teacher,
@@ -186,9 +180,6 @@ class SmartCampusState {
   final bool isMailboxAnonymous;
   final TeacherScheduleMode teacherScheduleMode;
 
-  /// 一次性配置：[PrincipalMailboxView] `initState` 时读取并立刻消费，
-  /// 用于支持「个人中心 - 意见反馈」直接落到「需求反馈」分段。
-  final PrincipalMailboxInitialMode principalMailboxInitialMode;
   final List<SmartCampusRole> availableRoles;
 
   SmartCampusState copyWith({
@@ -198,7 +189,6 @@ class SmartCampusState {
     PrincipalMailboxMessageType? selectedMailboxMessageType,
     bool? isMailboxAnonymous,
     TeacherScheduleMode? teacherScheduleMode,
-    PrincipalMailboxInitialMode? principalMailboxInitialMode,
     List<SmartCampusRole>? availableRoles,
   }) {
     return SmartCampusState(
@@ -209,8 +199,6 @@ class SmartCampusState {
           selectedMailboxMessageType ?? this.selectedMailboxMessageType,
       isMailboxAnonymous: isMailboxAnonymous ?? this.isMailboxAnonymous,
       teacherScheduleMode: teacherScheduleMode ?? this.teacherScheduleMode,
-      principalMailboxInitialMode:
-          principalMailboxInitialMode ?? this.principalMailboxInitialMode,
       availableRoles: availableRoles ?? this.availableRoles,
     );
   }

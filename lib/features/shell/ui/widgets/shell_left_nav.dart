@@ -142,12 +142,16 @@ class _ShellLeftNavState extends State<ShellLeftNav>
 
                   SizedBox(height: ui(18)),
 
-                  // 导航列表
+                  // 常规导航列表（可滚动）；底部留白给贴底的意见反馈
                   Expanded(
                     child: Padding(
                       padding: EdgeInsets.symmetric(horizontal: hPad),
                       child: ListView.separated(
-                        padding: EdgeInsets.zero,
+                        padding: EdgeInsets.only(
+                          bottom: widget.state.footerNavItem != null
+                              ? ui(54)
+                              : 0,
+                        ),
                         physics: const ClampingScrollPhysics(),
                         itemCount: widget.state.navItems.length,
                         separatorBuilder: (context, index) =>
@@ -168,10 +172,23 @@ class _ShellLeftNavState extends State<ShellLeftNav>
                       ),
                     ),
                   ),
-
-                  SizedBox(height: ui(57)),
                 ],
               ),
+
+              // 意见反馈：贴侧栏最底，50px 全宽，内容居中
+              if (widget.state.footerNavItem != null)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: _FooterFeedbackLink(
+                    item: widget.state.footerNavItem!,
+                    collapsed: t > 0.5,
+                    labelOpacity: _labelOpacity.value,
+                    onTap: () =>
+                        widget.onNavigate(widget.state.footerNavItem!.route),
+                  ),
+                ),
 
               // ── 缩放切换按钮（右下角）─────────────────────────────────────
               Positioned(
@@ -209,6 +226,75 @@ class _ShellLeftNavState extends State<ShellLeftNav>
           ),
         );
       },
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _FooterFeedbackLink — 侧栏底部弱样式入口（50px 全宽居中，无点击水波纹）
+// ─────────────────────────────────────────────────────────────────────────────
+class _FooterFeedbackLink extends StatelessWidget {
+  const _FooterFeedbackLink({
+    required this.item,
+    required this.collapsed,
+    required this.labelOpacity,
+    required this.onTap,
+  });
+
+  final ShellNavItem item;
+  final bool collapsed;
+  final double labelOpacity;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final tint = const Color(0xFF0B081A).withValues(alpha: 0.58);
+    final iconSize = ui(14);
+
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
+        height: ui(50),
+        width: double.infinity,
+        child: Center(
+          child: collapsed
+              ? Icon(
+                  Icons.feedback_outlined,
+                  size: iconSize,
+                  color: tint,
+                )
+              : Opacity(
+                  opacity: labelOpacity,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.feedback_outlined,
+                        size: iconSize,
+                        color: tint,
+                      ),
+                      SizedBox(width: ui(4)),
+                      Text(
+                        item.label,
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.clip,
+                        style: TextStyle(
+                          fontSize: ui(12),
+                          height: 1,
+                          fontFamily: 'PingFang SC',
+                          fontWeight: AppFont.w500,
+                          color: tint,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+        ),
+      ),
     );
   }
 }

@@ -67,17 +67,6 @@ class _MusicCompanionV2PageState extends ConsumerState<MusicCompanionV2Page> {
                 child: switch (state.activeTab) {
                   MusicCompanionTab.piano => _VirtualPianoPane(
                     key: const ValueKey<String>('music_piano'),
-                    audioReady: state.audioReady,
-                    statusHint: state.audioReady
-                        ? null
-                        : (state.errorMessage != null &&
-                              state.errorMessage!.contains('失败'))
-                        ? state.errorMessage!
-                        : '钢琴音频加载中…',
-                    showRetry: !state.audioReady &&
-                        state.errorMessage != null &&
-                        state.errorMessage!.contains('失败'),
-                    onRetry: controller.retryAudio,
                     activeNotes: state.activePianoNotes,
                     onPressKey: controller.pressPianoKey,
                     onReleaseKey: controller.releasePianoKey,
@@ -217,20 +206,12 @@ class _CompanionTabItem extends StatelessWidget {
 
 class _VirtualPianoPane extends StatelessWidget {
   const _VirtualPianoPane({
-    required this.audioReady,
-    this.statusHint,
-    this.showRetry = false,
-    this.onRetry,
     required this.activeNotes,
     required this.onPressKey,
     required this.onReleaseKey,
     super.key,
   });
 
-  final bool audioReady;
-  final String? statusHint;
-  final bool showRetry;
-  final Future<void> Function()? onRetry;
   final Set<String> activeNotes;
   final Future<void> Function(String token) onPressKey;
   final ValueChanged<String> onReleaseKey;
@@ -242,87 +223,25 @@ class _VirtualPianoPane extends StatelessWidget {
     // = 42) so its on-screen position is unchanged. The keyboard, in
     // contrast, fills the full pane width and butts up against the panel
     // bottom for the immersive look.
-    return Stack(
+    return Column(
       children: <Widget>[
-        Column(
-          children: <Widget>[
-            Expanded(
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: ui(42)),
-                child: RepaintBoundary(
-                  child: PianoVisualizer(activeNotes: activeNotes),
-                ),
-              ),
-            ),
-            SizedBox(height: ui(18)),
-            RepaintBoundary(
-              child: PianoKeyboard(
-                activeNotes: activeNotes,
-                onPress: onPressKey,
-                onRelease: onReleaseKey,
-                height: 240,
-              ),
-            ),
-          ],
-        ),
-        if (!audioReady)
-          Positioned.fill(
-            // 失败态时 overlay 要能接收点击触发 retry；加载中时仍透传指针避免
-            // 误吃琴键事件。
-            child: IgnorePointer(
-              ignoring: !showRetry,
-              child: ColoredBox(
-                color: const Color(0x660B081A),
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      Text(
-                        statusHint ?? '钢琴音频加载中…',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: ui(14),
-                          color: Colors.white,
-                          fontFamily: 'PingFang SC',
-                          fontWeight: AppFont.w500,
-                        ),
-                      ),
-                      if (showRetry && onRetry != null) ...<Widget>[
-                        SizedBox(height: ui(12)),
-                        GestureDetector(
-                          onTap: () => onRetry!(),
-                          behavior: HitTestBehavior.opaque,
-                          child: Container(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: ui(20),
-                              vertical: ui(8),
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(ui(8)),
-                              border: Border.all(
-                                color: Colors.white,
-                                width: ui(1),
-                              ),
-                            ),
-                            child: Text(
-                              '点击重试',
-                              style: TextStyle(
-                                fontSize: ui(13),
-                                color: Colors.white,
-                                fontFamily: 'PingFang SC',
-                                fontWeight: AppFont.w500,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
+        Expanded(
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: ui(42)),
+            child: RepaintBoundary(
+              child: PianoVisualizer(activeNotes: activeNotes),
             ),
           ),
+        ),
+        SizedBox(height: ui(18)),
+        RepaintBoundary(
+          child: PianoKeyboard(
+            activeNotes: activeNotes,
+            onPress: onPressKey,
+            onRelease: onReleaseKey,
+            height: 240,
+          ),
+        ),
       ],
     );
   }

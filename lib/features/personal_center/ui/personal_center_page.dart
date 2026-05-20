@@ -10,8 +10,6 @@ import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/state/shell_controller.dart';
-import '../../smart_campus/state/smart_campus_controller.dart';
-import '../../smart_campus/state/smart_campus_state.dart';
 import '../data/qr_image_saver.dart';
 import '../state/personal_center_controller.dart';
 import '../state/personal_center_state.dart';
@@ -117,14 +115,8 @@ class _PersonalCenterPageState extends ConsumerState<PersonalCenterPage> {
     );
   }
 
-  /// 「意见反馈」入口：跳转到智慧校园并切换到「校长信箱」的需求反馈分段。
-  /// 复用智慧校园 `PrincipalMailboxView` 的「需求反馈」表单 + 列表，避免在
-  /// 个人中心再实现一套相同表单。
   void _onFeedback(BuildContext context, WidgetRef ref) {
-    ref
-        .read(smartCampusControllerProvider.notifier)
-        .openPrincipalMailbox(initialMode: PrincipalMailboxInitialMode.feedback);
-    Navigator.pushReplacementNamed(context, RoutePaths.smartCampus);
+    Navigator.pushReplacementNamed(context, RoutePaths.helpFeedback);
   }
 
   void _onContactService(BuildContext context) {

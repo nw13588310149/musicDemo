@@ -28,6 +28,7 @@ import '../../features/school/ui/school_courseware_page.dart';
 import '../../features/school/ui/school_quiz_practice_page.dart';
 import '../../features/school/ui/school_video_tutorial_page.dart';
 import '../../features/shell/ui/shell_scaffold.dart';
+import '../../features/feedback/ui/app_feedback_page.dart';
 import '../../features/smart_campus/ui/smart_campus_page.dart';
 import '../../features/smart_dictation/ui/smart_dictation_page.dart';
 // import '../../features/smart_sight_singing/ui/smart_sight_singing_page.dart';
@@ -112,9 +113,10 @@ class AppRouter {
       case RoutePaths.info:
         return const InfoPage();
       case RoutePaths.fankui:
-      case RoutePaths.helpFeedback:
         return const primary_pages.FeedbackPage();
-      // 鈹€鈹€ 棣栭〉涔濆鏍煎姛鑳介粯璁ら〉 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+      case RoutePaths.helpFeedback:
+        return const AppFeedbackPage();
+      // ── 首页九宫格功能默认页 ─────────────────────────────────────
       case RoutePaths.dictation:
         return const DictationPage();
       case RoutePaths.sightSinging:
@@ -185,55 +187,55 @@ class AppRouter {
 
   static String _legacyPageTitle(String routeName) {
     const legacyRoutes = <String, String>{
-      RoutePaths.school: '鏍″洯棣栭〉',
-      RoutePaths.music: '闊充箰妯″潡',
-      RoutePaths.courseware: '鎴戠殑浜戠洏',
-      RoutePaths.videoTutorial: '瑙嗛涓績',
-      RoutePaths.smartDictation: '鏅鸿兘鍚啓',
-      RoutePaths.smartCampus: '鏅烘収鏍″洯',
-      RoutePaths.smartCampusSignRecords: '绛惧埌璁板綍',
-      RoutePaths.smartCampusSignApprovals: '绛惧埌瀹℃壒',
-      RoutePaths.smartSinging: '鏅鸿兘澹颁箰',
-      RoutePaths.myNotes: '鎴戠殑绗旇',
-      RoutePaths.myCollection: '鎴戠殑鏀惰棌',
-      RoutePaths.personalCenter: '涓汉涓績',
-      RoutePaths.helpFeedback: '帮助与反馈',
-      RoutePaths.noteBg: '绗旇鑳屾櫙',
-      RoutePaths.answerQuestions: '绛旈鍏ュ彛',
-      RoutePaths.camp: '闂叧缁冧範',
-      RoutePaths.consultation: '瀛︿範璧勮',
-      RoutePaths.dictation: '鍚啓缁冧範',
-      RoutePaths.mock: '妯℃嫙鑰冭瘯',
-      RoutePaths.musicTheory: '涔愮悊缁冧範',
-      RoutePaths.sightSinging: '瑙嗗敱缁冧範',
-      RoutePaths.store: '鍟嗗煄',
-      RoutePaths.musicPlay: '涔愯氨鎾斁',
-      RoutePaths.recording: '褰曢煶浣滃搧',
-      RoutePaths.voice: '澹颁箰璁粌',
-      RoutePaths.instrumental: '鍣ㄤ箰璁粌',
-      RoutePaths.theory: '涔愮悊璇︽儏',
-      RoutePaths.answer: '鍚啓绛旈',
-      RoutePaths.answer2: '鍚啓绛旈2',
-      RoutePaths.answer3: '鍚啓绛旈3',
-      RoutePaths.over: '鍚啓缁撴灉',
-      RoutePaths.detail: '璇句欢璇︽儏',
-      RoutePaths.detail2: '璇句欢璇︽儏2',
-      RoutePaths.info: '涓汉璧勬枡',
-      RoutePaths.fankui: '鎰忚鍙嶉',
+      RoutePaths.school: '校园课件',
+      RoutePaths.music: '音乐伴侣',
+      RoutePaths.courseware: '我的云盘',
+      RoutePaths.videoTutorial: '视频中心',
+      RoutePaths.smartDictation: '智能听写',
+      RoutePaths.smartCampus: '智慧校园',
+      RoutePaths.smartCampusSignRecords: '签到记录',
+      RoutePaths.smartCampusSignApprovals: '签到审批',
+      RoutePaths.smartSinging: '智能视唱',
+      RoutePaths.myNotes: '我的笔记',
+      RoutePaths.myCollection: '我的收藏',
+      RoutePaths.personalCenter: '个人中心',
+      RoutePaths.helpFeedback: '意见反馈',
+      RoutePaths.noteBg: '笔记背景',
+      RoutePaths.answerQuestions: '答题入口',
+      RoutePaths.camp: '闯关练习',
+      RoutePaths.consultation: '学习资讯',
+      RoutePaths.dictation: '听写练习',
+      RoutePaths.mock: '模拟考试',
+      RoutePaths.musicTheory: '乐理练习',
+      RoutePaths.sightSinging: '视唱练习',
+      RoutePaths.store: '商城',
+      RoutePaths.musicPlay: '乐谱播放',
+      RoutePaths.recording: '录音系统',
+      RoutePaths.voice: '声乐训练',
+      RoutePaths.instrumental: '器乐训练',
+      RoutePaths.theory: '乐理详情',
+      RoutePaths.answer: '听写答题',
+      RoutePaths.answer2: '听写答题2',
+      RoutePaths.answer3: '听写答题3',
+      RoutePaths.over: '听写结果',
+      RoutePaths.detail: '课件详情',
+      RoutePaths.detail2: '课件详情2',
+      RoutePaths.info: '个人资料',
+      RoutePaths.fankui: '意见反馈',
       RoutePaths.qrcode: '我的二维码',
-      RoutePaths.campAnswer: '闂叧浣滅瓟',
-      RoutePaths.campOver: '闂叧缁撶畻',
-      RoutePaths.chat: '鐝骇鑱婂ぉ',
-      RoutePaths.consultationDetail: '璧勮璇︽儏',
-      RoutePaths.noteDetail: '绗旇璇︽儏',
-      RoutePaths.answerEnd: '绛旈缁撴潫',
-      RoutePaths.answerEnd2: '绛旈缁撴潫2',
-      RoutePaths.verifie: '瀹炲悕璁よ瘉',
-      RoutePaths.set: '璁剧疆',
-      RoutePaths.xieyi: '鏈嶅姟鍗忚',
-      RoutePaths.personalAi: 'AI 闂瓟',
-      RoutePaths.email: '閭缁戝畾',
-      RoutePaths.aiSong: 'AI 浣滄洸',
+      RoutePaths.campAnswer: '闯关作答',
+      RoutePaths.campOver: '闯关结算',
+      RoutePaths.chat: '班级聊天',
+      RoutePaths.consultationDetail: '资讯详情',
+      RoutePaths.noteDetail: '笔记详情',
+      RoutePaths.answerEnd: '答题结束',
+      RoutePaths.answerEnd2: '答题结束2',
+      RoutePaths.verifie: '实名认证',
+      RoutePaths.set: '设置',
+      RoutePaths.xieyi: '服务协议',
+      RoutePaths.personalAi: '小艺同学',
+      RoutePaths.email: '邮箱绑定',
+      RoutePaths.aiSong: 'AI 作歌',
       RoutePaths.circle: '校圈',
     };
     return legacyRoutes[routeName] ?? '待迁移页面';

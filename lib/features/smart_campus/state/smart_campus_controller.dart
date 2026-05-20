@@ -273,30 +273,11 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
     state = state.copyWith(selectedRole: role, hasUserSelectedRole: true);
   }
 
-  void openPrincipalMailbox({
-    PrincipalMailboxInitialMode initialMode = PrincipalMailboxInitialMode.compose,
-  }) {
-    if (state.mainView == SmartCampusMainView.principalMailbox &&
-        state.principalMailboxInitialMode == initialMode) {
+  void openPrincipalMailbox() {
+    if (state.mainView == SmartCampusMainView.principalMailbox) {
       return;
     }
-    state = state.copyWith(
-      mainView: SmartCampusMainView.principalMailbox,
-      principalMailboxInitialMode: initialMode,
-    );
-  }
-
-  /// `PrincipalMailboxView.initState` 在拿到一次 [principalMailboxInitialMode]
-  /// 后调用，立即把状态重置为默认 [PrincipalMailboxInitialMode.compose]，避免
-  /// 下次从侧栏进入时仍然落在「需求反馈」分段。
-  void consumePrincipalMailboxInitialMode() {
-    if (state.principalMailboxInitialMode ==
-        PrincipalMailboxInitialMode.compose) {
-      return;
-    }
-    state = state.copyWith(
-      principalMailboxInitialMode: PrincipalMailboxInitialMode.compose,
-    );
+    state = state.copyWith(mainView: SmartCampusMainView.principalMailbox);
   }
 
   void openMyClass() {

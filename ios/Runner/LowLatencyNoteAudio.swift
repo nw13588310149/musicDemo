@@ -137,24 +137,41 @@ final class LowLatencyNoteAudio {
   private func stopAll() {
     queue.async { [weak self] in
       guard let self = self else { return }
-      for node in self.activeNodes {
-        node.stop()
-        self.engine.detach(node)
-      }
+      let nodes = self.activeNodes
       self.activeNodes.removeAll()
+      self.fadeOutAndDetach(nodes: nodes)
     }
   }
 
   private func dispose() {
     queue.async { [weak self] in
       guard let self = self else { return }
-      for node in self.activeNodes {
-        node.stop()
-        self.engine.detach(node)
-      }
+      let nodes = self.activeNodes
       self.activeNodes.removeAll()
+      self.fadeOutAndDetach(nodes: nodes)
       self.buffersByKey.removeAll()
       self.prepared = false
+    }
+  }
+
+  private func fadeOutAndDetach(nodes: [AVAudioPlayerNode]) {
+    guard !nodes.isEmpty else { return }
+    let steps = 6
+    let intervalMs = 8
+    for step in 1...steps {
+      queue.asyncAfter(deadline: .now() + .milliseconds(step * intervalMs)) { [weak self] in
+        guard let self = self else { return }
+        let scale = max(0, Float(steps - step) / Float(steps))
+        for node in nodes {
+          node.volume = node.volume * scale
+        }
+        if step == steps {
+          for node in nodes {
+            node.stop()
+            self.engine.detach(node)
+          }
+        }
+      }
     }
   }
 

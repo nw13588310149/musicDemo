@@ -1,10 +1,11 @@
 // =============================================================================
-// 智慧校园「校长信箱 / 需求反馈」页（学生 / 教师 / 班主任共用）
+// 智慧校园「校长信箱」页（学生 / 教师 / 班主任共用）
 //
 // 入口：`controller.openPrincipalMailbox()` → mainView == principalMailbox。
 // 返回：左上角返回 → onBack → controller.backToDashboard()。
 //
-// 通过右上角分段切换 compose / feedback 两种表单，外白卡 970×731 占满父容器。
+// 通过右上角分段切换 compose / submitted，外白卡 970×731 占满父容器。
+// 「意见反馈」已独立为全局侧栏底部入口（AppFeedbackPage）。
 //
 // 1) compose（校长信箱 · 写信）—— 严格对齐 Figma 绝对坐标（卡内为基准）：
 //    · header 0-82：white→#F9EDFF 渐变，左 32 返回 / 中标题 / 右分段
@@ -14,12 +15,6 @@
 //    · 上传文件：468-532 右侧（242×64 描边 #CECED1）
 //    · 提交按钮：618-670 居中（240×52 紫渐变 + 阴影 + 发送图标）
 //    · 卡底 731；提交按钮距底 61
-//
-// 2) feedback（需求反馈）—— 同卡内坐标：
-//    · header 标题改「需求反馈」+ 副标题「可将需要的资料反馈，工作人员第一时间上传」
-//    · 需求类型：96-168（声乐类 / 器乐类 / 视频类，默认器乐类选中）
-//    · 正文：    192-372（占位「请描述具体需求...」）
-//    · 提交按钮：618-670 居中（文案「提交给音乐之路」）
 //
 // chips 强制 Row（mainAxisSize.min）保持单行；开关使用本文件自定义
 // _AnonymousSwitch（44×24，紫底 #8741FF）以匹配 Figma 视觉。
@@ -44,8 +39,6 @@ import '../../courseware/ui/courseware_file_picker.dart';
 import '../../courseware/ui/courseware_url_opener.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/principal_mailbox_repository.dart';
-import '../state/smart_campus_controller.dart';
-import '../state/smart_campus_state.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 const Color _kPageBg = Color(0xFFEFF3FC);
@@ -58,7 +51,7 @@ const Color _kTextHint = Color(0xFFB6B5BB);
 const Color _kPlaceholder = Color(0xFFCECED1);
 const Color _kPurple = Color(0xFF8741FF);
 
-enum _MailboxMode { compose, submitted, feedback }
+enum _MailboxMode { compose, submitted }
 
 enum _MsgKind { report, suggestion, other }
 
@@ -168,12 +161,6 @@ class _PrincipalMailboxViewState extends ConsumerState<PrincipalMailboxView> {
   _AttachmentSlot? _attachment;
   bool _submitting = false;
 
-  // feedback
-  final _feedbackCtrl = TextEditingController();
-  bool _feedbackSubmitting = false;
-  bool _loadingFeedback = false;
-  List<_FeedbackRecord> _feedbacks = const <_FeedbackRecord>[];
-
   // submitted（我提交的）
   _MailboxStatus _listStatus = _MailboxStatus.sent;
   bool _loadingList = false;
@@ -185,37 +172,11 @@ class _PrincipalMailboxViewState extends ConsumerState<PrincipalMailboxView> {
   void initState() {
     super.initState();
     _repo = ref.read(principalMailboxRepositoryProvider);
-    // 一次性消费 SmartCampusController.openPrincipalMailbox(initialMode:) 设进
-    // 来的初始分段：个人中心「意见反馈」会传入 feedback，让本页打开即落到
-    // 「需求反馈」分段并拉取列表；之后立即 reset 回 compose，保证下次从侧栏
-    // 进入仍是默认「写信」分段。
-    final initialMode = ref
-        .read(smartCampusControllerProvider)
-        .principalMailboxInitialMode;
-    if (initialMode == PrincipalMailboxInitialMode.feedback) {
-      _mode = _MailboxMode.feedback;
-    }
-    // 必须延后到首帧之后再修改 SmartCampusController 状态，否则 Riverpod
-    // 会抛 “Tried to modify a provider while the widget tree was building”：
-    // initState 中 controller 自身正在通知本页 listener，这一帧内若再
-    // setState 会触发递归 notifyListeners。
-    if (initialMode != PrincipalMailboxInitialMode.compose) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        ref
-            .read(smartCampusControllerProvider.notifier)
-            .consumePrincipalMailboxInitialMode();
-        if (initialMode == PrincipalMailboxInitialMode.feedback) {
-          unawaited(_loadFeedback());
-        }
-      });
-    }
   }
 
   @override
   void dispose() {
     _bodyCtrl.dispose();
-    _feedbackCtrl.dispose();
     super.dispose();
   }
 
@@ -223,16 +184,12 @@ class _PrincipalMailboxViewState extends ConsumerState<PrincipalMailboxView> {
     AppToast.show(context, msg);
   }
 
-  /// 切换顶部分段：
-  /// - `submitted` 时按当前 `_listStatus` 拉一次校长信箱列表；
-  /// - `feedback`  时拉一次「我提交的意见反馈」列表。
+  /// 切换顶部分段：`submitted` 时按当前 `_listStatus` 拉一次校长信箱列表。
   void _switchMode(_MailboxMode mode) {
     if (_mode == mode) return;
     setState(() => _mode = mode);
     if (mode == _MailboxMode.submitted) {
       unawaited(_loadList());
-    } else if (mode == _MailboxMode.feedback) {
-      unawaited(_loadFeedback());
     }
   }
 
@@ -318,55 +275,6 @@ class _PrincipalMailboxViewState extends ConsumerState<PrincipalMailboxView> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _submitting = false);
-      _toast('网络异常，请稍后再试');
-    }
-  }
-
-  Future<void> _loadFeedback() async {
-    setState(() => _loadingFeedback = true);
-    try {
-      final resp = await _repo.feedbackList(current: 1, size: 50);
-      if (!mounted) return;
-      if (!resp.isSuccess) {
-        _toast(resp.msg.isEmpty ? '加载失败' : resp.msg);
-        setState(() => _loadingFeedback = false);
-        return;
-      }
-      final parsed = _parseFeedbacks(resp.data);
-      setState(() {
-        _feedbacks = parsed;
-        _loadingFeedback = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _loadingFeedback = false);
-      _toast('网络异常，请稍后再试');
-    }
-  }
-
-  Future<void> _onSubmitFeedback() async {
-    if (_feedbackSubmitting) return;
-    final body = _feedbackCtrl.text.trim();
-    if (body.isEmpty) {
-      _toast('请先填写反馈内容');
-      return;
-    }
-    setState(() => _feedbackSubmitting = true);
-    try {
-      final resp = await _repo.feedbackSave(content: body);
-      if (!mounted) return;
-      if (!resp.isSuccess) {
-        _toast(resp.msg.isEmpty ? '提交失败' : resp.msg);
-        setState(() => _feedbackSubmitting = false);
-        return;
-      }
-      _feedbackCtrl.clear();
-      setState(() => _feedbackSubmitting = false);
-      _toast('已提交反馈，感谢你的建议');
-      unawaited(_loadFeedback());
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _feedbackSubmitting = false);
       _toast('网络异常，请稍后再试');
     }
   }
@@ -467,14 +375,6 @@ class _PrincipalMailboxViewState extends ConsumerState<PrincipalMailboxView> {
           records: _records,
           onWriteNew: () => _switchMode(_MailboxMode.compose),
         );
-      case _MailboxMode.feedback:
-        return _FeedbackForm(
-          bodyCtrl: _feedbackCtrl,
-          onSubmit: _onSubmitFeedback,
-          submitting: _feedbackSubmitting,
-          loading: _loadingFeedback,
-          records: _feedbacks,
-        );
     }
   }
 
@@ -499,7 +399,6 @@ class _PrincipalMailboxViewState extends ConsumerState<PrincipalMailboxView> {
                 mode: _mode,
                 onCompose: () => _switchMode(_MailboxMode.compose),
                 onSubmitted: () => _switchMode(_MailboxMode.submitted),
-                onFeedback: () => _switchMode(_MailboxMode.feedback),
               ),
               Expanded(child: _buildBody()),
             ],
@@ -516,14 +415,12 @@ class _HeaderGradientBar extends StatelessWidget {
     required this.mode,
     required this.onCompose,
     required this.onSubmitted,
-    required this.onFeedback,
   });
 
   final VoidCallback onBack;
   final _MailboxMode mode;
   final VoidCallback onCompose;
   final VoidCallback onSubmitted;
-  final VoidCallback onFeedback;
 
   @override
   Widget build(BuildContext context) {
@@ -538,10 +435,6 @@ class _HeaderGradientBar extends StatelessWidget {
       case _MailboxMode.submitted:
         title = '校长信箱';
         subtitle = '我提交的信件，可在下方按状态筛选';
-        break;
-      case _MailboxMode.feedback:
-        title = '需求反馈';
-        subtitle = '可将需要的资料反馈，工作人员第一时间上传';
         break;
     }
     return SizedBox(
@@ -600,11 +493,10 @@ class _HeaderGradientBar extends StatelessWidget {
           Positioned(
             right: ui(20),
             top: ui(25),
-            child: _WriteFeedbackSegment(
+            child: _MailboxModeSegment(
               mode: mode,
               onCompose: onCompose,
               onSubmitted: onSubmitted,
-              onFeedback: onFeedback,
             ),
           ),
         ],
@@ -643,18 +535,16 @@ class _BackChip extends StatelessWidget {
   }
 }
 
-class _WriteFeedbackSegment extends StatelessWidget {
-  const _WriteFeedbackSegment({
+class _MailboxModeSegment extends StatelessWidget {
+  const _MailboxModeSegment({
     required this.mode,
     required this.onCompose,
     required this.onSubmitted,
-    required this.onFeedback,
   });
 
   final _MailboxMode mode;
   final VoidCallback onCompose;
   final VoidCallback onSubmitted;
-  final VoidCallback onFeedback;
 
   @override
   Widget build(BuildContext context) {
@@ -680,12 +570,6 @@ class _WriteFeedbackSegment extends StatelessWidget {
             selected: mode == _MailboxMode.submitted,
             weight: FontWeight.w500,
             onTap: onSubmitted,
-          ),
-          _SegmentItem(
-            label: '反馈',
-            selected: mode == _MailboxMode.feedback,
-            weight: FontWeight.w400,
-            onTap: onFeedback,
           ),
         ],
       ),
@@ -814,95 +698,6 @@ class _ComposeForm extends StatelessWidget {
                   busy: submitting,
                 ),
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// 反馈 tab：上方为「我的反馈」列表（按时间倒序展示自己提交过的内容），
-/// 下方为「写新反馈」输入区与提交按钮。后端只接收 `content` 字段，所以
-/// 不再有「需求类型」选择。
-class _FeedbackForm extends StatelessWidget {
-  const _FeedbackForm({
-    required this.bodyCtrl,
-    required this.onSubmit,
-    required this.submitting,
-    required this.loading,
-    required this.records,
-  });
-
-  final TextEditingController bodyCtrl;
-  final VoidCallback onSubmit;
-  final bool submitting;
-  final bool loading;
-  final List<_FeedbackRecord> records;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(ui(16), ui(14), ui(16), ui(16)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              const _SectionTitle('我的反馈'),
-              const Spacer(),
-              if (records.isNotEmpty)
-                Text(
-                  '共 ${records.length} 条',
-                  style: TextStyle(
-                    fontSize: ui(12),
-                    color: _kTextHint,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w400,
-                    height: 1.2,
-                  ),
-                ),
-            ],
-          ),
-          SizedBox(height: ui(12)),
-          Expanded(
-            child: loading
-                ? const Center(
-                    child: SizedBox(
-                      width: 28,
-                      height: 28,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.4,
-                        valueColor: AlwaysStoppedAnimation(_kPurple),
-                      ),
-                    ),
-                  )
-                : (records.isEmpty
-                      ? const _FeedbackEmptyHint()
-                      : ListView.separated(
-                          padding: EdgeInsets.only(bottom: ui(8)),
-                          itemBuilder: (_, i) =>
-                              _FeedbackTile(record: records[i]),
-                          separatorBuilder: (_, _) => SizedBox(height: ui(10)),
-                          itemCount: records.length,
-                        )),
-          ),
-          SizedBox(height: ui(12)),
-          const _SectionTitle('写新反馈'),
-          SizedBox(height: ui(8)),
-          _BodyField(
-            controller: bodyCtrl,
-            hint: '请描述你的意见或建议（如功能改进、体验优化等）',
-          ),
-          SizedBox(height: ui(12)),
-          Align(
-            alignment: Alignment.center,
-            child: _SubmitButton(
-              label: submitting ? '提交中…' : '提交给音乐之路',
-              onTap: submitting ? null : onSubmit,
-              busy: submitting,
             ),
           ),
         ],
@@ -1996,217 +1791,3 @@ String _pickString(Map<String, dynamic> m, List<String> keys) {
   return '';
 }
 
-// ============================================================================
-// 「我的反馈」列表
-// ============================================================================
-
-/// 「我提交的意见反馈」单条记录。后端 `feedbackList` 仅返回正文 + 时间，
-/// 无状态字段；如有「客服回复」字段也会一并取出展示。
-class _FeedbackRecord {
-  const _FeedbackRecord({
-    required this.id,
-    required this.content,
-    required this.createTime,
-    required this.replyContent,
-    required this.replyTime,
-  });
-
-  final String id;
-  final String content;
-  final String createTime;
-
-  /// 客服回复正文；空串表示尚未回复。
-  final String replyContent;
-  final String replyTime;
-}
-
-class _FeedbackEmptyHint extends StatelessWidget {
-  const _FeedbackEmptyHint();
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.forum_outlined,
-            size: ui(48),
-            color: _kPlaceholder,
-          ),
-          SizedBox(height: ui(12)),
-          Text(
-            '暂无历史反馈，欢迎在下方提一条',
-            style: TextStyle(
-              fontSize: ui(13),
-              color: _kTextHint,
-              fontFamily: 'PingFang SC',
-              fontWeight: AppFont.w400,
-              height: 1.4,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FeedbackTile extends StatelessWidget {
-  const _FeedbackTile({required this.record});
-
-  final _FeedbackRecord record;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    final hasReply = record.replyContent.trim().isNotEmpty;
-    return Container(
-      padding: EdgeInsets.all(ui(12)),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(10)),
-        border: Border.all(color: _kBorderSoft),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: ui(8),
-                  vertical: ui(2),
-                ),
-                decoration: BoxDecoration(
-                  color: hasReply
-                      ? const Color(0xFF35BD7C).withValues(alpha: 0.12)
-                      : _kPurple.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(ui(4)),
-                ),
-                child: Text(
-                  hasReply ? '已回复' : '已提交',
-                  style: TextStyle(
-                    fontSize: ui(11),
-                    color: hasReply ? const Color(0xFF35BD7C) : _kPurple,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w500,
-                    height: 1.4,
-                  ),
-                ),
-              ),
-              const Spacer(),
-              if (record.createTime.isNotEmpty)
-                Text(
-                  record.createTime,
-                  style: TextStyle(
-                    fontSize: ui(12),
-                    color: _kTextHint,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w400,
-                    height: 1.2,
-                  ),
-                ),
-            ],
-          ),
-          SizedBox(height: ui(8)),
-          Text(
-            record.content,
-            style: TextStyle(
-              fontSize: ui(13),
-              color: _kTextDark,
-              fontFamily: 'PingFang SC',
-              fontWeight: AppFont.w400,
-              height: 20 / 13,
-            ),
-          ),
-          if (hasReply) ...[
-            SizedBox(height: ui(10)),
-            Container(
-              padding: EdgeInsets.all(ui(10)),
-              decoration: BoxDecoration(
-                color: _kInnerGray,
-                borderRadius: BorderRadius.circular(ui(8)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.support_agent_rounded,
-                        size: ui(14),
-                        color: _kPurple,
-                      ),
-                      SizedBox(width: ui(4)),
-                      Text(
-                        '官方回复',
-                        style: TextStyle(
-                          fontSize: ui(12),
-                          color: _kPurple,
-                          fontFamily: 'PingFang SC',
-                          fontWeight: AppFont.w500,
-                          height: 1.2,
-                        ),
-                      ),
-                      const Spacer(),
-                      if (record.replyTime.isNotEmpty)
-                        Text(
-                          record.replyTime,
-                          style: TextStyle(
-                            fontSize: ui(11),
-                            color: _kTextHint,
-                            fontFamily: 'PingFang SC',
-                            fontWeight: AppFont.w400,
-                            height: 1.2,
-                          ),
-                        ),
-                    ],
-                  ),
-                  SizedBox(height: ui(6)),
-                  Text(
-                    record.replyContent,
-                    style: TextStyle(
-                      fontSize: ui(12),
-                      color: _kTextDark,
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w400,
-                      height: 20 / 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-/// 把后端 `feedbackList` 的 `data` 字段安全解析为前端 [_FeedbackRecord] 列表。
-List<_FeedbackRecord> _parseFeedbacks(dynamic data) {
-  final list = _asList(data);
-  return list
-      .map((e) {
-        if (e is! Map) return null;
-        final m = Map<String, dynamic>.from(e);
-        return _FeedbackRecord(
-          id: _pickString(m, const ['id', 'feedbackId']),
-          content: _pickString(m, const ['content', 'body', 'feedback']),
-          createTime: _pickString(m, const [
-            'createTime',
-            'submitTime',
-            'createdAt',
-          ]),
-          replyContent: _pickString(m, const [
-            'replyContent',
-            'reply',
-            'replyMsg',
-          ]),
-          replyTime: _pickString(m, const ['replyTime', 'replyAt']),
-        );
-      })
-      .whereType<_FeedbackRecord>()
-      .toList();
-}

@@ -1474,7 +1474,7 @@ class _RingPainter extends CustomPainter {
 // single piano tone (energy concentrated in low-frequency bins) reads as a
 // centered "swell" rather than a left-aligned cluster.
 
-class _PracticeAudioVisualizer extends StatelessWidget {
+class _PracticeAudioVisualizer extends StatefulWidget {
   const _PracticeAudioVisualizer({
     required this.ui,
     required this.frequencyBands,
@@ -1484,17 +1484,95 @@ class _PracticeAudioVisualizer extends StatelessWidget {
   final List<double> frequencyBands;
 
   @override
+  State<_PracticeAudioVisualizer> createState() =>
+      _PracticeAudioVisualizerState();
+}
+
+class _PracticeAudioVisualizerState extends State<_PracticeAudioVisualizer>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late List<double> _levels;
+  late List<double> _ambientPhases;
+  Duration _lastTick = Duration.zero;
+  double _time = 0;
+
+  static const int _barCount = 46;
+
+  @override
+  void initState() {
+    super.initState();
+    _levels = List<double>.filled(_barCount, 0);
+    _ambientPhases = List<double>.generate(_barCount, (i) => i * 0.31);
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 1),
+    )
+      ..addListener(_tick)
+      ..repeat();
+    _injectBands(widget.frequencyBands);
+  }
+
+  @override
+  void didUpdateWidget(covariant _PracticeAudioVisualizer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.frequencyBands, widget.frequencyBands)) {
+      _injectBands(widget.frequencyBands);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller
+      ..removeListener(_tick)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _tick() {
+    final elapsed = _controller.lastElapsedDuration ?? Duration.zero;
+    final dtSeconds = (elapsed - _lastTick).inMicroseconds / 1e6;
+    _lastTick = elapsed;
+    final dt = dtSeconds.clamp(0.0, 0.05);
+    _time += dt;
+
+    final decay = math.pow(0.10, dt) as double;
+    for (var i = 0; i < _levels.length; i++) {
+      _levels[i] = _levels[i] * decay;
+    }
+    _injectBands(widget.frequencyBands);
+    if (mounted) setState(() {});
+  }
+
+  void _injectBands(List<double> bands) {
+    if (bands.isEmpty) return;
+    final centered = _centerFrequencyBands(bands);
+    if (centered.isEmpty) return;
+    for (var i = 0; i < _levels.length && i < centered.length; i++) {
+      final source = centered[i].clamp(0.0, 1.0);
+      if (source <= 0.012) continue;
+      final shaped = math.pow(source, 0.72).toDouble();
+      _levels[i] = math.max(_levels[i], shaped);
+      // 向邻近柱子扩散一点，形成类似音乐伴侣钢琴页的波纹感。
+      if (i > 0) _levels[i - 1] = math.max(_levels[i - 1], shaped * 0.42);
+      if (i < _levels.length - 1) {
+        _levels[i + 1] = math.max(_levels[i + 1], shaped * 0.42);
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final height = ui(70);
-    final playing = frequencyBands.isNotEmpty;
+    final height = widget.ui(70);
+    final playing = _levels.any((level) => level > 0.018);
     return SizedBox(
       height: height,
       width: double.infinity,
       child: RepaintBoundary(
         child: CustomPaint(
           painter: _PracticeFrequencyPainter(
-            frequencyBands: playing ? frequencyBands : const <double>[],
-            time: 0,
+            levels: _levels,
+            ambientPhases: _ambientPhases,
+            time: _time,
             playing: playing,
           ),
         ),
@@ -1552,12 +1630,14 @@ List<double> _centerFrequencyBands(List<double> bands) {
 
 class _PracticeFrequencyPainter extends CustomPainter {
   const _PracticeFrequencyPainter({
-    required this.frequencyBands,
+    required this.levels,
+    required this.ambientPhases,
     required this.time,
     required this.playing,
   });
 
-  final List<double> frequencyBands;
+  final List<double> levels;
+  final List<double> ambientPhases;
   final double time;
   final bool playing;
 
@@ -1566,8 +1646,7 @@ class _PracticeFrequencyPainter extends CustomPainter {
     if (size.width <= 0 || size.height <= 0) {
       return;
     }
-    final centered = _centerFrequencyBands(frequencyBands);
-    final count = centered.isEmpty ? 46 : centered.length;
+    final count = levels.isEmpty ? 46 : levels.length;
     const gap = 3.0;
     final barWidth = math.max(1.2, (size.width - gap * (count - 1)) / count);
     final centerY = size.height * 0.62;
@@ -1577,9 +1656,14 @@ class _PracticeFrequencyPainter extends CustomPainter {
     final idlePaint = Paint()..color = const Color(0xFFE4E1EC);
 
     for (var i = 0; i < count; i++) {
-      final raw = centered.isEmpty
-          ? (playing ? _fallbackLevel(i, count, time) : 0.0)
-          : centered[i];
+      final ambientPhase = ambientPhases.isEmpty ? i * 0.31 : ambientPhases[i];
+      final ambient =
+          0.045 +
+          0.055 *
+              ((math.sin(time * 1.5 + ambientPhase) +
+                      math.sin(time * 0.86 + ambientPhase * 0.65)) /
+                  2);
+      final raw = (levels.isEmpty ? 0.0 : levels[i]) + ambient;
       final level = raw.clamp(0.0, 1.0);
       final x = i * (barWidth + gap);
       final up = math.max(size.height * 0.08, maxUp * level);
@@ -1618,20 +1702,10 @@ class _PracticeFrequencyPainter extends CustomPainter {
     }
   }
 
-  double _fallbackLevel(int index, int count, double t) {
-    final phase = t * math.pi * 2;
-    final waveA = math.sin(phase * 1.4 + index * 0.52);
-    final waveB = math.sin(phase * 2.1 + index * 0.21);
-    final envelope = math.sin(index / (count - 1) * math.pi);
-    return (0.18 + (waveA * 0.18 + waveB * 0.12 + 0.30) * envelope).clamp(
-      0.04,
-      0.88,
-    );
-  }
-
   @override
   bool shouldRepaint(covariant _PracticeFrequencyPainter oldDelegate) {
-    return oldDelegate.frequencyBands != frequencyBands ||
+    return oldDelegate.levels != levels ||
+        oldDelegate.ambientPhases != ambientPhases ||
         oldDelegate.time != time ||
         oldDelegate.playing != playing;
   }

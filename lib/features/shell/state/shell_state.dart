@@ -107,6 +107,7 @@ class ShellUser {
 class ShellState {
   const ShellState({
     required this.navItems,
+    this.footerNavItem,
     this.collapsed = false,
     this.showFloatingMenu = false,
     this.logoUrl = '',
@@ -117,6 +118,9 @@ class ShellState {
   });
 
   final List<ShellNavItem> navItems;
+
+  /// 吸附在侧栏底部的独立入口（意见反馈），不参与常规 tab 列表滚动混排。
+  final ShellNavItem? footerNavItem;
   final bool collapsed;
   final bool showFloatingMenu;
   final String logoUrl;
@@ -129,6 +133,7 @@ class ShellState {
 
   ShellState copyWith({
     List<ShellNavItem>? navItems,
+    ShellNavItem? footerNavItem,
     bool? collapsed,
     bool? showFloatingMenu,
     String? logoUrl,
@@ -139,6 +144,7 @@ class ShellState {
   }) {
     return ShellState(
       navItems: navItems ?? this.navItems,
+      footerNavItem: footerNavItem ?? this.footerNavItem,
       collapsed: collapsed ?? this.collapsed,
       showFloatingMenu: showFloatingMenu ?? this.showFloatingMenu,
       logoUrl: logoUrl ?? this.logoUrl,
@@ -243,11 +249,22 @@ List<ShellNavItem> buildDefaultNavItems({
   return [...base, if (schoolCoursewareEnabled) school, ...tail];
 }
 
+/// 侧栏底部固定的「意见反馈」入口（弱样式，见 ShellLeftNav._FooterFeedbackLink）。
+ShellNavItem buildFeedbackFooterNavItem() {
+  return const ShellNavItem(
+    label: '\u610f\u89c1\u53cd\u9988',
+    route: RoutePaths.helpFeedback,
+    icon: AppAssets.infoIconFeedback,
+    activeIcon: AppAssets.infoIconFeedback,
+  );
+}
+
 ShellState createInitialShellState(AppStorage storage) {
   final cachedAvatar = storage.avatarUrl;
   final cachedNickname = storage.nickname;
   return ShellState(
     navItems: buildDefaultNavItems(schoolCoursewareEnabled: false),
+    footerNavItem: buildFeedbackFooterNavItem(),
     user: (cachedAvatar.isNotEmpty || cachedNickname.isNotEmpty)
         ? ShellUser(avatarUrl: cachedAvatar, nickname: cachedNickname)
         : const ShellUser(),
