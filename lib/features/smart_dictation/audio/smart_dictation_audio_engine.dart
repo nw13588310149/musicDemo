@@ -4,19 +4,18 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 
-import '../../../core/audio/native_playback_audio_session.dart';
-import '../../music_companion/audio/shared_soloud_piano_pool.dart';
 import 'web_note_audio_player_base.dart';
 import 'web_note_audio_player_stub.dart'
     if (dart.library.html) 'web_note_audio_player_web.dart';
 
+/// 智能听写独立音频引擎（7d9da87 策略：自管音源表，不与音乐伴侣共用）。
 class SmartDictationAudioEngine {
   SmartDictationAudioEngine({SoLoud? soLoud})
     : _soLoud = soLoud ?? SoLoud.instance;
 
   final SoLoud _soLoud;
-  final SharedSoLoudPianoPool _pianoPool = SharedSoLoudPianoPool.instance;
   final WebNoteAudioPlayer _webPlayer = createWebNoteAudioPlayer();
+  final Map<String, AudioSource> _sourcesByCanonical = <String, AudioSource>{};
   final List<SoundHandle> _activeHandles = <SoundHandle>[];
   final StreamController<List<double>> _frequencyController =
       StreamController<List<double>>.broadcast();
@@ -24,7 +23,8 @@ class SmartDictationAudioEngine {
   Timer? _visualTicker;
   Future<void>? _initTask;
 
-  bool get isReady => kIsWeb ? _webPlayer.isReady : _pianoPool.isPlayable;
+  bool get isReady =>
+      kIsWeb ? _webPlayer.isReady : _sourcesByCanonical.isNotEmpty;
 
   Stream<List<double>> get frequencyBands =>
       kIsWeb ? _webPlayer.frequencyBands : _frequencyController.stream;
@@ -46,23 +46,26 @@ class SmartDictationAudioEngine {
       await _webPlayer.prepare(_assetByCanonical.values);
       return;
     }
-    await _pianoPool.ensurePlayable();
-    _configureVisualizationBestEffort();
-  }
 
-  void _configureVisualizationBestEffort() {
+    // 与音乐伴侣保持一致：仅在未初始化时 init()，避免重复 init 卸载对方音源。
     if (!_soLoud.isInitialized) {
+      await _soLoud.init();
+    }
+    _soLoud.setVisualizationEnabled(true);
+    _soLoud.setFftSmoothing(0.82);
+    _audioData ??= AudioData(GetSamplesKind.linear);
+    _soLoud.setMaxActiveVoiceCount(256);
+
+    if (_sourcesByCanonical.isNotEmpty) {
       return;
     }
-    try {
-      _soLoud.setVisualizationEnabled(true);
-      _soLoud.setFftSmoothing(0.82);
-      _audioData ??= AudioData(GetSamplesKind.linear);
-      _soLoud.setMaxActiveVoiceCount(256);
-    } catch (error, stack) {
-      debugPrint('SmartDictation visualization setup failed: $error\n$stack');
-      _audioData?.dispose();
-      _audioData = null;
+
+    for (final entry in _assetByCanonical.entries) {
+      final source = await _soLoud.loadAsset(
+        entry.value,
+        mode: LoadMode.memory,
+      );
+      _sourcesByCanonical[entry.key] = source;
     }
   }
 
@@ -80,9 +83,7 @@ class SmartDictationAudioEngine {
       await _webPlayer.playAsset(asset, volume: volume);
       return;
     }
-    await NativePlaybackAudioSession.ensurePlaybackActive();
-    await _pianoPool.ensureNote(canonical);
-    final source = _pianoPool.sourceForNote(canonical);
+    final source = _sourcesByCanonical[canonical];
     if (source == null) {
       return;
     }
@@ -91,16 +92,17 @@ class SmartDictationAudioEngine {
     _startVisualTicker();
   }
 
-  /// Web compatibility: browsers require user-gesture-triggered audio unlock.
-  /// Call this from a tap handler before the first real playback.
   Future<void> activateByUserGesture() async {
     await ensureInitialized();
     if (kIsWeb) {
       await _webPlayer.activateByUserGesture();
       return;
     }
-    await NativePlaybackAudioSession.ensurePlaybackActive();
-    _pianoPool.tryUnlockProbe();
+    if (_sourcesByCanonical.isEmpty) {
+      return;
+    }
+    final probe = _sourcesByCanonical.values.first;
+    _soLoud.play(probe, volume: 0.0001);
   }
 
   Future<void> playTokensHarmonic(
@@ -120,9 +122,7 @@ class SmartDictationAudioEngine {
         }
         continue;
       }
-      await NativePlaybackAudioSession.ensurePlaybackActive();
-      await _pianoPool.ensureNote(canonical);
-      final source = _pianoPool.sourceForNote(canonical);
+      final source = _sourcesByCanonical[canonical];
       if (source == null) {
         continue;
       }
@@ -148,9 +148,7 @@ class SmartDictationAudioEngine {
             await _webPlayer.playAsset(asset, volume: volume);
           }
         } else {
-          await NativePlaybackAudioSession.ensurePlaybackActive();
-          await _pianoPool.ensureNote(canonical);
-          final source = _pianoPool.sourceForNote(canonical);
+          final source = _sourcesByCanonical[canonical];
           if (source != null) {
             final handle = _soLoud.play(source, volume: volume);
             _activeHandles.add(handle);
@@ -187,11 +185,19 @@ class SmartDictationAudioEngine {
       _initTask = null;
       return;
     }
+    for (final source in _sourcesByCanonical.values) {
+      try {
+        await _soLoud.disposeSource(source);
+      } catch (_) {}
+    }
+    _sourcesByCanonical.clear();
     _activeHandles.clear();
     _stopVisualTicker();
     _audioData?.dispose();
     _audioData = null;
-    await _frequencyController.close();
+    if (!_frequencyController.isClosed) {
+      await _frequencyController.close();
+    }
     _initTask = null;
   }
 

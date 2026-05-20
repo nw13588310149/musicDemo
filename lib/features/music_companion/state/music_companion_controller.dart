@@ -90,11 +90,6 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
 
   Future<void> activateAudio() async {
     try {
-      await NativePlaybackAudioSession.ensurePlaybackActive();
-      if (!_audioEngine.isPianoReady) {
-        await _audioEngine.ensurePianoInitialized();
-      }
-      if (!mounted) return;
       if (!_audioEngine.isPianoReady) {
         await _audioEngine.ensurePianoInitialized();
       }
@@ -135,7 +130,6 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
     }
 
     try {
-      await NativePlaybackAudioSession.ensurePlaybackActive();
       if (!_audioEngine.isPianoReady) {
         await _audioEngine.ensurePianoInitialized();
       }

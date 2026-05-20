@@ -26,7 +26,7 @@ Future<void> main() async {
   } catch (error, stack) {
     debugPrint('MediaKit.ensureInitialized failed: $error\n$stack');
   }
-  // 后台预热 SoLoud 钢琴池，避免首次进入音乐伴侣时 iOS 在手势链里 await 加载失败。
+  // 7d9da87 不在启动时预热 SoLoud；各功能页独立 init + loadAsset，避免竞态。
   unawaited(warmupMusicCompanionPianoAudio());
   await SystemChrome.setPreferredOrientations(const [
     DeviceOrientation.landscapeLeft,

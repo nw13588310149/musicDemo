@@ -3,59 +3,62 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 
-import '../../../core/audio/native_playback_audio_session.dart';
 import 'music_companion_audio_catalog.dart';
 import 'music_companion_web_audio_player_base.dart';
-import 'shared_soloud_piano_pool.dart';
-import 'shared_web_piano_pool.dart';
+import 'music_companion_web_audio_player_stub.dart'
+    if (dart.library.html) 'music_companion_web_audio_player_web.dart';
 
-/// 应用启动后后台预热钢琴池（不阻塞首屏）。
-Future<void> warmupMusicCompanionPianoAudio() async {
-  try {
-    if (kIsWeb) {
-      await SharedWebPianoPool.instance.ensurePianoLoaded();
-      return;
-    }
-    await NativePlaybackAudioSession.ensurePlaybackActive();
-    await SharedSoLoudPianoPool.instance.ensurePlayable();
-  } catch (error, stack) {
-    debugPrint('warmupMusicCompanionPianoAudio: $error\n$stack');
-  }
-}
+/// 启动预热占位：7d9da87 不在 main() 里预热 SoLoud，各页面引擎独立加载。
+Future<void> warmupMusicCompanionPianoAudio() async {}
 
 class MusicCompanionAudioEngine {
   MusicCompanionAudioEngine({SoLoud? soLoud})
     : _soLoud = soLoud ?? SoLoud.instance;
 
   final SoLoud _soLoud;
-  final SharedSoLoudPianoPool _pianoPool = SharedSoLoudPianoPool.instance;
-  final SharedWebPianoPool _webPool = SharedWebPianoPool.instance;
+  final MusicCompanionWebAudioPlayer _webPlayer =
+      createMusicCompanionWebAudioPlayer();
 
+  final Map<String, AudioSource> _pianoSourcesByNote = <String, AudioSource>{};
   final Map<MusicCompanionMetronomeCue, AudioSource> _metronomeSourcesByCue =
       <MusicCompanionMetronomeCue, AudioSource>{};
   final List<SoundHandle> _activeHandles = <SoundHandle>[];
 
+  Future<void>? _initTask;
+  Future<void>? _pianoInitTask;
   Future<void>? _metronomeInitTask;
 
-  /// 设置为 true 后，本引擎会拒绝任何后续的 `playNote` / `playMetronomeCue`。
   bool _disposed = false;
 
-  bool get isReady => kIsWeb
-      ? _webPool.isReady
-      : _pianoPool.isPlayable || _metronomeSourcesByCue.isNotEmpty;
+  bool get isReady =>
+      kIsWeb ? _webPlayer.isReady : _pianoSourcesByNote.isNotEmpty;
 
-  bool get isPianoReady => kIsWeb ? _webPool.isReady : _pianoPool.isPlayable;
+  bool get isPianoReady =>
+      kIsWeb ? _webPlayer.isReady : _pianoSourcesByNote.isNotEmpty;
 
-  MusicCompanionWebAudioPlayer get _webPlayer => _webPool;
+  Future<void> ensureInitialized() {
+    return _initTask ??= () async {
+      try {
+        await Future.wait<void>(<Future<void>>[
+          ensurePianoInitialized(),
+          ensureMetronomeInitialized(),
+        ]);
+      } catch (_) {
+        _initTask = null;
+        rethrow;
+      }
+    }();
+  }
 
-  /// 原生：先 [ensurePlayable]（C4 可弹，去掉「加载中」），再后台串行拉全键盘。
-  /// Web：全量加载钢琴 wav。
-  Future<void> ensurePianoInitialized() async {
-    if (kIsWeb) {
-      await _webPool.ensurePianoLoaded();
-      return;
-    }
-    await _pianoPool.ensurePlayable();
+  Future<void> ensurePianoInitialized() {
+    return _pianoInitTask ??= () async {
+      try {
+        await _initializePianoAssets();
+      } catch (_) {
+        _pianoInitTask = null;
+        rethrow;
+      }
+    }();
   }
 
   Future<void> ensureMetronomeInitialized() {
@@ -69,8 +72,31 @@ class MusicCompanionAudioEngine {
     }();
   }
 
-  /// 兼容旧调用：等价于 [ensurePianoInitialized]。
-  Future<void> ensureInitialized() => ensurePianoInitialized();
+  Future<void> _initializePianoAssets() async {
+    final allAssets = <String>{...kMusicCompanionPianoAssetByNote.values};
+
+    if (kIsWeb) {
+      await _webPlayer.prepare(allAssets);
+      return;
+    }
+
+    if (!_soLoud.isInitialized) {
+      await _soLoud.init();
+    }
+    _soLoud.setMaxActiveVoiceCount(256);
+
+    if (_pianoSourcesByNote.isNotEmpty) {
+      return;
+    }
+
+    for (final entry in kMusicCompanionPianoAssetByNote.entries) {
+      final source = await _soLoud.loadAsset(
+        entry.value,
+        mode: LoadMode.memory,
+      );
+      _pianoSourcesByNote[entry.key] = source;
+    }
+  }
 
   Future<void> _initializeMetronomeAssets() async {
     final allAssets = <String>{...kMusicCompanionMetronomeAssetByCue.values};
@@ -80,22 +106,39 @@ class MusicCompanionAudioEngine {
       return;
     }
 
+    if (!_soLoud.isInitialized) {
+      await _soLoud.init();
+    }
+    _soLoud.setMaxActiveVoiceCount(256);
+
     for (final entry in kMusicCompanionMetronomeAssetByCue.entries) {
-      final existing = _metronomeSourcesByCue[entry.key];
-      if (existing != null) {
+      if (_metronomeSourcesByCue.containsKey(entry.key)) {
         continue;
       }
-      final source = await _pianoPool.loadExternalAsset(entry.value);
+      final source = await _soLoud.loadAsset(
+        entry.value,
+        mode: LoadMode.memory,
+      );
       _metronomeSourcesByCue[entry.key] = source;
     }
   }
 
-  /// 在用户手势的同一调用栈内同步弹奏（iOS 关键路径）。
+  /// iOS：必须在用户手势回调栈内同步 play。
   bool tryPlayNoteFromUserGesture(String rawNote, {double volume = 1}) {
-    if (_disposed || kIsWeb) {
+    if (_disposed || kIsWeb || !_soLoud.isInitialized) {
       return false;
     }
-    return _pianoPool.tryPlayNote(_normalizeNote(rawNote), volume: volume);
+    final source = _pianoSourcesByNote[_normalizeNote(rawNote)];
+    if (source == null) {
+      return false;
+    }
+    try {
+      _registerHandle(_soLoud.play(source, volume: volume));
+      return true;
+    } catch (error, stack) {
+      debugPrint('tryPlayNoteFromUserGesture($rawNote): $error\n$stack');
+      return false;
+    }
   }
 
   bool tryPlayMetronomeCueFromUserGesture(
@@ -113,33 +156,27 @@ class MusicCompanionAudioEngine {
       _registerHandle(_soLoud.play(source, volume: volume));
       return true;
     } catch (error, stack) {
-      debugPrint('tryPlayMetronomeCueFromUserGesture($cue): $error\n$stack');
+      debugPrint(
+        'tryPlayMetronomeCueFromUserGesture($cue): $error\n$stack',
+      );
       return false;
     }
   }
 
   Future<void> activateByUserGesture() async {
-    await NativePlaybackAudioSession.ensurePlaybackActive();
     await ensurePianoInitialized();
     if (kIsWeb) {
       await _webPlayer.activateByUserGesture();
       return;
     }
-    if (!_pianoPool.tryUnlockProbe()) {
-      debugPrint('MusicCompanionAudioEngine: SoLoud unlock probe skipped');
-    }
+    tryPlayNoteFromUserGesture('C4', volume: 0.02);
   }
 
   Future<void> playNote(String rawNote, {double volume = 1}) async {
     if (_disposed) return;
-    final note = _normalizeNote(rawNote);
-    if (kIsWeb) {
-      await ensurePianoInitialized();
-    } else {
-      await NativePlaybackAudioSession.ensurePlaybackActive();
-      await _pianoPool.ensureNote(note);
-    }
+    await ensurePianoInitialized();
     if (_disposed) return;
+    final note = _normalizeNote(rawNote);
     final asset = kMusicCompanionPianoAssetByNote[note];
     if (asset == null) {
       return;
@@ -151,7 +188,7 @@ class MusicCompanionAudioEngine {
       return;
     }
 
-    final source = _pianoPool.sourceForNote(note);
+    final source = _pianoSourcesByNote[note];
     if (source == null || _disposed) {
       return;
     }
@@ -240,19 +277,28 @@ class MusicCompanionAudioEngine {
     await stopAll();
 
     if (kIsWeb) {
-      // Web 钢琴池全局常驻，不在页面 dispose 时销毁解码缓存。
+      await _webPlayer.dispose();
+      _initTask = null;
+      _pianoInitTask = null;
       _metronomeInitTask = null;
       return;
     }
 
-    // 仅释放本引擎持有的节拍器音源；钢琴 wav 留在 [SharedSoLoudPianoPool]。
-    for (final source in _metronomeSourcesByCue.values) {
+    for (final source in _pianoSourcesByNote.values) {
       try {
-        await _pianoPool.disposeExternalSource(source);
+        await _soLoud.disposeSource(source);
       } catch (_) {}
     }
+    for (final source in _metronomeSourcesByCue.values) {
+      try {
+        await _soLoud.disposeSource(source);
+      } catch (_) {}
+    }
+    _pianoSourcesByNote.clear();
     _metronomeSourcesByCue.clear();
     _activeHandles.clear();
+    _initTask = null;
+    _pianoInitTask = null;
     _metronomeInitTask = null;
   }
 

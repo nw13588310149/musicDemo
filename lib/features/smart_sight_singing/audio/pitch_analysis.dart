@@ -24,18 +24,25 @@ abstract final class SightSingingPitchAnalyzer {
   static const String _msgDecodeFailed =
       '\u97f3\u9891\u89e3\u7801\u5931\u8d25\uff0c\u8bf7\u786e\u8ba4\u6586\u4ef6\u683c\u5f0f\u4e3a mp3 / m4a / wav / aac\u3002';
 
-  static Future<PitchTrack> analyzeFile(String path) async {
+  static Future<PitchTrack> analyzeFile(
+    String path, {
+    Duration? durationHint,
+  }) async {
     if (kIsWeb) {
       throw PitchAnalysisException(_msgWebNoPath);
     }
     try {
-      final maxSamples = _maxSamplesForDurationSec(_maxAnalysisSeconds);
+      final request = _sampleRequestForDuration(durationHint);
       final samples = await SoLoud.instance.readSamplesFromFile(
         path,
-        maxSamples,
-        average: false,
+        request.sampleCount,
+        endTime: request.endTimeSeconds,
+        average: true,
       );
-      return _analyzeFloatSamples(_trimTail(samples));
+      return _analyzeFloatSamples(
+        _trimTail(samples, enabled: !request.hasExactDuration),
+        durationHint: request.effectiveDuration,
+      );
     } on PitchAnalysisException {
       rethrow;
     } on SoLoudException catch (error) {
@@ -48,14 +55,22 @@ abstract final class SightSingingPitchAnalyzer {
   static Future<PitchTrack> analyzeBytes(
     Uint8List bytes, {
     required String formatHint,
+    Duration? durationHint,
   }) async {
     if (bytes.isEmpty) {
       throw PitchAnalysisException(_msgReadFailed);
     }
 
     try {
-      final samples = await _decodeBytes(bytes, formatHint: formatHint);
-      return _analyzeFloatSamples(samples);
+      final decoded = await _decodeBytes(
+        bytes,
+        formatHint: formatHint,
+        durationHint: durationHint,
+      );
+      return _analyzeFloatSamples(
+        decoded.samples,
+        durationHint: decoded.duration,
+      );
     } on PitchAnalysisException {
       rethrow;
     } on SoLoudException catch (error) {
@@ -65,29 +80,40 @@ abstract final class SightSingingPitchAnalyzer {
     }
   }
 
-  static Future<Float32List> _decodeBytes(
+  static Future<_DecodedAudioSamples> _decodeBytes(
     Uint8List bytes, {
     required String formatHint,
+    Duration? durationHint,
   }) async {
-    final maxSamples = _estimateMaxSamples(bytes);
+    final request = _sampleRequestForDuration(
+      durationHint ?? _estimateDuration(bytes),
+    );
     if (kIsWeb) {
       await _ensureSoLoudReadyForWebDecode();
       final samples = await SoLoud.instance.readSamplesFromMem(
         bytes,
-        maxSamples,
-        average: false,
+        request.sampleCount,
+        endTime: request.endTimeSeconds,
+        average: true,
       );
-      return _trimTail(samples);
+      return _DecodedAudioSamples(
+        samples: _trimTail(samples, enabled: !request.hasExactDuration),
+        duration: request.effectiveDuration,
+      );
     }
 
     final tempPath = await _writeTempAudio(bytes, formatHint);
     try {
       final samples = await SoLoud.instance.readSamplesFromFile(
         tempPath,
-        maxSamples,
-        average: false,
+        request.sampleCount,
+        endTime: request.endTimeSeconds,
+        average: true,
       );
-      return _trimTail(samples);
+      return _DecodedAudioSamples(
+        samples: _trimTail(samples, enabled: !request.hasExactDuration),
+        duration: request.effectiveDuration,
+      );
     } finally {
       await _deleteTempAudio(tempPath);
     }
@@ -100,21 +126,43 @@ abstract final class SightSingingPitchAnalyzer {
     }
   }
 
-  static int _estimateMaxSamples(Uint8List bytes) {
+  static Duration _estimateDuration(Uint8List bytes) {
     const bytesPerSecond = 16000; // ~128 kbps mp3
     final estimatedSec =
         (bytes.length / bytesPerSecond).ceil().clamp(30, _maxAnalysisSeconds);
     final cappedSec = kIsWeb
         ? math.min(estimatedSec, _webMaxAnalysisSeconds)
         : estimatedSec;
-    return _maxSamplesForDurationSec(cappedSec);
+    return Duration(seconds: cappedSec);
+  }
+
+  static _SampleRequest _sampleRequestForDuration(Duration? duration) {
+    final maxSeconds = kIsWeb ? _webMaxAnalysisSeconds : _maxAnalysisSeconds;
+    final durationMs = duration?.inMilliseconds ?? 0;
+    final hasExactDuration = durationMs > 0;
+    final cappedMs = hasExactDuration
+        ? math.min(durationMs, maxSeconds * 1000)
+        : maxSeconds * 1000;
+    final seconds = cappedMs / 1000.0;
+    final sampleCount = math.max(1, (seconds * analysisSampleRate).round());
+    return _SampleRequest(
+      sampleCount: sampleCount,
+      endTimeSeconds: hasExactDuration ? seconds : -1,
+      effectiveDuration: hasExactDuration
+          ? Duration(milliseconds: cappedMs.round())
+          : null,
+      hasExactDuration: hasExactDuration,
+    );
   }
 
   static int _maxSamplesForDurationSec(int seconds) {
     return seconds * analysisSampleRate;
   }
 
-  static Float32List _trimTail(Float32List samples) {
+  static Float32List _trimTail(Float32List samples, {required bool enabled}) {
+    if (!enabled) {
+      return samples;
+    }
     if (samples.isEmpty) {
       return samples;
     }
@@ -128,12 +176,16 @@ abstract final class SightSingingPitchAnalyzer {
     return Float32List.sublistView(samples, 0, end);
   }
 
-  static Future<PitchTrack> _analyzeFloatSamples(Float32List floats) async {
+  static Future<PitchTrack> _analyzeFloatSamples(
+    Float32List floats, {
+    Duration? durationHint,
+  }) async {
     if (floats.isEmpty) {
       throw PitchAnalysisException(_msgReadFailed);
     }
     final pcm = _floatToInt16Bytes(floats);
-    return _yinPipeline(pcm);
+    final sampleRate = _sampleRateForAnalysis(floats, durationHint);
+    return _yinPipeline(pcm, sampleRate: sampleRate);
   }
 
   static String _mapSoLoudError(SoLoudException error) {
@@ -160,6 +212,42 @@ abstract final class SightSingingPitchAnalyzer {
     if (ext.isEmpty || ext == 'audio') return 'mp3';
     return ext.replaceAll('.', '');
   }
+
+  static double _sampleRateForAnalysis(
+    Float32List samples,
+    Duration? durationHint,
+  ) {
+    final durationMs = durationHint?.inMilliseconds ?? 0;
+    if (durationMs <= 0 || samples.isEmpty) {
+      return analysisSampleRate.toDouble();
+    }
+    final sampleRate = samples.length * 1000 / durationMs;
+    if (!sampleRate.isFinite || sampleRate <= 0) {
+      return analysisSampleRate.toDouble();
+    }
+    return sampleRate.clamp(8000.0, 48000.0);
+  }
+}
+
+class _DecodedAudioSamples {
+  const _DecodedAudioSamples({required this.samples, required this.duration});
+
+  final Float32List samples;
+  final Duration? duration;
+}
+
+class _SampleRequest {
+  const _SampleRequest({
+    required this.sampleCount,
+    required this.endTimeSeconds,
+    required this.effectiveDuration,
+    required this.hasExactDuration,
+  });
+
+  final int sampleCount;
+  final double endTimeSeconds;
+  final Duration? effectiveDuration;
+  final bool hasExactDuration;
 }
 
 class PitchAnalysisException implements Exception {
@@ -169,8 +257,10 @@ class PitchAnalysisException implements Exception {
   String toString() => message;
 }
 
-Future<PitchTrack> _yinPipeline(Uint8List pcm) async {
-  const sampleRate = SightSingingPitchAnalyzer.analysisSampleRate;
+Future<PitchTrack> _yinPipeline(
+  Uint8List pcm, {
+  required double sampleRate,
+}) async {
   const bufSize = SightSingingPitchAnalyzer.yinBufferSize;
   const hop = SightSingingPitchAnalyzer.yinHopSize;
 
@@ -190,8 +280,8 @@ Future<PitchTrack> _yinPipeline(Uint8List pcm) async {
     );
   }
 
-  final totalMs = (totalSamples * 1000) ~/ sampleRate;
-  const stepMs = (hop * 1000) ~/ sampleRate;
+  final totalMs = (totalSamples * 1000 / sampleRate).round();
+  final stepMs = (hop * 1000 / sampleRate).round();
 
   final frames = <PitchFrame>[];
   final frameBuf = Uint8List(bufSize * 2);
@@ -210,7 +300,7 @@ Future<PitchTrack> _yinPipeline(Uint8List pcm) async {
       sumSq += s * s;
     }
     final rms = math.sqrt(sumSq / bufSize);
-    final timeMs = ((start + bufSize ~/ 2) * 1000) ~/ sampleRate;
+    final timeMs = ((start + bufSize ~/ 2) * 1000 / sampleRate).round();
 
     if (rms < 350) {
       frames.add(PitchFrame(
