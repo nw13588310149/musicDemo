@@ -15,11 +15,10 @@ class _MusicCompanionWebAudioPlayer implements MusicCompanionWebAudioPlayer {
   final Map<String, web.AudioBuffer> _buffersByAsset =
       <String, web.AudioBuffer>{};
   final Set<_ActivePlayback> _activePlaybacks = <_ActivePlayback>{};
+  final Set<String> _requestedAssets = <String>{};
 
   bool _ready = false;
   Future<void>? _prepareTask;
-
-  static const int _loadConcurrency = 4;
 
   @override
   bool get isReady => _ready;
@@ -32,30 +31,28 @@ class _MusicCompanionWebAudioPlayer implements MusicCompanionWebAudioPlayer {
 
   @override
   Future<void> prepare(Iterable<String> assets) {
-    final uniqueAssets = assets.toSet().toList(growable: false);
-    if (_ready && uniqueAssets.every(_buffersByAsset.containsKey)) {
+    _requestedAssets.addAll(assets);
+    if (_requestedAssets.every(_buffersByAsset.containsKey)) {
+      _ready = true;
       return Future<void>.value();
     }
 
-    return _prepareTask ??= _prepareAssets(uniqueAssets).whenComplete(() {
+    return _prepareTask ??= _prepareRequestedAssets().whenComplete(() {
       _prepareTask = null;
     });
   }
 
-  Future<void> _prepareAssets(List<String> uniqueAssets) async {
+  Future<void> _prepareRequestedAssets() async {
     final context = _ensureContext();
-    final pending = uniqueAssets
-        .where((asset) => !_buffersByAsset.containsKey(asset))
-        .toList(growable: false);
-
-    for (var i = 0; i < pending.length; i += _loadConcurrency) {
-      final batch = pending.skip(i).take(_loadConcurrency);
+    while (_requestedAssets.any((asset) => !_buffersByAsset.containsKey(asset))) {
+      final pending = _requestedAssets
+          .where((asset) => !_buffersByAsset.containsKey(asset))
+          .toList(growable: false);
       await Future.wait(
-        batch.map((asset) => _decodeAsset(context, asset)),
+        pending.map((asset) => _decodeAsset(context, asset)),
       );
     }
-
-    _ready = uniqueAssets.every(_buffersByAsset.containsKey);
+    _ready = true;
   }
 
   Future<void> _decodeAsset(web.AudioContext context, String asset) async {
@@ -115,6 +112,7 @@ class _MusicCompanionWebAudioPlayer implements MusicCompanionWebAudioPlayer {
   Future<void> dispose() async {
     await stopAll();
     _buffersByAsset.clear();
+    _requestedAssets.clear();
     _ready = false;
 
     final context = _audioContext;

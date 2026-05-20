@@ -1,43 +1,69 @@
-import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_soloud/flutter_soloud.dart';
 import 'package:pitch_detector_dart/pitch_detector.dart';
 
+import '../../../core/audio/native_playback_audio_session.dart';
 import 'pitch_track.dart';
 
-/// 智能视唱离线音高分析入口（当前暂时停用）。
-///
-/// 历史：原方案是用 `audio_decoder` 把 MP3 解码为 PCM，再喂入
-/// `pitch_detector_dart` 的 YIN 算法生成参考曲线。
-///
-/// 现状：`audio_decoder 0.8.0`（2026-05 新发版）在 iOS iPad 上引入后导致
-/// 应用启动阶段 `GeneratedPluginRegistrant` 注册原生插件时立即闪退。
-/// 为了恢复 iPad 主流程稳定性，已在 [`pubspec.yaml`] 中暂时停用 audio_decoder
-/// 并隐藏「智能视唱」左侧入口与路由 case。
-///
-/// 本类保留为占位 stub：所有公开 API 直接抛
-/// [`PitchAnalysisException`]，确保未来重新启用时可以原地替换实现而无需改
-/// 动调用方。
-///
-/// 重新启用时的备选方案：
-/// 1) 等 `audio_decoder` 升级修复 iOS 启动崩溃后恢复原 implementation；
-/// 2) 改用 `flutter_soloud.readSamplesFromFile` 直接读 mono 22050 PCM；
-/// 3) 把音高分析挪到服务端，前端只播放 + 拉曲线 JSON。
+/// Smart sight-singing offline pitch analysis (flutter_soloud + YIN).
 abstract final class SightSingingPitchAnalyzer {
   static const int analysisSampleRate = 22050;
   static const int yinBufferSize = 1024;
   static const int yinHopSize = 512;
+  static const int _maxAnalysisSeconds = 600;
 
-  static Future<PitchTrack> analyzeFile(String path) {
-    throw PitchAnalysisException('智能视唱暂未上线，请稍后再试。');
+  static const String _msgWebNoPath =
+      'Web \u7aef\u6682\u4e0d\u652f\u6301\u4ece\u672c\u5730\u8def\u5f84\u5206\u6790\u97f3\u9891\uff0c'
+      '\u8bf7\u4f7f\u7528 iPad \u6216\u91cd\u65b0\u9009\u62e9\u6587\u4ef6\u3002';
+  static const String _msgReadFailed =
+      '\u65e0\u6cd5\u8bfb\u53d6\u97f3\u9891\u6570\u636e\uff0c\u8bf7\u6362\u4e00\u9996\u6b4c\u8bd5\u8bd5\u3002';
+
+  static Future<PitchTrack> analyzeFile(String path) async {
+    if (kIsWeb) {
+      throw PitchAnalysisException(_msgWebNoPath);
+    }
+    await _ensureSoLoudReady();
+    final maxSamples = _maxAnalysisSeconds * analysisSampleRate;
+    final samples = await SoLoud.instance.readSamplesFromFile(
+      path,
+      maxSamples,
+      average: false,
+    );
+    if (samples.isEmpty) {
+      throw PitchAnalysisException(_msgReadFailed);
+    }
+    return _yinPipelineFromFloat(samples);
   }
 
   static Future<PitchTrack> analyzeBytes(
     Uint8List bytes, {
     required String formatHint,
-  }) {
-    throw PitchAnalysisException('智能视唱暂未上线，请稍后再试。');
+  }) async {
+    await _ensureSoLoudReady();
+    final maxSamples = _maxAnalysisSeconds * analysisSampleRate;
+    final samples = await SoLoud.instance.readSamplesFromMem(
+      bytes,
+      maxSamples,
+      average: false,
+    );
+    if (samples.isEmpty) {
+      throw PitchAnalysisException(_msgReadFailed);
+    }
+    return _yinPipelineFromFloat(samples);
+  }
+
+  static Future<void> _ensureSoLoudReady() async {
+    await NativePlaybackAudioSession.ensurePlaybackActive();
+    final soLoud = SoLoud.instance;
+    if (!soLoud.isInitialized) {
+      await soLoud.init(
+        sampleRate: analysisSampleRate,
+        bufferSize: 2048,
+        channels: Channels.mono,
+      );
+    }
   }
 }
 
@@ -48,14 +74,21 @@ class PitchAnalysisException implements Exception {
   String toString() => 'PitchAnalysisException: $message';
 }
 
-// ───────────────────────────────────────────────────────────────────────────
-// 以下工具函数保留供未来在恢复实现时直接复用（YIN 切帧 + 5 点中值平滑），
-// 当前未被引用，加 `// ignore:` 防止 lint 阻塞 dart analyze。
-// ───────────────────────────────────────────────────────────────────────────
+Future<PitchTrack> _yinPipelineFromFloat(Float32List floats) async {
+  final pcm = _floatToInt16Bytes(floats);
+  return _yinPipeline(pcm);
+}
 
-// ignore: unused_element
-Future<PitchTrack> _yinPipeline(Uint8List wavBytes) async {
-  final pcm = _stripWavHeader(wavBytes);
+Uint8List _floatToInt16Bytes(Float32List floats) {
+  final out = ByteData(floats.length * 2);
+  for (var i = 0; i < floats.length; i++) {
+    final clamped = floats[i].clamp(-1.0, 1.0);
+    out.setInt16(i * 2, (clamped * 32767).round(), Endian.little);
+  }
+  return out.buffer.asUint8List();
+}
+
+Future<PitchTrack> _yinPipeline(Uint8List pcm) async {
   const sampleRate = SightSingingPitchAnalyzer.analysisSampleRate;
   const bufSize = SightSingingPitchAnalyzer.yinBufferSize;
   const hop = SightSingingPitchAnalyzer.yinHopSize;
@@ -100,7 +133,11 @@ Future<PitchTrack> _yinPipeline(Uint8List wavBytes) async {
 
     if (rms < 350) {
       frames.add(PitchFrame(
-          timeMs: timeMs, frequencyHz: 0, midi: -1, confidence: 0));
+        timeMs: timeMs,
+        frequencyHz: 0,
+        midi: -1,
+        confidence: 0,
+      ));
       continue;
     }
 
@@ -142,7 +179,6 @@ Future<PitchTrack> _yinPipeline(Uint8List wavBytes) async {
   );
 }
 
-// ignore: unused_element
 List<PitchFrame> _medianSmooth(List<PitchFrame> frames) {
   if (frames.length < 5) return frames;
   final result = List<PitchFrame>.from(frames, growable: false);
@@ -168,26 +204,4 @@ List<PitchFrame> _medianSmooth(List<PitchFrame> frames) {
     }
   }
   return result;
-}
-
-// ignore: unused_element
-Uint8List _stripWavHeader(Uint8List bytes) {
-  if (bytes.length < 44) return bytes;
-  final limit = math.min(bytes.length, 256);
-  for (var i = 0; i + 8 <= limit; i++) {
-    if (bytes[i] == 0x64 &&
-        bytes[i + 1] == 0x61 &&
-        bytes[i + 2] == 0x74 &&
-        bytes[i + 3] == 0x61) {
-      return Uint8List.sublistView(bytes, i + 8);
-    }
-  }
-  return bytes;
-}
-
-// 保留对 [kIsWeb] / [debugPrint] 的间接依赖位（防止未来恢复时漏掉 import）。
-// ignore: unused_element
-void _ignoreUnusedImports() {
-  // ignore: avoid_print
-  if (kIsWeb) debugPrint('sight singing pitch analyzer stub');
 }

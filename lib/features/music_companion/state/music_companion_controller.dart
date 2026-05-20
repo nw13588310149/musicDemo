@@ -49,30 +49,20 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
   StreamSubscription<Uint8List>? _tunerSubscription;
 
   Future<void> _prepareAudio() async {
-    const maxAttempts = 3;
-    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        await NativePlaybackAudioSession.ensurePlaybackActive();
-        await _audioEngine.ensurePianoInitialized();
-        if (!mounted) return;
-        if (!_audioEngine.isPianoReady) {
-          throw StateError('piano audio not ready after initialization');
-        }
-        state = state.copyWith(audioReady: true, errorMessage: null);
-        return;
-      } catch (error, stack) {
-        debugPrint('MusicCompanion _prepareAudio($attempt): $error\n$stack');
-        if (!mounted) return;
-        if (attempt < maxAttempts) {
-          await Future<void>.delayed(Duration(milliseconds: 320 * attempt));
-          if (!mounted) return;
-          continue;
-        }
-        state = state.copyWith(
-          audioReady: false,
-          errorMessage: '音乐伴侣音频初始化失败，请稍后重试。',
-        );
-      }
+    try {
+      await _audioEngine.ensurePianoInitialized();
+      if (!mounted) return;
+      state = state.copyWith(
+        audioReady: _audioEngine.isPianoReady,
+        errorMessage: null,
+      );
+    } catch (error, stack) {
+      debugPrint('MusicCompanion _prepareAudio: $error\n$stack');
+      if (!mounted) return;
+      state = state.copyWith(
+        audioReady: false,
+        errorMessage: '音乐伴侣音频初始化失败，请稍后重试。',
+      );
     }
   }
 

@@ -30,9 +30,7 @@ import '../../features/school/ui/school_video_tutorial_page.dart';
 import '../../features/shell/ui/shell_scaffold.dart';
 import '../../features/smart_campus/ui/smart_campus_page.dart';
 import '../../features/smart_dictation/ui/smart_dictation_page.dart';
-// 智能视唱页暂时下线（audio_decoder 原生插件导致 iPad 启动闪退）。
-// 路由 case 已注释；feature 代码保留在 lib/features/smart_sight_singing/。
-// import '../../features/smart_sight_singing/ui/smart_sight_singing_page.dart';
+import '../../features/smart_sight_singing/ui/smart_sight_singing_page.dart';
 import '../../features/study_catalog/ui/study_catalog_page.dart';
 import '../../features/theory/ui/theory_page.dart';
 import '../../features/video_tutorial/ui/video_tutorial_page.dart';
@@ -97,9 +95,8 @@ class AppRouter {
         return const VideoTutorialV2Page();
       case RoutePaths.smartDictation:
         return const SmartDictationV2Page();
-      // 智能视唱暂时下线（audio_decoder 原生插件导致 iPad 启动闪退）。
-      // case RoutePaths.smartSightSinging:
-      //   return const SmartSightSingingPage();
+      case RoutePaths.smartSightSinging:
+        return const SmartSightSingingPage();
       case RoutePaths.music:
         return const MusicCompanionV2Page();
       case RoutePaths.smartCampus:

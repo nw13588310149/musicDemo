@@ -54,14 +54,15 @@ class MusicCompanionAudioEngine {
   /// `unawaited(_pianoPool.ensureLoaded())` 后台并发全量加载，导致 iPad 上
   /// `tryPlayNote()`（绕过 SoLoud 串行队列直接走 `_soLoud.play`）与后台
   /// `loadAsset` 在原生层竞态，引发冷启动闪退。
-  /// 现改为：只等待"可弹"状态（init + 解锁音 C4），其余 wav 全部走
-  /// `_pianoPool.ensureNote(note)` 在用户实际按键时的懒加载路径。
+  /// Web：全量加载钢琴 wav（与 7d9da87 一致）。
+  /// 原生：先 ensurePlayable（C4 可弹），再后台串行拉全键盘，避免启动阻塞。
   Future<void> ensurePianoInitialized() async {
     if (kIsWeb) {
       await _webPool.ensurePianoLoaded();
       return;
     }
     await _pianoPool.ensurePlayable();
+    unawaited(_pianoPool.ensureLoaded());
   }
 
   Future<void> ensureMetronomeInitialized() {
