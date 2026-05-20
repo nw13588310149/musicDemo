@@ -1,8 +1,8 @@
 import 'dart:async';
 
-import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 
 import '../audio/pitch_analysis.dart';
@@ -30,6 +30,11 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     });
   }
 
+  static const String _demoAssetPath = 'assets/audio/demo.mp3';
+  static const String _demoDisplayName = '青花';
+  static const String _demoMediaUri = 'asset:///assets/audio/demo.mp3';
+  static const int _maxOnlineAudioBytes = 50 * 1024 * 1024;
+
   late final Player _player;
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<bool>? _completedSub;
@@ -41,41 +46,116 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
 
   bool _shuttingDown = false;
 
-  /// 选择并导入本地 MP3（也支持 m4a/wav/aac），离线分析音高。
+  /// 解析内置 demo 曲目《青花》，离线生成参考音高。
   Future<void> importAudio() async {
     if (state.stage == SightSingingStage.analyzing ||
         state.stage == SightSingingStage.singing) {
       return;
     }
 
-    FilePickerResult? picked;
     try {
-      picked = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: const <String>['mp3', 'm4a', 'wav', 'aac'],
-        allowMultiple: false,
-        withData: kIsWeb,
+      final bytes = await rootBundle.load(_demoAssetPath);
+      await _analyzeBytesAndPreparePlayback(
+        bytes: Uint8List.sublistView(bytes),
+        formatHint: 'mp3',
+        displayName: _demoDisplayName,
+        mediaUri: _demoMediaUri,
       );
     } catch (e) {
       if (!mounted) return;
-      state = state.copyWith(errorMessage: '选择音频失败：$e');
+      state = state.copyWith(
+        stage: SightSingingStage.idle,
+        errorMessage: '解析《青花》失败：$e',
+        analyzingProgress: 0,
+      );
+    }
+  }
+
+  /// 下载并解析在线音频地址，随后用同一 URL 进行跟唱播放。
+  Future<void> analyzeOnlineAudio(String rawUrl) async {
+    if (state.stage == SightSingingStage.analyzing ||
+        state.stage == SightSingingStage.singing) {
       return;
     }
-    if (!mounted) return;
-    if (picked == null || picked.files.isEmpty) return;
 
-    final picked0 = picked.files.first;
-    final localPath = picked0.path;
-    final Uint8List? bytes = picked0.bytes;
-    if (localPath == null && bytes == null) {
-      state = state.copyWith(errorMessage: '无法读取所选音频文件');
+    final url = rawUrl.trim();
+    final uri = Uri.tryParse(url);
+    if (uri == null || !uri.hasScheme || !uri.hasAuthority) {
+      state = state.copyWith(errorMessage: '请输入有效的 http/https 音频地址。');
+      return;
+    }
+    if (uri.scheme != 'http' && uri.scheme != 'https') {
+      state = state.copyWith(errorMessage: '在线音频地址仅支持 http/https。');
       return;
     }
 
+    final displayName = _nameFromUri(uri);
     state = state.copyWith(
       stage: SightSingingStage.analyzing,
-      audioPath: localPath,
-      audioName: picked0.name,
+      audioPath: url,
+      audioName: displayName,
+      analyzingProgress: 0.05,
+      track: null,
+      userPoints: const <UserPitchPoint>[],
+      playbackMs: 0,
+      currentScore: 0,
+      hitCount: 0,
+      scoredCount: 0,
+      currentUserMidi: -1,
+      currentUserAmplitude: 0,
+      errorMessage: null,
+    );
+
+    try {
+      final response = await Dio(
+        BaseOptions(
+          connectTimeout: const Duration(seconds: 12),
+          receiveTimeout: const Duration(seconds: 45),
+          responseType: ResponseType.bytes,
+          followRedirects: true,
+        ),
+      ).get<List<int>>(url);
+      final data = response.data;
+      if (data == null || data.isEmpty) {
+        throw PitchAnalysisException('在线音频为空，请换一个地址试试。');
+      }
+      if (data.length > _maxOnlineAudioBytes) {
+        throw PitchAnalysisException('在线音频过大，请使用 50MB 以内的音频。');
+      }
+
+      await _analyzeBytesAndPreparePlayback(
+        bytes: Uint8List.fromList(data),
+        formatHint: _inferExt(displayName),
+        displayName: displayName,
+        mediaUri: url,
+      );
+    } on PitchAnalysisException catch (e) {
+      if (!mounted) return;
+      state = state.copyWith(
+        stage: SightSingingStage.idle,
+        errorMessage: e.message,
+        analyzingProgress: 0,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      state = state.copyWith(
+        stage: SightSingingStage.idle,
+        errorMessage: '在线音频解析失败：$e',
+        analyzingProgress: 0,
+      );
+    }
+  }
+
+  Future<void> _analyzeBytesAndPreparePlayback({
+    required Uint8List bytes,
+    required String formatHint,
+    required String displayName,
+    required String mediaUri,
+  }) async {
+    state = state.copyWith(
+      stage: SightSingingStage.analyzing,
+      audioPath: mediaUri,
+      audioName: displayName,
       analyzingProgress: 0.05,
       track: null,
       userPoints: const <UserPitchPoint>[],
@@ -90,12 +170,10 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
 
     // 解码 + 切帧 + YIN（在 isolate 中）。
     try {
-      final track = localPath != null
-          ? await SightSingingPitchAnalyzer.analyzeFile(localPath)
-          : await SightSingingPitchAnalyzer.analyzeBytes(
-              bytes!,
-              formatHint: _inferExt(picked0.name),
-            );
+      final track = await SightSingingPitchAnalyzer.analyzeBytes(
+        bytes,
+        formatHint: formatHint,
+      );
       if (!mounted) return;
       if (track.isEmpty) {
         state = state.copyWith(
@@ -113,8 +191,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
 
       // 准备 media_kit 播放器（不自动播放）。
       try {
-        await _player.open(Media(localPath ?? picked0.identifier ?? ''),
-            play: false);
+        await _player.open(Media(mediaUri), play: false);
       } catch (e) {
         if (!mounted) return;
         state = state.copyWith(errorMessage: '音频加载失败：$e');
@@ -134,6 +211,18 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
         analyzingProgress: 0,
       );
     }
+  }
+
+  static String _nameFromUri(Uri uri) {
+    final last = uri.pathSegments.isEmpty ? '' : uri.pathSegments.last;
+    final decoded = Uri.decodeComponent(last).trim();
+    return decoded.isEmpty ? '在线音频' : decoded;
+  }
+
+  static String _inferExt(String name) {
+    final dot = name.lastIndexOf('.');
+    if (dot < 0 || dot == name.length - 1) return 'mp3';
+    return name.substring(dot + 1).toLowerCase();
   }
 
   /// 开始跟唱：开启录音 + 实时音高，并播放 MP3。
@@ -300,12 +389,6 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       await _capture?.stop();
     } catch (_) {}
     _capture = null;
-  }
-
-  String _inferExt(String name) {
-    final dot = name.lastIndexOf('.');
-    if (dot < 0) return 'mp3';
-    return name.substring(dot + 1).toLowerCase();
   }
 }
 

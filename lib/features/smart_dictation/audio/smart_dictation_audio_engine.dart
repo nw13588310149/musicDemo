@@ -67,6 +67,7 @@ class SmartDictationAudioEngine {
       await _webPlayer.playAsset(asset, volume: volume);
       return;
     }
+    await NativePlaybackAudioSession.ensurePlaybackActive();
     await _pianoPool.ensureNote(canonical);
     final source = _pianoPool.sourceForNote(canonical);
     if (source == null) {

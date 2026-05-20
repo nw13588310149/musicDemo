@@ -177,6 +177,7 @@ flutter:
     - assets/images/note/
     - assets/images/avtor/
     - assets/images/piano/
+    - assets/audio/demo.mp3
     - assets/audio/music_companion/metronome/
     - assets/audio/music_companion/metronome/beat0/
     - assets/audio/music_companion/metronome/beat2/

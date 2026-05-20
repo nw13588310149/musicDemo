@@ -11,7 +11,23 @@ abstract final class NativePlaybackAudioSession {
   /// 钢琴 / 节拍器：纯播放，允许与其它模块混音。
   static Future<void> ensurePlaybackActive() {
     if (kIsWeb) return Future<void>.value();
-    return _playbackTask ??= _configurePlayback();
+    // AVAudioSession can be changed later by media_kit, recorder, or the
+    // tuner. Cache only concurrent calls, not the completed state, otherwise
+    // short sounds may become silent after another module switches category.
+    return _playbackTask ??= _configurePlaybackBestEffort().whenComplete(() {
+      _playbackTask = null;
+    });
+  }
+
+  static Future<void> _configurePlaybackBestEffort() async {
+    try {
+      await _configurePlayback();
+    } catch (error, stack) {
+      // Playback session setup is helpful after media/recording modules switch
+      // categories, but it must not block SoLoud initialization. The last known
+      // stable iPad path initialized SoLoud without audio_session at all.
+      debugPrint('NativePlaybackAudioSession playback setup failed: $error\n$stack');
+    }
   }
 
   static Future<void> _configurePlayback() async {

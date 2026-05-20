@@ -83,7 +83,7 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
     } else {
       await _stopTuner();
       if (tab != MusicCompanionTab.metronome) {
-        unawaited(NativePlaybackAudioSession.ensurePlaybackActive());
+        await NativePlaybackAudioSession.ensurePlaybackActive();
       }
     }
   }

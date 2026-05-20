@@ -9,7 +9,7 @@ import '../state/smart_sight_singing_controller.dart';
 import '../state/smart_sight_singing_state.dart';
 import 'widgets/karaoke_pitch_track.dart';
 
-/// 智能视唱主页：上传 MP3 → 离线分析音高 → 跟唱实时打分。
+/// 智能视唱主页：内置《青花》demo → 离线分析音高 → 跟唱实时打分。
 class SmartSightSingingPage extends ConsumerStatefulWidget {
   const SmartSightSingingPage({super.key});
 
@@ -21,6 +21,7 @@ class SmartSightSingingPage extends ConsumerStatefulWidget {
 class _SmartSightSingingPageState
     extends ConsumerState<SmartSightSingingPage> {
   String? _lastShownError;
+  final TextEditingController _onlineUrlController = TextEditingController();
 
   @override
   void initState() {
@@ -35,6 +36,12 @@ class _SmartSightSingingPageState
         );
       });
     }
+  }
+
+  @override
+  void dispose() {
+    _onlineUrlController.dispose();
+    super.dispose();
   }
 
   @override
@@ -66,18 +73,93 @@ class _SmartSightSingingPageState
         color: Colors.white,
         borderRadius: BorderRadius.circular(ui(16)),
       ),
-      child: Padding(
-        padding: EdgeInsets.all(ui(20)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _Header(
-              state: state,
-              onImport: () => controller.importAudio(),
+      child: Stack(
+        children: [
+          Padding(
+            padding: EdgeInsets.all(ui(20)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _Header(
+                  state: state,
+                  onImport: () => controller.importAudio(),
+                ),
+                SizedBox(height: ui(16)),
+                Expanded(
+                  child: _Body(
+                    state: state,
+                    controller: controller,
+                    onlineUrlController: _onlineUrlController,
+                  ),
+                ),
+              ],
             ),
-            SizedBox(height: ui(16)),
-            Expanded(child: _Body(state: state, controller: controller)),
-          ],
+          ),
+          const Positioned.fill(child: _TrialWatermark()),
+        ],
+      ),
+    );
+  }
+}
+
+class _TrialWatermark extends StatelessWidget {
+  const _TrialWatermark();
+
+  static const String _text = 'loti\u63d2\u4ef6-\u8bd5\u7528\u7248';
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return IgnorePointer(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(ui(16)),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final tileWidth = ui(210);
+            final tileHeight = ui(112);
+            final columns = (constraints.maxWidth / tileWidth).ceil() + 2;
+            final rows = (constraints.maxHeight / tileHeight).ceil() + 2;
+
+            return OverflowBox(
+              minWidth: constraints.maxWidth + tileWidth,
+              maxWidth: constraints.maxWidth + tileWidth,
+              minHeight: constraints.maxHeight + tileHeight,
+              maxHeight: constraints.maxHeight + tileHeight,
+              child: Opacity(
+                opacity: 0.13,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: List<Widget>.generate(rows, (row) {
+                    return Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: List<Widget>.generate(columns, (column) {
+                        return SizedBox(
+                          width: tileWidth,
+                          height: tileHeight,
+                          child: Center(
+                            child: Transform.rotate(
+                              angle: -0.52,
+                              child: Text(
+                                _text,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: ui(20),
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFF0B081A),
+                                  letterSpacing: ui(0.8),
+                                  fontFamily: 'PingFang SC',
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+                    );
+                  }),
+                ),
+              ),
+            );
+          },
         ),
       ),
     );
@@ -125,7 +207,7 @@ class _Header extends StatelessWidget {
             ),
             SizedBox(height: ui(2)),
             Text(
-              state.audioName ?? '上传 MP3 → KTV 风格跟唱 → 实时打分',
+              state.audioName ?? '内置歌曲《青花》 → KTV 风格跟唱 → 实时打分',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
@@ -139,8 +221,8 @@ class _Header extends StatelessWidget {
         const Spacer(),
         if (state.stage != SightSingingStage.singing)
           _ActionButton(
-            label: state.hasTrack ? '更换音频' : '导入 MP3',
-            icon: Icons.upload_file_rounded,
+            label: state.hasTrack ? '重新解析' : '解析《青花》',
+            icon: Icons.auto_graph_rounded,
             primary: !state.hasTrack,
             onTap: state.isBusy ? null : onImport,
           ),
@@ -150,16 +232,25 @@ class _Header extends StatelessWidget {
 }
 
 class _Body extends StatelessWidget {
-  const _Body({required this.state, required this.controller});
+  const _Body({
+    required this.state,
+    required this.controller,
+    required this.onlineUrlController,
+  });
   final SightSingingState state;
   final SmartSightSingingController controller;
+  final TextEditingController onlineUrlController;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     switch (state.stage) {
       case SightSingingStage.idle:
-        return _EmptyHint(onImport: controller.importAudio);
+        return _EmptyHint(
+          onImport: controller.importAudio,
+          onlineUrlController: onlineUrlController,
+          onAnalyzeUrl: controller.analyzeOnlineAudio,
+        );
       case SightSingingStage.analyzing:
         return _AnalyzingHint(state: state);
       case SightSingingStage.ready:
@@ -167,7 +258,11 @@ class _Body extends StatelessWidget {
       case SightSingingStage.finished:
         final track = state.track;
         if (track == null || track.isEmpty) {
-          return _EmptyHint(onImport: controller.importAudio);
+          return _EmptyHint(
+            onImport: controller.importAudio,
+            onlineUrlController: onlineUrlController,
+            onAnalyzeUrl: controller.analyzeOnlineAudio,
+          );
         }
         return Column(
           children: [
@@ -190,8 +285,14 @@ class _Body extends StatelessWidget {
 }
 
 class _EmptyHint extends StatelessWidget {
-  const _EmptyHint({required this.onImport});
+  const _EmptyHint({
+    required this.onImport,
+    required this.onlineUrlController,
+    required this.onAnalyzeUrl,
+  });
   final VoidCallback onImport;
+  final TextEditingController onlineUrlController;
+  final ValueChanged<String> onAnalyzeUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -219,7 +320,7 @@ class _EmptyHint extends StatelessWidget {
           ),
           SizedBox(height: ui(20)),
           Text(
-            '上传一首歌，开启智能视唱',
+            '解析《青花》，开启智能视唱',
             style: TextStyle(
               fontSize: ui(18),
               color: const Color(0xFF1A1A1A),
@@ -231,7 +332,7 @@ class _EmptyHint extends StatelessWidget {
           SizedBox(
             width: ui(360),
             child: Text(
-              '支持 MP3 / M4A / WAV。系统会先离线分析音高曲线，'
+              '使用内置 demo.mp3 作为示例曲目。系统会先离线分析音高曲线，'
               '随后你可以跟唱并实时看到与原曲的偏差与得分。',
               textAlign: TextAlign.center,
               style: TextStyle(
@@ -244,10 +345,50 @@ class _EmptyHint extends StatelessWidget {
           ),
           SizedBox(height: ui(24)),
           _ActionButton(
-            label: '导入 MP3',
-            icon: Icons.upload_file_rounded,
+            label: '解析《青花》',
+            icon: Icons.auto_graph_rounded,
             primary: true,
             onTap: onImport,
+          ),
+          SizedBox(height: ui(18)),
+          SizedBox(
+            width: ui(520),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: onlineUrlController,
+                    keyboardType: TextInputType.url,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: onAnalyzeUrl,
+                    decoration: InputDecoration(
+                      isDense: true,
+                      hintText: '输入在线音频地址（mp3 / m4a / wav / aac）',
+                      prefixIcon: const Icon(Icons.link_rounded),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(ui(12)),
+                      ),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: ui(12),
+                        vertical: ui(12),
+                      ),
+                    ),
+                    style: TextStyle(
+                      fontSize: ui(13),
+                      color: const Color(0xFF1A1A1A),
+                      fontFamily: 'PingFang SC',
+                    ),
+                  ),
+                ),
+                SizedBox(width: ui(10)),
+                _ActionButton(
+                  label: '解析链接',
+                  icon: Icons.cloud_download_outlined,
+                  primary: false,
+                  onTap: () => onAnalyzeUrl(onlineUrlController.text),
+                ),
+              ],
+            ),
           ),
         ],
       ),
