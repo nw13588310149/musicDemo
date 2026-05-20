@@ -24,6 +24,8 @@ class SharedSoLoudPianoPool {
 
   final SoLoud _soLoud = SoLoud.instance;
   final Map<String, AudioSource> _sourcesByNote = <String, AudioSource>{};
+  final Map<String, Future<void>> _loadingTasksByNote =
+      <String, Future<void>>{};
 
   Future<void>? _playableTask;
   Future<void>? _fullLoadTask;
@@ -59,7 +61,21 @@ class SharedSoLoudPianoPool {
     if (_sourcesByNote.containsKey(note)) {
       return;
     }
-    await _enqueue(() => _loadNoteImpl(note));
+    final existingTask = _loadingTasksByNote[note];
+    if (existingTask != null) {
+      await existingTask;
+      return;
+    }
+
+    final task = _enqueue(() => _loadNoteImpl(note));
+    _loadingTasksByNote[note] = task;
+    try {
+      await task;
+    } finally {
+      if (_loadingTasksByNote[note] == task) {
+        _loadingTasksByNote.remove(note);
+      }
+    }
   }
 
   Future<void> _loadPlayable() async {
@@ -79,9 +95,10 @@ class SharedSoLoudPianoPool {
 
   Future<void> _loadAllNotes() async {
     try {
-      await _enqueue(
-        () => _loadAllNotesImpl().timeout(const Duration(seconds: 180)),
-      );
+      await ensurePlayable();
+      for (final note in kMusicCompanionPianoAssetByNote.keys) {
+        await ensureNote(note);
+      }
     } catch (error, stack) {
       _fullLoadTask = null;
       debugPrint('SharedSoLoudPianoPool.ensureLoaded failed: $error\n$stack');
@@ -96,6 +113,19 @@ class SharedSoLoudPianoPool {
     return task;
   }
 
+  Future<AudioSource> loadExternalAsset(String asset) async {
+    await ensurePlayable();
+    return _enqueue(
+      () => _soLoud
+          .loadAsset(asset, mode: LoadMode.memory)
+          .timeout(const Duration(seconds: 30)),
+    );
+  }
+
+  Future<void> disposeExternalSource(AudioSource source) {
+    return _enqueue(() => _soLoud.disposeSource(source));
+  }
+
   Future<void> _ensureSoLoudInitializedImpl() async {
     await NativePlaybackAudioSession.ensurePlaybackActive();
     if (!_soLoud.isInitialized) {
@@ -105,22 +135,6 @@ class SharedSoLoudPianoPool {
       await _soLoud.init();
     }
     _soLoud.setMaxActiveVoiceCount(256);
-  }
-
-  Future<void> _loadAllNotesImpl() async {
-    await _ensureSoLoudInitializedImpl();
-
-    final pending = kMusicCompanionPianoAssetByNote.entries
-        .where((entry) => !_sourcesByNote.containsKey(entry.key))
-        .toList(growable: false);
-    if (pending.isEmpty) {
-      return;
-    }
-
-    // iOS：严格串行 loadAsset（与 c3f7d2e 稳定版一致，避免并发 native 崩溃）。
-    for (final entry in pending) {
-      await _loadNoteImpl(entry.key);
-    }
   }
 
   Future<void> _loadNoteImpl(String note) async {

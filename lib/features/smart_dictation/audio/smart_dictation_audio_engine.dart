@@ -47,18 +47,23 @@ class SmartDictationAudioEngine {
       return;
     }
     await _pianoPool.ensurePlayable();
-    unawaited(
-      _pianoPool.ensureLoaded().catchError((Object error, StackTrace stack) {
-        debugPrint('SmartDictation piano preload failed: $error\n$stack');
-      }),
-    );
+    _configureVisualizationBestEffort();
+  }
+
+  void _configureVisualizationBestEffort() {
     if (!_soLoud.isInitialized) {
       return;
     }
-    _soLoud.setVisualizationEnabled(true);
-    _soLoud.setFftSmoothing(0.82);
-    _audioData ??= AudioData(GetSamplesKind.linear);
-    _soLoud.setMaxActiveVoiceCount(256);
+    try {
+      _soLoud.setVisualizationEnabled(true);
+      _soLoud.setFftSmoothing(0.82);
+      _audioData ??= AudioData(GetSamplesKind.linear);
+      _soLoud.setMaxActiveVoiceCount(256);
+    } catch (error, stack) {
+      debugPrint('SmartDictation visualization setup failed: $error\n$stack');
+      _audioData?.dispose();
+      _audioData = null;
+    }
   }
 
   Future<void> playToken(String token, {double volume = 1}) async {

@@ -4,7 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 import 'package:pitch_detector_dart/pitch_detector.dart';
 
-import '../../../core/audio/native_playback_audio_session.dart';
+import 'pitch_analysis_temp_io.dart'
+    if (dart.library.html) 'pitch_analysis_temp_web.dart';
 import 'pitch_track.dart';
 
 /// Smart sight-singing offline pitch analysis (flutter_soloud + YIN).
@@ -12,54 +13,152 @@ abstract final class SightSingingPitchAnalyzer {
   static const int analysisSampleRate = 22050;
   static const int yinBufferSize = 1024;
   static const int yinHopSize = 512;
-  static const int _maxAnalysisSeconds = 600;
+  static const int _maxAnalysisSeconds = 480;
+  static const int _webMaxAnalysisSeconds = 360;
 
   static const String _msgWebNoPath =
       'Web \u7aef\u6682\u4e0d\u652f\u6301\u4ece\u672c\u5730\u8def\u5f84\u5206\u6790\u97f3\u9891\uff0c'
-      '\u8bf7\u4f7f\u7528 iPad \u6216\u91cd\u65b0\u9009\u62e9\u6587\u4ef6\u3002';
+      '\u8bf7\u4f7f\u7528 iPad \u6216\u91cd\u65b0\u9009\u62e9\u6586\u4ef6\u3002';
   static const String _msgReadFailed =
       '\u65e0\u6cd5\u8bfb\u53d6\u97f3\u9891\u6570\u636e\uff0c\u8bf7\u6362\u4e00\u9996\u6b4c\u8bd5\u8bd5\u3002';
+  static const String _msgDecodeFailed =
+      '\u97f3\u9891\u89e3\u7801\u5931\u8d25\uff0c\u8bf7\u786e\u8ba4\u6586\u4ef6\u683c\u5f0f\u4e3a mp3 / m4a / wav / aac\u3002';
 
   static Future<PitchTrack> analyzeFile(String path) async {
     if (kIsWeb) {
       throw PitchAnalysisException(_msgWebNoPath);
     }
-    await _ensureSoLoudReady();
-    final maxSamples = _maxAnalysisSeconds * analysisSampleRate;
-    final samples = await SoLoud.instance.readSamplesFromFile(
-      path,
-      maxSamples,
-      average: false,
-    );
-    if (samples.isEmpty) {
-      throw PitchAnalysisException(_msgReadFailed);
+    try {
+      final maxSamples = _maxSamplesForDurationSec(_maxAnalysisSeconds);
+      final samples = await SoLoud.instance.readSamplesFromFile(
+        path,
+        maxSamples,
+        average: false,
+      );
+      return _analyzeFloatSamples(_trimTail(samples));
+    } on PitchAnalysisException {
+      rethrow;
+    } on SoLoudException catch (error) {
+      throw PitchAnalysisException(_mapSoLoudError(error));
+    } catch (error) {
+      throw PitchAnalysisException('$_msgDecodeFailed ($error)');
     }
-    return _yinPipelineFromFloat(samples);
   }
 
   static Future<PitchTrack> analyzeBytes(
     Uint8List bytes, {
     required String formatHint,
   }) async {
-    await _ensureSoLoudReady();
-    final maxSamples = _maxAnalysisSeconds * analysisSampleRate;
-    final samples = await SoLoud.instance.readSamplesFromMem(
-      bytes,
-      maxSamples,
-      average: false,
-    );
-    if (samples.isEmpty) {
+    if (bytes.isEmpty) {
       throw PitchAnalysisException(_msgReadFailed);
     }
-    return _yinPipelineFromFloat(samples);
+
+    try {
+      final samples = await _decodeBytes(bytes, formatHint: formatHint);
+      return _analyzeFloatSamples(samples);
+    } on PitchAnalysisException {
+      rethrow;
+    } on SoLoudException catch (error) {
+      throw PitchAnalysisException(_mapSoLoudError(error));
+    } catch (error) {
+      throw PitchAnalysisException('$_msgDecodeFailed ($error)');
+    }
   }
 
-  static Future<void> _ensureSoLoudReady() async {
-    await NativePlaybackAudioSession.ensurePlaybackActive();
+  static Future<Float32List> _decodeBytes(
+    Uint8List bytes, {
+    required String formatHint,
+  }) async {
+    final maxSamples = _estimateMaxSamples(bytes);
+    if (kIsWeb) {
+      await _ensureSoLoudReadyForWebDecode();
+      final samples = await SoLoud.instance.readSamplesFromMem(
+        bytes,
+        maxSamples,
+        average: false,
+      );
+      return _trimTail(samples);
+    }
+
+    final tempPath = await _writeTempAudio(bytes, formatHint);
+    try {
+      final samples = await SoLoud.instance.readSamplesFromFile(
+        tempPath,
+        maxSamples,
+        average: false,
+      );
+      return _trimTail(samples);
+    } finally {
+      await _deleteTempAudio(tempPath);
+    }
+  }
+
+  static Future<void> _ensureSoLoudReadyForWebDecode() async {
     final soLoud = SoLoud.instance;
     if (!soLoud.isInitialized) {
       await soLoud.init();
     }
+  }
+
+  static int _estimateMaxSamples(Uint8List bytes) {
+    const bytesPerSecond = 16000; // ~128 kbps mp3
+    final estimatedSec =
+        (bytes.length / bytesPerSecond).ceil().clamp(30, _maxAnalysisSeconds);
+    final cappedSec = kIsWeb
+        ? math.min(estimatedSec, _webMaxAnalysisSeconds)
+        : estimatedSec;
+    return _maxSamplesForDurationSec(cappedSec);
+  }
+
+  static int _maxSamplesForDurationSec(int seconds) {
+    return seconds * analysisSampleRate;
+  }
+
+  static Float32List _trimTail(Float32List samples) {
+    if (samples.isEmpty) {
+      return samples;
+    }
+    var end = samples.length;
+    while (end > 0 && samples[end - 1].abs() < 1e-6) {
+      end--;
+    }
+    if (end == samples.length) {
+      return samples;
+    }
+    return Float32List.sublistView(samples, 0, end);
+  }
+
+  static Future<PitchTrack> _analyzeFloatSamples(Float32List floats) async {
+    if (floats.isEmpty) {
+      throw PitchAnalysisException(_msgReadFailed);
+    }
+    final pcm = _floatToInt16Bytes(floats);
+    return _yinPipeline(pcm);
+  }
+
+  static String _mapSoLoudError(SoLoudException error) {
+    if (error is SoLoudReadSamplesNoBackendCppException ||
+        error is SoLoudReadSamplesFailedToGetDataFormatCppException) {
+      return _msgDecodeFailed;
+    }
+    return '$_msgDecodeFailed (${error.description})';
+  }
+
+  static Future<String> _writeTempAudio(
+    Uint8List bytes,
+    String formatHint,
+  ) async {
+    return PitchAnalysisTempFile.write(bytes, _normalizeExt(formatHint));
+  }
+
+  static Future<void> _deleteTempAudio(String path) {
+    return PitchAnalysisTempFile.delete(path);
+  }
+
+  static String _normalizeExt(String formatHint) {
+    final ext = formatHint.trim().toLowerCase();
+    if (ext.isEmpty || ext == 'audio') return 'mp3';
+    return ext.replaceAll('.', '');
   }
 }
 
@@ -67,21 +166,7 @@ class PitchAnalysisException implements Exception {
   PitchAnalysisException(this.message);
   final String message;
   @override
-  String toString() => 'PitchAnalysisException: $message';
-}
-
-Future<PitchTrack> _yinPipelineFromFloat(Float32List floats) async {
-  final pcm = _floatToInt16Bytes(floats);
-  return _yinPipeline(pcm);
-}
-
-Uint8List _floatToInt16Bytes(Float32List floats) {
-  final out = ByteData(floats.length * 2);
-  for (var i = 0; i < floats.length; i++) {
-    final clamped = floats[i].clamp(-1.0, 1.0);
-    out.setInt16(i * 2, (clamped * 32767).round(), Endian.little);
-  }
-  return out.buffer.asUint8List();
+  String toString() => message;
 }
 
 Future<PitchTrack> _yinPipeline(Uint8List pcm) async {
@@ -173,6 +258,15 @@ Future<PitchTrack> _yinPipeline(Uint8List pcm) async {
     minMidi: minMidi,
     maxMidi: maxMidi,
   );
+}
+
+Uint8List _floatToInt16Bytes(Float32List floats) {
+  final out = ByteData(floats.length * 2);
+  for (var i = 0; i < floats.length; i++) {
+    final clamped = floats[i].clamp(-1.0, 1.0);
+    out.setInt16(i * 2, (clamped * 32767).round(), Endian.little);
+  }
+  return out.buffer.asUint8List();
 }
 
 List<PitchFrame> _medianSmooth(List<PitchFrame> frames) {

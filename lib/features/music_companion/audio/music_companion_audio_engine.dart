@@ -42,7 +42,7 @@ class MusicCompanionAudioEngine {
 
   bool get isReady => kIsWeb
       ? _webPool.isReady
-      : _pianoPool.isLoaded || _metronomeSourcesByCue.isNotEmpty;
+      : _pianoPool.isPlayable || _metronomeSourcesByCue.isNotEmpty;
 
   bool get isPianoReady => kIsWeb ? _webPool.isReady : _pianoPool.isPlayable;
 
@@ -56,11 +56,6 @@ class MusicCompanionAudioEngine {
       return;
     }
     await _pianoPool.ensurePlayable();
-    unawaited(
-      _pianoPool.ensureLoaded().catchError((Object error, StackTrace stack) {
-        debugPrint('MusicCompanion piano preload failed: $error\n$stack');
-      }),
-    );
   }
 
   Future<void> ensureMetronomeInitialized() {
@@ -85,22 +80,12 @@ class MusicCompanionAudioEngine {
       return;
     }
 
-    await _pianoPool.ensurePlayable();
-
-    if (!_soLoud.isInitialized) {
-      await _soLoud.init();
-    }
-    _soLoud.setMaxActiveVoiceCount(256);
-
     for (final entry in kMusicCompanionMetronomeAssetByCue.entries) {
       final existing = _metronomeSourcesByCue[entry.key];
       if (existing != null) {
         continue;
       }
-      final source = await _soLoud.loadAsset(
-        entry.value,
-        mode: LoadMode.memory,
-      );
+      final source = await _pianoPool.loadExternalAsset(entry.value);
       _metronomeSourcesByCue[entry.key] = source;
     }
   }
@@ -128,9 +113,7 @@ class MusicCompanionAudioEngine {
       _registerHandle(_soLoud.play(source, volume: volume));
       return true;
     } catch (error, stack) {
-      debugPrint(
-        'tryPlayMetronomeCueFromUserGesture($cue): $error\n$stack',
-      );
+      debugPrint('tryPlayMetronomeCueFromUserGesture($cue): $error\n$stack');
       return false;
     }
   }
@@ -265,7 +248,7 @@ class MusicCompanionAudioEngine {
     // 仅释放本引擎持有的节拍器音源；钢琴 wav 留在 [SharedSoLoudPianoPool]。
     for (final source in _metronomeSourcesByCue.values) {
       try {
-        await _soLoud.disposeSource(source);
+        await _pianoPool.disposeExternalSource(source);
       } catch (_) {}
     }
     _metronomeSourcesByCue.clear();

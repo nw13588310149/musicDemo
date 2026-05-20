@@ -61,6 +61,13 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
         displayName: _demoDisplayName,
         mediaUri: _demoMediaUri,
       );
+    } on PitchAnalysisException catch (e) {
+      if (!mounted) return;
+      state = state.copyWith(
+        stage: SightSingingStage.idle,
+        errorMessage: e.message,
+        analyzingProgress: 0,
+      );
     } catch (e) {
       if (!mounted) return;
       state = state.copyWith(
