@@ -68,6 +68,12 @@ class _MusicCompanionV2PageState extends ConsumerState<MusicCompanionV2Page> {
                   MusicCompanionTab.piano => _VirtualPianoPane(
                     key: const ValueKey<String>('music_piano'),
                     audioReady: state.audioReady,
+                    statusHint: state.audioReady
+                        ? null
+                        : (state.errorMessage != null &&
+                              state.errorMessage!.contains('失败'))
+                        ? state.errorMessage!
+                        : '钢琴音频加载中…',
                     activeNotes: state.activePianoNotes,
                     onPressKey: controller.pressPianoKey,
                     onReleaseKey: controller.releasePianoKey,
@@ -164,7 +170,7 @@ class _CompanionTabItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final label = switch (tab) {
-      MusicCompanionTab.piano => '虚拟钢琴',
+      MusicCompanionTab.piano => '虚拟钢琴1',
       MusicCompanionTab.metronome => '节拍器',
       MusicCompanionTab.tuner => '调音器',
     };
@@ -208,6 +214,7 @@ class _CompanionTabItem extends StatelessWidget {
 class _VirtualPianoPane extends StatelessWidget {
   const _VirtualPianoPane({
     required this.audioReady,
+    this.statusHint,
     required this.activeNotes,
     required this.onPressKey,
     required this.onReleaseKey,
@@ -215,6 +222,7 @@ class _VirtualPianoPane extends StatelessWidget {
   });
 
   final bool audioReady;
+  final String? statusHint;
   final Set<String> activeNotes;
   final Future<void> Function(String token) onPressKey;
   final ValueChanged<String> onReleaseKey;
@@ -256,7 +264,8 @@ class _VirtualPianoPane extends StatelessWidget {
                 color: const Color(0x660B081A),
                 child: Center(
                   child: Text(
-                    '钢琴音频加载中…',
+                    statusHint ?? '钢琴音频加载中…',
+                    textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: ui(14),
                       color: Colors.white,

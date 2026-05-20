@@ -497,3 +497,9 @@ const List<PianoKeySpec> kPianoFullBlackKeys = <PianoKeySpec>[
 
 /// 中央 C 在 [kPianoFullWhiteKeys] 中的下标，用于初始 scroll 位置。
 const int kPianoCenterCWhiteIndex = 14;
+
+/// 全键盘（C2–B6）所有音名，与 [kMusicCompanionPianoAssetByNote] 基本重合。
+final Set<String> kPianoKeyboardNoteTokens = <String>{
+  ...kPianoFullWhiteKeys.map((PianoKeySpec key) => key.token),
+  ...kPianoFullBlackKeys.map((PianoKeySpec key) => key.token),
+};

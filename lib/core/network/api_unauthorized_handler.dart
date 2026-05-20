@@ -53,17 +53,15 @@ class ApiUnauthorizedHandler {
           routeName == RoutePaths.forget;
 
       if (!onAuthPage) {
-        AppToast.show(
-          context,
-          (message == null || message.trim().isEmpty)
-              ? defaultMessage
-              : message.trim(),
-          type: AppToastType.error,
-        );
+        final toastText = (message == null || message.trim().isEmpty)
+            ? defaultMessage
+            : message.trim();
         Navigator.of(context).pushNamedAndRemoveUntil(
           RoutePaths.login,
           (route) => false,
         );
+        // Toast 必须在跳转后显示：跳转前插入的 Overlay 会随旧路由销毁。
+        _showToastOnLoginPage(toastText);
       }
     } finally {
       // 吞掉同一轮并发 401；登录成功后会 [reset]。
@@ -71,5 +69,31 @@ class ApiUnauthorizedHandler {
         _handling = false;
       });
     }
+  }
+
+  void _showToastOnLoginPage(String message) {
+    void tryShow([int attempt = 0]) {
+      final context = rootNavigatorKey.currentContext;
+      if (context == null || !context.mounted) {
+        if (attempt < 5) {
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => tryShow(attempt + 1),
+          );
+        }
+        return;
+      }
+      final overlay = Overlay.maybeOf(context, rootOverlay: true);
+      if (overlay == null) {
+        if (attempt < 5) {
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => tryShow(attempt + 1),
+          );
+        }
+        return;
+      }
+      AppToast.show(context, message, type: AppToastType.error);
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => tryShow());
   }
 }

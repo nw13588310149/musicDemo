@@ -17,6 +17,9 @@ class _MusicCompanionWebAudioPlayer implements MusicCompanionWebAudioPlayer {
   final Set<_ActivePlayback> _activePlaybacks = <_ActivePlayback>{};
 
   bool _ready = false;
+  Future<void>? _prepareTask;
+
+  static const int _loadConcurrency = 4;
 
   @override
   bool get isReady => _ready;
@@ -28,27 +31,38 @@ class _MusicCompanionWebAudioPlayer implements MusicCompanionWebAudioPlayer {
   }
 
   @override
-  Future<void> prepare(Iterable<String> assets) async {
+  Future<void> prepare(Iterable<String> assets) {
     final uniqueAssets = assets.toSet().toList(growable: false);
     if (_ready && uniqueAssets.every(_buffersByAsset.containsKey)) {
-      return;
+      return Future<void>.value();
     }
 
+    return _prepareTask ??= _prepareAssets(uniqueAssets).whenComplete(() {
+      _prepareTask = null;
+    });
+  }
+
+  Future<void> _prepareAssets(List<String> uniqueAssets) async {
     final context = _ensureContext();
-    await Future.wait(
-      uniqueAssets.map((asset) async {
-        if (_buffersByAsset.containsKey(asset)) {
-          return;
-        }
+    final pending = uniqueAssets
+        .where((asset) => !_buffersByAsset.containsKey(asset))
+        .toList(growable: false);
 
-        final byteData = await rootBundle.load(asset);
-        final bytes = Uint8List.fromList(Uint8List.sublistView(byteData));
-        final buffer = await context.decodeAudioData(bytes.buffer.toJS).toDart;
-        _buffersByAsset[asset] = buffer;
-      }),
-    );
+    for (var i = 0; i < pending.length; i += _loadConcurrency) {
+      final batch = pending.skip(i).take(_loadConcurrency);
+      await Future.wait(
+        batch.map((asset) => _decodeAsset(context, asset)),
+      );
+    }
 
-    _ready = true;
+    _ready = uniqueAssets.every(_buffersByAsset.containsKey);
+  }
+
+  Future<void> _decodeAsset(web.AudioContext context, String asset) async {
+    final byteData = await rootBundle.load(asset);
+    final bytes = Uint8List.fromList(Uint8List.sublistView(byteData));
+    final buffer = await context.decodeAudioData(bytes.buffer.toJS).toDart;
+    _buffersByAsset[asset] = buffer;
   }
 
   @override

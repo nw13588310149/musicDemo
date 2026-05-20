@@ -41,6 +41,7 @@ class HomeDashboardController extends StateNotifier<HomeDashboardState> {
 
   Future<void> refresh() async {
     try {
+      if (!mounted) return;
       state = state.copyWith(
         loading: true,
         quickActions: buildQuickActions(_storage.hasCheckStatus),
@@ -53,6 +54,7 @@ class HomeDashboardController extends StateNotifier<HomeDashboardState> {
         _safeRequest(_repository.getLatestInfo),
         _safeRequest(_repository.getNextSchoolCourse),
       ]);
+      if (!mounted) return;
 
       final myInfoResponse = responses[0];
       final bannerResponse = responses[1];
@@ -60,6 +62,8 @@ class HomeDashboardController extends StateNotifier<HomeDashboardState> {
       final nextCourseResponse = responses[3];
 
       final weekItems = await _buildWeekItems(myInfoResponse.data);
+      if (!mounted) return;
+
       final banners = _parseBanners(bannerResponse.data);
       final newsItems = _parseNews(latestResponse.data);
       final notices = _parseCourseNotices(nextCourseResponse.data);
@@ -79,6 +83,7 @@ class HomeDashboardController extends StateNotifier<HomeDashboardState> {
         errorMessage: hasAnyData ? '' : '暂无数据，请稍后重试',
       );
     } catch (_) {
+      if (!mounted) return;
       state = state.copyWith(
         loading: false,
         weekItems: state.weekItems.isEmpty

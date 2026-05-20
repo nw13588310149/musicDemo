@@ -60,6 +60,7 @@ import '../../../core/widgets/scaled_dialog.dart';
 import '../../courseware/state/cloud_drive_controller.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/admin_repository.dart';
+import 'face_capture/face_camera_registry.dart';
 import 'face_capture/face_image_picker.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
@@ -459,6 +460,9 @@ class _AdminFaceLibraryViewState extends ConsumerState<AdminFaceLibraryView> {
   @override
   void initState() {
     super.initState();
+    if (isCameraCaptureSupported) {
+      FaceCameraRegistry.warmUp();
+    }
     _loadClasses();
     unawaited(_loadStudentProfiles());
     unawaited(_loadFaceSum());

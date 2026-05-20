@@ -9,11 +9,16 @@ import 'face_image_picker.dart';
 /// 打开证件照裁切页，返回标准尺寸 JPEG。
 Future<FaceCapturedPhoto?> openFaceIdPhotoCropFlow(
   BuildContext context, {
-  required Uint8List sourceBytes,
+  Uint8List? sourceBytes,
+  String? sourcePath,
   required String sourceName,
   String title = '调整证件照',
   String hint = '拖动或双指缩放图片，将面部对准框内后点击确认',
 }) {
+  assert(
+    sourceBytes != null || sourcePath != null,
+    'sourceBytes or sourcePath required',
+  );
   final scale = DashboardScaleScope.of(context);
   return Navigator.of(context).push<FaceCapturedPhoto>(
     MaterialPageRoute<FaceCapturedPhoto>(
@@ -22,6 +27,7 @@ Future<FaceCapturedPhoto?> openFaceIdPhotoCropFlow(
         data: scale,
         child: FaceIdPhotoCropPage(
           sourceBytes: sourceBytes,
+          sourcePath: sourcePath,
           sourceName: sourceName,
           title: title,
           hint: hint,

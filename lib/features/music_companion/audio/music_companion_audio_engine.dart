@@ -6,16 +6,18 @@ import 'package:flutter_soloud/flutter_soloud.dart';
 import '../../../core/audio/native_playback_audio_session.dart';
 import 'music_companion_audio_catalog.dart';
 import 'music_companion_web_audio_player_base.dart';
-import 'music_companion_web_audio_player_stub.dart'
-    if (dart.library.html) 'music_companion_web_audio_player_web.dart';
 import 'shared_soloud_piano_pool.dart';
+import 'shared_web_piano_pool.dart';
 
 /// 应用启动后后台预热钢琴池（不阻塞首屏）。
 Future<void> warmupMusicCompanionPianoAudio() async {
-  if (kIsWeb) return;
   try {
+    if (kIsWeb) {
+      await SharedWebPianoPool.instance.ensurePianoLoaded();
+      return;
+    }
     await NativePlaybackAudioSession.ensurePlaybackActive();
-    await SharedSoLoudPianoPool.instance.ensureLoaded();
+    await SharedSoLoudPianoPool.instance.ensurePlayable();
   } catch (error, stack) {
     debugPrint('warmupMusicCompanionPianoAudio: $error\n$stack');
   }
@@ -27,8 +29,7 @@ class MusicCompanionAudioEngine {
 
   final SoLoud _soLoud;
   final SharedSoLoudPianoPool _pianoPool = SharedSoLoudPianoPool.instance;
-  final MusicCompanionWebAudioPlayer _webPlayer =
-      createMusicCompanionWebAudioPlayer();
+  final SharedWebPianoPool _webPool = SharedWebPianoPool.instance;
 
   final Map<MusicCompanionMetronomeCue, AudioSource> _metronomeSourcesByCue =
       <MusicCompanionMetronomeCue, AudioSource>{};
@@ -40,17 +41,19 @@ class MusicCompanionAudioEngine {
   bool _disposed = false;
 
   bool get isReady => kIsWeb
-      ? _webPlayer.isReady
+      ? _webPool.isReady
       : _pianoPool.isLoaded || _metronomeSourcesByCue.isNotEmpty;
 
-  bool get isPianoReady => kIsWeb ? _webPlayer.isReady : _pianoPool.isLoaded;
+  bool get isPianoReady => kIsWeb ? _webPool.isReady : _pianoPool.isPlayable;
+
+  MusicCompanionWebAudioPlayer get _webPlayer => _webPool;
 
   /// 仅预热钢琴（进页 / 用户点琴键）。节拍器音源在首次播放时再加载。
   Future<void> ensurePianoInitialized() {
     if (kIsWeb) {
-      return _webPlayer.prepare(kMusicCompanionPianoAssetByNote.values);
+      return _webPool.ensurePianoLoaded();
     }
-    return _pianoPool.ensureLoaded();
+    return _pianoPool.ensurePlayable();
   }
 
   Future<void> ensureMetronomeInitialized() {
@@ -137,15 +140,19 @@ class MusicCompanionAudioEngine {
       return;
     }
     if (!_pianoPool.tryUnlockProbe()) {
-      throw StateError('SoLoud playback probe failed');
+      debugPrint('MusicCompanionAudioEngine: SoLoud unlock probe skipped');
     }
   }
 
   Future<void> playNote(String rawNote, {double volume = 1}) async {
     if (_disposed) return;
-    await ensurePianoInitialized();
-    if (_disposed) return;
     final note = _normalizeNote(rawNote);
+    if (kIsWeb) {
+      await ensurePianoInitialized();
+    } else {
+      await _pianoPool.ensureNote(note);
+    }
+    if (_disposed) return;
     final asset = kMusicCompanionPianoAssetByNote[note];
     if (asset == null) {
       return;
@@ -246,7 +253,7 @@ class MusicCompanionAudioEngine {
     await stopAll();
 
     if (kIsWeb) {
-      await _webPlayer.dispose();
+      // Web 钢琴池全局常驻，不在页面 dispose 时销毁解码缓存。
       _metronomeInitTask = null;
       return;
     }

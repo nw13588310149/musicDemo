@@ -55,6 +55,9 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
         await NativePlaybackAudioSession.ensurePlaybackActive();
         await _audioEngine.ensurePianoInitialized();
         if (!mounted) return;
+        if (!_audioEngine.isPianoReady) {
+          throw StateError('piano audio not ready after initialization');
+        }
         state = state.copyWith(audioReady: true, errorMessage: null);
         return;
       } catch (error, stack) {
@@ -102,11 +105,18 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
         await _audioEngine.ensurePianoInitialized();
       }
       if (!mounted) return;
+      if (!_audioEngine.isPianoReady) {
+        await _audioEngine.ensurePianoInitialized();
+      }
+      if (!mounted) return;
       if (!_audioEngine.tryPlayNoteFromUserGesture('C4', volume: 0.02)) {
         await _audioEngine.activateByUserGesture();
       }
       if (!mounted) return;
-      state = state.copyWith(audioReady: true, errorMessage: null);
+      state = state.copyWith(
+        audioReady: _audioEngine.isPianoReady,
+        errorMessage: null,
+      );
     } catch (error, stack) {
       debugPrint('MusicCompanion activateAudio: $error\n$stack');
       if (!mounted) return;
@@ -140,11 +150,12 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
         await _audioEngine.ensurePianoInitialized();
       }
       if (!mounted) return;
-      if (_audioEngine.tryPlayNoteFromUserGesture(note)) {
-        state = state.copyWith(audioReady: true, errorMessage: null);
-        return;
+      if (kIsWeb) {
+        await _audioEngine.activateByUserGesture();
       }
-      await _audioEngine.playNote(note, volume: 1);
+      if (!_audioEngine.tryPlayNoteFromUserGesture(note)) {
+        await _audioEngine.playNote(note, volume: 1);
+      }
       if (!mounted) return;
       state = state.copyWith(audioReady: true, errorMessage: null);
     } catch (error, stack) {

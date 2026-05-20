@@ -1,13 +1,15 @@
-import 'dart:typed_data';
+import 'dart:async';
+import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:image/image.dart' as img;
 
 import '../../../../core/theme/app_font.dart';
 import '../../../../core/widgets/app_toast.dart';
 import '../../../../core/widgets/scaled_dialog.dart';
 import '../../../shell/ui/shell_layout.dart';
 import 'face_id_frame_overlay.dart';
+import 'face_id_image_prepare.dart';
 import 'face_id_photo_crop.dart';
 import 'face_id_photo_spec.dart';
 import 'face_image_picker.dart';
@@ -15,14 +17,19 @@ import 'face_image_picker.dart';
 /// 证件照裁切页：相册选图 / 相机原图均经此页调整并输出标准尺寸。
 class FaceIdPhotoCropPage extends StatefulWidget {
   const FaceIdPhotoCropPage({
-    required this.sourceBytes,
+    this.sourceBytes,
+    this.sourcePath,
     required this.sourceName,
     this.title = '调整证件照',
     this.hint = '拖动或双指缩放图片，将面部对准框内后点击确认',
     super.key,
-  });
+  }) : assert(
+         sourceBytes != null || sourcePath != null,
+         'sourceBytes or sourcePath required',
+       );
 
-  final Uint8List sourceBytes;
+  final Uint8List? sourceBytes;
+  final String? sourcePath;
   final String sourceName;
   final String title;
   final String hint;
@@ -32,9 +39,11 @@ class FaceIdPhotoCropPage extends StatefulWidget {
 }
 
 class _FaceIdPhotoCropPageState extends State<FaceIdPhotoCropPage> {
-  late final Uint8List _displayBytes;
-  late final Size _imageSize;
-  late final bool _decodeFailed;
+  Uint8List? _displayBytes;
+  Size _imageSize = Size.zero;
+  bool _decodeFailed = false;
+  bool _preparing = true;
+  String? _prepareError;
 
   Size _viewportSize = Size.zero;
   Rect _frameRect = Rect.zero;
@@ -52,17 +61,68 @@ class _FaceIdPhotoCropPageState extends State<FaceIdPhotoCropPage> {
   @override
   void initState() {
     super.initState();
-    final decoded = img.decodeImage(widget.sourceBytes);
-    if (decoded == null) {
-      _decodeFailed = true;
-      _displayBytes = widget.sourceBytes;
-      _imageSize = Size.zero;
-      return;
+    unawaited(_prepareImage());
+  }
+
+  Future<void> _prepareImage() async {
+    try {
+      final raw = await _loadRawBytes();
+      if (!mounted) return;
+      if (raw == null || raw.isEmpty) {
+        setState(() {
+          _preparing = false;
+          _decodeFailed = true;
+          _prepareError = '无法读取图片';
+        });
+        return;
+      }
+
+      final prepared = await prepareFaceIdDisplayImage(raw);
+      if (!mounted) return;
+      if (prepared == null) {
+        setState(() {
+          _preparing = false;
+          _decodeFailed = true;
+          _displayBytes = raw;
+          _prepareError = '无法解析图片';
+        });
+        return;
+      }
+
+      setState(() {
+        _preparing = false;
+        _decodeFailed = false;
+        _displayBytes = prepared.bytes;
+        _imageSize = prepared.size;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _preparing = false;
+        _decodeFailed = true;
+        _prepareError = '$e';
+      });
     }
-    _decodeFailed = false;
-    final oriented = img.bakeOrientation(decoded);
-    _displayBytes = Uint8List.fromList(img.encodeJpg(oriented, quality: 92));
-    _imageSize = Size(oriented.width.toDouble(), oriented.height.toDouble());
+  }
+
+  Future<Uint8List?> _loadRawBytes() async {
+    final inline = widget.sourceBytes;
+    if (inline != null && inline.isNotEmpty) {
+      return inline;
+    }
+    final path = widget.sourcePath;
+    if (path == null || path.isEmpty) {
+      return null;
+    }
+    return compute(_readFileBytes, path);
+  }
+
+  static Uint8List? _readFileBytes(String path) {
+    try {
+      return File(path).readAsBytesSync();
+    } catch (_) {
+      return null;
+    }
   }
 
   void _applyInitialTransform(Size viewport) {
@@ -78,7 +138,7 @@ class _FaceIdPhotoCropPageState extends State<FaceIdPhotoCropPage> {
   }
 
   void _onViewportSizeChanged(Size size) {
-    if (_decodeFailed || size == _viewportSize) return;
+    if (_decodeFailed || _preparing || size == _viewportSize) return;
     _viewportSize = size;
     _frameRect = FaceIdPhotoSpec.frameRectInPreview(size);
     if (!_layoutReady) {
@@ -108,10 +168,13 @@ class _FaceIdPhotoCropPageState extends State<FaceIdPhotoCropPage> {
 
   Future<void> _confirm() async {
     if (_busy || _frameRect == Rect.zero || _viewportSize == Size.zero) return;
+    final displayBytes = _displayBytes;
+    if (displayBytes == null) return;
+
     setState(() => _busy = true);
     try {
       final cropped = cropFaceIdPhotoFromViewport(
-        sourceBytes: _displayBytes,
+        sourceBytes: displayBytes,
         frameInViewport: _frameRect,
         imageToViewport: _imageToViewport,
       );
@@ -192,37 +255,7 @@ class _FaceIdPhotoCropPageState extends State<FaceIdPhotoCropPage> {
                 padding: EdgeInsets.symmetric(horizontal: ui(20)),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(ui(12)),
-                  child: _decodeFailed
-                      ? const Center(
-                          child: Text(
-                            '无法读取图片，请换一张重试',
-                            style: TextStyle(color: Colors.white70),
-                          ),
-                        )
-                      : LayoutBuilder(
-                          builder: (context, constraints) {
-                            final size = Size(
-                              constraints.maxWidth,
-                              constraints.maxHeight,
-                            );
-                            if (size != _viewportSize) {
-                              WidgetsBinding.instance.addPostFrameCallback((_) {
-                                if (!mounted) return;
-                                setState(() => _onViewportSizeChanged(size));
-                              });
-                            }
-                            return _FaceIdCropViewport(
-                              displayBytes: _displayBytes,
-                              imageSize: _imageSize,
-                              viewportSize: size.isEmpty ? Size.zero : size,
-                              frameRect: _frameRect,
-                              scale: _scale,
-                              offset: _offset,
-                              onScaleStart: _onScaleStart,
-                              onScaleUpdate: _onScaleUpdate,
-                            );
-                          },
-                        ),
+                  child: _buildPreview(ui),
                 ),
               ),
             ),
@@ -232,7 +265,8 @@ class _FaceIdPhotoCropPageState extends State<FaceIdPhotoCropPage> {
               child: AppDialogActionBar(
                 cancelLabel: '取消',
                 confirmLabel: _busy ? '处理中…' : '确认裁切',
-                confirmEnabled: !_busy && !_decodeFailed && _layoutReady,
+                confirmEnabled:
+                    !_busy && !_decodeFailed && !_preparing && _layoutReady,
                 onCancel: _busy ? () {} : () => Navigator.of(context).pop(),
                 onConfirm: _confirm,
               ),
@@ -240,6 +274,59 @@ class _FaceIdPhotoCropPageState extends State<FaceIdPhotoCropPage> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildPreview(double Function(num) ui) {
+    if (_preparing) {
+      return const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(color: Colors.white),
+            SizedBox(height: 12),
+            Text(
+              '正在加载图片…',
+              style: TextStyle(color: Colors.white70, fontSize: 14),
+            ),
+          ],
+        ),
+      );
+    }
+    if (_decodeFailed) {
+      return Center(
+        child: Text(
+          _prepareError ?? '无法读取图片，请换一张重试',
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: Colors.white70, fontSize: 14),
+        ),
+      );
+    }
+    final displayBytes = _displayBytes;
+    if (displayBytes == null) {
+      return const Center(child: CircularProgressIndicator(color: Colors.white));
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = Size(constraints.maxWidth, constraints.maxHeight);
+        if (size != _viewportSize) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            setState(() => _onViewportSizeChanged(size));
+          });
+        }
+        return _FaceIdCropViewport(
+          displayBytes: displayBytes,
+          imageSize: _imageSize,
+          viewportSize: size.isEmpty ? Size.zero : size,
+          frameRect: _frameRect,
+          scale: _scale,
+          offset: _offset,
+          onScaleStart: _onScaleStart,
+          onScaleUpdate: _onScaleUpdate,
+        );
+      },
     );
   }
 }

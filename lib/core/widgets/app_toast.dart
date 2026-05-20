@@ -30,7 +30,8 @@ class AppToast {
       return;
     }
 
-    final overlay = Overlay.maybeOf(context);
+    final overlay =
+        Overlay.maybeOf(context, rootOverlay: true) ?? Overlay.maybeOf(context);
     if (overlay == null) {
       return;
     }

@@ -9,11 +9,12 @@ import '../../../../core/theme/app_font.dart';
 import '../../../../core/widgets/app_toast.dart';
 import '../../../../core/widgets/scaled_dialog.dart';
 import '../../../shell/ui/shell_layout.dart';
+import 'face_camera_registry.dart';
 import 'face_id_frame_overlay.dart';
 import 'face_id_photo_flow.dart';
 import 'face_id_photo_spec.dart';
 
-/// 证件照取景相机：全屏预览 + 标准一寸框，支持前后摄切换。
+/// 证件照取景相机：全屏预览 + 标准一寸框；仅标准前/后摄切换，变焦独立按钮。
 class FaceIdCameraPage extends StatefulWidget {
   const FaceIdCameraPage({super.key});
 
@@ -22,12 +23,18 @@ class FaceIdCameraPage extends StatefulWidget {
 }
 
 class _FaceIdCameraPageState extends State<FaceIdCameraPage> {
-  List<CameraDescription> _cameras = <CameraDescription>[];
-  int _cameraIndex = 0;
+  FaceCameraPair _cameraPair = const FaceCameraPair();
+  bool _useFront = true;
   CameraController? _controller;
   String? _initError;
   bool _busy = false;
   bool _switchingCamera = false;
+
+  double _zoom = 1;
+  double _minZoom = 1;
+  double _maxZoom = 1;
+  bool _zoomReady = false;
+
   Size _previewLayoutSize = Size.zero;
   Rect _frameRect = Rect.zero;
 
@@ -39,31 +46,30 @@ class _FaceIdCameraPageState extends State<FaceIdCameraPage> {
 
   Future<void> _initCameras() async {
     try {
-      final cameras = await availableCameras();
+      final cameras = await FaceCameraRegistry.getCameras();
       if (cameras.isEmpty) {
         if (mounted) setState(() => _initError = '未检测到可用摄像头');
         return;
       }
-      _cameras = cameras;
-      final startIndex = cameras.indexWhere(
-        (c) => c.lensDirection == CameraLensDirection.front,
-      );
-      await _bindCamera(startIndex >= 0 ? startIndex : 0);
+      _cameraPair = FaceCameraRegistry.resolvePair(cameras);
+      await _bindCamera(_cameraPair.indexFor(useFront: _useFront));
     } catch (e) {
       if (mounted) setState(() => _initError = '无法打开摄像头：$e');
     }
   }
 
   Future<void> _bindCamera(int index) async {
-    if (_cameras.isEmpty) return;
+    final cameras = await FaceCameraRegistry.getCameras();
+    if (cameras.isEmpty) return;
 
-    final safeIndex = index.clamp(0, _cameras.length - 1);
+    final safeIndex = index.clamp(0, cameras.length - 1);
     final previous = _controller;
     if (mounted) {
       setState(() {
         _controller = null;
         _switchingCamera = true;
         _initError = null;
+        _zoomReady = false;
       });
     }
 
@@ -73,7 +79,7 @@ class _FaceIdCameraPageState extends State<FaceIdCameraPage> {
 
     try {
       final controller = CameraController(
-        _cameras[safeIndex],
+        cameras[safeIndex],
         ResolutionPreset.high,
         enableAudio: false,
         imageFormatGroup: ImageFormatGroup.jpeg,
@@ -82,15 +88,31 @@ class _FaceIdCameraPageState extends State<FaceIdCameraPage> {
       if (Platform.isIOS) {
         await controller.lockCaptureOrientation(DeviceOrientation.landscapeLeft);
       }
+
+      var minZ = 1.0;
+      var maxZ = 1.0;
+      try {
+        minZ = await controller.getMinZoomLevel();
+        maxZ = await controller.getMaxZoomLevel();
+      } catch (_) {}
+
+      final startZoom = 1.0.clamp(minZ, maxZ);
+      if (startZoom != 1.0) {
+        await controller.setZoomLevel(startZoom);
+      }
+
       if (!mounted) {
         await controller.dispose();
         return;
       }
       setState(() {
         _controller = controller;
-        _cameraIndex = safeIndex;
         _switchingCamera = false;
         _initError = null;
+        _minZoom = minZ;
+        _maxZoom = maxZ;
+        _zoom = startZoom;
+        _zoomReady = maxZ > minZ;
       });
     } catch (e) {
       if (!mounted) return;
@@ -102,10 +124,29 @@ class _FaceIdCameraPageState extends State<FaceIdCameraPage> {
   }
 
   Future<void> _switchCamera() async {
-    if (_cameras.length < 2 || _busy || _switchingCamera) return;
-    final next = (_cameraIndex + 1) % _cameras.length;
-    await _bindCamera(next);
+    if (!_cameraPair.canSwitch || _busy || _switchingCamera) return;
+    _useFront = !_useFront;
+    await _bindCamera(_cameraPair.indexFor(useFront: _useFront));
   }
+
+  Future<void> _applyZoom(double target) async {
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized || !_zoomReady) {
+      return;
+    }
+    final next = target.clamp(_minZoom, _maxZoom);
+    try {
+      await controller.setZoomLevel(next);
+      if (!mounted) return;
+      setState(() => _zoom = next);
+    } catch (e) {
+      if (!mounted) return;
+      AppToast.show(context, '变焦失败：$e');
+    }
+  }
+
+  void _zoomIn() => _applyZoom(_zoom + 0.2);
+  void _zoomOut() => _applyZoom(_zoom - 0.2);
 
   @override
   void dispose() {
@@ -154,17 +195,14 @@ class _FaceIdCameraPageState extends State<FaceIdCameraPage> {
     }
   }
 
-  String get _cameraSwitchLabel {
-    if (_cameras.isEmpty) return '切换';
-    return _cameras[_cameraIndex].lensDirection == CameraLensDirection.front
-        ? '后置'
-        : '前置';
-  }
+  String get _cameraSwitchLabel => _useFront ? '后置' : '前置';
+
+  String get _zoomLabel => '${_zoom.toStringAsFixed(1)}×';
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final canSwitch = _cameras.length > 1;
+    final canSwitch = _cameraPair.canSwitch;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -262,7 +300,41 @@ class _FaceIdCameraPageState extends State<FaceIdCameraPage> {
                 ),
               ),
             ),
-            SizedBox(height: ui(16)),
+            if (_zoomReady) ...[
+              SizedBox(height: ui(10)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _ZoomButton(
+                    ui: ui,
+                    icon: Icons.remove_rounded,
+                    label: '缩小',
+                    enabled: !_busy && !_switchingCamera && _zoom > _minZoom + 0.05,
+                    onPressed: _zoomOut,
+                  ),
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: ui(16)),
+                    child: Text(
+                      _zoomLabel,
+                      style: TextStyle(
+                        fontSize: ui(14),
+                        color: Colors.white,
+                        fontFamily: 'PingFang SC',
+                        fontWeight: AppFont.w500,
+                      ),
+                    ),
+                  ),
+                  _ZoomButton(
+                    ui: ui,
+                    icon: Icons.add_rounded,
+                    label: '放大',
+                    enabled: !_busy && !_switchingCamera && _zoom < _maxZoom - 0.05,
+                    onPressed: _zoomIn,
+                  ),
+                ],
+              ),
+            ],
+            SizedBox(height: ui(12)),
             Padding(
               padding: EdgeInsets.fromLTRB(ui(24), 0, ui(24), ui(20)),
               child: AppDialogActionBar(
@@ -274,6 +346,49 @@ class _FaceIdCameraPageState extends State<FaceIdCameraPage> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ZoomButton extends StatelessWidget {
+  const _ZoomButton({
+    required this.ui,
+    required this.icon,
+    required this.label,
+    required this.enabled,
+    required this.onPressed,
+  });
+
+  final double Function(num) ui;
+  final IconData icon;
+  final String label;
+  final bool enabled;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Opacity(
+      opacity: enabled ? 1 : 0.45,
+      child: TextButton.icon(
+        onPressed: enabled ? onPressed : null,
+        icon: Icon(icon, color: Colors.white, size: ui(22)),
+        label: Text(
+          label,
+          style: TextStyle(
+            fontSize: ui(13),
+            color: Colors.white,
+            fontFamily: 'PingFang SC',
+            fontWeight: AppFont.w500,
+          ),
+        ),
+        style: TextButton.styleFrom(
+          backgroundColor: Colors.white.withValues(alpha: 0.12),
+          padding: EdgeInsets.symmetric(horizontal: ui(14), vertical: ui(8)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(ui(8)),
+          ),
         ),
       ),
     );
