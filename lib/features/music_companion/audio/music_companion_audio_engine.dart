@@ -1,9 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter_soloud/flutter_soloud.dart';
+import 'package:just_audio/just_audio.dart';
 
-import '../../../core/audio/native_audio_bootstrap.dart';
 import 'music_companion_audio_catalog.dart';
 import 'music_companion_web_audio_player_base.dart';
 import 'music_companion_web_audio_player_stub.dart'
@@ -24,39 +23,29 @@ Future<void> warmupMusicCompanionPianoAudio() async {}
 /// - 任何一步失败都不会让缓存的 Future 永远卡住——`_pianoInitTask` 会在异常时
 ///   置空，UI 层可以提示重试或直接再次按键。
 class MusicCompanionAudioEngine {
-  MusicCompanionAudioEngine({SoLoud? soLoud})
-    : _soLoud = soLoud ?? SoLoud.instance;
+  MusicCompanionAudioEngine();
 
-  final SoLoud _soLoud;
   final MusicCompanionWebAudioPlayer _webPlayer =
       createMusicCompanionWebAudioPlayer();
 
-  final Map<String, AudioSource> _pianoSourcesByNote = <String, AudioSource>{};
-  final Map<String, Future<AudioSource?>> _inflightPianoLoads =
-      <String, Future<AudioSource?>>{};
-  final Map<MusicCompanionMetronomeCue, AudioSource> _metronomeSourcesByCue =
-      <MusicCompanionMetronomeCue, AudioSource>{};
-  final Map<MusicCompanionMetronomeCue, Future<AudioSource?>>
-  _inflightMetronomeLoads =
-      <MusicCompanionMetronomeCue, Future<AudioSource?>>{};
-  final List<SoundHandle> _activeHandles = <SoundHandle>[];
+  final Map<String, AudioPlayer> _pianoPlayersByNote = <String, AudioPlayer>{};
+  final Map<String, Future<AudioPlayer?>> _inflightPianoPlayers =
+      <String, Future<AudioPlayer?>>{};
+  final Map<MusicCompanionMetronomeCue, AudioPlayer> _metronomePlayersByCue =
+      <MusicCompanionMetronomeCue, AudioPlayer>{};
+  final Map<MusicCompanionMetronomeCue, Future<AudioPlayer?>>
+  _inflightMetronomePlayers =
+      <MusicCompanionMetronomeCue, Future<AudioPlayer?>>{};
+  final Set<AudioPlayer> _activeOneShotPlayers = <AudioPlayer>{};
 
   Future<void>? _pianoInitTask;
   Future<void>? _metronomeInitTask;
-  Future<void>? _pianoWarmupTask;
   bool _disposed = false;
 
-  /// 与 7d9da87 时的语义保持一致：只要任一类音源加载过就算 ready。
-  bool get isReady => kIsWeb
-      ? _webPlayer.isReady
-      : (NativeAudioBootstrap.isReady &&
-            (_pianoSourcesByNote.isNotEmpty ||
-                _metronomeSourcesByCue.isNotEmpty));
+  bool get isReady => kIsWeb ? _webPlayer.isReady : !_disposed;
 
-  /// 钢琴可用判定：Bootstrap 已就绪即可点琴键——具体音 wav 的懒加载在 [playNote]
-  /// 里完成。这样 UI 不会因为 60 个 wav 没解完一直停在「加载中」。
-  bool get isPianoReady =>
-      kIsWeb ? _webPlayer.isReady : NativeAudioBootstrap.isReady;
+  /// native/iOS 现在走 just_audio 懒加载，不需要等待 SoLoud.init。
+  bool get isPianoReady => kIsWeb ? _webPlayer.isReady : !_disposed;
 
   Future<void> ensureInitialized() async {
     await ensurePianoInitialized();
@@ -72,10 +61,7 @@ class MusicCompanionAudioEngine {
         await _webPlayer.prepare(kMusicCompanionPianoAssetByNote.values);
         return;
       }
-      await NativeAudioBootstrap.ensureReady();
-      // SoLoud 一旦可用就开始后台预热剩余音；任何琴键事件可以走懒加载分支
-      // 立刻播放，不需要等预热结束。
-      _pianoWarmupTask ??= _warmupAllPianoAssets();
+      // native/iOS: no-op. Each note is prepared lazily by just_audio.
     } catch (error, stack) {
       _pianoInitTask = null;
       debugPrint(
@@ -96,10 +82,7 @@ class MusicCompanionAudioEngine {
         await _webPlayer.prepare(kMusicCompanionMetronomeAssetByCue.values);
         return;
       }
-      await NativeAudioBootstrap.ensureReady();
-      // 节拍器只有 17 个小 mp3，整体并行加载也很快——一次性加载完，
-      // 后续每拍都能用 tryPlayMetronomeCueFromUserGesture 同步触发。
-      await _loadAllMetronomeAssets();
+      // native/iOS: no-op. Cues are prepared lazily by just_audio.
     } catch (error, stack) {
       _metronomeInitTask = null;
       debugPrint(
@@ -110,119 +93,81 @@ class MusicCompanionAudioEngine {
     }
   }
 
-  Future<void> _warmupAllPianoAssets() async {
-    for (final entry in kMusicCompanionPianoAssetByNote.entries) {
-      if (_disposed) return;
-      if (_pianoSourcesByNote.containsKey(entry.key)) continue;
-      try {
-        await _loadPianoSource(entry.key);
-      } catch (error, stack) {
-        debugPrint(
-          'MusicCompanionAudioEngine piano warmup ${entry.key} failed: '
-          '$error\n$stack',
-        );
-      }
-    }
-  }
-
-  Future<void> _loadAllMetronomeAssets() async {
-    for (final cue in kMusicCompanionMetronomeAssetByCue.keys) {
-      if (_disposed) return;
-      if (_metronomeSourcesByCue.containsKey(cue)) continue;
-      await _loadMetronomeSource(cue);
-    }
-  }
-
-  Future<AudioSource?> _loadPianoSource(String note) async {
-    final cached = _pianoSourcesByNote[note];
+  Future<AudioPlayer?> _loadPianoPlayer(String note) async {
+    final cached = _pianoPlayersByNote[note];
     if (cached != null) return cached;
-    final inflight = _inflightPianoLoads[note];
+    final inflight = _inflightPianoPlayers[note];
     if (inflight != null) return inflight;
 
     final asset = kMusicCompanionPianoAssetByNote[note];
     if (asset == null) return null;
 
-    final future = _soLoud
-        .loadAsset(asset, mode: LoadMode.memory)
-        .then((source) {
-          if (!_disposed) {
-            _pianoSourcesByNote[note] = source;
-          }
-          return source;
-        })
-        .whenComplete(() {
-          _inflightPianoLoads.remove(note);
-        });
-    _inflightPianoLoads[note] = future;
+    final future = _createAssetPlayer(asset).then((player) {
+      if (_disposed) {
+        unawaited(player.dispose());
+        return null;
+      }
+      _pianoPlayersByNote[note] = player;
+      return player;
+    }).whenComplete(() {
+      _inflightPianoPlayers.remove(note);
+    });
+    _inflightPianoPlayers[note] = future;
     return future;
   }
 
-  Future<AudioSource?> _loadMetronomeSource(
+  Future<AudioPlayer?> _loadMetronomePlayer(
     MusicCompanionMetronomeCue cue,
   ) async {
-    final cached = _metronomeSourcesByCue[cue];
+    final cached = _metronomePlayersByCue[cue];
     if (cached != null) return cached;
-    final inflight = _inflightMetronomeLoads[cue];
+    final inflight = _inflightMetronomePlayers[cue];
     if (inflight != null) return inflight;
 
     final asset = kMusicCompanionMetronomeAssetByCue[cue];
     if (asset == null) return null;
 
-    final future = _soLoud
-        .loadAsset(asset, mode: LoadMode.memory)
-        .then((source) {
-          if (!_disposed) {
-            _metronomeSourcesByCue[cue] = source;
-          }
-          return source;
-        })
-        .whenComplete(() {
-          _inflightMetronomeLoads.remove(cue);
-        });
-    _inflightMetronomeLoads[cue] = future;
+    final future = _createAssetPlayer(asset).then((player) {
+      if (_disposed) {
+        unawaited(player.dispose());
+        return null;
+      }
+      _metronomePlayersByCue[cue] = player;
+      return player;
+    }).whenComplete(() {
+      _inflightMetronomePlayers.remove(cue);
+    });
+    _inflightMetronomePlayers[cue] = future;
     return future;
+  }
+
+  Future<AudioPlayer> _createAssetPlayer(String asset) async {
+    final player = AudioPlayer();
+    await player.setAsset(asset);
+    await player.setVolume(1);
+    return player;
+  }
+
+  Future<void> _playPreparedPlayer(AudioPlayer player, {double volume = 1}) async {
+    await player.setVolume(volume.clamp(0.0, 1.0));
+    await player.seek(Duration.zero);
+    await player.play();
   }
 
   /// iOS：在用户手势同栈内同步播放——只有该音的 AudioSource 已经在内存里时
   /// 才能成功。预热未到该音时返回 false，调用方应当 fallback 到 `playNote`
   /// 的 await 分支等待加载。
   bool tryPlayNoteFromUserGesture(String rawNote, {double volume = 1}) {
-    if (_disposed || kIsWeb || !_soLoud.isInitialized) {
-      return false;
-    }
-    final source = _pianoSourcesByNote[_normalizeNote(rawNote)];
-    if (source == null) {
-      return false;
-    }
-    try {
-      _registerHandle(_soLoud.play(source, volume: volume));
-      return true;
-    } catch (error, stack) {
-      debugPrint('tryPlayNoteFromUserGesture($rawNote): $error\n$stack');
-      return false;
-    }
+    // just_audio 的 asset prepare/play 都是 async，无法在同一手势栈同步发声。
+    // 调用方会 fallback 到 [playNote]。
+    return false;
   }
 
   bool tryPlayMetronomeCueFromUserGesture(
     MusicCompanionMetronomeCue cue, {
     double volume = 1,
   }) {
-    if (_disposed || kIsWeb || !_soLoud.isInitialized) {
-      return false;
-    }
-    final source = _metronomeSourcesByCue[cue];
-    if (source == null) {
-      return false;
-    }
-    try {
-      _registerHandle(_soLoud.play(source, volume: volume));
-      return true;
-    } catch (error, stack) {
-      debugPrint(
-        'tryPlayMetronomeCueFromUserGesture($cue): $error\n$stack',
-      );
-      return false;
-    }
+    return false;
   }
 
   Future<void> activateByUserGesture() async {
@@ -235,9 +180,7 @@ class MusicCompanionAudioEngine {
     } catch (_) {
       return;
     }
-    // 走轻探针：C4 一旦在池里就同步弹一下；没在池里就让 playNote 的懒加载
-    // 自然把它拉进来。
-    tryPlayNoteFromUserGesture('C4', volume: 0.02);
+    await playNote('C4', volume: 0.02);
   }
 
   Future<void> playNote(String rawNote, {double volume = 1}) async {
@@ -266,9 +209,20 @@ class MusicCompanionAudioEngine {
     try {
       await ensurePianoInitialized();
       if (_disposed) return;
-      final source = await _loadPianoSource(note);
-      if (source == null || _disposed) return;
-      _registerHandle(_soLoud.play(source, volume: volume));
+      final player = await _loadPianoPlayer(note);
+      if (player == null || _disposed) return;
+      if (player.playing) {
+        final oneShot = await _createAssetPlayer(asset);
+        _activeOneShotPlayers.add(oneShot);
+        unawaited(
+          _playPreparedPlayer(oneShot, volume: volume).whenComplete(() async {
+            _activeOneShotPlayers.remove(oneShot);
+            await oneShot.dispose();
+          }),
+        );
+        return;
+      }
+      await _playPreparedPlayer(player, volume: volume);
     } catch (error, stack) {
       debugPrint(
         'MusicCompanionAudioEngine.playNote $note failed: $error\n$stack',
@@ -310,20 +264,13 @@ class MusicCompanionAudioEngine {
     try {
       await ensureMetronomeInitialized();
       if (_disposed) return;
-      final source = await _loadMetronomeSource(cue);
-      if (source == null || _disposed) return;
-      _registerHandle(_soLoud.play(source, volume: volume));
+      final player = await _loadMetronomePlayer(cue);
+      if (player == null || _disposed) return;
+      await _playPreparedPlayer(player, volume: volume);
     } catch (error, stack) {
       debugPrint(
         'MusicCompanionAudioEngine.playMetronomeCue $cue failed: $error\n$stack',
       );
-    }
-  }
-
-  void _registerHandle(SoundHandle handle) {
-    _activeHandles.add(handle);
-    if (_activeHandles.length > 1024) {
-      _activeHandles.removeRange(0, _activeHandles.length - 512);
     }
   }
 
@@ -332,13 +279,12 @@ class MusicCompanionAudioEngine {
       await _webPlayer.stopAll();
       return;
     }
-    if (!_soLoud.isInitialized) return;
-    for (final handle in List<SoundHandle>.from(_activeHandles)) {
-      try {
-        await _soLoud.stop(handle);
-      } catch (_) {}
-    }
-    _activeHandles.clear();
+    final players = <AudioPlayer>{
+      ..._pianoPlayersByNote.values,
+      ..._metronomePlayersByCue.values,
+      ..._activeOneShotPlayers,
+    };
+    await Future.wait(players.map((player) => player.stop().catchError((_) {})));
   }
 
   void stopAllImmediately() {
@@ -346,18 +292,13 @@ class MusicCompanionAudioEngine {
       unawaited(_webPlayer.stopAll());
       return;
     }
-    if (!_soLoud.isInitialized) {
-      _activeHandles.clear();
-      return;
+    for (final player in <AudioPlayer>{
+      ..._pianoPlayersByNote.values,
+      ..._metronomePlayersByCue.values,
+      ..._activeOneShotPlayers,
+    }) {
+      unawaited(player.stop().catchError((_) {}));
     }
-    for (final handle in List<SoundHandle>.from(_activeHandles)) {
-      try {
-        if (_soLoud.getIsValidVoiceHandle(handle)) {
-          unawaited(_soLoud.stop(handle));
-        }
-      } catch (_) {}
-    }
-    _activeHandles.clear();
   }
 
   Future<void> dispose() async {
@@ -369,28 +310,24 @@ class MusicCompanionAudioEngine {
       await _webPlayer.dispose();
       _pianoInitTask = null;
       _metronomeInitTask = null;
-      _pianoWarmupTask = null;
       return;
     }
-    // 同样不再 deinit SoLoud——这是全局共享的实例，参见 [NativeAudioBootstrap]。
-    for (final source in _pianoSourcesByNote.values) {
+    for (final player in <AudioPlayer>{
+      ..._pianoPlayersByNote.values,
+      ..._metronomePlayersByCue.values,
+      ..._activeOneShotPlayers,
+    }) {
       try {
-        await _soLoud.disposeSource(source);
+        await player.dispose();
       } catch (_) {}
     }
-    for (final source in _metronomeSourcesByCue.values) {
-      try {
-        await _soLoud.disposeSource(source);
-      } catch (_) {}
-    }
-    _pianoSourcesByNote.clear();
-    _metronomeSourcesByCue.clear();
-    _inflightPianoLoads.clear();
-    _inflightMetronomeLoads.clear();
-    _activeHandles.clear();
+    _pianoPlayersByNote.clear();
+    _metronomePlayersByCue.clear();
+    _inflightPianoPlayers.clear();
+    _inflightMetronomePlayers.clear();
+    _activeOneShotPlayers.clear();
     _pianoInitTask = null;
     _metronomeInitTask = null;
-    _pianoWarmupTask = null;
   }
 
   String _normalizeNote(String rawNote) {
