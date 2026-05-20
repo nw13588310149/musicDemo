@@ -4,6 +4,8 @@
 <dict>
 	<key>CADisableMinimumFrameDuration</key>
 	<true/>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
 	<key>UIDeviceFamily</key>
 	<array>
 		<integer>2</integer>
@@ -59,8 +61,6 @@
 					<string>flutter</string>
 					<key>UISceneDelegateClassName</key>
 					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
-					<key>UISceneStoryboardFile</key>
-					<string>Main</string>
 				</dict>
 			</array>
 		</dict>
@@ -69,8 +69,6 @@
 	<true/>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
-	<key>UIMainStoryboardFile</key>
-	<string>Main</string>
 	<!-- 仅横屏：与 Flutter SystemChrome + Android sensorLandscape 一致，iPad 竖握设备亦保持横屏 UI -->
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
