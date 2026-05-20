@@ -49,14 +49,19 @@ class MusicCompanionAudioEngine {
   MusicCompanionWebAudioPlayer get _webPlayer => _webPool;
 
   /// 仅预热钢琴（进页 / 用户点琴键）。节拍器音源在首次播放时再加载。
+  ///
+  /// 历史教训：这里曾在 `await ensurePlayable()` 后追加
+  /// `unawaited(_pianoPool.ensureLoaded())` 后台并发全量加载，导致 iPad 上
+  /// `tryPlayNote()`（绕过 SoLoud 串行队列直接走 `_soLoud.play`）与后台
+  /// `loadAsset` 在原生层竞态，引发冷启动闪退。
+  /// 现改为：只等待"可弹"状态（init + 解锁音 C4），其余 wav 全部走
+  /// `_pianoPool.ensureNote(note)` 在用户实际按键时的懒加载路径。
   Future<void> ensurePianoInitialized() async {
     if (kIsWeb) {
       await _webPool.ensurePianoLoaded();
       return;
     }
     await _pianoPool.ensurePlayable();
-    // 全量 wav 仅在用户真正进入音乐伴侣时后台拉取；启动预热只走 ensurePlayable。
-    unawaited(_pianoPool.ensureLoaded());
   }
 
   Future<void> ensureMetronomeInitialized() {

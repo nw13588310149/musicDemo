@@ -38,6 +38,32 @@ target 'Runner' do
 end
 
 post_install do |installer|
+  # ───────────────────────────────────────────────────────────────────────────
+  # flutter_soloud 4.0.x iOS 构建兜底
+  # ───────────────────────────────────────────────────────────────────────────
+  # 4.0.0 起，flutter_soloud 在 podspec 的 prepare_command 中通过 CMake 构建
+  # libflutter_soloud_plugin.a。但在某些 Xcode / CI（fastlane、codex CI 等）
+  # 环境下，Xcode 链接此 .a 时 CMake 步骤尚未完成，报错：
+  #   "Build input file cannot be found: libflutter_soloud_plugin.a"
+  # 该问题会连锁导致 audio_session 等其他 Pod 也"模块找不到"（因为 pod
+  # install 中断）。
+  #
+  # 这里在 post_install 阶段主动调用插件自带的 build_cmake.sh，保证 Xcode
+  # 链接前静态库一定存在。脚本内部是幂等的，已有产物会跳过实际编译。
+  # 参考：https://github.com/alnitak/flutter_soloud/issues/414
+  flutter_soloud_dir = File.expand_path(
+    File.join('.symlinks', 'plugins', 'flutter_soloud', 'ios'),
+    __dir__,
+  )
+  build_cmake = File.join(flutter_soloud_dir, 'build_cmake.sh')
+  if File.exist?(build_cmake)
+    Pod::UI.puts "[flutter_soloud] Pre-building CMake static lib via build_cmake.sh ..."
+    Dir.chdir(flutter_soloud_dir) do
+      ok = system({ 'CONFIGURATION' => 'Release' }, 'sh', './build_cmake.sh')
+      raise "flutter_soloud build_cmake.sh failed (exit #{$?.exitstatus})" unless ok
+    end
+  end
+
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
     target.build_configurations.each do |config|

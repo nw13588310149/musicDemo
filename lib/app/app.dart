@@ -5,7 +5,6 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/config/app_config_repository.dart';
-import '../features/music_companion/audio/music_companion_audio_engine.dart';
 import '../core/network/chat_socket_service.dart';
 import '../features/ai_chat/state/ai_chat_socket_dispatcher.dart';
 import '../core/permissions/first_launch_permission_host.dart';
@@ -32,78 +31,65 @@ class _MyAppState extends ConsumerState<MyApp> {
   void initState() {
     super.initState();
     bindApiUnauthorizedSessionCleanup(ref);
-    // ────────────────────────────────────────────────────────────────────
-    // 启动稳健化：所有"可能触发原生 / 同步抛错"的副作用都挪到首帧后再执行。
-    //
-    // 历史教训：
-    //   • commit afc74d7（fix:修复闪退）把 GeTui startSdk / SoLoud 预热
-    //     从 main() 推迟到首帧后，治掉了一次 iPad 冷启动闪退。
-    //   • 之后又在 initState 同步阶段新增 `chatSocketServiceProvider.connect()`
-    //     + `aiChatSocketDispatcherProvider` 的 read，会在 Flutter Engine
-    //     渲染第一帧前同步建 TCP/TLS。iPad 在弱网 / VPN / 代理 / 企业网络
-    //     栈下，`WebSocketChannel.connect` 的同步前置握手有概率把 Dart
-    //     异常抛在 main-isolate 启动阶段，表现为应用图标点开"立马闪退"。
-    //
-    // 解决：把 WebSocket / 流式 dispatcher / fileBaseUrl 刷新统一放进
-    // postFrameCallback，并在内部 try-catch 兜底；启动期 dart 代码尽量
-    // 只做纯字段读 / 字符串拼接。
-    // ────────────────────────────────────────────────────────────────────
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      try {
-        unawaited(ref.read(pushNotificationServiceProvider).initialize());
-      } catch (e, st) {
-        debugPrint('pushNotificationService.initialize failed: $e\n$st');
-      }
-      try {
-        unawaited(warmupMusicCompanionPianoAudio());
-      } catch (e, st) {
-        debugPrint('warmupMusicCompanionPianoAudio failed: $e\n$st');
-      }
 
-      final storage = ref.read(appStorageProvider);
-      if (storage.token.isNotEmpty) {
-        try {
-          final repo = ref.read(appConfigRepositoryProvider);
-          unawaited(repo.refreshFileBaseUrl());
-        } catch (e, st) {
-          debugPrint('refreshFileBaseUrl failed: $e\n$st');
-        }
-        try {
-          // 全局 WebSocket 长连接：承担 AI 助手 + 系统事件 + 群聊推送。
-          ref.read(chatSocketServiceProvider).connect();
-        } catch (e, st) {
-          debugPrint('chatSocketService.connect failed: $e\n$st');
-        }
-        try {
-          // 预热 AI WS 分发器，确保登录后流式帧不会因页面未挂载而丢失。
-          ref.read(aiChatSocketDispatcherProvider);
-        } catch (e, st) {
-          debugPrint('aiChatSocketDispatcher init failed: $e\n$st');
-        }
-      }
+    // ────────────────────────────────────────────────────────────────────
+    // 启动副作用：还原到 commit c3f7d2e（最后已知不闪退版本）的同步触发顺序，
+    // 同时保留 afc74d7 引入的全部 try-catch 防御网。
+    //
+    // 为什么不用 addPostFrameCallback？
+    //   实测把这些副作用推到首帧后，会与首帧渲染、原生 push / 音频 init
+    //   抢同一帧的主线程时间片，iPad 上反而触发冷启动闪退。
+    //   c3f7d2e 之所以稳定，是因为 main()/initState 同步阶段触发的原生
+    //   工作可以在 Engine 真正渲染管线启动前就铺开，不与 UI 抢资源。
+    // ────────────────────────────────────────────────────────────────────
 
-      // GeTui CID 监听同样推迟到首帧后挂载，避免 push service 构造与 stream
-      // 订阅落在启动期同步阶段。
+    // 已登录用户冷启动：异步刷新文件服务器配置；游客 token（"youke"）也走
+    // 同一路径，确保拿到最新的 fileBaseUrl。
+    final storage = ref.read(appStorageProvider);
+    if (storage.token.isNotEmpty) {
       try {
-        _cidSubscription = ref
-            .read(pushNotificationServiceProvider)
-            .clientIdStream
-            .listen((cid) async {
-              if (cid.isEmpty) return;
-              final token = ref.read(appStorageProvider).token;
-              if (token.isEmpty) return;
-              final authRepo = ref.read(authRepositoryProvider);
-              try {
-                await authRepo.reportCid(cid);
-              } catch (_) {
-                // 接口失败不影响业务。
-              }
-            });
+        final repo = ref.read(appConfigRepositoryProvider);
+        unawaited(repo.refreshFileBaseUrl());
       } catch (e, st) {
-        debugPrint('clientIdStream listen failed: $e\n$st');
+        debugPrint('refreshFileBaseUrl failed: $e\n$st');
       }
-    });
+      try {
+        // 全局 WebSocket 长连接：承担 AI 助手 + 系统事件 + 群聊推送。
+        // 游客 token 也尝试连接，由后端按需放行/拒绝。
+        ref.read(chatSocketServiceProvider).connect();
+      } catch (e, st) {
+        debugPrint('chatSocketService.connect failed: $e\n$st');
+      }
+      try {
+        // 预热 AI WS 分发器，确保登录后流式帧不会因页面未挂载而丢失。
+        ref.read(aiChatSocketDispatcherProvider);
+      } catch (e, st) {
+        debugPrint('aiChatSocketDispatcher init failed: $e\n$st');
+      }
+    }
+
+    // GeTui CID 是异步回调拿到的：登录早于 CID 到达 / CID 在运行时变更
+    // （极少见但官方支持）时，下面这个监听负责把最新 CID 上报到
+    // `/app/user/reportCid`。AuthController 的 `_reportCidIfNeeded` 只处理
+    // "登录时已经有 CID" 的快路径，慢路径靠这里兜底。
+    try {
+      _cidSubscription = ref
+          .read(pushNotificationServiceProvider)
+          .clientIdStream
+          .listen((cid) async {
+            if (cid.isEmpty) return;
+            final token = ref.read(appStorageProvider).token;
+            if (token.isEmpty) return;
+            final authRepo = ref.read(authRepositoryProvider);
+            try {
+              await authRepo.reportCid(cid);
+            } catch (_) {
+              // 接口失败不影响业务；下次 CID 到达 / 重新登录会再试一次。
+            }
+          });
+    } catch (e, st) {
+      debugPrint('clientIdStream listen failed: $e\n$st');
+    }
   }
 
   @override
