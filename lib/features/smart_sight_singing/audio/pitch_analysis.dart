@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 import 'package:pitch_detector_dart/pitch_detector.dart';
 
+import '../../../core/audio/native_audio_bootstrap.dart';
 import 'pitch_analysis_temp_io.dart'
     if (dart.library.html) 'pitch_analysis_temp_web.dart';
 import 'pitch_track.dart';
@@ -32,6 +33,7 @@ abstract final class SightSingingPitchAnalyzer {
       throw PitchAnalysisException(_msgWebNoPath);
     }
     try {
+      await NativeAudioBootstrap.ensureReady();
       final request = _sampleRequestForDuration(durationHint);
       final samples = await SoLoud.instance.readSamplesFromFile(
         path,
@@ -102,6 +104,7 @@ abstract final class SightSingingPitchAnalyzer {
       );
     }
 
+    await NativeAudioBootstrap.ensureReady();
     final tempPath = await _writeTempAudio(bytes, formatHint);
     try {
       final samples = await SoLoud.instance.readSamplesFromFile(
@@ -120,10 +123,15 @@ abstract final class SightSingingPitchAnalyzer {
   }
 
   static Future<void> _ensureSoLoudReadyForWebDecode() async {
-    final soLoud = SoLoud.instance;
-    if (!soLoud.isInitialized) {
-      await soLoud.init();
+    if (kIsWeb) {
+      final soLoud = SoLoud.instance;
+      if (!soLoud.isInitialized) {
+        await soLoud.init();
+      }
+      return;
     }
+    // Reuse the global native bootstrap instead of starting a second init path.
+    await NativeAudioBootstrap.ensureReady();
   }
 
   static Duration _estimateDuration(Uint8List bytes) {
@@ -153,10 +161,6 @@ abstract final class SightSingingPitchAnalyzer {
           : null,
       hasExactDuration: hasExactDuration,
     );
-  }
-
-  static int _maxSamplesForDurationSec(int seconds) {
-    return seconds * analysisSampleRate;
   }
 
   static Float32List _trimTail(Float32List samples, {required bool enabled}) {

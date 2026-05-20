@@ -4,12 +4,21 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 
-import '../../../core/audio/native_playback_audio_session.dart';
+import '../../../core/audio/native_audio_bootstrap.dart';
 import 'web_note_audio_player_base.dart';
 import 'web_note_audio_player_stub.dart'
     if (dart.library.html) 'web_note_audio_player_web.dart';
 
-/// 智能听写独立音频引擎（7d9da87 策略：自管音源表，不与音乐伴侣共用）。
+/// 智能听写音频引擎。
+///
+/// 重构后的核心策略（iPad 修复版）：
+/// - SoLoud 的 init / AVAudioSession 全部委托给 [NativeAudioBootstrap]，
+///   引擎自己只关心音源（AudioSource）的加载和播放；
+/// - 不再启动时一次性加载 30 个 wav，改为「懒加载 + 后台预热」：
+///   * `ensureInitialized()` 只保证 SoLoud 可用，然后立刻返回 `audioReady`；
+///   * 首次 `playToken(...)` 时按需加载真正用到的那一个 wav；
+///   * 同时在后台串行预热剩余 wav，让后续点击零延迟。
+/// - 任何一步失败都会清空当次缓存的 Future，下一次调用即可重试。
 class SmartDictationAudioEngine {
   SmartDictationAudioEngine({SoLoud? soLoud})
     : _soLoud = soLoud ?? SoLoud.instance;
@@ -17,125 +26,184 @@ class SmartDictationAudioEngine {
   final SoLoud _soLoud;
   final WebNoteAudioPlayer _webPlayer = createWebNoteAudioPlayer();
   final Map<String, AudioSource> _sourcesByCanonical = <String, AudioSource>{};
+  final Map<String, Future<AudioSource?>> _inflightLoads =
+      <String, Future<AudioSource?>>{};
   final List<SoundHandle> _activeHandles = <SoundHandle>[];
   final StreamController<List<double>> _frequencyController =
       StreamController<List<double>>.broadcast();
   AudioData? _audioData;
   Timer? _visualTicker;
   Future<void>? _initTask;
+  Future<void>? _warmupTask;
+  bool _disposed = false;
 
   bool get isReady =>
-      kIsWeb ? _webPlayer.isReady : _sourcesByCanonical.isNotEmpty;
+      kIsWeb ? _webPlayer.isReady : NativeAudioBootstrap.isReady;
 
   Stream<List<double>> get frequencyBands =>
       kIsWeb ? _webPlayer.frequencyBands : _frequencyController.stream;
 
+  /// 仅保证 SoLoud 可用 + Web 端把 HTML5 audio 池准备好。
+  /// 不阻塞在 30 个 wav 的解码上——那部分会丢到后台 [_warmupAllAssets]。
   Future<void> ensureInitialized() {
-    return _initTask ??= () async {
-      try {
-        await _initializeAndPreload();
-      } catch (error, stack) {
-        _initTask = null;
-        debugPrint('SmartDictationAudioEngine init failed: $error\n$stack');
-        rethrow;
-      }
-    }();
+    return _initTask ??= _runEnsureInitialized();
   }
 
-  Future<void> _initializeAndPreload() async {
-    if (kIsWeb) {
-      await _webPlayer.prepare(_assetByCanonical.values);
-      return;
-    }
-
-    // iOS 必须：在 SoLoud.init() 之前先把 AVAudioSession 切到 playback。
-    // 否则 media_kit / 人脸相机 / 调音器等模块如果先把 session 切走，
-    // SoLoud 底层 miniaudio 会拿不到输出设备，iPad 上表现为
-    // init() 卡死或后续 loadAsset 直接抛错（即「智能听写音频引擎初始化失败」）。
-    await NativePlaybackAudioSession.ensurePlaybackActive();
-    // 与音乐伴侣保持一致：仅在未初始化时 init()，避免重复 init 卸载对方音源。
-    if (!_soLoud.isInitialized) {
-      await _soLoud.init();
-    }
-    _soLoud.setVisualizationEnabled(true);
-    _soLoud.setFftSmoothing(0.82);
-    _audioData ??= AudioData(GetSamplesKind.linear);
-    _soLoud.setMaxActiveVoiceCount(256);
-
-    if (_sourcesByCanonical.isNotEmpty) {
-      return;
-    }
-
-    for (final entry in _assetByCanonical.entries) {
-      final source = await _soLoud.loadAsset(
-        entry.value,
-        mode: LoadMode.memory,
+  Future<void> _runEnsureInitialized() async {
+    try {
+      if (kIsWeb) {
+        await _webPlayer.prepare(_assetByCanonical.values);
+        return;
+      }
+      await NativeAudioBootstrap.ensureReady();
+      _soLoud.setVisualizationEnabled(true);
+      _soLoud.setFftSmoothing(0.82);
+      _audioData ??= AudioData(GetSamplesKind.linear);
+      // 进入页面立刻在后台串行预热剩余音源；首次播放时若还没轮到，懒加载分支
+      // 会按需即时加载该音 token，不会被预热占住。
+      _warmupTask ??= _warmupAllAssets();
+    } catch (error, stack) {
+      _initTask = null;
+      debugPrint(
+        'SmartDictationAudioEngine.ensureInitialized failed: $error\n$stack',
       );
-      _sourcesByCanonical[entry.key] = source;
+      rethrow;
     }
+  }
+
+  Future<void> _warmupAllAssets() async {
+    for (final entry in _assetByCanonical.entries) {
+      if (_disposed) return;
+      // 已经被懒加载或之前的预热加载过了，跳过。
+      if (_sourcesByCanonical.containsKey(entry.key)) continue;
+      try {
+        final source = await _loadSourceForCanonical(entry.key);
+        if (source != null && !_disposed) {
+          _sourcesByCanonical[entry.key] = source;
+        }
+      } catch (error, stack) {
+        debugPrint(
+          'SmartDictationAudioEngine warmup ${entry.key} failed: '
+          '$error\n$stack',
+        );
+        // 单个音失败不影响其它音继续预热。
+      }
+    }
+  }
+
+  Future<AudioSource?> _loadSourceForCanonical(String canonical) async {
+    final cached = _sourcesByCanonical[canonical];
+    if (cached != null) return cached;
+    final inflight = _inflightLoads[canonical];
+    if (inflight != null) return inflight;
+
+    final asset = _assetByCanonical[canonical];
+    if (asset == null) return null;
+
+    final future = _soLoud
+        .loadAsset(asset, mode: LoadMode.memory)
+        .then((source) {
+          if (_disposed) return source;
+          _sourcesByCanonical[canonical] = source;
+          return source;
+        })
+        .whenComplete(() {
+          _inflightLoads.remove(canonical);
+        });
+    _inflightLoads[canonical] = future;
+    return future;
   }
 
   Future<void> playToken(String token, {double volume = 1}) async {
-    await ensureInitialized();
+    if (_disposed) return;
     final canonical = canonicalFromToken(token);
-    if (canonical.isEmpty) {
-      return;
-    }
+    if (canonical.isEmpty) return;
+
     if (kIsWeb) {
       final asset = _assetByCanonical[canonical];
-      if (asset == null) {
-        return;
+      if (asset == null) return;
+      try {
+        await _webPlayer.playAsset(asset, volume: volume);
+      } catch (error, stack) {
+        debugPrint(
+          'SmartDictationAudioEngine.playToken web $canonical failed: '
+          '$error\n$stack',
+        );
       }
-      await _webPlayer.playAsset(asset, volume: volume);
       return;
     }
-    final source = _sourcesByCanonical[canonical];
-    if (source == null) {
-      return;
+
+    try {
+      await ensureInitialized();
+      if (_disposed) return;
+      final source = await _loadSourceForCanonical(canonical);
+      if (source == null || _disposed) return;
+      final handle = _soLoud.play(source, volume: volume);
+      _activeHandles.add(handle);
+      _startVisualTicker();
+    } catch (error, stack) {
+      debugPrint(
+        'SmartDictationAudioEngine.playToken $canonical failed: $error\n$stack',
+      );
     }
-    final handle = _soLoud.play(source, volume: volume);
-    _activeHandles.add(handle);
-    _startVisualTicker();
   }
 
   Future<void> activateByUserGesture() async {
-    await ensureInitialized();
     if (kIsWeb) {
       await _webPlayer.activateByUserGesture();
       return;
     }
-    if (_sourcesByCanonical.isEmpty) {
+    try {
+      await ensureInitialized();
+    } catch (_) {
+      // 这里允许失败：UI 层的「重试」会再次走一次。
       return;
     }
+    if (_disposed || _sourcesByCanonical.isEmpty) return;
     final probe = _sourcesByCanonical.values.first;
-    _soLoud.play(probe, volume: 0.0001);
+    try {
+      _soLoud.play(probe, volume: 0.0001);
+    } catch (error, stack) {
+      debugPrint(
+        'SmartDictationAudioEngine.activateByUserGesture probe failed: '
+        '$error\n$stack',
+      );
+    }
   }
 
   Future<void> playTokensHarmonic(
     List<String> tokens, {
     double volume = 1,
   }) async {
-    await ensureInitialized();
-    for (final token in tokens) {
-      final canonical = canonicalFromToken(token);
-      if (canonical.isEmpty) {
-        continue;
+    if (_disposed) return;
+    if (kIsWeb) {
+      for (final token in tokens) {
+        await playToken(token, volume: volume);
       }
-      if (kIsWeb) {
-        final asset = _assetByCanonical[canonical];
-        if (asset != null) {
-          await _webPlayer.playAsset(asset, volume: volume);
-        }
-        continue;
-      }
-      final source = _sourcesByCanonical[canonical];
-      if (source == null) {
-        continue;
-      }
-      final handle = _soLoud.play(source, volume: volume);
-      _activeHandles.add(handle);
-      _startVisualTicker();
+      return;
     }
+    try {
+      await ensureInitialized();
+    } catch (_) {
+      return;
+    }
+    for (final token in tokens) {
+      if (_disposed) return;
+      final canonical = canonicalFromToken(token);
+      if (canonical.isEmpty) continue;
+      final source = await _loadSourceForCanonical(canonical);
+      if (source == null || _disposed) continue;
+      try {
+        final handle = _soLoud.play(source, volume: volume);
+        _activeHandles.add(handle);
+      } catch (error, stack) {
+        debugPrint(
+          'SmartDictationAudioEngine harmonic $canonical failed: '
+          '$error\n$stack',
+        );
+      }
+    }
+    _startVisualTicker();
   }
 
   Future<void> playTokensMelodic(
@@ -143,25 +211,10 @@ class SmartDictationAudioEngine {
     Duration gap = const Duration(milliseconds: 320),
     double volume = 1,
   }) async {
-    await ensureInitialized();
+    if (_disposed) return;
     for (var i = 0; i < tokens.length; i++) {
-      final token = tokens[i];
-      final canonical = canonicalFromToken(token);
-      if (canonical.isNotEmpty) {
-        if (kIsWeb) {
-          final asset = _assetByCanonical[canonical];
-          if (asset != null) {
-            await _webPlayer.playAsset(asset, volume: volume);
-          }
-        } else {
-          final source = _sourcesByCanonical[canonical];
-          if (source != null) {
-            final handle = _soLoud.play(source, volume: volume);
-            _activeHandles.add(handle);
-            _startVisualTicker();
-          }
-        }
-      }
+      if (_disposed) return;
+      await playToken(tokens[i], volume: volume);
       if (i < tokens.length - 1) {
         await Future<void>.delayed(gap);
       }
@@ -173,9 +226,7 @@ class SmartDictationAudioEngine {
       await _webPlayer.stopAll();
       return;
     }
-    if (!_soLoud.isInitialized) {
-      return;
-    }
+    if (!_soLoud.isInitialized) return;
     for (final handle in List<SoundHandle>.from(_activeHandles)) {
       try {
         await _soLoud.stop(handle);
@@ -186,17 +237,24 @@ class SmartDictationAudioEngine {
   }
 
   Future<void> dispose() async {
+    if (_disposed) return;
+    _disposed = true;
     if (kIsWeb) {
       await _webPlayer.dispose();
       _initTask = null;
+      _warmupTask = null;
       return;
     }
+    // 注意：不再调 `_soLoud.deinit()`——SoLoud 是跨页面共享的全局单例，
+    // 一旦 deinit 其它仍在运行的页面（musicPlay 钢琴 / musicCompanion）
+    // 就会瞬间静音。仅 dispose 本引擎持有的音源即可。
     for (final source in _sourcesByCanonical.values) {
       try {
         await _soLoud.disposeSource(source);
       } catch (_) {}
     }
     _sourcesByCanonical.clear();
+    _inflightLoads.clear();
     _activeHandles.clear();
     _stopVisualTicker();
     _audioData?.dispose();
@@ -205,6 +263,7 @@ class SmartDictationAudioEngine {
       await _frequencyController.close();
     }
     _initTask = null;
+    _warmupTask = null;
   }
 
   void _startVisualTicker() {

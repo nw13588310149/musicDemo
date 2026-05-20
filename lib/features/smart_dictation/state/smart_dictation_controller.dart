@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/audio/native_audio_bootstrap.dart';
 import '../audio/smart_dictation_audio_engine.dart';
 import '../data/smart_dictation_repository.dart';
 import 'smart_dictation_state.dart';
@@ -139,9 +140,20 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
       state = state.copyWith(
         audioLoading: false,
         audioReady: false,
-        errorMessage: '音频引擎初始化失败',
+        errorMessage: '音频引擎初始化失败，可点击重试',
       );
     }
+  }
+
+  /// UI 重试入口：在「初始化失败」气泡 / 重播按钮上调用，先清掉全局缓存再重跑。
+  Future<void> retryAudio() async {
+    NativeAudioBootstrap.resetForRetry();
+    state = state.copyWith(
+      audioLoading: true,
+      audioReady: false,
+      clearErrorMessage: true,
+    );
+    await _prepareAudio();
   }
 
   Future<void> _loadVipInfo() async {

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pitch_detector_dart/pitch_detector.dart';
 import 'package:record/record.dart';
 
+import '../../../core/audio/native_audio_bootstrap.dart';
 import '../../../core/audio/native_playback_audio_session.dart';
 import '../audio/music_companion_audio_catalog.dart';
 import '../audio/music_companion_audio_engine.dart';
@@ -64,6 +65,14 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
         errorMessage: '音乐伴侣音频初始化失败，请稍后重试。',
       );
     }
+  }
+
+  /// UI 重试入口：用户在「初始化失败」提示上点击时调用。
+  /// 先重置 bootstrap 缓存，再走一次完整的 init 流程。
+  Future<void> retryAudio() async {
+    NativeAudioBootstrap.resetForRetry();
+    state = state.copyWith(audioReady: false, errorMessage: null);
+    await _prepareAudio();
   }
 
   Future<void> setTab(MusicCompanionTab tab) async {
