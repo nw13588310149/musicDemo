@@ -2518,7 +2518,7 @@ class _PublishDrawerState extends ConsumerState<_PublishDrawer> {
                       value: _deadlineDisplay,
                       onTap: () async {
                         final now = DateTime.now();
-                        final picked = await showDatePicker(
+                        final picked = await showAppDatePicker(
                           context: context,
                           initialDate: now,
                           firstDate: now,
@@ -2526,16 +2526,14 @@ class _PublishDrawerState extends ConsumerState<_PublishDrawer> {
                           helpText: '选择日期',
                           cancelText: '取消',
                           confirmText: '确定',
-                          builder: appPickerDialogTheme,
                         );
                         if (picked == null || !context.mounted) return;
-                        final t = await showTimePicker(
+                        final t = await showAppTimePicker(
                           context: context,
                           initialTime: TimeOfDay.now(),
                           helpText: '选择时间',
                           cancelText: '取消',
                           confirmText: '确定',
-                          builder: appPickerDialogTheme,
                         );
                         if (t == null) return;
                         setState(() {

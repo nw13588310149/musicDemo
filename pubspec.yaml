@@ -235,3 +235,8 @@ flutter:
       fonts:
         - asset: assets/fonts/Inter-Variable.ttf
           weight: 400
+    # 个人中心 VIP 卡标题等（20 / 700）
+    - family: Alimama ShuHeiTi
+      fonts:
+        - asset: assets/fonts/ttf/AlimamaShuHeiTi-Bold.otf
+          weight: 700

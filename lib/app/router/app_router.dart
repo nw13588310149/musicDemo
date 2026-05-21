@@ -55,11 +55,15 @@ class AppRouter {
     );
   }
 
-  static bool _isPublicRoute(String routeName) {
+  /// 登录 / 注册 / 找回密码等无需登录态的认证页。
+  static bool isAuthRoute(String routeName) {
     return routeName == RoutePaths.login ||
         routeName == RoutePaths.register ||
-        routeName == RoutePaths.forget ||
-        routeName == RoutePaths.xieyi2;
+        routeName == RoutePaths.forget;
+  }
+
+  static bool _isPublicRoute(String routeName) {
+    return isAuthRoute(routeName) || routeName == RoutePaths.xieyi2;
   }
 
   static Route<dynamic> _buildPublicRoute(

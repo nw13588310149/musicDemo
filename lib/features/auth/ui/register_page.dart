@@ -34,7 +34,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
         builder: (scale) => Stack(
           clipBehavior: Clip.none,
           children: [
-            AuthBackgroundArt(scale: scale),
+            const AuthBackgroundArt(),
             Positioned(
               left: _s(scale, 691),
               top: _s(scale, 163),
@@ -61,7 +61,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                         ],
                         prefixIcon: AuthImageIcon(
                           scale: scale,
-                          asset: AppAssets.figmaAuthIconPhoneSmall,
+                          asset: AppAssets.authPhone,
                           width: 20,
                           height: 20,
                           leftPadding: 12,
@@ -84,7 +84,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                         ],
                         prefixIcon: AuthImageIcon(
                           scale: scale,
-                          asset: AppAssets.figmaAuthIconSmsSmall,
+                          asset: AppAssets.authCode,
                           width: 18,
                           height: 18,
                           leftPadding: 13,
@@ -117,7 +117,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                         obscureText: true,
                         prefixIcon: AuthImageIcon(
                           scale: scale,
-                          asset: AppAssets.figmaAuthIconPasswordSmall,
+                          asset: AppAssets.authPassword,
                           width: 17,
                           height: 17,
                           leftPadding: 14,

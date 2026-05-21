@@ -2387,7 +2387,7 @@ class _FilterBar extends StatelessWidget {
         // 日期 picker pill
         InkWell(
           onTap: () async {
-            final picked = await showDatePicker(
+            final picked = await showAppDatePicker(
               context: context,
               initialDate:
                   DateTime.tryParse(selectedDate) ?? DateTime.now(),
@@ -2396,7 +2396,6 @@ class _FilterBar extends StatelessWidget {
               helpText: '选择日期',
               cancelText: '取消',
               confirmText: '确定',
-              builder: appPickerDialogTheme,
             );
             if (picked != null) {
               final iso =

@@ -9,18 +9,15 @@ import 'package:flutter/material.dart';
 ///   `decayPerSecond` 指数衰减；当 [activeNotes] 中出现某个音时，将该音的
 ///   音高映射到 x 位置，向相邻柱子做高斯扩散注入能量，形成 ADSR 中的
 ///   attack + sustain。
-/// - **环境波**：在所有柱子上叠一层很淡的两段 sin，让空闲时也有"呼吸"
-///   节奏，避免可视化区域看起来像静态图。
-/// - **渲染**：紫色垂直渐变柱 + 中线下方淡化的镜像反射；柱体使用圆头
-///   圆角 (RRect)。
-///
-/// 后续若接入真实音频 FFT，只需把 [_PianoVisualizerState._injectActiveNotes]
-/// 替换成"用 fft 数组覆盖 `_levels`"即可，渲染层无需变更。
+/// - **环境波**：可选。开启后会在所有柱子上叠一层很淡的两段 sin 呼吸波；
+///   默认关闭，空闲时柱体保持静止。
 class PianoVisualizer extends StatefulWidget {
   const PianoVisualizer({
     required this.activeNotes,
     this.barCount = 80,
     this.height,
+    this.showFloatingNotes = true,
+    this.ambientWave = false,
     super.key,
   });
 
@@ -32,6 +29,12 @@ class PianoVisualizer extends StatefulWidget {
 
   /// 显式高度；不指定则填满父级（要求父级有界）。
   final double? height;
+
+  /// 是否绘制漂浮音符装饰（练习页等紧凑区域可关闭）。
+  final bool showFloatingNotes;
+
+  /// 空闲时是否叠加呼吸式环境波；默认 false，柱体静止。
+  final bool ambientWave;
 
   @override
   State<PianoVisualizer> createState() => _PianoVisualizerState();
@@ -131,7 +134,11 @@ class _PianoVisualizerState extends State<PianoVisualizer>
     // 注入按键能量
     _injectActiveNotes();
 
-    if (mounted) setState(() {});
+    final animating =
+        widget.ambientWave ||
+        widget.activeNotes.isNotEmpty ||
+        _levels.any((level) => level > 0.004);
+    if (animating && mounted) setState(() {});
   }
 
   void _injectActiveNotes() {
@@ -221,15 +228,20 @@ class _PianoVisualizerState extends State<PianoVisualizer>
                   levels: _levels,
                   ambientPhases: _ambientPhases,
                   time: _now,
+                  ambientWave: widget.ambientWave,
                 ),
               ),
             ),
-            for (final n in _floatingNotes)
-              _FloatingNoteWidget(
-                spec: n,
-                time: _now,
-                parentSize: Size(constraints.maxWidth, constraints.maxHeight),
-              ),
+            if (widget.showFloatingNotes)
+              for (final n in _floatingNotes)
+                _FloatingNoteWidget(
+                  spec: n,
+                  time: _now,
+                  parentSize: Size(
+                    constraints.maxWidth,
+                    constraints.maxHeight,
+                  ),
+                ),
           ],
         );
       },
@@ -248,11 +260,13 @@ class _VisualizerPainter extends CustomPainter {
     required this.levels,
     required this.ambientPhases,
     required this.time,
+    required this.ambientWave,
   });
 
   final List<double> levels;
   final List<double> ambientPhases;
   final double time;
+  final bool ambientWave;
 
   static const _topColor = Color(0xFF8741FF);
   static const _bottomColor = Color(0xFFC8AEFF);
@@ -274,13 +288,14 @@ class _VisualizerPainter extends CustomPainter {
     final radius = Radius.circular(barW / 2);
 
     for (var i = 0; i < n; i++) {
-      // 环境波：两段 sin 叠加 → 形成不规则但平滑的"呼吸"波形。
-      final ambient =
-          0.05 +
-          0.06 *
-              ((math.sin(time * 1.6 + ambientPhases[i]) +
-                      math.sin(time * 0.9 + ambientPhases[i] * 0.6)) /
-                  2);
+      // 环境波：可选呼吸动画；关闭时用固定基线，柱体静止。
+      final ambient = ambientWave
+          ? 0.05 +
+                0.06 *
+                    ((math.sin(time * 1.6 + ambientPhases[i]) +
+                            math.sin(time * 0.9 + ambientPhases[i] * 0.6)) /
+                        2)
+          : 0.055;
       final level = (levels[i] + ambient).clamp(0.0, 1.0);
       // 柱高再做一次平滑曲线（pow 0.7），让小幅度更明显，大幅度差不多
       final shaped = math.pow(level, 0.7) as double;
@@ -319,8 +334,18 @@ class _VisualizerPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _VisualizerPainter old) {
-    if (old.time != time) return true;
+    if (old.ambientWave != ambientWave) return true;
     if (old.levels.length != levels.length) return true;
+    if (ambientWave && old.time != time) return true;
+    if (!ambientWave && _levelsChanged(old.levels, levels)) return true;
+    return false;
+  }
+
+  bool _levelsChanged(List<double> a, List<double> b) {
+    if (a.length != b.length) return true;
+    for (var i = 0; i < a.length; i++) {
+      if ((a[i] - b[i]).abs() > 0.003) return true;
+    }
     return false;
   }
 }

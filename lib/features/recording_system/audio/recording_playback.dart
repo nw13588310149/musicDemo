@@ -27,6 +27,14 @@ abstract class RecordingPlayback {
 
   Future<int?> setSource(String source, {required bool isUrl});
 
+  /// Play multiple local/url sources sequentially as one clip.
+  Future<int?> setSources(
+    List<String> sources, {
+    required bool isUrl,
+    List<int>? segmentDurationsMs,
+    int? totalDurationMs,
+  });
+
   Future<void> play();
 
   Future<void> pause();

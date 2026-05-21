@@ -5,8 +5,7 @@ enum MyNotesView { list, template, editor }
 enum MyNotesFilter {
   all('所有笔记'),
   recent('最近'),
-  favorite('收藏'),
-  unarchived('未归档');
+  favorite('收藏');
 
   const MyNotesFilter(this.label);
 
@@ -154,7 +153,6 @@ class MyNotesState {
       MyNotesFilter.all => sorted,
       MyNotesFilter.recent => sorted.take(8).toList(),
       MyNotesFilter.favorite => sorted.where((e) => e.isFavorite).toList(),
-      MyNotesFilter.unarchived => sorted,
     };
   }
 

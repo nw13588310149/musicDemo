@@ -927,7 +927,7 @@ class _DormResubmitDialogState extends State<_DormResubmitDialog> {
 
   Future<void> _pickDate() async {
     final now = DateTime.now();
-    final picked = await showDatePicker(
+    final picked = await showAppDatePicker(
       context: context,
       initialDate: _date ?? now,
       firstDate: DateTime(now.year - 1),
@@ -935,7 +935,6 @@ class _DormResubmitDialogState extends State<_DormResubmitDialog> {
       helpText: '选择日期',
       cancelText: '取消',
       confirmText: '确认',
-      builder: appPickerDialogTheme,
     );
     if (!mounted || picked == null) return;
     setState(() => _date = picked);

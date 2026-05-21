@@ -332,7 +332,7 @@ class _VoiceSearchPill extends StatelessWidget {
     final fontSize = ui(14);
     final iconSize = ui(15);
     // 与 courseware「我的云盘」搜索框写法保持一致：
-    // - 外层 SizedBox 提供胶囊高度（这里 30）；
+    // - 外层 SizedBox 提供胶囊高度（这里 40，与 _CloudSearchField 一致）；
     // - TextField 用 prefixIcon + prefixIconConstraints(minWidth) 占位图标；
     // - contentPadding 置零、不开 isDense / isCollapsed，让 Material 自带的
     //   `textAlignVertical=center` 接管文字垂直居中。
@@ -343,8 +343,8 @@ class _VoiceSearchPill extends StatelessWidget {
     // Android 表现一致。
 
     return SizedBox(
-      width: ui(254),
-      height: ui(30),
+      width: ui(324),
+      height: ui(40),
       child: TextField(
         controller: controller,
         onChanged: onChanged,

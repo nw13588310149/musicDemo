@@ -26,6 +26,7 @@ import '../data/video_publisher_data.dart';
 import '../state/video_tutorial_controller.dart';
 import '../state/video_tutorial_state.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_theme.dart';
 
 const int _kVideoPreloadLimit = 8;
 const int _kVideoPrecacheWidth = 720;
@@ -302,7 +303,8 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
                           crossAxisCount: 4,
                           mainAxisSpacing: ui(16),
                           crossAxisSpacing: ui(16),
-                          childAspectRatio: 220 / 180,
+                          childAspectRatio:
+                              _kVideoGridCardDesignW / _kVideoGridCardDesignH,
                         ),
                         delegate: SliverChildBuilderDelegate(
                           (context, index) {
@@ -1703,28 +1705,36 @@ class _PlayerTopBar extends StatelessWidget {
 }
 
 class _CenterPlayBtn extends StatelessWidget {
-  const _CenterPlayBtn({required this.isPlaying, required this.onTap});
+  const _CenterPlayBtn({
+    required this.isPlaying,
+    required this.onTap,
+    this.iconSize = 52,
+    this.containerSize = 52,
+  });
 
   final bool isPlaying;
   final VoidCallback onTap;
+  final double iconSize;
+  final double containerSize;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 52,
-        height: 52,
+        width: containerSize,
+        height: containerSize,
         decoration: BoxDecoration(
           color: Colors.black.withValues(alpha: 0.45),
           shape: BoxShape.circle,
         ),
+        alignment: Alignment.center,
         child: Image.asset(
           isPlaying
               ? AppAssets.videoV2CenterPause
               : AppAssets.videoV2CenterPlay,
-          width: 28,
-          height: 28,
+          width: iconSize,
+          height: iconSize,
           fit: BoxFit.contain,
         ),
       ),
@@ -2508,18 +2518,31 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                 ],
                               ),
                             ),
-                            child: Row(
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+                              child: Row(
                               children: [
-                                IconButton(
-                                  onPressed: () => Navigator.of(context).pop(),
-                                  icon: Image.asset(
-                                    AppAssets.videoV2Back,
-                                    width: 16,
-                                    height: 16,
-                                    fit: BoxFit.contain,
+                                GestureDetector(
+                                  onTap: () => Navigator.of(context).pop(),
+                                  child: Container(
+                                    width: 32,
+                                    height: 32,
+                                    decoration: BoxDecoration(
+                                      color: const Color(
+                                        0xFF212028,
+                                      ).withValues(alpha: 0.8),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    alignment: Alignment.center,
+                                    child: Image.asset(
+                                      AppAssets.videoV2Back,
+                                      width: 32,
+                                      height: 32,
+                                      fit: BoxFit.contain,
+                                    ),
                                   ),
                                 ),
-                                const SizedBox(width: 4),
+                                const SizedBox(width: 10),
                                 Expanded(
                                   child: Text(
                                     widget.title,
@@ -2556,13 +2579,17 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                   ),
                               ],
                             ),
+                            ),
                           ),
                         ),
 
-                        // 中央播放/暂停
+                        // 中央播放/暂停（全屏图标 60）
                         Positioned.fill(
                           child: Center(
-                            child: GestureDetector(
+                            child: _CenterPlayBtn(
+                              isPlaying: _isPlaying,
+                              iconSize: 64,
+                              containerSize: 64,
                               onTap: () {
                                 if (_isPlaying) {
                                   widget.player.pause();
@@ -2571,24 +2598,6 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                 }
                                 _autoHide();
                               },
-                              child: Container(
-                                width: 64,
-                                height: 64,
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withValues(alpha: 0.45),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Center(
-                                  child: Image.asset(
-                                    _isPlaying
-                                        ? AppAssets.videoV2CenterPause
-                                        : AppAssets.videoV2CenterPlay,
-                                    width: 34,
-                                    height: 34,
-                                    fit: BoxFit.contain,
-                                  ),
-                                ),
-                              ),
                             ),
                           ),
                         ),
@@ -3804,7 +3813,7 @@ class _LatestVideoListCard extends StatelessWidget {
     final ui = scale.ui;
     // Figma 规格：宽 255、radius 12、bg #F5F6FA。
     // 标题"最新视频"：13/400/PingFang SC/#0B081A，行高 1。
-    // 行：thumb 68×68 radius 4 + gap 12 + 标题 13/500（最多 2 行 ellipsis）。
+    // 行：thumb 68×68 + 标题 13/500（1 行）+ 作者行（与网格卡一致）。
     //
     // 布局：父 SizedBox 已固定 280，整张卡片在 Row 的 280 高度内；
     //   12(top) + 13(title) + 8(gap) + 3×68 + 2×12 + 6(bottom) = 263 ≤ 280。
@@ -3863,8 +3872,78 @@ class _LatestVideoListCard extends StatelessWidget {
   }
 }
 
-/// 最新视频列表行：68×68 缩略图 + 信息列。
-/// 数据没有 description 时，标题按 Figma 第 4/5 项的样式垂直居中显示。
+/// 视频卡片作者行：头像 + 昵称 + 播放量（与网格卡一致）
+class _VideoPublisherMetaRow extends StatelessWidget {
+  const _VideoPublisherMetaRow({
+    required this.videoId,
+    required this.size,
+    this.playCount = 0,
+    this.showPlayCount = true,
+  });
+
+  final String videoId;
+  final int playCount;
+  final double Function(double designPx) size;
+  final bool showPlayCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final publisher = videoPublisherFor(videoId);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        ClipOval(
+          child: Image.asset(
+            publisher.avatarAsset,
+            width: size(16),
+            height: size(16),
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => Container(
+              width: size(16),
+              height: size(16),
+              color: const Color(0xFFE0DEFF),
+            ),
+          ),
+        ),
+        SizedBox(width: size(4)),
+        Expanded(
+          child: Text(
+            publisher.nickname,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: size(10),
+              color: const Color(0xFFB6B5BB),
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w500,
+              height: 1,
+            ).useSystemChineseFont(),
+          ),
+        ),
+        if (showPlayCount) ...[
+          AppAssetGraphic(
+            AppAssets.videoV2CardViews,
+            width: size(12),
+            height: size(12),
+          ),
+          SizedBox(width: size(4)),
+          Text(
+            '$playCount',
+            style: TextStyle(
+              fontSize: size(12),
+              color: const Color(0xFFB6B5BB),
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w500,
+              height: 1,
+            ).useSystemChineseFont(),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// 最新视频列表行：68×68 缩略图 + 标题 + 作者行。
 class _LatestVideoRow extends StatelessWidget {
   const _LatestVideoRow({
     required this.scale,
@@ -3887,7 +3966,7 @@ class _LatestVideoRow extends StatelessWidget {
       child: SizedBox(
         height: ui(68),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(ui(4)),
@@ -3910,17 +3989,35 @@ class _LatestVideoRow extends StatelessWidget {
             ),
             SizedBox(width: ui(12)),
             Expanded(
-              child: Text(
-                item.name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: ui(13),
-                  color: const Color(0xFF0B081A),
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w500,
-                  height: 1.4,
-                ).useSystemChineseFont(),
+              child: SizedBox(
+                height: ui(68),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      item.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: ui(13),
+                        color: const Color(0xFF0B081A),
+                        fontFamily: 'PingFang SC',
+                        fontWeight: AppFont.w500,
+                        height: 1.3,
+                      ).useSystemChineseFont(),
+                    ),
+                    SizedBox(height: ui(8)),
+                    SizedBox(
+                      height: ui(16),
+                      child: _VideoPublisherMetaRow(
+                        videoId: item.id,
+                        size: ui,
+                        showPlayCount: false,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -3982,7 +4079,7 @@ class _SubCategoryBar extends StatelessWidget {
                   fontFamily: 'PingFang SC',
                   fontWeight: AppFont.w400,
                   height: 1,
-                ).useSystemChineseFont(),
+                ),
               ),
             ),
           );
@@ -3992,8 +4089,12 @@ class _SubCategoryBar extends StatelessWidget {
   }
 }
 
-// 视频网格卡片 — 严格按 Figma HTML 参考实现
-// 封面: 220:124 比例；缩略图 52×70 叠放在封面左下角延伸至信息区
+// 网格卡设计尺寸（与 Figma 220×180 一致）
+const double _kVideoGridCardDesignW = 220;
+const double _kVideoGridCardDesignH = 180;
+const double _kVideoGridCoverDesignH = 124;
+
+// 视频网格卡片 — 封面 220:124；缩略图 52×70 叠放在封面左下角延伸至信息区
 class _VideoGridCard extends StatelessWidget {
   const _VideoGridCard({
     super.key,
@@ -4014,18 +4115,30 @@ class _VideoGridCard extends StatelessWidget {
     // LayoutBuilder 获取实际卡片宽度，按 220px 设计基准等比缩放所有尺寸
     return LayoutBuilder(
       builder: (context, box) {
-        final cw = box.maxWidth; // 实际卡片宽度
-        final s = cw / 220.0; // 缩放因子
+        final cw = box.maxWidth;
+        final ch = box.maxHeight;
+        final s = cw / _kVideoGridCardDesignW;
 
-        // 封面高度按 220:124 比例
-        final coverH = 124.0 * s;
-        // 缩略图：52×70，左距10，顶距95（从封面顶部算起，即在封面底部上方29px开始）
-        final thumbL = 10.0 * s;
-        final thumbTop = 95.0 * s; // 相对于卡片顶部
-        final thumbW = 52.0 * s;
-        final thumbH = 70.0 * s;
-        // 信息区左侧预留宽度（缩略图右边缘 + 4px 间距 = (10+52+4)*s = 66s）
-        final infoLeft = 66.0 * s;
+        // 按网格实际高度切分封面/信息区，避免 aspectRatio 舍入导致信息区偏矮
+        final coverH = ch * (_kVideoGridCoverDesignH / _kVideoGridCardDesignH);
+        // 缩略图：52×70；左/下边距与卡片边框均为 10
+        const thumbInset = 10.0;
+        const thumbDesignW = 52.0;
+        const thumbDesignH = 70.0;
+        final thumbL = thumbInset * s;
+        final thumbTop =
+            (_kVideoGridCardDesignH - thumbDesignH - thumbInset) * s;
+        final thumbW = thumbDesignW * s;
+        final thumbH = thumbDesignH * s;
+        // 信息区左侧预留宽度（缩略图右边缘 + 4px 间距）
+        final infoLeft = (thumbInset + thumbDesignW + 4.0) * s;
+        // 缩略图下移后，标题/作者行同步下移；底内边距与缩略图 inset 对齐
+        final infoTopPad = 9.0 * s;
+        final infoBottomPad = thumbInset * s;
+        final titleLineH = 13.0 * s * 1.3;
+        final metaRowH = 16.0 * s;
+        const titleUpOffset = 2.0;
+        const metaUpOffset = 2.0;
 
         return Material(
           color: const Color(0xFFF5F6FA),
@@ -4035,12 +4148,11 @@ class _VideoGridCard extends StatelessWidget {
             onTap: onTap,
             child: Stack(
               children: [
-                // ── 卡片主体：封面 + 信息区 ──────────────────────────────
+                // 卡片主体：封面 + 信息区
                 SizedBox.expand(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // 封面区（保持 220:124 比例）
                       SizedBox(
                         height: coverH,
                         child: Stack(
@@ -4059,7 +4171,6 @@ class _VideoGridCard extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            // 时长角标：右下角
                             Positioned(
                               right: 8.0 * s,
                               bottom: 8.0 * s,
@@ -4089,90 +4200,52 @@ class _VideoGridCard extends StatelessWidget {
                           ],
                         ),
                       ),
-                      // 信息区（Expanded 自动填满剩余高度）
                       Expanded(
                         child: Padding(
                           padding: EdgeInsets.fromLTRB(
-                            infoLeft, // 左边为缩略图预留空间
-                            4.0 * s,
+                            infoLeft,
+                            infoTopPad,
                             10.0 * s,
-                            15.0 * s,
+                            infoBottomPad,
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // 标题
-                              Text(
-                                item.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 13.0 * s,
-                                  color: const Color(0xFF0B081A),
-                                  fontWeight: AppFont.w500,
-                                  fontFamily: 'PingFang SC',
-                                  height: 1.3,
-                                ).useSystemChineseFont(),
+                              Transform.translate(
+                                offset: Offset(0, -titleUpOffset * s),
+                                child: SizedBox(
+                                  height: titleLineH,
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      item.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 13.0 * s,
+                                        color: const Color(0xFF0B081A),
+                                        fontWeight: AppFont.w500,
+                                        fontFamily: 'PingFang SC',
+                                        height: 1.3,
+                                      ).useSystemChineseFont(),
+                                    ),
+                                  ),
+                                ),
                               ),
                               const Spacer(),
-                              // 作者 + 播放量
-                              Builder(
-                                builder: (_) {
-                                  // 后端没有返回作者，前端按 videoId 稳定取一个
-                                  // 昵称 + 头像，保证同一视频每次进入都一样。
-                                  final publisher = videoPublisherFor(item.id);
-                                  return Row(
-                                    children: [
-                                      // 作者头像（圆形真实图片）
-                                      ClipOval(
-                                        child: Image.asset(
-                                          publisher.avatarAsset,
-                                          width: 16.0 * s,
-                                          height: 16.0 * s,
-                                          fit: BoxFit.cover,
-                                          errorBuilder: (_, _, _) => Container(
-                                            width: 16.0 * s,
-                                            height: 16.0 * s,
-                                            color: const Color(0xFFE0DEFF),
-                                          ),
-                                        ),
-                                      ),
-                                      SizedBox(width: 4.0 * s),
-                                      // 作者名
-                                      Expanded(
-                                        child: Text(
-                                          publisher.nickname,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            fontSize: 10.0 * s,
-                                            color: const Color(0xFFB6B5BB),
-                                            fontFamily: 'PingFang SC',
-                                            fontWeight: AppFont.w500,
-                                            height: 1,
-                                          ).useSystemChineseFont(),
-                                        ),
-                                      ),
-                                      // 播放量图标 + 数字
-                                      AppAssetGraphic(
-                                        AppAssets.videoV2CardViews,
-                                        width: 12.0 * s,
-                                        height: 12.0 * s,
-                                      ),
-                                      SizedBox(width: 4.0 * s),
-                                      Text(
-                                        '${item.playCount}',
-                                        style: TextStyle(
-                                          fontSize: 12.0 * s,
-                                          color: const Color(0xFFB6B5BB),
-                                          fontFamily: 'PingFang SC',
-                                          fontWeight: AppFont.w500,
-                                          height: 1,
-                                        ).useSystemChineseFont(),
-                                      ),
-                                    ],
-                                  );
-                                },
+                              Transform.translate(
+                                offset: Offset(0, -metaUpOffset * s),
+                                child: SizedBox(
+                                  height: metaRowH,
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: _VideoPublisherMetaRow(
+                                      videoId: item.id,
+                                      playCount: item.playCount,
+                                      size: (px) => px * s,
+                                    ),
+                                  ),
+                                ),
                               ),
                             ],
                           ),
@@ -4181,7 +4254,7 @@ class _VideoGridCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                // ── 缩略图：叠在封面左下角，延伸至信息区 ─────────────────
+                // 缩略图：叠在封面左下角，延伸至信息区
                 Positioned(
                   left: thumbL,
                   top: thumbTop,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../features/shell/ui/shell_layout.dart';
 import '../constants/app_assets.dart';
@@ -38,12 +39,17 @@ Future<T?> showScaledDialog<T>({
   );
 }
 
+/// 渐变标题弹窗居中标题的设计基准（20/500，行高 24，距顶 25）。
+const double kAppDialogTitleFontSize = 20;
+const double kAppDialogTitleLineHeight = 24;
+const double kAppDialogTitlePaddingTop = 25;
+
 /// 「渐变顶部装饰 + 居中标题 + 自定义内容 + 底部按钮」对话框容器。
 ///
 /// 提取自 courseware「上传课件」弹窗的视觉系统，复用给所有需要：
 ///   · 圆角 24 + 顶部 #D2C6FF→white 渐变（stops 0 / 0.21 / 1）
 ///   · 顶部一张装饰位图（默认 `AppAssets.coursewareUploadHeader`）
-///   · 居中标题（默认 18/600，可通过 [titleFontSize] 覆盖；查寝补卡是 24px）
+///   · 居中标题（20/w500，行高 24，距顶 25；可通过参数覆盖）
 ///   · 自定义 [child] 表单内容
 ///   · 可选底部 [actionBar]（推荐传入 [AppDialogActionBar]）
 /// 的弹窗。`width` 默认 420（设计基准 428，少 8 用作左右 inset 余量）。
@@ -70,12 +76,14 @@ class GradientHeaderDialog extends StatelessWidget {
     required this.child,
     this.actionBar,
     this.width = 420,
-    this.titleFontSize = 18,
-    this.titleFontWeight = FontWeight.w600,
-    this.titlePaddingTop = 22,
+    this.titleFontSize = kAppDialogTitleFontSize,
+    this.titleFontWeight = FontWeight.w500,
+    this.titlePaddingTop = kAppDialogTitlePaddingTop,
     this.contentPadding,
     this.headerAsset = AppAssets.coursewareUploadHeader,
     this.headerHeight,
+    this.gradientMidStop = 0.21,
+    this.actionBarSpacing = 20,
   });
 
   /// 标题文字（居中显示）。
@@ -90,12 +98,12 @@ class GradientHeaderDialog extends StatelessWidget {
   /// 弹窗整体宽度（design 默认 420）。
   final double width;
 
-  /// 标题字号（默认 18；查寝补卡用 24）。
+  /// 标题字号（默认 [kAppDialogTitleFontSize]）。
   final double titleFontSize;
 
   final FontWeight titleFontWeight;
 
-  /// 标题距弹窗顶部的距离（默认 22，可与图片高度配合）。
+  /// 标题距弹窗顶部的距离（默认 [kAppDialogTitlePaddingTop]）。
   final double titlePaddingTop;
 
   /// content 内边距（默认左右 20、底部 20、顶部由 [titlePaddingTop] 决定）。
@@ -107,6 +115,12 @@ class GradientHeaderDialog extends StatelessWidget {
   /// 装饰图高度（默认 fitWidth 自适应）。
   final double? headerHeight;
 
+  /// 渐变中间 stop（默认 0.21；笔记/资料输入弹窗用 0.35）。
+  final double gradientMidStop;
+
+  /// 主体内容与底部 [actionBar] 之间的间距（设计基准 px，默认 20）。
+  final double actionBarSpacing;
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
@@ -117,11 +131,11 @@ class GradientHeaderDialog extends StatelessWidget {
         width: ui(width),
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
+          gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: <Color>[Color(0xFFD2C6FF), Colors.white, Colors.white],
-            stops: <double>[0, 0.21, 1],
+            colors: const <Color>[Color(0xFFD2C6FF), Colors.white, Colors.white],
+            stops: <double>[0, gradientMidStop, 1],
           ),
           borderRadius: BorderRadius.circular(ui(24)),
         ),
@@ -161,14 +175,14 @@ class GradientHeaderDialog extends StatelessWidget {
                         color: const Color(0xFF0B081A),
                         fontFamily: 'PingFang SC',
                         fontWeight: titleFontWeight,
-                        height: 1.0,
+                        height: kAppDialogTitleLineHeight / kAppDialogTitleFontSize,
                       ),
                     ),
                   ),
                   SizedBox(height: ui(20)),
                   Flexible(child: SingleChildScrollView(child: child)),
                   if (actionBar != null) ...[
-                    SizedBox(height: ui(20)),
+                    SizedBox(height: ui(actionBarSpacing)),
                     actionBar!,
                   ],
                 ],
@@ -288,14 +302,107 @@ class _AppDialogButton extends StatelessWidget {
   }
 }
 
+/// 渐变标题弹窗内统一的文本输入框（与「新建笔记」标题弹窗一致）。
+class AppDialogTextField extends StatelessWidget {
+  const AppDialogTextField({
+    super.key,
+    required this.controller,
+    this.hintText = '',
+    this.focusNode,
+    this.autofocus = false,
+    this.maxLength,
+    this.multiline = false,
+    this.multilineHeight = 152,
+    this.obscureText = false,
+    this.inputFormatters,
+    this.onSubmitted,
+  });
+
+  final TextEditingController controller;
+  final String hintText;
+  final FocusNode? focusNode;
+  final bool autofocus;
+  final int? maxLength;
+  final bool multiline;
+  final double multilineHeight;
+  final bool obscureText;
+  final List<TextInputFormatter>? inputFormatters;
+  final ValueChanged<String>? onSubmitted;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return SizedBox(
+      height: multiline ? ui(multilineHeight) : ui(48),
+      child: TextField(
+        controller: controller,
+        focusNode: focusNode,
+        autofocus: autofocus,
+        maxLength: maxLength,
+        expands: multiline,
+        maxLines: multiline ? null : 1,
+        obscureText: obscureText,
+        inputFormatters: inputFormatters,
+        keyboardType: multiline ? TextInputType.multiline : TextInputType.text,
+        textInputAction: multiline ? TextInputAction.newline : TextInputAction.done,
+        onSubmitted: onSubmitted,
+        textAlignVertical:
+            multiline ? TextAlignVertical.top : TextAlignVertical.center,
+        cursorColor: const Color(0xFF8741FF),
+        cursorWidth: 1.5,
+        cursorHeight: ui(16),
+        style: TextStyle(
+          fontSize: ui(14),
+          color: const Color(0xFF0B081A),
+          fontFamily: 'PingFang SC',
+          fontWeight: AppFont.w400,
+          height: 20 / 14,
+        ),
+        decoration: InputDecoration(
+          hintText: hintText,
+          counterText: '',
+          hintStyle: TextStyle(
+            fontSize: ui(14),
+            color: const Color(0xFFB6B5BB),
+            fontFamily: 'PingFang SC',
+            fontWeight: AppFont.w400,
+            height: 20 / 14,
+          ),
+          contentPadding: EdgeInsets.symmetric(
+            horizontal: ui(16),
+            vertical: ui(14),
+          ),
+          filled: true,
+          fillColor: Colors.white,
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(ui(8)),
+            borderSide: BorderSide(
+              color: const Color(0xFFF5F6FA),
+              width: ui(1),
+            ),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(ui(8)),
+            borderSide: BorderSide(
+              color: const Color(0xFFD9C7FF),
+              width: ui(1),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// 弹出一个文本输入对话框，返回用户输入（trim 后非空）；点击取消返回 null。
 ///
 /// 默认单行；[multiline] 为 true 时使用多行输入（类似 HTML `textarea`），
 /// 适合个人简介等场景。
 ///
-/// 样式与上传课件弹窗保持一致：
-/// - 圆角 24，白底（无渐变 / 无顶部装饰图）
-/// - 输入框：白底，1px `#F3F2F3` 边框，圆角 12
+/// 样式与「我的笔记 → 新建笔记」标题弹窗保持一致：
+/// - 420 宽，圆角 24，顶部 #D2C6FF→white 渐变 + 装饰图
+/// - 居中标题 20/w500，行高 24，距顶 25
+/// - 输入框 48 高，圆角 8，1px `#F5F6FA` 描边
 /// - 底部按钮使用 [AppDialogActionBar]
 Future<String?> showTextInputDialog({
   required BuildContext context,
@@ -316,119 +423,39 @@ Future<String?> showTextInputDialog({
     context: context,
     barrierColor: Colors.black.withValues(alpha: 0.18),
     builder: (dialogContext) {
-      final ui = DashboardScaleScope.of(dialogContext).ui;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (focusNode.canRequestFocus && !focusNode.hasFocus) {
           focusNode.requestFocus();
         }
       });
-      return Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: EdgeInsets.symmetric(
-          horizontal: ui(32),
-          vertical: ui(24),
+      return GradientHeaderDialog(
+        title: title,
+        headerHeight: 169,
+        gradientMidStop: 0.35,
+        actionBar: AppDialogActionBar(
+          cancelLabel: cancelLabel,
+          confirmLabel: confirmLabel,
+          onCancel: () =>
+              Navigator.of(dialogContext, rootNavigator: true).pop(),
+          onConfirm: () => Navigator.of(
+            dialogContext,
+            rootNavigator: true,
+          ).pop(controller.text.trim()),
         ),
-        child: Container(
-          width: ui(420),
-          padding: EdgeInsets.fromLTRB(ui(24), ui(28), ui(24), ui(20)),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(ui(24)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: ui(18),
-                  color: const Color(0xFF0B081A),
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w600,
-                ),
-              ),
-              SizedBox(height: ui(20)),
-              SizedBox(
-                height: multiline ? ui(multilineHeight) : ui(45),
-                child: TextField(
-                  controller: controller,
-                  focusNode: focusNode,
-                  autofocus: true,
-                  maxLength: maxLength,
-                  expands: multiline,
-                  maxLines: multiline ? null : 1,
-                  keyboardType: multiline
-                      ? TextInputType.multiline
-                      : TextInputType.text,
-                  textInputAction: multiline
-                      ? TextInputAction.newline
-                      : TextInputAction.done,
-                  onSubmitted: multiline
-                      ? null
-                      : (_) => Navigator.of(
-                          dialogContext,
-                          rootNavigator: true,
-                        ).pop(controller.text.trim()),
-                  textAlignVertical: multiline
-                      ? TextAlignVertical.top
-                      : TextAlignVertical.center,
-                  cursorColor: const Color(0xFF8741FF),
-                  cursorWidth: 1.5,
-                  cursorHeight: ui(16),
-                  style: TextStyle(
-                    fontSize: ui(14),
-                    color: const Color(0xFF0B081A),
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w400,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: hintText,
-                    counterText: '',
-                    hintStyle: TextStyle(
-                      fontSize: ui(14),
-                      color: const Color(0xFFB6B5BB),
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w400,
-                      height: 12 / 14,
-                    ),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: ui(13),
-                      vertical: ui(12),
-                    ),
-                    filled: true,
-                    fillColor: Colors.white,
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(ui(12)),
-                      borderSide: BorderSide(
-                        color: const Color(0xFFF3F2F3),
-                        width: ui(1),
-                      ),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(ui(12)),
-                      borderSide: BorderSide(
-                        color: const Color(0xFFD9C7FF),
-                        width: ui(1),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              SizedBox(height: ui(24)),
-              AppDialogActionBar(
-                cancelLabel: cancelLabel,
-                confirmLabel: confirmLabel,
-                onCancel: () =>
-                    Navigator.of(dialogContext, rootNavigator: true).pop(),
-                onConfirm: () =>
-                    Navigator.of(
-                      dialogContext,
-                      rootNavigator: true,
-                    ).pop(controller.text.trim()),
-              ),
-            ],
-          ),
+        child: AppDialogTextField(
+          controller: controller,
+          focusNode: focusNode,
+          autofocus: true,
+          hintText: hintText,
+          maxLength: maxLength,
+          multiline: multiline,
+          multilineHeight: multilineHeight,
+          onSubmitted: multiline
+              ? null
+              : (_) => Navigator.of(
+                  dialogContext,
+                  rootNavigator: true,
+                ).pop(controller.text.trim()),
         ),
       );
     },

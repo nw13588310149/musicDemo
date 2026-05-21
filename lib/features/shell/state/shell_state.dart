@@ -249,13 +249,13 @@ List<ShellNavItem> buildDefaultNavItems({
   return [...base, if (schoolCoursewareEnabled) school, ...tail];
 }
 
-/// 侧栏底部固定的「意见反馈」入口（弱样式，见 ShellLeftNav._FooterFeedbackLink）。
+/// 侧栏底部固定的「需求反馈」入口（弱样式，见 ShellLeftNav._FooterFeedbackLink）。
 ShellNavItem buildFeedbackFooterNavItem() {
   return const ShellNavItem(
-    label: '\u610f\u89c1\u53cd\u9988',
+    label: '意见反馈',
     route: RoutePaths.helpFeedback,
-    icon: AppAssets.infoIconFeedback,
-    activeIcon: AppAssets.infoIconFeedback,
+    icon: AppAssets.homeFeedbackIcon,
+    activeIcon: AppAssets.homeFeedbackIcon,
   );
 }
 

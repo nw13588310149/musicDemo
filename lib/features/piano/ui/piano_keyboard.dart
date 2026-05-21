@@ -251,7 +251,8 @@ class _PianoKeyboardState extends State<PianoKeyboard> {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final chromeHeight = widget.showChrome ? ui(38) : 0.0;
+    // 顶栏 = 上下 padding(6+6) + 缩略条高度(33)
+    final chromeHeight = widget.showChrome ? ui(45) : 0.0;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -583,7 +584,7 @@ class _PianoMiniScrollTrack extends StatelessWidget {
             : (scrollOffset / maxScroll) * maxThumbOffset;
 
         return SizedBox(
-          height: ui(26),
+          height: ui(33),
           child: Stack(
             children: [
               // 5.png 风格的轨道背景

@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/constants/app_assets.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/image_gallery_viewer.dart';
@@ -563,34 +564,30 @@ class _TheoryHeader extends StatelessWidget {
         _FavoriteChipButton(favorite: favorite, onTap: onToggleFavorite),
         SizedBox(width: ui(8)),
         _SecondaryChipButton(
-          icon: Icons.ios_share_outlined,
+          iconAsset: AppAssets.theoryShareIcon,
           label: '分享',
           onTap: onShare,
         ),
         if (showAssignmentBtn) ...<Widget>[
           SizedBox(width: ui(8)),
           _SecondaryChipButton(
-            icon: Icons.assignment_outlined,
+            iconAsset: AppAssets.theoryAssignmentIcon,
             label: '课程作业',
             onTap: onOpenAssignment,
           ),
         ],
         SizedBox(width: ui(8)),
         _SecondaryChipButton(
-          icon: Icons.menu_book_outlined,
+          iconAsset: AppAssets.theoryAnswerIcon,
           label: '查看答案',
           onTap: onOpenAnswer,
-          highlighted: true,
         ),
       ],
     );
   }
 }
 
-/// 顶部"收藏" chip。
-/// - 未收藏：浅紫底 + 灰文 "收藏" + 描边五角星；
-/// - 已收藏：浅紫底 + 紫文 "已收藏" + 实心紫色五角星。
-/// 视觉上沿用 [_SecondaryChipButton] 的胶囊高度/圆角，与同一行其他按钮保持一致。
+/// 顶部"收藏" chip：1px `#F3F2F3` 描边，无填充背景。
 class _FavoriteChipButton extends StatelessWidget {
   const _FavoriteChipButton({required this.favorite, required this.onTap});
 
@@ -609,25 +606,23 @@ class _FavoriteChipButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        height: ui(28),
+        height: ui(34),
         padding: EdgeInsets.symmetric(horizontal: ui(10)),
         decoration: BoxDecoration(
-          color: favorite
-              ? const Color(0xFFEDE3FF)
-              : const Color(0xFFF4F4FF),
           borderRadius: BorderRadius.circular(ui(8)),
+          border: Border.all(color: const Color(0xFFF3F2F3)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             Icon(
               favorite ? Icons.star_rounded : Icons.star_border_rounded,
-              size: ui(16),
+              size: ui(20),
               color: fg,
             ),
             SizedBox(width: ui(4)),
             Text(
-              favorite ? '已收藏' : '收藏',
+              favorite ? '收藏' : '收藏',
               style: TextStyle(
                 color: labelColor,
                 fontSize: ui(12),
@@ -662,38 +657,39 @@ class _TheoryContent extends ConsumerWidget {
     final detail = state.detail;
     final token = ref.watch(appStorageProvider).token;
 
-    // PDF / HTML / 空态视图直接铺满父容器，不再外包浅灰底 + 圆角边框
-    // 的卡片样式（避免与浏览器 PDF Viewer 自带的工具条边框形成双层视觉）。
     if (detail == null) {
       return const _TheoryEmptyState(message: '加载中…');
     }
     if (detail.hasPdf) {
-      return Stack(
-        children: <Widget>[
-          Positioned.fill(
-            child: TheoryPdfView(
-              url: detail.pdfUrl,
-              authToken: token,
-              interactive: pdfInteractive,
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(ui(8)),
+        child: Stack(
+          children: <Widget>[
+            Positioned.fill(
+              child: TheoryPdfView(
+                url: detail.pdfUrl,
+                authToken: token,
+                interactive: pdfInteractive,
+              ),
             ),
-          ),
-          // 右上角浮动"全屏"按钮：
-          // - Native：点击后把 PDF 推到根 Navigator 的全屏对话框；
-          // - Web：iframe 直接调浏览器 Fullscreen API（HtmlElementView
-          //   在 Flutter dialog 里嵌入 iframe 会被 platform view 层
-          //   遮住，所以走原生 fullscreen 反而最干净）；
-          //   退出 = 用户按 Esc 或浏览器自带的退出全屏按钮。
-          Positioned(
-            // 设计稿要求按钮整体下移 20 逻辑像素，避开 PDF 顶部
-            // 工具栏 / 页眉。
-            top: ui(12) + ui(20),
-            right: ui(12),
-            child: _PdfFullscreenToggle(
-              expanded: false,
-              onTap: onRequestFullscreen,
+            // 右上角浮动"全屏"按钮：
+            // - Native：点击后把 PDF 推到根 Navigator 的全屏对话框；
+            // - Web：iframe 直接调浏览器 Fullscreen API（HtmlElementView
+            //   在 Flutter dialog 里嵌入 iframe 会被 platform view 层
+            //   遮住，所以走原生 fullscreen 反而最干净）；
+            //   退出 = 用户按 Esc 或浏览器自带的退出全屏按钮。
+            Positioned(
+              // 设计稿要求按钮整体下移 16 逻辑像素，避开 PDF 顶部
+              // 工具栏 / 页眉。
+              top: ui(12) + ui(16),
+              right: ui(12),
+              child: _PdfFullscreenToggle(
+                expanded: false,
+                onTap: onRequestFullscreen,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       );
     }
     if (detail.hasHtmlContent) {
@@ -744,16 +740,17 @@ class _PdfFullscreenToggle extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              Icon(
+              Image.asset(
                 expanded
-                    ? Icons.fullscreen_exit_rounded
-                    : Icons.fullscreen_rounded,
-                size: ui(18),
-                color: const Color(0xFF1C274C),
+                    ? 'assets/images/home/quxiao.png'
+                    : 'assets/images/home/quan.png',
+                width: ui(20),
+                height: ui(20),
+                fit: BoxFit.contain,
               ),
               SizedBox(width: ui(4)),
               Text(
-                expanded ? '退出全屏' : '全屏',
+                expanded ? '退出' : '全屏',
                 style: TextStyle(
                   color: const Color(0xFF0B081A),
                   fontSize: ui(12),
@@ -794,8 +791,8 @@ class _PdfFullscreenView extends StatelessWidget {
               ),
             ),
             Positioned(
-              // 与卡片态保持视觉一致：同样下移 20 逻辑像素。
-              top: ui(12) + ui(20),
+              // 与卡片态保持视觉一致：同样下移 16 逻辑像素。
+              top: ui(12) + ui(16),
               right: ui(12),
               child: _PdfFullscreenToggle(
                 expanded: true,
@@ -1156,42 +1153,50 @@ class _GlassIconButton extends StatelessWidget {
 
 class _SecondaryChipButton extends StatelessWidget {
   const _SecondaryChipButton({
-    required this.icon,
+    this.icon,
+    this.iconAsset,
     required this.label,
     required this.onTap,
-    this.highlighted = false,
-  });
+  }) : assert(
+         icon != null || iconAsset != null,
+         'Either icon or iconAsset must be provided',
+       );
 
-  final IconData icon;
+  final IconData? icon;
+  final String? iconAsset;
   final String label;
   final VoidCallback onTap;
-  final bool highlighted;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final bg = highlighted ? const Color(0xFFEDE3FF) : const Color(0xFFF4F4FF);
-    final fg = highlighted ? const Color(0xFF8741FF) : const Color(0xFF1C274C);
+    const labelColor = Color(0xFF0B081A);
+    final leading = iconAsset != null
+        ? Image.asset(
+            iconAsset!,
+            width: ui(20),
+            height: ui(20),
+            fit: BoxFit.contain,
+          )
+        : Icon(icon!, size: ui(20), color: const Color(0xFF1C274C));
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        height: ui(28),
+        height: ui(34),
         padding: EdgeInsets.symmetric(horizontal: ui(10)),
         decoration: BoxDecoration(
-          color: bg,
           borderRadius: BorderRadius.circular(ui(8)),
+          border: Border.all(color: const Color(0xFFF3F2F3)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Icon(icon, size: ui(16), color: fg),
+            leading,
             SizedBox(width: ui(4)),
             Text(
               label,
               style: TextStyle(
-                color: highlighted
-                    ? const Color(0xFF8741FF)
-                    : const Color(0xFF0B081A),
+                color: labelColor,
                 fontSize: ui(12),
                 fontFamily: 'PingFang SC',
                 fontWeight: AppFont.w500,

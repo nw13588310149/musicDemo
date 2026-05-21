@@ -25,7 +25,7 @@ const _textHint = Color(0xFFB6B5BB);
 const _purple = Color(0xFF8741FF);
 const _purpleSoft = Color(0x0D8741FF);
 
-const _historyPaneWidth = 230.0;
+const _historyPaneWidth = 200.0;
 const _mainHorizontalPadding = 64.0;
 const _mainBottomPadding = 12.0;
 
@@ -44,9 +44,9 @@ const _theoryPrompts = <_AiPromptQuestion>[
 
 const _toolShortcuts = <_AiToolShortcut>[
   _AiToolShortcut(
-    title: '分析乐谱',
-    subtitle: 'AI 智能解析乐谱数据',
-    prompt: '请帮我分析这份乐谱的结构、难点和练习重点。',
+    title: '报考院校分析',
+    subtitle: 'AI 智能分析院校综合信息',
+    prompt: '请根据我的成绩帮我分析适合我的报考志愿',
     asset: AppAssets.aiChatV2ToolAnalyze,
   ),
   _AiToolShortcut(
@@ -416,22 +416,17 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
     );
   }
 
+  /// composer 外框高度：无附件 124 / 有附件 154。
+  double _composerHeight(AiChatState state) =>
+      state.pendingAttachments.isEmpty ? 124.0 : 154.0;
+
   Widget _buildLanding({
     required AiChatState state,
     required AiChatController controller,
     required double composerWidth,
   }) {
-    // 严格对齐 Figma（content 区高 730，相对坐标）：
-    //   top  94      LOGO 顶
-    //   +    76      welcome row（LOGO 52 / 副标题 2 行 22*2 + 标题 28 + gap 4 = 76）
-    //   +    11      welcome → cards
-    //   +   265      cards 区
-    //   +   110      cards → composer（Figma 实测，硬编码精准还原）
-    //   +   104      composer
-    //   +    13      composer → disclaimer
-    //   +    16      disclaimer line-height
-    //   +    41      bottom padding
-    //   = 730       ✓
+    // Figma content 区高 730：welcome + cards 固定，composer 高度见 [_composerHeight]，
+    // cards → composer 之间的剩余空间用 Spacer 吸收，避免 composer 变高后 Column 溢出。
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         _mainHorizontalPadding,
@@ -454,8 +449,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
               ],
             ),
           ),
-          // Figma: cards 底(content 446) → composer 顶(content 556) = 110
-          const SizedBox(height: 110),
+          const Spacer(),
           _buildComposer(state, controller, composerWidth),
           const SizedBox(height: 13),
           _buildDisclaimer(),
@@ -962,13 +956,13 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _actionIcon(
-                  icon: Icons.content_copy_outlined,
+                _actionAssetIcon(
+                  asset: AppAssets.aiChatCopy,
                   onTap: () => _copyText(message.text),
                 ),
                 const SizedBox(width: 10),
-                _actionIcon(
-                  icon: Icons.edit_outlined,
+                _actionAssetIcon(
+                  asset: AppAssets.aiChatRemove,
                   onTap: () => _reuseText(message.text),
                 ),
                 if (message.status == AiChatMessageStatus.failed) ...[
@@ -1105,8 +1099,8 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _actionIcon(
-                    icon: Icons.content_copy_outlined,
+                  _actionAssetIcon(
+                    asset: AppAssets.aiChatCopy,
                     onTap: () => _copyText(message.text),
                   ),
                 ],
@@ -1132,6 +1126,21 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
     );
   }
 
+  Widget _actionAssetIcon({
+    required String asset,
+    required VoidCallback onTap,
+    double size = 14,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(2),
+        child: AppAssetGraphic(asset, width: size, height: size),
+      ),
+    );
+  }
+
   Widget _buildComposer(
     AiChatState state,
     AiChatController controller,
@@ -1142,12 +1151,16 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
         !state.uploadingAttachment &&
         (_inputCtrl.text.trim().isNotEmpty ||
             state.pendingAttachments.isNotEmpty);
-    final composerHeight = state.pendingAttachments.isEmpty ? 104.0 : 154.0;
+    final composerHeight = _composerHeight(state);
+    final hasAttachments = state.pendingAttachments.isNotEmpty;
+    // 有附件时纵向更紧，略减 textarea 上下 padding，避免 Column 在 154 高度内溢出。
+    final textVerticalPadding = hasAttachments ? 4.0 : 8.0;
     return ConstrainedBox(
       constraints: BoxConstraints(maxWidth: width),
       child: Container(
         width: double.infinity,
         height: composerHeight,
+        clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
@@ -1172,18 +1185,26 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
           ],
         ),
         child: Column(
+          mainAxisSize: MainAxisSize.max,
           children: [
-            if (state.pendingAttachments.isNotEmpty)
+            if (hasAttachments)
               SizedBox(
                 height: 50,
-                child: _buildAttachmentTray(state, controller),
+                child: ClipRect(
+                  child: _buildAttachmentTray(state, controller),
+                ),
               ),
             // 输入区改为多行 textarea：占满输入框中剩余的纵向空间，
             // 内容超出时内部可滚动。Enter 换行；通过右下角发送按钮提交。
             // padding：左/右 16，顶部 12（首行文字距顶 12px），底部 8 留白。
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  textVerticalPadding,
+                  16,
+                  textVerticalPadding,
+                ),
                 child: TextField(
                   controller: _inputCtrl,
                   maxLines: null,
@@ -1280,7 +1301,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
 
   Widget _buildAttachmentTray(AiChatState state, AiChatController controller) {
     return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
       scrollDirection: Axis.horizontal,
       itemCount: state.pendingAttachments.length,
       separatorBuilder: (context, index) => const SizedBox(width: 8),

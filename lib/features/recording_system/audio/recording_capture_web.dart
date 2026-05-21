@@ -27,7 +27,21 @@ class _BrowserRecordingCapture implements RecordingCapture {
   Stream<double> get amplitudes => _amplitudes.stream;
 
   @override
-  Future<bool> hasPermission() async => true;
+  Future<bool> hasPermission() async {
+    try {
+      final stream = await web.window.navigator.mediaDevices
+          .getUserMedia(
+            web.MediaStreamConstraints(audio: true.toJS, video: false.toJS),
+          )
+          .toDart;
+      for (final track in stream.getTracks().toDart) {
+        track.stop();
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
 
   @override
   Future<void> start({required String path}) async {
@@ -73,10 +87,8 @@ class _BrowserRecordingCapture implements RecordingCapture {
           completer?.complete(null);
           return;
         }
-        final previous = _objectUrl;
-        if (previous != null) {
-          web.URL.revokeObjectURL(previous);
-        }
+        // Do not revoke the previous URL here: once returned to the app it
+        // may already be stored as an earlier session segment for playback.
         final url = web.URL.createObjectURL(blob);
         _objectUrl = url;
         completer?.complete(url);
@@ -246,12 +258,10 @@ class _BrowserRecordingCapture implements RecordingCapture {
     _recorder = null;
     _paused = false;
 
-    if (revokeUrl) {
-      final url = _objectUrl;
-      _objectUrl = null;
-      if (url != null) {
-        web.URL.revokeObjectURL(url);
-      }
+    final url = _objectUrl;
+    _objectUrl = null;
+    if (revokeUrl && url != null) {
+      web.URL.revokeObjectURL(url);
     }
   }
 }

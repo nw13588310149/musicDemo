@@ -4,6 +4,8 @@ import '../network/api_client.dart';
 import '../network/api_unauthorized_handler.dart';
 import '../network/chat_socket_service.dart';
 import '../storage/app_storage.dart';
+import '../../features/shell/state/shell_controller.dart';
+import '../../features/shell/state/school_binding_controller.dart';
 
 final appStorageProvider = Provider<AppStorage>((ref) {
   throw UnimplementedError('AppStorage provider must be overridden in main().');
@@ -18,5 +20,11 @@ final apiClientProvider = Provider<ApiClient>((ref) {
 void bindApiUnauthorizedSessionCleanup(WidgetRef ref) {
   ApiUnauthorizedHandler.instance.bindSessionCleared(() {
     ref.read(chatSocketServiceProvider).disconnect();
+    if (ref.exists(shellControllerProvider)) {
+      ref.read(shellControllerProvider.notifier).pausePolling();
+    }
+    if (ref.exists(schoolBindingControllerProvider)) {
+      ref.invalidate(schoolBindingControllerProvider);
+    }
   });
 }

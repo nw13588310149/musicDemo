@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/widgets/app_toast.dart';
+import '../../../app/router/route_paths.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../../smart_campus/data/principal_mailbox_repository.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -14,6 +15,11 @@ const Color _kTextDark = Color(0xFF0B081A);
 const Color _kTextHint = Color(0xFFB6B5BB);
 const Color _kPlaceholder = Color(0xFFCECED1);
 const Color _kPurple = Color(0xFF8741FF);
+
+/// 意见反馈页返回：统一回到个人中心（个人中心入口为 pushReplacement，不能依赖 pop）。
+void _backFromFeedback(BuildContext context) {
+  Navigator.of(context).pushReplacementNamed(RoutePaths.personalCenter);
+}
 
 /// 全局「意见反馈」页：与校长信箱分离，走 `/app/user/feedback*` 接口。
 class AppFeedbackPage extends ConsumerStatefulWidget {
@@ -106,7 +112,10 @@ class _AppFeedbackPageState extends ConsumerState<AppFeedbackPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _FeedbackHeader(ui: ui),
+            _FeedbackHeader(
+              ui: ui,
+              onBack: () => _backFromFeedback(context),
+            ),
             Expanded(
               child: Padding(
                 padding: EdgeInsets.fromLTRB(ui(16), ui(14), ui(16), ui(16)),
@@ -248,9 +257,10 @@ String _pickString(Map<String, dynamic> m, List<String> keys) {
 }
 
 class _FeedbackHeader extends StatelessWidget {
-  const _FeedbackHeader({required this.ui});
+  const _FeedbackHeader({required this.ui, required this.onBack});
 
   final double Function(num) ui;
+  final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) {
@@ -268,6 +278,11 @@ class _FeedbackHeader extends StatelessWidget {
                 ),
               ),
             ),
+          ),
+          Positioned(
+            left: ui(12),
+            top: ui(15),
+            child: _FeedbackBackButton(onTap: onBack),
           ),
           Positioned(
             top: ui(20),
@@ -303,6 +318,36 @@ class _FeedbackHeader extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _FeedbackBackButton extends StatelessWidget {
+  const _FeedbackBackButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: ui(32),
+        height: ui(32),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(ui(8)),
+          border: Border.all(color: const Color(0xFFF3F2F3), width: 1),
+        ),
+        child: Icon(
+          Icons.chevron_left,
+          size: ui(20),
+          color: const Color(0xFF0B081A),
+        ),
       ),
     );
   }

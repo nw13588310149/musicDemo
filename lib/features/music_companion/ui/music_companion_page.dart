@@ -229,7 +229,10 @@ class _VirtualPianoPane extends StatelessWidget {
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: ui(42)),
             child: RepaintBoundary(
-              child: PianoVisualizer(activeNotes: activeNotes),
+              child: PianoVisualizer(
+                activeNotes: activeNotes,
+                ambientWave: true,
+              ),
             ),
           ),
         ),
@@ -698,7 +701,7 @@ class _MetronomeTempoSlider extends StatelessWidget {
               // the thumb. `Stack(clipBehavior: Clip.none)` lets it overflow
               // upward into the spacer above the slider card.
               Positioned(
-                top: -ui(13),
+                top: -ui(20),
                 left: thumbCenter - ui(44),
                 child: IgnorePointer(
                   child: Container(

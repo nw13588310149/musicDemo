@@ -1209,10 +1209,13 @@ class _FolderBreadcrumb extends StatelessWidget {
         final text = Text(
           label,
           style: TextStyle(
-            fontSize: ui(14),
-            color: isLast ? const Color(0xFF1A1A1A) : const Color(0xFF788698),
+            fontSize: ui(15),
+            color: isLast
+                ? const Color(0xFF0B081A)
+                : const Color(0xFF0B081A).withValues(alpha: 0.2),
             fontFamily: 'PingFang SC',
-            fontWeight: isLast ? AppFont.w600 : AppFont.w400,
+            fontWeight: AppFont.w500,
+            height: 12 / 15,
           ),
         );
         if (isLast) {
@@ -1466,7 +1469,7 @@ class _CloudFoldersGrid extends StatelessWidget {
     return GridView.builder(
       padding: EdgeInsets.only(bottom: ui(78)),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 5,
+        crossAxisCount: 4,
         mainAxisSpacing: ui(16),
         crossAxisSpacing: ui(16),
         childAspectRatio: 0.95,
@@ -1502,7 +1505,7 @@ class _CloudFilesGrid extends StatelessWidget {
     return GridView.builder(
       padding: EdgeInsets.only(bottom: ui(78)),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 5,
+        crossAxisCount: 4,
         mainAxisSpacing: ui(16),
         crossAxisSpacing: ui(16),
         childAspectRatio: 0.9,
@@ -2222,8 +2225,8 @@ class _PreviewActionPill extends StatelessWidget {
           children: [
             Image.asset(
               iconAsset,
-              width: ui(16),
-              height: ui(16),
+              width: ui(20),
+              height: ui(20),
               fit: BoxFit.contain,
             ),
             SizedBox(width: ui(4)),
@@ -2380,48 +2383,54 @@ class _PreviewImagePager extends StatelessWidget {
               final resolved = CloudDriveController.resolveMediaUrl(
                 urls[index],
               );
-              return GestureDetector(
-                onDoubleTap: () => showImageGallery(
-                  context,
-                  images: urls
-                      .map(CloudDriveController.resolveMediaUrl)
-                      .toList(),
-                  initialIndex: index,
-                  heroTagPrefix: heroPrefix,
-                ),
-                child: InteractiveViewer(
-                  minScale: 1,
-                  maxScale: 4,
-                  child: Center(
-                    child: CachedNetworkImage(
-                      imageUrl: resolved,
-                      fit: BoxFit.contain,
-                      memCacheWidth: _coursewareDecodeExtent(
-                        context,
-                        MediaQuery.sizeOf(context).width,
-                        2200,
-                      ),
-                      memCacheHeight: _coursewareDecodeExtent(
-                        context,
-                        MediaQuery.sizeOf(context).height,
-                        1600,
-                      ),
-                      placeholder: (_, _) => SizedBox(
-                        width: ui(28),
-                        height: ui(28),
-                        child: CircularProgressIndicator(
-                          strokeWidth: ui(2),
-                          color: const Color(0xFF8741FF),
+              return LayoutBuilder(
+                builder: (context, constraints) {
+                  return GestureDetector(
+                    onDoubleTap: () => showImageGallery(
+                      context,
+                      images: urls
+                          .map(CloudDriveController.resolveMediaUrl)
+                          .toList(),
+                      initialIndex: index,
+                      heroTagPrefix: heroPrefix,
+                    ),
+                    child: InteractiveViewer(
+                      minScale: 1,
+                      maxScale: 4,
+                      child: SizedBox.expand(
+                        child: CachedNetworkImage(
+                          imageUrl: resolved,
+                          fit: BoxFit.contain,
+                          width: double.infinity,
+                          height: double.infinity,
+                          memCacheWidth: _coursewareDecodeExtent(
+                            context,
+                            constraints.maxWidth,
+                            4096,
+                          ),
+                          memCacheHeight: _coursewareDecodeExtent(
+                            context,
+                            constraints.maxHeight,
+                            4096,
+                          ),
+                          placeholder: (_, _) => SizedBox(
+                            width: ui(28),
+                            height: ui(28),
+                            child: CircularProgressIndicator(
+                              strokeWidth: ui(2),
+                              color: const Color(0xFF8741FF),
+                            ),
+                          ),
+                          errorWidget: (_, _, _) => Icon(
+                            Icons.broken_image_outlined,
+                            size: ui(48),
+                            color: const Color(0xFFB6B5BB),
+                          ),
                         ),
                       ),
-                      errorWidget: (_, _, _) => Icon(
-                        Icons.broken_image_outlined,
-                        size: ui(48),
-                        color: const Color(0xFFB6B5BB),
-                      ),
                     ),
-                  ),
-                ),
+                  );
+                },
               );
             },
           ),

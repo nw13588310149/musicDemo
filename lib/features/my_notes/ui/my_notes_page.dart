@@ -81,7 +81,12 @@ class _MyNotesPageState extends ConsumerState<MyNotesPage> {
     }
     // 先弹出"新建笔记"标题输入框（按 Figma 设计稿），确认后再带着
     // 标题进入"选择笔记样式"页面。
-    final title = await _showCreateNoteTitleDialog(context);
+    final title = await showTextInputDialog(
+      context: context,
+      title: '新建笔记',
+      hintText: '请输入笔记标题',
+      maxLength: 30,
+    );
     if (!mounted || title == null || title.isEmpty) {
       return;
     }
@@ -523,31 +528,32 @@ class _NotesAddCategoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    // 与录音系统侧栏「添加分类」保持一致：163×60 胶囊背景，纵向居中排版。
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
         height: ui(60),
-        padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(8)),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(ui(8)),
           color: const Color(0xFFF5F6FA),
         ),
-        child: Row(
+        alignment: Alignment.center,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // 20×20 grey circle with white plus glyph (matches CSS spec).
             Container(
-              width: ui(20),
-              height: ui(20),
+              width: ui(18),
+              height: ui(18),
               alignment: Alignment.center,
               decoration: const BoxDecoration(
                 color: Color(0xFFB6B5BB),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.add_rounded, size: ui(14), color: Colors.white),
+              child: Icon(Icons.add_rounded, size: ui(12), color: Colors.white),
             ),
-            SizedBox(width: ui(6)),
+            SizedBox(height: ui(4)),
             Text(
               '添加分类',
               style: TextStyle(
@@ -608,10 +614,10 @@ class _NotesContentArea extends StatelessWidget {
                       : GridView.builder(
                           padding: EdgeInsets.only(bottom: ui(64)),
                           gridDelegate:
-                              SliverGridDelegateWithMaxCrossAxisExtent(
-                                maxCrossAxisExtent: ui(190),
+                              SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 4,
                                 mainAxisSpacing: ui(20),
-                                crossAxisSpacing: ui(23),
+                                crossAxisSpacing: ui(16),
                                 childAspectRatio: 1.0,
                               ),
                           itemCount: state.visibleNotes.length,
@@ -650,7 +656,6 @@ class _NotesTabBar extends StatelessWidget {
     MyNotesFilter.all,
     MyNotesFilter.recent,
     MyNotesFilter.favorite,
-    MyNotesFilter.unarchived,
   ];
 
   final MyNotesFilter active;
@@ -764,11 +769,11 @@ class _NotesFloatingCreateButton extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // 16×16 purple star glyph per spec.
+            // 与录音系统「新建文件夹」FAB 保持一致：20×20 图标。
             Image.asset(
               'assets/images/note/3.png',
-              width: ui(16),
-              height: ui(16),
+              width: ui(20),
+              height: ui(20),
               fit: BoxFit.contain,
             ),
             SizedBox(width: ui(8)),
@@ -1714,155 +1719,6 @@ class _EmptyPanel extends StatelessWidget {
       ),
     );
   }
-}
-
-/// "新建笔记" 标题输入弹窗，按 Figma 设计稿 1:1 实现：
-/// - 容器 420×275，圆角 24，背景 `linear-gradient(180deg, #D2C6FF 0%,
-///   white 35%, white 100%)`
-/// - 顶部装饰使用 `assets/images/courseware/1.png`（与"上传课件"弹窗
-///   同源），按设计放在右上角并被容器圆角裁剪
-/// - 居中标题"新建笔记" 24/w500 #0B081A
-/// - 输入框 380×48，圆角 8，1px `#F5F6FA` 描边；占位 14/#B6B5BB
-/// - 底部"取消 / 确认"复用 [AppDialogActionBar]（视觉与 spec 完全一致）
-Future<String?> _showCreateNoteTitleDialog(BuildContext context) async {
-  final controller = TextEditingController();
-  final result = await showScaledDialog<String>(
-    context: context,
-    barrierColor: Colors.black.withValues(alpha: 0.18),
-    builder: (dialogContext) {
-      final scale = DashboardScaleScope.of(dialogContext);
-      final u = scale.ui;
-      return Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: EdgeInsets.symmetric(
-          horizontal: u(32),
-          vertical: u(24),
-        ),
-        child: Container(
-          width: u(420),
-          height: u(275),
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: <Color>[Color(0xFFD2C6FF), Colors.white, Colors.white],
-              stops: <double>[0, 0.35, 1],
-            ),
-            borderRadius: BorderRadius.circular(u(24)),
-          ),
-          child: Stack(
-            children: [
-              // 顶部装饰图：宽度铺满弹窗、高度 169，借助容器圆角自然裁剪。
-              Positioned(
-                left: 0,
-                right: 0,
-                top: 0,
-                child: SizedBox(
-                  height: u(169),
-                  child: Image.asset(
-                    AppAssets.coursewareUploadHeader,
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              ),
-              // 标题"新建笔记"：水平居中（spec left:162 ↔ 容器宽 420 居中）
-              Positioned(
-                left: 0,
-                right: 0,
-                top: u(50),
-                child: Center(
-                  child: Text(
-                    '新建笔记',
-                    style: TextStyle(
-                      fontSize: u(24),
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w500,
-                      color: const Color(0xFF0B081A),
-                      height: 1.0,
-                    ),
-                  ),
-                ),
-              ),
-              // 输入框：380×48，圆角 8，1px #F5F6FA 描边；spec 内边距 16/14
-              Positioned(
-                left: u(20),
-                right: u(20),
-                top: u(116),
-                child: SizedBox(
-                  height: u(48),
-                  child: TextField(
-                    controller: controller,
-                    autofocus: true,
-                    maxLength: 30,
-                    cursorColor: const Color(0xFF8741FF),
-                    cursorWidth: 1.5,
-                    cursorHeight: u(16),
-                    style: TextStyle(
-                      fontSize: u(14),
-                      color: const Color(0xFF0B081A),
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w400,
-                      height: 20 / 14,
-                    ),
-                    decoration: InputDecoration(
-                      isDense: true,
-                      hintText: '请输入笔记标题',
-                      counterText: '',
-                      hintStyle: TextStyle(
-                        fontSize: u(14),
-                        color: const Color(0xFFB6B5BB),
-                        fontFamily: 'PingFang SC',
-                        fontWeight: AppFont.w400,
-                        height: 20 / 14,
-                      ),
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: u(16),
-                        vertical: u(14),
-                      ),
-                      filled: true,
-                      fillColor: Colors.white,
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(u(8)),
-                        borderSide: BorderSide(
-                          color: const Color(0xFFF5F6FA),
-                          width: u(1),
-                        ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(u(8)),
-                        borderSide: BorderSide(
-                          color: const Color(0xFFD9C7FF),
-                          width: u(1),
-                        ),
-                      ),
-                    ),
-                    onSubmitted: (value) =>
-                        Navigator.of(dialogContext).pop(value.trim()),
-                  ),
-                ),
-              ),
-              // 底部按钮组：高度 45、宽度 182、间距 16，复用公共 ActionBar。
-              Positioned(
-                left: u(20),
-                right: u(20),
-                top: u(194),
-                child: AppDialogActionBar(
-                  cancelLabel: '取消',
-                  confirmLabel: '确认',
-                  onCancel: () => Navigator.of(dialogContext).pop(),
-                  onConfirm: () =>
-                      Navigator.of(dialogContext).pop(controller.text.trim()),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    },
-  );
-  controller.dispose();
-  return result;
 }
 
 Widget _buildOptionalRemoteImage(String? rawUrl, {BoxFit fit = BoxFit.cover}) {

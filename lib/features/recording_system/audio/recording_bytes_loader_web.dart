@@ -38,3 +38,19 @@ Future<Uint8List> readRecordedBytes(String source) async {
 /// `record` package documents for Web. The extension is irrelevant on
 /// this side; the upload step picks the right one based on platform.
 String createTemporaryRecordingPath() => '';
+
+Future<String> createPublishedRecordingUrl(
+  Uint8List bytes, {
+  String mimeType = 'audio/webm',
+}) async {
+  final blob = web.Blob(
+    [bytes.toJS].toJS,
+    web.BlobPropertyBag(type: mimeType),
+  );
+  return web.URL.createObjectURL(blob);
+}
+
+void disposePublishedRecordingUrl(String url) {
+  if (url.isEmpty || !url.startsWith('blob:')) return;
+  web.URL.revokeObjectURL(url);
+}

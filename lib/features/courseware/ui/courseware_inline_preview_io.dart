@@ -163,22 +163,25 @@ class _CoursewareImagePreview extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       color: const Color(0xFFFAFAFD),
-      alignment: Alignment.center,
-      child: CachedNetworkImage(
-        imageUrl: url,
-        fit: BoxFit.contain,
-        placeholder: (context, _) => const SizedBox(
-          width: 32,
-          height: 32,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            color: Color(0xFF8741FF),
+      child: SizedBox.expand(
+        child: CachedNetworkImage(
+          imageUrl: url,
+          fit: BoxFit.contain,
+          width: double.infinity,
+          height: double.infinity,
+          placeholder: (context, _) => const SizedBox(
+            width: 32,
+            height: 32,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: Color(0xFF8741FF),
+            ),
           ),
-        ),
-        errorWidget: (context, _, _) => const Icon(
-          Icons.broken_image_outlined,
-          size: 48,
-          color: Color(0xFFC9C6D8),
+          errorWidget: (context, _, _) => const Icon(
+            Icons.broken_image_outlined,
+            size: 48,
+            color: Color(0xFFC9C6D8),
+          ),
         ),
       ),
     );

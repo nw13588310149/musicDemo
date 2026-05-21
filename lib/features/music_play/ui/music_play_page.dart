@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 
 import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_toast.dart';
@@ -1406,8 +1407,8 @@ class _PlaybackBar extends StatelessWidget {
           Expanded(
             child: _ProgressTrack(
               ratio: ratio,
-              durationLabel:
-                  '${_formatDuration(state.position)}/${_formatDuration(state.duration)}',
+              currentLabel: _formatDuration(state.position),
+              totalLabel: _formatDuration(state.duration),
               onSeekRatio: onSeekRatio,
             ),
           ),
@@ -1434,12 +1435,13 @@ class _PlaybackBar extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Icon(
-                  favorite ? Icons.star_rounded : Icons.star_border_rounded,
-                  size: ui(24),
-                  color: favorite
-                      ? const Color(0xFF8741FF)
-                      : const Color(0xFFB6B5BB),
+                Image.asset(
+                  favorite
+                      ? 'assets/images/home/fav1.png'
+                      : 'assets/images/home/fav.png',
+                  width: ui(18),
+                  height: ui(18),
+                  fit: BoxFit.contain,
                 ),
                 SizedBox(width: ui(4)),
                 Text(
@@ -1447,7 +1449,9 @@ class _PlaybackBar extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: const Color(0xFFB6B5BB),
+                    color: favorite
+                        ? const Color(0xFF8741FF)
+                        : const Color(0xFFB6B5BB),
                     fontSize: ui(13),
                     fontFamily: 'PingFang SC',
                     fontWeight: AppFont.w500,
@@ -1523,43 +1527,63 @@ class _PlaybackBar extends StatelessWidget {
 class _ProgressTrack extends StatelessWidget {
   const _ProgressTrack({
     required this.ratio,
-    required this.durationLabel,
+    required this.currentLabel,
+    required this.totalLabel,
     required this.onSeekRatio,
   });
 
   final double ratio;
-  final String durationLabel;
+  final String currentLabel;
+  final String totalLabel;
   final ValueChanged<double> onSeekRatio;
+
+  static final _labelStyle = TextStyle(
+    fontFamily: 'PingFang SC',
+    fontWeight: AppFont.w500,
+    height: 1,
+  );
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final hitHeight = ui(20);
+    final labelStyle = _labelStyle.copyWith(fontSize: ui(10));
     return SizedBox(
       height: hitHeight,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Positioned.fill(
-            child: _GradientSlider(ratio: ratio, onSeekRatio: onSeekRatio),
-          ),
-          // 时间标签：贴近可见进度条上方（轨道顶在 y=(20-4)/2=8，
-          // bottom: 14 → 标签底边 y=6，距离轨道顶视觉约 ~4px）。
-          Positioned(
-            right: 0,
-            bottom: ui(14),
-            child: Text(
-              durationLabel,
-              style: TextStyle(
-                color: const Color(0xFF0B081A),
-                fontSize: ui(12),
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w500,
-                height: 1,
+      child: Transform.translate(
+        offset: Offset(0, ui(2)),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned.fill(
+              child: _GradientSlider(ratio: ratio, onSeekRatio: onSeekRatio),
+            ),
+            // 时间标签：贴近可见进度条上方（轨道顶在 y=(20-4)/2=8，
+            // bottom: 14 → 标签底边 y=6，距离轨道顶视觉约 ~4px）。
+            Positioned(
+              right: 0,
+              bottom: ui(14),
+              child: Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: currentLabel,
+                      style: labelStyle.copyWith(
+                        color: const Color(0xFF0B081A),
+                      ),
+                    ),
+                    TextSpan(
+                      text: '/$totalLabel',
+                      style: labelStyle.copyWith(
+                        color: const Color(0xFFB6B5BB),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1777,7 +1801,7 @@ class _LongTextPanel extends StatelessWidget {
 }
 
 /// 声乐/器乐课程左侧使用的浅色简介卡片。
-/// 复用 detail.longTextHtml，剥离 HTML 标签后展示。
+/// 复用 detail.longTextHtml，按后端富文本内联样式原样渲染。
 class _DescriptionCard extends StatelessWidget {
   const _DescriptionCard({required this.htmlText});
 
@@ -1786,13 +1810,14 @@ class _DescriptionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final plain = htmlText
-        .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
-        .replaceAll(RegExp(r'</p>', caseSensitive: false), '\n')
-        .replaceAll(RegExp(r'<[^>]+>'), '')
-        .replaceAll('&nbsp;', ' ')
-        .replaceAll('&amp;', '&')
-        .trim();
+    final trimmed = htmlText.trim();
+    final baseStyle = TextStyle(
+      color: const Color(0xFF0B081A),
+      fontSize: ui(13),
+      fontFamily: 'PingFang SC',
+      fontWeight: AppFont.w400,
+      height: 1.4,
+    );
 
     return Container(
       padding: EdgeInsets.symmetric(horizontal: ui(20), vertical: ui(16)),
@@ -1806,16 +1831,21 @@ class _DescriptionCard extends StatelessWidget {
           Expanded(
             child: SingleChildScrollView(
               physics: const ClampingScrollPhysics(),
-              child: SelectableText(
-                plain.isEmpty ? '暂无简介' : plain,
-                style: TextStyle(
-                  color: const Color(0xFF0B081A),
-                  fontSize: ui(13),
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w400,
-                  height: 26 / 13,
-                ),
-              ),
+              child: trimmed.isEmpty
+                  ? Text('暂无简介', style: baseStyle)
+                  : HtmlWidget(
+                      trimmed,
+                      textStyle: baseStyle,
+                      customStylesBuilder: (element) {
+                        if (element.localName == 'p') {
+                          return {
+                            'margin': '0',
+                            'padding': '0',
+                          };
+                        }
+                        return null;
+                      },
+                    ),
             ),
           ),
         ],
@@ -2760,8 +2790,8 @@ class _PlaylistChipState extends State<_PlaylistChip> {
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 140),
                 curve: Curves.easeOut,
-                height: ui(24),
-                width: ui(24),
+                height: ui(28),
+                width: ui(28),
                 decoration: BoxDecoration(
                   color: open ? const Color(0xFFF5F2FF) : Colors.transparent,
                   borderRadius: BorderRadius.circular(ui(6)),
@@ -2769,8 +2799,8 @@ class _PlaylistChipState extends State<_PlaylistChip> {
                 alignment: Alignment.center,
                 child: Image.asset(
                   AppAssets.homePlaylistIcon,
-                  width: ui(20),
-                  height: ui(20),
+                  width: ui(22),
+                  height: ui(22),
                   fit: BoxFit.contain,
                   filterQuality: FilterQuality.medium,
                 ),

@@ -9,6 +9,9 @@ enum RecordingListView { folders, files }
 
 enum RecordingPhase { idle, recording, paused }
 
+/// 录音页内「录音中」与「播放试听」两种交互模式。
+enum RecordingSessionMode { recording, playback }
+
 class RecordingCategoryItem {
   const RecordingCategoryItem({
     required this.id,
@@ -108,6 +111,8 @@ class RecordingSystemState {
     this.items = const <RecordingEntry>[],
     this.searchQuery = '',
     this.recordingPhase = RecordingPhase.idle,
+    this.recordingControlsVisible = false,
+    this.sessionMode = RecordingSessionMode.recording,
     this.elapsedMs = 0,
     this.liveWaveform = const <double>[],
     this.previewItem,
@@ -147,6 +152,10 @@ class RecordingSystemState {
   final List<RecordingEntry> items;
   final String searchQuery;
   final RecordingPhase recordingPhase;
+
+  /// 已离开初始大按钮态，展示底部控制栏（尚未开始录音时左侧为「开始」）。
+  final bool recordingControlsVisible;
+  final RecordingSessionMode sessionMode;
   final int elapsedMs;
   final List<double> liveWaveform;
   final RecordingEntry? previewItem;
@@ -201,6 +210,8 @@ class RecordingSystemState {
     List<RecordingEntry>? items,
     String? searchQuery,
     RecordingPhase? recordingPhase,
+    bool? recordingControlsVisible,
+    RecordingSessionMode? sessionMode,
     int? elapsedMs,
     List<double>? liveWaveform,
     RecordingEntry? previewItem,
@@ -235,6 +246,9 @@ class RecordingSystemState {
       items: items ?? this.items,
       searchQuery: searchQuery ?? this.searchQuery,
       recordingPhase: recordingPhase ?? this.recordingPhase,
+      recordingControlsVisible:
+          recordingControlsVisible ?? this.recordingControlsVisible,
+      sessionMode: sessionMode ?? this.sessionMode,
       elapsedMs: elapsedMs ?? this.elapsedMs,
       liveWaveform: liveWaveform ?? this.liveWaveform,
       previewItem: clearPreviewItem ? null : (previewItem ?? this.previewItem),

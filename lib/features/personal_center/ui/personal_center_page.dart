@@ -155,6 +155,20 @@ class _PersonalCenterPageState extends ConsumerState<PersonalCenterPage> {
   }
 }
 
+/// 头像下方身份徽标文案：按 [role] 映射，未知 role 不展示。
+String? _identityLabelFromRole(String? role) {
+  switch (role?.trim().toLowerCase()) {
+    case 'tourist':
+      return '游客';
+    case 'student':
+      return '学生';
+    case 'teacher':
+      return '老师';
+    default:
+      return null;
+  }
+}
+
 class _ProfileHero extends StatelessWidget {
   const _ProfileHero({
     required this.state,
@@ -171,7 +185,7 @@ class _ProfileHero extends StatelessWidget {
     final user = state.user;
     final nick = user['nickname']?.toString().trim() ?? '';
     final mobile = user['mobile']?.toString().trim() ?? '';
-    final identity = user['identity']?.toString().trim() ?? '';
+    final identityLabel = _identityLabelFromRole(user['role']?.toString());
     final avatarUrl = user['headUrl']?.toString();
 
     final days = controller.vipDaysRemaining();
@@ -225,16 +239,9 @@ class _ProfileHero extends StatelessWidget {
               nickname: nick.isNotEmpty ? nick : '未命名',
               mobile: mobile,
               onEdit: onEditProfile,
+              showAnnualBadge: showAnnualBadge,
             ),
           ),
-
-          // ── 「年卡会员」徽章（左 215，上 45）──
-          if (showAnnualBadge)
-            const Positioned(
-              left: 215,
-              top: 45,
-              child: _AnnualVipBadge(),
-            ),
 
           // ── 三张信息卡片（左 16，上 123，每张 303×100，间距 13）。
           //    注意：卡片需放在头像之前绘制，避免遮挡头像。──
@@ -291,11 +298,11 @@ class _ProfileHero extends StatelessWidget {
           ),
 
           // ── 身份徽标（左 57，上 167.5）──
-          if (identity.isNotEmpty)
+          if (identityLabel != null)
             Positioned(
               left: 64,
               top: 90,
-              child: _IdentityBadge(label: identity),
+              child: _IdentityBadge(label: identityLabel),
             ),
         ],
       ),
@@ -401,11 +408,13 @@ class _NicknameColumn extends StatelessWidget {
     required this.nickname,
     required this.mobile,
     required this.onEdit,
+    this.showAnnualBadge = false,
   });
 
   final String nickname;
   final String mobile;
   final VoidCallback onEdit;
+  final bool showAnnualBadge;
 
   @override
   Widget build(BuildContext context) {
@@ -447,6 +456,10 @@ class _NicknameColumn extends StatelessWidget {
                 ),
               ),
             ),
+            if (showAnnualBadge) ...[
+              const SizedBox(width: 12),
+              const _AnnualVipBadge(),
+            ],
           ],
         ),
         const SizedBox(height: 4),
@@ -468,11 +481,7 @@ class _NicknameColumn extends StatelessWidget {
 
 /// 「年卡会员」角标。
 ///
-/// 之前是用 [Stack] 把 24×24 V 标 + 73×22 紫渐变胶囊 + Alibaba PuHuiTi 700
-/// 文字三块合成的。现在直接换成单张设计图 [AppAssets.infoAnnualVipBadge]：
-/// - 容器宽高沿用之前的 `82×24` 占位坐标，避免父级 [Positioned] 的位置偏移；
-/// - `BoxFit.contain` 让设计图按自身比例自适应，不被拉伸；
-/// - V 标会被设计图自身的横向溢出贴在胶囊左侧（与原视觉一致）。
+/// 单张设计图 [AppAssets.infoAnnualVipBadge]；跟在昵称行编辑图标后，间距 12。
 class _AnnualVipBadge extends StatelessWidget {
   const _AnnualVipBadge();
 
@@ -489,6 +498,21 @@ class _AnnualVipBadge extends StatelessWidget {
     );
   }
 }
+
+/// 年卡 / 体验卡标题：Alimama ShuHeiTi Bold 20 / #170333。
+const _kVipCardTitleStyle = TextStyle(
+  fontSize: 20,
+  fontWeight: FontWeight.w700,
+  color: Color(0xFF170333),
+  fontFamily: 'Alimama ShuHeiTi',
+);
+
+TextStyle _vipCardSubtitleStyle() => TextStyle(
+  fontSize: 12,
+  fontWeight: AppFont.w400,
+  color: const Color(0xFF6D6B75),
+  fontFamily: 'PingFang SC',
+);
 
 class _VipPriceCard extends StatelessWidget {
   const _VipPriceCard({
@@ -542,25 +566,14 @@ class _VipPriceCard extends StatelessWidget {
                             title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF170333),
-                              fontFamily: 'Alimama ShuHeiTi',
-                              height: 1.15,
-                            ),
+                            style: _kVipCardTitleStyle,
                           ),
                           const SizedBox(height: 4),
                           Text(
                             subtitle,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: AppFont.w400,
-                              color: Color(0xFF6D6B75),
-                              fontFamily: 'PingFang SC',
-                            ),
+                            style: _vipCardSubtitleStyle(),
                           ),
                         ],
                       ),
@@ -596,9 +609,11 @@ class _VipPriceCard extends StatelessWidget {
       );
     }
 
+    final priceText = price.startsWith('¥') || price.startsWith('\u00a5')
+        ? price
+        : '¥$price';
     return Container(
       height: 100,
-      padding: const EdgeInsets.fromLTRB(14, 14, 12, 12),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.white.withValues(alpha: 0.85)),
@@ -608,62 +623,56 @@ class _VipPriceCard extends StatelessWidget {
           colors: [Colors.white.withValues(alpha: 0.72), Colors.white],
         ),
       ),
-      child: Stack(
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF170333),
-                  fontFamily: 'PingFang SC',
-                ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _kVipCardTitleStyle,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _vipCardSubtitleStyle(),
+                  ),
+                ],
               ),
-              const SizedBox(height: 6),
-              Text(
-                subtitle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Color(0xFF6D6B75),
-                  fontFamily: 'PingFang SC',
-                ),
-              ),
-            ],
-          ),
-          if (showPrice)
-            Positioned(
-              right: 0,
-              top: 0,
-              bottom: 0,
-              child: Center(
+            ),
+            if (showPrice)
+              Padding(
+                padding: const EdgeInsets.only(left: 6),
                 child: Text(
-                  price.startsWith('¥') || price.startsWith('\u00a5')
-                      ? price
-                      : '¥$price',
+                  priceText,
+                  textAlign: TextAlign.right,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 22,
+                    fontSize: 20,
                     fontWeight: FontWeight.w700,
                     color: Color(0xFF170333),
                     fontFamily: 'Barlow',
+                    height: 1,
                   ),
                 ),
               ),
-            ),
-          if (!showPrice && trailingLabel != null)
-            const Positioned(
-              right: 4,
-              top: 0,
-              bottom: 0,
-              child: Center(child: _VipActivatedBadge(height: 24)),
-            ),
-        ],
+            if (!showPrice && trailingLabel != null)
+              const Padding(
+                padding: EdgeInsets.only(left: 6),
+                child: _VipActivatedBadge(height: 22),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -673,8 +682,7 @@ class _VipPriceCard extends StatelessWidget {
 ///
 /// 之前是 `Container` + 紫色 [BoxDecoration] 胶囊 + 白字文本合成；现在直接
 /// 渲染设计图 [AppAssets.infoVipActivated]（紫字、无背景、自带留白）。
-/// - 通过 [height] 控制纵向占位（年卡 22、体验卡 24，沿用原始 padding 高度，
-///   保持两侧卡片视觉对齐）；
+/// - 通过 [height] 控制纵向占位（年卡 / 体验卡均为 22，与卡片内边距对齐）；
 /// - `BoxFit.contain` 让宽度按图片比例自适应，不被父级 [Row] 拉伸。
 class _VipActivatedBadge extends StatelessWidget {
   const _VipActivatedBadge({required this.height});
@@ -684,7 +692,7 @@ class _VipActivatedBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: height,
+      height: 30,
       child: Image.asset(
         AppAssets.infoVipActivated,
         fit: BoxFit.contain,
@@ -814,7 +822,7 @@ class _ActionListCard extends StatelessWidget {
                 ),
               _ActionTile(
                 iconAsset: AppAssets.infoIconFeedback,
-                label: '意见反馈',
+                label: '需求反馈',
                 onTap: onFeedback,
                 showDivider: true,
               ),
@@ -867,19 +875,20 @@ class _ActionTile extends StatelessWidget {
                 children: [
                   Image.asset(
                     iconAsset,
-                    width: 20,
-                    height: 20,
+                    width: 18,
+                    height: 18,
                     fit: BoxFit.contain,
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       label,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
                         height: 22 / 14,
-                        color: Color(0xFF0B081A),
+                        color: const Color(0xFF0B081A),
                         fontFamily: 'PingFang SC',
+                        fontWeight: AppFont.w400,
                       ),
                     ),
                   ),
@@ -894,7 +903,14 @@ class _ActionTile extends StatelessWidget {
             ),
           ),
           if (showDivider)
-            const Divider(height: 1, thickness: 1, color: Color(0xFFE6E8EB)),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: Divider(
+                height: 0.5,
+                thickness: 0.5,
+                color: Color(0xFFE6E8EB),
+              ),
+            ),
         ],
       ),
     );

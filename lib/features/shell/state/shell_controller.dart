@@ -41,6 +41,9 @@ class ShellController extends StateNotifier<ShellState> {
   Timer? _logoTimer;
   Timer? _noticeTimer;
 
+  /// 为 true 时即使已登录也不启动定时器（认证页 / 登出后）。
+  bool _pollingPaused = false;
+
   List<String> _cachedProvinces = const <String>[];
 
   void toggleCollapse() {
@@ -79,6 +82,22 @@ class ShellController extends StateNotifier<ShellState> {
     // 时再创建一个全新实例（带新 token），避免旧 session 的轮询线程或
     // 已经为 true 的 hasSchool 把新账号挡在外面。
     _ref.invalidate(schoolBindingControllerProvider);
+    pausePolling();
+  }
+
+  /// 进入登录 / 注册等认证页时调用，停止 myInfo / schoolList / 未读轮询。
+  void pausePolling() {
+    _pollingPaused = true;
+    _stopPollingTimers();
+  }
+
+  /// 登录成功或离开认证页后恢复轮询（无 token 时忽略）。
+  void resumePolling() {
+    if (_storage.token.isEmpty) {
+      return;
+    }
+    _pollingPaused = false;
+    _ensurePollingTimersStarted();
   }
 
   /// 演示用「白名单管理员」手机号：使用此号登录后，无论后端 `/myInfo`
@@ -98,6 +117,9 @@ class ShellController extends StateNotifier<ShellState> {
   }
 
   Future<void> refreshNoticeData() async {
+    if (_storage.token.isEmpty) {
+      return;
+    }
     final countResponse = await _repository.getUnreadCount();
     if (countResponse.code != 0) {
       return;
@@ -121,6 +143,9 @@ class ShellController extends StateNotifier<ShellState> {
   }
 
   Future<void> refreshUserAndSchool() async {
+    if (_storage.token.isEmpty) {
+      return;
+    }
     // 并行请求用户信息与学校信息，总耗时降为单次 RTT
     final responses = await Future.wait([
       _repository.getMyInfo(),
@@ -238,20 +263,35 @@ class ShellController extends StateNotifier<ShellState> {
 
   @override
   void dispose() {
-    _logoTimer?.cancel();
-    _noticeTimer?.cancel();
+    _stopPollingTimers();
     super.dispose();
   }
 
   Future<void> _init() async {
+    if (_storage.token.isEmpty) {
+      return;
+    }
     // 用户+学校数据优先到位（菜单/头像依赖它），消息数据后台并行，不阻塞首帧
     await refreshUserAndSchool();
     unawaited(refreshNoticeData());
+    _ensurePollingTimersStarted();
+  }
 
-    _logoTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+  void _stopPollingTimers() {
+    _logoTimer?.cancel();
+    _logoTimer = null;
+    _noticeTimer?.cancel();
+    _noticeTimer = null;
+  }
+
+  void _ensurePollingTimersStarted() {
+    if (_pollingPaused || _storage.token.isEmpty) {
+      return;
+    }
+    _logoTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
       unawaited(refreshUserAndSchool());
     });
-    _noticeTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+    _noticeTimer ??= Timer.periodic(const Duration(minutes: 1), (_) {
       unawaited(refreshNoticeData());
     });
   }

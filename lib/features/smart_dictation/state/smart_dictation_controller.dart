@@ -26,11 +26,6 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
     : _repository = repository,
       _audioEngine = SmartDictationAudioEngine(),
       super(SmartDictationState.initial()) {
-    _audioBandsSub = _audioEngine.frequencyBands.listen((bands) {
-      if (!_disposed && mounted) {
-        state = state.copyWith(frequencyBands: bands);
-      }
-    });
     unawaited(bootstrap());
   }
 
@@ -39,13 +34,14 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
   final Random _random = Random();
 
   Timer? _timer;
-  StreamSubscription<List<double>>? _audioBandsSub;
   bool _disposed = false;
   int _questionElapsedMillis = 0;
   bool _playedFirstSecondCue = false;
   bool _playedFourthSecondCue = false;
   bool _cueInFlight = false;
   bool _resumeAfterExitDialog = false;
+  final Map<String, Timer> _visualNoteReleaseTimers = <String, Timer>{};
+  final Set<String> _activeVisualNotes = <String>{};
 
   /// 已经成功拉过 `/app/user/smartDictationList` 的 track 缓存。
   /// 用户进入页面时只拉默认 track（绝对音感）的列表；切到音程 / 和弦
@@ -367,7 +363,7 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
 
   Future<void> submitAnswer(String option) async {
     final session = state.session;
-    if (session == null || session.finished) {
+    if (session == null || session.finished || session.currentQuestionAnswered) {
       return;
     }
 
@@ -448,6 +444,7 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
     _resumeAfterExitDialog = session.running;
     _stopTimer();
     unawaited(_audioEngine.stopAll());
+    _clearVisualNotes();
     state = state.copyWith(
       session: session.copyWith(showExitDialog: true, running: false),
     );
@@ -473,6 +470,7 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
     _stopTimer();
     _resumeAfterExitDialog = false;
     unawaited(_audioEngine.stopAll());
+    _clearVisualNotes();
     state = state.copyWith(
       clearSession: true,
       clearNoticeMessage: true,
@@ -547,11 +545,68 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
       return;
     }
     if (question.harmonic) {
+      _activateVisualNotes(
+        question.playTokens,
+        hold: const Duration(milliseconds: 1200),
+      );
       await _audioEngine.playTokensHarmonic(question.playTokens, volume: 0.95);
     } else if (question.playTokens.length <= 1) {
+      _activateVisualNotes(question.playTokens);
       await _audioEngine.playToken(question.playTokens.first, volume: 0.95);
     } else {
-      await _audioEngine.playTokensMelodic(question.playTokens, volume: 0.95);
+      const gap = Duration(milliseconds: 320);
+      for (var i = 0; i < question.playTokens.length; i++) {
+        if (_disposed) {
+          return;
+        }
+        _activateVisualNotes(<String>[question.playTokens[i]]);
+        await _audioEngine.playToken(question.playTokens[i], volume: 0.95);
+        if (i < question.playTokens.length - 1) {
+          await Future<void>.delayed(gap);
+        }
+      }
+    }
+  }
+
+  void _activateVisualNotes(
+    Iterable<String> tokens, {
+    Duration hold = const Duration(milliseconds: 900),
+  }) {
+    final canonicals = tokens
+        .map(SmartDictationAudioEngine.canonicalFromToken)
+        .where((canonical) => canonical.isNotEmpty)
+        .toSet();
+    if (canonicals.isEmpty) {
+      return;
+    }
+    for (final note in canonicals) {
+      _visualNoteReleaseTimers[note]?.cancel();
+      _activeVisualNotes.add(note);
+      _visualNoteReleaseTimers[note] = Timer(hold, () {
+        _visualNoteReleaseTimers.remove(note);
+        _activeVisualNotes.remove(note);
+        if (!_disposed && mounted) {
+          state = state.copyWith(
+            activeVisualNotes: Set<String>.from(_activeVisualNotes),
+          );
+        }
+      });
+    }
+    if (!_disposed && mounted) {
+      state = state.copyWith(
+        activeVisualNotes: Set<String>.from(_activeVisualNotes),
+      );
+    }
+  }
+
+  void _clearVisualNotes() {
+    for (final timer in _visualNoteReleaseTimers.values) {
+      timer.cancel();
+    }
+    _visualNoteReleaseTimers.clear();
+    _activeVisualNotes.clear();
+    if (!_disposed && mounted) {
+      state = state.copyWith(activeVisualNotes: const <String>{});
     }
   }
 
@@ -640,6 +695,7 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
           return;
         }
         if (shouldPlayStandard) {
+          _activateVisualNotes(const <String>['a1']);
           await _audioEngine.playToken('a1', volume: 0.92);
         } else {
           _playedFourthSecondCue = true;
@@ -665,16 +721,20 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
   }
 
   Future<void> _handleTimeout(SmartPracticeSession session) async {
-    if (session.finished) {
+    final latest = state.session;
+    if (latest == null ||
+        latest.finished ||
+        latest.currentIndex != session.currentIndex ||
+        latest.currentQuestionAnswered) {
       return;
     }
 
-    final updatedTrail = List<String>.from(session.trail)..add('timeout');
-    final lastQuestion = session.currentIndex >= session.totalQuestions - 1;
+    final updatedTrail = List<String>.from(latest.trail)..add('timeout');
+    final lastQuestion = latest.currentIndex >= latest.totalQuestions - 1;
 
     if (lastQuestion) {
-      final finished = session.copyWith(
-        wrongCount: session.wrongCount + 1,
+      final finished = latest.copyWith(
+        wrongCount: latest.wrongCount + 1,
         trail: updatedTrail,
         finished: true,
         running: false,
@@ -686,8 +746,8 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
     }
 
     state = state.copyWith(
-      session: session.copyWith(
-        wrongCount: session.wrongCount + 1,
+      session: latest.copyWith(
+        wrongCount: latest.wrongCount + 1,
         trail: updatedTrail,
         running: false,
         remainingMillis: 0,
@@ -695,15 +755,15 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
       noticeMessage: '本题超时',
     );
     await Future<void>.delayed(const Duration(milliseconds: 1000));
-    final latest = state.session;
-    if (latest == null ||
-        latest.finished ||
-        latest.currentIndex != session.currentIndex) {
+    final afterDelay = state.session;
+    if (afterDelay == null ||
+        afterDelay.finished ||
+        afterDelay.currentIndex != session.currentIndex) {
       return;
     }
-    final advanced = latest.copyWith(
-      currentIndex: latest.currentIndex + 1,
-      remainingMillis: latest.answerSeconds * 1000,
+    final advanced = afterDelay.copyWith(
+      currentIndex: afterDelay.currentIndex + 1,
+      remainingMillis: afterDelay.answerSeconds * 1000,
       running: true,
     );
     state = state.copyWith(session: advanced, clearNoticeMessage: true);
@@ -718,7 +778,7 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
 
     final stars = _resolveStars(
       total: session.totalQuestions,
-      correct: session.correctCount,
+      correct: session.trailCorrectCount,
     );
 
     try {
@@ -1159,7 +1219,7 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
     }
     _disposed = true;
     _stopTimer();
-    _audioBandsSub?.cancel();
+    _clearVisualNotes();
     unawaited(_audioEngine.dispose());
     super.dispose();
   }

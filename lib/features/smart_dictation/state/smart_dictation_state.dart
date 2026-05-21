@@ -137,6 +137,16 @@ class SmartPracticeSession {
 
   bool get timedMode => answerSeconds > 0;
 
+  /// 当前题是否已有作答记录（trail 条数 > 当前题索引）。
+  bool get currentQuestionAnswered => trail.length > currentIndex;
+
+  /// 以 trail 为准统计答对数，避免计数器与记录不同步。
+  int get trailCorrectCount =>
+      trail.where((entry) => entry == 'correct').length;
+
+  /// 以 trail 为准统计答错/超时数。
+  int get trailWrongCount => trail.length - trailCorrectCount;
+
   SmartPracticeSession copyWith({
     SmartDictationTrack? track,
     SmartDictationMode? sourceMode,
@@ -190,7 +200,7 @@ class SmartDictationState {
     required this.intervalConfig,
     required this.chordConfig,
     required this.session,
-    required this.frequencyBands,
+    required this.activeVisualNotes,
     required this.errorMessage,
     required this.noticeMessage,
     required this.vipExpireDateText,
@@ -209,7 +219,7 @@ class SmartDictationState {
   final SmartPracticeConfig intervalConfig;
   final SmartPracticeConfig chordConfig;
   final SmartPracticeSession? session;
-  final List<double> frequencyBands;
+  final Set<String> activeVisualNotes;
   final String errorMessage;
   final String noticeMessage;
   final String vipExpireDateText;
@@ -251,7 +261,7 @@ class SmartDictationState {
     SmartPracticeConfig? chordConfig,
     SmartPracticeSession? session,
     bool clearSession = false,
-    List<double>? frequencyBands,
+    Set<String>? activeVisualNotes,
     String? errorMessage,
     bool clearErrorMessage = false,
     String? noticeMessage,
@@ -272,7 +282,7 @@ class SmartDictationState {
       intervalConfig: intervalConfig ?? this.intervalConfig,
       chordConfig: chordConfig ?? this.chordConfig,
       session: clearSession ? null : (session ?? this.session),
-      frequencyBands: frequencyBands ?? this.frequencyBands,
+      activeVisualNotes: activeVisualNotes ?? this.activeVisualNotes,
       errorMessage: clearErrorMessage
           ? ''
           : (errorMessage ?? this.errorMessage),
@@ -394,7 +404,7 @@ class SmartDictationState {
         intervalPlayMode: SmartIntervalPlayMode.harmonic,
       ),
       session: null,
-      frequencyBands: <double>[],
+      activeVisualNotes: <String>{},
       errorMessage: '',
       noticeMessage: '',
       vipExpireDateText: '',

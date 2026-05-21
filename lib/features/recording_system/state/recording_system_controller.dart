@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:typed_data' show Uint8List;
+import 'dart:typed_data' show BytesBuilder, Uint8List;
 
 import 'package:flutter/foundation.dart'
     show ValueNotifier, debugPrint, kIsWeb;
@@ -122,6 +122,18 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
   /// Local file path / blob URL of the just-finalized recording. Needed
   /// after stop() for upload + as the fallback preview source.
   String? _currentRecordingPath;
+
+  /// Wall-clock offset when resuming recording after playback (Web stop path).
+  int _elapsedOffsetMs = 0;
+
+  /// Segments captured each time recording stops for listen/finish.
+  final List<Uint8List> _sessionRecordingSegments = <Uint8List>[];
+  final List<String> _sessionSegmentSources = <String>[];
+  final List<int> _sessionSegmentDurationMs = <int>[];
+  final List<String> _sessionPublishedPlaybackUrls = <String>[];
+  String? _sessionMergedPreviewUrl;
+  String? _lastCommittedSegmentSource;
+  static const String _sessionMultiPreviewToken = '__session_multi__';
 
   bool _disposed = false;
 
@@ -521,11 +533,14 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     await _stopPreviewPlayback();
     await _stopRecorder(discard: true);
     _preparedPlayerSource = null;
+    _resetSessionSegments();
     _resetWaveform();
     _resetTimers();
     state = state.copyWith(
       viewMode: RecordingViewMode.record,
       recordingPhase: RecordingPhase.idle,
+      recordingControlsVisible: false,
+      sessionMode: RecordingSessionMode.recording,
       elapsedMs: 0,
       liveWaveform: const <double>[],
       previewPlaying: false,
@@ -548,11 +563,14 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
 
   Future<void> resetRecording() async {
     await _stopRecorder(discard: true);
+    _resetSessionSegments();
     _resetWaveform();
     _resetTimers();
     _currentRecordingPath = null;
     state = state.copyWith(
       recordingPhase: RecordingPhase.idle,
+      recordingControlsVisible: false,
+      sessionMode: RecordingSessionMode.recording,
       elapsedMs: 0,
       liveWaveform: const <double>[],
       clearPreviewItem: true,
@@ -624,64 +642,84 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     return created;
   }
 
+  /// 从初始大按钮进入控制栏：检查/申请麦克风权限，不开始录音。
+  Future<String?> enterRecordingControls() async {
+    try {
+      final recorder = _ensureRecorder();
+      final hasPermission = await recorder.hasPermission();
+      if (!hasPermission) return _zhMicPermission;
+      if (mounted) {
+        state = state.copyWith(
+          recordingControlsVisible: true,
+          clearError: true,
+        );
+      }
+      return null;
+    } on MissingPluginException {
+      return _zhUnsupported;
+    } on UnsupportedError {
+      return _zhUnsupported;
+    } catch (error, stack) {
+      debugPrint('[recording] enterRecordingControls: $error\n$stack');
+      return _zhMicPermission;
+    }
+  }
+
   Future<String?> startRecording() async {
     try {
       final recorder = _ensureRecorder();
       if (mounted) {
-        state = state.copyWith(clearError: true);
+        state = state.copyWith(
+          clearError: true,
+          recordingControlsVisible: true,
+        );
       }
 
-      // Defensive: if the previous session didn't close cleanly, force-
-      // stop before requesting a new recording. record() will throw
-      // PlatformException("already recording") otherwise.
-      if (await recorder.isRecording() || await recorder.isPaused()) {
-        await _safeAsync(recorder.stop);
+      if (await recorder.isRecording()) {
+        return null;
       }
-      _resetWaveform();
-      _resetTimers();
+      if (await recorder.isPaused()) {
+        return resumeRecording();
+      }
+
+      final isFreshStart =
+          _amplitudeHistory.isEmpty && elapsedMs.value == 0 && _elapsedOffsetMs == 0;
+      if (isFreshStart) {
+        _resetSessionSegments();
+        _resetWaveform();
+        _resetTimers();
+      }
 
       final hasPermission = await recorder.hasPermission();
       if (!hasPermission) return _zhMicPermission;
 
-      // Permission is granted at this point. iOS first-launch is the
-      // critical path: between `hasPermission` (which dismisses the
-      // system mic alert) and `recorder.start(...)` actually finishing,
-      // AVAudioSession needs to switch category + activate the input,
-      // which can take several hundred milliseconds. If we wait until
-      // start() resolves before flipping `recordingPhase` and starting
-      // the stopwatch, the user just sees the idle UI frozen for that
-      // entire window the first time they ever record. Show the
-      // recording UI + start the wallclock immediately so the user gets
-      // feedback the instant they tap "Allow", and roll back if the
-      // engine actually fails to come up.
       if (mounted) {
         state = state.copyWith(
+          sessionMode: RecordingSessionMode.recording,
           recordingPhase: RecordingPhase.recording,
           clearError: true,
-          elapsedMs: 0,
-          liveWaveform: const <double>[],
         );
       }
       _preparedPlayerSource = null;
-      _startStopwatch();
+      if (_stopwatch == null || !(_stopwatch?.isRunning ?? false)) {
+        _startStopwatchFrom(_elapsedOffsetMs);
+      } else {
+        _stopwatch?.start();
+      }
 
       final path = _buildRecordingPath();
       _currentRecordingPath = path;
       try {
         await recorder.start(path: path);
       } catch (error) {
-        // Engine actually failed to come up: roll the UI back so the
-        // user can retry, and let the outer catch surface a proper
-        // localized message.
         _resetTimers();
+        _elapsedOffsetMs = 0;
         if (mounted) {
           state = state.copyWith(recordingPhase: RecordingPhase.idle);
         }
         rethrow;
       }
 
-      // Wire up amplitude only AFTER start() resolves ? a stream
-      // attached on a recorder that never went hot would just leak.
       _amplitudeSub = recorder.amplitudes.listen(_onAmplitude, onError: (_) {});
       return null;
     } on MissingPluginException {
@@ -722,7 +760,10 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     try {
       await recorder.resume();
       _stopwatch?.start();
-      state = state.copyWith(recordingPhase: RecordingPhase.recording);
+      state = state.copyWith(
+        sessionMode: RecordingSessionMode.recording,
+        recordingPhase: RecordingPhase.recording,
+      );
       return null;
     } on PlatformException catch (error) {
       return _platformMessage(error, _zhResumeRecordingFailed);
@@ -732,14 +773,224 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     }
   }
 
-  Future<String?> finishRecording() {
-    return _finalizeRecordingToPreview(minElapsedMs: 5000);
+  /// 播放态点左侧「继续」：回到录音（暂停态则 resume，已 stop 则续录）。
+  Future<String?> continueRecordingFromPlayback() async {
+    await _stopPreviewPlayback();
+    if (mounted) {
+      state = state.copyWith(
+        sessionMode: RecordingSessionMode.recording,
+        previewPlaying: false,
+        clearError: true,
+      );
+    }
+    final recorder = _recorder;
+    if (recorder != null && await recorder.isPaused()) {
+      return resumeRecording();
+    }
+    return _startContinuingRecording();
   }
 
-  /// "Listen now" button: lower threshold (1s) so the user can hear what
-  /// they just recorded before deciding to keep going or re-record.
+  Future<String?> _startContinuingRecording() async {
+    try {
+      final recorder = _ensureRecorder();
+      final hasPermission = await recorder.hasPermission();
+      if (!hasPermission) return _zhMicPermission;
+
+      final baseElapsed = math.max(
+        elapsedMs.value,
+        previewDurationMs.value > 0
+            ? previewDurationMs.value
+            : state.previewDurationMs,
+      );
+      _elapsedOffsetMs = baseElapsed;
+
+      final savedWaveform = state.previewItem?.waveform ?? state.liveWaveform;
+      if (savedWaveform.isNotEmpty && _amplitudeHistory.isEmpty) {
+        _amplitudeHistory.addAll(savedWaveform);
+        final start = savedWaveform.length > _kLiveWaveSampleCap
+            ? savedWaveform.length - _kLiveWaveSampleCap
+            : 0;
+        liveAmplitudes.value = List<double>.unmodifiable(
+          savedWaveform.sublist(start),
+        );
+      }
+
+      if (mounted) {
+        state = state.copyWith(
+          sessionMode: RecordingSessionMode.recording,
+          recordingPhase: RecordingPhase.recording,
+          recordingControlsVisible: true,
+          elapsedMs: baseElapsed,
+          liveWaveform: _amplitudeHistory.isEmpty
+              ? state.liveWaveform
+              : List<double>.unmodifiable(_amplitudeHistory),
+        );
+      }
+
+      _startStopwatchFrom(baseElapsed);
+      _preparedPlayerSource = null;
+
+      final path = _buildRecordingPath();
+      _currentRecordingPath = path;
+      await recorder.start(path: path);
+      _amplitudeSub = recorder.amplitudes.listen(_onAmplitude, onError: (_) {});
+      return null;
+    } on MissingPluginException {
+      return _zhUnsupported;
+    } on UnsupportedError {
+      return _zhUnsupported;
+    } on PlatformException catch (error) {
+      return _platformMessage(error, _zhStartRecordingFailed);
+    } catch (error, stack) {
+      debugPrint('[recording] _startContinuingRecording: $error\n$stack');
+      return _recordingStartMessage(error);
+    }
+  }
+
+  Future<String?> finishRecording() {
+    if (state.sessionMode == RecordingSessionMode.playback &&
+        state.previewSource != null &&
+        state.previewSource!.isNotEmpty) {
+      requestSaveDialog();
+      return Future<String?>.value(null);
+    }
+    return _finalizeRecording(minElapsedMs: 5000, openSaveDialog: true);
+  }
+
+  /// 中间播放键：录音中先进入播放态试听；播放态直接切换播放/暂停。
+  Future<String?> toggleCenterPlayback() async {
+    final inActiveRecording =
+        state.sessionMode == RecordingSessionMode.recording &&
+        (state.recordingPhase == RecordingPhase.recording ||
+            state.recordingPhase == RecordingPhase.paused);
+    if (inActiveRecording) {
+      return _enterPlaybackMode(minElapsedMs: 1000, autoPlay: true);
+    }
+    final source = state.previewSource;
+    if (source == null || source.isEmpty) {
+      return _zhRecordSomethingFirst;
+    }
+    await togglePreviewPlayback();
+    return null;
+  }
+
+  /// @deprecated Use [toggleCenterPlayback] from the UI.
   Future<String?> finalizeRecordingForListening() {
-    return _finalizeRecordingToPreview(minElapsedMs: 1000);
+    return _enterPlaybackMode(minElapsedMs: 1000, autoPlay: true);
+  }
+
+  /// 暂停录音并进入播放态（保留计时与波形，便于「继续」续录）。
+  Future<String?> _enterPlaybackMode({
+    required int minElapsedMs,
+    bool autoPlay = false,
+  }) async {
+    final elapsedFromStopwatch = _stopwatch?.elapsedMilliseconds ?? 0;
+    final elapsedMillis = _elapsedOffsetMs + elapsedFromStopwatch > 0
+        ? _elapsedOffsetMs + elapsedFromStopwatch
+        : elapsedMs.value;
+
+    if (elapsedMillis < minElapsedMs) {
+      return minElapsedMs >= 5000 ? _zhMinFiveSeconds : _zhRecordSomethingFirst;
+    }
+
+    final recorder = _recorder;
+    String? resolvedSource = _currentRecordingPath;
+
+    if (recorder != null &&
+        (await recorder.isRecording() || await recorder.isPaused())) {
+      try {
+        final stopped = await recorder.stop();
+        resolvedSource = (stopped != null && stopped.isNotEmpty)
+            ? stopped
+            : _currentRecordingPath;
+      } on PlatformException catch (error) {
+        return _platformMessage(error, _zhFinishRecordingFailed);
+      }
+      await _amplitudeSub?.cancel();
+      _amplitudeSub = null;
+      _stopwatch?.stop();
+      if (mounted) {
+        state = state.copyWith(recordingPhase: RecordingPhase.paused);
+      }
+    }
+
+    if (resolvedSource == null || resolvedSource.isEmpty) {
+      return _zhNoValidRecording;
+    }
+
+    Uint8List? bytes;
+    try {
+      bytes = await loadRecordedBytes(resolvedSource);
+    } catch (error, stack) {
+      debugPrint('[recording] loadRecordedBytes: $error\n$stack');
+      return _zhReadRecordingFailed;
+    }
+    if (bytes.isEmpty) return _zhRecordingEmpty;
+
+    final waveformSnapshot = _amplitudeHistory.isEmpty
+        ? _fallbackWaveform(resolvedSource.hashCode)
+        : List<double>.unmodifiable(_amplitudeHistory);
+
+    final durationMs = math.max(elapsedMillis, _effectivePreviewDurationMs());
+    final durationLabel = _formatDurationLabel(durationMs);
+    final defaultName = _zhDefaultRecordingName;
+
+    _commitRecordingSegment(
+      resolvedSource,
+      bytes,
+      segmentDurationMs: _segmentDurationMsForCommit(durationMs),
+    );
+    final sessionPreview = await _buildSessionPreviewAssets(durationMs: durationMs);
+    if (sessionPreview == null) return _zhNoValidRecording;
+
+    _preparedPlayerSource = null;
+    await _prepareSessionPreviewPlayer(totalDurationMs: durationMs);
+
+    final now = DateTime.now();
+    final autoTitle =
+        '$_zhRecordingPrefix${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
+
+    final draft = RecordingEntry(
+      id: -1,
+      categoryId: state.selectedSaveCategoryId > 0
+          ? state.selectedSaveCategoryId
+          : state.selectedCategoryId,
+      name: state.pendingTitle.isEmpty ? defaultName : state.pendingTitle,
+      url: sessionPreview.source,
+      durationLabel: durationLabel,
+      waveform: waveformSnapshot,
+      payload: <String, dynamic>{
+        'name': state.pendingTitle.isEmpty ? defaultName : state.pendingTitle,
+        'duration': durationLabel,
+        'url': sessionPreview.source,
+      },
+      isLocalDraft: true,
+    );
+
+    previewDurationMs.value = durationMs;
+    previewPositionMs.value = 0;
+    elapsedMs.value = durationMs;
+
+    state = state.copyWith(
+      sessionMode: RecordingSessionMode.playback,
+      recordingPhase: RecordingPhase.paused,
+      recordingControlsVisible: true,
+      elapsedMs: durationMs,
+      liveWaveform: waveformSnapshot,
+      previewItem: draft,
+      previewSource: sessionPreview.source,
+      previewDurationMs: durationMs,
+      previewPositionMs: 0,
+      previewPlaying: false,
+      previewPlaybackRate: 1,
+      recordedBytes: sessionPreview.bytes,
+      selectedSaveCategoryId: draft.categoryId,
+      pendingTitle: draft.name == defaultName ? autoTitle : draft.name,
+    );
+    if (autoPlay) {
+      await togglePreviewPlayback();
+    }
+    return null;
   }
 
   /// Manually open the save dialog from the preview header.
@@ -747,14 +998,17 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     state = state.copyWith(showSaveDialog: true);
   }
 
-  Future<String?> _finalizeRecordingToPreview({
+  Future<String?> _finalizeRecording({
     required int minElapsedMs,
+    bool switchToPreviewView = false,
+    bool openSaveDialog = false,
+    bool autoPlay = false,
   }) async {
     final stopwatch = _stopwatch;
     final recorder = _recorder;
     final elapsedFromStopwatch = stopwatch?.elapsedMilliseconds ?? 0;
-    final elapsedMillis = elapsedFromStopwatch > 0
-        ? elapsedFromStopwatch
+    final elapsedMillis = _elapsedOffsetMs + elapsedFromStopwatch > 0
+        ? _elapsedOffsetMs + elapsedFromStopwatch
         : elapsedMs.value;
 
     if (elapsedMillis < minElapsedMs) {
@@ -801,50 +1055,65 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     final durationMs = math.max(elapsedMillis, _effectivePreviewDurationMs());
     final durationLabel = _formatDurationLabel(durationMs);
     final defaultName = _zhDefaultRecordingName;
+
+    _commitRecordingSegment(
+      resolvedSource,
+      bytes,
+      segmentDurationMs: _segmentDurationMsForCommit(durationMs),
+    );
+    final sessionPreview = await _buildSessionPreviewAssets(durationMs: durationMs);
+    if (sessionPreview == null) return _zhNoValidRecording;
+
+    _preparedPlayerSource = null;
+    await _prepareSessionPreviewPlayer(totalDurationMs: durationMs);
+
+    final now = DateTime.now();
+    final autoTitle =
+        '$_zhRecordingPrefix${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
+
     final draft = RecordingEntry(
       id: -1,
       categoryId: state.selectedSaveCategoryId > 0
           ? state.selectedSaveCategoryId
           : state.selectedCategoryId,
       name: state.pendingTitle.isEmpty ? defaultName : state.pendingTitle,
-      url: resolvedSource,
+      url: sessionPreview.source,
       durationLabel: durationLabel,
       waveform: waveformSnapshot,
       payload: <String, dynamic>{
         'name': state.pendingTitle.isEmpty ? defaultName : state.pendingTitle,
         'duration': durationLabel,
-        'url': resolvedSource,
+        'url': sessionPreview.source,
       },
       isLocalDraft: true,
     );
-
-    // Prepare the player off the just-finalized source. We don't surface
-    // errors here ? the user gets a clear toast on the explicit play tap.
-    await _preparePreviewPlayer(resolvedSource);
-
-    final now = DateTime.now();
-    final autoTitle =
-        '$_zhRecordingPrefix${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
 
     previewDurationMs.value = durationMs;
     previewPositionMs.value = 0;
 
     state = state.copyWith(
-      viewMode: RecordingViewMode.preview,
+      viewMode: switchToPreviewView
+          ? RecordingViewMode.preview
+          : RecordingViewMode.record,
+      sessionMode: RecordingSessionMode.playback,
       recordingPhase: RecordingPhase.idle,
+      recordingControlsVisible: true,
       elapsedMs: durationMs,
       liveWaveform: waveformSnapshot,
       previewItem: draft,
-      previewSource: resolvedSource,
+      previewSource: sessionPreview.source,
       previewDurationMs: durationMs,
       previewPositionMs: 0,
       previewPlaying: false,
       previewPlaybackRate: 1,
-      recordedBytes: bytes,
-      showSaveDialog: false,
+      recordedBytes: sessionPreview.bytes,
+      showSaveDialog: openSaveDialog,
       selectedSaveCategoryId: draft.categoryId,
       pendingTitle: draft.name == defaultName ? autoTitle : draft.name,
     );
+    if (autoPlay) {
+      await togglePreviewPlayback();
+    }
     return null;
   }
 
@@ -862,17 +1131,18 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     liveAmplitudes.value = List<double>.unmodifiable(history.sublist(start));
   }
 
-  void _startStopwatch() {
+  void _startStopwatchFrom(int initialMs) {
     _stopwatchTicker?.cancel();
     final sw = _stopwatch ?? Stopwatch();
     sw
       ..reset()
       ..start();
     _stopwatch = sw;
-    elapsedMs.value = 0;
+    _elapsedOffsetMs = initialMs;
+    elapsedMs.value = initialMs;
     _stopwatchTicker = Timer.periodic(_kStopwatchTickInterval, (_) {
       if (_disposed) return;
-      final ms = sw.elapsedMilliseconds;
+      final ms = initialMs + sw.elapsedMilliseconds;
       if (ms != elapsedMs.value) {
         elapsedMs.value = ms;
       }
@@ -884,6 +1154,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     _stopwatchTicker = null;
     _stopwatch?.stop();
     _stopwatch?.reset();
+    _elapsedOffsetMs = 0;
     elapsedMs.value = 0;
   }
 
@@ -964,6 +1235,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     previewDurationMs.value = initialDuration;
     state = state.copyWith(
       viewMode: RecordingViewMode.preview,
+      sessionMode: RecordingSessionMode.playback,
       previewItem: item,
       previewSource: resolved,
       previewDurationMs: initialDuration,
@@ -983,9 +1255,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
 
   /// Toggle preview play/pause. Same code path on every platform now.
   Future<void> togglePreviewPlayback() async {
-    final source = state.previewSource;
-    if (source == null || source.isEmpty) return;
-    final prepareError = await _preparePreviewPlayerForUI(source);
+    final prepareError = await _ensurePreviewPlayerReady();
     if (prepareError != null) {
       if (mounted) state = state.copyWith(errorMessage: prepareError);
       return;
@@ -1026,7 +1296,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
   Future<void> seekPreviewTo(int targetMs) async {
     final source = state.previewSource;
     if (source == null || source.isEmpty) return;
-    final prepareError = await _preparePreviewPlayerForUI(source);
+    final prepareError = await _ensurePreviewPlayerReady();
     if (prepareError != null) {
       if (mounted) state = state.copyWith(errorMessage: prepareError);
       return;
@@ -1373,6 +1643,163 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
   // ?????????????????????????????????????????????????????????????????????
   // Helpers
   // ?????????????????????????????????????????????????????????????????????
+
+  void _resetSessionSegments() {
+    if (_sessionMergedPreviewUrl != null) {
+      revokePublishedRecordingUrl(_sessionMergedPreviewUrl!);
+    }
+    _revokeSessionPublishedPlaybackUrls();
+    _sessionRecordingSegments.clear();
+    _sessionSegmentSources.clear();
+    _sessionSegmentDurationMs.clear();
+    _sessionMergedPreviewUrl = null;
+    _lastCommittedSegmentSource = null;
+  }
+
+  void _revokeSessionPublishedPlaybackUrls() {
+    for (final url in _sessionPublishedPlaybackUrls) {
+      revokePublishedRecordingUrl(url);
+    }
+    _sessionPublishedPlaybackUrls.clear();
+  }
+
+  Future<List<String>> _webPlaybackSourcesFromSegments() async {
+    _revokeSessionPublishedPlaybackUrls();
+    final sources = <String>[];
+    for (final bytes in _sessionRecordingSegments) {
+      final url = await publishRecordingBytes(bytes);
+      sources.add(url);
+      _sessionPublishedPlaybackUrls.add(url);
+    }
+    return sources;
+  }
+
+  void _commitRecordingSegment(
+    String source,
+    Uint8List bytes, {
+    required int segmentDurationMs,
+  }) {
+    if (source.isEmpty || bytes.isEmpty) return;
+    if (_lastCommittedSegmentSource == source &&
+        _sessionRecordingSegments.isNotEmpty) {
+      _sessionRecordingSegments[_sessionRecordingSegments.length - 1] = bytes;
+      if (_sessionSegmentSources.isNotEmpty) {
+        _sessionSegmentSources[_sessionSegmentSources.length - 1] = source;
+      }
+      if (_sessionSegmentDurationMs.isNotEmpty) {
+        _sessionSegmentDurationMs[_sessionSegmentDurationMs.length - 1] =
+            segmentDurationMs;
+      }
+      return;
+    }
+    _sessionRecordingSegments.add(bytes);
+    _sessionSegmentSources.add(source);
+    _sessionSegmentDurationMs.add(segmentDurationMs);
+    _lastCommittedSegmentSource = source;
+  }
+
+  int _segmentDurationMsForCommit(int totalDurationMs) {
+    final committedTotal = _sessionSegmentDurationMs.fold<int>(
+      0,
+      (sum, value) => sum + value,
+    );
+    return math.max(totalDurationMs - committedTotal, 0);
+  }
+
+  Uint8List _mergeSessionRecordingBytes() {
+    if (_sessionRecordingSegments.isEmpty) return Uint8List(0);
+    if (_sessionRecordingSegments.length == 1) {
+      return _sessionRecordingSegments.first;
+    }
+    final builder = BytesBuilder(copy: false);
+    for (final segment in _sessionRecordingSegments) {
+      builder.add(segment);
+    }
+    return builder.toBytes();
+  }
+
+  Future<({String source, Uint8List bytes})?> _buildSessionPreviewAssets({
+    required int durationMs,
+  }) async {
+    final mergedBytes = _mergeSessionRecordingBytes();
+    if (mergedBytes.isEmpty) return null;
+
+    if (_sessionSegmentSources.length > 1) {
+      return (source: _sessionMultiPreviewToken, bytes: mergedBytes);
+    }
+
+    final source = _sessionSegmentSources.isNotEmpty
+        ? _sessionSegmentSources.last
+        : '';
+    if (source.isEmpty) return null;
+    return (source: source, bytes: mergedBytes);
+  }
+
+  bool get _sessionPreviewUsesMultiSource => _sessionSegmentSources.length > 1;
+
+  Future<String?> _ensurePreviewPlayerReady() async {
+    final source = state.previewSource;
+    if (source == null || source.isEmpty) return _zhNoSourceToPlay;
+    if (_sessionPreviewUsesMultiSource ||
+        source == _sessionMultiPreviewToken) {
+      return _prepareSessionPreviewPlayer(
+        totalDurationMs: _effectivePreviewDurationMs(),
+      );
+    }
+    return _preparePreviewPlayerForUI(source);
+  }
+
+  Future<String?> _prepareSessionPreviewPlayer({required int totalDurationMs}) async {
+    if (!_sessionPreviewUsesMultiSource) {
+      final source = state.previewSource;
+      if (source == null || source.isEmpty) return _zhNoSourceToPlay;
+      return _preparePreviewPlayerForUI(source);
+    }
+
+    final cacheKey = _sessionMultiPreviewToken;
+    if (_preparedPlayerSource == cacheKey) return null;
+
+    final player = _ensurePlayer();
+    try {
+      await player.stop();
+      final List<String> sources;
+      if (kIsWeb && _sessionPreviewUsesMultiSource) {
+        sources = await _webPlaybackSourcesFromSegments();
+      } else {
+        sources = _sessionSegmentSources
+            .map(
+              (item) =>
+                  _isUrlPlaybackSource(item) ? item : _localPlaybackPath(item),
+            )
+            .toList();
+      }
+      final isUrl = sources.every(_isUrlPlaybackSource);
+      final durMs = await player.setSources(
+        sources,
+        isUrl: isUrl,
+        segmentDurationsMs: List<int>.from(_sessionSegmentDurationMs),
+        totalDurationMs: totalDurationMs,
+      );
+      _preparedPlayerSource = cacheKey;
+      final resolvedDuration = totalDurationMs > 0
+          ? totalDurationMs
+          : (durMs ?? 0);
+      if (resolvedDuration > 0) {
+        previewDurationMs.value = resolvedDuration;
+        if (mounted && state.previewDurationMs != resolvedDuration) {
+          state = state.copyWith(previewDurationMs: resolvedDuration);
+        }
+      }
+      return null;
+    } on MissingPluginException {
+      return _zhLoadAudioFailed;
+    } on PlatformException catch (error) {
+      return _platformMessage(error, _zhLoadAudioFailed);
+    } catch (error, stack) {
+      debugPrint('[recording] _prepareSessionPreviewPlayer: $error\n$stack');
+      return _zhLoadAudioFailed;
+    }
+  }
 
   Future<void> _safeAsync(Future<dynamic> Function() op) async {
     try {
@@ -1765,6 +2192,12 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     } catch (_) {}
     try {
       _playerStateSub?.cancel();
+    } catch (_) {}
+    try {
+      _revokeSessionPublishedPlaybackUrls();
+      if (_sessionMergedPreviewUrl != null) {
+        revokePublishedRecordingUrl(_sessionMergedPreviewUrl!);
+      }
     } catch (_) {}
     try {
       _recorder?.dispose();

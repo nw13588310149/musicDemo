@@ -219,7 +219,7 @@ class ShellSectionTitleBar extends StatelessWidget {
                     moreLabel,
                     style: TextStyle(
                       fontSize: ui(14),
-                      color: Color(0xFF788698),
+                      color: const Color(0xFFA9A9A9),
                       fontFamily: 'PingFang SC',
                       fontWeight: AppFont.w400,
                       height: 1,

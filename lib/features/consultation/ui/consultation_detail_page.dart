@@ -224,24 +224,15 @@ class _DetailBody extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Text(
-                      detail.title,
-                      style: TextStyle(
-                        color: const Color(0xFF0B081A),
-                        fontSize: ui(16),
-                        fontFamily: 'PingFang SC',
-                        fontWeight: AppFont.w500,
-                        height: 24 / 16,
-                      ),
-                    ),
-                  ),
-                  SizedBox(width: ui(12)),
-                  _ViewCountText(count: detail.viewCount),
-                ],
+              Text(
+                detail.title,
+                style: TextStyle(
+                  color: const Color(0xFF0B081A),
+                  fontSize: ui(16),
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w500,
+                  height: 24 / 16,
+                ),
               ),
               SizedBox(height: ui(8)),
               Row(
@@ -255,7 +246,7 @@ class _DetailBody extends StatelessWidget {
                       height: 20 / 14,
                     ),
                   ),
-                  SizedBox(width: ui(16)),
+                  SizedBox(width: ui(11)),
                   Text(
                     detail.updateTime,
                     style: TextStyle(
@@ -265,6 +256,8 @@ class _DetailBody extends StatelessWidget {
                       height: 20 / 14,
                     ),
                   ),
+                  SizedBox(width: ui(16)),
+                  _ViewCountText(count: detail.viewCount),
                 ],
               ),
               SizedBox(height: ui(20)),
@@ -391,17 +384,17 @@ class _ViewCountText extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(
-          Icons.visibility_outlined,
-          size: ui(14),
-          color: const Color(0xFF928FA0),
+        Image.asset(
+          'assets/images/home/eye.png',
+          width: ui(14),
+          fit: BoxFit.contain,
         ),
         SizedBox(width: ui(4)),
         Text(
           count.toString(),
           style: TextStyle(
-            color: const Color(0xFFB6B5BB),
-            fontSize: ui(12),
+            color: const Color(0xFF6D6B75),
+            fontSize: ui(14),
             fontFamily: 'PingFang SC',
             height: 1.0,
           ),

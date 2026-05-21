@@ -1,6 +1,10 @@
 abstract final class AppAssets {
   static const authBackground = 'assets/images/auth/logo_bg.jpg';
+  static const authBg = 'assets/images/auth/bg.png';
   static const authLogo = 'assets/images/auth/logo_b.png';
+  static const authPhone = 'assets/images/auth/phone.png';
+  static const authPassword = 'assets/images/auth/pass.png';
+  static const authCode = 'assets/images/auth/code.png';
   static const loginPhone = 'assets/images/auth/login_phone.png';
   static const loginPassword = 'assets/images/auth/login_password.png';
   static const loginSms = 'assets/images/auth/login_sms.png';
@@ -145,6 +149,9 @@ abstract final class AppAssets {
   /// `Icons.edit_outlined`，统一视觉风格）。
   static const homeRename = 'assets/images/home/rename.png';
 
+  /// 日期选择器输入模式下「切回日历」按钮图标。
+  static const homeRili = 'assets/images/home/rili.png';
+
   /// 「绑定学校」弹窗左上角徽章背景图（紫色渐变气泡）。
   /// 用于 initial（同学你还没）/ pending（同学您当前）两种状态。
   static const homeTipsBadge = 'assets/images/home/ts.png';
@@ -234,6 +241,12 @@ abstract final class AppAssets {
   /// 多曲目播放器进度条右侧的「音频列表」图标（紫色音符 + 列表横线）。
   static const homePlaylistIcon = 'assets/images/home/list.png';
   static const homeSearchIcon = 'assets/images/home/search.png';
+  /// 侧栏底部「需求反馈」入口图标。
+  static const homeFeedbackIcon = 'assets/images/home/yj.png';
+  /// 乐理详情页顶栏：课程作业 / 查看答案 / 分享。
+  static const theoryAssignmentIcon = 'assets/images/home/the1.png';
+  static const theoryAnswerIcon = 'assets/images/home/the2.png';
+  static const theoryShareIcon = 'assets/images/home/the3.png';
   static const emptyCoursePlaceholder = 'assets/images/404/kc.png';
   static const homeV2InstrumentCardBg =
       'assets/images/home/v2/instrument_card_bg.png';
@@ -280,6 +293,10 @@ abstract final class AppAssets {
       'assets/images/aichat/v2/ai_history_filter.svg';
   static const aiChatV2HistoryMore =
       'assets/images/aichat/v2/ai_history_more.svg';
+  /// 对话消息「复制」操作图标。
+  static const aiChatCopy = 'assets/images/aichat/copy.png';
+  /// 对话消息「编辑 / 复用」操作图标。
+  static const aiChatRemove = 'assets/images/aichat/remove.png';
 
   static const videoBanner = 'assets/images/video/video_banner.jpg';
   static const videoPlay = 'assets/images/video/video_play.jpg';
@@ -426,6 +443,7 @@ abstract final class AppAssets {
   static const soundRecordIdle = 'assets/images/sound/15.png';
   static const soundRerecordButton = 'assets/images/sound/16.png';
   static const soundMicDisc = 'assets/images/sound/17.png';
+  static const soundStartButton = 'assets/images/sound/19.png';
   // 录音文件在文件夹列表里的占位卡片图（对齐我的云盘的占位风格）。
   static const soundRecordingFile = 'assets/images/sound/18.png';
   /// 收藏页声乐/器乐卡片右下角播放样式按钮（更多操作入口）。
@@ -450,4 +468,10 @@ abstract final class AppAssets {
   static const infoIconService = 'assets/images/info/icon4.png';
   static const infoIconRedeem = 'assets/images/info/icon5.png';
   static const infoChevron = 'assets/images/info/y.png';
+  /// 个人信息 · 性别选择弹窗顶部装饰背景。
+  static const infoGenderDialogHeader = 'assets/images/info/g.png';
+  static const infoGenderMale = 'assets/images/info/man.png';
+  static const infoGenderMaleSelected = 'assets/images/info/man1.png';
+  static const infoGenderFemale = 'assets/images/info/women.png';
+  static const infoGenderFemaleSelected = 'assets/images/info/women1.png';
 }

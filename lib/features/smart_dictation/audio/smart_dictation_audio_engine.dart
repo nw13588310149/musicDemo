@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
@@ -77,7 +76,6 @@ class SmartDictationAudioEngine {
       await ensureInitialized();
       if (_disposed) return;
       await _nativePlayer.play(canonical, volume: volume);
-      _emitNativeVisualPulse(tokenCount: 1);
     } catch (error, stack) {
       debugPrint(
         'SmartDictationAudioEngine.playToken $canonical failed: $error\n$stack',
@@ -130,7 +128,6 @@ class SmartDictationAudioEngine {
         );
       }
     }
-    _emitNativeVisualPulse(tokenCount: tokens.length);
   }
 
   Future<void> playTokensMelodic(
@@ -170,25 +167,6 @@ class SmartDictationAudioEngine {
       await _frequencyController.close();
     }
     _initTask = null;
-  }
-
-  void _emitNativeVisualPulse({required int tokenCount}) {
-    if (_frequencyController.isClosed) return;
-    const bands = 46;
-    final result = List<double>.filled(bands, 0);
-    final density = tokenCount.clamp(1, 4);
-    for (var i = 0; i < bands; i++) {
-      final wave = math.sin(i / bands * math.pi);
-      final ripple = math.sin((i + density * 3) / bands * math.pi * density);
-      result[i] = (wave * (0.55 + density * 0.1) + ripple.abs() * 0.18)
-          .clamp(0.0, 1.0);
-    }
-    _frequencyController.add(result);
-    Future<void>.delayed(const Duration(milliseconds: 180), () {
-      if (!_frequencyController.isClosed) {
-        _frequencyController.add(const <double>[]);
-      }
-    });
   }
 
   static List<String> splitTokenGroup(String raw) {

@@ -3,8 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/route_paths.dart';
+import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_date_time_pickers.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/app_wheel_picker_sheet.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/avatar_picker.dart';
@@ -232,6 +234,12 @@ class _InfoRows extends StatelessWidget {
         ),
         const _RowDivider(),
         _InfoRow(
+          title: '目标院校',
+          value: user['targetSchool']?.toString() ?? '',
+          onTap: () => _editTargetSchool(context, controller, user),
+        ),
+        const _RowDivider(),
+        _InfoRow(
           title: '个人简介',
           value: user['introduce']?.toString() ?? '',
           onTap: () => _editIntroduce(context, controller, user),
@@ -251,8 +259,17 @@ class _RowDivider extends StatelessWidget {
   const _RowDivider();
 
   @override
-  Widget build(BuildContext context) =>
-      const Divider(height: 1, thickness: 1, color: Color(0xFFF3F2F3));
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: ui(16)),
+      child: Divider(
+        height: ui(0.5),
+        thickness: ui(0.5),
+        color: const Color(0xFFE6E8EB),
+      ),
+    );
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -312,13 +329,14 @@ class _InfoRow extends StatelessWidget {
               ),
             ),
             if (showChevron)
-              Icon(
-                Icons.chevron_right,
-                size: ui(20),
-                color: const Color(0xFF0B081A),
+              Image.asset(
+                AppAssets.infoChevron,
+                width: ui(24),
+                height: ui(24),
+                fit: BoxFit.contain,
               )
             else
-              SizedBox(width: ui(20)),
+              SizedBox(width: ui(24)),
           ],
         ),
       ),
@@ -355,10 +373,11 @@ class _AvatarRow extends StatelessWidget {
             const Spacer(),
             _AvatarImage(url: avatarUrl, size: ui(44)),
             SizedBox(width: ui(8)),
-            Icon(
-              Icons.chevron_right,
-              size: ui(20),
-              color: const Color(0xFF0B081A),
+            Image.asset(
+              AppAssets.infoChevron,
+              width: ui(24),
+              height: ui(24),
+              fit: BoxFit.contain,
             ),
           ],
         ),
@@ -460,6 +479,28 @@ Future<void> _editSchool(
   _toast(context, err ?? '修改成功！');
 }
 
+Future<void> _editTargetSchool(
+  BuildContext context,
+  PersonalCenterController controller,
+  Map<String, dynamic> user,
+) async {
+  final value = await showTextInputDialog(
+    context: context,
+    title: '修改目标院校',
+    hintText: '请输入目标院校',
+    initialValue: user['targetSchool']?.toString() ?? '',
+    maxLength: 60,
+  );
+  if (value == null || value.isEmpty || !context.mounted) {
+    return;
+  }
+  final err = await controller.updateProfileFields(<String, dynamic>{
+    'targetSchool': value,
+  });
+  if (!context.mounted) return;
+  _toast(context, err ?? '修改成功！');
+}
+
 Future<void> _editIntroduce(
   BuildContext context,
   PersonalCenterController controller,
@@ -488,13 +529,15 @@ Future<void> _editGender(
   PersonalCenterController controller,
   Map<String, dynamic> user,
 ) async {
-  final selected = await showOptionsDialog(
+  final selected = await _showGenderPickerDialog(
     context: context,
-    title: '请选择性别',
-    options: const <String>['男', '女'],
-    selected: user['gender']?.toString(),
+    initial: _normalizeGender(user['gender']?.toString()),
   );
   if (selected == null || !context.mounted) {
+    return;
+  }
+  final current = _normalizeGender(user['gender']?.toString());
+  if (selected == current) {
     return;
   }
   final err = await controller.updateProfileFields(<String, dynamic>{
@@ -502,6 +545,157 @@ Future<void> _editGender(
   });
   if (!context.mounted) return;
   _toast(context, err ?? '修改成功！');
+}
+
+/// 将接口/历史数据中的性别字段规范为「男」或「女」。
+String? _normalizeGender(String? raw) {
+  final g = raw?.trim() ?? '';
+  if (g == '男' || g == '1' || g == 'm' || g == 'M') return '男';
+  if (g == '女' || g == '2' || g == 'f' || g == 'F') return '女';
+  return null;
+}
+
+/// 性别选择弹窗：样式与修改昵称等 [GradientHeaderDialog] 弹窗一致。
+Future<String?> _showGenderPickerDialog({
+  required BuildContext context,
+  String? initial,
+}) {
+  return showScaledDialog<String>(
+    context: context,
+    barrierColor: Colors.black.withValues(alpha: 0.18),
+    builder: (dialogContext) => _GenderPickerDialog(initial: initial),
+  );
+}
+
+class _GenderPickerDialog extends StatefulWidget {
+  const _GenderPickerDialog({this.initial});
+
+  final String? initial;
+
+  @override
+  State<_GenderPickerDialog> createState() => _GenderPickerDialogState();
+}
+
+class _GenderPickerDialogState extends State<_GenderPickerDialog> {
+  late String? _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = widget.initial;
+  }
+
+  void _confirm() {
+    final value = _selected;
+    if (value == null) {
+      _toast(context, '请选择性别');
+      return;
+    }
+    Navigator.of(context, rootNavigator: true).pop(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GradientHeaderDialog(
+      title: '请选择性别',
+      headerAsset: AppAssets.infoGenderDialogHeader,
+      headerHeight: 169,
+      gradientMidStop: 0.35,
+      actionBarSpacing: 32,
+      actionBar: AppDialogActionBar(
+        cancelLabel: '取消',
+        confirmLabel: '确定',
+        confirmEnabled: _selected != null,
+        onCancel: () => Navigator.of(context, rootNavigator: true).pop(),
+        onConfirm: _confirm,
+      ),
+      child: Center(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            _GenderOptionCard(
+              label: '男生',
+              selected: _selected == '男',
+              iconAsset: AppAssets.infoGenderMale,
+              selectedIconAsset: AppAssets.infoGenderMaleSelected,
+              onTap: () => setState(() => _selected = '男'),
+            ),
+            SizedBox(width: DashboardScaleScope.of(context).ui(32)),
+            _GenderOptionCard(
+              label: '女生',
+              selected: _selected == '女',
+              iconAsset: AppAssets.infoGenderFemale,
+              selectedIconAsset: AppAssets.infoGenderFemaleSelected,
+              onTap: () => setState(() => _selected = '女'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GenderOptionCard extends StatelessWidget {
+  const _GenderOptionCard({
+    required this.label,
+    required this.selected,
+    required this.iconAsset,
+    required this.selectedIconAsset,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final String iconAsset;
+  final String selectedIconAsset;
+  final VoidCallback onTap;
+
+  static const Color _selectedBorder = Color(0xFF8741FF);
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: ui(134),
+        height: ui(134),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(ui(16)),
+          border: selected
+              ? Border.all(color: _selectedBorder, width: ui(1))
+              : Border.all(color: const Color(0xFFF3F2F3), width: ui(1)),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            Image.asset(
+              selected ? selectedIconAsset : iconAsset,
+              width: ui(54),
+              height: ui(54),
+              fit: BoxFit.contain,
+            ),
+            SizedBox(height: ui(12)),
+            Text(
+              label,
+              style: TextStyle(
+                color: selected
+                    ? _selectedBorder
+                    : const Color(0xFF0B081A),
+                fontSize: ui(16),
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w400,
+                fontStyle: FontStyle.normal,
+                height: 16 / 16,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 Future<void> _editProvince(
@@ -515,13 +709,16 @@ Future<void> _editProvince(
     _toast(context, '加载省份失败，请稍后重试');
     return;
   }
-  final selected = await showOptionsDialog(
+  final selected = await showAppProvincePicker(
     context: context,
-    title: '请选择所在地区',
-    options: provinces,
+    provinces: provinces,
     selected: user['province']?.toString(),
   );
   if (selected == null || !context.mounted) {
+    return;
+  }
+  final current = user['province']?.toString().trim() ?? '';
+  if (selected == current) {
     return;
   }
   final err = await controller.updateProfileFields(<String, dynamic>{
@@ -538,7 +735,7 @@ Future<void> _editBirthday(
 ) async {
   final initial =
       _parseDate(user['birthday']?.toString()) ?? DateTime(2010, 1, 1);
-  final picked = await showDatePicker(
+  final picked = await showAppDatePicker(
     context: context,
     initialDate: initial,
     firstDate: DateTime(1950, 1, 1),
@@ -546,7 +743,6 @@ Future<void> _editBirthday(
     helpText: '选择日期',
     cancelText: '取消',
     confirmText: '确定',
-    builder: appPickerDialogTheme,
   );
   if (picked == null || !context.mounted) {
     return;
@@ -857,107 +1053,48 @@ class _PasswordEditDialogState extends State<_PasswordEditDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: EdgeInsets.symmetric(horizontal: ui(32), vertical: ui(24)),
-      child: Container(
-        width: ui(420),
-        padding: EdgeInsets.fromLTRB(ui(24), ui(28), ui(24), ui(20)),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(ui(24)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              '修改密码',
-              style: TextStyle(
-                fontSize: ui(18),
-                color: const Color(0xFF0B081A),
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w600,
-              ),
-            ),
-            SizedBox(height: ui(20)),
-            _PasswordField(controller: _oldCtrl, hint: '请输入原密码'),
-            SizedBox(height: ui(12)),
-            _PasswordField(controller: _newCtrl, hint: '请输入新密码'),
-            SizedBox(height: ui(12)),
-            _PasswordField(controller: _confirmCtrl, hint: '请再次输入新密码'),
-            SizedBox(height: ui(24)),
-            AppDialogActionBar(
-              cancelLabel: '取消',
-              confirmLabel: '确认',
-              confirmEnabled: !_submitting,
-              onCancel: () => Navigator.of(context).pop(),
-              onConfirm: _confirm,
-            ),
-          ],
-        ),
+    return GradientHeaderDialog(
+      title: '修改密码',
+      headerHeight: 169,
+      gradientMidStop: 0.35,
+      actionBar: AppDialogActionBar(
+        cancelLabel: '取消',
+        confirmLabel: '确认',
+        confirmEnabled: !_submitting,
+        onCancel: () => Navigator.of(context).pop(),
+        onConfirm: _confirm,
       ),
-    );
-  }
-}
-
-class _PasswordField extends StatelessWidget {
-  const _PasswordField({required this.controller, required this.hint});
-
-  final TextEditingController controller;
-  final String hint;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return SizedBox(
-      height: ui(45),
-      child: TextField(
-        controller: controller,
-        obscureText: true,
-        inputFormatters: <TextInputFormatter>[
-          FilteringTextInputFormatter.deny(RegExp(r'\s')),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          AppDialogTextField(
+            controller: _oldCtrl,
+            hintText: '请输入原密码',
+            autofocus: true,
+            obscureText: true,
+            inputFormatters: <TextInputFormatter>[
+              FilteringTextInputFormatter.deny(RegExp(r'\s')),
+            ],
+          ),
+          SizedBox(height: DashboardScaleScope.of(context).ui(12)),
+          AppDialogTextField(
+            controller: _newCtrl,
+            hintText: '请输入新密码',
+            obscureText: true,
+            inputFormatters: <TextInputFormatter>[
+              FilteringTextInputFormatter.deny(RegExp(r'\s')),
+            ],
+          ),
+          SizedBox(height: DashboardScaleScope.of(context).ui(12)),
+          AppDialogTextField(
+            controller: _confirmCtrl,
+            hintText: '请再次输入新密码',
+            obscureText: true,
+            inputFormatters: <TextInputFormatter>[
+              FilteringTextInputFormatter.deny(RegExp(r'\s')),
+            ],
+          ),
         ],
-        cursorColor: const Color(0xFF8741FF),
-        cursorWidth: 1.5,
-        cursorHeight: ui(16),
-        style: TextStyle(
-          fontSize: ui(14),
-          color: const Color(0xFF0B081A),
-          fontFamily: 'PingFang SC',
-          fontWeight: AppFont.w400,
-        ),
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: TextStyle(
-            fontSize: ui(14),
-            color: const Color(0xFFB6B5BB),
-            fontFamily: 'PingFang SC',
-            fontWeight: AppFont.w400,
-            height: 12 / 14,
-          ),
-          contentPadding: EdgeInsets.symmetric(
-            horizontal: ui(13),
-            vertical: ui(12),
-          ),
-          filled: true,
-          fillColor: Colors.white,
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(ui(12)),
-            borderSide: BorderSide(
-              color: const Color(0xFFF3F2F3),
-              width: ui(1),
-            ),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(ui(12)),
-            borderSide: BorderSide(
-              color: const Color(0xFFD9C7FF),
-              width: ui(1),
-            ),
-          ),
-        ),
       ),
     );
   }

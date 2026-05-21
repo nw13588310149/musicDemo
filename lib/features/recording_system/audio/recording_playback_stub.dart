@@ -28,6 +28,17 @@ class _UnsupportedPlayback implements RecordingPlayback {
   }
 
   @override
+  Future<int?> setSources(
+    List<String> sources, {
+    required bool isUrl,
+    List<int>? segmentDurationsMs,
+    int? totalDurationMs,
+  }) async {
+    if (sources.isEmpty) return null;
+    return setSource(sources.first, isUrl: isUrl);
+  }
+
+  @override
   Future<void> play() async {}
 
   @override

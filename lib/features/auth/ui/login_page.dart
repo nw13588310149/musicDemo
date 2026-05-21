@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -39,7 +41,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         builder: (scale) => Stack(
           clipBehavior: Clip.none,
           children: [
-            AuthBackgroundArt(scale: scale),
+            const AuthBackgroundArt(),
             Positioned(
               left: _s(scale, 691),
               top: _s(scale, 163),
@@ -64,9 +66,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           FilteringTextInputFormatter.digitsOnly,
                           LengthLimitingTextInputFormatter(11),
                         ],
-                        prefixIcon: AuthSvgIcon(
+                        prefixIcon: AuthImageIcon(
                           scale: scale,
-                          asset: AppAssets.figmaLoginPhoneIcon,
+                          asset: AppAssets.authPhone,
+                          width: 20,
+                          height: 20,
+                          leftPadding: 12,
                         ),
                         onChanged: controller.setMobile,
                       ),
@@ -80,9 +85,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         scale: scale,
                         hintText: '请输入密码',
                         obscureText: true,
-                        prefixIcon: AuthSvgIcon(
+                        prefixIcon: AuthImageIcon(
                           scale: scale,
-                          asset: AppAssets.figmaLoginPasswordIcon,
+                          asset: AppAssets.authPassword,
+                          width: 20,
+                          height: 20,
+                          leftPadding: 12,
                         ),
                         onChanged: controller.setPassword,
                       ),
@@ -153,7 +161,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     ),
                     Positioned(
                       left: _s(scale, 134),
-                      top: _s(scale, 389),
+                      top: _s(scale, 386),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -219,7 +227,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     if (result.success) {
       // 登录成功后立即预热 ShellController（触发 myInfo/mySchool 并行请求），
       // 使菜单和头像在导航动画期间就已在飞，进入主框架时第一时间呈现。
-      ref.read(shellControllerProvider.notifier).refreshUserAndSchool();
+      final shell = ref.read(shellControllerProvider.notifier);
+      unawaited(shell.refreshUserAndSchool());
+      shell.resumePolling();
       // 同步触发「绑定学校」轮询：构造控制器即开始 5s 一次的 schoolList
       // 检查，未绑定时 ShellScaffold 进场即可弹出强制绑定遮罩。
       ref.read(schoolBindingControllerProvider.notifier).refresh();

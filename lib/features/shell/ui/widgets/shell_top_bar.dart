@@ -8,7 +8,7 @@ import '../../../../app/router/route_paths.dart';
 import '../../../../core/constants/app_assets.dart';
 import '../../../../core/widgets/app_asset_graphic.dart';
 import '../../../../core/widgets/app_toast.dart';
-import '../../../../core/widgets/scaled_dialog.dart';
+import '../../../../core/widgets/app_wheel_picker_sheet.dart';
 import '../../data/shell_repository.dart';
 import '../../state/shell_controller.dart';
 import '../../state/shell_state.dart';
@@ -252,10 +252,9 @@ class ShellTopBar extends StatelessWidget {
       _showToast(context, '加载省份失败，请稍后重试');
       return;
     }
-    final selected = await showOptionsDialog(
+    final selected = await showAppProvincePicker(
       context: context,
-      title: '选择地区',
-      options: provinces,
+      provinces: provinces,
       selected: state.user.province.isEmpty ? null : state.user.province,
     );
     if (selected == null || !context.mounted) return;
@@ -353,11 +352,24 @@ class ShellTopBar extends StatelessWidget {
               ),
               child: Text(
                 unread > 99 ? '99+' : (unread > 9 ? '$unread+' : '$unread'),
+                textAlign: TextAlign.center,
+                textHeightBehavior: const TextHeightBehavior(
+                  applyHeightToFirstAscent: false,
+                  applyHeightToLastDescent: false,
+                ),
+                strutStyle: StrutStyle(
+                  fontSize: ui(9),
+                  height: 1,
+                  forceStrutHeight: true,
+                  leadingDistribution: TextLeadingDistribution.even,
+                ),
                 style: TextStyle(
+                  fontFamily: 'Manrope',
                   color: Colors.white,
                   fontSize: ui(9),
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w800,
                   height: 1,
+                  leadingDistribution: TextLeadingDistribution.even,
                 ),
               ),
             ),

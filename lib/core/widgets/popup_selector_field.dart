@@ -25,6 +25,8 @@ Future<T?> showAppPopupSelector<T>({
   double? width,
   double? minWidth,
   double? maxWidth,
+  /// 弹层内容最大高度（逻辑像素）；超出后列表可滚动。适合省份等长列表。
+  double? maxHeight,
 }) async {
   final renderBox = anchorContext.findRenderObject() as RenderBox?;
   if (renderBox == null) return null;
@@ -64,6 +66,7 @@ Future<T?> showAppPopupSelector<T>({
               items: items,
               value: value,
               itemLabel: itemLabel,
+              maxHeight: maxHeight,
               onSelected: (v) => Navigator.of(panelCtx).pop(v),
             ),
           ),
@@ -191,16 +194,32 @@ class PopupSelectorPanel<T> extends StatelessWidget {
     required this.value,
     required this.itemLabel,
     required this.onSelected,
+    this.maxHeight,
   });
 
   final List<T> items;
   final T? value;
   final String Function(T) itemLabel;
   final ValueChanged<T> onSelected;
+  final double? maxHeight;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final rows = <Widget>[
+      for (final item in items)
+        _PopupSelectorRow<T>(
+          label: itemLabel(item),
+          selected: item == value,
+          onTap: () => onSelected(item),
+        ),
+    ];
+    final listBody = maxHeight == null
+        ? Column(mainAxisSize: MainAxisSize.min, children: rows)
+        : ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: ui(maxHeight!)),
+            child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: rows)),
+          );
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -226,12 +245,7 @@ class PopupSelectorPanel<T> extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SizedBox(height: ui(6)),
-          for (final item in items)
-            _PopupSelectorRow<T>(
-              label: itemLabel(item),
-              selected: item == value,
-              onTap: () => onSelected(item),
-            ),
+          listBody,
           SizedBox(height: ui(6)),
         ],
       ),

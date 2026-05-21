@@ -182,7 +182,7 @@ class _AdminScheduleManagementViewState
   }
 
   Future<void> _pickDate() async {
-    final picked = await showDatePicker(
+    final picked = await showAppDatePicker(
       context: context,
       initialDate: _weekStart,
       firstDate: DateTime(2024),
@@ -190,7 +190,6 @@ class _AdminScheduleManagementViewState
       helpText: '选择教学日期',
       cancelText: '取消',
       confirmText: '确定',
-      builder: appPickerDialogTheme,
     );
     if (picked == null) return;
     final newMonday = _mondayOf(picked);

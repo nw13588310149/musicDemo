@@ -7,3 +7,14 @@ Future<Uint8List> readRecordedBytes(String source) async {
 }
 
 String createTemporaryRecordingPath() => 'recording.m4a';
+
+Future<String> createPublishedRecordingUrl(
+  Uint8List bytes, {
+  String mimeType = 'audio/webm',
+}) async {
+  throw UnsupportedError(
+    'Recording publish is not supported on this platform.',
+  );
+}
+
+void disposePublishedRecordingUrl(String url) {}

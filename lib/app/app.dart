@@ -13,6 +13,7 @@ import '../core/push/push_notification_service.dart';
 import '../core/theme/app_theme.dart';
 import '../core/utils/keyboard_dismisser.dart';
 import '../features/auth/data/auth_repository.dart';
+import '../features/shell/navigation/shell_polling_route_observer.dart';
 import 'router/app_navigator.dart';
 import 'router/app_router.dart';
 import 'router/route_paths.dart';
@@ -26,10 +27,12 @@ class MyApp extends ConsumerStatefulWidget {
 
 class _MyAppState extends ConsumerState<MyApp> {
   StreamSubscription<String>? _cidSubscription;
+  late final ShellPollingRouteObserver _shellPollingRouteObserver;
 
   @override
   void initState() {
     super.initState();
+    _shellPollingRouteObserver = ShellPollingRouteObserver(ref);
     bindApiUnauthorizedSessionCleanup(ref);
 
     // ────────────────────────────────────────────────────────────────────
@@ -112,6 +115,7 @@ class _MyAppState extends ConsumerState<MyApp> {
       theme: AppTheme.light,
       initialRoute: initialRoute,
       onGenerateRoute: AppRouter.onGenerateRoute,
+      navigatorObservers: [_shellPollingRouteObserver],
       // 本地化：强制 zh-CN，并注入 Material / Cupertino / Widgets 三套
       // LocalizationsDelegates。修复 iPadOS 输入框长按 / Live Text 弹出的
       // 系统编辑菜单（Scan Text、Copy、Paste 等）显示英文的问题。

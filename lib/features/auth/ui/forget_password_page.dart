@@ -42,7 +42,7 @@ class _ForgetPasswordPageState extends ConsumerState<ForgetPasswordPage> {
         builder: (scale) => Stack(
           clipBehavior: Clip.none,
           children: [
-            AuthBackgroundArt(scale: scale),
+            const AuthBackgroundArt(),
             Positioned(
               left: _s(scale, 691),
               top: _s(scale, 194),
@@ -106,7 +106,7 @@ class _ForgetPasswordPageState extends ConsumerState<ForgetPasswordPage> {
           ],
           prefixIcon: AuthImageIcon(
             scale: scale,
-            asset: AppAssets.figmaAuthIconPhoneSmall,
+            asset: AppAssets.authPhone,
             width: 18,
             height: 18,
             leftPadding: 13,
@@ -168,7 +168,7 @@ class _ForgetPasswordPageState extends ConsumerState<ForgetPasswordPage> {
           ],
           prefixIcon: AuthImageIcon(
             scale: scale,
-            asset: AppAssets.figmaAuthIconSmsSmall,
+            asset: AppAssets.authCode,
             width: 18,
             height: 18,
             leftPadding: 13,
@@ -222,7 +222,7 @@ class _ForgetPasswordPageState extends ConsumerState<ForgetPasswordPage> {
           obscureText: true,
           prefixIcon: AuthImageIcon(
             scale: scale,
-            asset: AppAssets.figmaAuthIconPasswordSmall,
+            asset: AppAssets.authPassword,
             width: 17,
             height: 17,
             leftPadding: 14,
@@ -241,7 +241,7 @@ class _ForgetPasswordPageState extends ConsumerState<ForgetPasswordPage> {
           obscureText: true,
           prefixIcon: AuthImageIcon(
             scale: scale,
-            asset: AppAssets.figmaAuthIconPasswordSmall,
+            asset: AppAssets.authPassword,
             width: 17,
             height: 17,
             leftPadding: 14,

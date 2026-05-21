@@ -147,7 +147,7 @@ class _SidebarPanel extends StatelessWidget {
         color: Colors.white,
         border: Border(right: BorderSide(color: Color(0xFFF3F2F3), width: 1)),
       ),
-      padding: EdgeInsets.fromLTRB(ui(8), ui(20), ui(8), ui(8)),
+      padding: EdgeInsets.fromLTRB(ui(8), ui(8), ui(8), ui(8)),
       child: ListView.separated(
         padding: EdgeInsets.zero,
         physics: const ClampingScrollPhysics(),
@@ -209,13 +209,13 @@ class _ContentPanel extends StatelessWidget {
                     onRefresh: onRefresh,
                   )
                 : Padding(
-                    padding: EdgeInsets.symmetric(vertical: ui(12)),
+                    padding: EdgeInsets.fromLTRB(0, ui(12), 0, ui(12)),
                     child: AppRefreshIndicator(
                       onRefresh: onRefresh,
                       child: ListView.separated(
                         padding: EdgeInsets.fromLTRB(
                           ui(20),
-                          hasChildren ? ui(4) : ui(12),
+                          ui(4),
                           ui(20),
                           ui(16),
                         ),

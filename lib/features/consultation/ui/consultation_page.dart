@@ -300,11 +300,11 @@ class _ConsultationCard extends StatelessWidget {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: const Color(0xFF0B081A),
-                              fontSize: ui(16),
+                              color: const Color(0xFF1A1A1A),
+                              fontSize: ui(14),
                               fontFamily: 'PingFang SC',
                               fontWeight: AppFont.w500,
-                              height: 24 / 16,
+                              height: 1.5,
                             ),
                           ),
                           const Spacer(),
@@ -398,10 +398,10 @@ class _ViewCount extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(
-          Icons.visibility_outlined,
-          size: ui(14),
-          color: const Color(0xFF928FA0),
+        Image.asset(
+          'assets/images/home/eye.png',
+          width: ui(14),
+          fit: BoxFit.contain,
         ),
         SizedBox(width: ui(4)),
         Text(

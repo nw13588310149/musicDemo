@@ -1493,7 +1493,7 @@ class _NotificationFormDrawerState extends State<_NotificationFormDrawer> {
   Future<void> _pickScheduledAt() async {
     final now = DateTime.now();
     final base = _scheduledAt ?? now.add(const Duration(hours: 1));
-    final date = await showDatePicker(
+    final date = await showAppDatePicker(
       context: context,
       initialDate: base.isBefore(now) ? now : base,
       firstDate: DateTime(now.year - 1),
@@ -1501,16 +1501,14 @@ class _NotificationFormDrawerState extends State<_NotificationFormDrawer> {
       helpText: '选择发布日期',
       cancelText: '取消',
       confirmText: '确定',
-      builder: appPickerDialogTheme,
     );
     if (date == null || !mounted) return;
-    final time = await showTimePicker(
+    final time = await showAppTimePicker(
       context: context,
       initialTime: TimeOfDay.fromDateTime(base),
       helpText: '选择发布时间',
       cancelText: '取消',
       confirmText: '确定',
-      builder: appPickerDialogTheme,
     );
     if (time == null || !mounted) return;
     setState(() {

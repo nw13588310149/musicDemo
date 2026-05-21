@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../music_companion/ui/widgets/piano_visualizer.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../shell/ui/shell_layout.dart';
@@ -83,7 +84,7 @@ List<String> _practiceDisplayOptions({
 class SmartDictationV2Page extends ConsumerWidget {
   const SmartDictationV2Page({super.key});
 
-  static const _timeOptions = <int>[7, 10, 15, 20, 25, 30, 0];
+  static const _timeOptions = <int>[7, 10, 15, 20, 25, 30, 60];
   static const _countOptions = <int>[10, 15, 20, 25];
   static const _rangeOptions = <String>[
     'f',
@@ -870,9 +871,6 @@ class _PracticeView extends StatefulWidget {
 }
 
 class _PracticeViewState extends State<_PracticeView> {
-  final _rng = math.Random();
-  late List<double> _bars;
-  Timer? _barTimer;
   OverlayEntry? _exitOverlay;
   OverlayEntry? _resultOverlay;
   bool _overlaySyncScheduled = false;
@@ -880,19 +878,6 @@ class _PracticeViewState extends State<_PracticeView> {
   @override
   void initState() {
     super.initState();
-    _bars = List.generate(52, (_) => 0.08 + _rng.nextDouble() * 0.2);
-    _barTimer = Timer.periodic(const Duration(milliseconds: 90), (_) {
-      if (!mounted) return;
-      final running = widget.state.session?.running == true;
-      setState(() {
-        _bars = List.generate(52, (i) {
-          final base = running
-              ? 0.05 + _rng.nextDouble() * 0.9
-              : 0.04 + _rng.nextDouble() * 0.12;
-          return (_bars[i] * 0.6 + base * 0.4).clamp(0.04, 1.0);
-        });
-      });
-    });
     // Present the initial exit dialog after first frame if needed.
     _scheduleOverlaySync();
   }
@@ -984,7 +969,6 @@ class _PracticeViewState extends State<_PracticeView> {
 
   @override
   void dispose() {
-    _barTimer?.cancel();
     try {
       _exitOverlay?.remove();
     } catch (_) {}
@@ -1002,10 +986,9 @@ class _PracticeViewState extends State<_PracticeView> {
     final session = widget.state.session!;
     final isAbsolute = session.track == SmartDictationTrack.absolute;
 
-    final progressFrac = session.totalQuestions == 0
-        ? 0.0
-        : (session.currentIndex + (session.finished ? 1 : 0)) /
-              session.totalQuestions;
+    final progressCurrent = session.finished
+        ? session.totalQuestions
+        : session.currentIndex + 1;
 
     return Container(
       decoration: BoxDecoration(
@@ -1077,11 +1060,15 @@ class _PracticeViewState extends State<_PracticeView> {
                     noticeMessage: widget.state.noticeMessage,
                   ),
                   SizedBox(width: ui(28)),
-                  // waveform
+                  // waveform — 复用音乐伴侣钢琴同款柱形可视化
                   Expanded(
-                    child: _PracticeAudioVisualizer(
-                      ui: ui,
-                      frequencyBands: widget.state.frequencyBands,
+                    child: RepaintBoundary(
+                      child: PianoVisualizer(
+                        activeNotes: widget.state.activeVisualNotes,
+                        barCount: 52,
+                        height: ui(70),
+                        showFloatingNotes: false,
+                      ),
                     ),
                   ),
                 ],
@@ -1094,8 +1081,7 @@ class _PracticeViewState extends State<_PracticeView> {
             padding: EdgeInsets.fromLTRB(ui(135), ui(18), ui(135), 0),
             child: _PracticeProgressBar(
               ui: ui,
-              progress: progressFrac,
-              current: session.currentIndex + (session.finished ? 1 : 0),
+              current: progressCurrent,
               total: session.totalQuestions,
             ),
           ),
@@ -1465,256 +1451,46 @@ class _RingPainter extends CustomPainter {
       old.showRing != showRing;
 }
 
-// ── Audio visualizer ─────────────────────────────────────────────────────────
-// Bars are styled to match music_play (purple gradient, mirrored fade), but
-// driven by the real frequencyBands stream from SmartDictationAudioEngine
-// (SoLoud FFT on native / Web Audio AnalyserNode on the web build).
-//
-// Smart-dictation specific: active bands are re-centered horizontally so a
-// single piano tone (energy concentrated in low-frequency bins) reads as a
-// centered "swell" rather than a left-aligned cluster.
-
-class _PracticeAudioVisualizer extends StatefulWidget {
-  const _PracticeAudioVisualizer({
-    required this.ui,
-    required this.frequencyBands,
-  });
-
-  final double Function(num) ui;
-  final List<double> frequencyBands;
-
-  @override
-  State<_PracticeAudioVisualizer> createState() =>
-      _PracticeAudioVisualizerState();
-}
-
-class _PracticeAudioVisualizerState extends State<_PracticeAudioVisualizer>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late List<double> _levels;
-  late List<double> _ambientPhases;
-  Duration _lastTick = Duration.zero;
-  double _time = 0;
-
-  static const int _barCount = 46;
-
-  @override
-  void initState() {
-    super.initState();
-    _levels = List<double>.filled(_barCount, 0);
-    _ambientPhases = List<double>.generate(_barCount, (i) => i * 0.31);
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 1),
-    )
-      ..addListener(_tick)
-      ..repeat();
-    _injectBands(widget.frequencyBands);
-  }
-
-  @override
-  void didUpdateWidget(covariant _PracticeAudioVisualizer oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.frequencyBands, widget.frequencyBands)) {
-      _injectBands(widget.frequencyBands);
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller
-      ..removeListener(_tick)
-      ..dispose();
-    super.dispose();
-  }
-
-  void _tick() {
-    final elapsed = _controller.lastElapsedDuration ?? Duration.zero;
-    final dtSeconds = (elapsed - _lastTick).inMicroseconds / 1e6;
-    _lastTick = elapsed;
-    final dt = dtSeconds.clamp(0.0, 0.05);
-    _time += dt;
-
-    final decay = math.pow(0.10, dt) as double;
-    for (var i = 0; i < _levels.length; i++) {
-      _levels[i] = _levels[i] * decay;
-    }
-    _injectBands(widget.frequencyBands);
-    if (mounted) setState(() {});
-  }
-
-  void _injectBands(List<double> bands) {
-    if (bands.isEmpty) return;
-    final centered = _centerFrequencyBands(bands);
-    if (centered.isEmpty) return;
-    for (var i = 0; i < _levels.length && i < centered.length; i++) {
-      final source = centered[i].clamp(0.0, 1.0);
-      if (source <= 0.012) continue;
-      final shaped = math.pow(source, 0.72).toDouble();
-      _levels[i] = math.max(_levels[i], shaped);
-      // 向邻近柱子扩散一点，形成类似音乐伴侣钢琴页的波纹感。
-      if (i > 0) _levels[i - 1] = math.max(_levels[i - 1], shaped * 0.42);
-      if (i < _levels.length - 1) {
-        _levels[i + 1] = math.max(_levels[i + 1], shaped * 0.42);
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final height = widget.ui(70);
-    final playing = _levels.any((level) => level > 0.018);
-    return SizedBox(
-      height: height,
-      width: double.infinity,
-      child: RepaintBoundary(
-        child: CustomPaint(
-          painter: _PracticeFrequencyPainter(
-            levels: _levels,
-            ambientPhases: _ambientPhases,
-            time: _time,
-            playing: playing,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Re-centers a frequency-band list so its non-zero region sits in the middle
-/// of the output, padding the rest with zeros. Used to keep single-tone
-/// piano spectra visually centered instead of clinging to the left edge.
-List<double> _centerFrequencyBands(List<double> bands) {
-  const targetCount = 46;
-  if (bands.isEmpty) {
-    return const <double>[];
-  }
-  final source = bands.length == targetCount
-      ? bands
-      : List<double>.generate(
-          targetCount,
-          (i) =>
-              bands[(i * bands.length / targetCount).floor().clamp(
-                0,
-                bands.length - 1,
-              )],
-        );
-
-  var first = 0;
-  var last = source.length - 1;
-  while (first < source.length && source[first] <= 0.018) {
-    first++;
-  }
-  while (last >= first && source[last] <= 0.018) {
-    last--;
-  }
-  if (first > last) {
-    return List<double>.filled(targetCount, 0);
-  }
-
-  final active = source.sublist(first, last + 1);
-  final result = List<double>.filled(targetCount, 0);
-  final offset = ((targetCount - active.length) / 2).round().clamp(
-    0,
-    targetCount - 1,
-  );
-  for (var i = 0; i < active.length && offset + i < targetCount; i++) {
-    final envelope = math.sin((i + 1) / (active.length + 1) * math.pi);
-    result[offset + i] = math.max(
-      active[i],
-      active[i] * 0.72 + envelope * 0.08,
-    );
-  }
-  return result;
-}
-
-class _PracticeFrequencyPainter extends CustomPainter {
-  const _PracticeFrequencyPainter({
-    required this.levels,
-    required this.ambientPhases,
-    required this.time,
-    required this.playing,
-  });
-
-  final List<double> levels;
-  final List<double> ambientPhases;
-  final double time;
-  final bool playing;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (size.width <= 0 || size.height <= 0) {
-      return;
-    }
-    final count = levels.isEmpty ? 46 : levels.length;
-    const gap = 3.0;
-    final barWidth = math.max(1.2, (size.width - gap * (count - 1)) / count);
-    final centerY = size.height * 0.62;
-    final maxUp = size.height * 0.58;
-    final maxDown = size.height * 0.30;
-    final radius = Radius.circular(barWidth / 2);
-    final idlePaint = Paint()..color = const Color(0xFFE4E1EC);
-
-    for (var i = 0; i < count; i++) {
-      final ambientPhase = ambientPhases.isEmpty ? i * 0.31 : ambientPhases[i];
-      final ambient =
-          0.045 +
-          0.055 *
-              ((math.sin(time * 1.5 + ambientPhase) +
-                      math.sin(time * 0.86 + ambientPhase * 0.65)) /
-                  2);
-      final raw = (levels.isEmpty ? 0.0 : levels[i]) + ambient;
-      final level = raw.clamp(0.0, 1.0);
-      final x = i * (barWidth + gap);
-      final up = math.max(size.height * 0.08, maxUp * level);
-      final down = math.max(size.height * 0.03, maxDown * level);
-      final active = level > 0.015;
-
-      final topRect = Rect.fromLTRB(x, centerY - up, x + barWidth, centerY);
-      final topPaint = active
-          ? (Paint()
-              ..shader = const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: <Color>[Color(0xFF8741FF), Color(0xFFC8AEFF)],
-              ).createShader(topRect))
-          : idlePaint;
-      canvas.drawRRect(RRect.fromRectAndRadius(topRect, radius), topPaint);
-
-      final bottomRect = Rect.fromLTRB(
-        x,
-        centerY,
-        x + barWidth,
-        centerY + down,
-      );
-      final bottomPaint = active
-          ? (Paint()
-              ..shader = const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: <Color>[Color(0x668741FF), Color(0x00C8AEFF)],
-              ).createShader(bottomRect))
-          : idlePaint;
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(bottomRect, radius),
-        bottomPaint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _PracticeFrequencyPainter oldDelegate) {
-    return oldDelegate.levels != levels ||
-        oldDelegate.ambientPhases != ambientPhases ||
-        oldDelegate.time != time ||
-        oldDelegate.playing != playing;
-  }
-}
-
 // ── Progress bar ──────────────────────────────────────────────────────────────
 
 class _PracticeProgressBar extends StatelessWidget {
   const _PracticeProgressBar({
+    required this.ui,
+    required this.current,
+    required this.total,
+  });
+
+  final double Function(num) ui;
+  final int current;
+  final int total;
+
+  double get _targetProgress {
+    if (total <= 0) {
+      return 0;
+    }
+    return (current / total).clamp(0.0, 1.0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(end: _targetProgress),
+      duration: const Duration(milliseconds: 340),
+      curve: Curves.easeOutQuart,
+      builder: (context, animatedProgress, _) {
+        return _PracticeProgressBarTrack(
+          ui: ui,
+          progress: animatedProgress,
+          current: current,
+          total: total,
+        );
+      },
+    );
+  }
+}
+
+class _PracticeProgressBarTrack extends StatelessWidget {
+  const _PracticeProgressBarTrack({
     required this.ui,
     required this.progress,
     required this.current,
@@ -1866,7 +1642,7 @@ class _PracticeOptionGrid extends StatelessWidget {
       config: state.activeConfig,
     );
     final playable = session.currentQuestion.optionPool.toSet();
-    final answerEnabled = session.started;
+    final answerEnabled = session.started && session.running;
 
     if (isAbsolute) {
       // fixed 10-per-row layout (same logic as config screen)
@@ -2050,15 +1826,17 @@ class _PracticeResultDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final total = session.totalQuestions <= 0 ? 1 : session.totalQuestions;
-    final attempts = session.correctCount + session.wrongCount;
+    final correctCount = session.trailCorrectCount;
+    final wrongCount = session.trailWrongCount;
+    final attempts = correctCount + wrongCount;
     final rate = attempts <= 0
         ? 0
-        : ((session.correctCount / attempts) * 100).round().clamp(0, 100);
-    final stars = session.correctCount >= total
+        : ((correctCount / attempts) * 100).round().clamp(0, 100);
+    final stars = correctCount >= total
         ? 3
-        : session.correctCount >= (total * 2 / 3).ceil()
+        : correctCount >= (total * 2 / 3).ceil()
         ? 2
-        : session.correctCount >= (total / 3).ceil()
+        : correctCount >= (total / 3).ceil()
         ? 1
         : 0;
 
@@ -2204,7 +1982,7 @@ class _PracticeResultDialog extends StatelessWidget {
                     child: _ResultStatCard(
                       ui: ui,
                       title: '答对数量',
-                      value: '${session.correctCount}个',
+                      value: '$correctCount个',
                     ),
                   ),
                   Positioned(
@@ -2213,7 +1991,7 @@ class _PracticeResultDialog extends StatelessWidget {
                     child: _ResultStatCard(
                       ui: ui,
                       title: '错误数量',
-                      value: '${session.wrongCount}个',
+                      value: '$wrongCount个',
                       valueColor: const Color(0xFFFF323C),
                     ),
                   ),

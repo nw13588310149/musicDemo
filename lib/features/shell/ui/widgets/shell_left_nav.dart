@@ -124,17 +124,20 @@ class _ShellLeftNavState extends State<ShellLeftNav>
                   SizedBox(height: ui(31.5)),
 
                   // Logo：透明度由动画驱动，高度固定保持空间
-                  Opacity(
-                    opacity: _logoOpacity.value,
-                    child: SizedBox(
-                      height: ui(36),
-                      child: Center(
-                        child: Image.asset(
-                          AppAssets.shellLogo,
-                          width: ui(132),
-                          height: ui(36),
-                          fit: BoxFit.contain,
-                          filterQuality: FilterQuality.high,
+                  Transform.translate(
+                    offset: Offset(0, -ui(4)),
+                    child: Opacity(
+                      opacity: _logoOpacity.value,
+                      child: SizedBox(
+                        height: ui(36),
+                        child: Center(
+                          child: Image.asset(
+                            AppAssets.shellLogo,
+                            width: ui(132),
+                            height: ui(36),
+                            fit: BoxFit.contain,
+                            filterQuality: FilterQuality.high,
+                          ),
                         ),
                       ),
                     ),
@@ -175,12 +178,12 @@ class _ShellLeftNavState extends State<ShellLeftNav>
                 ],
               ),
 
-              // 意见反馈：贴侧栏最底，50px 全宽，内容居中
+              // 需求反馈：贴侧栏最底，50px 全宽，内容居中
               if (widget.state.footerNavItem != null)
                 Positioned(
                   left: 0,
                   right: 0,
-                  bottom: 0,
+                  bottom: 10,
                   child: _FooterFeedbackLink(
                     item: widget.state.footerNavItem!,
                     collapsed: t > 0.5,
@@ -249,7 +252,7 @@ class _FooterFeedbackLink extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final tint = const Color(0xFF0B081A).withValues(alpha: 0.58);
+    const labelColor = Color(0xFFD1D1D1);
     final iconSize = ui(14);
 
     return GestureDetector(
@@ -260,10 +263,11 @@ class _FooterFeedbackLink extends StatelessWidget {
         width: double.infinity,
         child: Center(
           child: collapsed
-              ? Icon(
-                  Icons.feedback_outlined,
-                  size: iconSize,
-                  color: tint,
+              ? AppAssetGraphic(
+                  item.icon,
+                  width: iconSize,
+                  height: iconSize,
+                  fit: BoxFit.contain,
                 )
               : Opacity(
                   opacity: labelOpacity,
@@ -271,10 +275,11 @@ class _FooterFeedbackLink extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        Icons.feedback_outlined,
-                        size: iconSize,
-                        color: tint,
+                      AppAssetGraphic(
+                        item.icon,
+                        width: iconSize,
+                        height: iconSize,
+                        fit: BoxFit.contain,
                       ),
                       SizedBox(width: ui(4)),
                       Text(
@@ -286,8 +291,8 @@ class _FooterFeedbackLink extends StatelessWidget {
                           fontSize: ui(12),
                           height: 1,
                           fontFamily: 'PingFang SC',
-                          fontWeight: AppFont.w500,
-                          color: tint,
+                          fontWeight: AppFont.w400,
+                          color: labelColor,
                         ),
                       ),
                     ],

@@ -66,6 +66,30 @@ class _JustAudioPlayback implements RecordingPlayback {
   }
 
   @override
+  Future<int?> setSources(
+    List<String> sources, {
+    required bool isUrl,
+    List<int>? segmentDurationsMs,
+    int? totalDurationMs,
+  }) async {
+    if (sources.isEmpty) return null;
+    if (sources.length == 1) {
+      return setSource(sources.first, isUrl: isUrl);
+    }
+    final children = sources
+        .map(
+          (source) => isUrl
+              ? AudioSource.uri(Uri.parse(source))
+              : AudioSource.file(source),
+        )
+        .toList();
+    final duration = await _player.setAudioSource(
+      ConcatenatingAudioSource(children: children),
+    );
+    return totalDurationMs ?? duration?.inMilliseconds;
+  }
+
+  @override
   Future<void> play() => _player.play();
 
   @override

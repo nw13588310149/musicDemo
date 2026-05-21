@@ -13,6 +13,7 @@ import '../state/home_dashboard_state.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../../smart_campus/state/smart_campus_controller.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_theme.dart';
 
 class HomePage extends ConsumerWidget {
   const HomePage({super.key});
@@ -167,10 +168,10 @@ class _HomePageViewState extends ConsumerState<_HomePageView> {
               },
             ),
           ),
-          // 分页指示器
+          // 分页指示器（位置与视频中心轮播一致）
           Positioned(
-            right: 36,
-            bottom: 20,
+            right: 16,
+            bottom: 12,
             child: Row(
               children: List.generate(images.isEmpty ? 3 : images.length, (
                 index,

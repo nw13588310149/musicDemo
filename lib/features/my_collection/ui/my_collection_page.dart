@@ -414,7 +414,8 @@ class _CollectionGrid extends StatelessWidget {
         physics: const AlwaysScrollableScrollPhysics(),
         gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
           maxCrossAxisExtent: ui(236),
-          childAspectRatio: 220 / 180,
+          childAspectRatio:
+              _kCollectionVideoCardDesignW / _kCollectionVideoCardDesignH,
           crossAxisSpacing: ui(16),
           mainAxisSpacing: ui(16),
         ),
@@ -883,6 +884,11 @@ class _LessonArtwork extends StatelessWidget {
 // 视频 卡片：220×180，对齐视频中心 _VideoGridCard 设计
 // ──────────────────────────────────────────────────────────────────────────────
 
+// 视频卡片设计尺寸（与视频中心 _VideoGridCard 一致）
+const double _kCollectionVideoCardDesignW = 220;
+const double _kCollectionVideoCardDesignH = 180;
+const double _kCollectionVideoCoverDesignH = 124;
+
 class _VideoCollectionCard extends StatelessWidget {
   const _VideoCollectionCard({
     required this.item,
@@ -896,16 +902,30 @@ class _VideoCollectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
     return LayoutBuilder(
       builder: (context, box) {
         final cw = box.maxWidth;
-        final s = cw / 220.0;
-        final coverH = 124.0 * s;
-        final thumbL = 10.0 * s;
-        final thumbTop = 95.0 * s;
-        final thumbW = 52.0 * s;
-        final thumbH = 70.0 * s;
-        final infoLeft = 66.0 * s;
+        final ch = box.maxHeight;
+        final s = cw / _kCollectionVideoCardDesignW;
+
+        final coverH =
+            ch * (_kCollectionVideoCoverDesignH / _kCollectionVideoCardDesignH);
+        const thumbInset = 10.0;
+        const thumbDesignW = 52.0;
+        const thumbDesignH = 70.0;
+        final thumbL = thumbInset * s;
+        final thumbTop =
+            (_kCollectionVideoCardDesignH - thumbDesignH - thumbInset) * s;
+        final thumbW = thumbDesignW * s;
+        final thumbH = thumbDesignH * s;
+        final infoLeft = (thumbInset + thumbDesignW + 4.0) * s;
+        final infoTopPad = 9.0 * s;
+        final infoBottomPad = thumbInset * s;
+        final titleLineH = 13.0 * s * 1.3;
+        final metaRowH = 16.0 * s;
+        const titleUpOffset = 2.0;
+        const metaUpOffset = 2.0;
 
         final coverUrl = MediaUrl.resolve(item.coverUrl);
         final publisher = item.authorName.isNotEmpty
@@ -917,7 +937,7 @@ class _VideoCollectionCard extends StatelessWidget {
 
         return Material(
           color: const Color(0xFFF5F6FA),
-          borderRadius: BorderRadius.circular(12.0 * s),
+          borderRadius: BorderRadius.circular(ui(12)),
           clipBehavior: Clip.hardEdge,
           child: InkWell(
             onTap: onTap,
@@ -936,6 +956,7 @@ class _VideoCollectionCard extends StatelessWidget {
                               child: _CollectionImage(
                                 url: coverUrl,
                                 fit: BoxFit.cover,
+                                fallbackIconSize: ui(28),
                               ),
                             ),
                             Positioned(
@@ -971,73 +992,91 @@ class _VideoCollectionCard extends StatelessWidget {
                         child: Padding(
                           padding: EdgeInsets.fromLTRB(
                             infoLeft,
-                            4.0 * s,
+                            infoTopPad,
                             10.0 * s,
-                            15.0 * s,
+                            infoBottomPad,
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                item.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 13.0 * s,
-                                  color: const Color(0xFF0B081A),
-                                  fontWeight: AppFont.w500,
-                                  fontFamily: 'PingFang SC',
-                                  height: 1.3,
-                                ),
-                              ),
-                              const Spacer(),
-                              Row(
-                                children: [
-                                  ClipOval(
-                                    child: Image.asset(
-                                      publisher.avatarAsset,
-                                      width: 16.0 * s,
-                                      height: 16.0 * s,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (_, _, _) => Container(
-                                        width: 16.0 * s,
-                                        height: 16.0 * s,
-                                        color: const Color(0xFFE0DEFF),
-                                      ),
-                                    ),
-                                  ),
-                                  SizedBox(width: 4.0 * s),
-                                  Expanded(
+                              Transform.translate(
+                                offset: Offset(0, -titleUpOffset * s),
+                                child: SizedBox(
+                                  height: titleLineH,
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
                                     child: Text(
-                                      publisher.nickname,
+                                      item.title,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
-                                        fontSize: 10.0 * s,
-                                        color: const Color(0xFFB6B5BB),
-                                        fontFamily: 'PingFang SC',
+                                        fontSize: 13.0 * s,
+                                        color: const Color(0xFF0B081A),
                                         fontWeight: AppFont.w500,
-                                        height: 1,
+                                        fontFamily: 'PingFang SC',
+                                        height: 1.3,
                                       ),
                                     ),
                                   ),
-                                  Image.asset(
-                                    AppAssets.videoV2CardViews,
-                                    width: 12.0 * s,
-                                    height: 12.0 * s,
-                                  ),
-                                  SizedBox(width: 4.0 * s),
-                                  Text(
-                                    item.metricText,
-                                    style: TextStyle(
-                                      fontSize: 12.0 * s,
-                                      color: const Color(0xFFB6B5BB),
-                                      fontFamily: 'PingFang SC',
-                                      fontWeight: AppFont.w500,
-                                      height: 1,
+                                ),
+                              ),
+                              const Spacer(),
+                              Transform.translate(
+                                offset: Offset(0, -metaUpOffset * s),
+                                child: SizedBox(
+                                  height: metaRowH,
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Row(
+                                      children: [
+                                        ClipOval(
+                                          child: Image.asset(
+                                            publisher.avatarAsset,
+                                            width: 16.0 * s,
+                                            height: 16.0 * s,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, _, _) => Container(
+                                              width: 16.0 * s,
+                                              height: 16.0 * s,
+                                              color: const Color(0xFFE0DEFF),
+                                            ),
+                                          ),
+                                        ),
+                                        SizedBox(width: 4.0 * s),
+                                        Expanded(
+                                          child: Text(
+                                            publisher.nickname,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontSize: 10.0 * s,
+                                              color: const Color(0xFFB6B5BB),
+                                              fontFamily: 'PingFang SC',
+                                              fontWeight: AppFont.w500,
+                                              height: 1,
+                                            ),
+                                          ),
+                                        ),
+                                        Image.asset(
+                                          AppAssets.videoV2CardViews,
+                                          width: 12.0 * s,
+                                          height: 12.0 * s,
+                                        ),
+                                        SizedBox(width: 4.0 * s),
+                                        Text(
+                                          item.metricText,
+                                          style: TextStyle(
+                                            fontSize: 12.0 * s,
+                                            color: const Color(0xFFB6B5BB),
+                                            fontFamily: 'PingFang SC',
+                                            fontWeight: AppFont.w500,
+                                            height: 1,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                ],
+                                ),
                               ),
                             ],
                           ),
@@ -1065,7 +1104,11 @@ class _VideoCollectionCard extends StatelessWidget {
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(4.0 * s),
-                      child: _CollectionImage(url: coverUrl, fit: BoxFit.cover),
+                      child: _CollectionImage(
+                        url: coverUrl,
+                        fit: BoxFit.cover,
+                        fallbackColorOnly: true,
+                      ),
                     ),
                   ),
                 ),
@@ -1095,10 +1138,17 @@ _StaticPublisher _publisherFor(CollectionEntry item) {
 }
 
 class _CollectionImage extends StatelessWidget {
-  const _CollectionImage({required this.url, required this.fit});
+  const _CollectionImage({
+    required this.url,
+    required this.fit,
+    this.fallbackIconSize,
+    this.fallbackColorOnly = false,
+  });
 
   final String url;
   final BoxFit fit;
+  final double? fallbackIconSize;
+  final bool fallbackColorOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -1114,12 +1164,16 @@ class _CollectionImage extends StatelessWidget {
   }
 
   Widget _fallback() {
+    if (fallbackColorOnly) {
+      return Container(color: const Color(0xFFEDEDF2));
+    }
     return Container(
       color: const Color(0xFFEDEDF2),
       alignment: Alignment.center,
-      child: const Icon(
+      child: Icon(
         Icons.ondemand_video_rounded,
-        color: Color(0xFFB6B5BB),
+        color: const Color(0xFFB6B5BB),
+        size: fallbackIconSize,
       ),
     );
   }
