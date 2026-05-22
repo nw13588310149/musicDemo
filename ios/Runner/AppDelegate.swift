@@ -55,7 +55,7 @@ class RootFlutterViewController: FlutterViewController {
 
     DispatchQueue.main.async { [weak self] in
       guard let self, let window = self.view.window else { return }
-      ScreenCaptureGuard.shared.enable(on: window)
+      ScreenCaptureGuard.shared.configure(on: window, flutterView: self.view)
     }
   }
 }

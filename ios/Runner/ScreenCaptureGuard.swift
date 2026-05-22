@@ -1,103 +1,54 @@
+import Flutter
+import ScreenProtectorKit
 import UIKit
 
-/// iOS 前台截屏 / 录屏防护。
+/// 解析当前 Flutter 根视图，供 ScreenProtectorKit 挂载 secure layer。
+private final class FlutterHostViewResolver: ScreenProtectorRootViewResolving {
+  weak var hostView: UIView?
+
+  func resolveRootView() -> UIView? {
+    hostView
+  }
+}
+
+/// iOS 截屏 / 录屏 / 切后台防护（对齐 screen_protector + ScreenProtectorKit 用法）。
 ///
-/// 原理：将 `UIWindow.layer` 挂到 `isSecureTextEntry` UITextField 的安全渲染子树下，
-/// 系统合成截屏/录屏时会跳过该层（截图黑屏、录屏黑屏）。
-///
-/// 必须在 `RootFlutterViewController.viewDidAppear` 且 window 就绪后调用；
-/// 不可在 Flutter 插件注册阶段启用（与显式 FlutterEngine + SceneDelegate 冲突会黑屏）。
+/// 必须在 FlutterViewController.view 挂载后调用 `configure`；
+/// 不可手动 reparent `UIWindow.layer`（会导致只显示 1/4 屏、截屏后永久黑屏）。
 final class ScreenCaptureGuard {
   static let shared = ScreenCaptureGuard()
 
-  private var secureField: UITextField?
-  private weak var protectedWindow: UIWindow?
-  private var recordingOverlay: UIView?
-  private var recordingObserver: NSObjectProtocol?
+  private var kit: ScreenProtectorKit?
+  private let resolver = FlutterHostViewResolver()
+  private var isConfigured = false
 
   private init() {}
 
-  func enable(on window: UIWindow) {
-    guard secureField == nil else { return }
-    guard window.rootViewController != nil else { return }
+  /// 在首帧且 view.window 就绪后调用一次。
+  func configure(on window: UIWindow, flutterView: UIView) {
+    guard !isConfigured else { return }
+    guard flutterView.window != nil else { return }
 
-    let field = UITextField()
-    field.isSecureTextEntry = true
-    field.isUserInteractionEnabled = false
-    if #available(iOS 16.0, *) {
-      field.overrideUserInterfaceStyle = .light
+    isConfigured = true
+    resolver.hostView = flutterView
+
+    let protector = ScreenProtectorKit(window: window)
+    protector.setRootViewResolver(resolver)
+    // 与 screen_protector 一致：initial 必须传入 Flutter 根 view，不能传 window / nil。
+    ScreenProtectorKit.initial(with: flutterView)
+    protector.enabledPreventScreenshot()
+    if #available(iOS 11.0, *) {
+      protector.enabledPreventScreenRecording()
     }
 
-    window.addSubview(field)
-    field.translatesAutoresizingMaskIntoConstraints = false
-    NSLayoutConstraint.activate([
-      field.centerXAnchor.constraint(equalTo: window.centerXAnchor),
-      field.centerYAnchor.constraint(equalTo: window.centerYAnchor),
-      field.widthAnchor.constraint(equalToConstant: 1),
-      field.heightAnchor.constraint(equalToConstant: 1),
-    ])
-    window.layoutIfNeeded()
-
-    guard let superlayer = window.layer.superlayer else {
-      field.removeFromSuperview()
-      return
-    }
-    superlayer.addSublayer(field.layer)
-
-    let secureSublayer: CALayer?
-    if #available(iOS 17.0, *) {
-      secureSublayer = field.layer.sublayers?.last ?? field.layer.sublayers?.first
-    } else {
-      secureSublayer = field.layer.sublayers?.first ?? field.layer.sublayers?.last
-    }
-
-    guard let secureSublayer else {
-      field.layer.removeFromSuperlayer()
-      field.removeFromSuperview()
-      return
-    }
-
-    secureSublayer.addSublayer(window.layer)
-
-    secureField = field
-    protectedWindow = window
-    observeScreenRecording(on: window)
+    kit = protector
   }
 
-  private func observeScreenRecording(on window: UIWindow) {
-    guard recordingObserver == nil else { return }
-
-    recordingObserver = NotificationCenter.default.addObserver(
-      forName: UIScreen.capturedDidChangeNotification,
-      object: nil,
-      queue: .main
-    ) { [weak self, weak window] _ in
-      guard let self, let window else { return }
-      if UIScreen.main.isCaptured {
-        self.showRecordingOverlay(on: window)
-      } else {
-        self.hideRecordingOverlay()
-      }
-    }
-
-    if UIScreen.main.isCaptured {
-      showRecordingOverlay(on: window)
-    }
+  func sceneWillResignActive() {
+    kit?.enabledColorScreen(hexColor: "#000000")
   }
 
-  private func showRecordingOverlay(on window: UIWindow) {
-    guard recordingOverlay == nil else { return }
-
-    let overlay = UIView(frame: window.bounds)
-    overlay.backgroundColor = .black
-    overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-    overlay.isUserInteractionEnabled = false
-    window.addSubview(overlay)
-    recordingOverlay = overlay
-  }
-
-  private func hideRecordingOverlay() {
-    recordingOverlay?.removeFromSuperview()
-    recordingOverlay = nil
+  func sceneDidBecomeActive() {
+    kit?.disableColorScreen()
   }
 }

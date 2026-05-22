@@ -32,6 +32,8 @@ target 'Runner' do
   use_modular_headers!
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+  # 与 screen_protector 同源；仅原生调用，避免 Flutter 插件注册阶段 initial(nil) 黑屏。
+  pod 'ScreenProtectorKit', '1.5.1'
   target 'RunnerTests' do
     inherit! :search_paths
   end
