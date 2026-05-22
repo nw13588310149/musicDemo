@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/route_paths.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../recording_system/state/recording_system_controller.dart';
+import '../../smart_sight_singing/state/smart_sight_singing_controller.dart';
 import '../state/school_binding_controller.dart';
 import '../state/shell_controller.dart';
 import '../state/shell_state.dart';
@@ -134,6 +137,13 @@ class _ShellScaffoldState extends ConsumerState<ShellScaffold> {
         ref
             .read(recordingSystemControllerProvider.notifier)
             .enterListHome();
+      } else if (route == RoutePaths.smartSinging ||
+          route == RoutePaths.smartSightSinging) {
+        unawaited(
+          ref
+              .read(smartSightSingingControllerProvider.notifier)
+              .returnToHome(),
+        );
       }
       return;
     }

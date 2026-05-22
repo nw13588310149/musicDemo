@@ -30,6 +30,11 @@
   - bottom piano interaction reuses the existing Flutter short-audio ecosystem via `flutter_soloud`
   - page startup must not block on full piano/metronome asset preload
   - musicPlay should warm up piano audio in the background and load textbook detail first
+- Smart sight singing (`/smart-singing`):
+  - implemented under `lib/features/smart_sight_singing/`
+  - left nav entry enabled; offline pitch analysis via `flutter_soloud` + YIN
+  - follow-along playback uses `media_kit`; realtime scoring uses `record` + `pitch_detector_dart`
+  - page startup must not block on demo analysis; user triggers parse manually or via URL
 
 ## Technical Direction
 - For secondary study pages, prefer a reusable catalog architecture instead of duplicating page logic.

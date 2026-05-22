@@ -31,7 +31,7 @@ import '../../features/shell/ui/shell_scaffold.dart';
 import '../../features/feedback/ui/app_feedback_page.dart';
 import '../../features/smart_campus/ui/smart_campus_page.dart';
 import '../../features/smart_dictation/ui/smart_dictation_page.dart';
-// import '../../features/smart_sight_singing/ui/smart_sight_singing_page.dart';
+import '../../features/smart_sight_singing/ui/smart_sight_singing_page.dart';
 import '../../features/study_catalog/ui/study_catalog_page.dart';
 import '../../features/theory/ui/theory_page.dart';
 import '../../features/video_tutorial/ui/video_tutorial_page.dart';
@@ -100,8 +100,9 @@ class AppRouter {
         return const VideoTutorialV2Page();
       case RoutePaths.smartDictation:
         return const SmartDictationV2Page();
-      // case RoutePaths.smartSightSinging:
-      //   return const SmartSightSingingPage();
+      case RoutePaths.smartSinging:
+      case RoutePaths.smartSightSinging:
+        return const SmartSightSingingPage();
       case RoutePaths.music:
         return const MusicCompanionV2Page();
       case RoutePaths.smartCampus:
@@ -200,6 +201,7 @@ class AppRouter {
       RoutePaths.smartCampusSignRecords: '签到记录',
       RoutePaths.smartCampusSignApprovals: '签到审批',
       RoutePaths.smartSinging: '智能视唱',
+      RoutePaths.smartSightSinging: '智能视唱',
       RoutePaths.myNotes: '我的笔记',
       RoutePaths.myCollection: '我的收藏',
       RoutePaths.personalCenter: '个人中心',

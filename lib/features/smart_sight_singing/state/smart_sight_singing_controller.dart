@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 
+import '../../../core/audio/native_playback_audio_session.dart';
 import '../audio/pitch_analysis.dart';
 import '../audio/realtime_pitch_capture.dart';
 import 'smart_sight_singing_state.dart';
@@ -243,12 +245,22 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     final capture = createRealtimePitchCapture();
     _capture = capture;
     try {
-      final hasPermission = await capture.hasPermission();
+      var hasPermission = await capture.hasPermission();
       if (!hasPermission) {
+        hasPermission = await capture.requestPermission();
+      }
+      if (!hasPermission) {
+        _capture = null;
         if (!mounted) return;
         state = state.copyWith(errorMessage: '请先在系统设置中开启麦克风权限。');
         return;
       }
+
+      // 跟唱需要同时播放参考曲 + 采集人声，先切到录音专用 playAndRecord 会话。
+      if (!kIsWeb) {
+        await NativePlaybackAudioSession.ensureRecordActive();
+      }
+
       final pitchStream = await capture.start();
       _pitchSub = pitchStream.listen(_onUserPitch, onError: (Object e, _) {
         if (!mounted) return;
@@ -302,6 +314,34 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     state = state.copyWith(
       stage: reset ? SightSingingStage.ready : SightSingingStage.finished,
     );
+  }
+
+  /// 左侧导航再次点击「智能视唱」时：停止播放/录音并回到就绪态。
+  Future<void> returnToHome() async {
+    if (state.stage == SightSingingStage.analyzing) {
+      return;
+    }
+    if (state.stage == SightSingingStage.singing) {
+      await stopSinging(reset: true);
+      return;
+    }
+    try {
+      await _player.pause();
+      await _player.seek(Duration.zero);
+    } catch (_) {}
+    if (!mounted) return;
+    if (state.stage == SightSingingStage.finished) {
+      state = state.copyWith(
+        stage: SightSingingStage.ready,
+        playbackMs: 0,
+        userPoints: const <UserPitchPoint>[],
+        currentScore: 0,
+        hitCount: 0,
+        scoredCount: 0,
+        currentUserMidi: -1,
+        currentUserAmplitude: 0,
+      );
+    }
   }
 
   void dismissError() {
