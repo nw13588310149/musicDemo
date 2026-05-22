@@ -549,6 +549,11 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
           await _recorder.stop();
         }
       } catch (_) {}
+      // iOS：调音器离开后必须把 playAndRecord/measurement 让出来，否则
+      // 录音系统开录时麦克风增益异常偏低。
+      try {
+        await NativePlaybackAudioSession.ensurePlaybackActive();
+      } catch (_) {}
       try {
         await _audioEngine.stopAll();
       } catch (_) {}

@@ -1,8 +1,9 @@
-// 学生模型上的「专业 / 方向 / 行政班 / 住宿 / 电话 / 备注」均为带默认值的
+﻿// 学生模型上的「专业 / 方向 / 行政班 / 住宿 / 电话 / 备注」均为带默认值的
 // 命名参数，部分条目沿用默认值；analyzer 误报为 unused_element_parameter，整体忽略。
 // ignore_for_file: unused_element_parameter
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/widgets/popup_selector_field.dart';
@@ -878,7 +879,7 @@ class _FilterRowState extends State<_FilterRow> {
               Icon(Icons.search, size: ui(16), color: const Color(0xFFC6C6C6)),
               SizedBox(width: ui(10)),
               Expanded(
-                child: TextField(
+                child: AppTextField(
                   controller: _searchCtrl,
                   onChanged: widget.onSearchChanged,
                   cursorColor: _kPurple,
@@ -1219,8 +1220,6 @@ class _StudentProfileDialogState
 
     return GradientHeaderDialog(
       title: '学籍档案',
-      titleFontSize: 20,
-      titleFontWeight: FontWeight.w500,
       titlePaddingTop: 28,
       width: 428,
       headerAsset: null,

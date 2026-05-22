@@ -1,9 +1,10 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_assets.dart';
@@ -573,24 +574,27 @@ class _FileRenameInlineOverlay extends StatelessWidget {
             borderRadius: BorderRadius.circular(ui(24)),
             clipBehavior: Clip.antiAlias,
             child: Padding(
-              padding: EdgeInsets.fromLTRB(ui(24), ui(28), ui(24), ui(20)),
+              padding: EdgeInsets.fromLTRB(ui(24), ui(25), ui(24), ui(20)),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    '重命名资料',
-                    style: TextStyle(
-                      fontSize: ui(18),
-                      color: const Color(0xFF0B081A),
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w600,
+                  Center(
+                    child: Text(
+                      '重命名资料',
+                      style: appDialogTitleTextStyle(ui),
                     ),
                   ),
-                  SizedBox(height: ui(20)),
+                  SizedBox(
+                    height: ui(
+                      appDialogGapBeforeFirstInput(
+                        topInset: 25,
+                      ),
+                    ),
+                  ),
                   SizedBox(
                     height: ui(45),
-                    child: TextField(
+                    child: AppTextField(
                       controller: controller,
                       focusNode: focusNode,
                       autofocus: true,
@@ -1197,10 +1201,15 @@ class _FolderBreadcrumb extends StatelessWidget {
       runSpacing: ui(6),
       children: List<Widget>.generate(items.length * 2 - 1, (index) {
         if (index.isOdd) {
-          return Icon(
-            Icons.chevron_right_rounded,
-            size: ui(14),
-            color: const Color(0xFFB6B5BB),
+          final separatorIndex = index ~/ 2;
+          final isBeforeLastItem = separatorIndex + 1 == items.length - 1;
+          return Image.asset(
+            isBeforeLastItem
+                ? AppAssets.cloudBreadcrumbArrowLast
+                : AppAssets.cloudBreadcrumbArrow,
+            width: ui(20),
+            height: ui(20),
+            fit: BoxFit.contain,
           );
         }
         final itemIndex = index ~/ 2;
@@ -1280,7 +1289,7 @@ class _CloudSearchField extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     return SizedBox(
       height: ui(40),
-      child: TextField(
+      child: AppTextField(
         controller: controller,
         cursorColor: const Color(0xFF8741FF),
         cursorWidth: 1.5,
@@ -4098,7 +4107,7 @@ class _UploadDialogState extends State<_UploadDialog> {
               ),
             ),
             SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(ui(20), ui(22), ui(20), ui(20)),
+              padding: EdgeInsets.fromLTRB(ui(20), ui(25), ui(20), ui(20)),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -4107,32 +4116,21 @@ class _UploadDialogState extends State<_UploadDialog> {
                   Center(
                     child: Text(
                       '上传课件',
-                      style: TextStyle(
-                        fontSize: ui(18),
-                        color: const Color(0xFF0B081A),
-                        fontFamily: 'PingFang SC',
-                        fontWeight: AppFont.w600,
-                        height: 1.0,
+                      style: appDialogTitleTextStyle(ui),
+                    ),
+                  ),
+                  SizedBox(
+                    height: ui(
+                      appDialogGapBeforeFirstInput(
+                        topInset: 25,
                       ),
                     ),
                   ),
-                  SizedBox(height: ui(30)),
 
                   // ── courseware title input ──
-                  Text(
-                    '课件标题',
-                    style: TextStyle(
-                      fontSize: ui(14),
-                      color: const Color(0xFF0B081A),
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w500,
-                      height: 12 / 14,
-                    ),
-                  ),
-                  SizedBox(height: ui(10)),
                   SizedBox(
                     height: ui(45),
-                    child: TextField(
+                    child: AppTextField(
                       controller: _titleCtrl,
                       cursorColor: const Color(0xFF8741FF),
                       cursorWidth: 1.5,

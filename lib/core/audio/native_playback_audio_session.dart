@@ -99,8 +99,22 @@ abstract final class NativePlaybackAudioSession {
         );
   }
 
-  /// 调音器：需要麦克风输入。
-  static Future<void> ensurePlayAndRecordActive() async {
+  /// 录音系统 / 视唱实时采集：麦克风录入，不用 measurement（调音器专用）。
+  ///
+  /// iOS 上若沿用调音器的 `measurement` 或纯 `playback`，`record` 录到的
+  /// AAC 电平会明显偏低。
+  static Future<void> ensureRecordActive() {
+    return _ensurePlayAndRecordMode(AVAudioSessionMode.defaultMode);
+  }
+
+  /// 调音器：需要麦克风输入，measurement 利于低延迟音高检测。
+  static Future<void> ensurePlayAndRecordActive() {
+    return _ensurePlayAndRecordMode(AVAudioSessionMode.measurement);
+  }
+
+  static Future<void> _ensurePlayAndRecordMode(
+    AVAudioSessionMode avAudioSessionMode,
+  ) async {
     if (kIsWeb) return;
     try {
       final session = await AudioSession.instance.timeout(_kChannelTimeout);
@@ -116,10 +130,10 @@ abstract final class NativePlaybackAudioSession {
               avAudioSessionCategoryOptions:
                   AVAudioSessionCategoryOptions.defaultToSpeaker |
                   AVAudioSessionCategoryOptions.allowBluetooth,
-              avAudioSessionMode: AVAudioSessionMode.measurement,
+              avAudioSessionMode: avAudioSessionMode,
               androidAudioAttributes: const AndroidAudioAttributes(
-                contentType: AndroidAudioContentType.music,
-                usage: AndroidAudioUsage.media,
+                contentType: AndroidAudioContentType.speech,
+                usage: AndroidAudioUsage.voiceCommunication,
               ),
               androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
             ),
@@ -128,7 +142,8 @@ abstract final class NativePlaybackAudioSession {
       await session.setActive(true).timeout(_kChannelTimeout);
     } catch (error, stack) {
       debugPrint(
-        'NativePlaybackAudioSession.ensurePlayAndRecordActive failed: $error\n$stack',
+        'NativePlaybackAudioSession._ensurePlayAndRecordMode($avAudioSessionMode) '
+        'failed: $error\n$stack',
       );
     } finally {
       // 切到 playAndRecord 后，下次切回 playback 必须走完整的 release →

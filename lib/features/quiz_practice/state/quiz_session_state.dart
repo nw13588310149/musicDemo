@@ -11,6 +11,7 @@ class QuizSessionPageArgs {
     this.practiceId,
     this.startIndex = 0,
     this.allCount = 0,
+    this.schoolId = kPublicQuizSchoolId,
     this.openCompletionDialog = false,
   });
 
@@ -18,6 +19,9 @@ class QuizSessionPageArgs {
   final int? practiceId;
   final int startIndex;
   final int allCount;
+
+  /// 首页刷题固定 `0`；校园课件刷题传真实 schoolId。
+  final int schoolId;
 
   /// 进入页面后立刻弹出完成弹窗（对应 1.0 的 camp_over 路由）。
   final bool openCompletionDialog;
@@ -33,6 +37,7 @@ class QuizSessionPageArgs {
         practiceId: _toInt(raw['practiceId']),
         startIndex: _toInt(raw['startIndex']) ?? 0,
         allCount: _toInt(raw['allCount']) ?? 0,
+        schoolId: _toInt(raw['schoolId']) ?? kPublicQuizSchoolId,
         openCompletionDialog: raw['openCompletionDialog'] == true,
       );
     }
@@ -46,6 +51,7 @@ class QuizSessionPageArgs {
         other.practiceId == practiceId &&
         other.startIndex == startIndex &&
         other.allCount == allCount &&
+        other.schoolId == schoolId &&
         other.openCompletionDialog == openCompletionDialog;
   }
 
@@ -55,6 +61,7 @@ class QuizSessionPageArgs {
     practiceId,
     startIndex,
     allCount,
+    schoolId,
     openCompletionDialog,
   );
 

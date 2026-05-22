@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // 班主任端「班级工作台」独立页面
 //
 // 入口：班主任 dashboard 顶部「班级工作台」按钮 / 「班务 → 班级工作台 >」。
@@ -17,6 +17,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/widgets/app_toast.dart';
@@ -723,8 +724,6 @@ class _NoticeSectionState extends ConsumerState<_NoticeSection> {
         final ui = DashboardScaleScope.of(dialogContext).ui;
         return GradientHeaderDialog(
           title: '删除班级通知',
-          titleFontSize: 24,
-          titleFontWeight: FontWeight.w500,
           titlePaddingTop: 40,
           width: 420,
           contentPadding: EdgeInsets.fromLTRB(ui(40), ui(30), ui(40), ui(30)),
@@ -950,8 +949,6 @@ Future<void> _showPublishNoticeDialog(
       final ui = DashboardScaleScope.of(dialogContext).ui;
       return GradientHeaderDialog(
         title: '发布班级通知',
-        titleFontSize: 24,
-        titleFontWeight: FontWeight.w500,
         titlePaddingTop: 40,
         width: 460,
         contentPadding: EdgeInsets.fromLTRB(ui(40), ui(40), ui(40), ui(30)),
@@ -1001,7 +998,7 @@ Future<void> _showPublishNoticeDialog(
                 border: Border.all(color: _kBorderSoft, width: 1),
               ),
               alignment: Alignment.centerLeft,
-              child: TextField(
+              child: AppTextField(
                 controller: titleCtrl,
                 autofocus: true,
                 maxLines: 1,
@@ -1051,7 +1048,7 @@ Future<void> _showPublishNoticeDialog(
                 borderRadius: BorderRadius.circular(ui(8)),
                 border: Border.all(color: _kBorderSoft, width: 1),
               ),
-              child: TextField(
+              child: AppTextField(
                 controller: contentCtrl,
                 maxLines: null,
                 expands: true,
@@ -2450,7 +2447,7 @@ class _StudentsHeader extends StatelessWidget {
                 ),
                 SizedBox(width: ui(8)),
                 Expanded(
-                  child: TextField(
+                  child: AppTextField(
                     onChanged: onQueryChanged,
                     cursorColor: _kPurple,
                     cursorWidth: 1.5,
@@ -4045,7 +4042,7 @@ class _StudentDetailPanelState extends ConsumerState<_StudentDetailPanel> {
                                 borderRadius: BorderRadius.circular(ui(8)),
                                 border: Border.all(color: _kInnerGray),
                               ),
-                              child: TextField(
+                              child: AppTextField(
                                 controller: _remarkCtrl,
                                 maxLines: null,
                                 cursorColor: _kPurple,

@@ -18,6 +18,7 @@ class PianoVisualizer extends StatefulWidget {
     this.height,
     this.showFloatingNotes = true,
     this.ambientWave = false,
+    this.peakHeightScale = 1.0,
     super.key,
   });
 
@@ -35,6 +36,9 @@ class PianoVisualizer extends StatefulWidget {
 
   /// 空闲时是否叠加呼吸式环境波；默认 false，柱体静止。
   final bool ambientWave;
+
+  /// 播放音符时的峰值柱高倍率（默认 1）；仅按音符能量放大，空闲基线不变。
+  final double peakHeightScale;
 
   @override
   State<PianoVisualizer> createState() => _PianoVisualizerState();
@@ -229,6 +233,7 @@ class _PianoVisualizerState extends State<PianoVisualizer>
                   ambientPhases: _ambientPhases,
                   time: _now,
                   ambientWave: widget.ambientWave,
+                  peakHeightScale: widget.peakHeightScale,
                 ),
               ),
             ),
@@ -261,12 +266,14 @@ class _VisualizerPainter extends CustomPainter {
     required this.ambientPhases,
     required this.time,
     required this.ambientWave,
+    required this.peakHeightScale,
   });
 
   final List<double> levels;
   final List<double> ambientPhases;
   final double time;
   final bool ambientWave;
+  final double peakHeightScale;
 
   static const _topColor = Color(0xFF8741FF);
   static const _bottomColor = Color(0xFFC8AEFF);
@@ -296,13 +303,18 @@ class _VisualizerPainter extends CustomPainter {
                             math.sin(time * 0.9 + ambientPhases[i] * 0.6)) /
                         2)
           : 0.055;
-      final level = (levels[i] + ambient).clamp(0.0, 1.0);
+      final noteEnergy = levels[i].clamp(0.0, 1.0);
+      final level = (noteEnergy + ambient).clamp(0.0, 1.0);
       // 柱高再做一次平滑曲线（pow 0.7），让小幅度更明显，大幅度差不多
       final shaped = math.pow(level, 0.7) as double;
+      // 按音符能量插值放大峰值柱高；无播放时 noteEnergy≈0，倍率保持 1。
+      final peakMul = peakHeightScale <= 1
+          ? 1.0
+          : 1.0 + (peakHeightScale - 1.0) * noteEnergy;
 
       final x = i * (barW + gap);
-      final hUp = shaped * maxUp;
-      final hDown = shaped * maxDown;
+      final hUp = shaped * maxUp * peakMul;
+      final hDown = shaped * maxDown * peakMul;
 
       // 上半部分主体
       final topRect = Rect.fromLTRB(x, centerY - hUp, x + barW, centerY);
@@ -335,6 +347,7 @@ class _VisualizerPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _VisualizerPainter old) {
     if (old.ambientWave != ambientWave) return true;
+    if (old.peakHeightScale != peakHeightScale) return true;
     if (old.levels.length != levels.length) return true;
     if (ambientWave && old.time != time) return true;
     if (!ambientWave && _levelsChanged(old.levels, levels)) return true;

@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // 任课老师 / 班主任端「作业批改」独立页面（"作业与批改"总览）
 //
 // 入口：教师 dashboard 快捷区「作业批改」按钮 → controller.openHomeworkReview()
@@ -44,6 +44,7 @@
 // =============================================================================
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_response.dart';
@@ -3610,7 +3611,7 @@ class _ScoreInput extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: TextField(
+            child: AppTextField(
               controller: controller,
               keyboardType: TextInputType.number,
               cursorColor: _kPurple,
@@ -3743,7 +3744,7 @@ class _PlainInputFieldState extends State<_PlainInputField> {
         border: Border.all(color: _kPageGrey),
       ),
       child: Center(
-        child: TextField(
+        child: AppTextField(
           controller: _ctrl,
           cursorColor: _kPurple,
           cursorWidth: 1.5,
@@ -3809,7 +3810,7 @@ class _PlainTextAreaState extends State<_PlainTextArea> {
         borderRadius: BorderRadius.circular(ui(8)),
         border: Border.all(color: _kPageGrey),
       ),
-      child: TextField(
+      child: AppTextField(
         controller: _ctrl,
         maxLines: null,
         expands: true,

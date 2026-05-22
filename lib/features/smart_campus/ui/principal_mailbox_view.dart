@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // 智慧校园「校长信箱」页（学生 / 教师 / 班主任共用）
 //
 // 入口：`controller.openPrincipalMailbox()` → mainView == principalMailbox。
@@ -29,6 +29,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/media_url.dart';
@@ -742,7 +743,7 @@ class _BodyField extends StatelessWidget {
         color: _kInnerGray,
         borderRadius: BorderRadius.circular(ui(12)),
       ),
-      child: TextField(
+      child: AppTextField(
         controller: controller,
         maxLines: null,
         expands: true,

@@ -252,17 +252,21 @@ class _AppWheelPickerSheetState extends State<_AppWheelPickerSheet> {
                     setState(() => _selectedIndex = index);
                   },
                   children: [
-                    for (final item in widget.items)
+                    for (var i = 0; i < widget.items.length; i++)
                       Center(
                         child: Text(
-                          item,
+                          widget.items[i],
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: ui(18),
-                            color: _kPickerTitle,
+                            color: i == _selectedIndex
+                                ? _kPickerPrimary
+                                : _kPickerTitle,
                             fontFamily: 'PingFang SC',
-                            fontWeight: AppFont.w400,
+                            fontWeight: i == _selectedIndex
+                                ? AppFont.w500
+                                : AppFont.w400,
                             height: 22 / 18,
                           ),
                         ),

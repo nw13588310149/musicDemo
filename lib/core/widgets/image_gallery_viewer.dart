@@ -104,19 +104,44 @@ class _ImageGalleryViewerState extends State<ImageGalleryViewer> {
                     backgroundDecoration: const BoxDecoration(
                       color: Colors.transparent,
                     ),
+                    loadingBuilder: (context, progress) {
+                      if (progress == null) {
+                        return const SizedBox.shrink();
+                      }
+                      return const Center(
+                        child: SizedBox(
+                          width: 32,
+                          height: 32,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        ),
+                      );
+                    },
                     onPageChanged: (i) => setState(() => _currentIndex = i),
                     builder: (context, index) {
                       final image = widget.images[index];
-                      // 使用 customChild + Image.network(BoxFit.contain)，
-                      // 避免 PhotoView 直接吃 ResizeImage 时把「解码像素」
-                      // 当成布局逻辑尺寸，导致 iOS 端图片被缩小显示。
-                      return PhotoViewGalleryPageOptions.customChild(
-                        child: _GalleryNetworkImage(url: image),
+                      // 交给 PhotoView 用图片真实像素尺寸计算 contained 缩放，
+                      // 保证宽或高一侧贴满视口、另一侧留白，且绝不拉伸。
+                      // ResizeImage 只限制较长边，避免同时设 cacheWidth+cacheHeight
+                      // 在 iOS 上把解码结果压成视口比例导致变形。
+                      return PhotoViewGalleryPageOptions(
+                        imageProvider: _galleryImageProvider(context, image),
                         minScale: PhotoViewComputedScale.contained,
                         maxScale: PhotoViewComputedScale.covered * 4,
                         initialScale: PhotoViewComputedScale.contained,
+                        filterQuality: FilterQuality.medium,
                         heroAttributes: PhotoViewHeroAttributes(
                           tag: '${widget.heroTagPrefix}_${image}_$index',
+                        ),
+                        errorBuilder: (context, error, stackTrace) =>
+                            const Center(
+                          child: Icon(
+                            Icons.broken_image_outlined,
+                            color: Colors.white54,
+                            size: 48,
+                          ),
                         ),
                       );
                     },
@@ -179,46 +204,20 @@ class _ImageGalleryViewerState extends State<ImageGalleryViewer> {
   }
 }
 
-/// 画廊单页网络图：由 Flutter Image 自己按视口做 contain 布局，
-/// 解码尺寸只影响内存，不参与 PhotoView 的缩放计算。
-class _GalleryNetworkImage extends StatelessWidget {
-  const _GalleryNetworkImage({required this.url});
-
-  final String url;
-
-  @override
-  Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    return Image.network(
-      url,
-      fit: BoxFit.contain,
-      filterQuality: FilterQuality.medium,
-      cacheWidth: _galleryDecodeExtent(context, size.width, 4096),
-      cacheHeight: _galleryDecodeExtent(context, size.height, 4096),
-      loadingBuilder: (context, child, loadingProgress) {
-        if (loadingProgress == null) {
-          return child;
-        }
-        return const Center(
-          child: SizedBox(
-            width: 32,
-            height: 32,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: Colors.white,
-            ),
-          ),
-        );
-      },
-      errorBuilder: (context, error, stackTrace) => const Center(
-        child: Icon(
-          Icons.broken_image_outlined,
-          color: Colors.white54,
-          size: 48,
-        ),
-      ),
-    );
+/// 画廊网络图：仅按视口较长边限制解码宽度，高度随原图比例缩放。
+ImageProvider _galleryImageProvider(BuildContext context, String url) {
+  final viewport = MediaQuery.sizeOf(context);
+  final longestSide = viewport.width > viewport.height
+      ? viewport.width
+      : viewport.height;
+  final cacheWidth = _galleryDecodeExtent(context, longestSide, 4096);
+  if (cacheWidth == null) {
+    return NetworkImage(url);
   }
+  return ResizeImage(
+    NetworkImage(url),
+    width: cacheWidth,
+  );
 }
 
 int? _galleryDecodeExtent(
@@ -227,7 +226,7 @@ int? _galleryDecodeExtent(
   int maxPixels,
 ) {
   if (!logicalExtent.isFinite || logicalExtent <= 0) {
-    return maxPixels;
+    return null;
   }
   final dpr = MediaQuery.devicePixelRatioOf(context);
   return (logicalExtent * dpr).ceil().clamp(1, maxPixels).toInt();

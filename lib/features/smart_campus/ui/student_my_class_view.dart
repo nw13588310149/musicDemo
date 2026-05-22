@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // 学生端「我的班级」独立页面
 //
 // 入口：学生 dashboard 快捷区「我的班级」按钮 → controller.openMyClass()
@@ -23,6 +23,7 @@
 // =============================================================================
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shell/ui/shell_layout.dart';
@@ -949,7 +950,7 @@ class _ClassmateSearchBoxState extends State<_ClassmateSearchBox> {
           ),
           SizedBox(width: ui(8)),
           Expanded(
-            child: TextField(
+            child: AppTextField(
               controller: _controller,
               onChanged: widget.onChanged,
               cursorColor: _kPurple,

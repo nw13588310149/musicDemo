@@ -103,7 +103,7 @@ class SchoolPageState {
 ///   - 乐理: firstMenu=5、school 模式
 ///   - 试题(=1.0 答题): 不预选 firstMenu、school 模式
 ///   - 视频: 不预选 firstMenu、school 模式
-/// 2.0 多出的"刷题"沿用 [RoutePaths.camp]，QuizPractice 当前不依赖 firstMenu/school。
+/// 2.0 多出的"刷题"走 [RoutePaths.schoolCamp]，接口携带真实 schoolId。
 List<SchoolQuickAction> buildSchoolQuickActions() {
   return const <SchoolQuickAction>[
     SchoolQuickAction(

@@ -237,19 +237,17 @@ class MusicPlayState {
     return current.tracks[safeIndex];
   }
 
-  bool get showsKeyboard {
-    final current = detail;
-    if (current == null) {
+  /// 声乐/器乐目录、收藏、全局搜索等入口透传 `args.type == 2`（对齐 1.0
+  /// `goDetail`）；详情 `type` 为 4/5 时同样视为声乐/器乐课程。
+  bool get isVocalOrInstrumental {
+    final detailType = detail?.type;
+    if (detailType == 4 || detailType == 5) {
       return true;
     }
-    return current.type != 4 && current.type != 5;
+    return args.type == 2;
   }
 
-  /// 声乐(type=4) 或 器乐(type=5) 课程，使用与 1.0 一致的"五线谱/简谱"布局。
-  bool get isVocalOrInstrumental {
-    final t = detail?.type;
-    return t == 4 || t == 5;
-  }
+  bool get showsKeyboard => !isVocalOrInstrumental;
 
   MusicPlayState copyWith({
     MusicPlayPageArgs? args,

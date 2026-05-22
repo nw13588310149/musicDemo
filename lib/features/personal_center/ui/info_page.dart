@@ -180,6 +180,8 @@ class _InfoRows extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final user = state.user;
+    final isTeacher =
+        user['role']?.toString().trim().toLowerCase() == 'teacher';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -232,12 +234,14 @@ class _InfoRows extends StatelessWidget {
           value: user['school']?.toString() ?? '',
           onTap: () => _editSchool(context, controller, user),
         ),
-        const _RowDivider(),
-        _InfoRow(
-          title: '目标院校',
-          value: user['targetSchool']?.toString() ?? '',
-          onTap: () => _editTargetSchool(context, controller, user),
-        ),
+        if (!isTeacher) ...<Widget>[
+          const _RowDivider(),
+          _InfoRow(
+            title: '目标院校',
+            value: user['targetSchool']?.toString() ?? '',
+            onTap: () => _editTargetSchool(context, controller, user),
+          ),
+        ],
         const _RowDivider(),
         _InfoRow(
           title: '个人简介',

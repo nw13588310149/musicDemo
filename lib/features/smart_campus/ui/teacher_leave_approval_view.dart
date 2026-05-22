@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // 班主任端「请假审批」独立页面
 //
 // 入口：班主任 dashboard 快捷区「请假审批」按钮 → controller.openLeaveApproval()
@@ -35,6 +35,7 @@
 // =============================================================================
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
@@ -1034,8 +1035,6 @@ Future<String?> _showRejectDialog(
       final ui = DashboardScaleScope.of(dialogContext).ui;
       return GradientHeaderDialog(
         title: '驳回申请',
-        titleFontSize: 24,
-        titleFontWeight: FontWeight.w500,
         titlePaddingTop: 40,
         width: 428,
         contentPadding: EdgeInsets.fromLTRB(ui(40), ui(40), ui(40), ui(30)),
@@ -1082,7 +1081,7 @@ Future<String?> _showRejectDialog(
                 borderRadius: BorderRadius.circular(ui(8)),
                 border: Border.all(color: _kBorderSoft, width: 1),
               ),
-              child: TextField(
+              child: AppTextField(
                 controller: controller,
                 autofocus: true,
                 maxLines: null,

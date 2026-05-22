@@ -1,7 +1,8 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -997,8 +998,6 @@ class _MyQrCodeDialogState extends State<_MyQrCodeDialog> {
   Widget build(BuildContext context) {
     return GradientHeaderDialog(
       title: '我的二维码',
-      titleFontSize: 24,
-      titleFontWeight: FontWeight.w500,
       titlePaddingTop: 40,
       width: 428,
       contentPadding: const EdgeInsets.fromLTRB(24, 40, 24, 30),
@@ -1275,8 +1274,6 @@ class _RedeemVipDialogState extends State<_RedeemVipDialog> {
   Widget build(BuildContext context) {
     return GradientHeaderDialog(
       title: '兑换会员',
-      titleFontSize: 24,
-      titleFontWeight: FontWeight.w500,
       titlePaddingTop: 40,
       width: 428,
       contentPadding: const EdgeInsets.fromLTRB(24, 40, 24, 30),
@@ -1314,8 +1311,6 @@ class _ContactServiceDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     return GradientHeaderDialog(
       title: '联系客服',
-      titleFontSize: 24,
-      titleFontWeight: FontWeight.w500,
       titlePaddingTop: 40,
       width: 428,
       contentPadding: const EdgeInsets.fromLTRB(24, 40, 24, 30),
@@ -1369,8 +1364,6 @@ class _RecommendDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     return GradientHeaderDialog(
       title: '推荐给好友',
-      titleFontSize: 24,
-      titleFontWeight: FontWeight.w500,
       titlePaddingTop: 40,
       width: 428,
       contentPadding: const EdgeInsets.fromLTRB(24, 40, 24, 30),
@@ -1444,7 +1437,7 @@ class _DialogTextField extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       height: 48,
-      child: TextField(
+      child: AppTextField(
         controller: controller,
         autofocus: true,
         cursorColor: const Color(0xFF8741FF),

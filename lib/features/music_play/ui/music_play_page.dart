@@ -12,6 +12,7 @@ import '../../piano/ui/piano_keyboard.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../state/music_play_controller.dart';
 import '../state/music_play_state.dart';
+import 'music_play_html_utils.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 final Set<String> _musicPlayPrecachedImages = <String>{};
@@ -94,6 +95,8 @@ class _MusicPlayPageState extends ConsumerState<MusicPlayPage> {
     final urls = <String>[
       'assets/images/home/plyabj.png',
       'assets/images/home/play1.png',
+      'assets/images/home/play11.png',
+      'assets/images/home/play12.png',
       'assets/images/home/left.png',
       'assets/images/home/right.png',
       // 视唱多课程列表的「上一首 / 下一首」按钮图。
@@ -1376,21 +1379,13 @@ class _PlaybackBar extends StatelessWidget {
               width: ui(44),
               height: ui(44),
               child: Center(
-                child: Container(
-                  width: ui(36.67),
-                  height: ui(36.67),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF8741FF),
-                    shape: BoxShape.circle,
-                  ),
-                  alignment: Alignment.center,
-                  child: Icon(
-                    state.isPlaying
-                        ? Icons.pause_rounded
-                        : Icons.play_arrow_rounded,
-                    color: Colors.white,
-                    size: ui(22),
-                  ),
+                child: Image.asset(
+                  state.isPlaying
+                      ? 'assets/images/home/play12.png'
+                      : 'assets/images/home/play11.png',
+                  width: ui(38),
+                  height: ui(38),
+                  fit: BoxFit.contain,
                 ),
               ),
             ),
@@ -1776,6 +1771,14 @@ class _LongTextPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final trimmed = musicPlayHtmlForcePingFangSc(htmlText.trim());
+    final baseStyle = TextStyle(
+      color: Colors.white.withValues(alpha: 0.9),
+      fontSize: ui(14),
+      height: 1.7,
+      fontFamily: 'PingFang SC',
+    );
+
     return Container(
       padding: EdgeInsets.all(ui(18)),
       decoration: BoxDecoration(
@@ -1784,24 +1787,20 @@ class _LongTextPanel extends StatelessWidget {
       ),
       child: SingleChildScrollView(
         physics: const ClampingScrollPhysics(),
-        child: SelectableText(
-          htmlText
-              .replaceAll(RegExp(r'<[^>]+>'), ' ')
-              .replaceAll('&nbsp;', ' '),
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.9),
-            fontSize: ui(14),
-            height: 1.7,
-            fontFamily: 'PingFang SC',
-          ),
-        ),
+        child: trimmed.isEmpty
+            ? SelectableText('暂无简介', style: baseStyle)
+            : HtmlWidget(
+                trimmed,
+                textStyle: baseStyle,
+                customStylesBuilder: musicPlayHtmlCustomStyles,
+              ),
       ),
     );
   }
 }
 
 /// 声乐/器乐课程左侧使用的浅色简介卡片。
-/// 复用 detail.longTextHtml，按后端富文本内联样式原样渲染。
+/// 复用 detail.longTextHtml（`longText1`），保留富文本样式并统一为 PingFang SC。
 class _DescriptionCard extends StatelessWidget {
   const _DescriptionCard({required this.htmlText});
 
@@ -1810,7 +1809,7 @@ class _DescriptionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final trimmed = htmlText.trim();
+    final trimmed = musicPlayHtmlForcePingFangSc(htmlText.trim());
     final baseStyle = TextStyle(
       color: const Color(0xFF0B081A),
       fontSize: ui(13),
@@ -1836,15 +1835,7 @@ class _DescriptionCard extends StatelessWidget {
                   : HtmlWidget(
                       trimmed,
                       textStyle: baseStyle,
-                      customStylesBuilder: (element) {
-                        if (element.localName == 'p') {
-                          return {
-                            'margin': '0',
-                            'padding': '0',
-                          };
-                        }
-                        return null;
-                      },
+                      customStylesBuilder: musicPlayHtmlCustomStyles,
                     ),
             ),
           ),

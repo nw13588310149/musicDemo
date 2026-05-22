@@ -37,6 +37,7 @@ class _QuizSessionPageState extends ConsumerState<QuizSessionPage> {
             practiceId: parsed.practiceId,
             startIndex: parsed.startIndex,
             allCount: parsed.allCount,
+            schoolId: parsed.schoolId,
             openCompletionDialog: true,
           )
         : parsed;

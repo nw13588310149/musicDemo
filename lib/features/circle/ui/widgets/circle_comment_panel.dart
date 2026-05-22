@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 
 import '../../../../core/constants/app_assets.dart';
 import '../../../../core/widgets/app_asset_graphic.dart';
@@ -410,7 +411,7 @@ class _InputBar extends StatelessWidget {
                 borderRadius: BorderRadius.circular(ui(20)),
               ),
               alignment: Alignment.centerLeft,
-              child: TextField(
+              child: AppTextField(
                 controller: controller,
                 focusNode: focusNode,
                 onSubmitted: (_) => onSend(),

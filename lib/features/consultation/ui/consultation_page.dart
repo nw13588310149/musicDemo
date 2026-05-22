@@ -313,7 +313,7 @@ class _ConsultationCard extends StatelessWidget {
                               Text(
                                 formatRelativeTime(item.createTime),
                                 style: TextStyle(
-                                  color: const Color(0xFFB6B5BB),
+                                  color: const Color(0xFF6D6B75),
                                   fontSize: ui(12),
                                   fontFamily: 'PingFang SC',
                                   height: 20 / 12,
@@ -407,7 +407,7 @@ class _ViewCount extends StatelessWidget {
         Text(
           count.toString(),
           style: TextStyle(
-            color: const Color(0xFFB6B5BB),
+            color: const Color(0xFF6D6B75),
             fontSize: ui(12),
             fontFamily: 'PingFang SC',
             height: 1.0,

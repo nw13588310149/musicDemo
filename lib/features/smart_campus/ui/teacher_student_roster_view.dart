@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // 任课老师 / 班主任端「学生名册」独立页面
 //
 // 入口：教师 dashboard 快捷区「学生名册」按钮 → controller.openStudentRoster()
@@ -36,6 +36,7 @@ import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/media_url.dart';
@@ -745,7 +746,7 @@ class _RosterSearchFieldState extends State<_RosterSearchField> {
           Icon(Icons.search_rounded, size: ui(16), color: _kSearchIcon),
           SizedBox(width: ui(8)),
           Expanded(
-            child: TextField(
+            child: AppTextField(
               controller: _ctrl,
               onChanged: widget.onChanged,
               cursorColor: _kPurple,

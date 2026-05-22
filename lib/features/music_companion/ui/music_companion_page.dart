@@ -170,9 +170,7 @@ class _CompanionTabItem extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOutCubic,
+      child: Container(
         padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(10)),
         alignment: Alignment.center,
         decoration: BoxDecoration(

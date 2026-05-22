@@ -1,5 +1,6 @@
-import 'package:flutter/foundation.dart';
+﻿import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/widgets/app_toast.dart';
@@ -354,7 +355,7 @@ class _EmptyHint extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(
-                  child: TextField(
+                  child: AppTextField(
                     controller: onlineUrlController,
                     keyboardType: TextInputType.url,
                     textInputAction: TextInputAction.done,

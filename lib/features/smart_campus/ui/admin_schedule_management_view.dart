@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // 管理员端「排课与课表」独立页面
 //
 // 入口：admin dashboard 快捷区「排课与课表」按钮 →
@@ -36,6 +36,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_response.dart';
@@ -946,8 +947,6 @@ class _AdminScheduleManagementViewState
               final ui = DashboardScaleScope.of(ctx).ui;
               return GradientHeaderDialog(
                 title: '申请详情',
-                titleFontSize: 22,
-                titleFontWeight: FontWeight.w500,
                 titlePaddingTop: 36,
                 width: 428,
                 contentPadding: EdgeInsets.fromLTRB(
@@ -4304,8 +4303,6 @@ Future<String?> _showRejectDialog(
       final ui = DashboardScaleScope.of(dialogContext).ui;
       return GradientHeaderDialog(
         title: '驳回申请',
-        titleFontSize: 24,
-        titleFontWeight: FontWeight.w500,
         titlePaddingTop: 40,
         width: 428,
         contentPadding: EdgeInsets.fromLTRB(ui(40), ui(40), ui(40), ui(30)),
@@ -4352,7 +4349,7 @@ Future<String?> _showRejectDialog(
                 borderRadius: BorderRadius.circular(ui(8)),
                 border: Border.all(color: _kBorderSoft, width: 1),
               ),
-              child: TextField(
+              child: AppTextField(
                 controller: controller,
                 autofocus: true,
                 maxLines: null,

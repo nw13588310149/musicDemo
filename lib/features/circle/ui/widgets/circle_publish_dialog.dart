@@ -1,7 +1,8 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/widgets/app_toast.dart';
@@ -548,7 +549,7 @@ class _TitleField extends StatelessWidget {
         borderRadius: BorderRadius.circular(ui(12)),
       ),
       alignment: Alignment.center,
-      child: TextField(
+      child: AppTextField(
         controller: controller,
         onChanged: onChanged,
         maxLines: 1,
@@ -602,7 +603,7 @@ class _TextArea extends StatelessWidget {
         color: _kBg,
         borderRadius: BorderRadius.circular(ui(12)),
       ),
-      child: TextField(
+      child: AppTextField(
         controller: controller,
         onChanged: onChanged,
         maxLines: null,

@@ -339,6 +339,10 @@ abstract final class AppAssets {
   static const cloudUploadHeaderBg = 'assets/images/yunpan/yp10.png';
   static const cloudUploadImageIcon = 'assets/images/yunpan/yp11.png';
   static const cloudUploadFileIcon = 'assets/images/yunpan/yp12.png';
+  /// 云盘 / 录音面包屑：倒数第二级与末级之间的箭头
+  static const cloudBreadcrumbArrowLast = 'assets/images/yunpan/right.png';
+  /// 云盘 / 录音面包屑：其余层级之间的箭头
+  static const cloudBreadcrumbArrow = 'assets/images/yunpan/right1.png';
 
   /// 我的云盘 / 课件中心 2.0 资产
   /// 1.png 上传弹窗顶部装饰图（含纸张、五线谱）
@@ -451,6 +455,8 @@ abstract final class AppAssets {
 
   /// 个人中心（设计资源）
   static const infoBg = 'assets/images/info/bg.png';
+  /// 意见反馈等页面顶部横幅背景。
+  static const infoTopBg = 'assets/images/info/topBg.png';
   static const infoVip = 'assets/images/info/vip.png';
   /// 个人中心顶部「年卡会员」徽章整图（紫色多边形 V 标 + 渐变胶囊 + 白字
   /// 「年卡会员」），直接替代 [_AnnualVipBadge] 中代码渐变 + 文字 + V 装饰

@@ -1,7 +1,8 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/router/route_paths.dart';
@@ -1102,7 +1103,7 @@ class _TopSearchBoxState extends ConsumerState<_TopSearchBox> {
     return SizedBox(
       key: _fieldKey,
       height: ui(40),
-      child: TextField(
+      child: AppTextField(
         controller: _controller,
         focusNode: _focusNode,
         textInputAction: TextInputAction.search,

@@ -119,14 +119,8 @@ class _SchoolView extends StatelessWidget {
                     );
                   },
                 ),
-                const SizedBox(height: 16),
-                // ── 校园资讯 section ──────────────────────────────────────
-                // 与首页"最新"区域保持一致：使用 Shell 共享的标题栏 + 同款资讯卡。
-                ShellSectionTitleBar(
-                  title: '校园资讯',
-                  onMoreTap: () =>
-                      Navigator.pushNamed(context, RoutePaths.consultation),
-                ),
+                const SizedBox(height: 20),
+                _buildCampusNewsHeader(context),
                 const SizedBox(height: 10),
                 _NewsGrid(items: newsItems),
                 const SizedBox(height: 16),
@@ -163,6 +157,13 @@ class _SchoolView extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+
+  Widget _buildCampusNewsHeader(BuildContext context) {
+    return ShellSectionTitleBar(
+      title: '校园资讯',
+      onMoreTap: () => Navigator.pushNamed(context, RoutePaths.consultation),
     );
   }
 
@@ -953,7 +954,7 @@ class _NewsGrid extends StatelessWidget {
         crossAxisCount: 4,
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
-        mainAxisExtent: 140,
+        mainAxisExtent: 138,
       ),
       itemCount: items.length,
       itemBuilder: (context, i) => _NewsCard(item: items[i]),

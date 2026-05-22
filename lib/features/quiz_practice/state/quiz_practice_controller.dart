@@ -5,27 +5,30 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/quiz_practice_repository.dart';
 import 'quiz_practice_state.dart';
 
-final quizPracticeControllerProvider =
-    StateNotifierProvider.autoDispose<
-      QuizPracticeController,
-      QuizPracticeState
-    >((ref) {
+final quizPracticeControllerProvider = StateNotifierProvider.autoDispose
+    .family<QuizPracticeController, QuizPracticeState, int>((ref, schoolId) {
       final repo = ref.watch(quizPracticeRepositoryProvider);
-      return QuizPracticeController(repository: repo);
+      return QuizPracticeController(repository: repo, schoolId: schoolId);
     });
 
 class QuizPracticeController extends StateNotifier<QuizPracticeState> {
-  QuizPracticeController({required QuizPracticeRepository repository})
-    : _repository = repository,
-      super(QuizPracticeState.initial) {
+  QuizPracticeController({
+    required QuizPracticeRepository repository,
+    required int schoolId,
+  }) : _repository = repository,
+       _schoolId = schoolId,
+       super(QuizPracticeState.initial) {
     unawaited(refresh());
   }
 
   final QuizPracticeRepository _repository;
+  final int _schoolId;
+
+  int get schoolId => _schoolId;
 
   Future<void> refresh() async {
     state = state.copyWith(loading: true, clearErrorMessage: true);
-    final response = await _repository.getSummary();
+    final response = await _repository.getSummary(schoolId: _schoolId);
     if (!mounted) return;
     if (!response.isSuccess) {
       state = state.copyWith(
@@ -52,6 +55,7 @@ class QuizPracticeController extends StateNotifier<QuizPracticeState> {
 
   Future<void> _initializePractice(QuizPracticeType type) async {
     final response = await _repository.createPractice(
+      schoolId: _schoolId,
       practiceType: type.apiKey,
     );
     if (!mounted || !response.isSuccess) return;

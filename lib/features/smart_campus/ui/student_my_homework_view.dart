@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // 学生端「我的作业」独立页面
 //
 // 入口：学生 dashboard 快捷区「我的作业」按钮 → controller.openMyHomework()
@@ -44,6 +44,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/media_url.dart';
@@ -334,6 +335,7 @@ class _StudentMyHomeworkViewState extends ConsumerState<StudentMyHomeworkView> {
     return Container(
       color: _kPageBg,
       child: RefreshIndicator(
+        elevation: 0,
         onRefresh: _loadList,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -2448,8 +2450,6 @@ class _SubmitHomeworkDialogState extends ConsumerState<_SubmitHomeworkDialog> {
     final ui = DashboardScaleScope.of(context).ui;
     return GradientHeaderDialog(
       title: '提交作业',
-      titleFontSize: 24,
-      titleFontWeight: FontWeight.w500,
       width: 428,
       contentPadding: EdgeInsets.fromLTRB(ui(24), ui(60), ui(24), ui(20)),
       actionBar: AppDialogActionBar(
@@ -2808,7 +2808,7 @@ class _NoteInput extends StatelessWidget {
       ),
       padding: EdgeInsets.symmetric(horizontal: ui(16)),
       alignment: Alignment.center,
-      child: TextField(
+      child: AppTextField(
         controller: controller,
         cursorColor: _kPurple,
         cursorWidth: 1.5,
@@ -2918,8 +2918,6 @@ class _HomeworkDetailDialogState extends ConsumerState<_HomeworkDetailDialog> {
     final ui = DashboardScaleScope.of(context).ui;
     return GradientHeaderDialog(
       title: '作业详情',
-      titleFontSize: 24,
-      titleFontWeight: FontWeight.w500,
       width: 428,
       contentPadding: EdgeInsets.fromLTRB(ui(24), ui(60), ui(24), ui(20)),
       actionBar: AppDialogActionBar(

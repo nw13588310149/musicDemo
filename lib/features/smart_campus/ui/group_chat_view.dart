@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // 智慧校园「群聊」独立页面（学生 / 教师 / 班主任 共用）
 //
 // 入口：所有角色 dashboard 快捷区「群聊」按钮 → controller.openGroupChat()
@@ -54,6 +54,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/route_paths.dart';
@@ -889,7 +890,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 4),
-            child: TextField(
+            child: AppTextField(
               controller: ctrl,
               maxLines: 8,
               minLines: 6,
@@ -4404,7 +4405,7 @@ class _ChatInputBarState extends State<_ChatInputBar> {
             _MiniIconButton(icon: Icons.text_fields_rounded, onTap: () {}),
             SizedBox(width: ui(12)),
             Expanded(
-              child: TextField(
+              child: AppTextField(
                 controller: widget.controller,
                 focusNode: _focusNode,
                 cursorColor: const Color(0xFF8741FF),

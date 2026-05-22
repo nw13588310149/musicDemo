@@ -47,10 +47,9 @@ class _IORealtimePitchCapture implements RealtimePitchCapture {
       throw StateError('录音权限被拒绝');
     }
 
-    // 切换到 playAndRecord 会话配置（与调音器同款）：允许同时播放 MP3 +
-    // 录音，且 defaultToSpeaker，避免 `speech` mode 压低音乐音量。
+    // 与录音系统同款：playAndRecord + defaultMode（非调音器 measurement）。
     try {
-      await NativePlaybackAudioSession.ensurePlayAndRecordActive();
+      await NativePlaybackAudioSession.ensureRecordActive();
     } catch (_) {
       // 配置失败不阻断录音本身。
     }

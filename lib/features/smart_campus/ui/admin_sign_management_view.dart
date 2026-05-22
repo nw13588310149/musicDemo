@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // 管理员「签课管理」独立页面
 //
 // 入口：管理员首页快捷区「签课管理」→ controller.openSignManagement()
@@ -33,6 +33,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/widgets/app_date_time_pickers.dart';
@@ -2234,7 +2235,7 @@ class _MakeupAuditCard extends StatelessWidget {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(ui(16)),
         ),
-        content: TextField(
+        content: AppTextField(
           controller: controller,
           maxLines: 3,
           decoration: InputDecoration(

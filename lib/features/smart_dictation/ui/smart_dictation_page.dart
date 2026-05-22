@@ -1068,6 +1068,7 @@ class _PracticeViewState extends State<_PracticeView> {
                         barCount: 52,
                         height: ui(70),
                         showFloatingNotes: false,
+                        peakHeightScale: 2.0,
                       ),
                     ),
                   ),

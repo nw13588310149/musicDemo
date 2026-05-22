@@ -8,6 +8,7 @@ import 'package:flutter/services.dart'
     show MissingPluginException, PlatformException;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/audio/native_playback_audio_session.dart';
 import '../../../core/network/media_url.dart';
 import '../../../core/network/upload_result.dart';
 import '../audio/recording_bytes_loader.dart';
@@ -642,6 +643,13 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     return created;
   }
 
+  /// iOS：开录前把 AVAudioSession 从调音器的 measurement / playback 切到
+  /// 适合文件录音的 playAndRecord + defaultMode。
+  Future<void> _prepareNativeRecordSession() async {
+    if (kIsWeb) return;
+    await NativePlaybackAudioSession.ensureRecordActive();
+  }
+
   /// 从初始大按钮进入控制栏：检查/申请麦克风权限，不开始录音。
   Future<String?> enterRecordingControls() async {
     try {
@@ -710,6 +718,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       final path = _buildRecordingPath();
       _currentRecordingPath = path;
       try {
+        await _prepareNativeRecordSession();
         await recorder.start(path: path);
       } catch (error) {
         _resetTimers();
@@ -832,6 +841,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
 
       final path = _buildRecordingPath();
       _currentRecordingPath = path;
+      await _prepareNativeRecordSession();
       await recorder.start(path: path);
       _amplitudeSub = recorder.amplitudes.listen(_onAmplitude, onError: (_) {});
       return null;

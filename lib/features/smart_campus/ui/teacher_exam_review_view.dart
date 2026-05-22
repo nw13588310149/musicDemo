@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // 任课老师 / 班主任端「考评管理」独立页面
 //
 // 入口：教师 dashboard 快捷区「考评管理」按钮 → controller.openExamReview()
@@ -36,6 +36,7 @@
 // =============================================================================
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 
 import '../../../core/widgets/popup_selector_field.dart';
 import '../../shell/ui/shell_layout.dart';
@@ -2030,7 +2031,7 @@ class _ScoreInput extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: TextField(
+            child: AppTextField(
               controller: controller,
               keyboardType: TextInputType.number,
               cursorColor: _kPurple,
@@ -2169,7 +2170,7 @@ class _PlainTextAreaState extends State<_PlainTextArea> {
         borderRadius: BorderRadius.circular(ui(8)),
         border: Border.all(color: _kPageGrey),
       ),
-      child: TextField(
+      child: AppTextField(
         controller: _ctrl,
         maxLines: null,
         expands: true,

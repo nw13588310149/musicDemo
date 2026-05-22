@@ -1,8 +1,9 @@
-// 部分卡片只覆盖了部分模型可选字段，analyzer 误报为
+﻿// 部分卡片只覆盖了部分模型可选字段，analyzer 误报为
 // unused_element_parameter，整体忽略。
 // ignore_for_file: unused_element_parameter
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_response.dart';
@@ -3062,7 +3063,7 @@ class _PlainInput extends StatelessWidget {
         border: Border.all(color: _kFieldBorder, width: 1),
       ),
       alignment: Alignment.centerLeft,
-      child: TextField(
+      child: AppTextField(
         controller: controller,
         cursorColor: _kPurple,
         cursorWidth: 1.5,
@@ -3380,7 +3381,7 @@ class _SearchBar extends StatelessWidget {
           Icon(Icons.search, size: ui(16), color: const Color(0xFFC6C6C6)),
           SizedBox(width: ui(10)),
           Expanded(
-            child: TextField(
+            child: AppTextField(
               cursorColor: _kPurple,
               cursorWidth: 1.5,
               cursorHeight: ui(16),

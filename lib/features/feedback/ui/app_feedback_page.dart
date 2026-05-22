@@ -1,8 +1,10 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../app/router/route_paths.dart';
 import '../../shell/ui/shell_layout.dart';
@@ -167,11 +169,20 @@ class _AppFeedbackPageState extends ConsumerState<AppFeedbackPage> {
                                   )),
                     ),
                     SizedBox(height: ui(12)),
-                    const _SectionTitle('写新反馈'),
-                    SizedBox(height: ui(8)),
-                    _BodyField(
-                      controller: _bodyCtrl,
-                      hint: '请描述你的意见或建议（如功能改进、体验优化等）',
+                    Transform.translate(
+                      offset: Offset(0, -ui(10)),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const _SectionTitle('写新反馈'),
+                          SizedBox(height: ui(8)),
+                          _BodyField(
+                            controller: _bodyCtrl,
+                            hint: '请描述你的意见或建议（如功能改进、体验优化等）',
+                          ),
+                        ],
+                      ),
                     ),
                     SizedBox(height: ui(12)),
                     Align(
@@ -268,15 +279,11 @@ class _FeedbackHeader extends StatelessWidget {
       height: ui(82),
       child: Stack(
         children: [
-          const Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.bottomLeft,
-                  end: Alignment.topRight,
-                  colors: [Colors.white, Color(0xFFF9EDFF)],
-                ),
-              ),
+          Positioned.fill(
+            child: Image.asset(
+              AppAssets.infoTopBg,
+              fit: BoxFit.cover,
+              alignment: Alignment.topCenter,
             ),
           ),
           Positioned(
@@ -389,7 +396,7 @@ class _BodyField extends StatelessWidget {
         color: _kInnerGray,
         borderRadius: BorderRadius.circular(ui(12)),
       ),
-      child: TextField(
+      child: AppTextField(
         controller: controller,
         maxLines: null,
         expands: true,

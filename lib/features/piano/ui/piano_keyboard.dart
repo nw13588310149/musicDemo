@@ -526,8 +526,8 @@ class _PianoChromeImageButton extends StatelessWidget {
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: SizedBox(
-        width: size,
-        height: size,
+        width: 30,
+        height: 30,
         child: Image.asset(asset, fit: BoxFit.contain),
       ),
     );
@@ -729,8 +729,8 @@ class _PianoLabelToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final height = ui(26);
-    final width = ui(68);
+    final height = ui(30);
+    final width = ui(78);
 
     return GestureDetector(
       onTap: onTap,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 
 class AuthInputField extends StatelessWidget {
   const AuthInputField({
@@ -29,7 +30,7 @@ class AuthInputField extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       height: 45,
-      child: TextField(
+      child: AppTextField(
         enabled: enabled,
         onChanged: onChanged,
         keyboardType: keyboardType,

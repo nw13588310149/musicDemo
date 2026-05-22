@@ -74,8 +74,6 @@ class _FirstLaunchPermissionHostState
         final ui = DashboardScaleScope.of(dialogContext).ui;
         return GradientHeaderDialog(
           title: '开启必要权限',
-          titleFontSize: 24,
-          titleFontWeight: FontWeight.w500,
           titlePaddingTop: 40,
           width: 428,
           contentPadding: EdgeInsets.fromLTRB(ui(40), ui(40), ui(40), ui(30)),

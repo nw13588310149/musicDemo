@@ -615,11 +615,18 @@ class _FavoriteChipButton extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Icon(
-              favorite ? Icons.star_rounded : Icons.star_border_rounded,
-              size: ui(20),
-              color: fg,
-            ),
+            favorite
+                ? Icon(
+                    Icons.star_rounded,
+                    size: ui(20),
+                    color: fg,
+                  )
+                : Image.asset(
+                    'assets/images/home/fav3.png',
+                    width: ui(20),
+                    height: ui(20),
+                    fit: BoxFit.contain,
+                  ),
             SizedBox(width: ui(4)),
             Text(
               favorite ? '收藏' : '收藏',

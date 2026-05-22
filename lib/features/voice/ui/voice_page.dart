@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_assets.dart';
@@ -345,7 +346,7 @@ class _VoiceSearchPill extends StatelessWidget {
     return SizedBox(
       width: ui(324),
       height: ui(40),
-      child: TextField(
+      child: AppTextField(
         controller: controller,
         onChanged: onChanged,
         maxLines: 1,

@@ -48,6 +48,7 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
     // practiceId 缺失时（直接通过 deep link 进入），先调用 create 兜底。
     if (practiceId == null || practiceId <= 0) {
       final created = await _repository.createPractice(
+        schoolId: args.schoolId,
         practiceType: args.practiceType.apiKey,
       );
       if (!mounted) return;
@@ -61,7 +62,10 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
       return;
     }
 
-    final response = await _repository.getItemList(practiceId: practiceId);
+    final response = await _repository.getItemList(
+      schoolId: args.schoolId,
+      practiceId: practiceId,
+    );
     if (!mounted) return;
 
     if (!response.isSuccess) {
@@ -101,6 +105,7 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
     final itemId = question.itemId;
     final status = answer == question.correctAnswer ? 1 : 2;
     final response = await _repository.reportAnswer(
+      schoolId: state.args.schoolId,
       questionPracticeItemId: itemId,
       answer: answer,
       status: status,
@@ -176,7 +181,9 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
   }
 
   Future<void> _refreshSummariesForCompletion() async {
-    final response = await _repository.getSummary();
+    final response = await _repository.getSummary(
+      schoolId: state.args.schoolId,
+    );
     if (!mounted || !response.isSuccess || response.data is! Map) return;
 
     QuizPracticeSummary parse(QuizPracticeType t, Map raw) {
@@ -224,6 +231,7 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
 
     if (practiceId == null || practiceId <= 0) {
       final created = await _repository.createPractice(
+        schoolId: state.args.schoolId,
         practiceType: targetType.apiKey,
       );
       if (!mounted) return null;
@@ -241,6 +249,7 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
       practiceId: practiceId,
       startIndex: startIndex,
       allCount: allCount,
+      schoolId: state.args.schoolId,
     );
   }
 

@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // 班主任端「家校沟通」独立页面
 //
 // 入口：班主任 dashboard 快捷区「家校沟通」按钮 →
@@ -28,6 +28,7 @@
 // =============================================================================
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
@@ -563,7 +564,7 @@ class _SearchBox extends StatelessWidget {
           ),
           SizedBox(width: ui(8)),
           Expanded(
-            child: TextField(
+            child: AppTextField(
               controller: controller,
               onChanged: onChanged,
               cursorColor: _kPurple,
@@ -1303,7 +1304,7 @@ class _InputBar extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: TextField(
+            child: AppTextField(
               controller: controller,
               onSubmitted: (_) => onSend(),
               cursorColor: _kPurple,

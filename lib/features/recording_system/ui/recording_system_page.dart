@@ -1,7 +1,8 @@
-import 'dart:math' as math;
+﻿import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show ValueListenable, debugPrint;
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_assets.dart';
@@ -1030,10 +1031,15 @@ class _FolderBreadcrumb extends StatelessWidget {
       runSpacing: ui(6),
       children: List<Widget>.generate(items.length * 2 - 1, (index) {
         if (index.isOdd) {
-          return Icon(
-            Icons.chevron_right_rounded,
-            size: ui(14),
-            color: const Color(0xFFB6B5BB),
+          final separatorIndex = index ~/ 2;
+          final isBeforeLastItem = separatorIndex + 1 == items.length - 1;
+          return Image.asset(
+            isBeforeLastItem
+                ? AppAssets.cloudBreadcrumbArrowLast
+                : AppAssets.cloudBreadcrumbArrow,
+            width: ui(20),
+            height: ui(20),
+            fit: BoxFit.contain,
           );
         }
         final itemIndex = index ~/ 2;
@@ -1082,7 +1088,7 @@ class _RecordingSearchField extends StatelessWidget {
     //   字形 line metrics 偏移导致文字偏上 / 偏下。
     return SizedBox(
       height: ui(40),
-      child: TextField(
+      child: AppTextField(
         controller: controller,
         cursorColor: const Color(0xFF8741FF),
         cursorWidth: 1.5,
@@ -2487,6 +2493,8 @@ class _RecordingStageBody extends StatelessWidget {
 /// 波形容器内部布局（设计稿 px，经 [DashboardScaleData.ui] 缩放）。
 const double _kRecordingWaveSectionHeight = 110;
 const double _kRecordingWaveTopInset = 20;
+/// 波形柱中心间距（设计稿 px）；越小柱越密。
+const double _kRecordingWaveBarSpacing = 2;
 const double _kRecordingScaleTopGap = 15;
 const double _kRecordingScaleSectionHeight = 58;
 const double _kRecordingWaveBottomPad = 10;
@@ -2577,7 +2585,7 @@ class _LiveDarkWavePanel extends StatelessWidget {
                         scaleSectionHeight: ui(_kRecordingScaleSectionHeight),
                         bottomInset: ui(_kRecordingWaveBottomPad),
                         barWidth: ui(1.5),
-                        spacing: ui(3),
+                        spacing: ui(_kRecordingWaveBarSpacing),
                         cursorThickness: ui(2),
                         playheadDotRadius: ui(3),
                         labelFontSize: ui(10),
@@ -2710,7 +2718,7 @@ class _PreviewDarkWavePanelState extends State<_PreviewDarkWavePanel> {
                           scaleSectionHeight: ui(_kRecordingScaleSectionHeight),
                           bottomInset: ui(_kRecordingWaveBottomPad),
                           barWidth: ui(1.5),
-                          spacing: ui(3),
+                          spacing: ui(_kRecordingWaveBarSpacing),
                           cursorThickness: ui(2),
                           playheadDotRadius: ui(3),
                           labelFontSize: ui(14),
@@ -3459,13 +3467,7 @@ class _SaveRecordingDialog extends ConsumerWidget {
                 Center(
                   child: Text(
                     '保存录音文件',
-                    style: TextStyle(
-                      fontSize: ui(22),
-                      color: const Color(0xFF0B081A),
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w500,
-                      height: 1.0,
-                    ),
+                    style: appDialogTitleTextStyle(ui),
                   ),
                 ),
                 SizedBox(height: ui(28)),
@@ -3686,7 +3688,7 @@ class _SaveTitleFieldState extends State<_SaveTitleField> {
     final ui = DashboardScaleScope.of(context).ui;
     return SizedBox(
       height: ui(48),
-      child: TextField(
+      child: AppTextField(
         controller: _controller,
         onChanged: widget.onChanged,
         // 关键修复：保存录音弹窗一打开就让作品名称输入框拿到焦点。

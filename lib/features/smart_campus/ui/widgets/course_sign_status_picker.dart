@@ -34,8 +34,6 @@ Future<CourseSignStatus?> showCourseSignStatusPicker(
         builder: (ctx, setLocalState) {
           return GradientHeaderDialog(
             title: '修改签到状态',
-            titleFontSize: 20,
-            titleFontWeight: FontWeight.w600,
             titlePaddingTop: 36,
             width: 400,
             contentPadding: EdgeInsets.fromLTRB(ui(32), ui(24), ui(32), ui(8)),

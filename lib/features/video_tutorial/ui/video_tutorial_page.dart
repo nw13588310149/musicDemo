@@ -1742,6 +1742,15 @@ class _CenterPlayBtn extends StatelessWidget {
   }
 }
 
+// 非全屏底栏为基准；全屏底栏按钮热区与间距须与此一致。
+const double _kVideoCtrlIconSize = 18;
+const double _kVideoCtrlBtnHit = 32;
+const double _kVideoCtrlSettingHit = 28;
+const double _kVideoCtrlTimeGap = 6;
+const EdgeInsets _kVideoCtrlBarPadding = EdgeInsets.fromLTRB(8, 16, 14, 8);
+const EdgeInsets _kVideoCtrlRowPadding = EdgeInsets.fromLTRB(8, 0, 14, 8);
+const double _kVideoCtrlFullscreenIconGap = 2;
+
 class _PlayerBottomBar extends StatelessWidget {
   const _PlayerBottomBar({
     required this.isPlaying,
@@ -1790,7 +1799,7 @@ class _PlayerBottomBar extends StatelessWidget {
           colors: [Colors.transparent, Colors.black.withValues(alpha: 0.88)],
         ),
       ),
-      padding: const EdgeInsets.fromLTRB(8, 16, 14, 8),
+      padding: _kVideoCtrlBarPadding,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1876,25 +1885,28 @@ class _PlayerBottomBar extends StatelessWidget {
                 onPressed: onSeekBack,
                 icon: Image.asset(
                   AppAssets.videoV2SeekBack15,
-                  width: 16,
-                  height: 16,
+                  width: _kVideoCtrlIconSize,
+                  height: _kVideoCtrlIconSize,
                   fit: BoxFit.contain,
                 ),
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                constraints: const BoxConstraints(
+                  minWidth: _kVideoCtrlBtnHit,
+                  minHeight: _kVideoCtrlBtnHit,
+                ),
               ),
               GestureDetector(
                 onTap: onTogglePlay,
                 child: Container(
-                  width: 32,
-                  height: 32,
+                  width: _kVideoCtrlBtnHit,
+                  height: _kVideoCtrlBtnHit,
                   alignment: Alignment.center,
                   child: Image.asset(
                     isPlaying
                         ? AppAssets.videoV2SmallPause
                         : AppAssets.videoV2SmallPlay,
-                    width: 16,
-                    height: 16,
+                    width: _kVideoCtrlIconSize,
+                    height: _kVideoCtrlIconSize,
                     fit: BoxFit.contain,
                   ),
                 ),
@@ -1903,14 +1915,17 @@ class _PlayerBottomBar extends StatelessWidget {
                 onPressed: onSeekForward,
                 icon: Image.asset(
                   AppAssets.videoV2SeekForward15,
-                  width: 16,
-                  height: 16,
+                  width: _kVideoCtrlIconSize,
+                  height: _kVideoCtrlIconSize,
                   fit: BoxFit.contain,
                 ),
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                constraints: const BoxConstraints(
+                  minWidth: _kVideoCtrlBtnHit,
+                  minHeight: _kVideoCtrlBtnHit,
+                ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: _kVideoCtrlTimeGap),
               Text(
                 '${fmt(position)} / ${fmt(duration)}',
                 style: const TextStyle(color: Colors.white, fontSize: 12),
@@ -1920,23 +1935,26 @@ class _PlayerBottomBar extends StatelessWidget {
                 onPressed: onEnterPip,
                 icon: Image.asset(
                   AppAssets.videoV2Pip,
-                  width: 16,
-                  height: 16,
+                  width: _kVideoCtrlIconSize,
+                  height: _kVideoCtrlIconSize,
                   fit: BoxFit.contain,
                 ),
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                constraints: const BoxConstraints(
+                  minWidth: _kVideoCtrlBtnHit,
+                  minHeight: _kVideoCtrlBtnHit,
+                ),
               ),
               GestureDetector(
                 onTap: onShowSpeedPanel,
                 child: Container(
-                  width: 28,
-                  height: 28,
+                  width: _kVideoCtrlSettingHit,
+                  height: _kVideoCtrlSettingHit,
                   alignment: Alignment.center,
                   child: Image.asset(
                     AppAssets.videoV2Setting,
-                    width: 16,
-                    height: 16,
+                    width: _kVideoCtrlIconSize,
+                    height: _kVideoCtrlIconSize,
                     fit: BoxFit.contain,
                   ),
                 ),
@@ -1945,14 +1963,17 @@ class _PlayerBottomBar extends StatelessWidget {
                 onPressed: onFullscreen,
                 icon: Image.asset(
                   AppAssets.videoV2Fullscreen,
-                  width: 16,
-                  height: 16,
+                  width: _kVideoCtrlIconSize,
+                  height: _kVideoCtrlIconSize,
                   fit: BoxFit.contain,
                 ),
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                constraints: const BoxConstraints(
+                  minWidth: _kVideoCtrlBtnHit,
+                  minHeight: _kVideoCtrlBtnHit,
+                ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: _kVideoCtrlTimeGap),
             ],
           ),
         ],
@@ -2623,9 +2644,7 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                  ),
+                                  padding: const EdgeInsets.fromLTRB(8, 0, 14, 0),
                                   child: SliderTheme(
                                     data: SliderTheme.of(context).copyWith(
                                       trackHeight: 3,
@@ -2666,13 +2685,10 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                   ),
                                 ),
                                 Padding(
-                                  padding: const EdgeInsets.fromLTRB(
-                                    16,
-                                    0,
-                                    16,
-                                    12,
-                                  ),
+                                  padding: _kVideoCtrlRowPadding,
                                   child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.center,
                                     children: [
                                       IconButton(
                                         onPressed: () {
@@ -2686,15 +2702,18 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                         },
                                         icon: Image.asset(
                                           AppAssets.videoV2SeekBack15,
-                                          width: 16,
-                                          height: 16,
+                                          width: _kVideoCtrlIconSize,
+                                          height: _kVideoCtrlIconSize,
                                           fit: BoxFit.contain,
                                         ),
                                         padding: EdgeInsets.zero,
                                         constraints: const BoxConstraints(
-                                          minWidth: 36,
-                                          minHeight: 36,
+                                          minWidth: _kVideoCtrlBtnHit,
+                                          minHeight: _kVideoCtrlBtnHit,
                                         ),
+                                      ),
+                                      const SizedBox(
+                                        width: _kVideoCtrlFullscreenIconGap,
                                       ),
                                       GestureDetector(
                                         onTap: () {
@@ -2705,14 +2724,22 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                           }
                                           _autoHide();
                                         },
-                                        child: Image.asset(
-                                          _isPlaying
-                                              ? AppAssets.videoV2SmallPause
-                                              : AppAssets.videoV2SmallPlay,
-                                          width: 16,
-                                          height: 16,
-                                          fit: BoxFit.contain,
+                                        child: Container(
+                                          width: _kVideoCtrlBtnHit,
+                                          height: _kVideoCtrlBtnHit,
+                                          alignment: Alignment.center,
+                                          child: Image.asset(
+                                            _isPlaying
+                                                ? AppAssets.videoV2SmallPause
+                                                : AppAssets.videoV2SmallPlay,
+                                            width: _kVideoCtrlIconSize,
+                                            height: _kVideoCtrlIconSize,
+                                            fit: BoxFit.contain,
+                                          ),
                                         ),
+                                      ),
+                                      const SizedBox(
+                                        width: _kVideoCtrlFullscreenIconGap,
                                       ),
                                       IconButton(
                                         onPressed: () {
@@ -2729,22 +2756,22 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                         },
                                         icon: Image.asset(
                                           AppAssets.videoV2SeekForward15,
-                                          width: 16,
-                                          height: 16,
+                                          width: _kVideoCtrlIconSize,
+                                          height: _kVideoCtrlIconSize,
                                           fit: BoxFit.contain,
                                         ),
                                         padding: EdgeInsets.zero,
                                         constraints: const BoxConstraints(
-                                          minWidth: 36,
-                                          minHeight: 36,
+                                          minWidth: _kVideoCtrlBtnHit,
+                                          minHeight: _kVideoCtrlBtnHit,
                                         ),
                                       ),
-                                      const SizedBox(width: 4),
+                                      const SizedBox(width: _kVideoCtrlTimeGap),
                                       Text(
                                         '${_fmt(_position)} / ${_fmt(_duration)}',
                                         style: const TextStyle(
                                           color: Colors.white,
-                                          fontSize: 13,
+                                          fontSize: 12,
                                         ),
                                       ),
                                       const Spacer(),
@@ -2757,13 +2784,16 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                               ? Icons.volume_up_rounded
                                               : Icons.volume_off_rounded,
                                           color: Colors.white,
-                                          size: 22,
+                                          size: _kVideoCtrlIconSize,
                                         ),
                                         padding: EdgeInsets.zero,
                                         constraints: const BoxConstraints(
-                                          minWidth: 36,
-                                          minHeight: 36,
+                                          minWidth: _kVideoCtrlBtnHit,
+                                          minHeight: _kVideoCtrlBtnHit,
                                         ),
+                                      ),
+                                      const SizedBox(
+                                        width: _kVideoCtrlFullscreenIconGap,
                                       ),
                                       // 退出全屏
                                       IconButton(
@@ -2771,17 +2801,18 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                             Navigator.of(context).pop(),
                                         icon: Image.asset(
                                           AppAssets.videoV2FullscreenExit,
-                                          width: 16,
-                                          height: 16,
+                                          width: _kVideoCtrlIconSize,
+                                          height: _kVideoCtrlIconSize,
                                           fit: BoxFit.contain,
                                         ),
                                         tooltip: '退出全屏',
                                         padding: EdgeInsets.zero,
                                         constraints: const BoxConstraints(
-                                          minWidth: 36,
-                                          minHeight: 36,
+                                          minWidth: _kVideoCtrlBtnHit,
+                                          minHeight: _kVideoCtrlBtnHit,
                                         ),
                                       ),
+                                      const SizedBox(width: _kVideoCtrlTimeGap),
                                     ],
                                   ),
                                 ),
@@ -4046,7 +4077,7 @@ class _SubCategoryBar extends StatelessWidget {
     if (items.isEmpty) return const SizedBox.shrink();
     // Figma 规格：
     //   - 容器 padding 12/10/12/10、radius 8
-    //   - active bg #0B081A，文字 white；inactive bg #F5F6FA，文字 #0B081A
+    //   - active bg #0D1535，文字 white；inactive bg #F5F6FA，文字 #0B081A
     //   - 文字 14/400/PingFang SC（height 1）
     //   - 容器总高 ≈ 10 + 文字 line-box(~20) + 10 = 40
     //   - 项之间 gap 8（保持原值，Figma 仅给出单个 chip）
@@ -4066,7 +4097,7 @@ class _SubCategoryBar extends StatelessWidget {
               padding: EdgeInsets.symmetric(horizontal: ui(12)),
               decoration: BoxDecoration(
                 color: active
-                    ? const Color(0xFF0B081A)
+                    ? const Color(0xFF0D1535)
                     : const Color(0xFFF5F6FA),
                 borderRadius: BorderRadius.circular(ui(8)),
               ),
@@ -4137,8 +4168,7 @@ class _VideoGridCard extends StatelessWidget {
         final infoBottomPad = thumbInset * s;
         final titleLineH = 13.0 * s * 1.3;
         final metaRowH = 16.0 * s;
-        const titleUpOffset = 2.0;
-        const metaUpOffset = 2.0;
+        const titleUpOffset = 3.0;
 
         return Material(
           color: const Color(0xFFF5F6FA),
@@ -4233,17 +4263,14 @@ class _VideoGridCard extends StatelessWidget {
                                 ),
                               ),
                               const Spacer(),
-                              Transform.translate(
-                                offset: Offset(0, -metaUpOffset * s),
-                                child: SizedBox(
-                                  height: metaRowH,
-                                  child: Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: _VideoPublisherMetaRow(
-                                      videoId: item.id,
-                                      playCount: item.playCount,
-                                      size: (px) => px * s,
-                                    ),
+                              SizedBox(
+                                height: metaRowH,
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: _VideoPublisherMetaRow(
+                                    videoId: item.id,
+                                    playCount: item.playCount,
+                                    size: (px) => px * s,
                                   ),
                                 ),
                               ),

@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/media_url.dart';
@@ -816,7 +817,7 @@ class _FilterRowState extends State<_FilterRow> {
               Icon(Icons.search, size: ui(16), color: const Color(0xFFC6C6C6)),
               SizedBox(width: ui(10)),
               Expanded(
-                child: TextField(
+                child: AppTextField(
                   controller: _searchCtrl,
                   onChanged: widget.onSearchChanged,
                   cursorColor: _kPurple,
@@ -1136,8 +1137,6 @@ class _TeacherProfileDialog extends StatelessWidget {
 
     return GradientHeaderDialog(
       title: '教师档案',
-      titleFontSize: 20,
-      titleFontWeight: FontWeight.w500,
       titlePaddingTop: 28,
       width: 428,
       headerAsset: null,

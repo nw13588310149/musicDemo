@@ -16,11 +16,13 @@ class QuizPracticePage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(quizPracticeControllerProvider);
-    final controller = ref.read(quizPracticeControllerProvider.notifier);
+    const schoolId = kPublicQuizSchoolId;
+    final provider = quizPracticeControllerProvider(schoolId);
+    final state = ref.watch(provider);
+    final controller = ref.read(provider.notifier);
     final ui = DashboardScaleScope.of(context).ui;
 
-    ref.listen<QuizPracticeState>(quizPracticeControllerProvider, (
+    ref.listen<QuizPracticeState>(provider, (
       previous,
       next,
     ) {
@@ -67,6 +69,7 @@ class QuizPracticePage extends ConsumerWidget {
       practiceId: summary.practiceId,
       startIndex: summary.doneCount,
       allCount: summary.allCount,
+      schoolId: kPublicQuizSchoolId,
     );
     await Navigator.pushNamed(context, RoutePaths.campAnswer, arguments: args);
     if (!context.mounted) {

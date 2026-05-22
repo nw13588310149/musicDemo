@@ -15,18 +15,25 @@ class QuizPracticeRepository {
   final ApiClient client;
 
   /// 刷题数据汇总：返回顺序练习/随机练习/考前密卷/错题集 4 类的统计数据。
-  Future<ApiResponse> getSummary() {
-    return client.post('/app/user/questionPracticeSummary');
+  ///
+  /// [schoolId]：首页公开刷题固定传 `0`；校园课件刷题传真实学校 id。
+  Future<ApiResponse> getSummary({required int schoolId}) {
+    return client.post(
+      '/app/user/questionPracticeSummary',
+      data: <String, dynamic>{'schoolId': schoolId},
+    );
   }
 
   /// 创建一组练习（status==null 时初始化）。size 默认 150 与 1.0 一致。
   Future<ApiResponse> createPractice({
+    required int schoolId,
     required String practiceType,
     int size = 150,
   }) {
     return client.post(
       '/app/user/questionPracticeCreate',
       data: <String, dynamic>{
+        'schoolId': schoolId,
         'practiceType': practiceType,
         'size': size.toString(),
       },
@@ -34,15 +41,22 @@ class QuizPracticeRepository {
   }
 
   /// 根据 practiceId 拉取该轮练习的全部题目。
-  Future<ApiResponse> getItemList({required int practiceId}) {
+  Future<ApiResponse> getItemList({
+    required int schoolId,
+    required int practiceId,
+  }) {
     return client.post(
       '/app/user/questionPracticeItemList',
-      data: <String, dynamic>{'practiceId': practiceId},
+      data: <String, dynamic>{
+        'schoolId': schoolId,
+        'practiceId': practiceId,
+      },
     );
   }
 
   /// 上报答题结果。status: 1=正确, 2=错误。
   Future<ApiResponse> reportAnswer({
+    required int schoolId,
     required int questionPracticeItemId,
     required int answer,
     required int status,
@@ -50,6 +64,7 @@ class QuizPracticeRepository {
     return client.post(
       '/app/user/questionPracticeItemReport',
       data: <String, dynamic>{
+        'schoolId': schoolId,
         'answer': answer,
         'questionPracticeItemId': questionPracticeItemId,
         'status': status,

@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // 管理员端「通知管理」独立页面
 //
 // 入口：admin 首页快捷区「通知管理」按钮 →
@@ -46,6 +46,7 @@
 // =============================================================================
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 
 import '../../../core/widgets/app_date_time_pickers.dart';
 import '../../../core/widgets/app_toast.dart';
@@ -804,7 +805,7 @@ class _SearchInput extends StatelessWidget {
           ),
           SizedBox(width: ui(8)),
           Expanded(
-            child: TextField(
+            child: AppTextField(
               controller: controller,
               cursorColor: _kPurple,
               cursorWidth: 1.5,
@@ -1833,7 +1834,7 @@ class _TextField extends StatelessWidget {
         borderRadius: BorderRadius.circular(ui(10)),
         border: Border.all(color: _kInnerGray, width: 1),
       ),
-      child: TextField(
+      child: AppTextField(
         controller: controller,
         maxLines: maxLines,
         maxLength: maxLength,

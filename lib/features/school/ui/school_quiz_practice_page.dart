@@ -1,7 +1,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // school_quiz_practice_page.dart
-// 校园刷题页 — 样式与公开刷题页保持一致，当前为空数据占位。
-// TODO: 后续接入校园刷题接口替换 _schoolQuizProvider。
+// 校园刷题页 — 样式与公开刷题页一致，接口携带真实 schoolId。
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'dart:math' as math;
@@ -11,46 +10,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/route_paths.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../school/state/school_page_controller.dart';
+import '../../shell/ui/shell_layout.dart';
+import '../../quiz_practice/state/quiz_practice_controller.dart';
 import '../../quiz_practice/state/quiz_practice_state.dart';
 import '../../quiz_practice/state/quiz_session_state.dart';
-import '../../shell/ui/shell_layout.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
-
-// ── 校园刷题 state ──────────────────────────────────────────────────────────
-
-class _SchoolQuizState {
-  const _SchoolQuizState({this.loading = false, this.summaries = const []});
-
-  final bool loading;
-  final List<QuizPracticeSummary> summaries;
-}
-
-class _SchoolQuizNotifier extends StateNotifier<_SchoolQuizState> {
-  _SchoolQuizNotifier() : super(const _SchoolQuizState()) {
-    _init();
-  }
-
-  void _init() {
-    // 默认展示四个空圆环（0/0，0%），点击时提示"暂无可练习题目"。
-    // TODO: 改为调用校园刷题接口获取数据。
-    state = _SchoolQuizState(
-      loading: false,
-      summaries: QuizPracticeType.values
-          .map((t) => QuizPracticeSummary.empty(t))
-          .toList(),
-    );
-  }
-
-  Future<void> refresh() async {
-    // TODO: 接入校园刷题接口。
-    _init();
-  }
-}
-
-final _schoolQuizProvider =
-    StateNotifierProvider.autoDispose<_SchoolQuizNotifier, _SchoolQuizState>(
-      (ref) => _SchoolQuizNotifier(),
-    );
 
 // ── 页面入口 ────────────────────────────────────────────────────────────────
 
@@ -59,9 +24,17 @@ class SchoolQuizPracticePage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(_schoolQuizProvider);
-    final controller = ref.read(_schoolQuizProvider.notifier);
+    final schoolId = ref.watch(schoolPageControllerProvider).schoolId;
+    final provider = quizPracticeControllerProvider(schoolId);
+    final state = ref.watch(provider);
+    final controller = ref.read(provider.notifier);
     final ui = DashboardScaleScope.of(context).ui;
+
+    ref.listen<QuizPracticeState>(provider, (previous, next) {
+      final msg = next.errorMessage;
+      if (msg.isEmpty || msg == previous?.errorMessage) return;
+      AppToast.show(context, msg);
+    });
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -76,7 +49,7 @@ class SchoolQuizPracticePage extends ConsumerWidget {
                 : _PracticeRingRow(
                     summaries: state.summaries,
                     onSelect: (summary) =>
-                        _openSession(context, controller, summary),
+                        _openSession(context, controller, schoolId, summary),
                     onRefresh: controller.refresh,
                   ),
           ),
@@ -87,7 +60,8 @@ class SchoolQuizPracticePage extends ConsumerWidget {
 
   Future<void> _openSession(
     BuildContext context,
-    _SchoolQuizNotifier controller,
+    QuizPracticeController controller,
+    int schoolId,
     QuizPracticeSummary summary,
   ) async {
     if (summary.allCount <= 0) {
@@ -99,8 +73,8 @@ class SchoolQuizPracticePage extends ConsumerWidget {
       practiceId: summary.practiceId,
       startIndex: summary.doneCount,
       allCount: summary.allCount,
+      schoolId: schoolId,
     );
-    // TODO: 后续接入校园答题路由（如 RoutePaths.schoolCampAnswer）。
     await Navigator.pushNamed(context, RoutePaths.campAnswer, arguments: args);
     if (!context.mounted) return;
     await controller.refresh();

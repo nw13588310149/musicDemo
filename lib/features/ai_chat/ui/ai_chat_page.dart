@@ -1,6 +1,7 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -26,8 +27,14 @@ const _purple = Color(0xFF8741FF);
 const _purpleSoft = Color(0x0D8741FF);
 
 const _historyPaneWidth = 200.0;
+const _historyItemHorizontalPadding = 12.0;
+const _historyPaneBottomPadding = 12.0;
+const _historyPaneTopChromeHeight = 24.0 + 36.0 + 16.0 + 20.0 + 16.0;
+const _conversationHeaderHeight = 56.0;
 const _mainHorizontalPadding = 64.0;
 const _mainBottomPadding = 12.0;
+const _landingBottomPadding = 41.0;
+const _conversationBottomInset = 8.0;
 
 // Figma 题项编号配色：1/2 红 #EB2F2F；3 橙 #FE7B3F；4/5/6 浅灰 #CECED1
 // 注意：4/5/6 用的是 #CECED1（更淡），不是 #B6B5BB（_textHint），肉眼能看出差别。
@@ -107,61 +114,64 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
     final controller = ref.read(aiChatControllerProvider.notifier);
     _scheduleScrollIfNeeded(state);
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border.all(color: _border),
-        borderRadius: BorderRadius.circular(16),
-        color: state.isNewConversation ? null : Colors.white,
-        // Figma: linear-gradient(180deg, #EFEEFD 0%, white 34%, white 100%)
-        gradient: state.isNewConversation
-            ? const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xFFEFEEFD), Colors.white, Colors.white],
-                stops: [0, 0.34, 1],
-              )
-            : null,
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Row(
-          children: [
-            SizedBox(
-              width: _historyPaneWidth,
-              child: _buildHistoryPane(state, controller),
-            ),
-            Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final mainWidth =
-                      constraints.maxWidth - _mainHorizontalPadding * 2;
-                  final composerWidth = mainWidth > 0
-                      ? mainWidth
-                      : constraints.maxWidth;
-                  final userBubbleWidth = (mainWidth * 0.62)
-                      .clamp(220.0, 420.0)
-                      .toDouble();
-                  // AI 回复气泡占满对话主列宽度（最小 320 兜底）。
-                  final aiBubbleWidth = mainWidth > 320 ? mainWidth : 320.0;
+    return SizedBox.expand(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border.all(color: _border),
+          borderRadius: BorderRadius.circular(16),
+          color: state.isNewConversation ? null : Colors.white,
+          // Figma: linear-gradient(180deg, #EFEEFD 0%, white 34%, white 100%)
+          gradient: state.isNewConversation
+              ? const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFFEFEEFD), Colors.white, Colors.white],
+                  stops: [0, 0.34, 1],
+                )
+              : null,
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                width: _historyPaneWidth,
+                child: _buildHistoryPane(state, controller),
+              ),
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final mainWidth =
+                        constraints.maxWidth - _mainHorizontalPadding * 2;
+                    final composerWidth = mainWidth > 0
+                        ? mainWidth
+                        : constraints.maxWidth;
+                    final userBubbleWidth = (mainWidth * 0.62)
+                        .clamp(220.0, 420.0)
+                        .toDouble();
+                    // AI 回复气泡占满对话主列宽度（最小 320 兜底）。
+                    final aiBubbleWidth = mainWidth > 320 ? mainWidth : 320.0;
 
-                  if (state.isNewConversation) {
-                    return _buildLanding(
+                    if (state.isNewConversation) {
+                      return _buildLanding(
+                        state: state,
+                        controller: controller,
+                        composerWidth: composerWidth,
+                      );
+                    }
+                    return _buildConversation(
                       state: state,
                       controller: controller,
                       composerWidth: composerWidth,
+                      userBubbleMaxWidth: userBubbleWidth,
+                      aiBubbleMaxWidth: aiBubbleWidth,
                     );
-                  }
-                  return _buildConversation(
-                    state: state,
-                    controller: controller,
-                    composerWidth: composerWidth,
-                    userBubbleMaxWidth: userBubbleWidth,
-                    aiBubbleMaxWidth: aiBubbleWidth,
-                  );
-                },
+                  },
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -177,6 +187,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.max,
         children: [
           const SizedBox(height: 24),
           Padding(
@@ -256,7 +267,12 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
           const SizedBox(height: 16),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.fromLTRB(
+                16,
+                0,
+                16,
+                _historyPaneBottomPadding,
+              ),
               child: state.sessionsLoading && state.sessions.isEmpty
                   ? const Center(
                       child: SizedBox(
@@ -300,8 +316,9 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                             // Figma: 上一组结束 → 下一组 group label gap = 6
                             const SizedBox(height: 6),
                             Padding(
-                              // Figma: group label 在 group 内 left:12（相对 group 的 left:0）
-                              padding: const EdgeInsets.only(left: 12),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: _historyItemHorizontalPadding,
+                              ),
                               // Figma: 12/500 / line-height 18 / #CECED1
                               child: Text(
                                 group.label,
@@ -343,11 +360,11 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                               ),
                             ],
                           ],
-                        const SizedBox(height: 8),
                       ],
                     ),
             ),
           ),
+          SizedBox(height: _historyPaneBottomSpacerHeight(state)),
         ],
       ),
     );
@@ -367,14 +384,16 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
-        width: 198,
+        width: double.infinity,
         height: 40,
         decoration: BoxDecoration(
           color: active ? _panelFill : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          padding: const EdgeInsets.symmetric(
+            horizontal: _historyItemHorizontalPadding,
+          ),
           child: Row(
             children: [
               Expanded(
@@ -420,6 +439,31 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
   double _composerHeight(AiChatState state) =>
       state.pendingAttachments.isEmpty ? 124.0 : 154.0;
 
+  /// 右侧底部固定区（composer + 免责声明 + 间距）占用高度。
+  double _rightBottomReservedHeight(AiChatState state) {
+    const disclaimerHeight = 16.0;
+    final composer = _composerHeight(state);
+    if (state.isNewConversation) {
+      return composer + 13 + disclaimerHeight + _landingBottomPadding;
+    }
+    return composer + _mainBottomPadding + disclaimerHeight + _conversationBottomInset;
+  }
+
+  /// 左侧历史列表下方占位，使左右主内容滚动视口高度一致。
+  ///
+  /// [_historyPaneBottomPadding] 在 Expanded 内部的 ListView 上，属于滚动区
+  /// 域而非 Expanded 下方的结构高度，因此不参与 spacer 计算。
+  double _historyPaneBottomSpacerHeight(AiChatState state) {
+    final rightTopChrome = state.isNewConversation
+        ? 0.0
+        : _conversationHeaderHeight;
+    final spacer =
+        _rightBottomReservedHeight(state) +
+        rightTopChrome -
+        _historyPaneTopChromeHeight;
+    return spacer > 0 ? spacer : 0;
+  }
+
   Widget _buildLanding({
     required AiChatState state,
     required AiChatController controller,
@@ -432,9 +476,10 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
         _mainHorizontalPadding,
         94,
         _mainHorizontalPadding,
-        41,
+        _landingBottomPadding,
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.max,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildWelcomeSection(),
@@ -812,9 +857,10 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
           (item) => item.type == AiChatMessageType.ai && item.streaming,
         );
     return Column(
+      mainAxisSize: MainAxisSize.max,
       children: [
         Container(
-          height: 56,
+          height: _conversationHeaderHeight,
           alignment: Alignment.center,
           decoration: const BoxDecoration(
             color: Colors.white,
@@ -823,7 +869,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
           child: Text(
             _activeTitle(state),
             style: TextStyle(
-              color: Color(0xFF14214E),
+              color: Color(0xFF000000),
               fontSize: 15,
               fontFamily: 'PingFang SC',
               fontWeight: AppFont.w500,
@@ -898,7 +944,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
           child: _buildComposer(state, controller, composerWidth),
         ),
         _buildDisclaimer(),
-        const SizedBox(height: 8),
+        SizedBox(height: _conversationBottomInset),
       ],
     );
   }
@@ -918,7 +964,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
             DecoratedBox(
               decoration: BoxDecoration(
                 color: _panelFill,
-                borderRadius: BorderRadius.circular(22),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Padding(
                 padding: const EdgeInsets.symmetric(
@@ -1015,8 +1061,8 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                     children: [
                       const AppAssetGraphic(
                         AppAssets.aiChatThinkActive,
-                        width: 14,
-                        height: 14,
+                        width: 25,
+                        height: 25,
                       ),
                       const SizedBox(width: 4),
                       Text(
@@ -1129,7 +1175,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
   Widget _actionAssetIcon({
     required String asset,
     required VoidCallback onTap,
-    double size = 14,
+    double size = 18,
   }) {
     return InkWell(
       borderRadius: BorderRadius.circular(12),
@@ -1205,7 +1251,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                   16,
                   textVerticalPadding,
                 ),
-                child: TextField(
+                child: AppTextField(
                   controller: _inputCtrl,
                   maxLines: null,
                   minLines: null,
@@ -1373,31 +1419,29 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
     required Color borderColor,
     bool loading = false,
   }) {
-    return Material(
-      color: background,
-      borderRadius: BorderRadius.circular(6),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(6),
-        onTap: onTap,
-        child: Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: borderColor),
-          ),
-          child: Center(
-            child: loading
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: _purple,
-                    ),
-                  )
-                : AppAssetGraphic(iconAsset, width: 20, height: 20),
-          ),
+    // 上传按钮去掉 Material + InkWell 的水波纹/高亮，保持图标原有视觉。
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: background,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: borderColor),
+        ),
+        child: Center(
+          child: loading
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: _purple,
+                  ),
+                )
+              : AppAssetGraphic(iconAsset, width: 20, height: 20),
         ),
       ),
     );
@@ -1600,8 +1644,6 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
       builder: (dialogContext) {
         return GradientHeaderDialog(
           title: '删除会话',
-          titleFontSize: 20,
-          titleFontWeight: AppFont.w500,
           titlePaddingTop: 25,
           width: 428,
           actionBar: AppDialogActionBar(

@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // 学生端「查寝管理」独立页面
 //
 // 入口：学生 dashboard 快捷区「查寝管理」按钮 → controller.openDormCheck()
@@ -32,6 +32,7 @@
 // =============================================================================
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 
 import '../../../core/widgets/app_date_time_pickers.dart';
 import '../../../core/widgets/app_toast.dart';
@@ -964,8 +965,6 @@ class _DormResubmitDialogState extends State<_DormResubmitDialog> {
     final ui = DashboardScaleScope.of(context).ui;
     return GradientHeaderDialog(
       title: '申请查寝补卡',
-      titleFontSize: 24,
-      titleFontWeight: FontWeight.w500,
       titlePaddingTop: 39,
       width: 428,
       actionBar: AppDialogActionBar(
@@ -1131,7 +1130,7 @@ class _NoteField extends StatelessWidget {
         borderRadius: BorderRadius.circular(ui(8)),
         border: Border.all(color: _kBorderSoft),
       ),
-      child: TextField(
+      child: AppTextField(
         controller: controller,
         maxLines: null,
         expands: true,

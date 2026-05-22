@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import 'app_font.dart';
@@ -29,6 +30,12 @@ class AppTheme {
         seedColor: _primaryColor,
         primary: _primaryColor,
       ),
+      // iOS 文本选区把手、放大镜描边、未覆盖的 EditableText 光标等走 Cupertino
+      // primaryColor；须与品牌紫一致，否则会回退到 colorScheme.primary（绿色）。
+      cupertinoOverrideTheme: const CupertinoThemeData(
+        primaryColor: brandColor,
+        selectionHandleColor: brandColor,
+      ).noDefault(),
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.white,
         elevation: 0,

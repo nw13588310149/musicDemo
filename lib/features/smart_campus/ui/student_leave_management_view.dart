@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // 学生端「请假管理」独立页面
 //
 // 入口：学生 dashboard 快捷区「请假管理」按钮 → controller.openLeaveManagement()
@@ -36,6 +36,7 @@
 // =============================================================================
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 
 import '../../../core/widgets/app_date_time_pickers.dart';
 import '../../../core/widgets/app_toast.dart';
@@ -1693,7 +1694,7 @@ class _TextInputField extends StatelessWidget {
         border: Border.all(color: _kBoardBg),
       ),
       alignment: Alignment.center,
-      child: TextField(
+      child: AppTextField(
         controller: controller,
         keyboardType: keyboardType,
         cursorColor: _kPurple,
@@ -1740,7 +1741,7 @@ class _TextAreaField extends StatelessWidget {
         borderRadius: BorderRadius.circular(ui(8)),
         border: Border.all(color: _kBoardBg),
       ),
-      child: TextField(
+      child: AppTextField(
         controller: controller,
         maxLines: null,
         expands: true,

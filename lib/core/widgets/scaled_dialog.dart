@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'app_text_field.dart';
 import '../../features/shell/ui/shell_layout.dart';
 import '../constants/app_assets.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -39,17 +40,44 @@ Future<T?> showScaledDialog<T>({
   );
 }
 
-/// 渐变标题弹窗居中标题的设计基准（20/500，行高 24，距顶 25）。
+/// 输入弹窗标题的设计基准：对齐首页 [ShellSectionTitleBar]（如「最新」），字号 20。
 const double kAppDialogTitleFontSize = 20;
-const double kAppDialogTitleLineHeight = 24;
+const Color kAppDialogTitleColor = Color(0xFF1A1A1A);
 const double kAppDialogTitlePaddingTop = 25;
+
+/// 输入弹窗首个输入框顶边距容器顶部的设计基准。
+const double kAppDialogFirstInputTop = 90;
+
+/// 标题下方到 [child] 顶部的间距，使首个输入框顶边落在 [kAppDialogFirstInputTop]。
+double appDialogGapBeforeFirstInput({
+  required double topInset,
+  double titleFontSize = kAppDialogTitleFontSize,
+}) {
+  return (kAppDialogFirstInputTop - topInset - titleFontSize)
+      .clamp(0.0, double.infinity);
+}
+
+/// 输入弹窗 / [GradientHeaderDialog] 居中标题样式。
+TextStyle appDialogTitleTextStyle(
+  double Function(num) ui, {
+  double fontSize = kAppDialogTitleFontSize,
+}) {
+  return TextStyle(
+    fontSize: ui(fontSize),
+    color: kAppDialogTitleColor,
+    fontFamily: 'PingFang SC',
+    fontWeight: AppFont.w500,
+    height: 1,
+  );
+}
 
 /// 「渐变顶部装饰 + 居中标题 + 自定义内容 + 底部按钮」对话框容器。
 ///
 /// 提取自 courseware「上传课件」弹窗的视觉系统，复用给所有需要：
 ///   · 圆角 24 + 顶部 #D2C6FF→white 渐变（stops 0 / 0.21 / 1）
 ///   · 顶部一张装饰位图（默认 `AppAssets.coursewareUploadHeader`）
-///   · 居中标题（20/w500，行高 24，距顶 25；可通过参数覆盖）
+///   · 居中标题（20/w500，行高 1，距顶 25；对齐首页「最新」区块标题）
+///   · 首个输入框顶边距容器顶部 84（标题区与 [child] 之间自动留白）
 ///   · 自定义 [child] 表单内容
 ///   · 可选底部 [actionBar]（推荐传入 [AppDialogActionBar]）
 /// 的弹窗。`width` 默认 420（设计基准 428，少 8 用作左右 inset 余量）。
@@ -60,7 +88,6 @@ const double kAppDialogTitlePaddingTop = 25;
 ///   context: context,
 ///   builder: (ctx) => GradientHeaderDialog(
 ///     title: '申请查寝补卡',
-///     titleFontSize: 24,
 ///     child: _MyForm(),
 ///     actionBar: AppDialogActionBar(
 ///       onCancel: () => Navigator.pop(ctx),
@@ -77,7 +104,6 @@ class GradientHeaderDialog extends StatelessWidget {
     this.actionBar,
     this.width = 420,
     this.titleFontSize = kAppDialogTitleFontSize,
-    this.titleFontWeight = FontWeight.w500,
     this.titlePaddingTop = kAppDialogTitlePaddingTop,
     this.contentPadding,
     this.headerAsset = AppAssets.coursewareUploadHeader,
@@ -101,8 +127,6 @@ class GradientHeaderDialog extends StatelessWidget {
   /// 标题字号（默认 [kAppDialogTitleFontSize]）。
   final double titleFontSize;
 
-  final FontWeight titleFontWeight;
-
   /// 标题距弹窗顶部的距离（默认 [kAppDialogTitlePaddingTop]）。
   final double titlePaddingTop;
 
@@ -124,6 +148,19 @@ class GradientHeaderDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final resolvedPadding =
+        contentPadding ??
+        EdgeInsets.fromLTRB(
+          ui(20),
+          ui(titlePaddingTop),
+          ui(20),
+          ui(20),
+        );
+    final topInset = contentPadding?.top ?? titlePaddingTop;
+    final gapBeforeChild = appDialogGapBeforeFirstInput(
+      topInset: topInset,
+      titleFontSize: titleFontSize,
+    );
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: EdgeInsets.symmetric(horizontal: ui(32), vertical: ui(24)),
@@ -155,14 +192,7 @@ class GradientHeaderDialog extends StatelessWidget {
                     : Image.asset(headerAsset!, fit: BoxFit.fitWidth),
               ),
             Padding(
-              padding:
-                  contentPadding ??
-                  EdgeInsets.fromLTRB(
-                    ui(20),
-                    ui(titlePaddingTop),
-                    ui(20),
-                    ui(20),
-                  ),
+              padding: resolvedPadding,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -170,16 +200,13 @@ class GradientHeaderDialog extends StatelessWidget {
                   Center(
                     child: Text(
                       title,
-                      style: TextStyle(
-                        fontSize: ui(titleFontSize),
-                        color: const Color(0xFF0B081A),
-                        fontFamily: 'PingFang SC',
-                        fontWeight: titleFontWeight,
-                        height: kAppDialogTitleLineHeight / kAppDialogTitleFontSize,
+                      style: appDialogTitleTextStyle(
+                        ui,
+                        fontSize: titleFontSize,
                       ),
                     ),
                   ),
-                  SizedBox(height: ui(20)),
+                  SizedBox(height: ui(gapBeforeChild)),
                   Flexible(child: SingleChildScrollView(child: child)),
                   if (actionBar != null) ...[
                     SizedBox(height: ui(actionBarSpacing)),
@@ -334,7 +361,7 @@ class AppDialogTextField extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     return SizedBox(
       height: multiline ? ui(multilineHeight) : ui(48),
-      child: TextField(
+      child: AppTextField(
         controller: controller,
         focusNode: focusNode,
         autofocus: autofocus,
@@ -401,7 +428,8 @@ class AppDialogTextField extends StatelessWidget {
 ///
 /// 样式与「我的笔记 → 新建笔记」标题弹窗保持一致：
 /// - 420 宽，圆角 24，顶部 #D2C6FF→white 渐变 + 装饰图
-/// - 居中标题 20/w500，行高 24，距顶 25
+/// - 居中标题 20/w500，行高 1，距顶 25（对齐首页「最新」）
+/// - 首个输入框顶边距容器顶部 84
 /// - 输入框 48 高，圆角 8，1px `#F5F6FA` 描边
 /// - 底部按钮使用 [AppDialogActionBar]
 Future<String?> showTextInputDialog({

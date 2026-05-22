@@ -1,6 +1,7 @@
-import 'dart:ui';
+﻿import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -456,7 +457,7 @@ class _SchoolIdInput extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: TextField(
+            child: AppTextField(
               controller: controller,
               onChanged: onChanged,
               maxLength: 18,
