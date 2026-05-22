@@ -10,6 +10,7 @@ import '../features/ai_chat/state/ai_chat_socket_dispatcher.dart';
 import '../core/permissions/first_launch_permission_host.dart';
 import '../core/providers/app_providers.dart' show appStorageProvider, bindApiUnauthorizedSessionCleanup;
 import '../core/push/push_notification_service.dart';
+import '../core/security/app_screen_guard.dart';
 import '../core/theme/app_theme.dart';
 import '../core/utils/keyboard_dismisser.dart';
 import '../features/auth/data/auth_repository.dart';
@@ -93,6 +94,12 @@ class _MyAppState extends ConsumerState<MyApp> {
     } catch (e, st) {
       debugPrint('clientIdStream listen failed: $e\n$st');
     }
+
+    // 截屏防护必须在 FlutterViewController.view 挂载后再启用。
+    // 在 main()/runApp 前调用会导致 iOS secure layer 盖住内容 → 全屏黑屏。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(enableAppScreenGuard());
+    });
   }
 
   @override

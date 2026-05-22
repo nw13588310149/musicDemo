@@ -4,9 +4,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:screen_protector/screen_protector.dart';
 
-/// 启用全应用截屏防护，对齐 1.0 移动端安全策略：
+/// 启用全应用截屏 / 录屏防护，对齐 1.0 移动端安全策略：
 /// - Android：`protectDataLeakageOn` + `preventScreenshotOn`
 /// - iOS：`preventScreenshotOn` + `protectDataLeakageWithColor`（切后台 / 多任务预览遮罩）
+///
+/// 必须在 [runApp] 且首帧渲染完成后再调用；iOS 依赖 FlutterViewController.view
+/// 已挂载，过早启用会导致 secure layer 盖住界面（全屏黑屏）。
 Future<void> enableAppScreenGuard() async {
   if (kIsWeb) {
     return;

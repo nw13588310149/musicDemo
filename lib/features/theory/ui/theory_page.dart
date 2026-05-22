@@ -598,12 +598,12 @@ class _FavoriteChipButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final fg = favorite
-        ? const Color(0xFF8741FF)
-        : const Color(0xFF1C274C);
     final labelColor = favorite
         ? const Color(0xFF8741FF)
         : const Color(0xFF0B081A);
+    final iconAsset = favorite
+        ? 'assets/images/home/fav4.png'
+        : 'assets/images/home/fav3.png';
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -616,18 +616,12 @@ class _FavoriteChipButton extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            favorite
-                ? Icon(
-                    Icons.star_rounded,
-                    size: ui(20),
-                    color: fg,
-                  )
-                : Image.asset(
-                    'assets/images/home/fav3.png',
-                    width: ui(15),
-                    height: ui(15),
-                    fit: BoxFit.contain,
-                  ),
+            Image.asset(
+              iconAsset,
+              width: ui(15),
+              height: ui(15),
+              fit: BoxFit.contain,
+            ),
             SizedBox(width: ui(4)),
             Text(
               favorite ? '收藏' : '收藏',
