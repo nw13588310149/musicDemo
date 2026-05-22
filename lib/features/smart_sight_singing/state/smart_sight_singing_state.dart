@@ -59,6 +59,7 @@ class SightSingingState {
     this.currentScore = 0,
     this.hitCount = 0,
     this.scoredCount = 0,
+    this.combo = 0,
   });
 
   final SightSingingStage stage;
@@ -93,11 +94,14 @@ class SightSingingState {
   /// 实时累计得分（0~100）。
   final int currentScore;
 
-  /// 评分窗口命中次数（cents 偏差 < 50）。
+  /// 已结算音符中 Good 及以上次数。
   final int hitCount;
 
-  /// 已计算评分的帧数量（用于求命中率）。
+  /// 已结算音符总数。
   final int scoredCount;
+
+  /// 当前连击（连续 Good 及以上）。
+  final int combo;
 
   bool get hasTrack => track != null && !(track!.isEmpty);
 
@@ -119,6 +123,7 @@ class SightSingingState {
     int? currentScore,
     int? hitCount,
     int? scoredCount,
+    int? combo,
   }) {
     return SightSingingState(
       stage: stage ?? this.stage,
@@ -138,6 +143,7 @@ class SightSingingState {
       currentScore: currentScore ?? this.currentScore,
       hitCount: hitCount ?? this.hitCount,
       scoredCount: scoredCount ?? this.scoredCount,
+      combo: combo ?? this.combo,
     );
   }
 }

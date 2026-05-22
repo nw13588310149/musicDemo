@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import 'ktv_pitch_guide.dart';
+
 /// 单帧音高分析结果。
 class PitchFrame {
   const PitchFrame({
@@ -32,10 +34,14 @@ class PitchTrack {
     required this.frameStepMs,
     required this.minMidi,
     required this.maxMidi,
+    this.notes = const <KtvNoteSegment>[],
   });
 
   /// 按时间升序排列的全部帧（含无音高帧）。
   final List<PitchFrame> frames;
+
+  /// KTV 音符条（由帧合并量化得到，UI 绘制与打分优先使用）。
+  final List<KtvNoteSegment> notes;
 
   /// 曲目总长度（毫秒）。
   final int totalMs;
@@ -47,15 +53,45 @@ class PitchTrack {
   final double minMidi;
   final double maxMidi;
 
-  bool get isEmpty => frames.isEmpty;
+  bool get isEmpty => notes.isEmpty && frames.isEmpty;
 
-  /// 在时间 [ms] 附近返回参考音高帧（取最近的有效帧；找不到时回 `null`）。
+  /// 当前时间所在的音符条下标；无则 `null`。
+  int? noteIndexAt(int ms, {int earlyMs = 0, int lateMs = 0}) {
+    if (notes.isEmpty) return null;
+    for (var i = 0; i < notes.length; i++) {
+      final n = notes[i];
+      if (ms >= n.startMs - earlyMs && ms <= n.endMs + lateMs) {
+        return i;
+      }
+    }
+    return null;
+  }
+
+  KtvNoteSegment? noteAt(int ms, {int earlyMs = 0, int lateMs = 0}) {
+    final idx = noteIndexAt(ms, earlyMs: earlyMs, lateMs: lateMs);
+    if (idx == null) return null;
+    return notes[idx];
+  }
+
+  /// 在时间 [ms] 附近返回参考音高帧（优先音符条，其次原始帧）。
   PitchFrame? sampleAt(int ms, {int searchHalfWindowMs = 60}) {
+    final note = noteAt(
+      ms,
+      earlyMs: 120,
+      lateMs: 120,
+    );
+    if (note != null) {
+      return PitchFrame(
+        timeMs: ms,
+        frequencyHz: PitchUtils.midiToHz(note.midi),
+        midi: note.midi,
+        confidence: 1,
+      );
+    }
     if (frames.isEmpty) return null;
     if (frameStepMs <= 0) return null;
     var idx = (ms / frameStepMs).round();
     idx = idx.clamp(0, frames.length - 1);
-    // 优先返回 idx 本身；若该帧不可信，向两侧扩展找最近 pitched 帧。
     final center = frames[idx];
     if (center.pitched) return center;
     final maxOffset = (searchHalfWindowMs / frameStepMs).ceil();

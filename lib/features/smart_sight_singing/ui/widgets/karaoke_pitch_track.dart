@@ -118,28 +118,49 @@ class _KaraokePainter extends CustomPainter {
       ..strokeWidth = 1
       ..style = PaintingStyle.stroke;
 
-    final frames = track.frames;
-    final stepMs = track.frameStepMs <= 0 ? 23 : track.frameStepMs;
-    // 视窗起止帧。
     final visibleStartMs = playbackMs - windowMs ~/ 2;
     final visibleEndMs = playbackMs + windowMs ~/ 2;
-    final startIdx =
-        ((visibleStartMs - 2 * stepMs) / stepMs).floor().clamp(0, frames.length - 1);
-    final endIdx =
-        ((visibleEndMs + 2 * stepMs) / stepMs).ceil().clamp(0, frames.length - 1);
 
-    for (var i = startIdx; i <= endIdx; i++) {
-      final f = frames[i];
-      if (!f.pitched) continue;
-      final x0 = xFromTime(f.timeMs - stepMs ~/ 2);
-      final x1 = xFromTime(f.timeMs + stepMs ~/ 2);
-      final y = yFromMidi(f.midi);
-      final rect = RRect.fromRectAndRadius(
-        Rect.fromLTRB(x0, y - 3, x1, y + 3),
-        const Radius.circular(3),
-      );
-      canvas.drawRRect(rect, refPaint);
-      canvas.drawRRect(rect, refOutline);
+    // 参考音高：优先 KTV 音符条，否则回退到原始帧。
+    final notes = track.notes;
+    if (notes.isNotEmpty) {
+      for (final note in notes) {
+        if (note.endMs < visibleStartMs || note.startMs > visibleEndMs) {
+          continue;
+        }
+        final x0 = xFromTime(note.startMs);
+        final x1 = xFromTime(note.endMs);
+        final y = yFromMidi(note.midi);
+        final rect = RRect.fromRectAndRadius(
+          Rect.fromLTRB(x0, y - 5, x1, y + 5),
+          const Radius.circular(4),
+        );
+        canvas.drawRRect(rect, refPaint);
+        canvas.drawRRect(rect, refOutline);
+      }
+    } else {
+      final frames = track.frames;
+      final stepMs = track.frameStepMs <= 0 ? 23 : track.frameStepMs;
+      final startIdx = ((visibleStartMs - 2 * stepMs) / stepMs)
+          .floor()
+          .clamp(0, frames.length - 1);
+      final endIdx = ((visibleEndMs + 2 * stepMs) / stepMs)
+          .ceil()
+          .clamp(0, frames.length - 1);
+
+      for (var i = startIdx; i <= endIdx; i++) {
+        final f = frames[i];
+        if (!f.pitched) continue;
+        final x0 = xFromTime(f.timeMs - stepMs ~/ 2);
+        final x1 = xFromTime(f.timeMs + stepMs ~/ 2);
+        final y = yFromMidi(f.midi);
+        final rect = RRect.fromRectAndRadius(
+          Rect.fromLTRB(x0, y - 3, x1, y + 3),
+          const Radius.circular(3),
+        );
+        canvas.drawRRect(rect, refPaint);
+        canvas.drawRRect(rect, refOutline);
+      }
     }
 
     // 用户拖尾。
@@ -153,8 +174,8 @@ class _KaraokePainter extends CustomPainter {
         // 距当前时间越近、点越亮。
         final age = (playbackMs - p.timeMs).clamp(0, windowMs);
         final alpha = (255 * (1 - age / windowMs)).clamp(40, 255).toInt();
-        final hit = !p.cents.isNaN && p.cents.abs() <= 50;
-        final near = !p.cents.isNaN && p.cents.abs() <= 100;
+        final hit = !p.cents.isNaN && p.cents.abs() <= 45;
+        final near = !p.cents.isNaN && p.cents.abs() <= 90;
         final color = hit
             ? Color.fromARGB(alpha, 88, 234, 132)
             : near
@@ -169,7 +190,7 @@ class _KaraokePainter extends CustomPainter {
     if (currentUserMidi > 0) {
       final y = yFromMidi(currentUserMidi);
       final ref = track.sampleAt(playbackMs);
-      final on = ref != null && (currentUserMidi - ref.midi).abs() < 0.5;
+      final on = ref != null && (currentUserMidi - ref.midi).abs() < 0.45;
       final color = on ? const Color(0xFF58EA84) : const Color(0xFFFFB84C);
       canvas.drawCircle(
         Offset(centerX, y),

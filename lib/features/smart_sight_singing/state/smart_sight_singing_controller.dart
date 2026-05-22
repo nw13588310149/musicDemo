@@ -4,10 +4,11 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
-import 'package:media_kit/media_kit.dart';
 
 import '../../../core/audio/native_playback_audio_session.dart';
-import '../audio/pitch_analysis.dart';
+import '../audio/ktv_scoring.dart';
+import '../audio/midi_playback_scheduler.dart';
+import '../audio/midi_sight_singing_service.dart';
 import '../audio/realtime_pitch_capture.dart';
 import 'smart_sight_singing_state.dart';
 
@@ -23,32 +24,33 @@ final smartSightSingingControllerProvider =
 
 class SmartSightSingingController extends StateNotifier<SightSingingState> {
   SmartSightSingingController() : super(const SightSingingState()) {
-    _player = Player();
-    _positionSub = _player.stream.position.listen(_onPlaybackPosition);
-    _completedSub = _player.stream.completed.listen((completed) {
-      if (completed) {
-        unawaited(_handlePlaybackEnded());
-      }
+    _playback = MidiPlaybackScheduler();
+    _positionSub = _playback.positionMs.listen(_onPlaybackPosition);
+    _completedSub = _playback.completed.listen((_) {
+      unawaited(_handlePlaybackEnded());
     });
   }
 
-  static const String _demoAssetPath = 'assets/audio/demo_analysis.wav';
-  static const String _demoDisplayName = '青花';
-  static const String _demoMediaUri = 'asset:///assets/audio/demo.mp3';
-  static const int _maxOnlineAudioBytes = 50 * 1024 * 1024;
+  static const String _demoAssetPath = 'assets/audio/demo.mid';
+  static const String _demoDisplayName = 'demo';
+  static const int _maxOnlineMidiBytes = 8 * 1024 * 1024;
 
-  late final Player _player;
-  StreamSubscription<Duration>? _positionSub;
-  StreamSubscription<bool>? _completedSub;
+  late final MidiPlaybackScheduler _playback;
+  StreamSubscription<int>? _positionSub;
+  StreamSubscription<void>? _completedSub;
   StreamSubscription<RealtimePitchEvent>? _pitchSub;
   RealtimePitchCapture? _capture;
+  KtvScoringSession? _scoringSession;
+  MidiSightSingingBundle? _midiBundle;
 
-  /// 用户实时音高点的最大保留数（用于 KTV 拖尾绘制 + 内存上限）。
   static const int _userPointsCap = 720;
-
   bool _shuttingDown = false;
 
-  static String _formatDebugError(String headline, Object error, [StackTrace? stack]) {
+  static String _formatDebugError(
+    String headline,
+    Object error, [
+    StackTrace? stack,
+  ]) {
     final buffer = StringBuffer(headline);
     buffer.writeln();
     buffer.writeln('错误: $error');
@@ -60,13 +62,12 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     return buffer.toString();
   }
 
-  /// 供 UI 直接写入调试错误（例如 Web 端能力提示）。
   void reportError(String message) {
     if (!mounted) return;
     state = state.copyWith(errorMessage: message);
   }
 
-  /// 解析内置 demo 曲目《青花》，离线生成参考音高。
+  /// 解析内置 demo.mid，生成参考音符条并准备 MIDI 钢琴播放（曲目名 demo）。
   Future<void> importAudio() async {
     if (state.stage == SightSingingStage.analyzing ||
         state.stage == SightSingingStage.singing) {
@@ -75,30 +76,29 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
 
     try {
       final bytes = await rootBundle.load(_demoAssetPath);
-      await _analyzeBytesAndPreparePlayback(
+      await _prepareFromMidiBytes(
         bytes: Uint8List.sublistView(bytes),
-        formatHint: 'wav',
         displayName: _demoDisplayName,
-        mediaUri: _demoMediaUri,
+        sourceLabel: _demoAssetPath,
       );
-    } on PitchAnalysisException catch (e, stack) {
+    } on MidiSightSingingException catch (e, stack) {
       if (!mounted) return;
       state = state.copyWith(
         stage: SightSingingStage.idle,
-        errorMessage: _formatDebugError('解析《青花》音高失败', e.message, stack),
+        errorMessage: _formatDebugError('解析 demo MIDI 失败', e.message, stack),
         analyzingProgress: 0,
       );
     } catch (e, stack) {
       if (!mounted) return;
       state = state.copyWith(
         stage: SightSingingStage.idle,
-        errorMessage: _formatDebugError('解析《青花》失败', e, stack),
+        errorMessage: _formatDebugError('解析 demo 失败', e, stack),
         analyzingProgress: 0,
       );
     }
   }
 
-  /// 下载并解析在线音频地址，随后用同一 URL 进行跟唱播放。
+  /// 下载并解析在线 MIDI 地址。
   Future<void> analyzeOnlineAudio(String rawUrl) async {
     if (state.stage == SightSingingStage.analyzing ||
         state.stage == SightSingingStage.singing) {
@@ -108,15 +108,21 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     final url = rawUrl.trim();
     final uri = Uri.tryParse(url);
     if (uri == null || !uri.hasScheme || !uri.hasAuthority) {
-      state = state.copyWith(errorMessage: '请输入有效的 http/https 音频地址。');
+      state = state.copyWith(errorMessage: '请输入有效的 http/https MIDI 地址。');
       return;
     }
     if (uri.scheme != 'http' && uri.scheme != 'https') {
-      state = state.copyWith(errorMessage: '在线音频地址仅支持 http/https。');
+      state = state.copyWith(errorMessage: '在线地址仅支持 http/https。');
       return;
     }
 
     final displayName = _nameFromUri(uri);
+    final ext = _inferExt(displayName);
+    if (ext != 'mid' && ext != 'midi') {
+      state = state.copyWith(errorMessage: '在线解析仅支持 .mid / .midi 文件。');
+      return;
+    }
+
     state = state.copyWith(
       stage: SightSingingStage.analyzing,
       audioPath: url,
@@ -128,6 +134,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       currentScore: 0,
       hitCount: 0,
       scoredCount: 0,
+      combo: 0,
       currentUserMidi: -1,
       currentUserAmplitude: 0,
       errorMessage: null,
@@ -144,173 +151,102 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       ).get<List<int>>(url);
       final data = response.data;
       if (data == null || data.isEmpty) {
-        throw PitchAnalysisException('在线音频为空，请换一个地址试试。');
+        throw MidiSightSingingException('在线 MIDI 为空，请换一个地址试试。');
       }
-      if (data.length > _maxOnlineAudioBytes) {
-        throw PitchAnalysisException('在线音频过大，请使用 50MB 以内的音频。');
+      if (data.length > _maxOnlineMidiBytes) {
+        throw MidiSightSingingException('在线 MIDI 过大，请使用 8MB 以内的文件。');
       }
 
-      await _analyzeBytesAndPreparePlayback(
+      await _prepareFromMidiBytes(
         bytes: Uint8List.fromList(data),
-        formatHint: _inferExt(displayName),
         displayName: displayName,
-        mediaUri: url,
+        sourceLabel: url,
       );
-    } on PitchAnalysisException catch (e, stack) {
+    } on MidiSightSingingException catch (e, stack) {
       if (!mounted) return;
       state = state.copyWith(
         stage: SightSingingStage.idle,
-        errorMessage: _formatDebugError('在线音频解析失败', e.message, stack),
+        errorMessage: _formatDebugError('在线 MIDI 解析失败', e.message, stack),
         analyzingProgress: 0,
       );
     } catch (e, stack) {
       if (!mounted) return;
       state = state.copyWith(
         stage: SightSingingStage.idle,
-        errorMessage: _formatDebugError('在线音频解析失败', e, stack),
+        errorMessage: _formatDebugError('在线 MIDI 解析失败', e, stack),
         analyzingProgress: 0,
       );
     }
   }
 
-  Future<void> _analyzeBytesAndPreparePlayback({
+  Future<void> _prepareFromMidiBytes({
     required Uint8List bytes,
-    required String formatHint,
     required String displayName,
-    required String mediaUri,
+    required String sourceLabel,
   }) async {
     state = state.copyWith(
       stage: SightSingingStage.analyzing,
-      audioPath: mediaUri,
+      audioPath: sourceLabel,
       audioName: displayName,
-      analyzingProgress: 0.05,
+      analyzingProgress: 0.2,
       track: null,
       userPoints: const <UserPitchPoint>[],
       playbackMs: 0,
       currentScore: 0,
       hitCount: 0,
       scoredCount: 0,
+      combo: 0,
       currentUserMidi: -1,
       currentUserAmplitude: 0,
       errorMessage: null,
     );
 
-    // 先用 media_kit 探测真实时长（demo.mp3 为 VBR，按体积估算会偏差），
-    // 再带着精确 durationHint 做离线音高分析。
-    Duration? durationHint;
-    var playerPrepared = false;
-    Object? mediaProbeError;
-    StackTrace? mediaProbeStack;
-    try {
-      await _player.open(Media(mediaUri), play: false);
-      durationHint = await _waitForMediaDuration();
-      playerPrepared = durationHint != null;
-    } catch (e, stack) {
-      mediaProbeError = e;
-      mediaProbeStack = stack;
-    }
-
-    // 解码 + 切帧 + YIN。
-    try {
-      final track = await SightSingingPitchAnalyzer.analyzeBytes(
-        bytes,
-        formatHint: formatHint,
-        durationHint: durationHint,
-      );
-      if (!mounted) return;
-      if (track.isEmpty) {
-        state = state.copyWith(
-          stage: SightSingingStage.idle,
-          errorMessage: _formatDebugError(
-            '音高分析结果为空',
-            'bytes=${bytes.length}, format=$formatHint, '
-            'durationHint=${durationHint?.inMilliseconds ?? 'null'}ms',
-          ),
-          analyzingProgress: 0,
-        );
-        return;
-      }
-      state = state.copyWith(
-        stage: SightSingingStage.ready,
-        analyzingProgress: 1,
-        track: track,
-      );
-
-      if (!playerPrepared) {
-        try {
-          await _player.open(Media(mediaUri), play: false);
-        } catch (e, stack) {
-          if (!mounted) return;
-          state = state.copyWith(
-            errorMessage: _formatDebugError('音高已解析，但音频加载失败', e, stack),
-          );
-        }
-      } else if (mediaProbeError != null) {
-        state = state.copyWith(
-          errorMessage: _formatDebugError(
-            '音高已解析；media_kit 时长探测曾失败（已忽略）',
-            mediaProbeError,
-            mediaProbeStack,
-          ),
-        );
-      }
-    } on PitchAnalysisException catch (e, stack) {
-      if (!mounted) return;
+    final bundle = MidiSightSingingService.fromBytes(bytes);
+    if (!mounted) return;
+    if (bundle.track.isEmpty) {
       state = state.copyWith(
         stage: SightSingingStage.idle,
         errorMessage: _formatDebugError(
-          '音高分析失败 (bytes=${bytes.length}, format=$formatHint, '
-          'durationHint=${durationHint?.inMilliseconds ?? 'null'}ms)',
-          e.message,
-          stack,
+          'MIDI 参考轨为空',
+          'bytes=${bytes.length}, melodyTrack=${bundle.melodyTrackIndex}',
         ),
         analyzingProgress: 0,
       );
-    } catch (e, stack) {
-      if (!mounted) return;
-      state = state.copyWith(
-        stage: SightSingingStage.idle,
-        errorMessage: _formatDebugError(
-          '分析失败 (bytes=${bytes.length}, format=$formatHint)',
-          e,
-          stack,
-        ),
-        analyzingProgress: 0,
-      );
+      return;
     }
+
+    _midiBundle = bundle;
+    await _playback.prepare(
+      bundle.playbackEvents,
+      totalMs: bundle.totalMs,
+    );
+
+    if (!mounted) return;
+    state = state.copyWith(
+      stage: SightSingingStage.ready,
+      analyzingProgress: 1,
+      track: bundle.track,
+    );
   }
 
   static String _nameFromUri(Uri uri) {
     final last = uri.pathSegments.isEmpty ? '' : uri.pathSegments.last;
     final decoded = Uri.decodeComponent(last).trim();
-    return decoded.isEmpty ? '在线音频' : decoded;
+    return decoded.isEmpty ? '在线 MIDI' : decoded;
   }
 
   static String _inferExt(String name) {
     final dot = name.lastIndexOf('.');
-    if (dot < 0 || dot == name.length - 1) return 'mp3';
+    if (dot < 0 || dot == name.length - 1) return '';
     return name.substring(dot + 1).toLowerCase();
   }
 
-  /// media_kit 打开后 duration 可能异步就绪，短暂轮询几次。
-  Future<Duration?> _waitForMediaDuration() async {
-    for (var i = 0; i < 12; i++) {
-      final duration = _player.state.duration;
-      if (duration.inMilliseconds > 0) {
-        return duration;
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-    }
-    return null;
-  }
-
-  /// 开始跟唱：开启录音 + 实时音高，并播放 MP3。
   Future<void> startSinging() async {
     if (state.stage != SightSingingStage.ready &&
         state.stage != SightSingingStage.finished) {
       return;
     }
-    if (state.track == null) return;
+    if (state.track == null || _midiBundle == null) return;
 
     final capture = createRealtimePitchCapture();
     _capture = capture;
@@ -326,7 +262,6 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
         return;
       }
 
-      // 跟唱需要同时播放参考曲 + 采集人声，先切到录音专用 playAndRecord 会话。
       if (!kIsWeb) {
         await NativePlaybackAudioSession.ensureRecordActive();
       }
@@ -355,38 +290,48 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       currentScore: 0,
       hitCount: 0,
       scoredCount: 0,
+      combo: 0,
       currentUserMidi: -1,
       currentUserAmplitude: 0,
       errorMessage: null,
     );
 
+    _scoringSession = KtvScoringSession(track: state.track!);
+
+    if (_midiBundle != null) {
+      await _playback.prepare(
+        _midiBundle!.playbackEvents,
+        totalMs: _midiBundle!.totalMs,
+      );
+    }
     try {
-      await _player.seek(Duration.zero);
-      await _player.play();
+      await _playback.start();
     } catch (e) {
       await _stopCaptureSilently();
       if (!mounted) return;
       state = state.copyWith(
         stage: SightSingingStage.ready,
-        errorMessage: '音频播放失败：$e',
+        errorMessage: 'MIDI 播放失败：$e',
       );
     }
   }
 
-  /// 提前停止跟唱（用户手动结束）。
   Future<void> stopSinging({bool reset = false}) async {
     if (state.stage != SightSingingStage.singing) return;
+    final tick = _scoringSession?.finalize();
+    _scoringSession = null;
     await _stopCaptureSilently();
-    try {
-      await _player.pause();
-    } catch (_) {}
+    await _playback.pause();
     if (!mounted) return;
     state = state.copyWith(
       stage: reset ? SightSingingStage.ready : SightSingingStage.finished,
+      currentScore: tick?.totalScore ?? state.currentScore,
+      hitCount: tick?.hitCount ?? state.hitCount,
+      scoredCount: tick?.scoredCount ?? state.scoredCount,
+      combo: tick?.combo ?? state.combo,
     );
   }
 
-  /// 左侧导航再次点击「智能视唱」时：停止播放/录音并回到就绪态。
   Future<void> returnToHome() async {
     if (state.stage == SightSingingStage.analyzing) {
       return;
@@ -395,10 +340,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       await stopSinging(reset: true);
       return;
     }
-    try {
-      await _player.pause();
-      await _player.seek(Duration.zero);
-    } catch (_) {}
+    await _playback.stop();
     if (!mounted) return;
     if (state.stage == SightSingingStage.finished) {
       state = state.copyWith(
@@ -408,6 +350,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
         currentScore: 0,
         hitCount: 0,
         scoredCount: 0,
+        combo: 0,
         currentUserMidi: -1,
         currentUserAmplitude: 0,
       );
@@ -426,56 +369,42 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     await _completedSub?.cancel();
     _positionSub = null;
     _completedSub = null;
-    try {
-      await _player.dispose();
-    } catch (_) {}
+    await _playback.dispose();
   }
 
-  // ───────────────────────────────────────────────────────────────────────
-  // internals
-  // ───────────────────────────────────────────────────────────────────────
-
-  void _onPlaybackPosition(Duration position) {
+  void _onPlaybackPosition(int positionMs) {
     if (_shuttingDown || !mounted) return;
     if (state.stage != SightSingingStage.singing) return;
-    state = state.copyWith(playbackMs: position.inMilliseconds);
+    state = state.copyWith(playbackMs: positionMs);
   }
 
   Future<void> _handlePlaybackEnded() async {
     if (_shuttingDown || !mounted) return;
     if (state.stage != SightSingingStage.singing) return;
+    final tick = _scoringSession?.finalize();
+    _scoringSession = null;
     await _stopCaptureSilently();
+    await _playback.stop();
     if (!mounted) return;
-    state = state.copyWith(stage: SightSingingStage.finished);
+    state = state.copyWith(
+      stage: SightSingingStage.finished,
+      currentScore: tick?.totalScore ?? state.currentScore,
+      hitCount: tick?.hitCount ?? state.hitCount,
+      scoredCount: tick?.scoredCount ?? state.scoredCount,
+      combo: tick?.combo ?? state.combo,
+    );
   }
 
   void _onUserPitch(RealtimePitchEvent event) {
     if (_shuttingDown || !mounted) return;
     if (state.stage != SightSingingStage.singing) return;
 
-    final track = state.track;
     final timeMs = state.playbackMs;
-    final refFrame = track?.sampleAt(timeMs);
-    double cents = double.nan;
-    int newScore = state.currentScore;
-    int newHits = state.hitCount;
-    int newScored = state.scoredCount;
-    if (refFrame != null && event.pitched) {
-      cents = (event.midi - refFrame.midi) * 100;
-      newScored += 1;
-      final absCents = cents.abs();
-      // 评分窗口：≤ 50 cents 命中；50~100 半分；> 100 不计分。
-      if (absCents <= 50) {
-        newHits += 1;
-      }
-      final framePoints = absCents <= 50
-          ? 100
-          : absCents <= 100
-              ? 60
-              : 0;
-      // 滚动加权（最新帧权重 5%）。
-      newScore = ((newScore * 0.95) + framePoints * 0.05).round().clamp(0, 100);
-    }
+    final session = _scoringSession;
+    if (session == null) return;
+
+    final tick = session.onPitch(playbackMs: timeMs, event: event);
+    final cents = tick.cents;
 
     final newPoint = UserPitchPoint(
       timeMs: timeMs,
@@ -493,9 +422,10 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       userPoints: next,
       currentUserMidi: event.pitched ? event.midi : -1,
       currentUserAmplitude: event.amplitude,
-      currentScore: newScore,
-      hitCount: newHits,
-      scoredCount: newScored,
+      currentScore: tick.totalScore,
+      hitCount: tick.hitCount,
+      scoredCount: tick.scoredCount,
+      combo: tick.combo,
     );
   }
 
@@ -508,4 +438,3 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     _capture = null;
   }
 }
-

@@ -10,6 +10,7 @@ import 'pitch_analysis_temp_io.dart'
 import 'pitch_soloud_samples.dart';
 import 'pitch_track.dart';
 import 'pitch_wav_decoder.dart';
+import 'ktv_pitch_guide.dart';
 
 /// Smart sight-singing offline pitch analysis (flutter_soloud + YIN).
 abstract final class SightSingingPitchAnalyzer {
@@ -278,6 +279,7 @@ abstract final class SightSingingPitchAnalyzer {
     }
     return PitchTrack(
       frames: track.frames,
+      notes: track.notes,
       totalMs: playbackMs,
       frameStepMs: track.frameStepMs,
       minMidi: track.minMidi,
@@ -438,8 +440,17 @@ Future<PitchTrack> _yinPipeline(
     maxMidi = (maxMidi + 2).clamp(minMidi + 6, 100).toDouble();
   }
 
+  final smoothed = _medianSmooth(frames);
+  final notes = KtvPitchGuideBuilder.fromFrames(smoothed, frameStepMs: stepMs);
+  final noteRange = KtvPitchGuideBuilder.rangeForNotes(notes);
+  if (notes.isNotEmpty) {
+    minMidi = noteRange.minMidi;
+    maxMidi = noteRange.maxMidi;
+  }
+
   return PitchTrack(
-    frames: _medianSmooth(frames),
+    frames: smoothed,
+    notes: notes,
     totalMs: totalMs,
     frameStepMs: stepMs > 0 ? stepMs : 1,
     minMidi: minMidi,

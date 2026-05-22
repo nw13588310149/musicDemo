@@ -9,7 +9,7 @@ import '../state/smart_sight_singing_controller.dart';
 import '../state/smart_sight_singing_state.dart';
 import 'widgets/karaoke_pitch_track.dart';
 
-/// 智能视唱主页：内置《青花》demo → 离线分析音高 → 跟唱实时打分。
+/// 智能视唱主页：内置 demo.mid → MIDI 参考轨 → 跟唱实时打分。
 class SmartSightSingingPage extends ConsumerStatefulWidget {
   const SmartSightSingingPage({super.key});
 
@@ -285,7 +285,7 @@ class _Header extends StatelessWidget {
             ),
             SizedBox(height: ui(2)),
             Text(
-              state.audioName ?? '内置歌曲《青花》 → KTV 风格跟唱 → 实时打分',
+              state.audioName ?? '内置 demo → KTV 风格跟唱 → 实时打分',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
@@ -299,7 +299,7 @@ class _Header extends StatelessWidget {
         const Spacer(),
         if (state.stage != SightSingingStage.singing)
           _ActionButton(
-            label: state.hasTrack ? '重新解析' : '解析《青花》',
+            label: state.hasTrack ? '重新解析' : '解析 demo',
             icon: Icons.auto_graph_rounded,
             primary: !state.hasTrack,
             onTap: state.isBusy ? null : onImport,
@@ -398,7 +398,7 @@ class _EmptyHint extends StatelessWidget {
           ),
           SizedBox(height: ui(20)),
           Text(
-            '解析《青花》，开启智能视唱',
+            '解析 demo，开启智能视唱',
             style: TextStyle(
               fontSize: ui(18),
               color: const Color(0xFF1A1A1A),
@@ -410,7 +410,7 @@ class _EmptyHint extends StatelessWidget {
           SizedBox(
             width: ui(360),
             child: Text(
-              '使用内置 demo.mp3 作为示例曲目。系统会先离线分析音高曲线，'
+              '使用内置 demo.mid 作为示例曲目。系统会读取 MIDI 主旋律生成参考音符条，'
               '随后你可以跟唱并实时看到与原曲的偏差与得分。',
               textAlign: TextAlign.center,
               style: TextStyle(
@@ -423,7 +423,7 @@ class _EmptyHint extends StatelessWidget {
           ),
           SizedBox(height: ui(24)),
           _ActionButton(
-            label: '解析《青花》',
+            label: '解析 demo',
             icon: Icons.auto_graph_rounded,
             primary: true,
             onTap: onImport,
@@ -441,7 +441,7 @@ class _EmptyHint extends StatelessWidget {
                     onSubmitted: onAnalyzeUrl,
                     decoration: InputDecoration(
                       isDense: true,
-                      hintText: '输入在线音频地址（mp3 / m4a / wav / aac）',
+                      hintText: '输入在线 MIDI 地址（.mid / .midi）',
                       prefixIcon: const Icon(Icons.link_rounded),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(ui(12)),
@@ -504,7 +504,7 @@ class _AnalyzingHint extends StatelessWidget {
           ),
           SizedBox(height: ui(6)),
           Text(
-            '解码 → 帧切 → YIN 音高分析（《青花》约 1–3 分钟，请耐心等待）',
+            '正在读取 MIDI 主旋律并准备钢琴伴奏…',
             style: TextStyle(
               fontSize: ui(12),
               color: const Color(0xFF788698),
@@ -531,9 +531,6 @@ class _ScoreBoard extends StatelessWidget {
     final userName = state.currentUserMidi > 0
         ? PitchUtils.midiToNoteName(state.currentUserMidi)
         : '--';
-    final hitRate = state.scoredCount == 0
-        ? 0
-        : (100 * state.hitCount / state.scoredCount).round();
 
     final progress = state.track == null || state.track!.totalMs == 0
         ? 0.0
@@ -553,7 +550,14 @@ class _ScoreBoard extends StatelessWidget {
         children: [
           _ScoreCell(label: '得分', value: '${state.currentScore}'),
           SizedBox(width: ui(24)),
-          _ScoreCell(label: '命中率', value: '$hitRate%'),
+          _ScoreCell(label: '连击', value: '${state.combo}'),
+          SizedBox(width: ui(24)),
+          _ScoreCell(
+            label: '命中率',
+            value: state.scoredCount == 0
+                ? '--'
+                : '${(100 * state.hitCount / state.scoredCount).round()}%',
+          ),
           SizedBox(width: ui(24)),
           _ScoreCell(label: '标准音', value: refName),
           SizedBox(width: ui(24)),
