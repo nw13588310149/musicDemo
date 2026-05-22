@@ -448,6 +448,7 @@ class _Body extends StatelessWidget {
                     playbackMs: 0,
                     userPoints: const <UserPitchPoint>[],
                     currentUserMidi: state.currentUserMidi,
+                    currentUserAmplitude: state.currentUserAmplitude,
                   ),
                 ),
                 SizedBox(height: ui(12)),
@@ -481,6 +482,7 @@ class _Body extends StatelessWidget {
                 playbackMs: state.playbackMs,
                 userPoints: state.userPoints,
                 currentUserMidi: state.currentUserMidi,
+                currentUserAmplitude: state.currentUserAmplitude,
               ),
             ),
             SizedBox(height: ui(12)),
@@ -538,8 +540,8 @@ class _EmptyHint extends StatelessWidget {
           SizedBox(
             width: ui(420),
             child: Text(
-              '支持内置 demo、本地 .mid/.midi 文件或在线链接。iPad 默认无声跟唱，'
-              '请对照音符条演唱；可先试听旋律再开始。',
+              '支持内置 demo、本地 .mid/.midi 文件或在线链接。'
+              '伴奏音量由设备实体键调节；跟唱时麦克风会识别你的音高并绘制轨迹。',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: ui(13),
@@ -694,10 +696,12 @@ class _SingingModeBanner extends StatelessWidget {
               children: [
                 Text(
                   visualOnly
-                      ? (isIosTablet
-                          ? 'iPad 无声跟唱：跟唱时不播放伴奏，请对照音符条演唱。'
-                          : '无声跟唱：跟唱时不播放伴奏，请对照音符条演唱。')
-                      : '扬声器伴奏模式：已开启回声消除；仍建议佩戴耳机，外放可能被麦克风录入。',
+                      ? '无声跟唱：不播放伴奏，请对照音符条演唱。'
+                      : (isIosTablet
+                          ? 'iPad 跟唱：伴奏按 MIDI 原力度播放，音量由实体键调节；'
+                              '麦克风已启用回声消除以识别你的声音。'
+                          : '伴奏按 MIDI 原力度播放，音量由实体键调节；'
+                              '麦克风已启用回声消除以识别你的声音。'),
                   style: TextStyle(
                     fontSize: ui(12),
                     color: _DemoUi.accentMuted,
@@ -710,7 +714,7 @@ class _SingingModeBanner extends StatelessWidget {
                   Row(
                     children: [
                       Text(
-                        '跟唱时播放伴奏',
+                        '无声跟唱',
                         style: TextStyle(
                           fontSize: ui(12),
                           color: _DemoUi.accent,
@@ -719,13 +723,13 @@ class _SingingModeBanner extends StatelessWidget {
                       ),
                       SizedBox(width: ui(8)),
                       Switch.adaptive(
-                        value: !visualOnly,
+                        value: visualOnly,
                         onChanged: state.isPreviewPlaying ||
                                 state.stage == SightSingingStage.singing ||
                                 state.stage == SightSingingStage.countdown
                             ? null
                             : (enabled) =>
-                                controller.setVisualOnlyMode(!enabled),
+                                controller.setVisualOnlyMode(enabled),
                         activeTrackColor: _DemoUi.accent,
                       ),
                     ],
@@ -753,7 +757,9 @@ class _ScoreBoard extends StatelessWidget {
         : '--';
     final userName = state.currentUserMidi > 0
         ? PitchUtils.midiToNoteName(state.currentUserMidi)
-        : '--';
+        : state.currentUserAmplitude > 0.012
+            ? '拾音中'
+            : '--';
 
     final progress = state.track == null || state.track!.totalMs == 0
         ? 0.0
@@ -1137,7 +1143,9 @@ class _Controls extends StatelessWidget {
                           : '正在跟唱中…保持音准更稳更高分')
                       : (state.isPreviewPlaying
                           ? '试听中…熟悉旋律后可开始跟唱'
-                          : '准备就绪，点击「开始跟唱」即可'),
+                          : state.stage == SightSingingStage.ready
+                              ? '准备就绪：点击「开始跟唱」后将采集麦克风并绘制你的音高'
+                              : '准备就绪，点击「开始跟唱」即可'),
           style: TextStyle(
             fontSize: ui(13),
             color: const Color(0xFF1A1A1A),
@@ -1161,8 +1169,7 @@ class _Controls extends StatelessWidget {
             onTap: () => controller.stopSinging(),
           )
         else ...[
-          if (state.stage == SightSingingStage.ready &&
-              state.visualOnlyMode) ...[
+          if (state.stage == SightSingingStage.ready) ...[
             _ActionButton(
               label: state.isPreviewPlaying ? '停止试听' : '试听旋律',
               icon: state.isPreviewPlaying

@@ -13,6 +13,7 @@ class KaraokePitchTrack extends StatelessWidget {
     required this.playbackMs,
     required this.userPoints,
     required this.currentUserMidi,
+    this.currentUserAmplitude = 0,
     this.windowMs = 6000,
     super.key,
   });
@@ -21,6 +22,7 @@ class KaraokePitchTrack extends StatelessWidget {
   final int playbackMs;
   final List<UserPitchPoint> userPoints;
   final double currentUserMidi;
+  final double currentUserAmplitude;
   final int windowMs;
 
   @override
@@ -40,6 +42,7 @@ class KaraokePitchTrack extends StatelessWidget {
               playbackMs: playbackMs,
               userPoints: userPoints,
               currentUserMidi: currentUserMidi,
+              currentUserAmplitude: currentUserAmplitude,
               windowMs: windowMs,
             ),
             child: const SizedBox.expand(),
@@ -56,6 +59,7 @@ class _KaraokePainter extends CustomPainter {
     required this.playbackMs,
     required this.userPoints,
     required this.currentUserMidi,
+    required this.currentUserAmplitude,
     required this.windowMs,
   });
 
@@ -63,6 +67,7 @@ class _KaraokePainter extends CustomPainter {
   final int playbackMs;
   final List<UserPitchPoint> userPoints;
   final double currentUserMidi;
+  final double currentUserAmplitude;
   final int windowMs;
 
   static const _bg = Color(0xFFF5F6F8);
@@ -206,6 +211,21 @@ class _KaraokePainter extends CustomPainter {
         Paint()..color = color.withValues(alpha: 0.35),
       );
       canvas.drawCircle(Offset(centerX, y), 4, Paint()..color = color);
+    } else if (currentUserAmplitude > 0.01) {
+      // 有响度但未识别音高：在 Now 线底部显示麦克风活动指示。
+      final barW = (8 + currentUserAmplitude * 40).clamp(8.0, 36.0);
+      final barRect = RRect.fromRectAndRadius(
+        Rect.fromCenter(
+          center: Offset(centerX, size.height - 18),
+          width: barW,
+          height: 6,
+        ),
+        const Radius.circular(3),
+      );
+      canvas.drawRRect(
+        barRect,
+        Paint()..color = _userNear.withValues(alpha: 0.35 + currentUserAmplitude * 0.4),
+      );
     }
 
     final nowPaint = Paint()
@@ -224,6 +244,7 @@ class _KaraokePainter extends CustomPainter {
         old.track != track ||
         !identical(old.userPoints, userPoints) ||
         old.currentUserMidi != currentUserMidi ||
+        old.currentUserAmplitude != currentUserAmplitude ||
         old.windowMs != windowMs;
   }
 }

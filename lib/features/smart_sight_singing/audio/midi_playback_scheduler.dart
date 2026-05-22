@@ -8,13 +8,10 @@ import 'midi_sight_singing_service.dart';
 
 /// 基于现有钢琴短音资源，按 MIDI 事件时间轴播放。
 class MidiPlaybackScheduler {
-  MidiPlaybackScheduler({
-    MusicCompanionAudioEngine? audioEngine,
-    this.playbackVolumeScale = 1.0,
-  }) : _audio = audioEngine ?? MusicCompanionAudioEngine();
+  MidiPlaybackScheduler({MusicCompanionAudioEngine? audioEngine})
+      : _audio = audioEngine ?? MusicCompanionAudioEngine();
 
   final MusicCompanionAudioEngine _audio;
-  final double playbackVolumeScale;
   final StreamController<int> _positionController =
       StreamController<int>.broadcast();
   final StreamController<void> _completedController =
@@ -112,8 +109,7 @@ class MidiPlaybackScheduler {
     _activePlaybackPitch = event.pitch;
     final token = _pitchToToken(event.pitch);
     if (token == null) return;
-    final volume =
-        ((event.velocity / 127.0) * playbackVolumeScale).clamp(0.12, 1.0);
+    final volume = (event.velocity / 127.0).clamp(0.0, 1.0);
     try {
       await _audio.playNote(token, volume: volume);
     } catch (error, stack) {

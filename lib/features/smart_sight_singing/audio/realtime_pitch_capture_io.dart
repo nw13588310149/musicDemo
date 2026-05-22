@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:pitch_detector_dart/pitch_detector.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 
 import '../../../core/audio/native_playback_audio_session.dart';
@@ -10,23 +11,28 @@ import 'pitch_track.dart';
 import 'realtime_pitch_capture.dart';
 
 class _IORealtimePitchCapture implements RealtimePitchCapture {
-  _IORealtimePitchCapture({required this.profile});
+  _IORealtimePitchCapture({required this.profile})
+      : _detector = PitchDetector(
+          audioSampleRate: _sampleRate.toDouble(),
+          bufferSize: profile == RealtimePitchCaptureProfile.sightSinging
+              ? 4096
+              : 2048,
+        ),
+        _frameBuffer = Uint8List(
+          (profile == RealtimePitchCaptureProfile.sightSinging ? 4096 : 2048) *
+              2,
+        );
 
   final RealtimePitchCaptureProfile profile;
 
   static const int _sampleRate = 44100;
-  // YIN 缓冲 2048 ≈ 46ms @ 44100Hz，与音乐伴侣调音器保持一致。
-  static const int _bufferSize = 2048;
 
   final AudioRecorder _recorder = AudioRecorder();
-  final PitchDetector _detector = PitchDetector(
-    audioSampleRate: _sampleRate.toDouble(),
-    bufferSize: _bufferSize,
-  );
+  final PitchDetector _detector;
 
   StreamSubscription<Uint8List>? _streamSub;
   StreamController<RealtimePitchEvent>? _controller;
-  final Uint8List _frameBuffer = Uint8List(_bufferSize * 2);
+  final Uint8List _frameBuffer;
   int _filledBytes = 0;
   bool _running = false;
 
@@ -40,31 +46,33 @@ class _IORealtimePitchCapture implements RealtimePitchCapture {
   bool get isRunning => _running;
 
   @override
-  Future<bool> hasPermission() => _recorder.hasPermission();
+  Future<bool> hasPermission() async {
+    final status = await Permission.microphone.status;
+    if (status.isGranted || status.isLimited) return true;
+    return _recorder.hasPermission();
+  }
 
   @override
-  Future<bool> requestPermission() => _recorder.hasPermission();
+  Future<bool> requestPermission() async {
+    final status = await Permission.microphone.request();
+    if (status.isGranted || status.isLimited) return true;
+    return _recorder.hasPermission();
+  }
 
   RecordConfig get _recordConfig {
-    if (_isSightSinging) {
-      return RecordConfig(
-        encoder: AudioEncoder.pcm16bits,
-        sampleRate: _sampleRate,
-        numChannels: 1,
-        echoCancel: true,
-        noiseSuppress: false,
-        iosConfig: const IosRecordConfig(
-          categoryOptions: [
-            IosAudioCategoryOption.allowBluetooth,
-            IosAudioCategoryOption.allowBluetoothA2DP,
-          ],
-        ),
-      );
-    }
-    return const RecordConfig(
+    const iosConfig = IosRecordConfig(
+      categoryOptions: [
+        IosAudioCategoryOption.allowBluetooth,
+        IosAudioCategoryOption.allowBluetoothA2DP,
+      ],
+    );
+    return RecordConfig(
       encoder: AudioEncoder.pcm16bits,
       sampleRate: _sampleRate,
       numChannels: 1,
+      echoCancel: _isSightSinging,
+      noiseSuppress: false,
+      iosConfig: iosConfig,
     );
   }
 
@@ -73,7 +81,10 @@ class _IORealtimePitchCapture implements RealtimePitchCapture {
     if (_running) {
       throw StateError('RealtimePitchCapture already running');
     }
-    final allowed = await _recorder.hasPermission();
+    var allowed = await hasPermission();
+    if (!allowed) {
+      allowed = await requestPermission();
+    }
     if (!allowed) {
       throw StateError('录音权限被拒绝');
     }
@@ -157,11 +168,13 @@ class _IORealtimePitchCapture implements RealtimePitchCapture {
       if (abs > peak) peak = abs;
     }
     final rms = math.sqrt(sumSq / n);
-    // 0~1 归一化（32767 是 16bit 上限）。
-    final amplitude = (rms / 32767.0).clamp(0.0, 1.0);
+    final peakNorm = (peak / 32767.0).clamp(0.0, 1.0);
+    // 人声 RMS 通常在 300~4000；按 ~900 映射到 0~1，便于 UI 显示「拾音中」。
+    final rmsNorm = (rms / 900.0).clamp(0.0, 1.0);
+    final amplitude = math.max(peakNorm * 0.55, rmsNorm);
 
     final silenceThreshold =
-        _isSightSinging ? 450.0 : (_isVisualOnly ? 320.0 : 350.0);
+        _isSightSinging ? 220.0 : (_isVisualOnly ? 180.0 : 240.0);
     if (rms < silenceThreshold) {
       if (!out.isClosed) {
         out.add(
@@ -185,8 +198,8 @@ class _IORealtimePitchCapture implements RealtimePitchCapture {
           ? PitchUtils.hzToMidi(hz)
           : double.nan;
       final minConfidence = _isSightSinging
-          ? 0.82
-          : (_isVisualOnly ? 0.78 : 0.75);
+          ? 0.70
+          : (_isVisualOnly ? 0.68 : 0.72);
       final pitched = result.pitched &&
           result.probability > minConfidence &&
           hz > 70 &&

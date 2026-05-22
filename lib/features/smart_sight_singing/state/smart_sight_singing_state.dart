@@ -128,7 +128,7 @@ class SightSingingState {
   /// 当前连击（连续 Good 及以上）。
   final int combo;
 
-  /// iPad 等设备：跟唱时不播放扬声器伴奏，仅看音符条。
+  /// iPad 等设备：跟唱时不播放扬声器伴奏，仅看音符条（可选开关）。
   final bool visualOnlyMode;
 
   /// 就绪态试听旋律中。

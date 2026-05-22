@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../../core/audio/native_playback_audio_session.dart';
 import '../audio/ktv_scoring.dart';
@@ -33,9 +34,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
             visualOnlyMode: SightSingingPlatform.defaultsToVisualOnlyMode,
           ),
         ) {
-    _playback = MidiPlaybackScheduler(
-      playbackVolumeScale: _sightSingingPlaybackVolumeScale,
-    );
+    _playback = MidiPlaybackScheduler();
     _playback.muteAudioOutput = SightSingingPlatform.defaultsToVisualOnlyMode;
     _positionSub = _playback.positionMs.listen(_onPlaybackPosition);
     _completedSub = _playback.completed.listen((_) {
@@ -51,7 +50,6 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
   static const String _demoDisplayName = 'demo';
   static const int _maxOnlineMidiBytes = 8 * 1024 * 1024;
   static const int _countdownStart = 3;
-  static const double _sightSingingPlaybackVolumeScale = 0.42;
 
   late final MidiPlaybackScheduler _playback;
   StreamSubscription<int>? _positionSub;
@@ -403,6 +401,14 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     _isPreviewSession = false;
     await _playback.stop();
     _playback.muteAudioOutput = state.visualOnlyMode;
+    if (!kIsWeb) {
+      NativePlaybackAudioSession.invalidatePlaybackCache();
+      if (state.visualOnlyMode) {
+        await NativePlaybackAudioSession.ensurePlayAndRecordActive();
+      } else {
+        await NativePlaybackAudioSession.ensureSightSingingActive();
+      }
+    }
     if (!mounted) return;
     state = state.copyWith(isPreviewPlaying: false, playbackMs: 0);
   }
@@ -436,11 +442,17 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       if (!hasPermission) {
         _capture = null;
         if (!mounted) return;
-        state = state.copyWith(errorMessage: '请先在系统设置中开启麦克风权限。');
+        final status = await Permission.microphone.status;
+        state = state.copyWith(
+          errorMessage: status.isPermanentlyDenied
+              ? '麦克风权限被拒绝，请在系统「设置 → 音乐之路 → 麦克风」中开启。'
+              : '请允许麦克风权限后再开始跟唱。',
+        );
         return;
       }
 
       if (!kIsWeb) {
+        NativePlaybackAudioSession.invalidatePlaybackCache();
         if (state.visualOnlyMode) {
           await NativePlaybackAudioSession.ensurePlayAndRecordActive();
         } else {
@@ -684,11 +696,16 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       policy: _voiceGatePolicy,
     );
 
+    // UI 始终反映麦克风输入：响度来自原始帧，音高优先用过滤后结果。
+    final displayMidi = filtered.pitched
+        ? filtered.midi
+        : (event.pitched ? event.midi : -1.0);
+
     // 倒计时阶段只预热麦克风，不计分。
     if (state.stage == SightSingingStage.countdown) {
       state = state.copyWith(
-        currentUserMidi: filtered.pitched ? filtered.midi : -1,
-        currentUserAmplitude: filtered.amplitude,
+        currentUserMidi: displayMidi > 0 ? displayMidi : -1,
+        currentUserAmplitude: event.amplitude,
       );
       return;
     }
@@ -698,8 +715,8 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
 
     final newPoint = UserPitchPoint(
       timeMs: timeMs,
-      midi: filtered.pitched ? filtered.midi : -1,
-      amplitude: filtered.amplitude,
+      midi: displayMidi > 0 ? displayMidi : -1,
+      amplitude: event.amplitude,
       cents: cents,
     );
 
@@ -710,8 +727,8 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
 
     state = state.copyWith(
       userPoints: next,
-      currentUserMidi: filtered.pitched ? filtered.midi : -1,
-      currentUserAmplitude: filtered.amplitude,
+      currentUserMidi: displayMidi > 0 ? displayMidi : -1,
+      currentUserAmplitude: event.amplitude,
       currentScore: tick.totalScore,
       hitCount: tick.hitCount,
       scoredCount: tick.scoredCount,
