@@ -177,7 +177,13 @@ final class LowLatencyNoteAudio {
 
   private func configureSession() throws {
     let session = AVAudioSession.sharedInstance()
-    try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+    // 与 Dart [NativePlaybackAudioSession.ensureSightSingingCaptureActive] 一致：
+    // 跟唱时需同时外放钢琴 + 采集麦克风，不能用纯 playback（会掐断 record 流）。
+    try session.setCategory(
+      .playAndRecord,
+      mode: .measurement,
+      options: [.mixWithOthers, .defaultToSpeaker, .allowBluetooth]
+    )
     try session.setActive(true)
   }
 

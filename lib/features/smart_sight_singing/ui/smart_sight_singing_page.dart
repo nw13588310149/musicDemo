@@ -755,7 +755,7 @@ class _ScoreBoard extends StatelessWidget {
     final refName = ref != null
         ? PitchUtils.midiToNoteName(ref.midi)
         : '--';
-    final userName = state.currentUserMidi > 0
+    final userName = state.currentUserMidi >= 0
         ? PitchUtils.midiToNoteName(state.currentUserMidi)
         : state.currentUserAmplitude > 0.012
             ? '拾音中'

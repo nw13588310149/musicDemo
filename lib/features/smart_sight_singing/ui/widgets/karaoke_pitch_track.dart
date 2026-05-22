@@ -195,7 +195,7 @@ class _KaraokePainter extends CustomPainter {
       }
     }
 
-    if (currentUserMidi > 0) {
+    if (currentUserMidi >= 0) {
       final y = yFromMidi(currentUserMidi);
       final ref = track.sampleAt(playbackMs);
       final on = ref != null && (currentUserMidi - ref.midi).abs() < 0.45;

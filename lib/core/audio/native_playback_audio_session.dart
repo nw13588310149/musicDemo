@@ -133,21 +133,37 @@ abstract final class NativePlaybackAudioSession {
           AVAudioSessionCategoryOptions.defaultToSpeaker |
           AVAudioSessionCategoryOptions.allowBluetooth |
           AVAudioSessionCategoryOptions.mixWithOthers,
+      deactivateFirst: true,
+    );
+  }
+
+  /// 钢琴 Short-audio 初始化后轻量 reclaim：不先 setActive(false)，避免掐断正在进行的录音。
+  static Future<void> ensureSightSingingCaptureActiveSoft() {
+    return _ensurePlayAndRecordMode(
+      AVAudioSessionMode.measurement,
+      categoryOptions:
+          AVAudioSessionCategoryOptions.defaultToSpeaker |
+          AVAudioSessionCategoryOptions.allowBluetooth |
+          AVAudioSessionCategoryOptions.mixWithOthers,
+      deactivateFirst: false,
     );
   }
 
   static Future<void> _ensurePlayAndRecordMode(
     AVAudioSessionMode avAudioSessionMode, {
     required AVAudioSessionCategoryOptions categoryOptions,
+    bool deactivateFirst = true,
   }) async {
     if (kIsWeb) return;
     try {
       final session = await AudioSession.instance.timeout(_kChannelTimeout);
-      try {
-        await session
-            .setActive(false)
-            .timeout(_kChannelTimeout, onTimeout: () => false);
-      } catch (_) {}
+      if (deactivateFirst) {
+        try {
+          await session
+              .setActive(false)
+              .timeout(_kChannelTimeout, onTimeout: () => false);
+        } catch (_) {}
+      }
       await session
           .configure(
             AudioSessionConfiguration(

@@ -47,12 +47,18 @@ class MidiPlaybackScheduler {
     _activePlaybackPitch = null;
   }
 
+  /// 倒计时阶段预加载钢琴采样，避免跟唱开始时 native 会话与录音争抢。
+  Future<void> warmupAudioEngine() async {
+    if (muteAudioOutput) return;
+    await _audio.ensurePianoInitialized();
+  }
+
   Future<void> start({bool? muteAudio}) async {
     if (muteAudio != null) {
       muteAudioOutput = muteAudio;
     }
     if (_running || _events.isEmpty) return;
-    if (!muteAudioOutput) {
+    if (!muteAudioOutput && !_audio.isPianoReady) {
       await _audio.ensurePianoInitialized();
     }
     _running = true;
