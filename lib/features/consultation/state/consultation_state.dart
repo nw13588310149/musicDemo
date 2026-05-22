@@ -1,6 +1,21 @@
 import 'package:flutter/foundation.dart';
 
 @immutable
+class ConsultationPageArgs {
+  const ConsultationPageArgs({this.schoolMode = false});
+
+  final bool schoolMode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ConsultationPageArgs && schoolMode == other.schoolMode;
+
+  @override
+  int get hashCode => schoolMode.hashCode;
+}
+
+@immutable
 class ConsultationItem {
   const ConsultationItem({
     required this.id,

@@ -16,10 +16,21 @@ class VideoTutorialRepository {
 
   final ApiClient client;
 
-  Future<ApiResponse> getBannerList() {
+  Future<ApiResponse> getBannerList({int schoolId = 0}) {
+    final data = <String, dynamic>{'contentType': 1};
+    if (schoolId > 0) {
+      data['schoolId'] = schoolId;
+    }
+    return client.post('/app/user/bannerList', data: data);
+  }
+
+  Future<ApiResponse> getSchoolBannerList({required int schoolId}) {
     return client.post(
       '/app/user/bannerList',
-      data: const <String, dynamic>{'contentType': 1},
+      data: <String, dynamic>{
+        'contentType': 1,
+        'schoolId': schoolId,
+      },
     );
   }
 
@@ -47,9 +58,33 @@ class VideoTutorialRepository {
     );
   }
 
+  Future<ApiResponse> getSchoolVideoList({
+    required int current,
+    required int size,
+    String? firstMenu,
+    String? secondMenu,
+  }) {
+    return client.post(
+      '/app/user/schoolVideoTutorialList',
+      data: <String, dynamic>{
+        'current': current,
+        'size': size,
+        'firstMenu': firstMenu,
+        'secondMenu': secondMenu,
+      },
+    );
+  }
+
   Future<ApiResponse> getVideoDetail(String id) {
     return client.post(
       '/app/user/videoTutorialDetail',
+      data: <String, dynamic>{'id': id},
+    );
+  }
+
+  Future<ApiResponse> getSchoolVideoDetail(String id) {
+    return client.post(
+      '/app/user/schoolVideoTutorialDetail',
       data: <String, dynamic>{'id': id},
     );
   }

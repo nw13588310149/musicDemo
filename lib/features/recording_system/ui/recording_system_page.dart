@@ -2320,7 +2320,6 @@ class _PlaybackSeekBodyState extends State<_PlaybackSeekBody> {
           builder: (context, durationMs, _) {
             final totalMs =
                 durationMs > 0 ? durationMs : widget.fallbackDurationMs;
-            final clampedTotalMs = math.max(totalMs, 8000);
             final playbackRatio = totalMs <= 0
                 ? 0.0
                 : (positionMs / totalMs).clamp(0.0, 1.0).toDouble();
@@ -2340,7 +2339,7 @@ class _PlaybackSeekBodyState extends State<_PlaybackSeekBody> {
               scrubberPanel: _DarkScrubberPanel(
                 progressRatio: displayRatio,
                 startLabel: _formatSecondsClock(displayPositionMs),
-                endLabel: _formatSecondsClock(clampedTotalMs),
+                endLabel: _formatSecondsClock(totalMs),
                 onSeekRatio: _commitSeek,
                 dragRatio: _dragRatio,
                 onDragRatioChanged: _setDragRatio,
@@ -2497,6 +2496,9 @@ const double _kRecordingWaveTopInset = 20;
 const double _kRecordingWaveBarSpacing = 2;
 const double _kRecordingScaleTopGap = 15;
 const double _kRecordingScaleSectionHeight = 58;
+const double _kRecordingMajorTickHeight = 12;
+const double _kRecordingMinorTickHeight = 6;
+const double _kRecordingScaleContentOffset = 5;
 const double _kRecordingWaveBottomPad = 10;
 const double _kRecordingWaveHorizontalPad = 8;
 
@@ -2589,8 +2591,9 @@ class _LiveDarkWavePanel extends StatelessWidget {
                         cursorThickness: ui(2),
                         playheadDotRadius: ui(3),
                         labelFontSize: ui(10),
-                        majorTickHeight: ui(8),
-                        minorTickHeight: ui(4),
+                        majorTickHeight: ui(_kRecordingMajorTickHeight),
+                        minorTickHeight: ui(_kRecordingMinorTickHeight),
+                        scaleContentOffset: ui(_kRecordingScaleContentOffset),
                       ),
                     );
                   },
@@ -2710,7 +2713,7 @@ class _PreviewDarkWavePanelState extends State<_PreviewDarkWavePanel> {
                         painter: _WaveWithScalePainter(
                           samples: widget.waveform,
                           progressRatio: ratio,
-                          totalDurationMs: math.max(total, 8000),
+                          totalDurationMs: total,
                           truncateAtPlayhead: false,
                           waveSectionHeight: ui(_kRecordingWaveSectionHeight),
                           waveTopInset: ui(_kRecordingWaveTopInset),
@@ -2722,8 +2725,9 @@ class _PreviewDarkWavePanelState extends State<_PreviewDarkWavePanel> {
                           cursorThickness: ui(2),
                           playheadDotRadius: ui(3),
                           labelFontSize: ui(14),
-                          majorTickHeight: ui(8),
-                          minorTickHeight: ui(4),
+                          majorTickHeight: ui(_kRecordingMajorTickHeight),
+                          minorTickHeight: ui(_kRecordingMinorTickHeight),
+                          scaleContentOffset: ui(_kRecordingScaleContentOffset),
                         ),
                       );
                     },
@@ -2757,6 +2761,7 @@ class _WaveWithScalePainter extends CustomPainter {
     required this.labelFontSize,
     required this.majorTickHeight,
     required this.minorTickHeight,
+    required this.scaleContentOffset,
   });
 
   final List<double> samples;
@@ -2775,6 +2780,7 @@ class _WaveWithScalePainter extends CustomPainter {
   final double labelFontSize;
   final double majorTickHeight;
   final double minorTickHeight;
+  final double scaleContentOffset;
 
   static const _waveBg = Color(0xFF141414);
   static const _scaleBg = Color(0xFF1E1E1E);
@@ -2950,8 +2956,8 @@ class _WaveWithScalePainter extends CustomPainter {
       height: 1,
     );
 
-    final majorTop = scaleTop + 4;
-    final labelTop = scaleTop + majorTickHeight + 10;
+    final majorTop = scaleTop + 4 + scaleContentOffset;
+    final labelTop = scaleTop + majorTickHeight + 10 + scaleContentOffset;
     final lastSecond = totalMs ~/ 1000;
 
     for (var sec = 0; sec <= lastSecond; sec++) {
@@ -3024,7 +3030,8 @@ class _WaveWithScalePainter extends CustomPainter {
         oldDelegate.playheadDotRadius != playheadDotRadius ||
         oldDelegate.labelFontSize != labelFontSize ||
         oldDelegate.majorTickHeight != majorTickHeight ||
-        oldDelegate.minorTickHeight != minorTickHeight;
+        oldDelegate.minorTickHeight != minorTickHeight ||
+        oldDelegate.scaleContentOffset != scaleContentOffset;
   }
 }
 

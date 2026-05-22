@@ -9,7 +9,6 @@ import '../../../core/network/media_url.dart';
 import '../../../core/widgets/app_asset_graphic.dart';
 import '../../../core/widgets/app_refresh_indicator.dart';
 import '../../../core/widgets/seamless_banner_carousel.dart';
-import '../../home/state/home_dashboard_controller.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../state/school_page_controller.dart';
 import '../state/school_page_state.dart';
@@ -86,7 +85,10 @@ class _SchoolView extends StatelessWidget {
                             children: [
                               SizedBox(
                                 height: bannerH,
-                                child: _HeroBanner(height: bannerH),
+                                child: _HeroBanner(
+                                  height: bannerH,
+                                  bannerItems: state.bannerItems,
+                                ),
                               ),
                               const SizedBox(height: gap),
                               // 快捷按钮：高度 = leftH - banner - voice - 2*gap
@@ -163,7 +165,13 @@ class _SchoolView extends StatelessWidget {
   Widget _buildCampusNewsHeader(BuildContext context) {
     return ShellSectionTitleBar(
       title: '校园资讯',
-      onMoreTap: () => Navigator.pushNamed(context, RoutePaths.consultation),
+      onMoreTap: () => Navigator.pushNamed(
+        context,
+        RoutePaths.consultation,
+        arguments: <String, dynamic>{
+          'school': state.schoolId > 0 ? state.schoolId : true,
+        },
+      ),
     );
   }
 
@@ -181,72 +189,32 @@ class _SchoolView extends StatelessWidget {
     List<SchoolLearningItem> input,
   ) {
     if (input.length >= 3) return input.take(3).toList();
-    const fallback = <SchoolLearningItem>[
-      SchoolLearningItem(
-        text: '听写',
-        value: 40,
-        color: Color(0xFFB184FF),
-        background: Color(0xFFF0EBFA),
-      ),
-      SchoolLearningItem(
-        text: '视唱',
-        value: 40,
-        color: Color(0xFF13E8BE),
-        background: Color(0xFFF0EBFA),
-      ),
-      SchoolLearningItem(
-        text: '乐理',
-        value: 100,
-        color: Color(0xFFFF5681),
-        background: Color(0xFFF0EBFA),
-      ),
+
+    const subjects = <({String text, Color color})>[
+      (text: '听写', color: Color(0xFFB184FF)),
+      (text: '视唱', color: Color(0xFF13E8BE)),
+      (text: '乐理', color: Color(0xFFFF5681)),
     ];
-    if (input.isEmpty) return fallback;
-    final merged = <SchoolLearningItem>[...input];
-    final existing = input.map((e) => e.text).toSet();
-    for (final item in fallback) {
-      if (!existing.contains(item.text)) merged.add(item);
-    }
-    return merged.take(3).toList();
+
+    final byText = {for (final item in input) item.text: item};
+    return subjects
+        .map(
+          (subject) =>
+              byText[subject.text] ??
+              SchoolLearningItem(
+                text: subject.text,
+                completeCount: 0,
+                allCount: 0,
+                progress: 0,
+                color: subject.color,
+                background: const Color(0xFFF0EBFA),
+              ),
+        )
+        .toList();
   }
 
   List<SchoolNewsItem> _resolveNews(List<SchoolNewsItem> input) {
-    if (input.isNotEmpty) return input.take(4).toList();
-    final now = DateTime.now();
-    return <SchoolNewsItem>[
-      SchoolNewsItem(
-        id: -1,
-        title: '新疆艺术学院2026年普通本科统招',
-        shortTitle: '新疆艺术学院招生简章',
-        tags: const ['招生资讯', '元宵资讯', 'C宫系统'],
-        viewCount: 0,
-        createTime: now.subtract(const Duration(days: 2)),
-      ),
-      SchoolNewsItem(
-        id: -2,
-        title: '云南艺术学院2026年普通本科统招',
-        shortTitle: '云南艺术学院招生简章',
-        tags: const ['统考', '成绩查询'],
-        viewCount: 0,
-        createTime: now.subtract(const Duration(days: 13)),
-      ),
-      SchoolNewsItem(
-        id: -3,
-        title: '四川成都2026年成绩查询',
-        shortTitle: '四川成都成绩查询',
-        tags: const ['招生简章', '统考', '成绩查询'],
-        viewCount: 0,
-        createTime: now.subtract(const Duration(days: 16)),
-      ),
-      SchoolNewsItem(
-        id: -4,
-        title: '新疆艺术学院2026年普通本科统招',
-        shortTitle: '新疆艺术学院招生简章',
-        tags: const ['招生简章', '元宵资讯', 'C宫系统'],
-        viewCount: 0,
-        createTime: now.subtract(const Duration(days: 23)),
-      ),
-    ];
+    return input.take(4).toList();
   }
 }
 
@@ -254,22 +222,22 @@ class _SchoolView extends StatelessWidget {
 /// 校园页轮播 Banner。
 /// 与首页 `_buildBanner` 保持完全一致：使用通用的 [SeamlessBannerCarousel]，
 /// 指示器位置/尺寸与首页严格对齐（right:36, bottom:20, active 21×4，opacity 0.85/1）。
-class _HeroBanner extends ConsumerStatefulWidget {
-  const _HeroBanner({required this.height});
+class _HeroBanner extends StatefulWidget {
+  const _HeroBanner({required this.height, required this.bannerItems});
 
   final double height;
+  final List<SchoolBannerItem> bannerItems;
 
   @override
-  ConsumerState<_HeroBanner> createState() => _HeroBannerState();
+  State<_HeroBanner> createState() => _HeroBannerState();
 }
 
-class _HeroBannerState extends ConsumerState<_HeroBanner> {
+class _HeroBannerState extends State<_HeroBanner> {
   int _bannerIndex = 0;
 
   @override
   Widget build(BuildContext context) {
-    final bannerItems = ref.watch(homeDashboardControllerProvider).bannerItems;
-    final images = bannerItems
+    final images = widget.bannerItems
         .map((e) => MediaUrl.resolve(e.imageUrl))
         .where((url) => url.isNotEmpty)
         .toList();
@@ -718,7 +686,7 @@ class _ProgressCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final meta = _ProgressMeta.fromText(item.text, item.value);
+    final meta = _ProgressMeta.fromItem(item);
 
     // 不设固定高度 — 由父级 Expanded 决定高度，内容用 Spacer 撑开
     return Container(
@@ -1150,35 +1118,43 @@ class _ProgressMeta {
   final Color chipColor;
   final String tip;
 
-  factory _ProgressMeta.fromText(String text, int apiValue) {
-    if (text.contains('乐理')) {
-      return const _ProgressMeta(
-        totalHours: 60,
-        completedHours: 60,
-        remainingHours: 0,
-        progress: 100,
-        gradientStart: Color(0xFFFFBECE),
-        gradientEnd: Color(0xFFFF5681),
-        chipColor: Color(0xFFFF7699),
-        tip: '恭喜你！你完成了乐理的全部课程',
+  factory _ProgressMeta.fromItem(SchoolLearningItem item) {
+    final progress = item.progress.clamp(0, 100).toDouble();
+    final totalHours = item.allCount;
+    final completedHours = item.completeCount;
+    final remainingHours = item.remainingCount;
+    final completed =
+        progress >= 100 ||
+        (item.allCount > 0 && item.completeCount >= item.allCount);
+
+    if (item.text.contains('乐理')) {
+      return _ProgressMeta(
+        totalHours: totalHours,
+        completedHours: completedHours,
+        remainingHours: remainingHours,
+        progress: progress,
+        gradientStart: const Color(0xFFFFBECE),
+        gradientEnd: const Color(0xFFFF5681),
+        chipColor: const Color(0xFFFF7699),
+        tip: completed ? '恭喜你！你完成了乐理的全部课程' : '',
       );
     }
-    if (text.contains('视唱')) {
+    if (item.text.contains('视唱')) {
       return _ProgressMeta(
-        totalHours: 60,
-        completedHours: 5,
-        remainingHours: 55,
-        progress: apiValue == 0 ? 40.0 : apiValue.toDouble(),
+        totalHours: totalHours,
+        completedHours: completedHours,
+        remainingHours: remainingHours,
+        progress: progress,
         gradientStart: const Color(0xFF4DE6C8),
         gradientEnd: const Color(0xFF13E8BE),
         chipColor: const Color(0xFF20E7C0),
       );
     }
     return _ProgressMeta(
-      totalHours: 60,
-      completedHours: 5,
-      remainingHours: 55,
-      progress: apiValue == 0 ? 40.0 : apiValue.toDouble(),
+      totalHours: totalHours,
+      completedHours: completedHours,
+      remainingHours: remainingHours,
+      progress: progress,
       gradientStart: const Color(0xFFD4BFFF),
       gradientEnd: const Color(0xFFB184FF),
       chipColor: const Color(0xFFB991FF),

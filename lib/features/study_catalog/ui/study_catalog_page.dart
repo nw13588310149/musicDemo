@@ -5,6 +5,7 @@ import '../../../app/router/route_paths.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_refresh_indicator.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/course_empty_placeholder.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../../voice/ui/voice_page.dart';
 import '../state/study_catalog_controller.dart';
@@ -202,12 +203,7 @@ class _ContentPanel extends StatelessWidget {
             child: state.loading && state.lessonGroups.isEmpty
                 ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
                 : state.lessonGroups.isEmpty
-                ? _EmptyState(
-                    message: state.errorMessage.isEmpty
-                        ? '暂无课程'
-                        : state.errorMessage,
-                    onRefresh: onRefresh,
-                  )
+                ? const CourseEmptyPlaceholder()
                 : Padding(
                     padding: EdgeInsets.fromLTRB(0, ui(12), 0, ui(12)),
                     child: AppRefreshIndicator(
@@ -800,47 +796,5 @@ class _LessonArtwork extends StatelessWidget {
       case StudyCatalogArtworkLabel.instrumental:
         return '单音';
     }
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.message, required this.onRefresh});
-
-  final String message;
-  final Future<void> Function() onRefresh;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.menu_book_outlined,
-            size: ui(48),
-            color: const Color(0xFFC5C7D0),
-          ),
-          SizedBox(height: ui(12)),
-          Text(
-            message,
-            style: TextStyle(
-              fontSize: ui(14),
-              color: const Color(0xFF8E90A0),
-              fontFamily: 'PingFang SC',
-            ),
-          ),
-          SizedBox(height: ui(12)),
-          OutlinedButton(
-            onPressed: () => onRefresh(),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFF292151),
-              side: const BorderSide(color: Color(0xFFE0E3F0)),
-            ),
-            child: const Text('重新加载'),
-          ),
-        ],
-      ),
-    );
   }
 }

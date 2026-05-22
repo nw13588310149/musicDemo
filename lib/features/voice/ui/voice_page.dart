@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_refresh_indicator.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/course_empty_placeholder.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../../study_catalog/state/study_catalog_controller.dart';
 import '../../study_catalog/state/study_catalog_state.dart';
@@ -453,12 +454,12 @@ class _VoiceBody extends StatelessWidget {
       return const Center(child: CircularProgressIndicator(strokeWidth: 2));
     }
     if (!hasAnyLessons) {
-      return _VoiceListEmptyPlaceholder(
-        message: errorMessage.isEmpty ? '暂无课程' : errorMessage,
-      );
+      return const CourseEmptyPlaceholder();
     }
     if (lessons.isEmpty) {
-      return _VoiceListEmptyPlaceholder(message: '没有匹配 “${query.trim()}” 的作品');
+      return CourseEmptyPlaceholder(
+        message: '没有匹配 “${query.trim()}” 的作品',
+      );
     }
 
     return AppRefreshIndicator(
@@ -555,44 +556,6 @@ class _VoiceSongCard extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// 列表为空占位：163×163 插图 + 居中文案（Inter 16 / 400 / black），无按钮。
-class _VoiceListEmptyPlaceholder extends StatelessWidget {
-  const _VoiceListEmptyPlaceholder({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Image.asset(
-            AppAssets.emptyCoursePlaceholder,
-            width: ui(163),
-            height: ui(163),
-            fit: BoxFit.contain,
-          ),
-          SizedBox(height: ui(4)),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontFamily: 'Inter',
-              fontSize: ui(16),
-              fontWeight: FontWeight.w400,
-              color: Colors.black,
-              height: 1.25,
-              fontVariations: const [FontVariation('wght', 400)],
-            ),
-          ),
-        ],
       ),
     );
   }

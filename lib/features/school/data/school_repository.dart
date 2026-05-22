@@ -52,14 +52,32 @@ class SchoolRepository {
   Future<ApiResponse> getLearningProgress() {
     return client.post(
       '/app/user/schoolHomeLearningProgress',
-      data: const <String, dynamic>{'province': '甘肃省'},
+      data: const <String, dynamic>{'province': '甘肃'},
     );
   }
 
-  Future<ApiResponse> getLatestInfo() {
+  Future<ApiResponse> getBannerList({required int schoolId}) {
+    return client.post(
+      '/app/user/bannerList',
+      data: <String, dynamic>{
+        'contentType': 0,
+        'schoolId': schoolId,
+      },
+    );
+  }
+
+  Future<ApiResponse> getSchoolHomeLatestInfo() {
+    return client.post(
+      '/app/user/schoolHomeLatestInfo',
+      data: const <String, dynamic>{'province': '甘肃'},
+    );
+  }
+
+  /// 校区资讯为空时，回退到首页最新资讯。
+  Future<ApiResponse> getHomeLatestInfo() {
     return client.post(
       '/app/user/homeLatestInfo',
-      data: const <String, dynamic>{'province': '甘肃省'},
+      data: const <String, dynamic>{'province': '甘肃'},
     );
   }
 

@@ -26,15 +26,30 @@ class SchoolQuickAction {
 class SchoolLearningItem {
   const SchoolLearningItem({
     required this.text,
-    required this.value,
+    required this.completeCount,
+    required this.allCount,
+    required this.progress,
     required this.color,
     required this.background,
   });
 
   final String text;
-  final int value;
+  final int completeCount;
+  final int allCount;
+
+  /// 0–100 进度百分比。
+  final int progress;
   final Color color;
   final Color background;
+
+  int get remainingCount =>
+      (allCount - completeCount).clamp(0, allCount > 0 ? allCount : 0);
+}
+
+class SchoolBannerItem {
+  const SchoolBannerItem({required this.imageUrl});
+
+  final String imageUrl;
 }
 
 class SchoolNewsItem {
@@ -61,6 +76,7 @@ class SchoolPageState {
     this.schoolId = 0,
     this.schoolName = '',
     this.quickActions = const [],
+    this.bannerItems = const [],
     this.learningItems = const [],
     this.newsItems = const [],
     this.errorMessage = '',
@@ -70,6 +86,7 @@ class SchoolPageState {
   final int schoolId;
   final String schoolName;
   final List<SchoolQuickAction> quickActions;
+  final List<SchoolBannerItem> bannerItems;
   final List<SchoolLearningItem> learningItems;
   final List<SchoolNewsItem> newsItems;
   final String errorMessage;
@@ -79,6 +96,7 @@ class SchoolPageState {
     int? schoolId,
     String? schoolName,
     List<SchoolQuickAction>? quickActions,
+    List<SchoolBannerItem>? bannerItems,
     List<SchoolLearningItem>? learningItems,
     List<SchoolNewsItem>? newsItems,
     String? errorMessage,
@@ -88,6 +106,7 @@ class SchoolPageState {
       schoolId: schoolId ?? this.schoolId,
       schoolName: schoolName ?? this.schoolName,
       quickActions: quickActions ?? this.quickActions,
+      bannerItems: bannerItems ?? this.bannerItems,
       learningItems: learningItems ?? this.learningItems,
       newsItems: newsItems ?? this.newsItems,
       errorMessage: errorMessage ?? this.errorMessage,

@@ -849,6 +849,27 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     });
   }
 
+  /// 1.0 `musicPlay`：视唱 / 听写 在当前音频**完整播完**时上报一次
+  /// `/app/user/textbookRecordSave`。
+  ///
+  /// - 视唱：教材 `type == 1`，或视唱多题入口透传的 `args.type == 3`
+  /// - 听写：教材 `type == 3`（听写列表 / 搜索入口通常不带路由 type）
+  /// - 乐理走 [TheoryController.markAnswerOpened]（查看答案时上报），不在此页处理
+  bool _shouldSaveStudyRecord(MusicPlayDetail detail) {
+    if (state.args.type == 3) {
+      return true;
+    }
+    return detail.type == 1 || detail.type == 3;
+  }
+
+  void _maybeSaveStudyRecord(MusicPlayDetail detail) {
+    if (_recordSaved || !_shouldSaveStudyRecord(detail)) {
+      return;
+    }
+    _recordSaved = true;
+    unawaited(repository.saveStudyRecord(detail.id));
+  }
+
   Future<void> _handleTrackCompleted() async {
     if (_disposed) return;
     final detail = state.detail;
@@ -856,10 +877,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       return;
     }
 
-    if (!_recordSaved && (state.args.type == 3 || detail.type == 1)) {
-      _recordSaved = true;
-      unawaited(repository.saveStudyRecord(detail.id));
-    }
+    _maybeSaveStudyRecord(detail);
 
     final tracks = detail.tracks;
     final mode = state.playMode;

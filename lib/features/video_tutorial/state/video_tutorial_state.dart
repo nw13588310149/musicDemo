@@ -1,3 +1,22 @@
+class VideoTutorialPageArgs {
+  const VideoTutorialPageArgs({this.schoolMode = false, this.schoolId = 0});
+
+  static const public = VideoTutorialPageArgs();
+
+  final bool schoolMode;
+  final int schoolId;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is VideoTutorialPageArgs &&
+          schoolMode == other.schoolMode &&
+          schoolId == other.schoolId;
+
+  @override
+  int get hashCode => Object.hash(schoolMode, schoolId);
+}
+
 class VideoBannerItem {
   const VideoBannerItem({required this.imageUrl});
 

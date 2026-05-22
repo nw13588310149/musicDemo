@@ -802,12 +802,14 @@ class _PianoWhiteKey extends StatelessWidget {
           // 切图自身会描绘"键面 + 底部脚线/阴影"。按下时阴影变小、键面下沉
           // 的视觉变化全部由 4.png 自己负责，所以这里不再做位置动画。
           //
-          // 标签需要落在"键面区域"的下方、避开底部那段阴影。按现有切图实测：
+          // 标签落在键面下方区域、避开底部阴影。按切图实测：
           // - 默认态 3.png 大约底部 12% 是阴影；
           // - 按下态 4.png 阴影被压扁到 4% 左右。
-          // 这里按比例算 label 的 bottom，保证两态都贴在键面下沿。
+          // 整体仍按 bottom 锚定到原来的位置；Column 内各段固定槽位高度，
+          // 保证各白键音名/简谱数字在同一水平线上。
           final h = constraints.maxHeight;
-          final labelBottom = isPressed ? h * 0.06 : h * 0.13;
+          final labelBottom =
+              (isPressed ? h * 0.08 : h * 0.15) - ui(10);
 
           return Stack(
             clipBehavior: Clip.none,
@@ -880,6 +882,26 @@ class _PianoWhiteKeyLabel extends StatelessWidget {
   /// 白键在键盘中的下标（0..34）。
   final int index;
 
+  static double _capsuleHeight(double Function(double) ui) => ui(18);
+  static double _gapHeight(double Function(double) ui) => ui(3);
+  static double _dotSlotHeight(double Function(double) ui) => ui(10);
+  static double _numberHeight(double Function(double) ui) => ui(15);
+
+  static TextStyle _capsuleTextStyle({
+    required Color color,
+    required double fontSize,
+    required FontWeight fontWeight,
+  }) {
+    return TextStyle(
+      color: color,
+      fontSize: fontSize,
+      fontFamily: 'Manrope',
+      fontWeight: fontWeight,
+      height: 1.15,
+      leadingDistribution: TextLeadingDistribution.even,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
@@ -904,81 +926,98 @@ class _PianoWhiteKeyLabel extends StatelessWidget {
         ? const Color(0xFF0B081A)
         : const Color(0xFF1A1A1A);
 
+    // 固定槽位高度：最多 2 个八度点，保证各键简谱数字在同一水平线。
+    final dotSlotHeight = _dotSlotHeight(ui);
+    final numberHeight = _numberHeight(ui);
+    const dotColor = Color(0xFF6D6B75);
+    final nameStyle = _capsuleTextStyle(
+      color: textColor,
+      fontSize: ui(12),
+      fontWeight: FontWeight.w600,
+    );
+    final superscriptStyle = _capsuleTextStyle(
+      color: textColor,
+      fontSize: ui(8),
+      fontWeight: FontWeight.w700,
+    );
+    final solfegeStyle = TextStyle(
+      color: const Color(0xFF1A1A1A),
+      fontSize: ui(13),
+      fontFamily: 'Manrope',
+      fontWeight: FontWeight.w600,
+      height: 1,
+    );
+
     return Column(
-      mainAxisAlignment: MainAxisAlignment.end,
+      mainAxisAlignment: MainAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: <Widget>[
-        // 顶部音名胶囊
-        Container(
-          padding: EdgeInsets.symmetric(horizontal: ui(3), vertical: ui(1.5)),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(ui(2.5)),
-            color: bgColor,
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                mainText,
-                style: TextStyle(
-                  color: textColor,
-                  fontSize: ui(11),
-                  fontFamily: 'Manrope',
-                  fontWeight: FontWeight.w600,
-                  height: 1,
-                ),
+        // 顶部音名胶囊（固定行高，各键顶部对齐）
+        SizedBox(
+          height: _capsuleHeight(ui),
+          child: Center(
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: ui(4), vertical: ui(2.5)),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(ui(3)),
+                color: bgColor,
               ),
-              if (superscript.isNotEmpty) ...<Widget>[
-                SizedBox(width: ui(0.5)),
-                Transform.translate(
-                  offset: Offset(0, -ui(2.0)),
-                  child: Text(
-                    superscript,
-                    style: TextStyle(
-                      color: textColor,
-                      fontSize: ui(7),
-                      fontFamily: 'Manrope',
-                      fontWeight: FontWeight.w700,
-                      height: 1,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: <Widget>[
+                  Text(mainText, style: nameStyle),
+                  if (superscript.isNotEmpty) ...<Widget>[
+                    SizedBox(width: ui(0.5)),
+                    Transform.translate(
+                      offset: Offset(0, -ui(2.5)),
+                      child: Text(superscript, style: superscriptStyle),
                     ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+        SizedBox(height: _gapHeight(ui)),
+        // 高八度点（数字上方，固定槽位、底部对齐）
+        SizedBox(
+          height: dotSlotHeight,
+          child: spec.octaveDots > 0
+              ? Align(
+                  alignment: Alignment.bottomCenter,
+                  child: _OctaveDots(
+                    count: spec.octaveDots,
+                    color: dotColor,
                   ),
-                ),
-              ],
-            ],
-          ),
+                )
+              : null,
         ),
-        SizedBox(height: ui(3)),
-        // 高八度点（数字上方）
-        if (spec.octaveDots > 0)
-          Padding(
-            padding: EdgeInsets.only(bottom: ui(1.5)),
-            child: _OctaveDots(
-              count: spec.octaveDots,
-              color: const Color(0xFF6D6B75),
+        // 简谱 1..7（固定行高，各键水平对齐）
+        SizedBox(
+          height: numberHeight,
+          child: Center(
+            child: Text(
+              spec.solfege == 0 ? '' : '${spec.solfege}',
+              style: solfegeStyle,
             ),
           ),
-        // 简谱 1..7
-        Text(
-          spec.solfege == 0 ? '' : '${spec.solfege}',
-          style: TextStyle(
-            color: const Color(0xFF1A1A1A),
-            fontSize: ui(13),
-            fontFamily: 'Manrope',
-            fontWeight: FontWeight.w600,
-            height: 1,
-          ),
         ),
-        // 低八度点（数字下方）
-        if (spec.octaveDots < 0)
-          Padding(
-            padding: EdgeInsets.only(top: ui(1.5)),
-            child: _OctaveDots(
-              count: -spec.octaveDots,
-              color: const Color(0xFF6D6B75),
-            ),
-          ),
+        // 低八度点（数字下方，固定槽位、顶部对齐）
+        SizedBox(
+          height: dotSlotHeight,
+          child: spec.octaveDots < 0
+              ? Align(
+                  alignment: Alignment.topCenter,
+                  child: _OctaveDots(
+                    count: -spec.octaveDots,
+                    color: dotColor,
+                  ),
+                )
+              : null,
+        ),
       ],
     );
   }

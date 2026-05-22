@@ -1383,8 +1383,8 @@ class _PlaybackBar extends StatelessWidget {
                   state.isPlaying
                       ? 'assets/images/home/play12.png'
                       : 'assets/images/home/play11.png',
-                  width: ui(38),
-                  height: ui(38),
+                  width: ui(36),
+                  height: ui(36),
                   fit: BoxFit.contain,
                 ),
               ),

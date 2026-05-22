@@ -14,10 +14,12 @@ class ConsultationPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(consultationControllerProvider);
-    final controller = ref.read(consultationControllerProvider.notifier);
+    final args = _parseArgs(ModalRoute.of(context)?.settings.arguments);
+    final provider = consultationControllerProvider(args);
+    final state = ref.watch(provider);
+    final controller = ref.read(provider.notifier);
 
-    ref.listen<ConsultationState>(consultationControllerProvider, (
+    ref.listen<ConsultationState>(provider, (
       previous,
       next,
     ) {
@@ -53,6 +55,31 @@ class ConsultationPage extends ConsumerWidget {
       ),
     );
   }
+
+  ConsultationPageArgs _parseArgs(dynamic raw) {
+    if (raw is ConsultationPageArgs) {
+      return raw;
+    }
+    if (raw is Map) {
+      return ConsultationPageArgs(
+        schoolMode: _isTruthy(raw['schoolMode']) || _isTruthy(raw['school']),
+      );
+    }
+    return const ConsultationPageArgs();
+  }
+}
+
+/// 仿 JS `!!value` 语义：null/false/0/空串视为假，其他视为真。
+bool _isTruthy(dynamic value) {
+  if (value == null) return false;
+  if (value is bool) return value;
+  if (value is num) return value != 0;
+  if (value is String) {
+    if (value.isEmpty) return false;
+    final lower = value.toLowerCase();
+    return lower != 'false' && lower != '0';
+  }
+  return true;
 }
 
 // ─────────────────────────────────────────────────────────────────────

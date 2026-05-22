@@ -38,7 +38,12 @@ const int _kVideoImageMaxDecodeHeight = 1000;
 // ─────────────────────────────────────────────────────────────────────────────
 
 class VideoTutorialV2Page extends ConsumerStatefulWidget {
-  const VideoTutorialV2Page({super.key});
+  const VideoTutorialV2Page({
+    super.key,
+    this.args = VideoTutorialPageArgs.public,
+  });
+
+  final VideoTutorialPageArgs args;
 
   @override
   ConsumerState<VideoTutorialV2Page> createState() =>
@@ -46,6 +51,7 @@ class VideoTutorialV2Page extends ConsumerStatefulWidget {
 }
 
 class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
+  VideoTutorialPageArgs get _pageArgs => widget.args;
   final ScrollController _scrollController = ScrollController();
   int _bannerIndex = 0;
   bool _isDetailOpening = false;
@@ -87,7 +93,7 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
   void _handleScroll() {
     if (!_scrollController.hasClients) return;
     if (_scrollController.position.extentAfter < 360) {
-      ref.read(videoTutorialControllerProvider.notifier).loadMore();
+      ref.read(videoTutorialControllerProvider(_pageArgs).notifier).loadMore();
     }
   }
 
@@ -149,7 +155,7 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
     if (_isDetailOpening) return;
     _isDetailOpening = true;
 
-    final notifier = ref.read(videoTutorialControllerProvider.notifier);
+    final notifier = ref.read(videoTutorialControllerProvider(_pageArgs).notifier);
     final message = await load(notifier);
 
     if (!mounted) {
@@ -162,7 +168,7 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
       return;
     }
 
-    final detail = ref.read(videoTutorialControllerProvider).detail;
+    final detail = ref.read(videoTutorialControllerProvider(_pageArgs)).detail;
     if (detail == null) {
       _isDetailOpening = false;
       return;
@@ -170,12 +176,17 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
 
     final scale = DashboardScaleScope.of(context);
     await Navigator.of(context, rootNavigator: true).push<void>(
-      _VideoDetailRoute(detail: detail, resolveUrl: _resolveUrl, scale: scale),
+      _VideoDetailRoute(
+        detail: detail,
+        resolveUrl: _resolveUrl,
+        scale: scale,
+        pageArgs: _pageArgs,
+      ),
     );
 
     _isDetailOpening = false;
     if (mounted) {
-      ref.read(videoTutorialControllerProvider.notifier).closeDetail();
+      ref.read(videoTutorialControllerProvider(_pageArgs).notifier).closeDetail();
     }
   }
 
@@ -188,7 +199,7 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
     if (_scrollController.hasClients) {
       _scrollController.jumpTo(0);
     }
-    await ref.read(videoTutorialControllerProvider.notifier).selectMenu(id);
+    await ref.read(videoTutorialControllerProvider(_pageArgs).notifier).selectMenu(id);
   }
 
   Future<void> _selectChildMenu(String? id) async {
@@ -196,7 +207,7 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
       _scrollController.jumpTo(0);
     }
     await ref
-        .read(videoTutorialControllerProvider.notifier)
+        .read(videoTutorialControllerProvider(_pageArgs).notifier)
         .selectChildMenu(id);
   }
 
@@ -208,7 +219,7 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(videoTutorialControllerProvider);
+    final state = ref.watch(videoTutorialControllerProvider(_pageArgs));
     final scale = DashboardScaleScope.of(context);
     final ui = scale.ui;
     _preloadImages(state);
@@ -234,7 +245,7 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
           Expanded(
             child: AppRefreshIndicator(
               onRefresh: () =>
-                  ref.read(videoTutorialControllerProvider.notifier).refresh(),
+                  ref.read(videoTutorialControllerProvider(_pageArgs).notifier).refresh(),
               child: CustomScrollView(
                 key: const PageStorageKey<String>('video_tutorial_scroll'),
                 controller: _scrollController,
@@ -424,6 +435,7 @@ class _VideoDetailRoute extends PageRouteBuilder<void> {
     required this.detail,
     required this.resolveUrl,
     required this.scale,
+    required this.pageArgs,
     this.handoffPlayer,
     this.handoffController,
   }) : super(
@@ -435,6 +447,7 @@ class _VideoDetailRoute extends PageRouteBuilder<void> {
            detail: detail,
            resolveUrl: resolveUrl,
            scale: scale,
+           pageArgs: pageArgs,
            animation: animation,
            handoffPlayer: handoffPlayer,
            handoffController: handoffController,
@@ -445,6 +458,7 @@ class _VideoDetailRoute extends PageRouteBuilder<void> {
   final VideoDetail detail;
   final String Function(String) resolveUrl;
   final DashboardScaleData scale;
+  final VideoTutorialPageArgs pageArgs;
   // 从画中画展开时，直接接管已有播放器，避免重新加载
   final Player? handoffPlayer;
   final VideoController? handoffController;
@@ -455,6 +469,7 @@ class _VideoDetailOverlay extends StatelessWidget {
     required this.detail,
     required this.resolveUrl,
     required this.scale,
+    required this.pageArgs,
     required this.animation,
     this.handoffPlayer,
     this.handoffController,
@@ -463,6 +478,7 @@ class _VideoDetailOverlay extends StatelessWidget {
   final VideoDetail detail;
   final String Function(String) resolveUrl;
   final DashboardScaleData scale;
+  final VideoTutorialPageArgs pageArgs;
   final Animation<double> animation;
   final Player? handoffPlayer;
   final VideoController? handoffController;
@@ -500,6 +516,7 @@ class _VideoDetailOverlay extends StatelessWidget {
                   initialDetail: detail,
                   resolveUrl: resolveUrl,
                   scale: scale,
+                  pageArgs: pageArgs,
                   handoffPlayer: handoffPlayer,
                   handoffController: handoffController,
                 ),
@@ -521,6 +538,7 @@ class _VideoDetailSheet extends ConsumerStatefulWidget {
     required this.initialDetail,
     required this.resolveUrl,
     required this.scale,
+    required this.pageArgs,
     this.handoffPlayer,
     this.handoffController,
   });
@@ -528,6 +546,7 @@ class _VideoDetailSheet extends ConsumerStatefulWidget {
   final VideoDetail initialDetail;
   final String Function(String) resolveUrl;
   final DashboardScaleData scale;
+  final VideoTutorialPageArgs pageArgs;
   // 从画中画展开时传入已在播放的播放器，跳过重新加载
   final Player? handoffPlayer;
   final VideoController? handoffController;
@@ -613,7 +632,7 @@ class _VideoDetailSheetState extends ConsumerState<_VideoDetailSheet>
     if (_loadingSwitch) return;
     setState(() => _loadingSwitch = true);
     final msg = await ref
-        .read(videoTutorialControllerProvider.notifier)
+        .read(videoTutorialControllerProvider(widget.pageArgs).notifier)
         .openDetail(item);
     if (!mounted) return;
     if (msg != null && msg.isNotEmpty) {
@@ -621,7 +640,7 @@ class _VideoDetailSheetState extends ConsumerState<_VideoDetailSheet>
       setState(() => _loadingSwitch = false);
       return;
     }
-    final detail = ref.read(videoTutorialControllerProvider).detail;
+    final detail = ref.read(videoTutorialControllerProvider(widget.pageArgs)).detail;
     if (detail != null) {
       setState(() {
         _currentDetail = detail;
@@ -693,6 +712,7 @@ class _VideoDetailSheetState extends ConsumerState<_VideoDetailSheet>
         detail: detail,
         resolveUrl: resolveUrl,
         scale: widget.scale,
+        pageArgs: widget.pageArgs,
         handoffPlayer: player,
         handoffController: ctrl,
       ),
@@ -701,20 +721,20 @@ class _VideoDetailSheetState extends ConsumerState<_VideoDetailSheet>
 
   Future<void> _toggleFavorite() async {
     final msg = await ref
-        .read(videoTutorialControllerProvider.notifier)
+        .read(videoTutorialControllerProvider(widget.pageArgs).notifier)
         .toggleFavorite();
     if (!mounted) return;
     if (msg != null && msg.isNotEmpty) {
       _showMsg(msg);
     } else {
       final isFav =
-          ref.read(videoTutorialControllerProvider).detail?.isFavorite ?? false;
+          ref.read(videoTutorialControllerProvider(widget.pageArgs)).detail?.isFavorite ?? false;
       _showMsg(isFav ? '收藏成功' : '已取消收藏');
     }
   }
 
   Future<void> _showShareSheet() async {
-    final notifier = ref.read(videoTutorialControllerProvider.notifier);
+    final notifier = ref.read(videoTutorialControllerProvider(widget.pageArgs).notifier);
     if (!mounted) return;
     await showClassShareDrawer<void>(
       context: context,
@@ -759,7 +779,7 @@ class _VideoDetailSheetState extends ConsumerState<_VideoDetailSheet>
 
   @override
   Widget build(BuildContext context) {
-    final ctrlState = ref.watch(videoTutorialControllerProvider);
+    final ctrlState = ref.watch(videoTutorialControllerProvider(widget.pageArgs));
     final detail = ctrlState.detail ?? _currentDetail;
 
     return Column(

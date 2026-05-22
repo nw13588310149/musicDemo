@@ -8,28 +8,35 @@ import '../../../core/storage/app_storage.dart';
 import '../data/video_tutorial_repository.dart';
 import 'video_tutorial_state.dart';
 
-final videoTutorialControllerProvider =
-    StateNotifierProvider.autoDispose<
-      VideoTutorialController,
-      VideoTutorialState
-    >((ref) {
+final videoTutorialControllerProvider = StateNotifierProvider.autoDispose
+    .family<VideoTutorialController, VideoTutorialState, VideoTutorialPageArgs>((
+      ref,
+      args,
+    ) {
       final repository = ref.watch(videoTutorialRepositoryProvider);
       final storage = ref.watch(appStorageProvider);
-      return VideoTutorialController(repository: repository, storage: storage);
+      return VideoTutorialController(
+        repository: repository,
+        storage: storage,
+        args: args,
+      );
     });
 
 class VideoTutorialController extends StateNotifier<VideoTutorialState> {
   VideoTutorialController({
     required VideoTutorialRepository repository,
     required AppStorage storage,
+    required VideoTutorialPageArgs args,
   }) : _repository = repository,
        _storage = storage,
+       _args = args,
        super(VideoTutorialState(checkStatusEnabled: storage.hasCheckStatus)) {
     unawaited(refresh());
   }
 
   final VideoTutorialRepository _repository;
   final AppStorage _storage;
+  final VideoTutorialPageArgs _args;
   final Map<String, _VideoListCacheEntry> _listCache =
       <String, _VideoListCacheEntry>{};
   final Set<String> _inFlightPageKeys = <String>{};
@@ -56,7 +63,9 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
     );
 
     final responses = await Future.wait<dynamic>([
-      _repository.getBannerList(),
+      _args.schoolMode
+          ? _repository.getSchoolBannerList(schoolId: _args.schoolId)
+          : _repository.getBannerList(),
       _repository.getMenuList(),
       _repository.getMyInfo(),
     ]);
@@ -167,7 +176,9 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
       clearDetail: true,
     );
 
-    final response = await _repository.getVideoDetail(item.id);
+    final response = await (_args.schoolMode
+        ? _repository.getSchoolVideoDetail(item.id)
+        : _repository.getVideoDetail(item.id));
     if (!response.isSuccess) {
       state = state.copyWith(detailLoading: false);
       return response.msg.isEmpty ? '加载视频详情失败' : response.msg;
@@ -217,7 +228,9 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
       clearDetail: true,
     );
 
-    final response = await _repository.getVideoDetail(id);
+    final response = await (_args.schoolMode
+        ? _repository.getSchoolVideoDetail(id)
+        : _repository.getVideoDetail(id));
     if (!response.isSuccess) {
       state = state.copyWith(detailLoading: false, showDetailPanel: false);
       return response.msg.isEmpty ? '加载视频详情失败' : response.msg;
@@ -351,12 +364,19 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
       errorMessage: '',
     );
 
-    final response = await _repository.getVideoList(
-      current: page,
-      size: _pageSize,
-      firstMenu: state.selectedMenuId,
-      secondMenu: state.selectedChildId,
-    );
+    final response = await (_args.schoolMode
+        ? _repository.getSchoolVideoList(
+            current: page,
+            size: _pageSize,
+            firstMenu: state.selectedMenuId,
+            secondMenu: state.selectedChildId,
+          )
+        : _repository.getVideoList(
+            current: page,
+            size: _pageSize,
+            firstMenu: state.selectedMenuId,
+            secondMenu: state.selectedChildId,
+          ));
     _inFlightPageKeys.remove(pageKey);
 
     if (!response.isSuccess) {

@@ -14,7 +14,7 @@ class ConsultationRepository {
 
   final ApiClient client;
 
-  /// 资讯列表：1.0 走 textbookList + type:9。
+  /// 官方资讯列表：1.0 走 textbookList + type:9。
   Future<ApiResponse> getList({
     int page = 1,
     int size = 1000,
@@ -25,6 +25,28 @@ class ConsultationRepository {
   }) {
     return client.post(
       '/app/user/textbookList',
+      data: <String, dynamic>{
+        'current': page,
+        'size': size,
+        'province': province,
+        'firstMenu': firstMenu,
+        'secondMenu': secondMenu,
+        'type': type,
+      },
+    );
+  }
+
+  /// 校区资讯列表；入参与 [getList] 一致。
+  Future<ApiResponse> getSchoolList({
+    int page = 1,
+    int size = 1000,
+    String province = '',
+    String firstMenu = '',
+    String secondMenu = '',
+    int type = 9,
+  }) {
+    return client.post(
+      '/app/user/schoolTextbookList',
       data: <String, dynamic>{
         'current': page,
         'size': size,

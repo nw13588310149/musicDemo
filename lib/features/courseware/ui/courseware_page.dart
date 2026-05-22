@@ -2406,23 +2406,21 @@ class _PreviewImagePager extends StatelessWidget {
                     child: InteractiveViewer(
                       minScale: 1,
                       maxScale: 4,
-                      child: SizedBox.expand(
-                        child: CachedNetworkImage(
-                          imageUrl: resolved,
-                          fit: BoxFit.contain,
-                          width: double.infinity,
-                          height: double.infinity,
-                          memCacheWidth: _coursewareDecodeExtent(
-                            context,
-                            constraints.maxWidth,
-                            4096,
-                          ),
-                          memCacheHeight: _coursewareDecodeExtent(
-                            context,
-                            constraints.maxHeight,
-                            4096,
-                          ),
-                          placeholder: (_, _) => SizedBox(
+                      child: CachedNetworkImage(
+                        imageUrl: resolved,
+                        fit: BoxFit.contain,
+                        width: constraints.maxWidth,
+                        height: constraints.maxHeight,
+                        // 只限制较长边解码，避免同时设 width+height 把位图
+                        // 压成视口比例导致拉伸（与 image_gallery_viewer 一致）。
+                        memCacheWidth: _coursewarePreviewMemCacheWidth(
+                          context,
+                          constraints.maxWidth,
+                          constraints.maxHeight,
+                          4096,
+                        ),
+                        placeholder: (_, _) => Center(
+                          child: SizedBox(
                             width: ui(28),
                             height: ui(28),
                             child: CircularProgressIndicator(
@@ -2430,7 +2428,9 @@ class _PreviewImagePager extends StatelessWidget {
                               color: const Color(0xFF8741FF),
                             ),
                           ),
-                          errorWidget: (_, _, _) => Icon(
+                        ),
+                        errorWidget: (_, _, _) => Center(
+                          child: Icon(
                             Icons.broken_image_outlined,
                             size: ui(48),
                             color: const Color(0xFFB6B5BB),
@@ -4889,6 +4889,21 @@ int? _coursewareDecodeExtent(
   }
   final dpr = MediaQuery.devicePixelRatioOf(context);
   return (logicalExtent * dpr).ceil().clamp(1, maxPixels).toInt();
+}
+
+/// 大图预览解码宽度：仅按视口较长边限制，高度随原图比例缩放。
+int? _coursewarePreviewMemCacheWidth(
+  BuildContext context,
+  double maxWidth,
+  double maxHeight,
+  int maxPixels,
+) {
+  final longest = math.max(
+    maxWidth.isFinite ? maxWidth : 0.0,
+    maxHeight.isFinite ? maxHeight : 0.0,
+  );
+  if (longest <= 0) return null;
+  return _coursewareDecodeExtent(context, longest, maxPixels);
 }
 
 enum _CloudFileAction { preview, play, rename, share, delete }
