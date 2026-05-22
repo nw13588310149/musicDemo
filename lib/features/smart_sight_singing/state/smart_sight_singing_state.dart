@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../audio/midi_sight_singing_service.dart';
 import '../audio/pitch_track.dart';
 
 enum SightSingingStage {
@@ -9,8 +10,14 @@ enum SightSingingStage {
   /// 正在解码 + 离线分析音高。
   analyzing,
 
+  /// 解析完成，等待用户选择主旋律轨。
+  selectTrack,
+
   /// 分析完成，等待开始跟唱。
   ready,
+
+  /// 跟唱前倒计时（3→2→1）。
+  countdown,
 
   /// 正在跟唱（播放 + 录音）。
   singing,
@@ -52,6 +59,10 @@ class SightSingingState {
     this.analyzingProgress = 0,
     this.errorMessage,
     this.track,
+    this.trackSummaries = const <MidiTrackSummary>[],
+    this.selectedTrackIndex,
+    this.melodyTrackIndex,
+    this.countdownSeconds = 0,
     this.playbackMs = 0,
     this.userPoints = const <UserPitchPoint>[],
     this.currentUserMidi = -1,
@@ -79,6 +90,18 @@ class SightSingingState {
   /// 离线分析结果。
   final PitchTrack? track;
 
+  /// 解析后各轨摘要（`selectTrack` 阶段使用）。
+  final List<MidiTrackSummary> trackSummaries;
+
+  /// 用户在选轨界面高亮的轨道（1-based）。
+  final int? selectedTrackIndex;
+
+  /// 已确认的主旋律轨（1-based）。
+  final int? melodyTrackIndex;
+
+  /// 跟唱前倒计时剩余秒数（`countdown` 阶段）。
+  final int countdownSeconds;
+
   /// 当前播放进度（毫秒）。
   final int playbackMs;
 
@@ -105,9 +128,13 @@ class SightSingingState {
 
   bool get hasTrack => track != null && !(track!.isEmpty);
 
-  bool get isBusy => stage == SightSingingStage.analyzing;
+  bool get isBusy =>
+      stage == SightSingingStage.analyzing ||
+      stage == SightSingingStage.countdown;
 
   bool get isSinging => stage == SightSingingStage.singing;
+
+  bool get isSelectingTrack => stage == SightSingingStage.selectTrack;
 
   SightSingingState copyWith({
     SightSingingStage? stage,
@@ -116,6 +143,10 @@ class SightSingingState {
     double? analyzingProgress,
     Object? errorMessage = _sentinel,
     Object? track = _sentinel,
+    List<MidiTrackSummary>? trackSummaries,
+    Object? selectedTrackIndex = _sentinel,
+    Object? melodyTrackIndex = _sentinel,
+    int? countdownSeconds,
     int? playbackMs,
     List<UserPitchPoint>? userPoints,
     double? currentUserMidi,
@@ -136,6 +167,14 @@ class SightSingingState {
           ? this.errorMessage
           : errorMessage as String?,
       track: identical(track, _sentinel) ? this.track : track as PitchTrack?,
+      trackSummaries: trackSummaries ?? this.trackSummaries,
+      selectedTrackIndex: identical(selectedTrackIndex, _sentinel)
+          ? this.selectedTrackIndex
+          : selectedTrackIndex as int?,
+      melodyTrackIndex: identical(melodyTrackIndex, _sentinel)
+          ? this.melodyTrackIndex
+          : melodyTrackIndex as int?,
+      countdownSeconds: countdownSeconds ?? this.countdownSeconds,
       playbackMs: playbackMs ?? this.playbackMs,
       userPoints: userPoints ?? this.userPoints,
       currentUserMidi: currentUserMidi ?? this.currentUserMidi,

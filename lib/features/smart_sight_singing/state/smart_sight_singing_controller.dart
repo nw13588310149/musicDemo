@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 
 import '../../../core/audio/native_playback_audio_session.dart';
 import '../audio/ktv_scoring.dart';
+import '../audio/midi_file_parser.dart';
 import '../audio/midi_playback_scheduler.dart';
 import '../audio/midi_sight_singing_service.dart';
 import '../audio/realtime_pitch_capture.dart';
@@ -34,6 +35,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
   static const String _demoAssetPath = 'assets/audio/demo.mid';
   static const String _demoDisplayName = 'demo';
   static const int _maxOnlineMidiBytes = 8 * 1024 * 1024;
+  static const int _countdownStart = 3;
 
   late final MidiPlaybackScheduler _playback;
   StreamSubscription<int>? _positionSub;
@@ -42,6 +44,8 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
   RealtimePitchCapture? _capture;
   KtvScoringSession? _scoringSession;
   MidiSightSingingBundle? _midiBundle;
+  ParsedMidiFile? _parsedMidi;
+  Timer? _countdownTimer;
 
   static const int _userPointsCap = 720;
   bool _shuttingDown = false;
@@ -67,12 +71,9 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     state = state.copyWith(errorMessage: message);
   }
 
-  /// 解析内置 demo.mid，生成参考音符条并准备 MIDI 钢琴播放（曲目名 demo）。
+  /// 解析内置 demo.mid，进入选轨界面（曲目名 demo）。
   Future<void> importAudio() async {
-    if (state.stage == SightSingingStage.analyzing ||
-        state.stage == SightSingingStage.singing) {
-      return;
-    }
+    if (_blocksImport()) return;
 
     try {
       final bytes = await rootBundle.load(_demoAssetPath);
@@ -100,10 +101,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
 
   /// 下载并解析在线 MIDI 地址。
   Future<void> analyzeOnlineAudio(String rawUrl) async {
-    if (state.stage == SightSingingStage.analyzing ||
-        state.stage == SightSingingStage.singing) {
-      return;
-    }
+    if (_blocksImport()) return;
 
     final url = rawUrl.trim();
     final uri = Uri.tryParse(url);
@@ -129,6 +127,9 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       audioName: displayName,
       analyzingProgress: 0.05,
       track: null,
+      trackSummaries: const <MidiTrackSummary>[],
+      selectedTrackIndex: null,
+      melodyTrackIndex: null,
       userPoints: const <UserPitchPoint>[],
       playbackMs: 0,
       currentScore: 0,
@@ -184,12 +185,19 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     required String displayName,
     required String sourceLabel,
   }) async {
+    _parsedMidi = null;
+    _midiBundle = null;
+    await _playback.stop();
+
     state = state.copyWith(
       stage: SightSingingStage.analyzing,
       audioPath: sourceLabel,
       audioName: displayName,
       analyzingProgress: 0.2,
       track: null,
+      trackSummaries: const <MidiTrackSummary>[],
+      selectedTrackIndex: null,
+      melodyTrackIndex: null,
       userPoints: const <UserPitchPoint>[],
       playbackMs: 0,
       currentScore: 0,
@@ -201,44 +209,85 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       errorMessage: null,
     );
 
-    final bundle = MidiSightSingingService.fromBytes(bytes);
+    final preview = MidiSightSingingService.parsePreview(bytes);
     if (!mounted) return;
-    if (bundle.track.isEmpty) {
-      state = state.copyWith(
-        stage: SightSingingStage.idle,
-        errorMessage: _formatDebugError(
-          'MIDI 参考轨为空',
-          'bytes=${bytes.length}, melodyTrack=${bundle.melodyTrackIndex}',
-        ),
-        analyzingProgress: 0,
-      );
+
+    _parsedMidi = preview.parsed;
+    state = state.copyWith(
+      stage: SightSingingStage.selectTrack,
+      analyzingProgress: 1,
+      trackSummaries: preview.summaries,
+      selectedTrackIndex: preview.suggestedTrackIndex,
+    );
+  }
+
+  void setSelectedTrack(int trackIndex) {
+    if (state.stage != SightSingingStage.selectTrack) return;
+    if (trackIndex < 1 || trackIndex > state.trackSummaries.length) return;
+    state = state.copyWith(selectedTrackIndex: trackIndex);
+  }
+
+  /// 用户确认主旋律轨，生成参考轨并进入就绪状态。
+  Future<void> confirmSelectedTrack() async {
+    if (state.stage != SightSingingStage.selectTrack) return;
+    final parsed = _parsedMidi;
+    final trackIndex = state.selectedTrackIndex;
+    if (parsed == null || trackIndex == null) return;
+
+    MidiTrackSummary? summary;
+    for (final s in state.trackSummaries) {
+      if (s.trackIndex == trackIndex) {
+        summary = s;
+        break;
+      }
+    }
+    if (summary == null || !summary.hasNotes) {
+      state = state.copyWith(errorMessage: '请选择包含音符的轨道。');
       return;
     }
 
-    _midiBundle = bundle;
-    await _playback.prepare(
-      bundle.playbackEvents,
-      totalMs: bundle.totalMs,
-    );
+    try {
+      final bundle = MidiSightSingingService.buildBundle(parsed, trackIndex);
+      _midiBundle = bundle;
+      await _playback.prepare(
+        bundle.playbackEvents,
+        totalMs: bundle.totalMs,
+      );
 
-    if (!mounted) return;
+      if (!mounted) return;
+      state = state.copyWith(
+        stage: SightSingingStage.ready,
+        track: bundle.track,
+        melodyTrackIndex: trackIndex,
+        trackSummaries: const <MidiTrackSummary>[],
+        selectedTrackIndex: null,
+        playbackMs: 0,
+        userPoints: const <UserPitchPoint>[],
+        currentScore: 0,
+        hitCount: 0,
+        scoredCount: 0,
+        combo: 0,
+        currentUserMidi: -1,
+        currentUserAmplitude: 0,
+        errorMessage: null,
+      );
+    } on MidiSightSingingException catch (e, stack) {
+      if (!mounted) return;
+      state = state.copyWith(
+        errorMessage: _formatDebugError('构建参考轨失败', e.message, stack),
+      );
+    }
+  }
+
+  void cancelTrackSelection() {
+    if (state.stage != SightSingingStage.selectTrack) return;
+    _parsedMidi = null;
     state = state.copyWith(
-      stage: SightSingingStage.ready,
-      analyzingProgress: 1,
-      track: bundle.track,
+      stage: SightSingingStage.idle,
+      trackSummaries: const <MidiTrackSummary>[],
+      selectedTrackIndex: null,
+      analyzingProgress: 0,
     );
-  }
-
-  static String _nameFromUri(Uri uri) {
-    final last = uri.pathSegments.isEmpty ? '' : uri.pathSegments.last;
-    final decoded = Uri.decodeComponent(last).trim();
-    return decoded.isEmpty ? '在线 MIDI' : decoded;
-  }
-
-  static String _inferExt(String name) {
-    final dot = name.lastIndexOf('.');
-    if (dot < 0 || dot == name.length - 1) return '';
-    return name.substring(dot + 1).toLowerCase();
   }
 
   Future<void> startSinging() async {
@@ -283,8 +332,11 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       return;
     }
 
+    _scoringSession = KtvScoringSession(track: state.track!);
+
     state = state.copyWith(
-      stage: SightSingingStage.singing,
+      stage: SightSingingStage.countdown,
+      countdownSeconds: _countdownStart,
       userPoints: const <UserPitchPoint>[],
       playbackMs: 0,
       currentScore: 0,
@@ -296,24 +348,62 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       errorMessage: null,
     );
 
-    _scoringSession = KtvScoringSession(track: state.track!);
+    _countdownTimer?.cancel();
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted || _shuttingDown) {
+        timer.cancel();
+        return;
+      }
+      if (state.stage != SightSingingStage.countdown) {
+        timer.cancel();
+        return;
+      }
+      if (state.countdownSeconds <= 1) {
+        timer.cancel();
+        unawaited(_beginSingingPlayback());
+        return;
+      }
+      state = state.copyWith(countdownSeconds: state.countdownSeconds - 1);
+    });
+  }
 
-    if (_midiBundle != null) {
-      await _playback.prepare(
-        _midiBundle!.playbackEvents,
-        totalMs: _midiBundle!.totalMs,
-      );
-    }
+  Future<void> _beginSingingPlayback() async {
+    if (!mounted || _shuttingDown) return;
+    if (_midiBundle == null) return;
+
+    state = state.copyWith(
+      stage: SightSingingStage.singing,
+      countdownSeconds: 0,
+    );
+
+    await _playback.prepare(
+      _midiBundle!.playbackEvents,
+      totalMs: _midiBundle!.totalMs,
+    );
     try {
       await _playback.start();
     } catch (e) {
       await _stopCaptureSilently();
+      _scoringSession = null;
       if (!mounted) return;
       state = state.copyWith(
         stage: SightSingingStage.ready,
         errorMessage: 'MIDI 播放失败：$e',
       );
     }
+  }
+
+  Future<void> cancelCountdown() async {
+    if (state.stage != SightSingingStage.countdown) return;
+    _countdownTimer?.cancel();
+    _countdownTimer = null;
+    _scoringSession = null;
+    await _stopCaptureSilently();
+    if (!mounted) return;
+    state = state.copyWith(
+      stage: SightSingingStage.ready,
+      countdownSeconds: 0,
+    );
   }
 
   Future<void> stopSinging({bool reset = false}) async {
@@ -336,8 +426,16 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     if (state.stage == SightSingingStage.analyzing) {
       return;
     }
+    if (state.stage == SightSingingStage.countdown) {
+      await cancelCountdown();
+      return;
+    }
     if (state.stage == SightSingingStage.singing) {
       await stopSinging(reset: true);
+      return;
+    }
+    if (state.stage == SightSingingStage.selectTrack) {
+      cancelTrackSelection();
       return;
     }
     await _playback.stop();
@@ -364,12 +462,32 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
 
   Future<void> shutdown() async {
     _shuttingDown = true;
+    _countdownTimer?.cancel();
+    _countdownTimer = null;
     await _stopCaptureSilently();
     await _positionSub?.cancel();
     await _completedSub?.cancel();
     _positionSub = null;
     _completedSub = null;
     await _playback.dispose();
+  }
+
+  bool _blocksImport() {
+    return state.stage == SightSingingStage.analyzing ||
+        state.stage == SightSingingStage.singing ||
+        state.stage == SightSingingStage.countdown;
+  }
+
+  static String _nameFromUri(Uri uri) {
+    final last = uri.pathSegments.isEmpty ? '' : uri.pathSegments.last;
+    final decoded = Uri.decodeComponent(last).trim();
+    return decoded.isEmpty ? '在线 MIDI' : decoded;
+  }
+
+  static String _inferExt(String name) {
+    final dot = name.lastIndexOf('.');
+    if (dot < 0 || dot == name.length - 1) return '';
+    return name.substring(dot + 1).toLowerCase();
   }
 
   void _onPlaybackPosition(int positionMs) {
@@ -397,11 +515,23 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
 
   void _onUserPitch(RealtimePitchEvent event) {
     if (_shuttingDown || !mounted) return;
-    if (state.stage != SightSingingStage.singing) return;
+    if (state.stage != SightSingingStage.singing &&
+        state.stage != SightSingingStage.countdown) {
+      return;
+    }
 
     final timeMs = state.playbackMs;
     final session = _scoringSession;
     if (session == null) return;
+
+    // 倒计时阶段只预热麦克风，不计分。
+    if (state.stage == SightSingingStage.countdown) {
+      state = state.copyWith(
+        currentUserMidi: event.pitched ? event.midi : -1,
+        currentUserAmplitude: event.amplitude,
+      );
+      return;
+    }
 
     final tick = session.onPitch(playbackMs: timeMs, event: event);
     final cents = tick.cents;

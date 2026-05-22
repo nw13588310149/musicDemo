@@ -93,7 +93,17 @@ abstract final class MidiFileParser {
         );
       }
 
-      offset = chunkEnd + (chunkLen.isOdd ? 1 : 0);
+      offset = chunkEnd;
+      // 标准 SMF 在奇数长度 chunk 后可能有 1 字节对齐填充；
+      // 部分文件（含 demo.mid）下一轨 MTrk 紧接其后，不能再 blindly +1。
+      if (chunkLen.isOdd && offset < bytes.length) {
+        final nextId = offset + 4 <= bytes.length
+            ? String.fromCharCodes(bytes.sublist(offset, offset + 4))
+            : '';
+        if (nextId != 'MTrk' && nextId != 'MThd') {
+          offset += 1;
+        }
+      }
     }
 
     final totalMs = allNotes.isEmpty
@@ -137,10 +147,12 @@ abstract final class MidiFileParser {
       }
 
       if (status == 0xFF) {
-        if (offset + 2 > trackData.length) break;
+        if (offset >= trackData.length) break;
         final metaType = trackData[offset];
-        final len = trackData[offset + 1];
-        offset += 2;
+        offset += 1;
+        final lenResult = _readVarLen(trackData, offset);
+        final len = lenResult.value;
+        offset = lenResult.nextOffset;
         final dataEnd = offset + len;
         if (dataEnd > trackData.length) break;
         if (metaType == _metaTempo && len == 3) {
@@ -155,8 +167,8 @@ abstract final class MidiFileParser {
 
       if (status == 0xF0 || status == 0xF7) {
         if (offset >= trackData.length) break;
-        final len = trackData[offset];
-        offset += 1 + len;
+        final lenResult = _readVarLen(trackData, offset);
+        offset = lenResult.nextOffset + lenResult.value;
         continue;
       }
 
