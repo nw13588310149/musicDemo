@@ -24,11 +24,11 @@ class QuizPracticeRepository {
     );
   }
 
-  /// 创建一组练习（status==null 时初始化）。size 默认 150 与 1.0 一致。
+  /// 创建一组练习（status==null 时初始化）。size 默认 25。
   Future<ApiResponse> createPractice({
     required int schoolId,
     required String practiceType,
-    int size = 150,
+    int size = 25,
   }) {
     return client.post(
       '/app/user/questionPracticeCreate',

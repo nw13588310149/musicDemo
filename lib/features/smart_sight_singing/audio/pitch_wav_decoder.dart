@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 /// Pure-Dart WAV PCM decoder for sight-singing pitch analysis.
@@ -10,7 +11,11 @@ abstract final class PitchWavDecoder {
         bytes[0] == 0x52 &&
         bytes[1] == 0x49 &&
         bytes[2] == 0x46 &&
-        bytes[3] == 0x46;
+        bytes[3] == 0x46 &&
+        bytes[8] == 0x57 &&
+        bytes[9] == 0x41 &&
+        bytes[10] == 0x56 &&
+        bytes[11] == 0x45;
   }
 
   static PitchWavDecodeResult decode(
@@ -22,8 +27,9 @@ abstract final class PitchWavDecoder {
     }
 
     final view = ByteData.sublistView(bytes);
-    final riffSize = view.getUint32(8, Endian.little);
-    if (bytes.length < 12 + riffSize) {
+    // RIFF chunk size 位于 offset 4（不含前 8 字节的 "RIFF"+size 头）。
+    final riffSize = view.getUint32(4, Endian.little);
+    if (bytes.length < 8 + riffSize) {
       throw PitchWavDecodeException('WAV 文件不完整。');
     }
 
@@ -39,19 +45,26 @@ abstract final class PitchWavDecoder {
       final chunkId = String.fromCharCodes(bytes.sublist(offset, offset + 4));
       final chunkSize = view.getUint32(offset + 4, Endian.little);
       final chunkDataStart = offset + 8;
+      if (chunkSize <= 0) {
+        break;
+      }
 
       if (chunkId == 'fmt ' && chunkSize >= 16) {
         audioFormat = view.getUint16(chunkDataStart, Endian.little);
         numChannels = view.getUint16(chunkDataStart + 2, Endian.little);
         sampleRate = view.getUint32(chunkDataStart + 4, Endian.little);
         bitsPerSample = view.getUint16(chunkDataStart + 14, Endian.little);
-      } else if (chunkId == 'data') {
+      } else if (chunkId == 'data' && dataOffset < 0) {
         dataOffset = chunkDataStart;
-        dataSize = chunkSize;
-        break;
+        dataSize = math.min(chunkSize, bytes.length - chunkDataStart);
       }
 
-      offset = chunkDataStart + chunkSize + (chunkSize.isOdd ? 1 : 0);
+      final nextOffset =
+          chunkDataStart + chunkSize + (chunkSize.isOdd ? 1 : 0);
+      if (nextOffset <= offset) {
+        break;
+      }
+      offset = nextOffset;
     }
 
     if (dataOffset < 0 || dataSize <= 0) {

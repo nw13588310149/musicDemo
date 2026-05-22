@@ -504,7 +504,7 @@ class _AnalyzingHint extends StatelessWidget {
           ),
           SizedBox(height: ui(6)),
           Text(
-            '解码 → 帧切 → YIN 音高分析（约需 5–15 秒）',
+            '解码 → 帧切 → YIN 音高分析（《青花》约 1–3 分钟，请耐心等待）',
             style: TextStyle(
               fontSize: ui(12),
               color: const Color(0xFF788698),

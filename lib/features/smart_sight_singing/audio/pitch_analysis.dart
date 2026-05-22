@@ -67,7 +67,8 @@ abstract final class SightSingingPitchAnalyzer {
       );
       return _analyzeFloatSamples(
         decoded.samples,
-        durationHint: decoded.duration,
+        analysisDuration: decoded.duration,
+        playbackDuration: decoded.playbackDuration,
       );
     } on PitchAnalysisException {
       rethrow;
@@ -97,7 +98,9 @@ abstract final class SightSingingPitchAnalyzer {
         }
         return _DecodedAudioSamples(
           samples: wav.samples,
-          duration: durationHint ?? wav.duration,
+          // 分析用解码时长；若 media_kit 探测到播放时长，在 YIN 阶段再对齐时间轴。
+          duration: wav.duration,
+          playbackDuration: durationHint,
         );
       } on PitchWavDecodeException catch (error) {
         throw PitchAnalysisException('WAV 解码失败：$error');
@@ -120,6 +123,7 @@ abstract final class SightSingingPitchAnalyzer {
       return _DecodedAudioSamples(
         samples: trimmed,
         duration: durationHint ?? _durationFromSampleCount(trimmed.length),
+        playbackDuration: durationHint,
       );
     }
 
@@ -135,6 +139,7 @@ abstract final class SightSingingPitchAnalyzer {
       return _DecodedAudioSamples(
         samples: samples,
         duration: durationHint ?? _durationFromSampleCount(samples.length),
+        playbackDuration: durationHint,
       );
     } finally {
       await PitchAnalysisTempFile.delete(tempPath);
@@ -246,14 +251,38 @@ abstract final class SightSingingPitchAnalyzer {
 
   static Future<PitchTrack> _analyzeFloatSamples(
     Float32List floats, {
-    Duration? durationHint,
+    Duration? analysisDuration,
+    Duration? playbackDuration,
   }) async {
     if (floats.isEmpty) {
       throw PitchAnalysisException(_msgReadFailed);
     }
     final pcm = _floatToInt16Bytes(floats);
-    final sampleRate = _sampleRateForAnalysis(floats, durationHint);
-    return _yinPipeline(pcm, sampleRate: sampleRate);
+    final sampleRate = _sampleRateForAnalysis(floats, analysisDuration);
+    final track = kIsWeb
+        ? await _yinPipeline(pcm, sampleRate: sampleRate)
+        : await compute(
+            _yinPipelineIsolate,
+            _YinPipelineMessage(pcm: pcm, sampleRate: sampleRate),
+          );
+    return _alignTrackToPlaybackDuration(track, playbackDuration);
+  }
+
+  static PitchTrack _alignTrackToPlaybackDuration(
+    PitchTrack track,
+    Duration? playbackDuration,
+  ) {
+    final playbackMs = playbackDuration?.inMilliseconds ?? 0;
+    if (playbackMs <= 0 || track.totalMs >= playbackMs) {
+      return track;
+    }
+    return PitchTrack(
+      frames: track.frames,
+      totalMs: playbackMs,
+      frameStepMs: track.frameStepMs,
+      minMidi: track.minMidi,
+      maxMidi: track.maxMidi,
+    );
   }
 
   static String _mapSoLoudError(SoLoudException error) {
@@ -283,10 +312,15 @@ abstract final class SightSingingPitchAnalyzer {
 }
 
 class _DecodedAudioSamples {
-  const _DecodedAudioSamples({required this.samples, required this.duration});
+  const _DecodedAudioSamples({
+    required this.samples,
+    required this.duration,
+    this.playbackDuration,
+  });
 
   final Float32List samples;
   final Duration? duration;
+  final Duration? playbackDuration;
 }
 
 class _SampleRequest {
@@ -304,6 +338,20 @@ class PitchAnalysisException implements Exception {
   final String message;
   @override
   String toString() => message;
+}
+
+class _YinPipelineMessage {
+  const _YinPipelineMessage({
+    required this.pcm,
+    required this.sampleRate,
+  });
+
+  final Uint8List pcm;
+  final double sampleRate;
+}
+
+Future<PitchTrack> _yinPipelineIsolate(_YinPipelineMessage message) {
+  return _yinPipeline(message.pcm, sampleRate: message.sampleRate);
 }
 
 Future<PitchTrack> _yinPipeline(
