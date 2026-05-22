@@ -2,17 +2,22 @@ import 'package:flutter/foundation.dart';
 
 @immutable
 class ConsultationPageArgs {
-  const ConsultationPageArgs({this.schoolMode = false});
+  const ConsultationPageArgs({this.schoolMode = false, this.sourceName});
 
   final bool schoolMode;
+
+  /// 校园课件入口透传 schoolList.name，供列表进详情时覆盖默认来源。
+  final String? sourceName;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is ConsultationPageArgs && schoolMode == other.schoolMode;
+      other is ConsultationPageArgs &&
+          schoolMode == other.schoolMode &&
+          sourceName == other.sourceName;
 
   @override
-  int get hashCode => schoolMode.hashCode;
+  int get hashCode => Object.hash(schoolMode, sourceName);
 }
 
 @immutable

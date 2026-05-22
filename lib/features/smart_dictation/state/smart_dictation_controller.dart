@@ -399,7 +399,7 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
       ),
       noticeMessage: correct ? '回答正确' : '回答错误',
     );
-    await Future<void>.delayed(const Duration(milliseconds: 2000));
+    await Future<void>.delayed(const Duration(milliseconds: 3000));
     final latest = state.session;
     if (latest == null ||
         latest.finished ||

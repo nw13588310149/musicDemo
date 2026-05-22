@@ -10,9 +10,12 @@ const Color _kPickerTitle = Color(0xFF0B081A);
 const Color _kPickerMuted = Color(0xFF6D6B75);
 const Color _kToolbarBorder = Color(0xFFE6E8EB);
 
-/// iOS 风格底部滚轮选择器（[CupertinoPicker] + 取消/确定工具栏）。
+/// iOS 风格底部滚轮选择器（静音 [ListWheelScrollView] + 取消/确定工具栏）。
 ///
 /// 仿 iOS 系统「地区」等 Picker：自底部滑出，中间滚轮切换，点确定返回选中项。
+/// 不使用 [CupertinoPicker]：其在 iOS 上会对每个刻度播放
+/// `SystemSoundType.tick` + 触觉，快速滚动时听感像滋滋声，且与后台
+/// 长音频（musicPlay 等）叠在一起更明显。
 /// 通过根 Navigator 的 [showGeneralDialog] 铺满整屏宽度（含侧栏区域），
 /// 避免 [showModalBottomSheet] 在宽屏/横屏 dashboard 下只覆盖内容区的问题。
 Future<String?> showAppWheelPicker({
@@ -161,7 +164,22 @@ class _AppWheelPickerSheetState extends State<_AppWheelPickerSheet> {
       FixedExtentScrollController(initialItem: widget.initialIndex);
 
   @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_syncSelectedFromScroll);
+  }
+
+  void _syncSelectedFromScroll() {
+    final index = _scrollController.selectedItem;
+    if (index == _selectedIndex || !mounted) {
+      return;
+    }
+    setState(() => _selectedIndex = index);
+  }
+
+  @override
   void dispose() {
+    _scrollController.removeListener(_syncSelectedFromScroll);
     _scrollController.dispose();
     super.dispose();
   }
@@ -242,42 +260,90 @@ class _AppWheelPickerSheetState extends State<_AppWheelPickerSheet> {
               SizedBox(
                 height: ui(216),
                 width: double.infinity,
-                child: CupertinoPicker(
+                child: _SilentWheelPicker(
                   scrollController: _scrollController,
                   itemExtent: ui(34),
-                  magnification: 1.08,
-                  squeeze: 1.1,
-                  useMagnifier: true,
-                  onSelectedItemChanged: (index) {
-                    setState(() => _selectedIndex = index);
-                  },
-                  children: [
-                    for (var i = 0; i < widget.items.length; i++)
-                      Center(
-                        child: Text(
-                          widget.items[i],
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: ui(18),
-                            color: i == _selectedIndex
-                                ? _kPickerPrimary
-                                : _kPickerTitle,
-                            fontFamily: 'PingFang SC',
-                            fontWeight: i == _selectedIndex
-                                ? AppFont.w500
-                                : AppFont.w400,
-                            height: 22 / 18,
-                          ),
-                        ),
-                      ),
-                  ],
+                  itemCount: widget.items.length,
+                  selectedIndex: _selectedIndex,
+                  itemLabel: (index) => widget.items[index],
                 ),
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+/// 与 [CupertinoPicker] 相同的滚轮透视/放大镜，但不触发 iOS tick 音效。
+class _SilentWheelPicker extends StatelessWidget {
+  const _SilentWheelPicker({
+    required this.scrollController,
+    required this.itemExtent,
+    required this.itemCount,
+    required this.selectedIndex,
+    required this.itemLabel,
+  });
+
+  final FixedExtentScrollController scrollController;
+  final double itemExtent;
+  final int itemCount;
+  final int selectedIndex;
+  final String Function(int index) itemLabel;
+
+  static const double _diameterRatio = 1.07;
+  static const double _magnification = 1.08;
+  static const double _squeeze = 1.1;
+  static const double _overAndUnderCenterOpacity = 0.447;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final overlayHeight = itemExtent * _magnification;
+
+    return Stack(
+      children: [
+        ListWheelScrollView.useDelegate(
+          controller: scrollController,
+          physics: const FixedExtentScrollPhysics(),
+          itemExtent: itemExtent,
+          diameterRatio: _diameterRatio,
+          useMagnifier: true,
+          magnification: _magnification,
+          squeeze: _squeeze,
+          overAndUnderCenterOpacity: _overAndUnderCenterOpacity,
+          changeReportingBehavior: ChangeReportingBehavior.onScrollEnd,
+          childDelegate: ListWheelChildBuilderDelegate(
+            childCount: itemCount,
+            builder: (context, index) {
+              final selected = index == selectedIndex;
+              return Center(
+                child: Text(
+                  itemLabel(index),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: ui(18),
+                    color: selected ? _kPickerPrimary : _kPickerTitle,
+                    fontFamily: 'PingFang SC',
+                    fontWeight: selected ? AppFont.w500 : AppFont.w400,
+                    height: 22 / 18,
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        IgnorePointer(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints.expand(height: overlayHeight),
+              child: const CupertinoPickerDefaultSelectionOverlay(),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

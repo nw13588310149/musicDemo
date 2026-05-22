@@ -175,7 +175,7 @@ class _ContentPanel extends StatelessWidget {
             child: state.loading && state.lessonGroups.isEmpty
                 ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
                 : state.lessonGroups.isEmpty
-                ? const CourseEmptyPlaceholder()
+                ? CourseEmptyPlaceholder(schoolMode: state.schoolMode)
                 : Padding(
                     padding: EdgeInsets.symmetric(vertical: ui(12)),
                     child: AppRefreshIndicator(

@@ -676,14 +676,10 @@ class _Content extends StatelessWidget {
                       title: '最低音',
                       children: [
                         for (final note in _kMinRangeNotes)
-                          _SmartRowChip(
+                          _SmartOptionChip(
                             ui: ui,
                             label: note,
-                            isNote: true,
-                            // 音程 / 和弦练习里：最低音 / 最高音 chip 的升降号
-                            // 走 Unicode 音乐符号（♯ / ♭），与 Word 特殊符号
-                            // 面板里的"音乐专用符号"一致。绝对音感不受影响。
-                            useMusicSymbols: true,
+                            isNoteChip: true,
                             selected: config.minNote == note,
                             onTap: () => onSetRange(
                               minNote: note,
@@ -698,11 +694,10 @@ class _Content extends StatelessWidget {
                       title: '最高音',
                       children: [
                         for (final note in _kMaxRangeNotes)
-                          _SmartRowChip(
+                          _SmartOptionChip(
                             ui: ui,
                             label: note,
-                            isNote: true,
-                            useMusicSymbols: true,
+                            isNoteChip: true,
                             selected: config.maxNote == note,
                             onTap: () => onSetRange(
                               minNote: config.minNote,
@@ -1644,6 +1639,11 @@ class _PracticeOptionGrid extends StatelessWidget {
     );
     final playable = session.currentQuestion.optionPool.toSet();
     final answerEnabled = session.started && session.running;
+    final revealCorrect =
+        !session.running &&
+        session.currentQuestionAnswered &&
+        state.noticeMessage == '回答错误';
+    final correctOption = session.currentQuestion.correctOption;
 
     if (isAbsolute) {
       // fixed 10-per-row layout (same logic as config screen)
@@ -1673,6 +1673,7 @@ class _PracticeOptionGrid extends StatelessWidget {
                       label: opt,
                       isNoteChip: true,
                       selected: playable.contains(opt),
+                      themeHighlight: revealCorrect && opt == correctOption,
                       enabled: answerEnabled && playable.contains(opt),
                       onTap: () => onSubmit(opt),
                     ),
@@ -1711,6 +1712,7 @@ class _PracticeOptionGrid extends StatelessWidget {
                     label: opt,
                     isNoteChip: false,
                     selected: playable.contains(opt),
+                    themeHighlight: revealCorrect && opt == correctOption,
                     enabled: answerEnabled && playable.contains(opt),
                     onTap: () => onSubmit(opt),
                   ),
@@ -2866,31 +2868,17 @@ TextSpan _buildNoteSpan(String note, TextStyle base) {
 /// centered, the sharp/flat prefix pinned to the **top-left** corner and the
 /// octave-number suffix pinned to the **top-right** corner.
 ///
-/// Used by:
-/// - 绝对音感 grid keys (52×52, fontSize 16) → default [boxWidth]/[boxHeight].
-/// - 最低音 / 最高音 行内小 chip (fontSize 14) → 显式传更紧凑的 box 尺寸，
-///   保证标记定位规则与绝对音感按键完全一致。
-///
-/// [useMusicSymbols]：将左上角的升 / 降标识渲染为正式的 Unicode 音乐符号
-/// （`♯` U+266F / `♭` U+266D），跟 Word 特殊符号面板里的"音乐专用符号"一致。
-/// 默认 false 时仍使用键盘字符 `#` / `b`。音程、和弦练习里 `最低音 / 最高音`
-/// chip 走 true 通道，绝对音感的 grid 按键沿用 false。
+/// Used by 绝对音感 / 最低音 / 最高音 等 52×52 note chips (fontSize 16)。
 class _NoteNameText extends StatelessWidget {
   const _NoteNameText({
     required this.ui,
     required this.note,
     required this.style,
-    this.boxWidth,
-    this.boxHeight,
-    this.useMusicSymbols = false,
   });
 
   final double Function(num) ui;
   final String note;
   final TextStyle style;
-  final double? boxWidth;
-  final double? boxHeight;
-  final bool useMusicSymbols;
 
   @override
   Widget build(BuildContext context) {
@@ -2899,15 +2887,13 @@ class _NoteNameText extends StatelessWidget {
     String? suffix;
 
     if (s.startsWith('#')) {
-      // ♯ 比 # 略窄、字面更高，与白底紫字 chip 配合时居中位移会差几像素，
-      // 因此通过 [_prefixStyle] 单独微调字号 / lineHeight，避免顶端被裁。
-      prefix = useMusicSymbols ? '\u266F' : '#';
+      prefix = '#';
       s = s.substring(1);
     } else if (s.length > 1 &&
         s[0] == 'b' &&
         s[1].compareTo('a') >= 0 &&
         s[1].compareTo('z') <= 0) {
-      prefix = useMusicSymbols ? '\u266D' : 'b';
+      prefix = 'b';
       s = s.substring(1);
     }
 
@@ -2916,11 +2902,9 @@ class _NoteNameText extends StatelessWidget {
       s = s.substring(0, s.length - 1);
     }
 
-    final prefixStyle = useMusicSymbols ? _prefixStyle(style) : style;
-
     return SizedBox(
-      width: boxWidth ?? ui(31),
-      height: boxHeight ?? ui(28),
+      width: ui(31),
+      height: ui(28),
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -2934,7 +2918,7 @@ class _NoteNameText extends StatelessWidget {
               top: ui(-2),
               child: Text(
                 prefix,
-                style: prefixStyle,
+                style: style,
                 textAlign: TextAlign.center,
               ),
             ),
@@ -2948,14 +2932,6 @@ class _NoteNameText extends StatelessWidget {
       ),
     );
   }
-
-  /// `♯` / `♭` 比 ASCII `#` / `b` 高一头、占位也更紧——直接套同一个 style
-  /// 会让符号挤在 chip 顶端被裁掉一点头。这里把字号放到 1.05× 并强制 1.0
-  /// 行高，让符号在 14×14 的左上角小盒里完整显示。
-  TextStyle _prefixStyle(TextStyle base) {
-    final size = base.fontSize ?? 14.0;
-    return base.copyWith(fontSize: size * 1.05, height: 1.0);
-  }
 }
 
 /// Large option chip used in the top selection grid of the smart practice view.
@@ -2968,6 +2944,7 @@ class _SmartOptionChip extends StatelessWidget {
     required this.onTap,
     this.isNoteChip = false,
     this.enabled = true,
+    this.themeHighlight = false,
   });
 
   final double Function(num) ui;
@@ -2976,12 +2953,14 @@ class _SmartOptionChip extends StatelessWidget {
   final VoidCallback onTap;
   final bool isNoteChip;
   final bool enabled;
+  final bool themeHighlight;
 
   @override
   Widget build(BuildContext context) {
     final w = isNoteChip ? ui(52) : ui(98);
     final h = isNoteChip ? ui(52) : ui(56);
-    final textColor = selected ? Colors.white : const Color(0xFF0B081A);
+    final highlighted = themeHighlight || selected;
+    final textColor = highlighted ? Colors.white : const Color(0xFF0B081A);
     final textStyle = TextStyle(
       fontSize: ui(16),
       fontFamily: 'PingFang SC',
@@ -3001,7 +2980,13 @@ class _SmartOptionChip extends StatelessWidget {
       padding: EdgeInsets.all(ui(0.5)),
       child: Container(
         decoration: BoxDecoration(
-          gradient: selected
+          gradient: themeHighlight
+              ? const LinearGradient(
+                  begin: Alignment.centerRight,
+                  end: Alignment.centerLeft,
+                  colors: <Color>[Color(0xFFB68EFF), Color(0xFF8640FF)],
+                )
+              : selected
               ? const LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
@@ -3040,20 +3025,12 @@ class _SmartRowChip extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
-    this.isNote = false,
-    this.useMusicSymbols = false,
   });
 
   final double Function(num) ui;
   final String label;
   final bool selected;
   final VoidCallback onTap;
-  final bool isNote;
-
-  /// 仅在 [isNote] 为 true 时生效：将左上角的升 / 降标识替换为
-  /// Unicode 音乐符号 (`♯` / `♭`)。当前只在音程、和弦练习的
-  /// 「最低音 / 最高音」chip 上启用，其它地方仍是 ASCII `#` / `b`。
-  final bool useMusicSymbols;
 
   @override
   Widget build(BuildContext context) {
@@ -3075,20 +3052,7 @@ class _SmartRowChip extends StatelessWidget {
         ),
         child: Padding(
           padding: EdgeInsets.symmetric(horizontal: ui(24), vertical: ui(9)),
-          // 最低音 / 最高音 行内 chip：用 _NoteNameText 走"中心字母 +
-          // 左上角 #/b + 右上角 八度数字"的角标布局，跟绝对音感的按键完全
-          // 一致。boxWidth/boxHeight 按 14px 字号收紧（默认值是给 16px 的
-          // 绝对音感 grid 用的，太宽会让 chip 横向变胖）。
-          child: isNote
-              ? _NoteNameText(
-                  ui: ui,
-                  note: label,
-                  style: textStyle,
-                  boxWidth: ui(28),
-                  boxHeight: ui(18),
-                  useMusicSymbols: useMusicSymbols,
-                )
-              : Text(label, style: textStyle),
+          child: Text(label, style: textStyle),
         ),
       ),
     );

@@ -48,7 +48,10 @@ class ConsultationPage extends ConsumerWidget {
                     )
                   : state.items.isEmpty
                   ? const _ConsultationEmpty()
-                  : _ConsultationBody(items: state.items),
+                  : _ConsultationBody(
+                      items: state.items,
+                      sourceName: args.sourceName,
+                    ),
             ),
           ],
         ),
@@ -63,6 +66,8 @@ class ConsultationPage extends ConsumerWidget {
     if (raw is Map) {
       return ConsultationPageArgs(
         schoolMode: _isTruthy(raw['schoolMode']) || _isTruthy(raw['school']),
+        sourceName:
+            raw['sourceName']?.toString() ?? raw['schoolName']?.toString(),
       );
     }
     return const ConsultationPageArgs();
@@ -159,9 +164,10 @@ class ConsultationBackButton extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────
 
 class _ConsultationBody extends StatelessWidget {
-  const _ConsultationBody({required this.items});
+  const _ConsultationBody({required this.items, this.sourceName});
 
   final List<ConsultationItem> items;
+  final String? sourceName;
 
   @override
   Widget build(BuildContext context) {
@@ -178,7 +184,7 @@ class _ConsultationBody extends StatelessWidget {
           children: [
             const _ConsultationBanner(),
             SizedBox(height: ui(16)),
-            _ConsultationGrid(items: items),
+            _ConsultationGrid(items: items, sourceName: sourceName),
           ],
         ),
       ),
@@ -255,9 +261,10 @@ class _ConsultationBanner extends StatelessWidget {
 }
 
 class _ConsultationGrid extends StatelessWidget {
-  const _ConsultationGrid({required this.items});
+  const _ConsultationGrid({required this.items, this.sourceName});
 
   final List<ConsultationItem> items;
+  final String? sourceName;
 
   @override
   Widget build(BuildContext context) {
@@ -278,6 +285,7 @@ class _ConsultationGrid extends StatelessWidget {
                 child: _ConsultationCard(
                   item: items[i],
                   showLatestBadge: i < 3,
+                  sourceName: sourceName,
                 ),
               ),
           ],
@@ -288,10 +296,15 @@ class _ConsultationGrid extends StatelessWidget {
 }
 
 class _ConsultationCard extends StatelessWidget {
-  const _ConsultationCard({required this.item, required this.showLatestBadge});
+  const _ConsultationCard({
+    required this.item,
+    required this.showLatestBadge,
+    this.sourceName,
+  });
 
   final ConsultationItem item;
   final bool showLatestBadge;
+  final String? sourceName;
 
   @override
   Widget build(BuildContext context) {
@@ -304,7 +317,10 @@ class _ConsultationCard extends StatelessWidget {
         onTap: () => Navigator.pushNamed(
           context,
           RoutePaths.consultationDetail,
-          arguments: ConsultationDetailArgs(id: item.id),
+          arguments: ConsultationDetailArgs(
+            id: item.id,
+            sourceName: sourceName,
+          ),
         ),
         child: SizedBox(
           height: ui(116),

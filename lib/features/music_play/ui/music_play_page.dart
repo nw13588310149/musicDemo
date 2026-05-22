@@ -1542,7 +1542,7 @@ class _ProgressTrack extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final hitHeight = ui(20);
-    final labelStyle = _labelStyle.copyWith(fontSize: ui(10));
+    final labelStyle = _labelStyle.copyWith(fontSize: ui(12));
     return SizedBox(
       height: hitHeight,
       child: Transform.translate(

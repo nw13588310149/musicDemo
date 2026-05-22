@@ -2,19 +2,33 @@ import 'package:flutter/foundation.dart';
 
 @immutable
 class ConsultationDetailArgs {
-  const ConsultationDetailArgs({required this.id});
+  const ConsultationDetailArgs({required this.id, this.sourceName});
 
   final int id;
+
+  /// 校园课件等入口透传的学校名称（schoolList.name）；有值时覆盖默认「音乐之路」。
+  final String? sourceName;
 
   factory ConsultationDetailArgs.fromRaw(dynamic raw) {
     if (raw is ConsultationDetailArgs) return raw;
     if (raw is int) return ConsultationDetailArgs(id: raw);
     if (raw is Map) {
       final id = raw['id'];
-      if (id is int) return ConsultationDetailArgs(id: id);
-      if (id is num) return ConsultationDetailArgs(id: id.toInt());
+      final sourceName =
+          raw['sourceName']?.toString() ?? raw['schoolName']?.toString();
+      if (id is int) {
+        return ConsultationDetailArgs(id: id, sourceName: sourceName);
+      }
+      if (id is num) {
+        return ConsultationDetailArgs(
+          id: id.toInt(),
+          sourceName: sourceName,
+        );
+      }
       final parsed = int.tryParse(id?.toString() ?? '');
-      if (parsed != null) return ConsultationDetailArgs(id: parsed);
+      if (parsed != null) {
+        return ConsultationDetailArgs(id: parsed, sourceName: sourceName);
+      }
     }
     final parsed = int.tryParse(raw?.toString() ?? '');
     return ConsultationDetailArgs(id: parsed ?? 0);
@@ -22,10 +36,12 @@ class ConsultationDetailArgs {
 
   @override
   bool operator ==(Object other) =>
-      other is ConsultationDetailArgs && other.id == id;
+      other is ConsultationDetailArgs &&
+      other.id == id &&
+      other.sourceName == sourceName;
 
   @override
-  int get hashCode => id.hashCode;
+  int get hashCode => Object.hash(id, sourceName);
 }
 
 @immutable
@@ -59,11 +75,25 @@ class ConsultationDetail {
     return ConsultationDetail(
       id: _toInt(raw['id']) ?? 0,
       title: raw['title']?.toString() ?? '',
-      source: '音乐之路',
+      source: raw['shortText1']?.toString().trim().isNotEmpty == true
+          ? raw['shortText1'].toString().trim()
+          : '音乐之路',
       updateTime: raw['updateTime']?.toString() ?? '',
       viewCount: _toInt(raw['viewCount']) ?? 0,
       htmlContent: raw['longText1']?.toString() ?? '',
       coverUrl: raw['shortText3']?.toString() ?? '',
+    );
+  }
+
+  ConsultationDetail copyWith({String? source}) {
+    return ConsultationDetail(
+      id: id,
+      title: title,
+      source: source ?? this.source,
+      updateTime: updateTime,
+      viewCount: viewCount,
+      htmlContent: htmlContent,
+      coverUrl: coverUrl,
     );
   }
 

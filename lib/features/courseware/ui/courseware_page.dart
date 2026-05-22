@@ -11,6 +11,7 @@ import '../../../core/constants/app_assets.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/widgets/action_menu.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/cloud_folder_more_menu_button.dart';
 import '../../../core/widgets/class_share_drawer.dart';
 import '../../../core/widgets/image_gallery_viewer.dart';
 import '../../../core/widgets/scaled_dialog.dart';
@@ -1608,15 +1609,11 @@ class _FolderCardState extends State<_FolderCard> {
                   // 右上角操作菜单（仅真实文件夹显示，新建快捷方式不显示）
                   if (!isCreate)
                     Positioned(
-                      // 覆盖背景图自带的三个点位置：不再显示代码实现的三点图标
-                      // 这里只放一个透明的点击热区
                       top: ui(32),
                       right: ui(12),
-                      child: GestureDetector(
+                      child: CloudFolderMoreMenuButton(
                         key: _menuTriggerKey,
-                        behavior: HitTestBehavior.opaque,
                         onTap: _openActionMenu,
-                        child: SizedBox(width: ui(34), height: ui(34)),
                       ),
                     ),
                 ],
@@ -1937,7 +1934,7 @@ class _FolderArtwork extends StatelessWidget {
     final asset = item.isCreateShortcut || item.title.contains('新建文件夹')
         ? AppAssets.cloudFolderEmptyBg
         : AppAssets.cloudFolderFilledBg;
-    return Image.asset(asset, fit: BoxFit.fill);
+    return Image.asset(asset, fit: BoxFit.cover, gaplessPlayback: true);
   }
 }
 

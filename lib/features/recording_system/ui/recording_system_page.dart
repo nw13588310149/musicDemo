@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/action_menu.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/cloud_folder_more_menu_button.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../state/recording_system_controller.dart';
@@ -625,15 +626,11 @@ class _RecordingCategoryCardState extends State<_RecordingCategoryCard> {
                 ],
               ),
             ),
-            GestureDetector(
+            CloudFolderMoreMenuButton(
               key: _menuTriggerKey,
-              behavior: HitTestBehavior.opaque,
               onTap: _openActionMenu,
-              child: SizedBox(
-                width: ui(24),
-                height: ui(24),
-                child: const _RecordingDotsGlyph(),
-              ),
+              iconLogicalSize: 24,
+              hitLogicalExtent: 24,
             ),
           ],
         ),
@@ -712,42 +709,6 @@ class _RecordingFolderGlyph extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// Three vertically-stacked grey dots (the menu trigger glyph).
-class _RecordingDotsGlyph extends StatelessWidget {
-  const _RecordingDotsGlyph();
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    final dot = SizedBox(
-      width: ui(3.1),
-      height: ui(3.1),
-      child: const DecoratedBox(
-        decoration: BoxDecoration(
-          color: Color(0xFFB6B5BB),
-          shape: BoxShape.circle,
-        ),
-      ),
-    );
-    return SizedBox(
-      width: ui(24),
-      height: ui(24),
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            dot,
-            SizedBox(height: ui(2)),
-            dot,
-            SizedBox(height: ui(2)),
-            dot,
-          ],
-        ),
       ),
     );
   }
@@ -1277,7 +1238,8 @@ class _RecordingFolderCardState extends State<_RecordingFolderCard> {
                   Positioned.fill(
                     child: Image.asset(
                       AppAssets.cloudFolderFilledBg,
-                      fit: BoxFit.fill,
+                      fit: BoxFit.cover,
+                      gaplessPlayback: true,
                     ),
                   ),
                   if (item.dateLabel.isNotEmpty)
@@ -1313,11 +1275,9 @@ class _RecordingFolderCardState extends State<_RecordingFolderCard> {
                   Positioned(
                     top: ui(32),
                     right: ui(12),
-                    child: GestureDetector(
+                    child: CloudFolderMoreMenuButton(
                       key: _menuTriggerKey,
-                      behavior: HitTestBehavior.opaque,
                       onTap: _openActionMenu,
-                      child: SizedBox(width: ui(34), height: ui(34)),
                     ),
                   ),
                 ],

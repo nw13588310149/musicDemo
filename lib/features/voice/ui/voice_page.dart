@@ -74,6 +74,7 @@ class _VoicePageState extends ConsumerState<VoicePage> {
                 lessons: filteredLessons,
                 query: _query,
                 errorMessage: state.errorMessage,
+                schoolMode: state.schoolMode,
                 onOpenLesson: (lesson) => _openLesson(state, lesson),
                 onRefresh: controller.refreshLessons,
                 // 同一个 widget 同时承载「声乐」与「器乐」两个二级页：
@@ -431,6 +432,7 @@ class _VoiceBody extends StatelessWidget {
     required this.lessons,
     required this.query,
     required this.errorMessage,
+    required this.schoolMode,
     required this.onOpenLesson,
     required this.onRefresh,
     required this.coverAsset,
@@ -441,6 +443,7 @@ class _VoiceBody extends StatelessWidget {
   final List<StudyCatalogLesson> lessons;
   final String query;
   final String errorMessage;
+  final bool schoolMode;
   final ValueChanged<StudyCatalogLesson> onOpenLesson;
   final Future<void> Function() onRefresh;
   /// 卡片封面图（声乐用 fm.png / 器乐用 fm2.png），由顶层按 config 决定。
@@ -454,11 +457,12 @@ class _VoiceBody extends StatelessWidget {
       return const Center(child: CircularProgressIndicator(strokeWidth: 2));
     }
     if (!hasAnyLessons) {
-      return const CourseEmptyPlaceholder();
+      return CourseEmptyPlaceholder(schoolMode: schoolMode);
     }
     if (lessons.isEmpty) {
       return CourseEmptyPlaceholder(
         message: '没有匹配 “${query.trim()}” 的作品',
+        schoolMode: schoolMode,
       );
     }
 

@@ -124,7 +124,7 @@ class _SchoolView extends StatelessWidget {
                 const SizedBox(height: 20),
                 _buildCampusNewsHeader(context),
                 const SizedBox(height: 10),
-                _NewsGrid(items: newsItems),
+                _NewsGrid(items: newsItems, sourceName: state.schoolName),
                 const SizedBox(height: 16),
                 // Error message
                 if (state.errorMessage.isNotEmpty)
@@ -170,6 +170,7 @@ class _SchoolView extends StatelessWidget {
         RoutePaths.consultation,
         arguments: <String, dynamic>{
           'school': state.schoolId > 0 ? state.schoolId : true,
+          'sourceName': state.schoolName,
         },
       ),
     );
@@ -861,31 +862,40 @@ class _Stat extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 数字（18/600/Barlow）与"课时"（10/400/PingFang）按字母基线对齐，
-        // 避免之前用 padding-bottom:2 手工垫高造成的像素偏移。
+        // 数字（20/Barlow）与"课时"（10/PingFang）用 Row.end + 课时上移 2px 抵消字体度量差。
         Row(
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
+          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Text(
               '$value',
               style: const TextStyle(
-                fontSize: 18,
+                fontSize: 20,
                 color: Color(0xFF1A1A1A),
                 fontWeight: FontWeight.w600,
                 fontFamily: 'Barlow',
                 height: 1,
               ),
+              textHeightBehavior: const TextHeightBehavior(
+                applyHeightToFirstAscent: false,
+                applyHeightToLastDescent: false,
+              ),
             ),
             const SizedBox(width: 2),
-            Text(
-              '课时',
-              style: TextStyle(
-                fontSize: 10,
-                color: Color(0xFF6D6B75),
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w400,
-                height: 1,
+            Transform.translate(
+              offset: const Offset(0, -2),
+              child: Text(
+                '课时',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Color(0xFF6D6B75),
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w400,
+                  height: 1,
+                ),
+                textHeightBehavior: const TextHeightBehavior(
+                  applyHeightToFirstAscent: false,
+                  applyHeightToLastDescent: false,
+                ),
               ),
             ),
           ],
@@ -908,9 +918,10 @@ class _Stat extends StatelessWidget {
 
 // ── News grid (4 equal-width cards) ──────────────────────────────────────────
 class _NewsGrid extends StatelessWidget {
-  const _NewsGrid({required this.items});
+  const _NewsGrid({required this.items, required this.sourceName});
 
   final List<SchoolNewsItem> items;
+  final String sourceName;
 
   @override
   Widget build(BuildContext context) {
@@ -925,7 +936,8 @@ class _NewsGrid extends StatelessWidget {
         mainAxisExtent: 138,
       ),
       itemCount: items.length,
-      itemBuilder: (context, i) => _NewsCard(item: items[i]),
+      itemBuilder: (context, i) =>
+          _NewsCard(item: items[i], sourceName: sourceName),
     );
   }
 }
@@ -933,9 +945,10 @@ class _NewsGrid extends StatelessWidget {
 /// 校园资讯卡片：与首页"最新"区域的资讯卡完全一致的视觉规格
 /// （字号 / 颜色 / line-height / 元素绝对定位），仅数据来源换为 SchoolNewsItem。
 class _NewsCard extends StatelessWidget {
-  const _NewsCard({required this.item});
+  const _NewsCard({required this.item, required this.sourceName});
 
   final SchoolNewsItem item;
+  final String sourceName;
 
   @override
   Widget build(BuildContext context) {
@@ -945,7 +958,10 @@ class _NewsCard extends StatelessWidget {
       onTap: () => Navigator.pushNamed(
         context,
         RoutePaths.consultationDetail,
-        arguments: <String, dynamic>{'id': item.id},
+        arguments: <String, dynamic>{
+          'id': item.id,
+          if (sourceName.isNotEmpty) 'sourceName': sourceName,
+        },
       ),
       child: RepaintBoundary(
         child: Container(

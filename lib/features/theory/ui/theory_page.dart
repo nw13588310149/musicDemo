@@ -139,6 +139,7 @@ class _TheoryPageState extends ConsumerState<TheoryPage> {
     await showGeneralDialog<void>(
       context: context,
       useRootNavigator: true,
+      fullscreenDialog: true,
       barrierColor: Colors.black,
       barrierDismissible: false,
       barrierLabel: '退出全屏',
@@ -623,8 +624,8 @@ class _FavoriteChipButton extends StatelessWidget {
                   )
                 : Image.asset(
                     'assets/images/home/fav3.png',
-                    width: ui(20),
-                    height: ui(20),
+                    width: ui(15),
+                    height: ui(15),
                     fit: BoxFit.contain,
                   ),
             SizedBox(width: ui(4)),
@@ -775,7 +776,8 @@ class _PdfFullscreenToggle extends StatelessWidget {
 }
 
 /// PDF 全屏对话框：覆盖整个 app 窗口的黑色背景 + 占满屏幕的 [TheoryPdfView]，
-/// 右上角放退出按钮。`SafeArea` 让按钮避开刘海/Home indicator。
+/// 右上角放退出按钮。PDF 本身不套 [SafeArea]，避免 iOS 底部 Home 指示条
+/// 区域留出黑边；仅退出按钮避开刘海。
 class _PdfFullscreenView extends StatelessWidget {
   const _PdfFullscreenView({required this.url, required this.authToken});
 
@@ -787,28 +789,34 @@ class _PdfFullscreenView extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     return Material(
       color: Colors.black,
-      child: SafeArea(
-        child: Stack(
-          children: <Widget>[
-            Positioned.fill(
-              child: TheoryPdfView(
-                url: url,
-                authToken: authToken,
-                interactive: true,
+      child: Stack(
+        fit: StackFit.expand,
+        children: <Widget>[
+          TheoryPdfView(
+            url: url,
+            authToken: authToken,
+            interactive: true,
+            fullscreen: true,
+          ),
+          SafeArea(
+            bottom: false,
+            child: Align(
+              alignment: Alignment.topRight,
+              child: Padding(
+                // 与卡片态保持视觉一致：同样下移 16 逻辑像素。
+                padding: EdgeInsets.only(
+                  top: ui(12) + ui(16),
+                  right: ui(12),
+                ),
+                child: _PdfFullscreenToggle(
+                  expanded: true,
+                  onTap: () =>
+                      Navigator.of(context, rootNavigator: true).maybePop(),
+                ),
               ),
             ),
-            Positioned(
-              // 与卡片态保持视觉一致：同样下移 16 逻辑像素。
-              top: ui(12) + ui(16),
-              right: ui(12),
-              child: _PdfFullscreenToggle(
-                expanded: true,
-                onTap: () =>
-                    Navigator.of(context, rootNavigator: true).maybePop(),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

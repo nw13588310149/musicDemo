@@ -922,7 +922,7 @@ class _ActionTile extends StatelessWidget {
 // 我的二维码弹窗：紫白渐变头 + 头像/名称 + 浅紫框 二维码 + 双按钮（保存到相册 / 关闭）。
 // 完全对齐 Figma 428×××（高度由内容撑起）布局：
 //   · 顶部 180 高 D8CCFF→white 渐变（由 GradientHeaderDialog 提供）
-//   · 标题「我的二维码」24/500 居中
+//   · 标题「我的二维码」20/500 居中，距顶与「新建笔记」弹窗一致（25）
 //   · 380×294 #F5F6FA 二维码卡：上方 头像+名称+手机号 横排，中部紫渐变框 152×154
 //     包二维码 122×122，下方两行说明文字
 //   · 双按钮：取消（白）/ 主操作（紫渐变）
@@ -998,9 +998,15 @@ class _MyQrCodeDialogState extends State<_MyQrCodeDialog> {
   Widget build(BuildContext context) {
     return GradientHeaderDialog(
       title: '我的二维码',
-      titlePaddingTop: 40,
+      headerHeight: 169,
+      gradientMidStop: 0.35,
       width: 428,
-      contentPadding: const EdgeInsets.fromLTRB(24, 40, 24, 30),
+      contentPadding: const EdgeInsets.fromLTRB(
+        24,
+        kAppDialogTitlePaddingTop,
+        24,
+        30,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1274,9 +1280,15 @@ class _RedeemVipDialogState extends State<_RedeemVipDialog> {
   Widget build(BuildContext context) {
     return GradientHeaderDialog(
       title: '兑换会员',
-      titlePaddingTop: 40,
+      headerHeight: 169,
+      gradientMidStop: 0.35,
       width: 428,
-      contentPadding: const EdgeInsets.fromLTRB(24, 40, 24, 30),
+      contentPadding: const EdgeInsets.fromLTRB(
+        24,
+        kAppDialogTitlePaddingTop,
+        24,
+        30,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1311,9 +1323,15 @@ class _ContactServiceDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     return GradientHeaderDialog(
       title: '联系客服',
-      titlePaddingTop: 40,
+      headerHeight: 169,
+      gradientMidStop: 0.35,
       width: 428,
-      contentPadding: const EdgeInsets.fromLTRB(24, 40, 24, 30),
+      contentPadding: const EdgeInsets.fromLTRB(
+        24,
+        kAppDialogTitlePaddingTop,
+        24,
+        30,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1364,9 +1382,15 @@ class _RecommendDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     return GradientHeaderDialog(
       title: '推荐给好友',
-      titlePaddingTop: 40,
+      headerHeight: 169,
+      gradientMidStop: 0.35,
       width: 428,
-      contentPadding: const EdgeInsets.fromLTRB(24, 40, 24, 30),
+      contentPadding: const EdgeInsets.fromLTRB(
+        24,
+        kAppDialogTitlePaddingTop,
+        24,
+        30,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -17,11 +17,15 @@ class TheoryPdfView extends StatefulWidget {
     required this.url,
     required this.authToken,
     this.interactive = true,
+    this.fullscreen = false,
   });
 
   final String url;
   final String authToken;
   final bool interactive;
+
+  /// Native 全屏对话框用；Web 走浏览器 Fullscreen API，此处仅占位。
+  final bool fullscreen;
 
   @override
   State<TheoryPdfView> createState() => _TheoryPdfViewState();

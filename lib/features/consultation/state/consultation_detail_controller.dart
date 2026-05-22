@@ -48,9 +48,14 @@ class ConsultationDetailController
       state = state.copyWith(loading: false, errorMessage: '数据异常');
       return;
     }
+    var detail = ConsultationDetail.fromJson(data);
+    final sourceOverride = state.args.sourceName?.trim();
+    if (sourceOverride != null && sourceOverride.isNotEmpty) {
+      detail = detail.copyWith(source: sourceOverride);
+    }
     state = state.copyWith(
       loading: false,
-      detail: ConsultationDetail.fromJson(data),
+      detail: detail,
     );
   }
 

@@ -1762,9 +1762,15 @@ class _CenterPlayBtn extends StatelessWidget {
   }
 }
 
-// 非全屏底栏为基准；全屏底栏按钮热区与间距须与此一致。
+// 非全屏底栏为基准；全屏底栏操作图标在基准上整体 +4px。
 const double _kVideoCtrlIconSize = 18;
+const double _kVideoCtrlFullscreenIconSize = _kVideoCtrlIconSize + 4;
+const double _kVideoCtrlFullscreenPlayPauseIconSize =
+    _kVideoCtrlFullscreenIconSize - 2;
+const double _kVideoCtrlFullscreenVolumeIconSize =
+    _kVideoCtrlFullscreenIconSize + 1;
 const double _kVideoCtrlBtnHit = 32;
+const double _kVideoCtrlFullscreenBtnHit = _kVideoCtrlBtnHit + 4;
 const double _kVideoCtrlSettingHit = 28;
 const double _kVideoCtrlTimeGap = 6;
 const EdgeInsets _kVideoCtrlBarPadding = EdgeInsets.fromLTRB(8, 16, 14, 8);
@@ -2722,14 +2728,14 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                         },
                                         icon: Image.asset(
                                           AppAssets.videoV2SeekBack15,
-                                          width: _kVideoCtrlIconSize,
-                                          height: _kVideoCtrlIconSize,
+                                          width: _kVideoCtrlFullscreenIconSize,
+                                          height: _kVideoCtrlFullscreenIconSize,
                                           fit: BoxFit.contain,
                                         ),
                                         padding: EdgeInsets.zero,
                                         constraints: const BoxConstraints(
-                                          minWidth: _kVideoCtrlBtnHit,
-                                          minHeight: _kVideoCtrlBtnHit,
+                                          minWidth: _kVideoCtrlFullscreenBtnHit,
+                                          minHeight: _kVideoCtrlFullscreenBtnHit,
                                         ),
                                       ),
                                       const SizedBox(
@@ -2745,15 +2751,17 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                           _autoHide();
                                         },
                                         child: Container(
-                                          width: _kVideoCtrlBtnHit,
-                                          height: _kVideoCtrlBtnHit,
+                                          width: _kVideoCtrlFullscreenBtnHit,
+                                          height: _kVideoCtrlFullscreenBtnHit,
                                           alignment: Alignment.center,
                                           child: Image.asset(
                                             _isPlaying
                                                 ? AppAssets.videoV2SmallPause
                                                 : AppAssets.videoV2SmallPlay,
-                                            width: _kVideoCtrlIconSize,
-                                            height: _kVideoCtrlIconSize,
+                                            width:
+                                                _kVideoCtrlFullscreenPlayPauseIconSize,
+                                            height:
+                                                _kVideoCtrlFullscreenPlayPauseIconSize,
                                             fit: BoxFit.contain,
                                           ),
                                         ),
@@ -2776,14 +2784,14 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                         },
                                         icon: Image.asset(
                                           AppAssets.videoV2SeekForward15,
-                                          width: _kVideoCtrlIconSize,
-                                          height: _kVideoCtrlIconSize,
+                                          width: _kVideoCtrlFullscreenIconSize,
+                                          height: _kVideoCtrlFullscreenIconSize,
                                           fit: BoxFit.contain,
                                         ),
                                         padding: EdgeInsets.zero,
                                         constraints: const BoxConstraints(
-                                          minWidth: _kVideoCtrlBtnHit,
-                                          minHeight: _kVideoCtrlBtnHit,
+                                          minWidth: _kVideoCtrlFullscreenBtnHit,
+                                          minHeight: _kVideoCtrlFullscreenBtnHit,
                                         ),
                                       ),
                                       const SizedBox(width: _kVideoCtrlTimeGap),
@@ -2804,12 +2812,12 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                               ? Icons.volume_up_rounded
                                               : Icons.volume_off_rounded,
                                           color: Colors.white,
-                                          size: _kVideoCtrlIconSize,
+                                          size: _kVideoCtrlFullscreenVolumeIconSize,
                                         ),
                                         padding: EdgeInsets.zero,
                                         constraints: const BoxConstraints(
-                                          minWidth: _kVideoCtrlBtnHit,
-                                          minHeight: _kVideoCtrlBtnHit,
+                                          minWidth: _kVideoCtrlFullscreenBtnHit,
+                                          minHeight: _kVideoCtrlFullscreenBtnHit,
                                         ),
                                       ),
                                       const SizedBox(
@@ -2821,15 +2829,15 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                             Navigator.of(context).pop(),
                                         icon: Image.asset(
                                           AppAssets.videoV2FullscreenExit,
-                                          width: _kVideoCtrlIconSize,
-                                          height: _kVideoCtrlIconSize,
+                                          width: _kVideoCtrlFullscreenIconSize,
+                                          height: _kVideoCtrlFullscreenIconSize,
                                           fit: BoxFit.contain,
                                         ),
                                         tooltip: '退出全屏',
                                         padding: EdgeInsets.zero,
                                         constraints: const BoxConstraints(
-                                          minWidth: _kVideoCtrlBtnHit,
-                                          minHeight: _kVideoCtrlBtnHit,
+                                          minWidth: _kVideoCtrlFullscreenBtnHit,
+                                          minHeight: _kVideoCtrlFullscreenBtnHit,
                                         ),
                                       ),
                                       const SizedBox(width: _kVideoCtrlTimeGap),

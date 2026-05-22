@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:pdfrx/pdfrx.dart';
 
@@ -7,11 +9,15 @@ class TheoryPdfView extends StatelessWidget {
     required this.url,
     required this.authToken,
     this.interactive = true,
+    this.fullscreen = false,
   });
 
   final String url;
   final String authToken;
   final bool interactive;
+
+  /// 全屏对话框内：黑底、零边距，与外层 [Material] 无缝贴合。
+  final bool fullscreen;
 
   @override
   Widget build(BuildContext context) {
@@ -23,8 +29,16 @@ class TheoryPdfView extends StatelessWidget {
       headers: headers.isEmpty ? null : headers,
       withCredentials: true,
       params: PdfViewerParams(
-        backgroundColor: const Color(0xFFFAFAFB),
-        margin: 12,
+        backgroundColor:
+            fullscreen ? Colors.black : const Color(0xFFFAFAFB),
+        margin: fullscreen ? 0 : 12,
+        // iOS：禁止长按选字 / 复制（pdfrx textSelectionParams.enabled=false）。
+        textSelectionParams: Platform.isIOS
+            ? const PdfTextSelectionParams(
+                enabled: false,
+                showContextMenuAutomatically: false,
+              )
+            : null,
         // 去掉每一页四周默认的黑色 drop shadow（pdfrx 默认值是
         // BoxShadow(color: Colors.black54, blurRadius: 4, ...)），
         // 让 PDF 干净地贴在卡片背景上。

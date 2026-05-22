@@ -83,6 +83,14 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   static const Duration _kSeekStaleWindow = Duration(milliseconds: 350);
   static const int _kSeekStaleDiffMs = 500;
 
+  /// 拖动进度条期间保持静音，直到 [_kSeekFadeInDelay] 内不再有新 seek
+  /// 才做一次 fade-in，避免「每 60ms 节流 seek → 每轮 fade-out/in 重叠」
+  /// 造成的滋滋声。
+  bool _seekMuted = false;
+  Timer? _seekFadeInTimer;
+  int _seekAudioGen = 0;
+  static const Duration _kSeekFadeInDelay = Duration(milliseconds: 200);
+
   /// 把半音数转为 [Player.setPitch] 接受的频率倍率（2^(n/12)）。
   static double _pitchRatio(int semitones) =>
       math.pow(2, semitones / 12.0).toDouble();
@@ -256,6 +264,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     double to, {
     int durationMs = 80,
     int steps = 8,
+    int? cancelGeneration,
   }) async {
     if (_disposed) return;
     if (steps <= 1 || (from - to).abs() < 0.5) {
@@ -267,6 +276,9 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     final stepDelay = math.max(1, durationMs ~/ steps);
     for (var i = 1; i <= steps; i++) {
       if (_disposed) return;
+      if (cancelGeneration != null && cancelGeneration != _seekAudioGen) {
+        return;
+      }
       final t = i / steps;
       final eased = t * t * (3 - 2 * t);
       final v = from + (to - from) * eased;
@@ -452,6 +464,57 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     await _openActiveTrack(play: true);
   }
 
+  void _cancelSeekFadeInTimer() {
+    _seekFadeInTimer?.cancel();
+    _seekFadeInTimer = null;
+  }
+
+  /// 打断上一轮 seek 留下的 fade-in（拖动中新一轮 seek 进来时）。
+  void _abortSeekFadeIn() {
+    _cancelSeekFadeInTimer();
+    _seekAudioGen++;
+  }
+
+  void _scheduleSeekFadeIn(Player? player) {
+    _cancelSeekFadeInTimer();
+    if (player == null || _disposed) {
+      return;
+    }
+    final gen = _seekAudioGen;
+    _seekFadeInTimer = Timer(_kSeekFadeInDelay, () {
+      _seekFadeInTimer = null;
+      unawaited(_completeSeekFadeIn(player, gen));
+    });
+  }
+
+  Future<void> _completeSeekFadeIn(Player player, int scheduledGen) async {
+    if (_disposed || scheduledGen != _seekAudioGen) {
+      return;
+    }
+    if (_seekInFlight || _pendingSeek != null) {
+      return;
+    }
+    try {
+      await Future.delayed(const Duration(milliseconds: 120));
+      if (_disposed || scheduledGen != _seekAudioGen) {
+        return;
+      }
+      if (_seekInFlight || _pendingSeek != null) {
+        return;
+      }
+      await _fadeVolume(
+        player,
+        0,
+        100,
+        durationMs: 90,
+        cancelGeneration: scheduledGen,
+      );
+    } catch (_) {}
+    if (!_disposed && scheduledGen == _seekAudioGen) {
+      _seekMuted = false;
+    }
+  }
+
   Future<void> seek(Duration position) async {
     final max = state.duration;
     final safe = max == Duration.zero
@@ -459,6 +522,9 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
         : Duration(
             milliseconds: position.inMilliseconds.clamp(0, max.inMilliseconds),
           );
+
+    // 拖动中会高频 seek：取消已排队的 fade-in，避免与新一轮静音窗重叠。
+    _cancelSeekFadeInTimer();
 
     // 1) 已有 seek 在飞 → 只更新 pending 目标 + 乐观刷 UI 后立刻返回，
     //    让正在跑的 seek 循环跑完当前帧后接到最新目标。这样无论拖多快，
@@ -475,6 +541,8 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
 
     // 2) 空闲：拿到飞行权 → 进入 seek 循环。每轮跑完后看 `_pendingSeek`，
     //    若有更新过的目标就继续跑下一轮；否则退出。
+    _abortSeekFadeIn();
+    final audioGen = _seekAudioGen;
     _seekInFlight = true;
     Duration target = safe;
     _lastSeekTarget = target;
@@ -483,18 +551,33 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       state = state.copyWith(position: target);
     }
 
-    // iPad 上拖进度条会持续产生 pop——把整段 seek 循环包在一段
-    // fade-out → 反复 seek → 等输出环吐出目标位置 PCM → fade-in 的
-    // 静音窗里。比原先"硬切 setVolume(0)"更彻底：硬切对 mpv 的 IPC
-    // setVolume 来说不是即时生效（参见 [_fadeVolume] 的注释），输出
-    // 环里的旧帧仍会被推到喇叭；多步渐隐才能真正盖掉切点的 click。
+    // 整段 scrub 只 fade-out 一次、保持静音反复 seek；fade-in 推迟到
+    // [_kSeekFadeInDelay] 内不再有新 seek（见 [_scheduleSeekFadeIn]）。
     Player? mutedPlayer;
     try {
       mutedPlayer = _player;
       if (mutedPlayer != null) {
-        await _fadeVolume(mutedPlayer, 100, 0, durationMs: 60);
+        if (!_seekMuted) {
+          await _fadeVolume(
+            mutedPlayer,
+            100,
+            0,
+            durationMs: 60,
+            cancelGeneration: audioGen,
+          );
+        } else {
+          try {
+            await mutedPlayer.setVolume(0);
+          } catch (_) {}
+        }
+        if (!_disposed && audioGen == _seekAudioGen) {
+          _seekMuted = true;
+        }
       }
       while (true) {
+        if (_disposed || audioGen != _seekAudioGen) {
+          break;
+        }
         final player = _player;
         if (player == null) {
           break;
@@ -519,17 +602,8 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       }
     } finally {
       _seekInFlight = false;
-      // 用户松手后，再多压 ~120ms 让 mpv 把目标位置的新 PCM 推到输出
-      // 环；否则会先听到一段"啊—"或杂音再切到目标音乐，比原来的 pop
-      // 更刺耳。然后用 fade-in 平滑恢复，避免恢复瞬间又出 click。
-      final p = mutedPlayer;
-      if (p != null && !_disposed) {
-        try {
-          await Future.delayed(const Duration(milliseconds: 120));
-          if (!_disposed) {
-            await _fadeVolume(p, 0, 100, durationMs: 90);
-          }
-        } catch (_) {}
+      if (audioGen == _seekAudioGen) {
+        _scheduleSeekFadeIn(mutedPlayer);
       }
     }
   }
@@ -1220,6 +1294,8 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     // 并先把 _disposed 置位，让任何还在 await 的异步链（[togglePlay]、
     // [pressPianoKey]、[_openActiveTrack] 等）都能 short-circuit。
     _disposed = true;
+    _cancelSeekFadeInTimer();
+    _seekAudioGen++;
 
     _positionSub?.cancel();
     _durationSub?.cancel();
