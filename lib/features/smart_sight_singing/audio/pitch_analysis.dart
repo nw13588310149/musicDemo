@@ -7,7 +7,9 @@ import 'package:pitch_detector_dart/pitch_detector.dart';
 import '../../../core/audio/native_audio_bootstrap.dart';
 import 'pitch_analysis_temp_io.dart'
     if (dart.library.html) 'pitch_analysis_temp_web.dart';
+import 'pitch_soloud_samples.dart';
 import 'pitch_track.dart';
+import 'pitch_wav_decoder.dart';
 
 /// Smart sight-singing offline pitch analysis (flutter_soloud + YIN).
 abstract final class SightSingingPitchAnalyzer {
@@ -33,17 +35,11 @@ abstract final class SightSingingPitchAnalyzer {
       throw PitchAnalysisException(_msgWebNoPath);
     }
     try {
-      await NativeAudioBootstrap.ensureReady();
-      final request = _sampleRequestForDuration(
-        durationHint ?? _estimateDurationFromPath(path),
-      );
-      final samples = await _readSamplesWithFallback(
-        filePath: path,
-        request: request,
-      );
-      return _analyzeFloatSamples(
-        samples,
-        durationHint: durationHint ?? _durationFromSampleCount(samples.length),
+      final bytes = await PitchAnalysisTempFile.read(path);
+      return analyzeBytes(
+        bytes,
+        formatHint: _normalizeExt(path.contains('.') ? path.split('.').last : 'mp3'),
+        durationHint: durationHint,
       );
     } on PitchAnalysisException {
       rethrow;
@@ -88,6 +84,26 @@ abstract final class SightSingingPitchAnalyzer {
     Duration? durationHint,
   }) async {
     final ext = _normalizeExt(formatHint);
+
+    // WAV：纯 Dart 解码，绕开 flutter_soloud 在 compute isolate 里的 FFI 崩溃。
+    if (ext == 'wav' || PitchWavDecoder.looksLikeWav(bytes)) {
+      try {
+        final wav = PitchWavDecoder.decode(
+          bytes,
+          targetSampleRate: analysisSampleRate,
+        );
+        if (wav.samples.isEmpty) {
+          throw PitchAnalysisException(_msgReadFailed);
+        }
+        return _DecodedAudioSamples(
+          samples: wav.samples,
+          duration: durationHint ?? wav.duration,
+        );
+      } on PitchWavDecodeException catch (error) {
+        throw PitchAnalysisException('WAV 解码失败：$error');
+      }
+    }
+
     final request = _sampleRequestForDuration(
       durationHint ?? _estimateDuration(bytes),
     );
@@ -109,31 +125,11 @@ abstract final class SightSingingPitchAnalyzer {
 
     await NativeAudioBootstrap.ensureReady();
 
-    // WAV 优先走内存；MP3/M4A 等压缩格式写临时文件再解码（miniaudio 更稳）。
-    if (ext == 'wav') {
-      try {
-        final samples = await SoLoud.instance.readSamplesFromMem(
-          bytes,
-          request.sampleCount,
-          endTime: -1,
-          average: true,
-        );
-        final trimmed = _trimTail(samples);
-        if (trimmed.isNotEmpty) {
-          return _DecodedAudioSamples(
-            samples: trimmed,
-            duration: durationHint ?? _durationFromSampleCount(trimmed.length),
-          );
-        }
-      } on SoLoudException {
-        // fall through to temp-file path
-      }
-    }
-
     final tempPath = await PitchAnalysisTempFile.write(bytes, ext);
     try {
-      final samples = await _readSamplesWithFallback(
+      final samples = _readSamplesWithFallback(
         filePath: tempPath,
+        bytes: bytes,
         request: request,
       );
       return _DecodedAudioSamples(
@@ -145,13 +141,14 @@ abstract final class SightSingingPitchAnalyzer {
     }
   }
 
-  static Future<Float32List> _readSamplesWithFallback({
+  static Float32List _readSamplesWithFallback({
     required String filePath,
+    required Uint8List bytes,
     required _SampleRequest request,
-  }) async {
+  }) {
     Object? lastError;
     try {
-      final samples = await SoLoud.instance.readSamplesFromFile(
+      final samples = readPitchAnalysisSamplesFromFile(
         filePath,
         request.sampleCount,
         endTime: -1,
@@ -165,13 +162,8 @@ abstract final class SightSingingPitchAnalyzer {
       lastError = error;
     }
 
-    if (kIsWeb) {
-      throw PitchAnalysisException(_msgDecodeFailed);
-    }
-
     try {
-      final bytes = await PitchAnalysisTempFile.read(filePath);
-      final samples = await SoLoud.instance.readSamplesFromMem(
+      final samples = readPitchAnalysisSamplesFromMem(
         bytes,
         request.sampleCount,
         endTime: -1,
@@ -212,18 +204,6 @@ abstract final class SightSingingPitchAnalyzer {
         ? math.min(estimatedSec, _webMaxAnalysisSeconds)
         : estimatedSec;
     return Duration(seconds: cappedSec);
-  }
-
-  static Duration _estimateDurationFromPath(String path) {
-    final dot = path.lastIndexOf('.');
-    if (dot < 0) {
-      return const Duration(seconds: 120);
-    }
-    final ext = path.substring(dot + 1).toLowerCase();
-    if (ext == 'wav') {
-      return const Duration(seconds: 300);
-    }
-    return const Duration(seconds: 180);
   }
 
   static Duration _durationFromSampleCount(int sampleCount) {

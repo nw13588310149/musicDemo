@@ -37,7 +37,7 @@ Future<void> main() async {
   // - Android：immersiveSticky 模式下用户从屏幕边缘下拉时系统栏会临时显示，几秒后自动隐藏。
   // - iOS：状态栏由 Info.plist + RootFlutterViewController 控制；这里调用是无副作用的兜底。
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-  // 截屏防护在原生层启用：iOS SceneDelegate / Android MainActivity。
+  // 截屏 / 录屏防护在原生层启用：iOS ScreenCaptureGuard / Android MainActivity。
 
   final storage = await AppStorage.create();
   final cid = Uri.base.queryParameters['cid'];

@@ -11,10 +11,11 @@ private final class FlutterHostViewResolver: ScreenProtectorRootViewResolving {
   }
 }
 
-/// iOS 截屏 / 录屏 / 切后台防护（对齐 screen_protector + ScreenProtectorKit 用法）。
+/// iOS 截屏 / 录屏防护（ScreenProtectorKit，与 screen_protector 同源）。
 ///
 /// 必须在 FlutterViewController.view 挂载后调用 `configure`；
 /// 不可手动 reparent `UIWindow.layer`（会导致只显示 1/4 屏、截屏后永久黑屏）。
+/// 不在切后台时盖黑屏，避免影响多任务切换体验。
 final class ScreenCaptureGuard {
   static let shared = ScreenCaptureGuard()
 
@@ -42,13 +43,5 @@ final class ScreenCaptureGuard {
     }
 
     kit = protector
-  }
-
-  func sceneWillResignActive() {
-    kit?.enabledColorScreen(hexColor: "#000000")
-  }
-
-  func sceneDidBecomeActive() {
-    kit?.disableColorScreen()
   }
 }

@@ -44,14 +44,6 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     window.makeKeyAndVisible()
     self.window = window
   }
-
-  func sceneWillResignActive(_ scene: UIScene) {
-    ScreenCaptureGuard.shared.sceneWillResignActive()
-  }
-
-  func sceneDidBecomeActive(_ scene: UIScene) {
-    ScreenCaptureGuard.shared.sceneDidBecomeActive()
-  }
 }
 
 #if DEBUG
