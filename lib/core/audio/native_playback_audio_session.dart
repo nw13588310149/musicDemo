@@ -112,18 +112,6 @@ abstract final class NativePlaybackAudioSession {
     );
   }
 
-  /// 智能视唱：playAndRecord + voiceChat（系统回声消除），不强制外放。
-  ///
-  /// 避免 `defaultToSpeaker` 把伴奏从扬声器播出后被麦克风录入，导致误打分。
-  static Future<void> ensureSightSingingActive() {
-    return _ensurePlayAndRecordMode(
-      AVAudioSessionMode.voiceChat,
-      categoryOptions:
-          AVAudioSessionCategoryOptions.allowBluetooth |
-          AVAudioSessionCategoryOptions.allowBluetoothA2dp,
-    );
-  }
-
   /// 调音器：需要麦克风输入，measurement 利于低延迟音高检测。
   static Future<void> ensurePlayAndRecordActive() {
     return _ensurePlayAndRecordMode(
@@ -131,6 +119,20 @@ abstract final class NativePlaybackAudioSession {
       categoryOptions:
           AVAudioSessionCategoryOptions.defaultToSpeaker |
           AVAudioSessionCategoryOptions.allowBluetooth,
+    );
+  }
+
+  /// 智能视唱实时采音：measurement + mixWithOthers，与钢琴伴奏并行。
+  ///
+  /// 不用 voiceChat / 系统 AEC——跟唱时用户音高常与伴奏一致，AEC 会把人声当回声消掉，
+  /// 导致 YIN 只有响度、没有音高。串音改由 [PitchVoiceGate] 在打分侧过滤。
+  static Future<void> ensureSightSingingCaptureActive() {
+    return _ensurePlayAndRecordMode(
+      AVAudioSessionMode.measurement,
+      categoryOptions:
+          AVAudioSessionCategoryOptions.defaultToSpeaker |
+          AVAudioSessionCategoryOptions.allowBluetooth |
+          AVAudioSessionCategoryOptions.mixWithOthers,
     );
   }
 

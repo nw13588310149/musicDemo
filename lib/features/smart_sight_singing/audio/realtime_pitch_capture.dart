@@ -47,10 +47,10 @@ enum RealtimePitchCaptureProfile {
   /// 录音系统等通用场景。
   general,
 
-  /// 智能视唱 + 扬声器/耳机伴奏：回声消除 + voiceChat 会话。
+  /// 智能视唱 + 扬声器伴奏：measurement 采音 + 软件串音过滤。
   sightSinging,
 
-  /// iPad 无声跟唱：仅麦克风测音高，measurement 模式更稳。
+  /// 无声跟唱：与 [sightSinging] 相同采音策略，仅伴奏不外放。
   visualOnly,
 }
 

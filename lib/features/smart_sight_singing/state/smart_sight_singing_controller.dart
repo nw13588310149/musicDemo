@@ -403,11 +403,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     _playback.muteAudioOutput = state.visualOnlyMode;
     if (!kIsWeb) {
       NativePlaybackAudioSession.invalidatePlaybackCache();
-      if (state.visualOnlyMode) {
-        await NativePlaybackAudioSession.ensurePlayAndRecordActive();
-      } else {
-        await NativePlaybackAudioSession.ensureSightSingingActive();
-      }
+      await NativePlaybackAudioSession.ensureSightSingingCaptureActive();
     }
     if (!mounted) return;
     state = state.copyWith(isPreviewPlaying: false, playbackMs: 0);
@@ -453,11 +449,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
 
       if (!kIsWeb) {
         NativePlaybackAudioSession.invalidatePlaybackCache();
-        if (state.visualOnlyMode) {
-          await NativePlaybackAudioSession.ensurePlayAndRecordActive();
-        } else {
-          await NativePlaybackAudioSession.ensureSightSingingActive();
-        }
+        await NativePlaybackAudioSession.ensureSightSingingCaptureActive();
       }
 
       final pitchStream = await capture.start();
@@ -516,10 +508,6 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     if (!mounted || _shuttingDown) return;
     if (_midiBundle == null) return;
 
-    if (!kIsWeb && !state.visualOnlyMode) {
-      await NativePlaybackAudioSession.ensureSightSingingActive();
-    }
-
     state = state.copyWith(
       stage: SightSingingStage.singing,
       countdownSeconds: 0,
@@ -532,6 +520,9 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     );
     try {
       await _playback.start(muteAudio: state.visualOnlyMode);
+      if (!kIsWeb && !state.visualOnlyMode) {
+        await NativePlaybackAudioSession.ensureSightSingingCaptureActive();
+      }
     } catch (e) {
       await _stopCaptureSilently();
       _scoringSession = null;
@@ -696,10 +687,9 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       policy: _voiceGatePolicy,
     );
 
-    // UI 始终反映麦克风输入：响度来自原始帧，音高优先用过滤后结果。
-    final displayMidi = filtered.pitched
-        ? filtered.midi
-        : (event.pitched ? event.midi : -1.0);
+    // UI / 绘制始终用原始 YIN 结果；串音过滤仅作用于打分。
+    final displayMidi =
+        event.pitched && event.midi >= 0 ? event.midi : -1.0;
 
     // 倒计时阶段只预热麦克风，不计分。
     if (state.stage == SightSingingStage.countdown) {

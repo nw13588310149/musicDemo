@@ -11,6 +11,7 @@ import 'pitch_soloud_samples.dart';
 import 'pitch_track.dart';
 import 'pitch_wav_decoder.dart';
 import 'ktv_pitch_guide.dart';
+import 'pcm_pitch_utils.dart';
 
 /// Smart sight-singing offline pitch analysis (flutter_soloud + YIN).
 abstract final class SightSingingPitchAnalyzer {
@@ -411,7 +412,9 @@ Future<PitchTrack> _yinPipeline(
       continue;
     }
 
-    final result = await detector.getPitchFromIntBuffer(frameBuf);
+    final result = await detector.getPitchFromFloatBuffer(
+      pcm16LeToFloatSamples(frameBuf),
+    );
     final hz = result.pitch;
     final midi = (result.pitched && hz > 0 && hz.isFinite)
         ? PitchUtils.hzToMidi(hz)

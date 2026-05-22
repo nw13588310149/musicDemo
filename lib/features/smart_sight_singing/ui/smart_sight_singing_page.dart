@@ -699,9 +699,9 @@ class _SingingModeBanner extends StatelessWidget {
                       ? '无声跟唱：不播放伴奏，请对照音符条演唱。'
                       : (isIosTablet
                           ? 'iPad 跟唱：伴奏按 MIDI 原力度播放，音量由实体键调节；'
-                              '麦克风已启用回声消除以识别你的声音。'
+                              '麦克风实时识别你的音高并绘制轨迹。'
                           : '伴奏按 MIDI 原力度播放，音量由实体键调节；'
-                              '麦克风已启用回声消除以识别你的声音。'),
+                              '麦克风实时识别你的音高并绘制轨迹。'),
                   style: TextStyle(
                     fontSize: ui(12),
                     color: _DemoUi.accentMuted,

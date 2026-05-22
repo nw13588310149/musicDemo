@@ -7,40 +7,35 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 
 import '../../../core/audio/native_playback_audio_session.dart';
+import 'pcm_pitch_utils.dart';
 import 'pitch_track.dart';
 import 'realtime_pitch_capture.dart';
 
 class _IORealtimePitchCapture implements RealtimePitchCapture {
   _IORealtimePitchCapture({required this.profile})
-      : _detector = PitchDetector(
+      : _frameBuffer = Uint8List(_bufferSize * 2),
+        _detector = PitchDetector(
           audioSampleRate: _sampleRate.toDouble(),
-          bufferSize: profile == RealtimePitchCaptureProfile.sightSinging
-              ? 4096
-              : 2048,
-        ),
-        _frameBuffer = Uint8List(
-          (profile == RealtimePitchCaptureProfile.sightSinging ? 4096 : 2048) *
-              2,
+          bufferSize: _bufferSize,
         );
 
   final RealtimePitchCaptureProfile profile;
 
   static const int _sampleRate = 44100;
+  static const int _bufferSize = 2048;
 
   final AudioRecorder _recorder = AudioRecorder();
   final PitchDetector _detector;
+  final Uint8List _frameBuffer;
 
   StreamSubscription<Uint8List>? _streamSub;
   StreamController<RealtimePitchEvent>? _controller;
-  final Uint8List _frameBuffer;
   int _filledBytes = 0;
   bool _running = false;
+  Future<void> _detectChain = Future<void>.value();
 
   bool get _isSightSinging =>
       profile == RealtimePitchCaptureProfile.sightSinging;
-
-  bool get _isVisualOnly =>
-      profile == RealtimePitchCaptureProfile.visualOnly;
 
   @override
   bool get isRunning => _running;
@@ -60,19 +55,12 @@ class _IORealtimePitchCapture implements RealtimePitchCapture {
   }
 
   RecordConfig get _recordConfig {
-    const iosConfig = IosRecordConfig(
-      categoryOptions: [
-        IosAudioCategoryOption.allowBluetooth,
-        IosAudioCategoryOption.allowBluetoothA2DP,
-      ],
-    );
-    return RecordConfig(
+    return const RecordConfig(
       encoder: AudioEncoder.pcm16bits,
       sampleRate: _sampleRate,
       numChannels: 1,
-      echoCancel: _isSightSinging,
+      echoCancel: false,
       noiseSuppress: false,
-      iosConfig: iosConfig,
     );
   }
 
@@ -90,14 +78,7 @@ class _IORealtimePitchCapture implements RealtimePitchCapture {
     }
 
     try {
-      switch (profile) {
-        case RealtimePitchCaptureProfile.sightSinging:
-          await NativePlaybackAudioSession.ensureSightSingingActive();
-        case RealtimePitchCaptureProfile.visualOnly:
-          await NativePlaybackAudioSession.ensurePlayAndRecordActive();
-        case RealtimePitchCaptureProfile.general:
-          await NativePlaybackAudioSession.ensureRecordActive();
-      }
+      await NativePlaybackAudioSession.ensureSightSingingCaptureActive();
     } catch (_) {
       // 配置失败不阻断录音本身。
     }
@@ -111,6 +92,7 @@ class _IORealtimePitchCapture implements RealtimePitchCapture {
     );
     _controller = controller;
     _filledBytes = 0;
+    _detectChain = Future<void>.value();
     _running = true;
 
     _streamSub = pcmStream.listen(
@@ -142,12 +124,18 @@ class _IORealtimePitchCapture implements RealtimePitchCapture {
       _filledBytes += take;
       offset += take;
       if (_filledBytes == _frameBuffer.length) {
-        // 拷贝一份，避免 detector 内部异步访问到下一帧覆写后的数据。
         final frame = Uint8List.fromList(_frameBuffer);
         _filledBytes = 0;
-        _emitFrame(frame, out);
+        _enqueueFrame(frame, out);
       }
     }
+  }
+
+  void _enqueueFrame(
+    Uint8List frame,
+    StreamController<RealtimePitchEvent> out,
+  ) {
+    _detectChain = _detectChain.then((_) => _emitFrame(frame, out));
   }
 
   Future<void> _emitFrame(
@@ -156,7 +144,6 @@ class _IORealtimePitchCapture implements RealtimePitchCapture {
   ) async {
     if (!_running || out.isClosed) return;
 
-    // 振幅 / RMS 计算。
     final view = ByteData.sublistView(frame);
     var sumSq = 0.0;
     var peak = 0.0;
@@ -169,12 +156,10 @@ class _IORealtimePitchCapture implements RealtimePitchCapture {
     }
     final rms = math.sqrt(sumSq / n);
     final peakNorm = (peak / 32767.0).clamp(0.0, 1.0);
-    // 人声 RMS 通常在 300~4000；按 ~900 映射到 0~1，便于 UI 显示「拾音中」。
     final rmsNorm = (rms / 900.0).clamp(0.0, 1.0);
     final amplitude = math.max(peakNorm * 0.55, rmsNorm);
 
-    final silenceThreshold =
-        _isSightSinging ? 220.0 : (_isVisualOnly ? 180.0 : 240.0);
+    const silenceThreshold = 200.0;
     if (rms < silenceThreshold) {
       if (!out.isClosed) {
         out.add(
@@ -191,20 +176,20 @@ class _IORealtimePitchCapture implements RealtimePitchCapture {
     }
 
     try {
-      final result = await _detector.getPitchFromIntBuffer(frame);
+      final floatSamples = pcm16LeToFloatSamples(frame);
+      final result = await _detector.getPitchFromFloatBuffer(floatSamples);
       if (!_running || out.isClosed) return;
+
       final hz = result.pitch;
       final midi = (result.pitched && hz > 0 && hz.isFinite)
           ? PitchUtils.hzToMidi(hz)
           : double.nan;
-      final minConfidence = _isSightSinging
-          ? 0.70
-          : (_isVisualOnly ? 0.68 : 0.72);
+      // 与离线 pitch_analysis 一致：以 YIN pitched 为准，不过滤 probability。
       final pitched = result.pitched &&
-          result.probability > minConfidence &&
-          hz > 70 &&
-          hz < 1200 &&
-          midi.isFinite;
+          hz > 65 &&
+          hz < 1400 &&
+          midi.isFinite &&
+          (!_isSightSinging || result.probability > 0.12);
       out.add(
         RealtimePitchEvent(
           frequencyHz: pitched ? hz : 0,
@@ -236,6 +221,7 @@ class _IORealtimePitchCapture implements RealtimePitchCapture {
       await controller.close();
     }
     _filledBytes = 0;
+    _detectChain = Future<void>.value();
   }
 }
 
