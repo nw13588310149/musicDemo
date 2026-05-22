@@ -177,11 +177,24 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       errorMessage: null,
     );
 
+    // 先用 media_kit 探测真实时长（demo.mp3 为 VBR，按体积估算会偏差），
+    // 再带着精确 durationHint 做离线音高分析。
+    Duration? durationHint;
+    var playerPrepared = false;
+    try {
+      await _player.open(Media(mediaUri), play: false);
+      durationHint = await _waitForMediaDuration();
+      playerPrepared = durationHint != null;
+    } catch (_) {
+      // 探测失败时仍尝试分析，pitch 模块会退回 endTime=-1 模式。
+    }
+
     // 解码 + 切帧 + YIN。
     try {
       final track = await SightSingingPitchAnalyzer.analyzeBytes(
         bytes,
         formatHint: formatHint,
+        durationHint: durationHint,
       );
       if (!mounted) return;
       if (track.isEmpty) {
@@ -198,12 +211,13 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
         track: track,
       );
 
-      // 准备 media_kit 播放器（不自动播放）。
-      try {
-        await _player.open(Media(mediaUri), play: false);
-      } catch (e) {
-        if (!mounted) return;
-        state = state.copyWith(errorMessage: '音频加载失败：$e');
+      if (!playerPrepared) {
+        try {
+          await _player.open(Media(mediaUri), play: false);
+        } catch (e) {
+          if (!mounted) return;
+          state = state.copyWith(errorMessage: '音频加载失败：$e');
+        }
       }
     } on PitchAnalysisException catch (e) {
       if (!mounted) return;
@@ -232,6 +246,18 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     final dot = name.lastIndexOf('.');
     if (dot < 0 || dot == name.length - 1) return 'mp3';
     return name.substring(dot + 1).toLowerCase();
+  }
+
+  /// media_kit 打开后 duration 可能异步就绪，短暂轮询几次。
+  Future<Duration?> _waitForMediaDuration() async {
+    for (var i = 0; i < 12; i++) {
+      final duration = _player.state.duration;
+      if (duration.inMilliseconds > 0) {
+        return duration;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    return null;
   }
 
   /// 开始跟唱：开启录音 + 实时音高，并播放 MP3。
