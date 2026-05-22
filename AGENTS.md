@@ -32,7 +32,7 @@
   - musicPlay should warm up piano audio in the background and load textbook detail first
 - Smart sight singing (`/smart-singing`):
   - implemented under `lib/features/smart_sight_singing/`
-  - left nav entry enabled; reference pitch from `assets/audio/demo.mid` (melody track)
+  - left nav entry hidden (route `/smart-singing` still registered for direct navigation); reference pitch from `assets/audio/demo.mid`
   - playback uses shared piano short-audio scheduler (`MusicCompanionAudioEngine`)
   - follow-along scoring uses `record` + `pitch_detector_dart` + KTV note-based scoring
   - online import supports `.mid` / `.midi` only; legacy YIN/mp3 path kept in code but unused for demo
