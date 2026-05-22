@@ -24,6 +24,8 @@ import UIKit
 /// - 延后系统底部上滑手势，避免误触退出。
 @objc(RootFlutterViewController)
 class RootFlutterViewController: FlutterViewController {
+  private var didEnableScreenCaptureGuard = false
+
   /// 与 Info.plist 一致，仅横屏；竖握 iPad 时系统不旋转为竖屏 UI。
   override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
     return [.landscapeLeft, .landscapeRight]
@@ -39,5 +41,21 @@ class RootFlutterViewController: FlutterViewController {
 
   override var preferredScreenEdgesDeferringSystemGestures: UIRectEdge {
     return [.bottom]
+  }
+
+  override func viewDidAppear(_ animated: Bool) {
+    super.viewDidAppear(animated)
+    installScreenCaptureGuardIfNeeded()
+  }
+
+  /// Flutter 首帧渲染完成且 window 挂载后再启用截屏防护，避免启动黑屏。
+  private func installScreenCaptureGuardIfNeeded() {
+    guard !didEnableScreenCaptureGuard else { return }
+    didEnableScreenCaptureGuard = true
+
+    DispatchQueue.main.async { [weak self] in
+      guard let self, let window = self.view.window else { return }
+      ScreenCaptureGuard.shared.enable(on: window)
+    }
   }
 }
