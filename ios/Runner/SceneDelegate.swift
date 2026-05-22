@@ -6,6 +6,8 @@ import UIKit
 class SceneDelegate: UIResponder, UIWindowSceneDelegate {
   var window: UIWindow?
   private var lowLatencyNoteAudio: LowLatencyNoteAudio?
+  /// 切后台 / 多任务预览时的黑色遮罩，防止界面内容泄漏。
+  private var privacyOverlay: UIView?
 
   func scene(
     _ scene: UIScene,
@@ -20,6 +22,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
       nibName: nil,
       bundle: nil
     )
+    flutterViewController.view.backgroundColor = .white
 
     #if DEBUG
     // Debug 包从桌面冷启动时 registrar 为 null，Swift 插件会 SIGSEGV（flutter#69011）。
@@ -42,6 +45,31 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     window.rootViewController = flutterViewController
     window.makeKeyAndVisible()
     self.window = window
+  }
+
+  func sceneWillResignActive(_ scene: UIScene) {
+    showPrivacyOverlay()
+  }
+
+  func sceneDidBecomeActive(_ scene: UIScene) {
+    hidePrivacyOverlay()
+  }
+
+  private func showPrivacyOverlay() {
+    guard let window = window else { return }
+    if privacyOverlay != nil { return }
+
+    let overlay = UIView(frame: window.bounds)
+    overlay.backgroundColor = .black
+    overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    overlay.isUserInteractionEnabled = false
+    window.addSubview(overlay)
+    privacyOverlay = overlay
+  }
+
+  private func hidePrivacyOverlay() {
+    privacyOverlay?.removeFromSuperview()
+    privacyOverlay = nil
   }
 }
 

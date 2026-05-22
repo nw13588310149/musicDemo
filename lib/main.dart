@@ -37,9 +37,7 @@ Future<void> main() async {
   // - Android：immersiveSticky 模式下用户从屏幕边缘下拉时系统栏会临时显示，几秒后自动隐藏。
   // - iOS：状态栏由 Info.plist + RootFlutterViewController 控制；这里调用是无副作用的兜底。
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-  // 截屏防护必须在首帧之后启用（见 MyApp.initState），此处不可调用：
-  // iOS 的 preventScreenshotOn 依赖 FlutterViewController.view 已挂载，
-  // 在 runApp 前调用会导致 secure layer 盖住内容 → 全屏黑屏。
+  // 截屏防护在原生层启用：iOS SceneDelegate / Android MainActivity。
 
   final storage = await AppStorage.create();
   final cid = Uri.base.queryParameters['cid'];

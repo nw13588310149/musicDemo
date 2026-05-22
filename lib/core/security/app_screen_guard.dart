@@ -1,6 +1,6 @@
 /// 全应用截屏 / 录屏防护（iOS / Android）。
 ///
-/// Web / 桌面走 stub no-op；移动端在 [MyApp] 首帧渲染后调用 [enableAppScreenGuard]。
+/// Web / 桌面走 stub no-op；iOS / Android 在原生层启用，Dart 调用为兼容保留。
 library;
 
 export 'app_screen_guard_stub.dart'

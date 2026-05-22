@@ -87,7 +87,8 @@ dependencies:
   permission_handler: ^12.0.1
   camera: ^0.11.1
   image: ^4.5.4
-  screen_protector: ^1.5.1
+  # 截屏防护改由原生层实现（iOS SceneDelegate / Android MainActivity）。
+  # screen_protector 与显式 FlutterEngine + SceneDelegate 不兼容，会导致 iOS 启动黑屏。
   # ───────────────────────────────────────────────────────────────────────
   # 智能视唱依赖（已暂时停用）：
   # 原计划：`audio_decoder: ^0.8.0` 把 MP3 → PCM，配合 `pitch_detector_dart`

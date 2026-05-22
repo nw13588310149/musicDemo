@@ -1,30 +1,10 @@
-import 'dart:io' show Platform;
-
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
-import 'package:screen_protector/screen_protector.dart';
 
-/// 启用全应用截屏 / 录屏防护，对齐 1.0 移动端安全策略：
-/// - Android：`protectDataLeakageOn` + `preventScreenshotOn`
-/// - iOS：`preventScreenshotOn` + `protectDataLeakageWithColor`（切后台 / 多任务预览遮罩）
-///
-/// 必须在 [runApp] 且首帧渲染完成后再调用；iOS 依赖 FlutterViewController.view
-/// 已挂载，过早启用会导致 secure layer 盖住界面（全屏黑屏）。
+/// 移动端截屏防护由原生层负责，Dart 侧保持 no-op：
+/// - iOS：`SceneDelegate` 切后台时黑色遮罩（多任务预览防泄漏）
+/// - Android：`MainActivity` 设置 `FLAG_SECURE`（截屏/录屏/多任务预览）
 Future<void> enableAppScreenGuard() async {
-  if (kIsWeb) {
-    return;
-  }
-  try {
-    if (Platform.isAndroid) {
-      await ScreenProtector.protectDataLeakageOn();
-      await ScreenProtector.preventScreenshotOn();
-      return;
-    }
-    if (Platform.isIOS) {
-      await ScreenProtector.preventScreenshotOn();
-      await ScreenProtector.protectDataLeakageWithColor(Colors.black);
-    }
-  } catch (error, stack) {
-    debugPrint('enableAppScreenGuard failed: $error\n$stack');
+  if (kDebugMode) {
+    debugPrint('enableAppScreenGuard: handled natively on iOS/Android');
   }
 }
