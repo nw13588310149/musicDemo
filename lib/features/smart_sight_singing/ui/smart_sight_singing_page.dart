@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/widgets/app_toast.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../audio/pitch_track.dart';
 import '../state/smart_sight_singing_controller.dart';
@@ -21,7 +20,6 @@ class SmartSightSingingPage extends ConsumerStatefulWidget {
 
 class _SmartSightSingingPageState
     extends ConsumerState<SmartSightSingingPage> {
-  String? _lastShownError;
   final TextEditingController _onlineUrlController = TextEditingController();
 
   @override
@@ -30,10 +28,8 @@ class _SmartSightSingingPageState
     if (kIsWeb) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        AppToast.show(
-          context,
+        ref.read(smartSightSingingControllerProvider.notifier).reportError(
           'Web 端暂不支持智能视唱实时录音，请在 iPad 上使用。',
-          type: AppToastType.error,
         );
       });
     }
@@ -51,21 +47,6 @@ class _SmartSightSingingPageState
     final controller = ref.read(
       smartSightSingingControllerProvider.notifier,
     );
-
-    if (state.errorMessage != null && state.errorMessage != _lastShownError) {
-      _lastShownError = state.errorMessage;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        AppToast.show(
-          context,
-          state.errorMessage!,
-          type: AppToastType.error,
-        );
-        controller.dismissError();
-      });
-    } else if (state.errorMessage == null) {
-      _lastShownError = null;
-    }
 
     final ui = DashboardScaleScope.of(context).ui;
 
@@ -85,6 +66,14 @@ class _SmartSightSingingPageState
                   state: state,
                   onImport: () => controller.importAudio(),
                 ),
+                if (state.errorMessage != null) ...[
+                  SizedBox(height: ui(12)),
+                  _DebugErrorPanel(
+                    message: state.errorMessage!,
+                    stage: state.stage,
+                    onDismiss: controller.dismissError,
+                  ),
+                ],
                 SizedBox(height: ui(16)),
                 Expanded(
                   child: _Body(
@@ -97,6 +86,96 @@ class _SmartSightSingingPageState
             ),
           ),
           const Positioned.fill(child: _TrialWatermark()),
+        ],
+      ),
+    );
+  }
+}
+
+/// 调试阶段：在页面上直接展示完整错误（含 stack），便于排查解码/权限等问题。
+class _DebugErrorPanel extends StatelessWidget {
+  const _DebugErrorPanel({
+    required this.message,
+    required this.stage,
+    required this.onDismiss,
+  });
+
+  final String message;
+  final SightSingingStage stage;
+  final VoidCallback onDismiss;
+
+  static String _stageLabel(SightSingingStage stage) {
+    return switch (stage) {
+      SightSingingStage.idle => 'idle',
+      SightSingingStage.analyzing => 'analyzing',
+      SightSingingStage.ready => 'ready',
+      SightSingingStage.singing => 'singing',
+      SightSingingStage.finished => 'finished',
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      height: ui(180),
+      padding: EdgeInsets.all(ui(12)),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF0F0),
+        borderRadius: BorderRadius.circular(ui(12)),
+        border: Border.all(color: const Color(0xFFE57373)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.bug_report_outlined, color: Colors.red.shade700, size: ui(18)),
+              SizedBox(width: ui(6)),
+              Text(
+                '调试错误（stage: ${_stageLabel(stage)}）',
+                style: TextStyle(
+                  fontSize: ui(13),
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFFB71C1C),
+                  fontFamily: 'PingFang SC',
+                ),
+              ),
+              const Spacer(),
+              InkWell(
+                onTap: onDismiss,
+                borderRadius: BorderRadius.circular(ui(8)),
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: ui(8),
+                    vertical: ui(4),
+                  ),
+                  child: Text(
+                    '关闭',
+                    style: TextStyle(
+                      fontSize: ui(12),
+                      color: const Color(0xFFB71C1C),
+                      fontFamily: 'PingFang SC',
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: ui(8)),
+          Expanded(
+            child: SingleChildScrollView(
+              child: SelectableText(
+                message,
+                style: TextStyle(
+                  fontSize: ui(12),
+                  height: 1.45,
+                  color: const Color(0xFF4A1515),
+                  fontFamily: 'Consolas',
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );

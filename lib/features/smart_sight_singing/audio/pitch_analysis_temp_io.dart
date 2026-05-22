@@ -20,4 +20,8 @@ abstract final class PitchAnalysisTempFile {
       }
     } catch (_) {}
   }
+
+  static Future<Uint8List> read(String path) async {
+    return File(path).readAsBytes();
+  }
 }

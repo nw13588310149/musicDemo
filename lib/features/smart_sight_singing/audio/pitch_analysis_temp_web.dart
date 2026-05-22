@@ -7,4 +7,8 @@ abstract final class PitchAnalysisTempFile {
   }
 
   static Future<void> delete(String path) async {}
+
+  static Future<Uint8List> read(String path) async {
+    throw UnsupportedError('PitchAnalysisTempFile.read is not used on web.');
+  }
 }

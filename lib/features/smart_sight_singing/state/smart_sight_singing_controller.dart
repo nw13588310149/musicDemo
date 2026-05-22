@@ -32,7 +32,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     });
   }
 
-  static const String _demoAssetPath = 'assets/audio/demo.mp3';
+  static const String _demoAssetPath = 'assets/audio/demo_analysis.wav';
   static const String _demoDisplayName = '青花';
   static const String _demoMediaUri = 'asset:///assets/audio/demo.mp3';
   static const int _maxOnlineAudioBytes = 50 * 1024 * 1024;
@@ -48,6 +48,24 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
 
   bool _shuttingDown = false;
 
+  static String _formatDebugError(String headline, Object error, [StackTrace? stack]) {
+    final buffer = StringBuffer(headline);
+    buffer.writeln();
+    buffer.writeln('错误: $error');
+    if (stack != null) {
+      buffer.writeln();
+      buffer.writeln('Stack trace:');
+      buffer.write(stack);
+    }
+    return buffer.toString();
+  }
+
+  /// 供 UI 直接写入调试错误（例如 Web 端能力提示）。
+  void reportError(String message) {
+    if (!mounted) return;
+    state = state.copyWith(errorMessage: message);
+  }
+
   /// 解析内置 demo 曲目《青花》，离线生成参考音高。
   Future<void> importAudio() async {
     if (state.stage == SightSingingStage.analyzing ||
@@ -59,22 +77,22 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       final bytes = await rootBundle.load(_demoAssetPath);
       await _analyzeBytesAndPreparePlayback(
         bytes: Uint8List.sublistView(bytes),
-        formatHint: 'mp3',
+        formatHint: 'wav',
         displayName: _demoDisplayName,
         mediaUri: _demoMediaUri,
       );
-    } on PitchAnalysisException catch (e) {
+    } on PitchAnalysisException catch (e, stack) {
       if (!mounted) return;
       state = state.copyWith(
         stage: SightSingingStage.idle,
-        errorMessage: e.message,
+        errorMessage: _formatDebugError('解析《青花》音高失败', e.message, stack),
         analyzingProgress: 0,
       );
-    } catch (e) {
+    } catch (e, stack) {
       if (!mounted) return;
       state = state.copyWith(
         stage: SightSingingStage.idle,
-        errorMessage: '解析《青花》失败：$e',
+        errorMessage: _formatDebugError('解析《青花》失败', e, stack),
         analyzingProgress: 0,
       );
     }
@@ -138,18 +156,18 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
         displayName: displayName,
         mediaUri: url,
       );
-    } on PitchAnalysisException catch (e) {
+    } on PitchAnalysisException catch (e, stack) {
       if (!mounted) return;
       state = state.copyWith(
         stage: SightSingingStage.idle,
-        errorMessage: e.message,
+        errorMessage: _formatDebugError('在线音频解析失败', e.message, stack),
         analyzingProgress: 0,
       );
-    } catch (e) {
+    } catch (e, stack) {
       if (!mounted) return;
       state = state.copyWith(
         stage: SightSingingStage.idle,
-        errorMessage: '在线音频解析失败：$e',
+        errorMessage: _formatDebugError('在线音频解析失败', e, stack),
         analyzingProgress: 0,
       );
     }
@@ -181,12 +199,15 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     // 再带着精确 durationHint 做离线音高分析。
     Duration? durationHint;
     var playerPrepared = false;
+    Object? mediaProbeError;
+    StackTrace? mediaProbeStack;
     try {
       await _player.open(Media(mediaUri), play: false);
       durationHint = await _waitForMediaDuration();
       playerPrepared = durationHint != null;
-    } catch (_) {
-      // 探测失败时仍尝试分析，pitch 模块会退回 endTime=-1 模式。
+    } catch (e, stack) {
+      mediaProbeError = e;
+      mediaProbeStack = stack;
     }
 
     // 解码 + 切帧 + YIN。
@@ -200,7 +221,11 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       if (track.isEmpty) {
         state = state.copyWith(
           stage: SightSingingStage.idle,
-          errorMessage: '音频时长过短或无法识别有效音高，请尝试其他歌曲。',
+          errorMessage: _formatDebugError(
+            '音高分析结果为空',
+            'bytes=${bytes.length}, format=$formatHint, '
+            'durationHint=${durationHint?.inMilliseconds ?? 'null'}ms',
+          ),
           analyzingProgress: 0,
         );
         return;
@@ -214,23 +239,42 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       if (!playerPrepared) {
         try {
           await _player.open(Media(mediaUri), play: false);
-        } catch (e) {
+        } catch (e, stack) {
           if (!mounted) return;
-          state = state.copyWith(errorMessage: '音频加载失败：$e');
+          state = state.copyWith(
+            errorMessage: _formatDebugError('音高已解析，但音频加载失败', e, stack),
+          );
         }
+      } else if (mediaProbeError != null) {
+        state = state.copyWith(
+          errorMessage: _formatDebugError(
+            '音高已解析；media_kit 时长探测曾失败（已忽略）',
+            mediaProbeError,
+            mediaProbeStack,
+          ),
+        );
       }
-    } on PitchAnalysisException catch (e) {
+    } on PitchAnalysisException catch (e, stack) {
       if (!mounted) return;
       state = state.copyWith(
         stage: SightSingingStage.idle,
-        errorMessage: e.message,
+        errorMessage: _formatDebugError(
+          '音高分析失败 (bytes=${bytes.length}, format=$formatHint, '
+          'durationHint=${durationHint?.inMilliseconds ?? 'null'}ms)',
+          e.message,
+          stack,
+        ),
         analyzingProgress: 0,
       );
-    } catch (e) {
+    } catch (e, stack) {
       if (!mounted) return;
       state = state.copyWith(
         stage: SightSingingStage.idle,
-        errorMessage: '分析失败：$e',
+        errorMessage: _formatDebugError(
+          '分析失败 (bytes=${bytes.length}, format=$formatHint)',
+          e,
+          stack,
+        ),
         analyzingProgress: 0,
       );
     }

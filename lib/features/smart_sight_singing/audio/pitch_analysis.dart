@@ -5,6 +5,8 @@ import 'package:flutter_soloud/flutter_soloud.dart';
 import 'package:pitch_detector_dart/pitch_detector.dart';
 
 import '../../../core/audio/native_audio_bootstrap.dart';
+import 'pitch_analysis_temp_io.dart'
+    if (dart.library.html) 'pitch_analysis_temp_web.dart';
 import 'pitch_track.dart';
 
 /// Smart sight-singing offline pitch analysis (flutter_soloud + YIN).
@@ -33,22 +35,15 @@ abstract final class SightSingingPitchAnalyzer {
     try {
       await NativeAudioBootstrap.ensureReady();
       final request = _sampleRequestForDuration(
-        durationHint,
-        isExactDuration: durationHint != null,
+        durationHint ?? _estimateDurationFromPath(path),
       );
-      final samples = await SoLoud.instance.readSamplesFromFile(
-        path,
-        request.sampleCount,
-        endTime: request.endTimeSeconds,
-        average: true,
+      final samples = await _readSamplesWithFallback(
+        filePath: path,
+        request: request,
       );
-      final trimmed = _trimTail(samples, enabled: !request.isExactDuration);
-      final duration = request.isExactDuration
-          ? request.effectiveDuration
-          : _durationFromSampleCount(trimmed.length);
       return _analyzeFloatSamples(
-        trimmed,
-        durationHint: duration,
+        samples,
+        durationHint: durationHint ?? _durationFromSampleCount(samples.length),
       );
     } on PitchAnalysisException {
       rethrow;
@@ -92,35 +87,109 @@ abstract final class SightSingingPitchAnalyzer {
     required String formatHint,
     Duration? durationHint,
   }) async {
-    final isExactDuration = durationHint != null;
+    final ext = _normalizeExt(formatHint);
     final request = _sampleRequestForDuration(
       durationHint ?? _estimateDuration(bytes),
-      isExactDuration: isExactDuration,
     );
 
     if (kIsWeb) {
       await _ensureSoLoudReadyForWebDecode();
-    } else {
-      await NativeAudioBootstrap.ensureReady();
+      final samples = await SoLoud.instance.readSamplesFromMem(
+        bytes,
+        request.sampleCount,
+        endTime: -1,
+        average: true,
+      );
+      final trimmed = _trimTail(samples);
+      return _DecodedAudioSamples(
+        samples: trimmed,
+        duration: durationHint ?? _durationFromSampleCount(trimmed.length),
+      );
     }
 
-    // 统一走内存解码：避免临时文件权限/路径问题；VBR MP3 必须用 endTime=-1
-    // 让 miniaudio 自己读完整文件，不能把「按体积估算的时长」当成精确 endTime。
-    final samples = await SoLoud.instance.readSamplesFromMem(
-      bytes,
-      request.sampleCount,
-      endTime: request.endTimeSeconds,
-      average: true,
-    );
+    await NativeAudioBootstrap.ensureReady();
 
-    final trimmed = _trimTail(samples, enabled: !request.isExactDuration);
-    final duration = request.isExactDuration
-        ? request.effectiveDuration
-        : _durationFromSampleCount(trimmed.length);
+    // WAV 优先走内存；MP3/M4A 等压缩格式写临时文件再解码（miniaudio 更稳）。
+    if (ext == 'wav') {
+      try {
+        final samples = await SoLoud.instance.readSamplesFromMem(
+          bytes,
+          request.sampleCount,
+          endTime: -1,
+          average: true,
+        );
+        final trimmed = _trimTail(samples);
+        if (trimmed.isNotEmpty) {
+          return _DecodedAudioSamples(
+            samples: trimmed,
+            duration: durationHint ?? _durationFromSampleCount(trimmed.length),
+          );
+        }
+      } on SoLoudException {
+        // fall through to temp-file path
+      }
+    }
 
-    return _DecodedAudioSamples(
-      samples: trimmed,
-      duration: duration,
+    final tempPath = await PitchAnalysisTempFile.write(bytes, ext);
+    try {
+      final samples = await _readSamplesWithFallback(
+        filePath: tempPath,
+        request: request,
+      );
+      return _DecodedAudioSamples(
+        samples: samples,
+        duration: durationHint ?? _durationFromSampleCount(samples.length),
+      );
+    } finally {
+      await PitchAnalysisTempFile.delete(tempPath);
+    }
+  }
+
+  static Future<Float32List> _readSamplesWithFallback({
+    required String filePath,
+    required _SampleRequest request,
+  }) async {
+    Object? lastError;
+    try {
+      final samples = await SoLoud.instance.readSamplesFromFile(
+        filePath,
+        request.sampleCount,
+        endTime: -1,
+        average: true,
+      );
+      final trimmed = _trimTail(samples);
+      if (trimmed.isNotEmpty) {
+        return trimmed;
+      }
+    } catch (error) {
+      lastError = error;
+    }
+
+    if (kIsWeb) {
+      throw PitchAnalysisException(_msgDecodeFailed);
+    }
+
+    try {
+      final bytes = await PitchAnalysisTempFile.read(filePath);
+      final samples = await SoLoud.instance.readSamplesFromMem(
+        bytes,
+        request.sampleCount,
+        endTime: -1,
+        average: true,
+      );
+      final trimmed = _trimTail(samples);
+      if (trimmed.isNotEmpty) {
+        return trimmed;
+      }
+    } catch (error) {
+      lastError = error;
+    }
+
+    if (lastError is SoLoudException) {
+      throw PitchAnalysisException(_mapSoLoudError(lastError));
+    }
+    throw PitchAnalysisException(
+      lastError == null ? _msgDecodeFailed : '$_msgDecodeFailed ($lastError)',
     );
   }
 
@@ -132,20 +201,29 @@ abstract final class SightSingingPitchAnalyzer {
       }
       return;
     }
-    // Reuse the global native bootstrap instead of starting a second init path.
     await NativeAudioBootstrap.ensureReady();
   }
 
   static Duration _estimateDuration(Uint8List bytes) {
-    // 仅用于规划 readSamples 的采样点数；真实时长在 endTime=-1 模式下
-    // 由解码结果反推，避免 VBR / ID3 导致「估算时长 ≠ 实际时长」。
-    const bytesPerSecond = 16000; // ~128 kbps mp3
+    const bytesPerSecond = 16000;
     final estimatedSec =
         (bytes.length / bytesPerSecond).ceil().clamp(10, _maxAnalysisSeconds);
     final cappedSec = kIsWeb
         ? math.min(estimatedSec, _webMaxAnalysisSeconds)
         : estimatedSec;
     return Duration(seconds: cappedSec);
+  }
+
+  static Duration _estimateDurationFromPath(String path) {
+    final dot = path.lastIndexOf('.');
+    if (dot < 0) {
+      return const Duration(seconds: 120);
+    }
+    final ext = path.substring(dot + 1).toLowerCase();
+    if (ext == 'wav') {
+      return const Duration(seconds: 300);
+    }
+    return const Duration(seconds: 180);
   }
 
   static Duration _durationFromSampleCount(int sampleCount) {
@@ -156,10 +234,7 @@ abstract final class SightSingingPitchAnalyzer {
     return Duration(milliseconds: math.max(1, ms));
   }
 
-  static _SampleRequest _sampleRequestForDuration(
-    Duration? duration, {
-    required bool isExactDuration,
-  }) {
+  static _SampleRequest _sampleRequestForDuration(Duration? duration) {
     final maxSeconds = kIsWeb ? _webMaxAnalysisSeconds : _maxAnalysisSeconds;
     final durationMs = duration?.inMilliseconds ?? 0;
     final cappedMs = durationMs > 0
@@ -169,19 +244,13 @@ abstract final class SightSingingPitchAnalyzer {
     final sampleCount = math.max(1, (seconds * analysisSampleRate).round());
     return _SampleRequest(
       sampleCount: sampleCount,
-      // 只有 media_kit 等来源提供了可靠时长时才传精确 endTime。
-      endTimeSeconds: isExactDuration && durationMs > 0 ? seconds : -1,
       effectiveDuration: durationMs > 0
           ? Duration(milliseconds: cappedMs.round())
           : null,
-      isExactDuration: isExactDuration && durationMs > 0,
     );
   }
 
-  static Float32List _trimTail(Float32List samples, {required bool enabled}) {
-    if (!enabled) {
-      return samples;
-    }
+  static Float32List _trimTail(Float32List samples) {
     if (samples.isEmpty) {
       return samples;
     }
@@ -208,11 +277,13 @@ abstract final class SightSingingPitchAnalyzer {
   }
 
   static String _mapSoLoudError(SoLoudException error) {
-    if (error is SoLoudReadSamplesNoBackendCppException ||
-        error is SoLoudReadSamplesFailedToGetDataFormatCppException) {
-      return _msgDecodeFailed;
-    }
-    return '$_msgDecodeFailed (${error.description})';
+    return '$_msgDecodeFailed (${error.runtimeType}: ${error.description})';
+  }
+
+  static String _normalizeExt(String formatHint) {
+    final ext = formatHint.trim().toLowerCase();
+    if (ext.isEmpty || ext == 'audio') return 'mp3';
+    return ext.replaceAll('.', '');
   }
 
   static double _sampleRateForAnalysis(
@@ -241,15 +312,11 @@ class _DecodedAudioSamples {
 class _SampleRequest {
   const _SampleRequest({
     required this.sampleCount,
-    required this.endTimeSeconds,
     required this.effectiveDuration,
-    required this.isExactDuration,
   });
 
   final int sampleCount;
-  final double endTimeSeconds;
   final Duration? effectiveDuration;
-  final bool isExactDuration;
 }
 
 class PitchAnalysisException implements Exception {
