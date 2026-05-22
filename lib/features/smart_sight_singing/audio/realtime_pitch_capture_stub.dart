@@ -19,5 +19,7 @@ class _WebRealtimePitchCapture implements RealtimePitchCapture {
   Future<void> stop() async {}
 }
 
-RealtimePitchCapture createPlatformRealtimePitchCapture() =>
+RealtimePitchCapture createPlatformRealtimePitchCapture({
+  RealtimePitchCaptureProfile profile = RealtimePitchCaptureProfile.general,
+}) =>
     _WebRealtimePitchCapture();

@@ -71,6 +71,8 @@ class SightSingingState {
     this.hitCount = 0,
     this.scoredCount = 0,
     this.combo = 0,
+    this.visualOnlyMode = false,
+    this.isPreviewPlaying = false,
   });
 
   final SightSingingStage stage;
@@ -126,6 +128,12 @@ class SightSingingState {
   /// 当前连击（连续 Good 及以上）。
   final int combo;
 
+  /// iPad 等设备：跟唱时不播放扬声器伴奏，仅看音符条。
+  final bool visualOnlyMode;
+
+  /// 就绪态试听旋律中。
+  final bool isPreviewPlaying;
+
   bool get hasTrack => track != null && !(track!.isEmpty);
 
   bool get isBusy =>
@@ -155,6 +163,8 @@ class SightSingingState {
     int? hitCount,
     int? scoredCount,
     int? combo,
+    bool? visualOnlyMode,
+    bool? isPreviewPlaying,
   }) {
     return SightSingingState(
       stage: stage ?? this.stage,
@@ -183,6 +193,8 @@ class SightSingingState {
       hitCount: hitCount ?? this.hitCount,
       scoredCount: scoredCount ?? this.scoredCount,
       combo: combo ?? this.combo,
+      visualOnlyMode: visualOnlyMode ?? this.visualOnlyMode,
+      isPreviewPlaying: isPreviewPlaying ?? this.isPreviewPlaying,
     );
   }
 }

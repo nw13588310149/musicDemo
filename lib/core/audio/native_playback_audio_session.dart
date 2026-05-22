@@ -104,17 +104,40 @@ abstract final class NativePlaybackAudioSession {
   /// iOS 上若沿用调音器的 `measurement` 或纯 `playback`，`record` 录到的
   /// AAC 电平会明显偏低。
   static Future<void> ensureRecordActive() {
-    return _ensurePlayAndRecordMode(AVAudioSessionMode.defaultMode);
+    return _ensurePlayAndRecordMode(
+      AVAudioSessionMode.defaultMode,
+      categoryOptions:
+          AVAudioSessionCategoryOptions.defaultToSpeaker |
+          AVAudioSessionCategoryOptions.allowBluetooth,
+    );
+  }
+
+  /// 智能视唱：playAndRecord + voiceChat（系统回声消除），不强制外放。
+  ///
+  /// 避免 `defaultToSpeaker` 把伴奏从扬声器播出后被麦克风录入，导致误打分。
+  static Future<void> ensureSightSingingActive() {
+    return _ensurePlayAndRecordMode(
+      AVAudioSessionMode.voiceChat,
+      categoryOptions:
+          AVAudioSessionCategoryOptions.allowBluetooth |
+          AVAudioSessionCategoryOptions.allowBluetoothA2dp,
+    );
   }
 
   /// 调音器：需要麦克风输入，measurement 利于低延迟音高检测。
   static Future<void> ensurePlayAndRecordActive() {
-    return _ensurePlayAndRecordMode(AVAudioSessionMode.measurement);
+    return _ensurePlayAndRecordMode(
+      AVAudioSessionMode.measurement,
+      categoryOptions:
+          AVAudioSessionCategoryOptions.defaultToSpeaker |
+          AVAudioSessionCategoryOptions.allowBluetooth,
+    );
   }
 
   static Future<void> _ensurePlayAndRecordMode(
-    AVAudioSessionMode avAudioSessionMode,
-  ) async {
+    AVAudioSessionMode avAudioSessionMode, {
+    required AVAudioSessionCategoryOptions categoryOptions,
+  }) async {
     if (kIsWeb) return;
     try {
       final session = await AudioSession.instance.timeout(_kChannelTimeout);
@@ -127,9 +150,7 @@ abstract final class NativePlaybackAudioSession {
           .configure(
             AudioSessionConfiguration(
               avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
-              avAudioSessionCategoryOptions:
-                  AVAudioSessionCategoryOptions.defaultToSpeaker |
-                  AVAudioSessionCategoryOptions.allowBluetooth,
+              avAudioSessionCategoryOptions: categoryOptions,
               avAudioSessionMode: avAudioSessionMode,
               androidAudioAttributes: const AndroidAudioAttributes(
                 contentType: AndroidAudioContentType.speech,

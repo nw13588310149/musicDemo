@@ -43,5 +43,18 @@ class RealtimePitchEvent {
 }
 
 /// 通过条件导入选择 io / web 实现。
-RealtimePitchCapture createRealtimePitchCapture() =>
-    createPlatformRealtimePitchCapture();
+enum RealtimePitchCaptureProfile {
+  /// 录音系统等通用场景。
+  general,
+
+  /// 智能视唱 + 扬声器/耳机伴奏：回声消除 + voiceChat 会话。
+  sightSinging,
+
+  /// iPad 无声跟唱：仅麦克风测音高，measurement 模式更稳。
+  visualOnly,
+}
+
+RealtimePitchCapture createRealtimePitchCapture({
+  RealtimePitchCaptureProfile profile = RealtimePitchCaptureProfile.general,
+}) =>
+    createPlatformRealtimePitchCapture(profile: profile);

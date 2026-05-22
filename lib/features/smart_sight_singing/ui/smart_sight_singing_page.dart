@@ -6,9 +6,23 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../audio/midi_sight_singing_service.dart';
 import '../audio/pitch_track.dart';
+import '../state/sight_singing_platform.dart';
 import '../state/smart_sight_singing_controller.dart';
 import '../state/smart_sight_singing_state.dart';
 import 'widgets/karaoke_pitch_track.dart';
+
+/// demo 页中性色，不使用产品主色。
+abstract final class _DemoUi {
+  static const accent = Color(0xFF1A1A1A);
+  static const accentMuted = Color(0xFF4A5568);
+  static const border = Color(0xFFE5E7EF);
+  static const borderStrong = Color(0xFFD0D5DD);
+  static const surface = Color(0xFFF5F6F8);
+  static const surfaceSelected = Color(0xFFEDEDF0);
+  static const textSecondary = Color(0xFF788698);
+  static const badgeBg = Color(0xFFEDEDF0);
+  static const badgeText = Color(0xFF4A5568);
+}
 
 /// 智能视唱主页：内置 demo.mid → MIDI 参考轨 → 跟唱实时打分。
 class SmartSightSingingPage extends ConsumerStatefulWidget {
@@ -314,16 +328,16 @@ class _Header extends StatelessWidget {
         Container(
           width: ui(40),
           height: ui(40),
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             shape: BoxShape.circle,
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF8741FF), Color(0xFF3B82F6)],
-            ),
+            color: _DemoUi.surface,
+            border: Border.all(color: _DemoUi.border),
           ),
-          child: const Icon(Icons.graphic_eq_rounded,
-              color: Colors.white, size: 22),
+          child: Icon(
+            Icons.graphic_eq_rounded,
+            color: _DemoUi.accent,
+            size: ui(22),
+          ),
         ),
         SizedBox(width: ui(12)),
         Column(
@@ -399,6 +413,7 @@ class _Body extends StatelessWidget {
       case SightSingingStage.idle:
         return _EmptyHint(
           onImport: controller.importAudio,
+          onImportLocal: controller.importLocalMidi,
           onlineUrlController: onlineUrlController,
           onAnalyzeUrl: controller.analyzeOnlineAudio,
         );
@@ -414,6 +429,7 @@ class _Body extends StatelessWidget {
         if (track == null || track.isEmpty) {
           return _EmptyHint(
             onImport: controller.importAudio,
+            onImportLocal: controller.importLocalMidi,
             onlineUrlController: onlineUrlController,
             onAnalyzeUrl: controller.analyzeOnlineAudio,
           );
@@ -422,6 +438,8 @@ class _Body extends StatelessWidget {
           children: [
             Column(
               children: [
+                _SingingModeBanner(state: state, controller: controller),
+                SizedBox(height: ui(12)),
                 _ScoreBoard(state: state),
                 SizedBox(height: ui(12)),
                 Expanded(
@@ -446,12 +464,15 @@ class _Body extends StatelessWidget {
         if (track == null || track.isEmpty) {
           return _EmptyHint(
             onImport: controller.importAudio,
+            onImportLocal: controller.importLocalMidi,
             onlineUrlController: onlineUrlController,
             onAnalyzeUrl: controller.analyzeOnlineAudio,
           );
         }
         return Column(
           children: [
+            _SingingModeBanner(state: state, controller: controller),
+            SizedBox(height: ui(12)),
             _ScoreBoard(state: state),
             SizedBox(height: ui(12)),
             Expanded(
@@ -473,10 +494,12 @@ class _Body extends StatelessWidget {
 class _EmptyHint extends StatelessWidget {
   const _EmptyHint({
     required this.onImport,
+    required this.onImportLocal,
     required this.onlineUrlController,
     required this.onAnalyzeUrl,
   });
   final VoidCallback onImport;
+  final VoidCallback onImportLocal;
   final TextEditingController onlineUrlController;
   final ValueChanged<String> onAnalyzeUrl;
 
@@ -492,21 +515,18 @@ class _EmptyHint extends StatelessWidget {
             height: ui(96),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFFEAE2FF), Color(0xFFDDE9FF)],
-              ),
+              color: _DemoUi.surface,
+              border: Border.all(color: _DemoUi.border),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.library_music_rounded,
-              size: 48,
-              color: Color(0xFF8741FF),
+              size: ui(48),
+              color: _DemoUi.accentMuted,
             ),
           ),
           SizedBox(height: ui(20)),
           Text(
-            '解析 demo，开启智能视唱',
+            '导入 MIDI，开启智能视唱',
             style: TextStyle(
               fontSize: ui(18),
               color: const Color(0xFF1A1A1A),
@@ -516,10 +536,10 @@ class _EmptyHint extends StatelessWidget {
           ),
           SizedBox(height: ui(8)),
           SizedBox(
-            width: ui(360),
+            width: ui(420),
             child: Text(
-              '使用内置 demo.mid 作为示例曲目。解析后请选择一条主旋律轨，'
-              '确认后生成参考音符条，随后跟唱并实时看到偏差与得分。',
+              '支持内置 demo、本地 .mid/.midi 文件或在线链接。iPad 默认无声跟唱，'
+              '请对照音符条演唱；可先试听旋律再开始。',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: ui(13),
@@ -530,11 +550,23 @@ class _EmptyHint extends StatelessWidget {
             ),
           ),
           SizedBox(height: ui(24)),
-          _ActionButton(
-            label: '解析 demo',
-            icon: Icons.auto_graph_rounded,
-            primary: true,
-            onTap: onImport,
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _ActionButton(
+                label: '解析 demo',
+                icon: Icons.auto_graph_rounded,
+                primary: true,
+                onTap: onImport,
+              ),
+              SizedBox(width: ui(12)),
+              _ActionButton(
+                label: '上传本地 MIDI',
+                icon: Icons.upload_file_rounded,
+                primary: false,
+                onTap: onImportLocal,
+              ),
+            ],
           ),
           SizedBox(height: ui(18)),
           SizedBox(
@@ -597,7 +629,7 @@ class _AnalyzingHint extends StatelessWidget {
             height: ui(64),
             child: const CircularProgressIndicator(
               strokeWidth: 4,
-              color: Color(0xFF8741FF),
+              color: _DemoUi.accent,
             ),
           ),
           SizedBox(height: ui(18)),
@@ -617,6 +649,89 @@ class _AnalyzingHint extends StatelessWidget {
               fontSize: ui(12),
               color: const Color(0xFF788698),
               fontFamily: 'PingFang SC',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SingingModeBanner extends StatelessWidget {
+  const _SingingModeBanner({
+    required this.state,
+    required this.controller,
+  });
+
+  final SightSingingState state;
+  final SmartSightSingingController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final visualOnly = state.visualOnlyMode;
+    final isIosTablet = SightSingingPlatform.isIosTablet;
+
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: ui(14), vertical: ui(10)),
+      decoration: BoxDecoration(
+        color: _DemoUi.surface,
+        borderRadius: BorderRadius.circular(ui(12)),
+        border: Border.all(color: _DemoUi.border),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            visualOnly ? Icons.visibility_rounded : Icons.headphones_rounded,
+            color: _DemoUi.accentMuted,
+            size: ui(18),
+          ),
+          SizedBox(width: ui(8)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  visualOnly
+                      ? (isIosTablet
+                          ? 'iPad 无声跟唱：跟唱时不播放伴奏，请对照音符条演唱。'
+                          : '无声跟唱：跟唱时不播放伴奏，请对照音符条演唱。')
+                      : '扬声器伴奏模式：已开启回声消除；仍建议佩戴耳机，外放可能被麦克风录入。',
+                  style: TextStyle(
+                    fontSize: ui(12),
+                    color: _DemoUi.accentMuted,
+                    fontFamily: 'PingFang SC',
+                    height: 1.4,
+                  ),
+                ),
+                if (isIosTablet) ...[
+                  SizedBox(height: ui(8)),
+                  Row(
+                    children: [
+                      Text(
+                        '跟唱时播放伴奏',
+                        style: TextStyle(
+                          fontSize: ui(12),
+                          color: _DemoUi.accent,
+                          fontFamily: 'PingFang SC',
+                        ),
+                      ),
+                      SizedBox(width: ui(8)),
+                      Switch.adaptive(
+                        value: !visualOnly,
+                        onChanged: state.isPreviewPlaying ||
+                                state.stage == SightSingingStage.singing ||
+                                state.stage == SightSingingStage.countdown
+                            ? null
+                            : (enabled) =>
+                                controller.setVisualOnlyMode(!enabled),
+                        activeTrackColor: _DemoUi.accent,
+                      ),
+                    ],
+                  ),
+                ],
+              ],
             ),
           ),
         ],
@@ -647,12 +762,9 @@ class _ScoreBoard extends StatelessWidget {
     return Container(
       padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(12)),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-          colors: [Color(0xFFF6F1FF), Color(0xFFEEF4FF)],
-        ),
+        color: _DemoUi.surface,
         borderRadius: BorderRadius.circular(ui(14)),
+        border: Border.all(color: _DemoUi.border),
       ),
       child: Row(
         children: [
@@ -680,7 +792,7 @@ class _ScoreBoard extends StatelessWidget {
                 value: progress,
                 minHeight: ui(6),
                 backgroundColor: const Color(0x33000000),
-                color: const Color(0xFF8741FF),
+                color: _DemoUi.accent,
               ),
             ),
           ),
@@ -864,11 +976,10 @@ class _TrackListTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final disabled = !summary.hasNotes;
-    final borderColor = selected
-        ? const Color(0xFF8741FF)
-        : const Color(0xFFE5E7EF);
+    final borderColor =
+        selected ? _DemoUi.accent : _DemoUi.border;
     final bg = selected
-        ? const Color(0xFFF6F1FF)
+        ? _DemoUi.surfaceSelected
         : disabled
             ? const Color(0xFFFAFAFC)
             : Colors.white;
@@ -894,8 +1005,8 @@ class _TrackListTile extends StatelessWidget {
                 color: disabled
                     ? const Color(0xFFB0B6C2)
                     : selected
-                        ? const Color(0xFF8741FF)
-                        : const Color(0xFF788698),
+                        ? _DemoUi.accent
+                        : _DemoUi.textSecondary,
                 size: ui(20),
               ),
               SizedBox(width: ui(10)),
@@ -924,14 +1035,14 @@ class _TrackListTile extends StatelessWidget {
                               vertical: ui(2),
                             ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFE8F5E9),
+                              color: _DemoUi.badgeBg,
                               borderRadius: BorderRadius.circular(ui(8)),
                             ),
                             child: Text(
                               '推荐',
                               style: TextStyle(
                                 fontSize: ui(11),
-                                color: const Color(0xFF2E7D32),
+                                color: _DemoUi.badgeText,
                                 fontFamily: 'PingFang SC',
                               ),
                             ),
@@ -1021,8 +1132,12 @@ class _Controls extends StatelessWidget {
               : state.stage == SightSingingStage.finished
                   ? '本次演唱结束 · 综合得分 ${state.currentScore}'
                   : singing
-                      ? '正在跟唱中…保持音准更稳更高分'
-                      : '准备就绪，点击「开始跟唱」即可',
+                      ? (state.visualOnlyMode
+                          ? '无声跟唱中…请对照音符条保持音准'
+                          : '正在跟唱中…保持音准更稳更高分')
+                      : (state.isPreviewPlaying
+                          ? '试听中…熟悉旋律后可开始跟唱'
+                          : '准备就绪，点击「开始跟唱」即可'),
           style: TextStyle(
             fontSize: ui(13),
             color: const Color(0xFF1A1A1A),
@@ -1045,15 +1160,28 @@ class _Controls extends StatelessWidget {
             primary: false,
             onTap: () => controller.stopSinging(),
           )
-        else
+        else ...[
+          if (state.stage == SightSingingStage.ready &&
+              state.visualOnlyMode) ...[
+            _ActionButton(
+              label: state.isPreviewPlaying ? '停止试听' : '试听旋律',
+              icon: state.isPreviewPlaying
+                  ? Icons.stop_circle_outlined
+                  : Icons.play_circle_outline_rounded,
+              primary: false,
+              onTap: () => controller.previewMelody(),
+            ),
+            SizedBox(width: ui(10)),
+          ],
           _ActionButton(
             label: state.stage == SightSingingStage.finished
                 ? '重新跟唱'
                 : '开始跟唱',
             icon: Icons.mic_rounded,
             primary: true,
-            onTap: () => controller.startSinging(),
+            onTap: state.isPreviewPlaying ? null : () => controller.startSinging(),
           ),
+        ],
       ],
     );
   }
@@ -1078,13 +1206,13 @@ class _ActionButton extends StatelessWidget {
     final bg = disabled
         ? const Color(0xFFE5E5EF)
         : primary
-            ? const Color(0xFF8741FF)
+            ? _DemoUi.accent
             : Colors.white;
     final fg = disabled
         ? const Color(0xFFB0B6C2)
         : primary
             ? Colors.white
-            : const Color(0xFF8741FF);
+            : _DemoUi.accent;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(ui(24)),
@@ -1095,13 +1223,13 @@ class _ActionButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(ui(24)),
           border: primary || disabled
               ? null
-              : Border.all(color: const Color(0xFF8741FF), width: 1),
+              : Border.all(color: _DemoUi.borderStrong, width: 1),
           boxShadow: primary && !disabled
               ? const [
                   BoxShadow(
-                    color: Color(0x408741FF),
-                    blurRadius: 12,
-                    offset: Offset(0, 4),
+                    color: Color(0x1A000000),
+                    blurRadius: 8,
+                    offset: Offset(0, 2),
                   ),
                 ]
               : null,

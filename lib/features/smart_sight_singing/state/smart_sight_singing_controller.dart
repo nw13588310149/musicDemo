@@ -10,7 +10,10 @@ import '../audio/ktv_scoring.dart';
 import '../audio/midi_file_parser.dart';
 import '../audio/midi_playback_scheduler.dart';
 import '../audio/midi_sight_singing_service.dart';
+import '../audio/pitch_voice_gate.dart';
 import '../audio/realtime_pitch_capture.dart';
+import '../data/midi_file_picker.dart';
+import 'sight_singing_platform.dart';
 import 'smart_sight_singing_state.dart';
 
 final smartSightSingingControllerProvider =
@@ -24,10 +27,22 @@ final smartSightSingingControllerProvider =
     });
 
 class SmartSightSingingController extends StateNotifier<SightSingingState> {
-  SmartSightSingingController() : super(const SightSingingState()) {
-    _playback = MidiPlaybackScheduler();
+  SmartSightSingingController()
+      : super(
+          SightSingingState(
+            visualOnlyMode: SightSingingPlatform.defaultsToVisualOnlyMode,
+          ),
+        ) {
+    _playback = MidiPlaybackScheduler(
+      playbackVolumeScale: _sightSingingPlaybackVolumeScale,
+    );
+    _playback.muteAudioOutput = SightSingingPlatform.defaultsToVisualOnlyMode;
     _positionSub = _playback.positionMs.listen(_onPlaybackPosition);
     _completedSub = _playback.completed.listen((_) {
+      if (_isPreviewSession) {
+        unawaited(_stopPreview());
+        return;
+      }
       unawaited(_handlePlaybackEnded());
     });
   }
@@ -36,6 +51,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
   static const String _demoDisplayName = 'demo';
   static const int _maxOnlineMidiBytes = 8 * 1024 * 1024;
   static const int _countdownStart = 3;
+  static const double _sightSingingPlaybackVolumeScale = 0.42;
 
   late final MidiPlaybackScheduler _playback;
   StreamSubscription<int>? _positionSub;
@@ -46,6 +62,10 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
   MidiSightSingingBundle? _midiBundle;
   ParsedMidiFile? _parsedMidi;
   Timer? _countdownTimer;
+  Timer? _previewTimer;
+  var _isPreviewSession = false;
+
+  static const int _previewMaxMs = 20000;
 
   static const int _userPointsCap = 720;
   bool _shuttingDown = false;
@@ -69,6 +89,38 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
   void reportError(String message) {
     if (!mounted) return;
     state = state.copyWith(errorMessage: message);
+  }
+
+  /// 从本地文件系统选择 MIDI 并解析。
+  Future<void> importLocalMidi() async {
+    if (_blocksImport()) return;
+
+    try {
+      final picked = await pickLocalMidiFile();
+      if (picked == null) return;
+      await _prepareFromMidiBytes(
+        bytes: picked.bytes,
+        displayName: picked.name,
+        sourceLabel: picked.path ?? picked.name,
+      );
+    } on StateError catch (e) {
+      if (!mounted) return;
+      state = state.copyWith(errorMessage: e.message);
+    } on MidiSightSingingException catch (e, stack) {
+      if (!mounted) return;
+      state = state.copyWith(
+        stage: SightSingingStage.idle,
+        errorMessage: _formatDebugError('本地 MIDI 解析失败', e.message, stack),
+        analyzingProgress: 0,
+      );
+    } catch (e, stack) {
+      if (!mounted) return;
+      state = state.copyWith(
+        stage: SightSingingStage.idle,
+        errorMessage: _formatDebugError('本地 MIDI 读取失败', e, stack),
+        analyzingProgress: 0,
+      );
+    }
   }
 
   /// 解析内置 demo.mid，进入选轨界面（曲目名 demo）。
@@ -290,6 +342,79 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     );
   }
 
+  void setVisualOnlyMode(bool enabled) {
+    if (state.visualOnlyMode == enabled) return;
+    _playback.muteAudioOutput = enabled;
+    state = state.copyWith(visualOnlyMode: enabled);
+  }
+
+  /// iPad 无声模式下试听旋律（会短暂开启扬声器伴奏）。
+  Future<void> previewMelody() async {
+    if (state.stage != SightSingingStage.ready || _midiBundle == null) return;
+    if (state.isPreviewPlaying) {
+      await stopPreview();
+      return;
+    }
+
+    final bundle = _midiBundle!;
+    await _playback.stop();
+    _isPreviewSession = true;
+    _playback.muteAudioOutput = false;
+
+    if (!kIsWeb) {
+      await NativePlaybackAudioSession.ensurePlaybackActive();
+    }
+
+    await _playback.prepare(
+      bundle.playbackEvents,
+      totalMs: bundle.totalMs,
+    );
+
+    try {
+      await _playback.start(muteAudio: false);
+    } catch (e) {
+      _isPreviewSession = false;
+      _playback.muteAudioOutput = state.visualOnlyMode;
+      if (!mounted) return;
+      state = state.copyWith(errorMessage: '旋律试听失败：$e');
+      return;
+    }
+
+    if (!mounted) return;
+    state = state.copyWith(isPreviewPlaying: true, playbackMs: 0);
+
+    _previewTimer?.cancel();
+    final previewMs = bundle.totalMs < _previewMaxMs
+        ? bundle.totalMs
+        : _previewMaxMs;
+    _previewTimer = Timer(Duration(milliseconds: previewMs), () {
+      unawaited(_stopPreview());
+    });
+  }
+
+  Future<void> stopPreview() async {
+    if (!state.isPreviewPlaying && !_isPreviewSession) return;
+    await _stopPreview();
+  }
+
+  Future<void> _stopPreview() async {
+    _previewTimer?.cancel();
+    _previewTimer = null;
+    _isPreviewSession = false;
+    await _playback.stop();
+    _playback.muteAudioOutput = state.visualOnlyMode;
+    if (!mounted) return;
+    state = state.copyWith(isPreviewPlaying: false, playbackMs: 0);
+  }
+
+  PitchVoiceGatePolicy get _voiceGatePolicy => state.visualOnlyMode
+      ? PitchVoiceGate.visualOnly
+      : PitchVoiceGate.withAccompaniment;
+
+  RealtimePitchCaptureProfile get _captureProfile => state.visualOnlyMode
+      ? RealtimePitchCaptureProfile.visualOnly
+      : RealtimePitchCaptureProfile.sightSinging;
+
   Future<void> startSinging() async {
     if (state.stage != SightSingingStage.ready &&
         state.stage != SightSingingStage.finished) {
@@ -297,7 +422,11 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     }
     if (state.track == null || _midiBundle == null) return;
 
-    final capture = createRealtimePitchCapture();
+    if (state.isPreviewPlaying) {
+      await stopPreview();
+    }
+
+    final capture = createRealtimePitchCapture(profile: _captureProfile);
     _capture = capture;
     try {
       var hasPermission = await capture.hasPermission();
@@ -312,7 +441,11 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       }
 
       if (!kIsWeb) {
-        await NativePlaybackAudioSession.ensureRecordActive();
+        if (state.visualOnlyMode) {
+          await NativePlaybackAudioSession.ensurePlayAndRecordActive();
+        } else {
+          await NativePlaybackAudioSession.ensureSightSingingActive();
+        }
       }
 
       final pitchStream = await capture.start();
@@ -371,17 +504,22 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     if (!mounted || _shuttingDown) return;
     if (_midiBundle == null) return;
 
+    if (!kIsWeb && !state.visualOnlyMode) {
+      await NativePlaybackAudioSession.ensureSightSingingActive();
+    }
+
     state = state.copyWith(
       stage: SightSingingStage.singing,
       countdownSeconds: 0,
     );
 
+    _playback.muteAudioOutput = state.visualOnlyMode;
     await _playback.prepare(
       _midiBundle!.playbackEvents,
       totalMs: _midiBundle!.totalMs,
     );
     try {
-      await _playback.start();
+      await _playback.start(muteAudio: state.visualOnlyMode);
     } catch (e) {
       await _stopCaptureSilently();
       _scoringSession = null;
@@ -438,6 +576,9 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       cancelTrackSelection();
       return;
     }
+    if (state.isPreviewPlaying) {
+      await stopPreview();
+    }
     await _playback.stop();
     if (!mounted) return;
     if (state.stage == SightSingingStage.finished) {
@@ -464,6 +605,9 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     _shuttingDown = true;
     _countdownTimer?.cancel();
     _countdownTimer = null;
+    _previewTimer?.cancel();
+    _previewTimer = null;
+    _isPreviewSession = false;
     await _stopCaptureSilently();
     await _positionSub?.cancel();
     await _completedSub?.cancel();
@@ -492,6 +636,10 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
 
   void _onPlaybackPosition(int positionMs) {
     if (_shuttingDown || !mounted) return;
+    if (_isPreviewSession) {
+      state = state.copyWith(playbackMs: positionMs);
+      return;
+    }
     if (state.stage != SightSingingStage.singing) return;
     state = state.copyWith(playbackMs: positionMs);
   }
@@ -524,22 +672,34 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     final session = _scoringSession;
     if (session == null) return;
 
+    final refFrame = state.track?.sampleAt(
+      state.playbackMs - KtvScoringConfig.micLatencyMs,
+    );
+    final refMidi = refFrame?.pitched == true ? refFrame!.midi : null;
+    final playbackMidi = _playback.activePlaybackPitch?.toDouble();
+    final filtered = PitchVoiceGate.filterForScoring(
+      event: event,
+      refMidi: refMidi,
+      playbackMidi: playbackMidi,
+      policy: _voiceGatePolicy,
+    );
+
     // 倒计时阶段只预热麦克风，不计分。
     if (state.stage == SightSingingStage.countdown) {
       state = state.copyWith(
-        currentUserMidi: event.pitched ? event.midi : -1,
-        currentUserAmplitude: event.amplitude,
+        currentUserMidi: filtered.pitched ? filtered.midi : -1,
+        currentUserAmplitude: filtered.amplitude,
       );
       return;
     }
 
-    final tick = session.onPitch(playbackMs: timeMs, event: event);
+    final tick = session.onPitch(playbackMs: timeMs, event: filtered);
     final cents = tick.cents;
 
     final newPoint = UserPitchPoint(
       timeMs: timeMs,
-      midi: event.pitched ? event.midi : -1,
-      amplitude: event.amplitude,
+      midi: filtered.pitched ? filtered.midi : -1,
+      amplitude: filtered.amplitude,
       cents: cents,
     );
 
@@ -550,8 +710,8 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
 
     state = state.copyWith(
       userPoints: next,
-      currentUserMidi: event.pitched ? event.midi : -1,
-      currentUserAmplitude: event.amplitude,
+      currentUserMidi: filtered.pitched ? filtered.midi : -1,
+      currentUserAmplitude: filtered.amplitude,
       currentScore: tick.totalScore,
       hitCount: tick.hitCount,
       scoredCount: tick.scoredCount,

@@ -10,9 +10,11 @@ import 'midi_sight_singing_service.dart';
 class MidiPlaybackScheduler {
   MidiPlaybackScheduler({
     MusicCompanionAudioEngine? audioEngine,
+    this.playbackVolumeScale = 1.0,
   }) : _audio = audioEngine ?? MusicCompanionAudioEngine();
 
   final MusicCompanionAudioEngine _audio;
+  final double playbackVolumeScale;
   final StreamController<int> _positionController =
       StreamController<int>.broadcast();
   final StreamController<void> _completedController =
@@ -26,6 +28,13 @@ class MidiPlaybackScheduler {
   var _lastMs = -1;
   var _running = false;
 
+  /// 为 true 时只推进时间轴，不触发钢琴短音（iPad 无声跟唱）。
+  bool muteAudioOutput = false;
+
+  /// 当前时刻正在播放的 MIDI 音高（供串音过滤）；无声模式下恒为 null。
+  int? _activePlaybackPitch;
+  int? get activePlaybackPitch => muteAudioOutput ? null : _activePlaybackPitch;
+
   Stream<int> get positionMs => _positionController.stream;
   Stream<void> get completed => _completedController.stream;
 
@@ -38,14 +47,21 @@ class MidiPlaybackScheduler {
     _totalMs = totalMs;
     _eventIndex = 0;
     _lastMs = -1;
+    _activePlaybackPitch = null;
   }
 
-  Future<void> start() async {
+  Future<void> start({bool? muteAudio}) async {
+    if (muteAudio != null) {
+      muteAudioOutput = muteAudio;
+    }
     if (_running || _events.isEmpty) return;
-    await _audio.ensurePianoInitialized();
+    if (!muteAudioOutput) {
+      await _audio.ensurePianoInitialized();
+    }
     _running = true;
     _eventIndex = 0;
     _lastMs = -1;
+    _activePlaybackPitch = null;
     _stopwatch = Stopwatch()..start();
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(milliseconds: 16), _onTick);
@@ -57,6 +73,7 @@ class MidiPlaybackScheduler {
     _timer = null;
     _stopwatch?.stop();
     _stopwatch = null;
+    _activePlaybackPitch = null;
     await _audio.stopAll();
   }
 
@@ -91,9 +108,12 @@ class MidiPlaybackScheduler {
   }
 
   Future<void> _playEvent(MidiPlaybackEvent event) async {
+    if (muteAudioOutput) return;
+    _activePlaybackPitch = event.pitch;
     final token = _pitchToToken(event.pitch);
     if (token == null) return;
-    final volume = (event.velocity / 127.0).clamp(0.15, 1.0);
+    final volume =
+        ((event.velocity / 127.0) * playbackVolumeScale).clamp(0.12, 1.0);
     try {
       await _audio.playNote(token, volume: volume);
     } catch (error, stack) {

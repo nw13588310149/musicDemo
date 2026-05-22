@@ -32,10 +32,12 @@
   - musicPlay should warm up piano audio in the background and load textbook detail first
 - Smart sight singing (`/smart-singing`):
   - implemented under `lib/features/smart_sight_singing/`
-  - left nav entry enabled; reference pitch from `assets/audio/demo.mid` (user-confirmed melody track)
+  - left nav entry enabled; supports built-in demo, local `.mid/.midi` upload, and online URL
   - after MIDI parse, user selects and confirms melody track; playback + scoring use that track only
-  - playback uses shared piano short-audio scheduler (`MusicCompanionAudioEngine`)
-  - follow-along scoring uses `record` + `pitch_detector_dart` + KTV note-based scoring; 3s countdown before sing
+  - iPad defaults to visual-only follow (no speaker accompaniment during sing; KTV track timer only)
+  - iPad ready state offers melody preview; optional toggle to enable speaker accompaniment (headphones recommended)
+  - playback uses shared piano short-audio scheduler when accompaniment enabled
+  - follow-along scoring uses measurement mode (visual-only) or echo-cancel session (with accompaniment)
   - online import supports `.mid` / `.midi` only; legacy YIN/mp3 path kept in code but unused for demo
 
 ## Technical Direction

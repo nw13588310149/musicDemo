@@ -10,7 +10,9 @@ import 'pitch_track.dart';
 import 'realtime_pitch_capture.dart';
 
 class _IORealtimePitchCapture implements RealtimePitchCapture {
-  _IORealtimePitchCapture();
+  _IORealtimePitchCapture({required this.profile});
+
+  final RealtimePitchCaptureProfile profile;
 
   static const int _sampleRate = 44100;
   // YIN 缓冲 2048 ≈ 46ms @ 44100Hz，与音乐伴侣调音器保持一致。
@@ -28,6 +30,12 @@ class _IORealtimePitchCapture implements RealtimePitchCapture {
   int _filledBytes = 0;
   bool _running = false;
 
+  bool get _isSightSinging =>
+      profile == RealtimePitchCaptureProfile.sightSinging;
+
+  bool get _isVisualOnly =>
+      profile == RealtimePitchCaptureProfile.visualOnly;
+
   @override
   bool get isRunning => _running;
 
@@ -36,6 +44,29 @@ class _IORealtimePitchCapture implements RealtimePitchCapture {
 
   @override
   Future<bool> requestPermission() => _recorder.hasPermission();
+
+  RecordConfig get _recordConfig {
+    if (_isSightSinging) {
+      return RecordConfig(
+        encoder: AudioEncoder.pcm16bits,
+        sampleRate: _sampleRate,
+        numChannels: 1,
+        echoCancel: true,
+        noiseSuppress: false,
+        iosConfig: const IosRecordConfig(
+          categoryOptions: [
+            IosAudioCategoryOption.allowBluetooth,
+            IosAudioCategoryOption.allowBluetoothA2DP,
+          ],
+        ),
+      );
+    }
+    return const RecordConfig(
+      encoder: AudioEncoder.pcm16bits,
+      sampleRate: _sampleRate,
+      numChannels: 1,
+    );
+  }
 
   @override
   Future<Stream<RealtimePitchEvent>> start() async {
@@ -47,20 +78,20 @@ class _IORealtimePitchCapture implements RealtimePitchCapture {
       throw StateError('录音权限被拒绝');
     }
 
-    // 与录音系统同款：playAndRecord + defaultMode（非调音器 measurement）。
     try {
-      await NativePlaybackAudioSession.ensureRecordActive();
+      switch (profile) {
+        case RealtimePitchCaptureProfile.sightSinging:
+          await NativePlaybackAudioSession.ensureSightSingingActive();
+        case RealtimePitchCaptureProfile.visualOnly:
+          await NativePlaybackAudioSession.ensurePlayAndRecordActive();
+        case RealtimePitchCaptureProfile.general:
+          await NativePlaybackAudioSession.ensureRecordActive();
+      }
     } catch (_) {
       // 配置失败不阻断录音本身。
     }
 
-    final pcmStream = await _recorder.startStream(
-      const RecordConfig(
-        encoder: AudioEncoder.pcm16bits,
-        sampleRate: _sampleRate,
-        numChannels: 1,
-      ),
-    );
+    final pcmStream = await _recorder.startStream(_recordConfig);
 
     final controller = StreamController<RealtimePitchEvent>(
       onCancel: () async {
@@ -129,7 +160,9 @@ class _IORealtimePitchCapture implements RealtimePitchCapture {
     // 0~1 归一化（32767 是 16bit 上限）。
     final amplitude = (rms / 32767.0).clamp(0.0, 1.0);
 
-    if (rms < 350) {
+    final silenceThreshold =
+        _isSightSinging ? 450.0 : (_isVisualOnly ? 320.0 : 350.0);
+    if (rms < silenceThreshold) {
       if (!out.isClosed) {
         out.add(
           RealtimePitchEvent(
@@ -151,8 +184,11 @@ class _IORealtimePitchCapture implements RealtimePitchCapture {
       final midi = (result.pitched && hz > 0 && hz.isFinite)
           ? PitchUtils.hzToMidi(hz)
           : double.nan;
+      final minConfidence = _isSightSinging
+          ? 0.82
+          : (_isVisualOnly ? 0.78 : 0.75);
       final pitched = result.pitched &&
-          result.probability > 0.75 &&
+          result.probability > minConfidence &&
           hz > 70 &&
           hz < 1200 &&
           midi.isFinite;
@@ -190,5 +226,7 @@ class _IORealtimePitchCapture implements RealtimePitchCapture {
   }
 }
 
-RealtimePitchCapture createPlatformRealtimePitchCapture() =>
-    _IORealtimePitchCapture();
+RealtimePitchCapture createPlatformRealtimePitchCapture({
+  RealtimePitchCaptureProfile profile = RealtimePitchCaptureProfile.general,
+}) =>
+    _IORealtimePitchCapture(profile: profile);

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../audio/pitch_track.dart';
 import '../../state/smart_sight_singing_state.dart';
 
-/// KTV 风格音高滚动轨道：
+/// KTV 风格音高滚动轨道（demo 中性浅色）：
 /// - 横轴时间（当前 ± [windowMs] / 2），中央有一根「Now」竖线。
 /// - 纵轴 MIDI，按 [PitchTrack.minMidi] / [PitchTrack.maxMidi] 自适应。
 /// - 参考音高用横向胶囊段绘制；用户演唱音高沿时间轴留下拖尾。
@@ -25,18 +25,25 @@ class KaraokePitchTrack extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: RepaintBoundary(
-        child: CustomPaint(
-          painter: _KaraokePainter(
-            track: track,
-            playbackMs: playbackMs,
-            userPoints: userPoints,
-            currentUserMidi: currentUserMidi,
-            windowMs: windowMs,
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F6F8),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE5E7EF)),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: RepaintBoundary(
+          child: CustomPaint(
+            painter: _KaraokePainter(
+              track: track,
+              playbackMs: playbackMs,
+              userPoints: userPoints,
+              currentUserMidi: currentUserMidi,
+              windowMs: windowMs,
+            ),
+            child: const SizedBox.expand(),
           ),
-          child: const SizedBox.expand(),
         ),
       ),
     );
@@ -58,24 +65,26 @@ class _KaraokePainter extends CustomPainter {
   final double currentUserMidi;
   final int windowMs;
 
+  static const _bg = Color(0xFFF5F6F8);
+  static const _grid = Color(0xFFD8DCE3);
+  static const _label = Color(0xFF788698);
+  static const _refFill = Color(0xFFB8BEC8);
+  static const _refStroke = Color(0xFF6B7280);
+  static const _nowLine = Color(0xFF1A1A1A);
+  static const _userOn = Color(0xFF4A5568);
+  static const _userNear = Color(0xFF9CA3AF);
+  static const _userOff = Color(0xFFC4C9D1);
+
   @override
   void paint(Canvas canvas, Size size) {
-    // 背景：深紫到深蓝渐变（KTV 风）。
     final bgRect = Offset.zero & size;
-    final bgPaint = Paint()
-      ..shader = const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [Color(0xFF1B1340), Color(0xFF0E1A36)],
-      ).createShader(bgRect);
-    canvas.drawRect(bgRect, bgPaint);
+    canvas.drawRect(bgRect, Paint()..color = _bg);
 
-    // 纵轴音高范围。
     final minMidi = track.minMidi;
     final maxMidi = track.maxMidi;
     final midiRange = (maxMidi - minMidi).clamp(6, 60).toDouble();
 
-    final centerX = size.width * 0.32; // Now 竖线靠左 1/3。
+    final centerX = size.width * 0.32;
     final pxPerMs = size.width / windowMs;
 
     double xFromTime(int ms) => centerX + (ms - playbackMs) * pxPerMs;
@@ -84,21 +93,19 @@ class _KaraokePainter extends CustomPainter {
       return size.height * (1 - t.clamp(0, 1));
     }
 
-    // 横向网格：每个半音一条暗线。
     final gridPaint = Paint()
-      ..color = const Color(0x22FFFFFF)
+      ..color = _grid
       ..strokeWidth = 0.5;
     for (var m = minMidi.ceil(); m <= maxMidi.floor(); m++) {
       final y = yFromMidi(m.toDouble());
       canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
-      // 整 C 标注。
       if (((m % 12) + 12) % 12 == 0) {
         final name = PitchUtils.midiToNoteName(m.toDouble());
         final tp = TextPainter(
           text: TextSpan(
             text: name,
             style: const TextStyle(
-              color: Color(0x88FFFFFF),
+              color: _label,
               fontSize: 11,
               fontFamily: 'Inter',
             ),
@@ -109,19 +116,17 @@ class _KaraokePainter extends CustomPainter {
       }
     }
 
-    // 参考音高（小段彩色胶囊）。
     final refPaint = Paint()
-      ..color = const Color(0xFF6AB3FF)
+      ..color = _refFill
       ..style = PaintingStyle.fill;
     final refOutline = Paint()
-      ..color = const Color(0xAA1E90FF)
+      ..color = _refStroke
       ..strokeWidth = 1
       ..style = PaintingStyle.stroke;
 
     final visibleStartMs = playbackMs - windowMs ~/ 2;
     final visibleEndMs = playbackMs + windowMs ~/ 2;
 
-    // 参考音高：优先 KTV 音符条，否则回退到原始帧。
     final notes = track.notes;
     if (notes.isNotEmpty) {
       for (final note in notes) {
@@ -163,7 +168,6 @@ class _KaraokePainter extends CustomPainter {
       }
     }
 
-    // 用户拖尾。
     if (userPoints.isNotEmpty) {
       for (var i = 0; i < userPoints.length; i++) {
         final p = userPoints[i];
@@ -171,44 +175,42 @@ class _KaraokePainter extends CustomPainter {
         final x = xFromTime(p.timeMs);
         if (x < -8 || x > size.width + 8) continue;
         final y = yFromMidi(p.midi);
-        // 距当前时间越近、点越亮。
         final age = (playbackMs - p.timeMs).clamp(0, windowMs);
         final alpha = (255 * (1 - age / windowMs)).clamp(40, 255).toInt();
         final hit = !p.cents.isNaN && p.cents.abs() <= 45;
         final near = !p.cents.isNaN && p.cents.abs() <= 90;
-        final color = hit
-            ? Color.fromARGB(alpha, 88, 234, 132)
+        final base = hit
+            ? _userOn
             : near
-                ? Color.fromARGB(alpha, 255, 184, 76)
-                : Color.fromARGB(alpha, 255, 110, 110);
+                ? _userNear
+                : _userOff;
+        final color = base.withValues(alpha: alpha / 255);
         final radius = (1.5 + p.amplitude * 4).clamp(1.5, 6).toDouble();
         canvas.drawCircle(Offset(x, y), radius, Paint()..color = color);
       }
     }
 
-    // 当前用户实测音 — 大光点 + 发光环。
     if (currentUserMidi > 0) {
       final y = yFromMidi(currentUserMidi);
       final ref = track.sampleAt(playbackMs);
       final on = ref != null && (currentUserMidi - ref.midi).abs() < 0.45;
-      final color = on ? const Color(0xFF58EA84) : const Color(0xFFFFB84C);
+      final color = on ? _userOn : _userNear;
       canvas.drawCircle(
         Offset(centerX, y),
         14,
-        Paint()..color = color.withValues(alpha: 0.18),
+        Paint()..color = color.withValues(alpha: 0.12),
       );
       canvas.drawCircle(
         Offset(centerX, y),
         7,
-        Paint()..color = color.withValues(alpha: 0.4),
+        Paint()..color = color.withValues(alpha: 0.35),
       );
       canvas.drawCircle(Offset(centerX, y), 4, Paint()..color = color);
     }
 
-    // Now 竖线。
     final nowPaint = Paint()
-      ..color = const Color(0xCCFFFFFF)
-      ..strokeWidth = 2;
+      ..color = _nowLine
+      ..strokeWidth = 1.5;
     canvas.drawLine(
       Offset(centerX, 6),
       Offset(centerX, size.height - 6),
