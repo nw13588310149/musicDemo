@@ -9,6 +9,7 @@ import 'package:media_kit/media_kit.dart';
 import '../../../core/network/api_response.dart';
 import '../../../core/network/media_url.dart';
 import '../../music_companion/audio/music_companion_audio_engine.dart';
+import '../../smart_campus/data/book_share_payload.dart';
 import '../data/music_play_repository.dart';
 import 'music_play_state.dart';
 
@@ -759,13 +760,18 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     }
 
     state = state.copyWith(sending: true, clearErrorMessage: true);
-    final content = jsonEncode(<String, dynamic>{
-      'id': detail.id,
-      'title': detail.title,
-      'type': detail.type,
-      'shortText3': detail.coverUrl,
-      'subtitle': detail.subtitle,
-    });
+    final content = jsonEncode(buildBookShareContent(
+      id: detail.id,
+      title: detail.title,
+      type: resolveMusicPlayShareBookType(
+        detailType: detail.type,
+        routeType: state.args.type,
+      ),
+      coverUrl: detail.coverUrl,
+      subtitle: detail.shortText2.isNotEmpty
+          ? detail.shortText2
+          : detail.shortText1,
+    ));
 
     for (final cls in selected) {
       final response = await repository.sendMsg(

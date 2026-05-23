@@ -7,6 +7,8 @@ class ParsedMidiNote {
     required this.channel,
     required this.pitch,
     required this.velocity,
+    required this.startTick,
+    required this.endTick,
     required this.startMs,
     required this.endMs,
   });
@@ -15,6 +17,8 @@ class ParsedMidiNote {
   final int channel;
   final int pitch;
   final int velocity;
+  final int startTick;
+  final int endTick;
   final double startMs;
   final double endMs;
 }
@@ -260,6 +264,8 @@ abstract final class MidiFileParser {
               channel: event.channel!,
               pitch: event.pitch!,
               velocity: started.velocity,
+              startTick: started.startTick,
+              endTick: event.tick,
               startMs: tickToMs(started.startTick),
               endMs: tickToMs(event.tick),
             ),

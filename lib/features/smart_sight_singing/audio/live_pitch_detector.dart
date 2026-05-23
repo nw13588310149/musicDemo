@@ -4,9 +4,13 @@ import 'dart:typed_data';
 import 'package:pitch_detector_dart/pitch_detector.dart';
 
 import '../config/smart_sight_singing_config.dart';
+import '../config/smart_sight_singing_tuning.dart';
 import 'pitch_track.dart';
 
 /// 实时单帧音高分析（YIN + 自相关互补，兼容 iPad 麦克风）。
+///
+/// 平滑相关阈值实时从 [SightSingingTuning] 读取；buffer/sampleRate
+/// 一旦构造完成不会再变（再变需要重启录音流并重建 FFT）。
 class LivePitchDetector {
   LivePitchDetector({double? sampleRate, int? bufferSize})
     : sampleRate =
@@ -23,15 +27,29 @@ class LivePitchDetector {
       ),
       _hann = _buildHannWindow(
         bufferSize ?? SmartSightSingingRealtimePitchConfig.bufferSize,
-      );
+      ) {
+    // 单帧时长（ms）：buffer / sampleRate，用于把「静音帧数」换算成 ms。
+    _frameDurationMs =
+        (this.bufferSize * 1000.0) /
+        (this.sampleRate <= 0 ? 1.0 : this.sampleRate);
+  }
 
   final double sampleRate;
   final int bufferSize;
   final PitchDetector _yin;
   final List<double> _hann;
+  late final double _frameDurationMs;
 
   double? _lastHz;
   int _stableCount = 0;
+
+  /// 连续无音高帧累计时长（ms）。超过 tuning.silenceResetSmoothingMs
+  /// 后清掉 `_lastHz`，避免再次出声时被旧的稳定值吸附到错误音。
+  double _silenceMs = 0;
+
+  /// 上一帧检测元信息（供调试面板读取）。
+  LivePitchResult get lastResult => _lastResult;
+  LivePitchResult _lastResult = LivePitchResult.empty;
 
   static List<double> _buildHannWindow(int size) {
     if (size <= 1) return List<double>.filled(size, 1);
@@ -55,33 +73,37 @@ class LivePitchDetector {
       best = _pickBetter(best, _pickBetter(acLe, acBe));
     }
 
+    final tuning = SightSingingTuning.instance;
+
     if (best.pitched && best.frequencyHz > 0) {
+      _silenceMs = 0;
       if (_lastHz != null &&
           (best.frequencyHz - _lastHz!).abs() / _lastHz! <
-              SmartSightSingingRealtimePitchConfig.stableFrequencyDiffRatio) {
+              tuning.stableFrequencyDiffRatio) {
         _stableCount++;
       } else {
         _stableCount = 1;
       }
       _lastHz = best.frequencyHz;
       // 单帧 YIN 偶发跳音时，用上一稳定值平滑。
-      if (_stableCount >=
-              SmartSightSingingRealtimePitchConfig.stableFrameCount &&
-          _lastHz != null) {
+      if (_stableCount >= tuning.stableFrameCount && _lastHz != null) {
         best = LivePitchResult(
           pitched: true,
           frequencyHz: _lastHz!,
-          confidence: math.max(
-            best.confidence,
-            SmartSightSingingRealtimePitchConfig.smoothedConfidenceFloor,
-          ),
+          confidence: math.max(best.confidence, tuning.smoothedConfidenceFloor),
           source: best.source,
         );
       }
     } else {
       _stableCount = 0;
+      _silenceMs += _frameDurationMs;
+      // 静音持续超过阈值，丢掉旧的 `_lastHz`，避免再次出声时被错误吸附。
+      if (_silenceMs >= tuning.silenceResetSmoothingMs) {
+        _lastHz = null;
+      }
     }
 
+    _lastResult = best;
     return best;
   }
 
@@ -189,9 +211,7 @@ class LivePitchDetector {
     }
 
     if (bestLag <= 0 ||
-        bestCorr <
-            SmartSightSingingRealtimePitchConfig
-                .autocorrelationMinCorrelation) {
+        bestCorr < SightSingingTuning.instance.autocorrelationMinCorrelation) {
       return LivePitchResult.empty;
     }
 

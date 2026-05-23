@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../audio/ktv_pitch_guide.dart';
 import '../../audio/pitch_track.dart';
 import '../../config/smart_sight_singing_config.dart';
+import '../../state/smart_sight_singing_state.dart';
 
 /// 谱例视唱视图：把 MIDI 主旋律轨绘制成五线谱滚动谱例。
 class ScoreSightReadingTrack extends StatelessWidget {
@@ -12,7 +13,10 @@ class ScoreSightReadingTrack extends StatelessWidget {
     required this.track,
     required this.playbackMs,
     required this.currentUserMidi,
+    this.userPoints = const <UserPitchPoint>[],
     this.currentUserAmplitude = 0,
+    this.scoringStandardCents =
+        SmartSightSingingScoringConfig.defaultStandardCents,
     this.windowMs = SmartSightSingingViewConfig.scoreWindowMs,
     super.key,
   });
@@ -20,7 +24,9 @@ class ScoreSightReadingTrack extends StatelessWidget {
   final PitchTrack track;
   final int playbackMs;
   final double currentUserMidi;
+  final List<UserPitchPoint> userPoints;
   final double currentUserAmplitude;
+  final double scoringStandardCents;
   final int windowMs;
 
   @override
@@ -39,7 +45,9 @@ class ScoreSightReadingTrack extends StatelessWidget {
               track: track,
               playbackMs: playbackMs,
               currentUserMidi: currentUserMidi,
+              userPoints: userPoints,
               currentUserAmplitude: currentUserAmplitude,
+              scoringStandardCents: scoringStandardCents,
               windowMs: windowMs,
             ),
             child: const SizedBox.expand(),
@@ -55,14 +63,18 @@ class _ScoreSightReadingPainter extends CustomPainter {
     required this.track,
     required this.playbackMs,
     required this.currentUserMidi,
+    required this.userPoints,
     required this.currentUserAmplitude,
+    required this.scoringStandardCents,
     required this.windowMs,
   });
 
   final PitchTrack track;
   final int playbackMs;
   final double currentUserMidi;
+  final List<UserPitchPoint> userPoints;
   final double currentUserAmplitude;
+  final double scoringStandardCents;
   final int windowMs;
 
   static const _bg = Color(0xFFF5F6F8);
@@ -72,6 +84,9 @@ class _ScoreSightReadingPainter extends CustomPainter {
   static const _notePast = Color(0xFFC4C9D1);
   static const _active = Color(0xFF1A1A1A);
   static const _user = Color(0xFF4A5568);
+  static const _userGood = Color(0xFF2E7D5B);
+  static const _userOk = Color(0xFFB7791F);
+  static const _userMiss = Color(0xFFC05621);
 
   static const int _e4Step = SmartSightSingingViewConfig.trebleStaffBottomStep;
   static const int _f5Step = SmartSightSingingViewConfig.trebleStaffTopStep;
@@ -131,6 +146,8 @@ class _ScoreSightReadingPainter extends CustomPainter {
       _drawNote(canvas, note, Offset(x0, y), color, active);
     }
 
+    _drawUserTrace(canvas, visibleStartMs, visibleEndMs, xFromTime, yFromMidi);
+
     final nowPaint = Paint()
       ..color = _active
       ..strokeWidth = 1.5;
@@ -144,6 +161,19 @@ class _ScoreSightReadingPainter extends CustomPainter {
       final ref = track.sampleAt(playbackMs);
       final displayMidi = _displayUserMidi(currentUserMidi, ref?.midi);
       final y = yFromMidi(displayMidi);
+      if (ref != null && ref.pitched) {
+        final refY = yFromMidi(ref.midi);
+        canvas.drawLine(
+          Offset(centerX, refY),
+          Offset(centerX, y),
+          Paint()
+            ..color = _comparisonColor(
+              PitchUtils.octaveNormalizedCents(displayMidi, ref.midi),
+            ).withValues(alpha: 0.45)
+            ..strokeWidth = 2
+            ..strokeCap = StrokeCap.round,
+        );
+      }
       canvas.drawCircle(
         Offset(centerX, y),
         13,
@@ -178,6 +208,52 @@ class _ScoreSightReadingPainter extends CustomPainter {
             alpha: 0.35 + currentUserAmplitude * 0.4,
           ),
       );
+    }
+  }
+
+  void _drawUserTrace(
+    Canvas canvas,
+    int visibleStartMs,
+    int visibleEndMs,
+    double Function(int ms) xFromTime,
+    double Function(double midi) yFromMidi,
+  ) {
+    Offset? previous;
+    int? previousMs;
+    for (final point in userPoints) {
+      if (!point.pitched ||
+          point.timeMs < visibleStartMs ||
+          point.timeMs > visibleEndMs) {
+        previous = null;
+        previousMs = null;
+        continue;
+      }
+
+      final ref = track.sampleAt(point.timeMs);
+      final displayMidi = _displayUserMidi(point.midi, ref?.midi);
+      final current = Offset(xFromTime(point.timeMs), yFromMidi(displayMidi));
+      final color = _comparisonColor(point.cents);
+      final alpha = (0.32 + point.amplitude * 0.42).clamp(0.32, 0.78);
+
+      if (previous != null &&
+          previousMs != null &&
+          point.timeMs - previousMs <= 180) {
+        canvas.drawLine(
+          previous,
+          current,
+          Paint()
+            ..color = color.withValues(alpha: alpha * 0.72)
+            ..strokeWidth = 2
+            ..strokeCap = StrokeCap.round,
+        );
+      }
+      canvas.drawCircle(
+        current,
+        (2.5 + point.amplitude * 4).clamp(2.5, 6.0),
+        Paint()..color = color.withValues(alpha: alpha),
+      );
+      previous = current;
+      previousMs = point.timeMs;
     }
   }
 
@@ -225,8 +301,9 @@ class _ScoreSightReadingPainter extends CustomPainter {
       _drawAccidental(canvas, spelling.accidental!, center, color);
     }
 
+    final value = _noteValue(note);
     final notePaint = Paint()
-      ..color = active ? _active : color
+      ..color = _noteHeadFilled(note) ? (active ? _active : color) : _bg
       ..style = PaintingStyle.fill;
     final outline = Paint()
       ..color = active ? _active : color
@@ -236,15 +313,27 @@ class _ScoreSightReadingPainter extends CustomPainter {
     canvas.save();
     canvas.translate(center.dx, center.dy);
     canvas.rotate(-math.pi / 10);
+    final headWidth = value == _ScoreNoteValue.whole ? 19.0 : 16.0;
+    final headHeight = value == _ScoreNoteValue.whole ? 10.5 : 11.0;
     canvas.drawOval(
-      Rect.fromCenter(center: Offset.zero, width: 16, height: 11),
+      Rect.fromCenter(
+        center: Offset.zero,
+        width: headWidth,
+        height: headHeight,
+      ),
       notePaint,
     );
     canvas.drawOval(
-      Rect.fromCenter(center: Offset.zero, width: 16, height: 11),
+      Rect.fromCenter(
+        center: Offset.zero,
+        width: headWidth,
+        height: headHeight,
+      ),
       outline,
     );
     canvas.restore();
+
+    if (value == _ScoreNoteValue.whole) return;
 
     final stemUp = spelling.step < 34;
     final stemStart = stemUp
@@ -260,6 +349,54 @@ class _ScoreSightReadingPainter extends CustomPainter {
         ..color = active ? _active : color
         ..strokeWidth = 1.5,
     );
+
+    final flagCount = switch (value) {
+      _ScoreNoteValue.eighth => 1,
+      _ScoreNoteValue.sixteenth => 2,
+      _ => 0,
+    };
+    if (flagCount > 0) {
+      _drawFlags(canvas, stemEnd, stemUp, active ? _active : color, flagCount);
+    }
+  }
+
+  void _drawFlags(
+    Canvas canvas,
+    Offset stemEnd,
+    bool stemUp,
+    Color color,
+    int count,
+  ) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.6
+      ..strokeCap = StrokeCap.round;
+    for (var i = 0; i < count; i++) {
+      final dy = i * (stemUp ? 7.0 : -7.0);
+      final start = Offset(stemEnd.dx, stemEnd.dy + dy);
+      final path = Path()..moveTo(start.dx, start.dy);
+      if (stemUp) {
+        path.cubicTo(
+          start.dx + 13,
+          start.dy + 4,
+          start.dx + 15,
+          start.dy + 13,
+          start.dx + 4,
+          start.dy + 18,
+        );
+      } else {
+        path.cubicTo(
+          start.dx + 13,
+          start.dy - 4,
+          start.dx + 15,
+          start.dy - 13,
+          start.dx + 4,
+          start.dy - 18,
+        );
+      }
+      canvas.drawPath(path, paint);
+    }
   }
 
   void _drawAccidental(
@@ -323,6 +460,46 @@ class _ScoreSightReadingPainter extends CustomPainter {
     return refMidi + cents / 100;
   }
 
+  Color _comparisonColor(double cents) {
+    final absCents = cents.abs();
+    if (!absCents.isFinite) return _user;
+    final goodCents = SmartSightSingingScoringConfig.normalizeStandardCents(
+      scoringStandardCents,
+    );
+    final okCents =
+        goodCents *
+        SmartSightSingingScoringConfig.okCentsAtDefault /
+        SmartSightSingingScoringConfig.defaultStandardCents;
+    if (absCents <= goodCents) {
+      return _userGood;
+    }
+    if (absCents <= okCents) {
+      return _userOk;
+    }
+    return _userMiss;
+  }
+
+  bool _noteHeadFilled(KtvNoteSegment note) {
+    return switch (_noteValue(note)) {
+      _ScoreNoteValue.whole || _ScoreNoteValue.half => false,
+      _ => true,
+    };
+  }
+
+  _ScoreNoteValue _noteValue(KtvNoteSegment note) {
+    final beats = note.durationBeats;
+    if (beats == null || !beats.isFinite || beats <= 0) {
+      return note.durationMs <= 300
+          ? _ScoreNoteValue.eighth
+          : _ScoreNoteValue.quarter;
+    }
+    if (beats >= 3.2) return _ScoreNoteValue.whole;
+    if (beats >= 1.6) return _ScoreNoteValue.half;
+    if (beats > 0.75) return _ScoreNoteValue.quarter;
+    if (beats > 0.37) return _ScoreNoteValue.eighth;
+    return _ScoreNoteValue.sixteenth;
+  }
+
   _StaffSpelling _spell(double midi) {
     final rounded = midi.round();
     final octave = (rounded ~/ 12) - 1;
@@ -348,10 +525,14 @@ class _ScoreSightReadingPainter extends CustomPainter {
     return old.track != track ||
         old.playbackMs != playbackMs ||
         old.currentUserMidi != currentUserMidi ||
+        old.userPoints != userPoints ||
         old.currentUserAmplitude != currentUserAmplitude ||
+        old.scoringStandardCents != scoringStandardCents ||
         old.windowMs != windowMs;
   }
 }
+
+enum _ScoreNoteValue { whole, half, quarter, eighth, sixteenth }
 
 class _StaffSpelling {
   const _StaffSpelling({required this.step, required this.accidental});

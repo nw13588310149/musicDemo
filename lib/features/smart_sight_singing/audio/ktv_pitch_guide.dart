@@ -9,11 +9,15 @@ class KtvNoteSegment {
     required this.startMs,
     required this.endMs,
     required this.midi,
+    this.startBeat,
+    this.durationBeats,
   });
 
   final int startMs;
   final int endMs;
   final double midi;
+  final double? startBeat;
+  final double? durationBeats;
 
   int get durationMs => math.max(0, endMs - startMs);
 

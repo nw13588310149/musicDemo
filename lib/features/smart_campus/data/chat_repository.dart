@@ -19,7 +19,7 @@ import '../../../core/providers/app_providers.dart';
 ///   - `deleteMsg`             撤回消息
 ///   - `updateAnnouncement`    设置群公告
 ///   - `updateDoNotDisturb`    设置消息免打扰
-///   - `updateTop`             设置群聊置顶
+///   - `pinnedClass`           设置群聊置顶 / 取消置顶
 ///
 /// 请求头 `app-token` / `schoolId` 由 [ApiClient] 统一注入；调用方只需传
 /// 业务字段。所有方法返回 [ApiResponse]，由调用方按 `isSuccess` + `data`
@@ -198,16 +198,16 @@ class ChatRepository {
     );
   }
 
-  /// 设置群聊置顶。`top` true=置顶 / false=取消置顶。
-  Future<ApiResponse> updateTop({
+  /// 设置群聊置顶。`isPinned` 1=置顶 / 0=取消置顶。
+  Future<ApiResponse> pinnedClass({
     required String classId,
-    required bool top,
+    required int isPinned,
   }) {
     return client.post(
-      '$_base/updateTop',
+      '$_base/pinnedClass',
       data: <String, dynamic>{
         'classId': classId,
-        'top': top,
+        'isPinned': isPinned,
       },
     );
   }

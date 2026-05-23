@@ -603,36 +603,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
   }
 
   /// 把一条 raw 消息压成会话 cell 上的一行简介（图片/语音/文件给中文占位）。
-  String _summaryFor(Map<String, dynamic> m) {
-    final type = _asInt(m['type']) ?? 1;
-    switch (type) {
-      case 0:
-        return (m['text'] ?? m['content'] ?? '系统通知').toString();
-      case 1:
-        return (m['content'] ?? '').toString();
-      case 2:
-        return '[图片]';
-      case 3:
-        final p = (m['param1'] ?? '').toString();
-        switch (p) {
-          case 'voice':
-            return '[语音]';
-          case 'video':
-            return '[视频]';
-          case 'news':
-            return '[资讯]';
-          case 'book':
-          case 'kj':
-            return '[课程分享]';
-          case 'file':
-            return '[文件]';
-          default:
-            return '[消息]';
-        }
-      default:
-        return (m['content'] ?? '').toString();
-    }
-  }
+  String _summaryFor(Map<String, dynamic> m) => _previewTextForRawMessage(m);
 
   /// 数页 raw count，与 `_parseMessages` 保持一致的 key 顺序。
   int _countRawMessages(Object? raw) {
@@ -879,7 +850,10 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
       _pinSaving = true;
       _pinned = next;
     });
-    final res = await _repo.updateTop(classId: classId, top: next);
+    final res = await _repo.pinnedClass(
+      classId: classId,
+      isPinned: next ? 1 : 0,
+    );
     if (!mounted) return;
     if (res.code == 0) {
       setState(() {
@@ -919,6 +893,17 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
     }
 
     final tempId = 'local-${DateTime.now().microsecondsSinceEpoch}';
+
+    Uint8List? bytes = file.bytes;
+    if ((bytes == null || bytes.isEmpty) && file.path != null) {
+      bytes = await loadRecordedBytes(file.path!);
+    }
+    if (!mounted) return;
+    if (bytes == null || bytes.isEmpty) {
+      AppToast.show(context, '无法读取图片');
+      return;
+    }
+
     final optimistic = _UserChatMessage(
       id: tempId,
       fromUserId: widget.currentUserId,
@@ -926,7 +911,11 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
       avatarUrl: widget.currentUserAvatarUrl,
       avatarColor: const Color(0xFF8741FF),
       sentAt: DateTime.now(),
-      bubble: _ImageBubble(url: ''),
+      bubble: _ImageBubble(
+        url: '',
+        localBytes: bytes,
+        uploading: true,
+      ),
     );
     setState(() {
       _sending = true;
@@ -935,13 +924,6 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
     _scheduleScrollToBottom(animated: true);
 
     try {
-      Uint8List? bytes = file.bytes;
-      if ((bytes == null || bytes.isEmpty) && file.path != null) {
-        bytes = await loadRecordedBytes(file.path!);
-      }
-      if (bytes == null || bytes.isEmpty) {
-        throw StateError('empty image');
-      }
       final filename = file.name.isNotEmpty
           ? file.name
           : 'chat_image_${DateTime.now().millisecondsSinceEpoch}.jpg';
@@ -1210,51 +1192,65 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
                     Center(
                       child: GestureDetector(
                         onTap: pickAndUploadLogo,
-                        child: Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            _AvatarCircle(
-                              avatarUrl: logo.isEmpty ? null : _resolveMediaUrl(logo),
-                              fallback: nameCtrl.text.trim().isEmpty
-                                  ? '群聊'
-                                  : nameCtrl.text.trim(),
-                              size: 72,
-                              radius: 16,
-                              color: _kPurple,
-                            ),
-                            Positioned(
-                              right: -4,
-                              bottom: -4,
-                              child: Container(
-                                width: 24,
-                                height: 24,
-                                alignment: Alignment.center,
-                                decoration: BoxDecoration(
+                        // 头像显示 100，但占位高度仍为 72，顶部对齐，避免变大后整体下移。
+                        child: SizedBox(
+                          width: 100,
+                          height: 72,
+                          child: OverflowBox(
+                            alignment: Alignment.topCenter,
+                            maxWidth: 100,
+                            maxHeight: 100,
+                            child: Stack(
+                              clipBehavior: Clip.none,
+                              children: [
+                                _AvatarCircle(
+                                  avatarUrl: logo.isEmpty
+                                      ? null
+                                      : _resolveMediaUrl(logo),
+                                  fallback: nameCtrl.text.trim().isEmpty
+                                      ? '群聊'
+                                      : nameCtrl.text.trim(),
+                                  size: 100,
+                                  radius: 16,
                                   color: _kPurple,
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: Colors.white, width: 2),
                                 ),
-                                child: uploading
-                                    ? const SizedBox(
-                                        width: 12,
-                                        height: 12,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
+                                Positioned(
+                                  right: -4,
+                                  bottom: -4,
+                                  child: Container(
+                                  width: 24,
+                                  height: 24,
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                    color: _kPurple,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border:
+                                        Border.all(color: Colors.white, width: 2),
+                                  ),
+                                  child: uploading
+                                      ? const SizedBox(
+                                          width: 12,
+                                          height: 12,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white,
+                                          ),
+                                        )
+                                      : const Icon(
+                                          Icons.camera_alt_rounded,
+                                          size: 13,
                                           color: Colors.white,
                                         ),
-                                      )
-                                    : const Icon(
-                                        Icons.camera_alt_rounded,
-                                        size: 13,
-                                        color: Colors.white,
-                                      ),
-                              ),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 18),
+                    // 头像向下溢出 (100-72)，补足与输入框间距。
+                    const SizedBox(height: 46),
                     AppTextField(
                       controller: nameCtrl,
                       maxLength: 30,
@@ -1952,7 +1948,7 @@ class _ChatLayout extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             SizedBox(
-              width: ui(280),
+              width: ui(230),
               child: _ConversationListPane(
                 conversations: conversations,
                 selectedConvId: selectedConvId,
@@ -2328,10 +2324,11 @@ class _DetailSummaryCard extends StatelessWidget {
                           SizedBox(width: ui(6)),
                           GestureDetector(
                             onTap: onEditProfile,
-                            child: Icon(
-                              Icons.edit_outlined,
-                              size: ui(14),
-                              color: _kPurple,
+                            child: AppAssetGraphic(
+                              AppAssets.groupChatSet,
+                              width: ui(14),
+                              height: ui(14),
+                              fit: BoxFit.contain,
                             ),
                           ),
                         ],
@@ -2970,7 +2967,7 @@ class _GroupChatBackButton extends StatelessWidget {
   }
 }
 
-class _ConversationListPane extends StatelessWidget {
+class _ConversationListPane extends StatefulWidget {
   const _ConversationListPane({
     required this.conversations,
     required this.selectedConvId,
@@ -2984,8 +2981,30 @@ class _ConversationListPane extends StatelessWidget {
   final VoidCallback onBack;
 
   @override
+  State<_ConversationListPane> createState() => _ConversationListPaneState();
+}
+
+class _ConversationListPaneState extends State<_ConversationListPane> {
+  final TextEditingController _searchCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  List<_Conversation> get _filteredConversations {
+    final keyword = _searchCtrl.text.trim();
+    if (keyword.isEmpty) return widget.conversations;
+    return widget.conversations
+        .where((c) => c.name.contains(keyword))
+        .toList();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final filtered = _filteredConversations;
     return Container(
       decoration: BoxDecoration(
         color: _kCardBg,
@@ -3005,29 +3024,37 @@ class _ConversationListPane extends StatelessWidget {
               alignment: Alignment.centerLeft,
               child: Padding(
                 padding: EdgeInsets.only(left: ui(4)),
-                child: _GroupChatBackButton(onTap: onBack),
+                child: _GroupChatBackButton(onTap: widget.onBack),
               ),
             ),
           ),
-          _ConvSearchField(),
+          _ConvSearchField(
+            controller: _searchCtrl,
+            onChanged: (_) => setState(() {}),
+          ),
           SizedBox(height: ui(12)),
           Expanded(
-            child: conversations.isEmpty
+            child: widget.conversations.isEmpty
                 ? const _EmptyConversationsHint()
-                : ListView.separated(
-              padding: EdgeInsets.zero,
-              itemCount: conversations.length,
-              separatorBuilder: (a, b) =>
-                  Divider(height: 1, thickness: 0.5, color: _kBorderSoft),
-              itemBuilder: (context, i) {
-                final c = conversations[i];
-                return _ConversationCell(
-                  conv: c,
-                  active: c.id == selectedConvId,
-                  onTap: () => onSelect(c.id),
-                );
-              },
-            ),
+                : filtered.isEmpty
+                    ? const _ConversationSearchEmptyHint()
+                    : ListView.separated(
+                        padding: EdgeInsets.zero,
+                        itemCount: filtered.length,
+                        separatorBuilder: (a, b) => Divider(
+                          height: 1,
+                          thickness: 0.5,
+                          color: _kBorderSoft,
+                        ),
+                        itemBuilder: (context, i) {
+                          final c = filtered[i];
+                          return _ConversationCell(
+                            conv: c,
+                            active: c.id == widget.selectedConvId,
+                            onTap: () => widget.onSelect(c.id),
+                          );
+                        },
+                      ),
           ),
         ],
       ),
@@ -3036,6 +3063,14 @@ class _ConversationListPane extends StatelessWidget {
 }
 
 class _ConvSearchField extends StatelessWidget {
+  const _ConvSearchField({
+    required this.controller,
+    required this.onChanged,
+  });
+
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
@@ -3055,17 +3090,67 @@ class _ConvSearchField extends StatelessWidget {
             fit: BoxFit.contain,
           ),
           SizedBox(width: ui(8)),
-          Text(
-            '搜索群聊 / 同学',
-            style: TextStyle(
-              fontSize: ui(14),
-              color: const Color(0xFFD1D1D1),
-              fontFamily: 'PingFang SC',
-              fontWeight: AppFont.w400,
-              height: 1,
+          Expanded(
+            child: TextField(
+              controller: controller,
+              onChanged: onChanged,
+              style: TextStyle(
+                fontSize: ui(14),
+                color: _kTextDark,
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w400,
+                height: 1.2,
+              ),
+              cursorColor: _kPurple,
+              cursorWidth: 1.5,
+              decoration: InputDecoration(
+                isDense: true,
+                border: InputBorder.none,
+                hintText: '搜索群聊',
+                hintStyle: TextStyle(
+                  fontSize: ui(14),
+                  color: const Color(0xFFD1D1D1),
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w400,
+                  height: 1.2,
+                ),
+                contentPadding: EdgeInsets.zero,
+              ),
             ),
           ),
+          if (controller.text.isNotEmpty)
+            GestureDetector(
+              onTap: () {
+                controller.clear();
+                onChanged('');
+              },
+              child: Icon(
+                Icons.cancel_rounded,
+                size: ui(16),
+                color: const Color(0xFFD1D1D1),
+              ),
+            ),
         ],
+      ),
+    );
+  }
+}
+
+class _ConversationSearchEmptyHint extends StatelessWidget {
+  const _ConversationSearchEmptyHint();
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Center(
+      child: Text(
+        '未找到相关群聊',
+        style: TextStyle(
+          color: _kTextSecondary,
+          fontSize: ui(13),
+          fontFamily: 'PingFang SC',
+          fontWeight: AppFont.w400,
+        ),
       ),
     );
   }
@@ -3095,70 +3180,27 @@ class _ConversationCell extends StatelessWidget {
           color: active ? _kBoardBg : Colors.transparent,
           borderRadius: BorderRadius.circular(ui(8)),
         ),
-        child: Stack(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                _AvatarCircle(
-                  avatarUrl: conv.avatarUrl,
-                  fallback: conv.name,
-                  size: ui(36),
-                  radius: ui(8),
-                  color: conv.avatarColor,
-                ),
-                SizedBox(width: ui(10)),
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        conv.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: ui(13),
-                          color: _kTextDark,
-                          fontFamily: 'PingFang SC',
-                          fontWeight: AppFont.w500,
-                          height: 1.2,
-                        ),
-                      ),
-                      SizedBox(height: ui(6)),
-                      Text(
-                        conv.lastMessage,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: ui(11),
-                          color: _kTextHint,
-                          fontFamily: 'PingFang SC',
-                          fontWeight: AppFont.w400,
-                          height: 1.2,
-                        ),
-                      ),
-                    ],
+            SizedBox(
+              width: ui(36),
+              height: ui(36),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  _AvatarCircle(
+                    avatarUrl: conv.avatarUrl,
+                    fallback: conv.name,
+                    size: ui(36),
+                    radius: ui(8),
+                    color: conv.avatarColor,
                   ),
-                ),
-                SizedBox(width: ui(6)),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      conv.lastTime,
-                      style: TextStyle(
-                        fontSize: ui(11),
-                        color: _kTextDivider,
-                        fontFamily: 'PingFang SC',
-                        fontWeight: AppFont.w400,
-                        height: 1.2,
-                      ),
-                    ),
-                    SizedBox(height: ui(8)),
-                    if (conv.unread > 0)
-                      Container(
+                  if (conv.unread > 0)
+                    Positioned(
+                      top: -ui(3),
+                      right: -ui(3),
+                      child: Container(
                         constraints: BoxConstraints(minWidth: ui(16)),
                         height: ui(16),
                         padding: EdgeInsets.symmetric(horizontal: ui(4)),
@@ -3166,6 +3208,7 @@ class _ConversationCell extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: _kBadgeRed,
                           borderRadius: BorderRadius.circular(ui(8)),
+                          border: Border.all(color: Colors.white, width: 1.5),
                         ),
                         child: Text(
                           conv.unread > 99 ? '99+' : '${conv.unread}',
@@ -3177,21 +3220,71 @@ class _ConversationCell extends StatelessWidget {
                             height: 1,
                           ),
                         ),
-                      )
-                    else
-                      SizedBox(height: ui(16)),
-                  ],
-                ),
-              ],
+                      ),
+                    ),
+                ],
+              ),
             ),
-            Positioned(
-              top: ui(6),
-              right: ui(6),
-              child: AppAssetGraphic(
-                conv.pinned ? AppAssets.groupChatPin : AppAssets.groupChatPinOff,
-                width: ui(12),
-                height: ui(12),
-                fit: BoxFit.contain,
+            SizedBox(width: ui(10)),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    conv.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: ui(13),
+                      color: _kTextDark,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w500,
+                      height: 1.2,
+                    ),
+                  ),
+                  SizedBox(height: ui(6)),
+                  Text(
+                    conv.lastMessage,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: ui(11),
+                      color: _kTextHint,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w400,
+                      height: 1.2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(width: ui(6)),
+            SizedBox(
+              height: ui(36),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  AppAssetGraphic(
+                    conv.pinned
+                        ? AppAssets.groupChatPin
+                        : AppAssets.groupChatPinOff,
+                    width: ui(12),
+                    height: ui(12),
+                    fit: BoxFit.contain,
+                  ),
+                  Text(
+                    conv.lastTime,
+                    style: TextStyle(
+                      fontSize: ui(11),
+                      color: _kTextDivider,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w400,
+                      height: 1.2,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -4552,6 +4645,14 @@ class _VoiceBubbleView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    // 语音条按时长做线性插值：短语音接近最小宽，长语音接近最大宽。
+    const minSec = 1;
+    const maxSec = 60;
+    const minBars = 8;
+    const maxBars = 42;
+    final sec = bubble.durationSec.clamp(minSec, maxSec);
+    final ratio = (sec - minSec) / (maxSec - minSec);
+    final barCount = (minBars + (maxBars - minBars) * ratio).round();
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(ui(8)),
@@ -4574,6 +4675,10 @@ class _VoiceBubbleView extends StatelessWidget {
             SizedBox(width: ui(8)),
             // 语音播放进度条的容器
             Container(
+              constraints: BoxConstraints(
+                minWidth: ui(44),
+                maxWidth: ui(192),
+              ),
               padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(8)),
               decoration: BoxDecoration(
                 color: _kBoardBg,
@@ -4581,6 +4686,7 @@ class _VoiceBubbleView extends StatelessWidget {
               ),
               child: _Waveform(
                 heights: bubble.waveform,
+                barCount: barCount,
                 playedFraction: isPlaying ? playedFraction.clamp(0, 1) : 0,
                 playedColor: _kPurple,
                 idleColor: const Color(0xFFD2D5DA),
@@ -4607,6 +4713,7 @@ class _VoiceBubbleView extends StatelessWidget {
 class _Waveform extends StatelessWidget {
   const _Waveform({
     required this.heights,
+    this.barCount,
     required this.playedFraction,
     required this.playedColor,
     required this.idleColor,
@@ -4614,6 +4721,7 @@ class _Waveform extends StatelessWidget {
 
   /// 长度任意的归一化高度（0~1），UI 会按 16px 最大高映射。
   final List<double> heights;
+  final int? barCount;
   final double playedFraction;
   final Color playedColor;
   final Color idleColor;
@@ -4621,7 +4729,8 @@ class _Waveform extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final total = heights.length;
+    final bars = _sampleBars(heights, barCount ?? heights.length);
+    final total = bars.length;
     final playedCount = (playedFraction * total).round();
     return SizedBox(
       height: ui(16),
@@ -4632,7 +4741,7 @@ class _Waveform extends StatelessWidget {
           for (var i = 0; i < total; i++) ...[
             Container(
               width: ui(2),
-              height: ui(3 + heights[i] * 13),
+              height: ui(3 + bars[i] * 13),
               decoration: BoxDecoration(
                 color: i < playedCount ? playedColor : idleColor,
                 borderRadius: BorderRadius.circular(ui(1)),
@@ -4643,6 +4752,18 @@ class _Waveform extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  List<double> _sampleBars(List<double> src, int target) {
+    if (target <= 0) return const <double>[];
+    if (src.isEmpty) return List<double>.filled(target, 0.28);
+    if (src.length == target) {
+      return src.map((v) => v.clamp(0.08, 1).toDouble()).toList();
+    }
+    return List<double>.generate(target, (i) {
+      final sourceIndex = (i * (src.length - 1) / (target - 1)).round();
+      return src[sourceIndex].clamp(0.08, 1).toDouble();
+    });
   }
 }
 
@@ -4655,7 +4776,50 @@ class _ImageBubbleView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final size = ui(180);
     final url = _resolveMediaUrl(bubble.url);
+    final radius = BorderRadius.circular(ui(8));
+
+    Widget loadingBox({Widget? child, double? progress}) {
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: _kBoardBg,
+          borderRadius: radius,
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (child != null) child,
+            ColoredBox(
+              color: Colors.black.withValues(alpha: child == null ? 0 : 0.18),
+            ),
+            Center(
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: _kPurple,
+                value: progress,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (bubble.uploading || url.isEmpty) {
+      final preview = bubble.localBytes != null
+          ? Image.memory(
+              bubble.localBytes!,
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+            )
+          : null;
+      return loadingBox(child: preview);
+    }
+
     // hero tag 需与 showImageGallery 内部 tag 格式一致
     // showImageGallery 使用 '${heroTagPrefix}_${image}_$index'
     const prefix = 'chat_img';
@@ -4665,18 +4829,18 @@ class _ImageBubbleView extends StatelessWidget {
       child: Hero(
         tag: heroTag,
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(ui(8)),
+          borderRadius: radius,
           child: Image.network(
             url,
-            width: ui(180),
-            height: ui(180),
+            width: size,
+            height: size,
             fit: BoxFit.cover,
             errorBuilder: (ctx, err, st) => Container(
-              width: ui(180),
-              height: ui(180),
+              width: size,
+              height: size,
               decoration: BoxDecoration(
                 color: _kBoardBg,
-                borderRadius: BorderRadius.circular(ui(8)),
+                borderRadius: radius,
               ),
               child: Icon(
                 Icons.broken_image_outlined,
@@ -4686,23 +4850,11 @@ class _ImageBubbleView extends StatelessWidget {
             ),
             loadingBuilder: (ctx, child, progress) {
               if (progress == null) return child;
-              return Container(
-                width: ui(180),
-                height: ui(180),
-                decoration: BoxDecoration(
-                  color: _kBoardBg,
-                  borderRadius: BorderRadius.circular(ui(8)),
-                ),
-                child: Center(
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: _kPurple,
-                    value: progress.expectedTotalBytes != null
-                        ? progress.cumulativeBytesLoaded /
-                            progress.expectedTotalBytes!
-                        : null,
-                  ),
-                ),
+              return loadingBox(
+                progress: progress.expectedTotalBytes != null
+                    ? progress.cumulativeBytesLoaded /
+                        progress.expectedTotalBytes!
+                    : null,
               );
             },
           ),
@@ -4751,6 +4903,40 @@ void _navigateSharedContent(BuildContext context, _SharedCardBubble b) {
           },
         },
       );
+    case 'book':
+      if (id == null || id.isEmpty) return;
+      final bookType = b.bookType;
+      if (bookType == 2) {
+        Navigator.pushNamed(
+          context,
+          RoutePaths.theory,
+          arguments: <String, dynamic>{'id': id},
+        );
+      } else if (bookType == 1) {
+        Navigator.pushNamed(
+          context,
+          RoutePaths.musicPlay,
+          arguments: <String, dynamic>{'id': id, 'type': 3},
+        );
+      } else if (bookType == 4 || bookType == 5) {
+        Navigator.pushNamed(
+          context,
+          RoutePaths.musicPlay,
+          arguments: <String, dynamic>{'id': id, 'type': 2},
+        );
+      } else if (bookType == 10) {
+        Navigator.pushNamed(
+          context,
+          RoutePaths.answerEnd2,
+          arguments: <String, dynamic>{'id': id, 'closedByDefault': true},
+        );
+      } else {
+        Navigator.pushNamed(
+          context,
+          RoutePaths.musicPlay,
+          arguments: <String, dynamic>{'id': id},
+        );
+      }
     default:
       break;
   }
@@ -5701,9 +5887,15 @@ class _TextBubble extends _ChatBubble {
 }
 
 class _ImageBubble extends _ChatBubble {
-  const _ImageBubble({required this.url});
+  const _ImageBubble({
+    required this.url,
+    this.localBytes,
+    this.uploading = false,
+  });
 
   final String url;
+  final Uint8List? localBytes;
+  final bool uploading;
 }
 
 class _VoiceBubble extends _ChatBubble {
@@ -5741,6 +5933,7 @@ class _SharedCardBubble extends _ChatBubble {
     this.kjAudioUrl,
     this.kjImageUrls = const [],
     this.kjTypeValue, // '1'=音频 '2'=谱例 '3'=课件
+    this.bookType,
   });
 
   final IconData icon;
@@ -5754,6 +5947,8 @@ class _SharedCardBubble extends _ChatBubble {
   final String? kjAudioUrl;
   final List<String> kjImageUrls;
   final String? kjTypeValue;
+  /// 课程教材 type（1 视唱 / 2 乐理 / 3 听写 / 4 声乐 / 5 器乐）。
+  final int? bookType;
 }
 
 // =============================================================================
@@ -5919,6 +6114,21 @@ class GroupChatMessageParser {
             contentId: obj?['id']?.toString(),
           );
           break;
+        case 'book':
+          final subtitle = (obj?['subtitle'] ?? obj?['shortText3'] ?? '')
+              .toString()
+              .trim();
+          bubble = _SharedCardBubble(
+            icon: Icons.menu_book_rounded,
+            iconColor: const Color(0xFF325BFF),
+            title: (obj?['title'] ?? '课程分享').toString(),
+            subtitle: subtitle.isEmpty ? '课程分享' : subtitle,
+            subtype: 'book',
+            coverUrl: obj?['coverImg']?.toString() ?? obj?['imgUrl']?.toString(),
+            contentId: obj?['id']?.toString(),
+            bookType: _asInt(obj?['type']),
+          );
+          break;
         default:
           bubble = _TextBubble(
             text: '[${p1.isEmpty ? '消息' : p1}] ${(obj?['title'] ?? obj?['name'] ?? '').toString()}',
@@ -6058,6 +6268,75 @@ bool _truthyTop(Object? value) {
   return false;
 }
 
+bool _isConversationPinned(Map<String, dynamic> m) {
+  if (_truthyTop(m['top']) ||
+      _truthyTop(m['isTop']) ||
+      _truthyTop(m['pinned']) ||
+      _truthyTop(m['isPinned'])) {
+    return true;
+  }
+  final pinnedTime = m['pinnedTime'];
+  if (pinnedTime is num) return pinnedTime != 0;
+  if (pinnedTime is String) {
+    final v = pinnedTime.trim();
+    return v.isNotEmpty && v != '0';
+  }
+  return false;
+}
+
+/// classList / syncMsg 里 latestMsg 等 raw 消息 → 会话列表摘要文案。
+String _previewTextForRawMessage(Map<String, dynamic> m) {
+  final type = _asInt(m['type']) ?? 1;
+  switch (type) {
+    case 0:
+      return GroupChatMessageParser._stripHtml(
+        (m['text'] ?? m['content'] ?? '系统通知').toString(),
+      );
+    case 1:
+      return GroupChatMessageParser._stripHtml(
+        (m['content'] ?? '').toString(),
+      );
+    case 2:
+      return '[图片]';
+    case 3:
+      final p = (m['param1'] ?? '').toString();
+      if (p == 'book') {
+        final contentRaw = m['content'];
+        if (contentRaw is String && contentRaw.startsWith('{')) {
+          try {
+            final decoded = jsonDecode(contentRaw);
+            if (decoded is Map) {
+              final title = (decoded['title'] ?? '').toString().trim();
+              if (title.isNotEmpty) return '[课程] $title';
+            }
+          } catch (_) {}
+        }
+        return '[课程分享]';
+      }
+      switch (p) {
+        case 'voice':
+          return '[语音]';
+        case 'video':
+          return '[视频]';
+        case 'news':
+          return '[资讯]';
+        case 'book':
+        case 'kj':
+          return '[课程分享]';
+        case 'file':
+          return '[文件]';
+        default:
+          return '[消息]';
+      }
+    case 100:
+      return '撤回了一条消息';
+    default:
+      return GroupChatMessageParser._stripHtml(
+        (m['content'] ?? '').toString(),
+      );
+  }
+}
+
 (String, List<_RichSpan>) _parseSystemMessageParts(String content) {
   final text = content.trim();
   if (text.isEmpty) {
@@ -6090,20 +6369,34 @@ List<_Conversation> _parseConversations(Object? raw) {
     final id = (m['id'] ?? m['classId'])?.toString();
     if (id == null || id.isEmpty) continue;
     final name = (m['groupName'] ?? m['name'] ?? m['className'] ?? '').toString();
-    final lastMsgRaw =
-        m['lastMsg'] ?? m['lastMessage'] ?? m['lastContent'] ?? '';
-    final lastTimeMs = m['lastTime'] ?? m['lastMsgTime'] ?? m['updateTime'];
+    final latestMsgRaw =
+        m['latestMsg'] ?? m['lastMsg'] ?? m['lastMessage'] ?? m['lastContent'];
+    var lastMessage = '';
+    DateTime? latestMsgTime;
+    if (latestMsgRaw is Map) {
+      final latestMap = latestMsgRaw.map((k, v) => MapEntry(k.toString(), v));
+      lastMessage = _previewTextForRawMessage(latestMap);
+      latestMsgTime = _parseDateTime(
+        latestMap['createTime'] ??
+            latestMap['sendTime'] ??
+            latestMap['msgTime'],
+      );
+    } else if (latestMsgRaw != null) {
+      final text = latestMsgRaw.toString().trim();
+      if (text.isNotEmpty) lastMessage = text;
+    }
+    final lastTimeMs = m['lastTime'] ??
+        m['lastMsgTime'] ??
+        m['updateTime'] ??
+        latestMsgTime;
     final unreadRaw = m['unread'] ?? m['unreadCount'] ?? m['badge'] ?? 0;
     final muted =
         m['doNotDisturb'] == true ||
         m['muted'] == true ||
         m['isMute'] == true ||
-        (m['doNotDisturb'] is num && (m['doNotDisturb'] as num) != 0);
-    final pinned =
-        _truthyTop(m['top']) ||
-        _truthyTop(m['isTop']) ||
-        _truthyTop(m['pinned']) ||
-        _truthyTop(m['isPinned']);
+        (m['doNotDisturb'] is num && (m['doNotDisturb'] as num) != 0) ||
+        (m['mute'] is num && (m['mute'] as num) != 0);
+    final pinned = _isConversationPinned(m);
     final memberRaw = m['memberCount'] ?? m['userCount'] ?? m['memberNum'] ?? 0;
     final logo = _resolveMediaUrl(
       (m['logo'] ?? m['groupLogo'] ?? m['avatarUrl'] ?? m['avatar'])?.toString(),
@@ -6112,7 +6405,7 @@ List<_Conversation> _parseConversations(Object? raw) {
       _Conversation(
         id: id,
         name: name.isEmpty ? '群聊' : name,
-        lastMessage: lastMsgRaw.toString(),
+        lastMessage: lastMessage,
         lastTime: _formatLastTime(_parseDateTime(lastTimeMs)),
         unread: _asInt(unreadRaw) ?? 0,
         muted: muted,
@@ -6295,10 +6588,8 @@ _GroupDetail _parseGroupDetail(
       (classMap['mute'] is num && (classMap['mute'] as num) != 0) ||
       fallback.muted;
   final pinned =
-      _truthyTop(m['top']) ||
-      _truthyTop(m['isTop']) ||
-      _truthyTop(m['pinned']) ||
-      _truthyTop(m['isPinned']) ||
+      _isConversationPinned(m) ||
+      _isConversationPinned(classMap) ||
       fallback.pinned;
 
   return _GroupDetail(
@@ -6351,6 +6642,7 @@ int? _asInt(Object? raw) {
 
 DateTime? _parseDateTime(Object? raw) {
   if (raw == null) return null;
+  if (raw is DateTime) return raw;
   if (raw is num) {
     return DateTime.fromMillisecondsSinceEpoch(raw.toInt());
   }

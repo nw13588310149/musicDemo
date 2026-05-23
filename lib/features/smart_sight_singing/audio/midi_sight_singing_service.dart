@@ -126,6 +126,8 @@ abstract final class MidiSightSingingService {
               n.startMs.round() + SmartSightSingingMidiConfig.minMidiNoteMs,
             ),
             midi: n.pitch.toDouble(),
+            startBeat: n.startTick / parsed.ticksPerQuarter,
+            durationBeats: (n.endTick - n.startTick) / parsed.ticksPerQuarter,
           ),
         )
         .toList(growable: false);

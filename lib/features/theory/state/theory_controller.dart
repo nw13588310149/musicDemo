@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_response.dart';
 import '../../../core/network/media_url.dart';
+import '../../smart_campus/data/book_share_payload.dart';
 import '../data/theory_repository.dart';
 import 'theory_state.dart';
 
@@ -191,13 +192,11 @@ class TheoryController extends StateNotifier<TheoryState> {
     }
 
     state = state.copyWith(sending: true, clearErrorMessage: true);
-    final content = jsonEncode(<String, dynamic>{
-      'id': detail.id,
-      'title': detail.title,
-      'type': state.args.type,
-      'shortText3': '',
-      'subtitle': '',
-    });
+    final content = jsonEncode(buildBookShareContent(
+      id: detail.id,
+      title: detail.title,
+      type: detail.type,
+    ));
 
     for (final cls in selected) {
       final response = await repository.sendMsg(

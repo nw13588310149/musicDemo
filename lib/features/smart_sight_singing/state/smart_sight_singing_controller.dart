@@ -7,13 +7,14 @@ import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../../core/audio/native_playback_audio_session.dart';
-import '../config/smart_sight_singing_config.dart';
 import '../audio/ktv_scoring.dart';
 import '../audio/midi_file_parser.dart';
 import '../audio/midi_playback_scheduler.dart';
 import '../audio/midi_sight_singing_service.dart';
 import '../audio/pitch_voice_gate.dart';
 import '../audio/realtime_pitch_capture.dart';
+import '../config/smart_sight_singing_config.dart';
+import '../config/smart_sight_singing_tuning.dart';
 import '../data/midi_file_picker.dart';
 import 'sight_singing_platform.dart';
 import 'smart_sight_singing_state.dart';
@@ -45,6 +46,21 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       }
       unawaited(_handlePlaybackEnded());
     });
+    SightSingingTuning.instance.addListener(_onTuningChanged);
+    unawaited(SightSingingTuning.instance.ensureLoaded());
+  }
+
+  void _onTuningChanged() {
+    // tuning 改变后，把当前评分会话的容差同步到最新默认值（仅当用户未设置过
+    // session 级容差时才同步；判定方式：state.scoringStandardCents 与默认值
+    // 完全相等，视为「未自定义」）。
+    final tuning = SightSingingTuning.instance;
+    if ((state.scoringStandardCents -
+                SmartSightSingingScoringConfig.defaultStandardCents)
+            .abs() <
+        0.01) {
+      _scoringSession?.updateStandardCents(tuning.defaultStandardCents);
+    }
   }
 
   late final MidiPlaybackScheduler _playback;
@@ -412,8 +428,8 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
   }
 
   PitchVoiceGatePolicy get _voiceGatePolicy => state.visualOnlyMode
-      ? PitchVoiceGate.visualOnly
-      : PitchVoiceGate.withAccompaniment;
+      ? PitchVoiceGate.visualOnly()
+      : PitchVoiceGate.withAccompaniment();
 
   RealtimePitchCaptureProfile get _captureProfile => state.visualOnlyMode
       ? RealtimePitchCaptureProfile.visualOnly
@@ -573,7 +589,11 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
 
   Future<void> stopSinging({bool reset = false}) async {
     if (state.stage != SightSingingStage.singing) return;
-    final tick = _scoringSession?.finalize();
+    final session = _scoringSession;
+    final tick = session?.finalize();
+    final completedScores = session == null
+        ? const <KtvNoteScore>[]
+        : session.completedScores;
     _scoringSession = null;
     await _stopCaptureSilently();
     await _playback.pause();
@@ -584,6 +604,9 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       hitCount: tick?.hitCount ?? state.hitCount,
       scoredCount: tick?.scoredCount ?? state.scoredCount,
       combo: tick?.combo ?? state.combo,
+      completedNoteScores: reset
+          ? const <KtvNoteScore>[]
+          : completedScores,
     );
   }
 
@@ -619,8 +642,25 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
         combo: 0,
         currentUserMidi: -1,
         currentUserAmplitude: 0,
+        completedNoteScores: const <KtvNoteScore>[],
       );
     }
+  }
+
+  /// 切换调试面板可见性（页面右上角调试按钮）。
+  void toggleDebugPanel() {
+    state = state.copyWith(debugPanelVisible: !state.debugPanelVisible);
+  }
+
+  void setDebugPanelVisible(bool visible) {
+    if (state.debugPanelVisible == visible) return;
+    state = state.copyWith(debugPanelVisible: visible);
+  }
+
+  /// 调试面板触发的 tuning 变更后，立刻刷新 UI 一次（即便没有麦克风事件）。
+  void onTuningExternallyChanged() {
+    if (!mounted) return;
+    state = state.copyWith();
   }
 
   void dismissError() {
@@ -630,6 +670,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
 
   Future<void> shutdown() async {
     _shuttingDown = true;
+    SightSingingTuning.instance.removeListener(_onTuningChanged);
     _countdownTimer?.cancel();
     _countdownTimer = null;
     _previewTimer?.cancel();
@@ -674,7 +715,11 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
   Future<void> _handlePlaybackEnded() async {
     if (_shuttingDown || !mounted) return;
     if (state.stage != SightSingingStage.singing) return;
-    final tick = _scoringSession?.finalize();
+    final session = _scoringSession;
+    final tick = session?.finalize();
+    final completedScores = session == null
+        ? const <KtvNoteScore>[]
+        : session.completedScores;
     _scoringSession = null;
     await _stopCaptureSilently();
     await _playback.stop();
@@ -685,6 +730,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       hitCount: tick?.hitCount ?? state.hitCount,
       scoredCount: tick?.scoredCount ?? state.scoredCount,
       combo: tick?.combo ?? state.combo,
+      completedNoteScores: completedScores,
     );
   }
 
@@ -702,9 +748,8 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     final session = _scoringSession;
     if (session == null) return;
 
-    final refFrame = state.track?.sampleAt(
-      state.playbackMs - SmartSightSingingScoringConfig.micLatencyMs,
-    );
+    final tuning = SightSingingTuning.instance;
+    final refFrame = state.track?.sampleAt(state.playbackMs - tuning.micLatencyMs);
     final refMidi = refFrame?.pitched == true ? refFrame!.midi : null;
     final playbackMidi = _playback.activePlaybackPitch?.toDouble();
     final filtered = PitchVoiceGate.filterForScoring(
@@ -728,6 +773,12 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       state = state.copyWith(
         currentUserMidi: displayMidi >= 0 ? displayMidi : -1,
         currentUserAmplitude: event.amplitude,
+        lastFrequencyHz: event.frequencyHz,
+        lastFrameConfidence: event.confidence,
+        lastSourceLabel: event.pitched ? 'live' : '--',
+        lastRefMidi: refMidi ?? -1,
+        lastPlaybackMidi: playbackMidi ?? -1,
+        lastCents: double.nan,
       );
       return;
     }
@@ -758,6 +809,14 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       hitCount: tick.hitCount,
       scoredCount: tick.scoredCount,
       combo: tick.combo,
+      lastFrequencyHz: event.frequencyHz,
+      lastFrameConfidence: event.confidence,
+      lastSourceLabel: event.pitched
+          ? (filtered.pitched ? 'voice' : 'bleed?')
+          : '--',
+      lastRefMidi: refMidi ?? -1,
+      lastPlaybackMidi: playbackMidi ?? -1,
+      lastCents: cents,
     );
   }
 

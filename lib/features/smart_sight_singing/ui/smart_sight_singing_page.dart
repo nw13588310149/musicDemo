@@ -1,15 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shell/ui/shell_layout.dart';
+import '../audio/ktv_scoring.dart';
 import '../audio/midi_sight_singing_service.dart';
 import '../audio/pitch_track.dart';
 import '../config/smart_sight_singing_config.dart';
+import '../config/smart_sight_singing_tuning.dart';
 import '../state/sight_singing_platform.dart';
 import '../state/smart_sight_singing_controller.dart';
 import '../state/smart_sight_singing_state.dart';
+import 'widgets/debug_calibration_panel.dart';
 import 'widgets/karaoke_pitch_track.dart';
 import 'widgets/score_sight_reading_track.dart';
 
@@ -41,6 +46,9 @@ class _SmartSightSingingPageState extends ConsumerState<SmartSightSingingPage> {
   @override
   void initState() {
     super.initState();
+    // 调试面板里所有 override 已自动持久化；这里先触发一次加载，避免
+    // 真机第一次出声前还是 const 默认值。
+    unawaited(SightSingingTuning.instance.ensureLoaded());
     if (kIsWeb) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -73,32 +81,44 @@ class _SmartSightSingingPageState extends ConsumerState<SmartSightSingingPage> {
         children: [
           Padding(
             padding: EdgeInsets.all(ui(20)),
-            child: Column(
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _Header(state: state, onImport: () => controller.importAudio()),
-                if (state.errorMessage != null) ...[
-                  SizedBox(height: ui(12)),
-                  if (kDebugMode)
-                    _DebugErrorPanel(
-                      message: state.errorMessage!,
-                      stage: state.stage,
-                      onDismiss: controller.dismissError,
-                    )
-                  else
-                    _UserErrorBanner(
-                      message: state.errorMessage!.split('\n').first,
-                      onDismiss: controller.dismissError,
-                    ),
-                ],
-                SizedBox(height: ui(16)),
                 Expanded(
-                  child: _Body(
-                    state: state,
-                    controller: controller,
-                    onlineUrlController: _onlineUrlController,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _Header(
+                        state: state,
+                        onImport: () => controller.importAudio(),
+                        onToggleDebug: controller.toggleDebugPanel,
+                      ),
+                      if (state.errorMessage != null) ...[
+                        SizedBox(height: ui(12)),
+                        if (kDebugMode)
+                          _DebugErrorPanel(
+                            message: state.errorMessage!,
+                            stage: state.stage,
+                            onDismiss: controller.dismissError,
+                          )
+                        else
+                          _UserErrorBanner(
+                            message: state.errorMessage!.split('\n').first,
+                            onDismiss: controller.dismissError,
+                          ),
+                      ],
+                      SizedBox(height: ui(16)),
+                      Expanded(
+                        child: _Body(
+                          state: state,
+                          controller: controller,
+                          onlineUrlController: _onlineUrlController,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+                if (state.debugPanelVisible) const DebugCalibrationPanel(),
               ],
             ),
           ),
@@ -316,9 +336,14 @@ class _TrialWatermark extends StatelessWidget {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.state, required this.onImport});
+  const _Header({
+    required this.state,
+    required this.onImport,
+    required this.onToggleDebug,
+  });
   final SightSingingState state;
   final VoidCallback onImport;
+  final VoidCallback onToggleDebug;
 
   @override
   Widget build(BuildContext context) {
@@ -369,13 +394,19 @@ class _Header extends StatelessWidget {
         ),
         const Spacer(),
         if (state.stage != SightSingingStage.singing &&
-            state.stage != SightSingingStage.countdown)
+            state.stage != SightSingingStage.countdown) ...[
           _ActionButton(
             label: _importLabel(state),
             icon: Icons.auto_graph_rounded,
             primary: !state.hasTrack && !state.isSelectingTrack,
             onTap: state.isBusy ? null : onImport,
           ),
+          SizedBox(width: ui(10)),
+        ],
+        _DebugToggleButton(
+          active: state.debugPanelVisible,
+          onTap: onToggleDebug,
+        ),
       ],
     );
   }
@@ -448,6 +479,7 @@ class _Body extends StatelessWidget {
                     currentUserMidi: state.currentUserMidi,
                     currentUserAmplitude: state.currentUserAmplitude,
                     scoreSightReadingMode: state.scoreSightReadingMode,
+                    scoringStandardCents: state.scoringStandardCents,
                   ),
                 ),
                 SizedBox(height: ui(12)),
@@ -469,6 +501,9 @@ class _Body extends StatelessWidget {
             onAnalyzeUrl: controller.analyzeOnlineAudio,
           );
         }
+        final showNoteDetails =
+            state.stage == SightSingingStage.finished &&
+            state.completedNoteScores.isNotEmpty;
         return Column(
           children: [
             _SingingModeBanner(state: state, controller: controller),
@@ -483,13 +518,182 @@ class _Body extends StatelessWidget {
                 currentUserMidi: state.currentUserMidi,
                 currentUserAmplitude: state.currentUserAmplitude,
                 scoreSightReadingMode: state.scoreSightReadingMode,
+                scoringStandardCents: state.scoringStandardCents,
               ),
             ),
+            if (showNoteDetails) ...[
+              SizedBox(height: ui(12)),
+              _NoteScoresPanel(scores: state.completedNoteScores),
+            ],
             SizedBox(height: ui(12)),
             _Controls(state: state, controller: controller),
           ],
         );
     }
+  }
+}
+
+/// 演唱结束后的「逐音详情」：横向滚动展示每颗音的等级 + 偏差，
+/// 帮助老师/学生定位哪几颗音偏了。
+class _NoteScoresPanel extends StatelessWidget {
+  const _NoteScoresPanel({required this.scores});
+
+  final List<KtvNoteScore> scores;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final perfectCount = scores.where((s) => s.hitLevel == 'perfect').length;
+    final goodCount = scores.where((s) => s.hitLevel == 'good').length;
+    final okCount = scores.where((s) => s.hitLevel == 'ok').length;
+    final missCount = scores.where((s) => s.hitLevel == 'miss').length;
+
+    return Container(
+      height: ui(98),
+      padding: EdgeInsets.fromLTRB(ui(14), ui(8), ui(14), ui(10)),
+      decoration: BoxDecoration(
+        color: _DemoUi.surface,
+        borderRadius: BorderRadius.circular(ui(12)),
+        border: Border.all(color: _DemoUi.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Text(
+                '逐音详情',
+                style: TextStyle(
+                  fontSize: ui(12),
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF1A1A1A),
+                  fontFamily: 'PingFang SC',
+                ),
+              ),
+              SizedBox(width: ui(10)),
+              _NoteBadge(label: 'Perfect', count: perfectCount, color: const Color(0xFF2E7D5B)),
+              SizedBox(width: ui(6)),
+              _NoteBadge(label: 'Good', count: goodCount, color: const Color(0xFF4A5568)),
+              SizedBox(width: ui(6)),
+              _NoteBadge(label: 'OK', count: okCount, color: const Color(0xFFB7791F)),
+              SizedBox(width: ui(6)),
+              _NoteBadge(label: 'Miss', count: missCount, color: const Color(0xFFC05621)),
+            ],
+          ),
+          SizedBox(height: ui(6)),
+          Expanded(
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: scores.length,
+              separatorBuilder: (_, _) => SizedBox(width: ui(6)),
+              itemBuilder: (context, index) {
+                final s = scores[index];
+                return _NoteChip(index: index + 1, score: s);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NoteBadge extends StatelessWidget {
+  const _NoteBadge({
+    required this.label,
+    required this.count,
+    required this.color,
+  });
+
+  final String label;
+  final int count;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: ui(6), vertical: ui(2)),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(ui(6)),
+      ),
+      child: Text(
+        '$label $count',
+        style: TextStyle(
+          fontSize: ui(10),
+          color: color,
+          fontFamily: 'PingFang SC',
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+class _NoteChip extends StatelessWidget {
+  const _NoteChip({required this.index, required this.score});
+
+  final int index;
+  final KtvNoteScore score;
+
+  static const _green = Color(0xFF2E7D5B);
+  static const _gray = Color(0xFF4A5568);
+  static const _amber = Color(0xFFB7791F);
+  static const _red = Color(0xFFC05621);
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final color = switch (score.hitLevel) {
+      'perfect' => _green,
+      'good' => _gray,
+      'ok' => _amber,
+      _ => _red,
+    };
+    final centsLabel = score.cents.isFinite
+        ? '${score.cents > 0 ? '+' : ''}${score.cents.round()}c'
+        : '--';
+    return Container(
+      width: ui(58),
+      padding: EdgeInsets.symmetric(horizontal: ui(4), vertical: ui(4)),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+        borderRadius: BorderRadius.circular(ui(6)),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            '#$index ${PitchUtils.midiToNoteName(score.refMidi)}',
+            style: TextStyle(
+              fontSize: ui(10),
+              color: const Color(0xFF1A1A1A),
+              fontFamily: 'Inter',
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          Text(
+            centsLabel,
+            style: TextStyle(
+              fontSize: ui(10),
+              color: color,
+              fontFamily: 'Inter',
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          Text(
+            '${score.points}',
+            style: TextStyle(
+              fontSize: ui(10),
+              color: color,
+              fontFamily: 'Inter',
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -501,6 +705,7 @@ class _PracticeTrackView extends StatelessWidget {
     required this.currentUserMidi,
     required this.currentUserAmplitude,
     required this.scoreSightReadingMode,
+    required this.scoringStandardCents,
   });
 
   final PitchTrack track;
@@ -509,6 +714,7 @@ class _PracticeTrackView extends StatelessWidget {
   final double currentUserMidi;
   final double currentUserAmplitude;
   final bool scoreSightReadingMode;
+  final double scoringStandardCents;
 
   @override
   Widget build(BuildContext context) {
@@ -516,8 +722,10 @@ class _PracticeTrackView extends StatelessWidget {
       return ScoreSightReadingTrack(
         track: track,
         playbackMs: playbackMs,
+        userPoints: userPoints,
         currentUserMidi: currentUserMidi,
         currentUserAmplitude: currentUserAmplitude,
+        scoringStandardCents: scoringStandardCents,
       );
     }
     return KaraokePitchTrack(
@@ -820,11 +1028,17 @@ class _ScoreBoard extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     final ref = state.track?.sampleAt(state.playbackMs);
     final refName = ref != null ? PitchUtils.midiToNoteName(ref.midi) : '--';
+    final currentCents = state.currentUserMidi >= 0 && ref != null
+        ? PitchUtils.octaveNormalizedCents(state.currentUserMidi, ref.midi)
+        : double.nan;
     final userName = state.currentUserMidi >= 0
         ? PitchUtils.midiToNoteName(state.currentUserMidi)
         : state.currentUserAmplitude >
               SmartSightSingingViewConfig.pickupLabelMinAmplitude
-        ? '拾音中'
+        ? '识别中'
+        : '--';
+    final centsLabel = currentCents.isFinite
+        ? '${currentCents > 0 ? '+' : ''}${currentCents.round()}c'
         : '--';
 
     final progress = state.track == null || state.track!.totalMs == 0
@@ -854,6 +1068,8 @@ class _ScoreBoard extends StatelessWidget {
           _ScoreCell(label: '标准音', value: refName),
           SizedBox(width: ui(24)),
           _ScoreCell(label: '你的音', value: userName),
+          SizedBox(width: ui(24)),
+          _ScoreCell(label: '偏差', value: centsLabel),
           const Spacer(),
           // 进度条。
           SizedBox(
@@ -1256,6 +1472,36 @@ class _Controls extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+class _DebugToggleButton extends StatelessWidget {
+  const _DebugToggleButton({required this.active, required this.onTap});
+
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final fg = active ? Colors.white : _DemoUi.accent;
+    final bg = active ? _DemoUi.accent : Colors.white;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(ui(20)),
+      child: Container(
+        width: ui(36),
+        height: ui(36),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(ui(18)),
+          border: Border.all(
+            color: active ? _DemoUi.accent : _DemoUi.borderStrong,
+          ),
+        ),
+        child: Icon(Icons.tune_rounded, color: fg, size: ui(18)),
+      ),
     );
   }
 }

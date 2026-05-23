@@ -9,7 +9,7 @@ import 'midi_sight_singing_service.dart';
 /// 基于现有钢琴短音资源，按 MIDI 事件时间轴播放。
 class MidiPlaybackScheduler {
   MidiPlaybackScheduler({MusicCompanionAudioEngine? audioEngine})
-      : _audio = audioEngine ?? MusicCompanionAudioEngine();
+    : _audio = audioEngine ?? MusicCompanionAudioEngine();
 
   final MusicCompanionAudioEngine _audio;
   final StreamController<int> _positionController =
@@ -37,7 +37,10 @@ class MidiPlaybackScheduler {
 
   int get totalMs => _totalMs;
 
-  Future<void> prepare(List<MidiPlaybackEvent> events, {required int totalMs}) async {
+  Future<void> prepare(
+    List<MidiPlaybackEvent> events, {
+    required int totalMs,
+  }) async {
     await stop();
     _events = List<MidiPlaybackEvent>.from(events)
       ..sort((a, b) => a.timeMs.compareTo(b.timeMs));
@@ -57,7 +60,7 @@ class MidiPlaybackScheduler {
     if (muteAudio != null) {
       muteAudioOutput = muteAudio;
     }
-    if (_running || _events.isEmpty) return;
+    if (_running || (_events.isEmpty && _totalMs <= 0)) return;
     if (!muteAudioOutput && !_audio.isPianoReady) {
       await _audio.ensurePianoInitialized();
     }
@@ -119,7 +122,9 @@ class MidiPlaybackScheduler {
     try {
       await _audio.playNote(token, volume: volume);
     } catch (error, stack) {
-      debugPrint('MidiPlaybackScheduler.playNote($token) failed: $error\n$stack');
+      debugPrint(
+        'MidiPlaybackScheduler.playNote($token) failed: $error\n$stack',
+      );
     }
   }
 

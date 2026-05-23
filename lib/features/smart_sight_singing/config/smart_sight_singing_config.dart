@@ -263,12 +263,12 @@ abstract final class SmartSightSingingRealtimePitchConfig {
   /// 实时音高检测 buffer。
   /// 建议范围：2048 ~ 8192；越小延迟低但稳定性差，越大更稳但更慢。
   /// 调整内容：实时 YIN/自相关检测每帧采样数。
-  static const int bufferSize = 4096;
+  static const int bufferSize = 2048;
 
   /// 实时检测最低 RMS。
   /// 建议范围：80 ~ 500；越高越抗噪，越低越灵敏。
   /// 调整内容：实时麦克风响度低于多少直接判为无音高。
-  static const double minRms = 180;
+  static const double minRms = 120;
 
   /// PitchFrame 最低置信度。
   /// 建议范围：0.25 ~ 0.7；越高越不容易显示/使用低置信度音高。
@@ -289,7 +289,7 @@ abstract final class SmartSightSingingRealtimePitchConfig {
   /// 自相关最低可信度。
   /// 建议范围：0.2 ~ 0.6；越高越严格。
   /// 调整内容：YIN 失败后，自相关结果是否可用。
-  static const double autocorrelationMinCorrelation = 0.32;
+  static const double autocorrelationMinCorrelation = 0.24;
 
   /// 稳定音高连续帧相对差。
   /// 建议范围：0.04 ~ 0.12；越大越容易认为音高稳定。

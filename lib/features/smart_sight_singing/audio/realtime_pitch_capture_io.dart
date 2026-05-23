@@ -7,6 +7,7 @@ import 'package:record/record.dart';
 
 import '../../../core/audio/native_playback_audio_session.dart';
 import '../config/smart_sight_singing_config.dart';
+import '../config/smart_sight_singing_tuning.dart';
 import 'live_pitch_detector.dart';
 import 'realtime_pitch_capture.dart';
 
@@ -139,7 +140,7 @@ class _IORealtimePitchCapture implements RealtimePitchCapture {
     if (!_running || out.isClosed) return;
 
     final amplitude = _measureAmplitude(frame);
-    if (amplitude.rms < SmartSightSingingRealtimePitchConfig.minRms) {
+    if (amplitude.rms < SightSingingTuning.instance.realtimeMinRms) {
       out.add(
         RealtimePitchEvent(
           frequencyHz: 0,
@@ -155,7 +156,10 @@ class _IORealtimePitchCapture implements RealtimePitchCapture {
     final result = await _detector.analyzePcm16Frame(frame);
     if (!_running || out.isClosed) return;
 
-    if (result.pitched && result.midi.isFinite) {
+    final minConf = SightSingingTuning.instance.frameMinConfidence;
+    if (result.pitched &&
+        result.midi.isFinite &&
+        result.confidence >= minConf) {
       out.add(
         RealtimePitchEvent(
           frequencyHz: result.frequencyHz,

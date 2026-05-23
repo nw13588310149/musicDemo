@@ -1,9 +1,13 @@
 import '../config/smart_sight_singing_config.dart';
+import '../config/smart_sight_singing_tuning.dart';
 import 'pitch_track.dart';
 import 'realtime_pitch_capture.dart';
 import 'ktv_pitch_guide.dart';
 
 /// 评分音准容差。standardCents 是 Good/命中的标准区间。
+///
+/// 其它两档（Perfect / OK）按 [SightSingingTuning] 中的比例换算，
+/// 调试面板修改 perfect/ok 比例后实时生效。
 class KtvScoringTolerance {
   const KtvScoringTolerance({
     required this.perfectCents,
@@ -15,16 +19,17 @@ class KtvScoringTolerance {
     final good = SmartSightSingingScoringConfig.normalizeStandardCents(
       standardCents,
     );
+    final tuning = SightSingingTuning.instance;
+    final perfectRatio =
+        tuning.perfectCentsAtDefault /
+        SmartSightSingingScoringConfig.defaultStandardCents;
+    final okRatio =
+        tuning.okCentsAtDefault /
+        SmartSightSingingScoringConfig.defaultStandardCents;
     return KtvScoringTolerance(
-      perfectCents:
-          good *
-          SmartSightSingingScoringConfig.perfectCentsAtDefault /
-          SmartSightSingingScoringConfig.defaultStandardCents,
+      perfectCents: good * perfectRatio,
       goodCents: good,
-      okCents:
-          good *
-          SmartSightSingingScoringConfig.okCentsAtDefault /
-          SmartSightSingingScoringConfig.defaultStandardCents,
+      okCents: good * okRatio,
     );
   }
 
@@ -58,18 +63,29 @@ class KtvNoteScore {
   final String hitLevel;
 
   bool get isHit => points >= SmartSightSingingScoringConfig.goodPoints;
+
+  int get durationMs {
+    final d = endMs - startMs;
+    return d < 0 ? 0 : d;
+  }
 }
 
 /// KTV 打分会话：在用户跟唱过程中按音符结算。
+///
+/// 所有可调参数（mic 延迟、早晚窗、音准容差、是否八度归一）都实时
+/// 从 [SightSingingTuning] 读取，调试面板拖动后下一帧立即生效。
 class KtvScoringSession {
   KtvScoringSession({
     required PitchTrack track,
     double standardCents = SmartSightSingingScoringConfig.defaultStandardCents,
   }) : _track = track,
-       _tolerance = KtvScoringTolerance.fromStandardCents(standardCents);
+       _standardCents = standardCents;
 
   final PitchTrack _track;
-  final KtvScoringTolerance _tolerance;
+  double _standardCents;
+
+  KtvScoringTolerance get _tolerance =>
+      KtvScoringTolerance.fromStandardCents(_standardCents);
 
   int? _activeNoteIndex;
   final List<double> _userMidis = <double>[];
@@ -83,26 +99,59 @@ class KtvScoringSession {
   int get combo => _combo;
   int get maxCombo => _maxCombo;
 
-  /// 当前累计得分 0~100（已完成音符平均分）。
-  int get totalScore {
-    if (_completed.isEmpty) return 0;
-    final sum = _completed.fold<int>(0, (a, s) => a + s.points);
-    return (sum / _completed.length).round().clamp(0, 100);
+  /// 实时调整音准容差（不影响已结算音符）。
+  void updateStandardCents(double cents) {
+    _standardCents = cents;
   }
+
+  /// 当前累计得分 0~100（按时长加权的已完成音符平均分）。
+  /// 改成时长加权后，短装饰音失误不会等同于长音失误，更符合教学。
+  int get totalScore => _weightedAverage(_completed);
 
   int get hitCount => _completed.where((s) => s.isHit).length;
   int get scoredCount => _completed.length;
+
+  int get _liveTotalScore {
+    final preview = _previewActiveNoteScore();
+    if (preview == null) return totalScore;
+    return _weightedAverage([..._completed, preview]);
+  }
+
+  int get _liveHitCount {
+    final preview = _previewActiveNoteScore();
+    return hitCount + ((preview?.isHit ?? false) ? 1 : 0);
+  }
+
+  int get _liveScoredCount {
+    final preview = _previewActiveNoteScore();
+    return scoredCount + (preview == null ? 0 : 1);
+  }
+
+  static int _weightedAverage(List<KtvNoteScore> scores) {
+    if (scores.isEmpty) return 0;
+    var totalWeight = 0;
+    var totalScoreWeighted = 0;
+    for (final s in scores) {
+      // 至少给 80ms 的权重，避免极短装饰音权重为 0。
+      final w = s.durationMs < 80 ? 80 : s.durationMs;
+      totalWeight += w;
+      totalScoreWeighted += s.points * w;
+    }
+    if (totalWeight == 0) return 0;
+    return (totalScoreWeighted / totalWeight).round().clamp(0, 100);
+  }
 
   /// 处理一帧实时音高；返回当前应展示给用户的信息。
   KtvScoringTick onPitch({
     required int playbackMs,
     required RealtimePitchEvent event,
   }) {
-    final evalMs = playbackMs - SmartSightSingingScoringConfig.micLatencyMs;
+    final tuning = SightSingingTuning.instance;
+    final evalMs = playbackMs - tuning.micLatencyMs;
     final noteIndex = _track.noteIndexAt(
       evalMs,
-      earlyMs: SmartSightSingingScoringConfig.earlySingMs,
-      lateMs: SmartSightSingingScoringConfig.lateSingMs,
+      earlyMs: tuning.earlySingMs,
+      lateMs: tuning.lateSingMs,
     );
     final note = noteIndex == null ? null : _track.notes[noteIndex];
 
@@ -120,13 +169,13 @@ class KtvScoringSession {
     final refMidi = refFrame?.midi ?? -1;
     double cents = double.nan;
     if (event.pitched && refFrame != null && refFrame.pitched) {
-      cents = PitchUtils.octaveNormalizedCents(event.midi, refFrame.midi);
+      cents = _centsForScoring(event.midi, refFrame.midi);
     }
 
     return KtvScoringTick(
-      totalScore: totalScore,
-      hitCount: hitCount,
-      scoredCount: scoredCount,
+      totalScore: _liveTotalScore,
+      hitCount: _liveHitCount,
+      scoredCount: _liveScoredCount,
       combo: _combo,
       cents: cents,
       refMidi: refMidi,
@@ -170,6 +219,31 @@ class KtvScoringSession {
     _userMidis.clear();
   }
 
+  KtvNoteScore? _previewActiveNoteScore() {
+    final index = _activeNoteIndex;
+    if (index == null ||
+        index < 0 ||
+        index >= _track.notes.length ||
+        _userMidis.isEmpty) {
+      return null;
+    }
+    return _gradeNote(
+      note: _track.notes[index],
+      noteIndex: index,
+      userMidis: _userMidis,
+      tolerance: _tolerance,
+    );
+  }
+
+  /// 评分时计算偏差：默认八度归一，可在 tuning 中关闭后变为严格音域。
+  static double _centsForScoring(double userMidi, double refMidi) {
+    if (!userMidi.isFinite || !refMidi.isFinite) return double.nan;
+    if (SightSingingTuning.instance.octaveNormalizeScoring) {
+      return PitchUtils.octaveNormalizedCents(userMidi, refMidi);
+    }
+    return (userMidi - refMidi) * 100;
+  }
+
   static KtvNoteScore _gradeNote({
     required KtvNoteSegment note,
     required int noteIndex,
@@ -191,7 +265,7 @@ class KtvScoringSession {
 
     final sorted = List<double>.from(userMidis)..sort();
     final userMidi = sorted[sorted.length ~/ 2];
-    final cents = PitchUtils.octaveNormalizedCents(userMidi, note.midi);
+    final cents = _centsForScoring(userMidi, note.midi);
     final absCents = cents.abs();
 
     late int points;

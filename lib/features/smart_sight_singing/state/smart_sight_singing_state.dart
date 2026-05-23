@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../config/smart_sight_singing_config.dart';
+import '../audio/ktv_scoring.dart';
 import '../audio/midi_sight_singing_service.dart';
 import '../audio/pitch_track.dart';
 
@@ -77,6 +78,14 @@ class SightSingingState {
     this.scoringStandardCents =
         SmartSightSingingScoringConfig.defaultStandardCents,
     this.isPreviewPlaying = false,
+    this.debugPanelVisible = false,
+    this.lastFrequencyHz = 0,
+    this.lastFrameConfidence = 0,
+    this.lastSourceLabel = '',
+    this.lastRefMidi = -1,
+    this.lastPlaybackMidi = -1,
+    this.lastCents = double.nan,
+    this.completedNoteScores = const <KtvNoteScore>[],
   });
 
   final SightSingingStage stage;
@@ -144,6 +153,20 @@ class SightSingingState {
   /// 就绪态试听旋律中。
   final bool isPreviewPlaying;
 
+  /// 调试面板可见性（覆盖在主页右侧）。
+  final bool debugPanelVisible;
+
+  /// 实时麦克风最近一帧元信息（仅 debug 面板使用）。
+  final double lastFrequencyHz;
+  final double lastFrameConfidence;
+  final String lastSourceLabel;
+  final double lastRefMidi;
+  final double lastPlaybackMidi;
+  final double lastCents;
+
+  /// 演唱结束后的逐音详情（finished 阶段展示在底部）。
+  final List<KtvNoteScore> completedNoteScores;
+
   bool get hasTrack => track != null && !(track!.isEmpty);
 
   bool get isBusy =>
@@ -177,6 +200,14 @@ class SightSingingState {
     bool? scoreSightReadingMode,
     double? scoringStandardCents,
     bool? isPreviewPlaying,
+    bool? debugPanelVisible,
+    double? lastFrequencyHz,
+    double? lastFrameConfidence,
+    String? lastSourceLabel,
+    double? lastRefMidi,
+    double? lastPlaybackMidi,
+    double? lastCents,
+    List<KtvNoteScore>? completedNoteScores,
   }) {
     return SightSingingState(
       stage: stage ?? this.stage,
@@ -212,6 +243,14 @@ class SightSingingState {
           scoreSightReadingMode ?? this.scoreSightReadingMode,
       scoringStandardCents: scoringStandardCents ?? this.scoringStandardCents,
       isPreviewPlaying: isPreviewPlaying ?? this.isPreviewPlaying,
+      debugPanelVisible: debugPanelVisible ?? this.debugPanelVisible,
+      lastFrequencyHz: lastFrequencyHz ?? this.lastFrequencyHz,
+      lastFrameConfidence: lastFrameConfidence ?? this.lastFrameConfidence,
+      lastSourceLabel: lastSourceLabel ?? this.lastSourceLabel,
+      lastRefMidi: lastRefMidi ?? this.lastRefMidi,
+      lastPlaybackMidi: lastPlaybackMidi ?? this.lastPlaybackMidi,
+      lastCents: lastCents ?? this.lastCents,
+      completedNoteScores: completedNoteScores ?? this.completedNoteScores,
     );
   }
 }
