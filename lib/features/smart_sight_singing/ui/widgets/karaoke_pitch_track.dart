@@ -89,6 +89,7 @@ class _KaraokePainter extends CustomPainter {
     final minMidi = track.minMidi;
     final maxMidi = track.maxMidi;
     final midiRange = (maxMidi - minMidi).clamp(6, 60).toDouble();
+    final rangeCenter = (minMidi + maxMidi) / 2;
 
     final centerX =
         size.width * SmartSightSingingViewConfig.karaokeNowLineFraction;
@@ -98,6 +99,24 @@ class _KaraokePainter extends CustomPainter {
     double yFromMidi(double midi) {
       final t = (midi - minMidi) / midiRange;
       return size.height * (1 - t.clamp(0, 1));
+    }
+
+    // 用户演唱可能跨八度（男生唱女高音谱、童声唱男低音谱…），原始 MIDI
+    // 会落在显示音域之外被钉到顶/底。这里把用户音高沿八度方向"折叠"到
+    // 离参考音（或音域中心）最近的同名八度，再交给 yFromMidi 绘制；
+    // 与 octaveNormalizedCents 评分逻辑保持一致。
+    double octaveSnap(double midi, double target) {
+      if (midi < 0 || !midi.isFinite) return midi;
+      final delta = midi - target;
+      final octaves = (delta / 12).round();
+      return midi - octaves * 12;
+    }
+
+    double displayMidiAt(double midi, int timeMs) {
+      if (midi < 0 || !midi.isFinite) return midi;
+      final ref = track.sampleAt(timeMs);
+      final target = (ref != null && ref.pitched) ? ref.midi : rangeCenter;
+      return octaveSnap(midi, target);
     }
 
     final gridPaint = Paint()
@@ -185,7 +204,7 @@ class _KaraokePainter extends CustomPainter {
         if (!p.pitched) continue;
         final x = xFromTime(p.timeMs);
         if (x < -8 || x > size.width + 8) continue;
-        final y = yFromMidi(p.midi);
+        final y = yFromMidi(displayMidiAt(p.midi, p.timeMs));
         final age = (playbackMs - p.timeMs).clamp(0, windowMs);
         final alpha = (255 * (1 - age / windowMs)).clamp(40, 255).toInt();
         final hit = !p.cents.isNaN && p.cents.abs() <= 45;
@@ -202,7 +221,7 @@ class _KaraokePainter extends CustomPainter {
     }
 
     if (currentUserMidi >= 0) {
-      final y = yFromMidi(currentUserMidi);
+      final y = yFromMidi(displayMidiAt(currentUserMidi, playbackMs));
       final ref = track.sampleAt(playbackMs);
       final cents = ref == null
           ? double.nan
