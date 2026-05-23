@@ -5,6 +5,7 @@ import 'package:flutter_soloud/flutter_soloud.dart';
 import 'package:pitch_detector_dart/pitch_detector.dart';
 
 import '../../../core/audio/native_audio_bootstrap.dart';
+import '../config/smart_sight_singing_config.dart';
 import 'pitch_analysis_temp_io.dart'
     if (dart.library.html) 'pitch_analysis_temp_web.dart';
 import 'pitch_soloud_samples.dart';
@@ -15,11 +16,12 @@ import 'pcm_pitch_utils.dart';
 
 /// Smart sight-singing offline pitch analysis (flutter_soloud + YIN).
 abstract final class SightSingingPitchAnalyzer {
-  static const int analysisSampleRate = 22050;
-  static const int yinBufferSize = 1024;
-  static const int yinHopSize = 512;
-  static const int _maxAnalysisSeconds = 480;
-  static const int _webMaxAnalysisSeconds = 360;
+  static const int analysisSampleRate =
+      SmartSightSingingOfflineAnalysisConfig.analysisSampleRate;
+  static const int yinBufferSize =
+      SmartSightSingingOfflineAnalysisConfig.yinBufferSize;
+  static const int yinHopSize =
+      SmartSightSingingOfflineAnalysisConfig.yinHopSize;
 
   static const String _msgWebNoPath =
       'Web \u7aef\u6682\u4e0d\u652f\u6301\u4ece\u672c\u5730\u8def\u5f84\u5206\u6790\u97f3\u9891\uff0c'
@@ -40,7 +42,9 @@ abstract final class SightSingingPitchAnalyzer {
       final bytes = await PitchAnalysisTempFile.read(path);
       return analyzeBytes(
         bytes,
-        formatHint: _normalizeExt(path.contains('.') ? path.split('.').last : 'mp3'),
+        formatHint: _normalizeExt(
+          path.contains('.') ? path.split('.').last : 'mp3',
+        ),
         durationHint: durationHint,
       );
     } on PitchAnalysisException {
@@ -204,11 +208,19 @@ abstract final class SightSingingPitchAnalyzer {
   }
 
   static Duration _estimateDuration(Uint8List bytes) {
-    const bytesPerSecond = 16000;
     final estimatedSec =
-        (bytes.length / bytesPerSecond).ceil().clamp(10, _maxAnalysisSeconds);
+        (bytes.length /
+                SmartSightSingingOfflineAnalysisConfig.estimatedBytesPerSecond)
+            .ceil()
+            .clamp(
+              10,
+              SmartSightSingingOfflineAnalysisConfig.maxAnalysisSeconds,
+            );
     final cappedSec = kIsWeb
-        ? math.min(estimatedSec, _webMaxAnalysisSeconds)
+        ? math.min(
+            estimatedSec,
+            SmartSightSingingOfflineAnalysisConfig.webMaxAnalysisSeconds,
+          )
         : estimatedSec;
     return Duration(seconds: cappedSec);
   }
@@ -222,7 +234,9 @@ abstract final class SightSingingPitchAnalyzer {
   }
 
   static _SampleRequest _sampleRequestForDuration(Duration? duration) {
-    final maxSeconds = kIsWeb ? _webMaxAnalysisSeconds : _maxAnalysisSeconds;
+    final maxSeconds = kIsWeb
+        ? SmartSightSingingOfflineAnalysisConfig.webMaxAnalysisSeconds
+        : SmartSightSingingOfflineAnalysisConfig.maxAnalysisSeconds;
     final durationMs = duration?.inMilliseconds ?? 0;
     final cappedMs = durationMs > 0
         ? math.min(durationMs, maxSeconds * 1000)
@@ -310,7 +324,10 @@ abstract final class SightSingingPitchAnalyzer {
     if (!sampleRate.isFinite || sampleRate <= 0) {
       return analysisSampleRate.toDouble();
     }
-    return sampleRate.clamp(8000.0, 48000.0);
+    return sampleRate.clamp(
+      SmartSightSingingOfflineAnalysisConfig.minDerivedSampleRate,
+      SmartSightSingingOfflineAnalysisConfig.maxDerivedSampleRate,
+    );
   }
 }
 
@@ -344,10 +361,7 @@ class PitchAnalysisException implements Exception {
 }
 
 class _YinPipelineMessage {
-  const _YinPipelineMessage({
-    required this.pcm,
-    required this.sampleRate,
-  });
+  const _YinPipelineMessage({required this.pcm, required this.sampleRate});
 
   final Uint8List pcm;
   final double sampleRate;
@@ -375,8 +389,8 @@ Future<PitchTrack> _yinPipeline(
       frames: <PitchFrame>[],
       totalMs: 0,
       frameStepMs: 0,
-      minMidi: 48,
-      maxMidi: 72,
+      minMidi: SmartSightSingingPitchRangeConfig.defaultMinMidi,
+      maxMidi: SmartSightSingingPitchRangeConfig.defaultMaxMidi,
     );
   }
 
@@ -402,13 +416,10 @@ Future<PitchTrack> _yinPipeline(
     final rms = math.sqrt(sumSq / bufSize);
     final timeMs = ((start + bufSize ~/ 2) * 1000 / sampleRate).round();
 
-    if (rms < 350) {
-      frames.add(PitchFrame(
-        timeMs: timeMs,
-        frequencyHz: 0,
-        midi: -1,
-        confidence: 0,
-      ));
+    if (rms < SmartSightSingingOfflineAnalysisConfig.minRms) {
+      frames.add(
+        PitchFrame(timeMs: timeMs, frequencyHz: 0, midi: -1, confidence: 0),
+      );
       continue;
     }
 
@@ -420,27 +431,47 @@ Future<PitchTrack> _yinPipeline(
         ? PitchUtils.hzToMidi(hz)
         : double.nan;
     final ok =
-        result.pitched && hz > 0 && midi.isFinite && hz > 60 && hz < 1400;
+        result.pitched &&
+        hz > 0 &&
+        midi.isFinite &&
+        hz > SmartSightSingingOfflineAnalysisConfig.minFrequencyHz &&
+        hz < SmartSightSingingOfflineAnalysisConfig.maxFrequencyHz;
 
     if (ok) {
       if (midi < minMidi) minMidi = midi;
       if (midi > maxMidi) maxMidi = midi;
     }
 
-    frames.add(PitchFrame(
-      timeMs: timeMs,
-      frequencyHz: ok ? hz : 0,
-      midi: ok ? midi : -1,
-      confidence: result.probability,
-    ));
+    frames.add(
+      PitchFrame(
+        timeMs: timeMs,
+        frequencyHz: ok ? hz : 0,
+        midi: ok ? midi : -1,
+        confidence: result.probability,
+      ),
+    );
   }
 
   if (!minMidi.isFinite || !maxMidi.isFinite) {
-    minMidi = 48;
-    maxMidi = 72;
+    minMidi = SmartSightSingingPitchRangeConfig.defaultMinMidi;
+    maxMidi = SmartSightSingingPitchRangeConfig.defaultMaxMidi;
   } else {
-    minMidi = (minMidi - 2).clamp(24, 96).toDouble();
-    maxMidi = (maxMidi + 2).clamp(minMidi + 6, 100).toDouble();
+    minMidi =
+        (minMidi - SmartSightSingingPitchRangeConfig.rangePaddingSemitones)
+            .clamp(
+              SmartSightSingingPitchRangeConfig.hardMinMidi,
+              SmartSightSingingPitchRangeConfig.hardMaxMidi -
+                  SmartSightSingingPitchRangeConfig.minDisplayedRangeSemitones,
+            )
+            .toDouble();
+    maxMidi =
+        (maxMidi + SmartSightSingingPitchRangeConfig.rangePaddingSemitones)
+            .clamp(
+              minMidi +
+                  SmartSightSingingPitchRangeConfig.minDisplayedRangeSemitones,
+              SmartSightSingingPitchRangeConfig.hardMaxMidi,
+            )
+            .toDouble();
   }
 
   final smoothed = _medianSmooth(frames);
@@ -471,21 +502,26 @@ Uint8List _floatToInt16Bytes(Float32List floats) {
 }
 
 List<PitchFrame> _medianSmooth(List<PitchFrame> frames) {
-  if (frames.length < 5) return frames;
+  final radius = SmartSightSingingOfflineAnalysisConfig.medianSmoothRadius;
+  if (frames.length < radius * 2 + 1) return frames;
   final result = List<PitchFrame>.from(frames, growable: false);
   final window = <double>[];
   for (var i = 0; i < frames.length; i++) {
     if (!frames[i].pitched) continue;
     window.clear();
-    for (var k = -2; k <= 2; k++) {
+    for (var k = -radius; k <= radius; k++) {
       final j = i + k;
       if (j < 0 || j >= frames.length) continue;
       if (frames[j].pitched) window.add(frames[j].midi);
     }
-    if (window.length < 3) continue;
+    if (window.length <
+        SmartSightSingingOfflineAnalysisConfig.medianSmoothMinPitched) {
+      continue;
+    }
     window.sort();
     final med = window[window.length ~/ 2];
-    if ((med - frames[i].midi).abs() > 0.6) {
+    if ((med - frames[i].midi).abs() >
+        SmartSightSingingOfflineAnalysisConfig.medianSmoothJumpSemitones) {
       result[i] = PitchFrame(
         timeMs: frames[i].timeMs,
         frequencyHz: PitchUtils.midiToHz(med),

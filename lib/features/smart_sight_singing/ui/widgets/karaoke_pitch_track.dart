@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../config/smart_sight_singing_config.dart';
 import '../../audio/pitch_track.dart';
 import '../../state/smart_sight_singing_state.dart';
 
@@ -14,7 +15,7 @@ class KaraokePitchTrack extends StatelessWidget {
     required this.userPoints,
     required this.currentUserMidi,
     this.currentUserAmplitude = 0,
-    this.windowMs = 6000,
+    this.windowMs = SmartSightSingingViewConfig.karaokeWindowMs,
     super.key,
   });
 
@@ -89,7 +90,8 @@ class _KaraokePainter extends CustomPainter {
     final maxMidi = track.maxMidi;
     final midiRange = (maxMidi - minMidi).clamp(6, 60).toDouble();
 
-    final centerX = size.width * 0.32;
+    final centerX =
+        size.width * SmartSightSingingViewConfig.karaokeNowLineFraction;
     final pxPerMs = size.width / windowMs;
 
     double xFromTime(int ms) => centerX + (ms - playbackMs) * pxPerMs;
@@ -150,13 +152,17 @@ class _KaraokePainter extends CustomPainter {
       }
     } else {
       final frames = track.frames;
-      final stepMs = track.frameStepMs <= 0 ? 23 : track.frameStepMs;
-      final startIdx = ((visibleStartMs - 2 * stepMs) / stepMs)
-          .floor()
-          .clamp(0, frames.length - 1);
-      final endIdx = ((visibleEndMs + 2 * stepMs) / stepMs)
-          .ceil()
-          .clamp(0, frames.length - 1);
+      final stepMs = track.frameStepMs <= 0
+          ? SmartSightSingingMidiConfig.referenceFrameStepMs
+          : track.frameStepMs;
+      final startIdx = ((visibleStartMs - 2 * stepMs) / stepMs).floor().clamp(
+        0,
+        frames.length - 1,
+      );
+      final endIdx = ((visibleEndMs + 2 * stepMs) / stepMs).ceil().clamp(
+        0,
+        frames.length - 1,
+      );
 
       for (var i = startIdx; i <= endIdx; i++) {
         final f = frames[i];
@@ -187,8 +193,8 @@ class _KaraokePainter extends CustomPainter {
         final base = hit
             ? _userOn
             : near
-                ? _userNear
-                : _userOff;
+            ? _userNear
+            : _userOff;
         final color = base.withValues(alpha: alpha / 255);
         final radius = (1.5 + p.amplitude * 4).clamp(1.5, 6).toDouble();
         canvas.drawCircle(Offset(x, y), radius, Paint()..color = color);
@@ -198,7 +204,10 @@ class _KaraokePainter extends CustomPainter {
     if (currentUserMidi >= 0) {
       final y = yFromMidi(currentUserMidi);
       final ref = track.sampleAt(playbackMs);
-      final on = ref != null && (currentUserMidi - ref.midi).abs() < 0.45;
+      final cents = ref == null
+          ? double.nan
+          : PitchUtils.octaveNormalizedCents(currentUserMidi, ref.midi);
+      final on = !cents.isNaN && cents.abs() < 45;
       final color = on ? _userOn : _userNear;
       canvas.drawCircle(
         Offset(centerX, y),
@@ -211,7 +220,8 @@ class _KaraokePainter extends CustomPainter {
         Paint()..color = color.withValues(alpha: 0.35),
       );
       canvas.drawCircle(Offset(centerX, y), 4, Paint()..color = color);
-    } else if (currentUserAmplitude > 0.01) {
+    } else if (currentUserAmplitude >
+        SmartSightSingingViewConfig.micActivityIndicatorMinAmplitude) {
       // 有响度但未识别音高：在 Now 线底部显示麦克风活动指示。
       final barW = (8 + currentUserAmplitude * 40).clamp(8.0, 36.0);
       final barRect = RRect.fromRectAndRadius(
@@ -224,7 +234,10 @@ class _KaraokePainter extends CustomPainter {
       );
       canvas.drawRRect(
         barRect,
-        Paint()..color = _userNear.withValues(alpha: 0.35 + currentUserAmplitude * 0.4),
+        Paint()
+          ..color = _userNear.withValues(
+            alpha: 0.35 + currentUserAmplitude * 0.4,
+          ),
       );
     }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../config/smart_sight_singing_config.dart';
 import '../audio/midi_sight_singing_service.dart';
 import '../audio/pitch_track.dart';
 
@@ -72,6 +73,9 @@ class SightSingingState {
     this.scoredCount = 0,
     this.combo = 0,
     this.visualOnlyMode = false,
+    this.scoreSightReadingMode = false,
+    this.scoringStandardCents =
+        SmartSightSingingScoringConfig.defaultStandardCents,
     this.isPreviewPlaying = false,
   });
 
@@ -131,6 +135,12 @@ class SightSingingState {
   /// iPad 等设备：跟唱时不播放扬声器伴奏，仅看音符条（可选开关）。
   final bool visualOnlyMode;
 
+  /// 谱例视唱：用五线谱视图替代 KTV 音高轨展示参考旋律。
+  final bool scoreSightReadingMode;
+
+  /// 音准命中容差，单位 cents。默认 90 cents 内算 Good/命中。
+  final double scoringStandardCents;
+
   /// 就绪态试听旋律中。
   final bool isPreviewPlaying;
 
@@ -164,14 +174,18 @@ class SightSingingState {
     int? scoredCount,
     int? combo,
     bool? visualOnlyMode,
+    bool? scoreSightReadingMode,
+    double? scoringStandardCents,
     bool? isPreviewPlaying,
   }) {
     return SightSingingState(
       stage: stage ?? this.stage,
-      audioPath:
-          identical(audioPath, _sentinel) ? this.audioPath : audioPath as String?,
-      audioName:
-          identical(audioName, _sentinel) ? this.audioName : audioName as String?,
+      audioPath: identical(audioPath, _sentinel)
+          ? this.audioPath
+          : audioPath as String?,
+      audioName: identical(audioName, _sentinel)
+          ? this.audioName
+          : audioName as String?,
       analyzingProgress: analyzingProgress ?? this.analyzingProgress,
       errorMessage: identical(errorMessage, _sentinel)
           ? this.errorMessage
@@ -194,6 +208,9 @@ class SightSingingState {
       scoredCount: scoredCount ?? this.scoredCount,
       combo: combo ?? this.combo,
       visualOnlyMode: visualOnlyMode ?? this.visualOnlyMode,
+      scoreSightReadingMode:
+          scoreSightReadingMode ?? this.scoreSightReadingMode,
+      scoringStandardCents: scoringStandardCents ?? this.scoringStandardCents,
       isPreviewPlaying: isPreviewPlaying ?? this.isPreviewPlaying,
     );
   }

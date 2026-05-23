@@ -1,10 +1,11 @@
+import '../config/smart_sight_singing_config.dart';
 import 'realtime_pitch_capture.dart';
 
 /// 过滤扬声器伴奏被麦克风录入导致的「假跟唱」。
 abstract final class PitchVoiceGate {
   /// 无声跟唱：不外放伴奏，不做串音过滤。
   static const PitchVoiceGatePolicy visualOnly = PitchVoiceGatePolicy(
-    minAmplitude: 0.012,
+    minAmplitude: SmartSightSingingVoiceGateConfig.visualOnlyMinAmplitude,
     bleedMatchMaxAmplitude: 0,
     bleedMatchMaxCents: 0,
     rejectPlaybackPitchMatch: false,
@@ -13,11 +14,11 @@ abstract final class PitchVoiceGate {
 
   /// 有伴奏跟唱：仅过滤「极低响度 + 与当前钢琴音完全一致」的扬声器串音。
   /// 唱准参考音不应被过滤——用户本来就要对准旋律。
-  static const PitchVoiceGatePolicy withAccompaniment =
-      PitchVoiceGatePolicy(
-    minAmplitude: 0.018,
-    bleedMatchMaxAmplitude: 0.075,
-    bleedMatchMaxCents: 10,
+  static const PitchVoiceGatePolicy withAccompaniment = PitchVoiceGatePolicy(
+    minAmplitude: SmartSightSingingVoiceGateConfig.accompanimentMinAmplitude,
+    bleedMatchMaxAmplitude:
+        SmartSightSingingVoiceGateConfig.bleedMatchMaxAmplitude,
+    bleedMatchMaxCents: SmartSightSingingVoiceGateConfig.bleedMatchMaxCents,
     rejectPlaybackPitchMatch: true,
     rejectRefMidiMatch: false,
   );
@@ -40,7 +41,9 @@ abstract final class PitchVoiceGate {
         playbackMidi > 0) {
       final playbackDiff = (event.midi - playbackMidi).abs() * 100;
       // 响度明显高于串音水平时，视为用户发声（即使音高与伴奏一致）。
-      if (event.amplitude > policy.bleedMatchMaxAmplitude + 0.045) {
+      if (event.amplitude >
+          policy.bleedMatchMaxAmplitude +
+              SmartSightSingingVoiceGateConfig.strongVoiceExtraAmplitude) {
         return true;
       }
       if (playbackDiff <= policy.bleedMatchMaxCents &&

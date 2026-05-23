@@ -3,9 +3,8 @@ import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 
+import '../config/smart_sight_singing_config.dart';
 import 'midi_file_picker.dart';
-
-const int kMaxLocalMidiBytes = 8 * 1024 * 1024;
 
 Future<PickedMidiFile?> pickLocalMidiFileImpl() async {
   final result = await FilePicker.platform.pickFiles(
@@ -26,12 +25,14 @@ Future<PickedMidiFile?> pickLocalMidiFileImpl() async {
   if (size <= 0) {
     throw StateError('所选 MIDI 文件为空。');
   }
-  if (size > kMaxLocalMidiBytes) {
+  if (size > SmartSightSingingImportConfig.maxLocalMidiBytes) {
     throw StateError('本地 MIDI 过大，请使用 8MB 以内的文件。');
   }
 
   final bytes = Uint8List.fromList(await ioFile.readAsBytes());
-  final name = file.name.trim().isEmpty ? _nameFromPath(path) : file.name.trim();
+  final name = file.name.trim().isEmpty
+      ? _nameFromPath(path)
+      : file.name.trim();
   return PickedMidiFile(name: name, path: path, bytes: bytes);
 }
 

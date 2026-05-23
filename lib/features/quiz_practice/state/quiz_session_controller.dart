@@ -65,6 +65,7 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
     final response = await _repository.getItemList(
       schoolId: args.schoolId,
       practiceId: practiceId,
+      practiceType: args.practiceType.apiKey,
     );
     if (!mounted) return;
 

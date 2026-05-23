@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import '../config/smart_sight_singing_config.dart';
 import 'pitch_track.dart';
 
 /// KTV 参考「音符条」：由连续帧合并、量化后得到，用于 UI 绘制与打分。
@@ -24,20 +25,19 @@ class KtvNoteSegment {
 /// 商业 KTV 的参考音高来自伴奏 MIDI / 人工标注，而不是对混音做 YIN。
 /// 这里在无法拿到 MIDI 时，对离线 YIN 结果做：八度连续量化、合并、去毛刺。
 abstract final class KtvPitchGuideBuilder {
-  static const int _minNoteMs = 140;
-  static const int _mergeGapMs = 160;
-  static const double _minConfidence = 0.52;
-
   static List<KtvNoteSegment> fromFrames(
     List<PitchFrame> frames, {
-    int frameStepMs = 23,
+    int frameStepMs = SmartSightSingingMidiConfig.referenceFrameStepMs,
   }) {
     if (frames.isEmpty) return const [];
 
     final quantized = <({int timeMs, double midi})>[];
     double? prevMidi;
     for (final frame in frames) {
-      if (!frame.pitched || frame.confidence < _minConfidence) continue;
+      if (!frame.pitched ||
+          frame.confidence < SmartSightSingingKtvGuideConfig.minConfidence) {
+        continue;
+      }
       final midi = _quantizeWithContinuity(frame.midi, prevMidi);
       if (!midi.isFinite) continue;
       prevMidi = midi;
@@ -53,11 +53,15 @@ abstract final class KtvPitchGuideBuilder {
     for (var i = 1; i < quantized.length; i++) {
       final q = quantized[i];
       final gap = q.timeMs - segEnd;
-      final sameNote = (q.midi - segMidi).abs() < 0.5;
-      if (sameNote && gap <= _mergeGapMs) {
+      final sameNote =
+          (q.midi - segMidi).abs() <
+          SmartSightSingingKtvGuideConfig.sameNoteToleranceSemitones;
+      if (sameNote && gap <= SmartSightSingingKtvGuideConfig.mergeGapMs) {
         segEnd = q.timeMs + frameStepMs;
       } else {
-        raw.add(KtvNoteSegment(startMs: segStart, endMs: segEnd, midi: segMidi));
+        raw.add(
+          KtvNoteSegment(startMs: segStart, endMs: segEnd, midi: segMidi),
+        );
         segStart = q.timeMs;
         segEnd = q.timeMs + frameStepMs;
         segMidi = q.midi;
@@ -73,16 +77,11 @@ abstract final class KtvPitchGuideBuilder {
     if (!raw.isFinite) return double.nan;
     final base = raw.round();
     if (prev == null || !prev.isFinite) return base.toDouble();
-    final candidates = <double>[
-      base - 24.0,
-      base - 12.0,
-      base.toDouble(),
-      base + 12.0,
-      base + 24.0,
-    ];
-    candidates.sort(
-      (a, b) => (a - prev).abs().compareTo((b - prev).abs()),
-    );
+    final candidates = SmartSightSingingKtvGuideConfig
+        .octaveContinuityCandidates
+        .map((offset) => base + offset)
+        .toList();
+    candidates.sort((a, b) => (a - prev).abs().compareTo((b - prev).abs()));
     return candidates.first;
   }
 
@@ -94,9 +93,11 @@ abstract final class KtvPitchGuideBuilder {
     for (var i = 1; i < segments.length; i++) {
       final prev = out.last;
       final cur = segments[i];
-      final same = (prev.midi - cur.midi).abs() < 0.5;
+      final same =
+          (prev.midi - cur.midi).abs() <
+          SmartSightSingingKtvGuideConfig.sameNoteToleranceSemitones;
       final gap = cur.startMs - prev.endMs;
-      if (same && gap <= _mergeGapMs) {
+      if (same && gap <= SmartSightSingingKtvGuideConfig.mergeGapMs) {
         out[out.length - 1] = KtvNoteSegment(
           startMs: prev.startMs,
           endMs: cur.endMs,
@@ -109,35 +110,47 @@ abstract final class KtvPitchGuideBuilder {
     return out;
   }
 
-  static List<KtvNoteSegment> _dropSpuriousBlips(List<KtvNoteSegment> segments) {
+  static List<KtvNoteSegment> _dropSpuriousBlips(
+    List<KtvNoteSegment> segments,
+  ) {
     if (segments.isEmpty) return segments;
     final out = <KtvNoteSegment>[];
     for (var i = 0; i < segments.length; i++) {
       final seg = segments[i];
-      if (seg.durationMs >= _minNoteMs) {
+      if (seg.durationMs >= SmartSightSingingKtvGuideConfig.minNoteMs) {
         out.add(seg);
         continue;
       }
       final prev = i > 0 ? segments[i - 1] : null;
       final next = i + 1 < segments.length ? segments[i + 1] : null;
-      final jumpPrev =
-          prev == null ? 0.0 : (seg.midi - prev.midi).abs();
-      final jumpNext =
-          next == null ? 0.0 : (seg.midi - next.midi).abs();
+      final jumpPrev = prev == null ? 0.0 : (seg.midi - prev.midi).abs();
+      final jumpNext = next == null ? 0.0 : (seg.midi - next.midi).abs();
       // 极短且与前后都相差超过 4 半音 → 视为伴奏毛刺。
-      if (jumpPrev > 4 && jumpNext > 4) {
+      if (jumpPrev >
+              SmartSightSingingKtvGuideConfig.spuriousBlipJumpSemitones &&
+          jumpNext >
+              SmartSightSingingKtvGuideConfig.spuriousBlipJumpSemitones) {
         continue;
       }
       out.add(seg);
     }
-    return out.where((s) => s.durationMs >= 80).toList(growable: false);
+    return out
+        .where(
+          (s) =>
+              s.durationMs >=
+              SmartSightSingingKtvGuideConfig.minCleanedSegmentMs,
+        )
+        .toList(growable: false);
   }
 
   static ({double minMidi, double maxMidi}) rangeForNotes(
     List<KtvNoteSegment> notes,
   ) {
     if (notes.isEmpty) {
-      return (minMidi: 48.0, maxMidi: 72.0);
+      return (
+        minMidi: SmartSightSingingPitchRangeConfig.defaultMinMidi,
+        maxMidi: SmartSightSingingPitchRangeConfig.defaultMaxMidi,
+      );
     }
     var minM = double.infinity;
     var maxM = -double.infinity;
@@ -146,8 +159,19 @@ abstract final class KtvPitchGuideBuilder {
       if (n.midi > maxM) maxM = n.midi;
     }
     return (
-      minMidi: (minM - 2).clamp(24, 96).toDouble(),
-      maxMidi: (maxM + 2).clamp(minM + 6, 100).toDouble(),
+      minMidi: (minM - SmartSightSingingPitchRangeConfig.rangePaddingSemitones)
+          .clamp(
+            SmartSightSingingPitchRangeConfig.hardMinMidi,
+            SmartSightSingingPitchRangeConfig.hardMaxMidi -
+                SmartSightSingingPitchRangeConfig.minDisplayedRangeSemitones,
+          )
+          .toDouble(),
+      maxMidi: (maxM + SmartSightSingingPitchRangeConfig.rangePaddingSemitones)
+          .clamp(
+            minM + SmartSightSingingPitchRangeConfig.minDisplayedRangeSemitones,
+            SmartSightSingingPitchRangeConfig.hardMaxMidi,
+          )
+          .toDouble(),
     );
   }
 }

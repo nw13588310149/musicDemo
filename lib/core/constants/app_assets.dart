@@ -480,4 +480,20 @@ abstract final class AppAssets {
   static const infoGenderMaleSelected = 'assets/images/info/man1.png';
   static const infoGenderFemale = 'assets/images/info/women.png';
   static const infoGenderFemaleSelected = 'assets/images/info/women1.png';
+
+  // 智慧校园群聊
+  static const groupChatBg = 'assets/images/groupChat/bg.png';
+  static const groupChatPin = 'assets/images/groupChat/Pin.png';
+  static const groupChatPinOff = 'assets/images/groupChat/Pin1.png';
+  static const groupChatPinAction = 'assets/images/groupChat/zd.png';
+  static const groupChatPinActionOn = 'assets/images/groupChat/yzd.png';
+  static const groupChatSet = 'assets/images/groupChat/set.png';
+  static const groupChatInfo = 'assets/images/groupChat/info.png';
+  static const groupChatVoice = 'assets/images/groupChat/voice.png';
+  static const groupChatVoiceMode = 'assets/images/groupChat/voice1.png';
+  static const groupChatMsg = 'assets/images/groupChat/msg.png';
+  static const groupChatUpload = 'assets/images/groupChat/sc.png';
+  static const groupChatSend = 'assets/images/groupChat/send.png';
+  static const groupChatPlay = 'assets/images/groupChat/play.png';
+  static const groupChatStop = 'assets/images/groupChat/stop.png';
 }

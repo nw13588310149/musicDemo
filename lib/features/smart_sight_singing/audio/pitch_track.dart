@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import '../config/smart_sight_singing_config.dart';
 import 'ktv_pitch_guide.dart';
 
 /// 单帧音高分析结果。
@@ -23,7 +24,10 @@ class PitchFrame {
   /// YIN 概率（0~1），越高越可信。
   final double confidence;
 
-  bool get pitched => frequencyHz > 0 && confidence > 0.4 && midi.isFinite;
+  bool get pitched =>
+      frequencyHz > 0 &&
+      confidence > SmartSightSingingRealtimePitchConfig.frameMinConfidence &&
+      midi.isFinite;
 }
 
 /// 参考音高曲线 + 元数据。
@@ -74,11 +78,15 @@ class PitchTrack {
   }
 
   /// 在时间 [ms] 附近返回参考音高帧（优先音符条，其次原始帧）。
-  PitchFrame? sampleAt(int ms, {int searchHalfWindowMs = 60}) {
+  PitchFrame? sampleAt(
+    int ms, {
+    int searchHalfWindowMs =
+        SmartSightSingingScoringConfig.referenceFrameSearchHalfWindowMs,
+  }) {
     final note = noteAt(
       ms,
-      earlyMs: 120,
-      lateMs: 120,
+      earlyMs: SmartSightSingingScoringConfig.referenceSampleEarlyMs,
+      lateMs: SmartSightSingingScoringConfig.referenceSampleLateMs,
     );
     if (note != null) {
       return PitchFrame(
@@ -122,6 +130,18 @@ class PitchUtils {
   static double centsBetween(double real, double ref) {
     if (ref <= 0 || real <= 0) return double.nan;
     return 1200 * (math.log(real / ref) / math.ln2);
+  }
+
+  /// 计算 MIDI 音高相对参考音的最近八度偏差。
+  ///
+  /// 上传 MIDI 常常不在人声舒适音区，实时人声检测也可能偶发八度跳变；
+  /// 智能视唱按旋律音级评分时，应避免同名音跨八度被直接判为 0 分。
+  static double octaveNormalizedCents(double midi, double refMidi) {
+    if (!midi.isFinite || !refMidi.isFinite || midi < 0 || refMidi < 0) {
+      return double.nan;
+    }
+    final cents = (midi - refMidi) * 100;
+    return cents - (cents / 1200).roundToDouble() * 1200;
   }
 
   /// 例如 midi=60 -> "C4"。

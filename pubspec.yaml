@@ -175,6 +175,7 @@ flutter:
     - assets/images/note/
     - assets/images/avtor/
     - assets/images/piano/
+    - assets/images/groupChat/
     - assets/audio/demo.mid
     - assets/audio/demo.mp3
     - assets/audio/demo_analysis.wav

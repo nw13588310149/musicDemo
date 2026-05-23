@@ -36,7 +36,9 @@ class ParsedMidiFile {
   final double totalMs;
 
   List<ParsedMidiNote> notesOnTrack(int trackIndex) {
-    return notes.where((n) => n.trackIndex == trackIndex).toList(growable: false);
+    return notes
+        .where((n) => n.trackIndex == trackIndex)
+        .toList(growable: false);
   }
 }
 
@@ -70,7 +72,7 @@ abstract final class MidiFileParser {
     }
 
     var offset = 8 + headerLen;
-    final allNotes = <ParsedMidiNote>[];
+    final trackEvents = <_ParsedTrackEvents>[];
     var trackIndex = 0;
 
     while (offset + 8 <= bytes.length && trackIndex < trackCount) {
@@ -84,11 +86,10 @@ abstract final class MidiFileParser {
 
       if (chunkId == 'MTrk') {
         trackIndex += 1;
-        allNotes.addAll(
-          _parseTrack(
-            bytes.sublist(chunkStart, chunkEnd),
+        trackEvents.add(
+          _ParsedTrackEvents(
             trackIndex: trackIndex,
-            ticksPerQuarter: division,
+            events: _parseTrackEvents(bytes.sublist(chunkStart, chunkEnd)),
           ),
         );
       }
@@ -106,6 +107,19 @@ abstract final class MidiFileParser {
       }
     }
 
+    final tempos = _globalTempoMap(trackEvents);
+    final allNotes = <ParsedMidiNote>[];
+    for (final track in trackEvents) {
+      allNotes.addAll(
+        _pairNotes(
+          events: track.events,
+          trackIndex: track.trackIndex,
+          ticksPerQuarter: division,
+          tempos: tempos,
+        ),
+      );
+    }
+
     final totalMs = allNotes.isEmpty
         ? 0.0
         : allNotes.map((n) => n.endMs).reduce((a, b) => a > b ? a : b);
@@ -119,11 +133,7 @@ abstract final class MidiFileParser {
     );
   }
 
-  static List<ParsedMidiNote> _parseTrack(
-    Uint8List trackData, {
-    required int trackIndex,
-    required int ticksPerQuarter,
-  }) {
+  static List<_TimedEvent> _parseTrackEvents(Uint8List trackData) {
     final events = <_TimedEvent>[];
     var offset = 0;
     var tick = 0;
@@ -156,7 +166,8 @@ abstract final class MidiFileParser {
         final dataEnd = offset + len;
         if (dataEnd > trackData.length) break;
         if (metaType == _metaTempo && len == 3) {
-          final uspq = (trackData[offset] << 16) |
+          final uspq =
+              (trackData[offset] << 16) |
               (trackData[offset + 1] << 8) |
               trackData[offset + 2];
           events.add(_TimedEvent.tempo(tick: tick, usPerQuarter: uspq));
@@ -188,11 +199,7 @@ abstract final class MidiFileParser {
                   pitch: pitch,
                   velocity: velocity,
                 )
-              : _TimedEvent.noteOff(
-                  tick: tick,
-                  channel: channel,
-                  pitch: pitch,
-                ),
+              : _TimedEvent.noteOff(tick: tick, channel: channel, pitch: pitch),
         );
         continue;
       }
@@ -210,26 +217,15 @@ abstract final class MidiFileParser {
       offset += 1;
     }
 
-    return _pairNotes(
-      events: events,
-      trackIndex: trackIndex,
-      ticksPerQuarter: ticksPerQuarter,
-    );
+    return events;
   }
 
   static List<ParsedMidiNote> _pairNotes({
     required List<_TimedEvent> events,
     required int trackIndex,
     required int ticksPerQuarter,
+    required List<(int tick, int usPerQuarter)> tempos,
   }) {
-    final tempos = <(int tick, int usPerQuarter)>[(0, 500000)];
-    for (final event in events) {
-      if (event.kind == _TimedEventKind.tempo) {
-        tempos.add((event.tick, event.usPerQuarter!));
-      }
-    }
-    tempos.sort((a, b) => a.$1.compareTo(b.$1));
-
     double tickToMs(int tick) {
       var ms = 0.0;
       var prevTick = 0;
@@ -276,6 +272,21 @@ abstract final class MidiFileParser {
     return notes;
   }
 
+  static List<(int tick, int usPerQuarter)> _globalTempoMap(
+    List<_ParsedTrackEvents> tracks,
+  ) {
+    final tempos = <(int tick, int usPerQuarter)>[(0, 500000)];
+    for (final track in tracks) {
+      for (final event in track.events) {
+        if (event.kind == _TimedEventKind.tempo) {
+          tempos.add((event.tick, event.usPerQuarter!));
+        }
+      }
+    }
+    tempos.sort((a, b) => a.$1.compareTo(b.$1));
+    return tempos;
+  }
+
   static _VarLenResult _readVarLen(Uint8List data, int offset) {
     var value = 0;
     var i = offset;
@@ -297,6 +308,13 @@ class _VarLenResult {
   final int nextOffset;
 }
 
+class _ParsedTrackEvents {
+  const _ParsedTrackEvents({required this.trackIndex, required this.events});
+
+  final int trackIndex;
+  final List<_TimedEvent> events;
+}
+
 enum _TimedEventKind { tempo, noteOn, noteOff }
 
 class _TimedEvent {
@@ -309,10 +327,7 @@ class _TimedEvent {
     this.velocity,
   });
 
-  factory _TimedEvent.tempo({
-    required int tick,
-    required int usPerQuarter,
-  }) {
+  factory _TimedEvent.tempo({required int tick, required int usPerQuarter}) {
     return _TimedEvent._(
       kind: _TimedEventKind.tempo,
       tick: tick,

@@ -82,6 +82,11 @@ class TeacherRepository {
     return client.post('$_base/courseList', data: body);
   }
 
+  /// 班主任编辑班级群资料。当前用于更新群聊名称与头像。
+  Future<ApiResponse> classUpdate(Map<String, dynamic> body) {
+    return client.post('$_base/classUpdate', data: body);
+  }
+
   // ============== 小班课申请 ==============
 
   /// 提交"申请小课"。

@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../../core/audio/native_playback_audio_session.dart';
+import '../config/smart_sight_singing_config.dart';
 import '../audio/ktv_scoring.dart';
 import '../audio/midi_file_parser.dart';
 import '../audio/midi_playback_scheduler.dart';
@@ -29,11 +30,11 @@ final smartSightSingingControllerProvider =
 
 class SmartSightSingingController extends StateNotifier<SightSingingState> {
   SmartSightSingingController()
-      : super(
-          SightSingingState(
-            visualOnlyMode: SightSingingPlatform.defaultsToVisualOnlyMode,
-          ),
-        ) {
+    : super(
+        SightSingingState(
+          visualOnlyMode: SightSingingPlatform.defaultsToVisualOnlyMode,
+        ),
+      ) {
     _playback = MidiPlaybackScheduler();
     _playback.muteAudioOutput = SightSingingPlatform.defaultsToVisualOnlyMode;
     _positionSub = _playback.positionMs.listen(_onPlaybackPosition);
@@ -46,11 +47,6 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     });
   }
 
-  static const String _demoAssetPath = 'assets/audio/demo.mid';
-  static const String _demoDisplayName = 'demo';
-  static const int _maxOnlineMidiBytes = 8 * 1024 * 1024;
-  static const int _countdownStart = 3;
-
   late final MidiPlaybackScheduler _playback;
   StreamSubscription<int>? _positionSub;
   StreamSubscription<void>? _completedSub;
@@ -62,10 +58,6 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
   Timer? _countdownTimer;
   Timer? _previewTimer;
   var _isPreviewSession = false;
-
-  static const int _previewMaxMs = 20000;
-
-  static const int _userPointsCap = 720;
   bool _shuttingDown = false;
 
   static String _formatDebugError(
@@ -126,11 +118,13 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     if (_blocksImport()) return;
 
     try {
-      final bytes = await rootBundle.load(_demoAssetPath);
+      final bytes = await rootBundle.load(
+        SmartSightSingingImportConfig.demoMidiAssetPath,
+      );
       await _prepareFromMidiBytes(
         bytes: Uint8List.sublistView(bytes),
-        displayName: _demoDisplayName,
-        sourceLabel: _demoAssetPath,
+        displayName: SmartSightSingingImportConfig.demoDisplayName,
+        sourceLabel: SmartSightSingingImportConfig.demoMidiAssetPath,
       );
     } on MidiSightSingingException catch (e, stack) {
       if (!mounted) return;
@@ -194,8 +188,8 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     try {
       final response = await Dio(
         BaseOptions(
-          connectTimeout: const Duration(seconds: 12),
-          receiveTimeout: const Duration(seconds: 45),
+          connectTimeout: SmartSightSingingImportConfig.onlineConnectTimeout,
+          receiveTimeout: SmartSightSingingImportConfig.onlineReceiveTimeout,
           responseType: ResponseType.bytes,
           followRedirects: true,
         ),
@@ -204,7 +198,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       if (data == null || data.isEmpty) {
         throw MidiSightSingingException('在线 MIDI 为空，请换一个地址试试。');
       }
-      if (data.length > _maxOnlineMidiBytes) {
+      if (data.length > SmartSightSingingImportConfig.maxOnlineMidiBytes) {
         throw MidiSightSingingException('在线 MIDI 过大，请使用 8MB 以内的文件。');
       }
 
@@ -299,10 +293,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     try {
       final bundle = MidiSightSingingService.buildBundle(parsed, trackIndex);
       _midiBundle = bundle;
-      await _playback.prepare(
-        bundle.playbackEvents,
-        totalMs: bundle.totalMs,
-      );
+      await _playback.prepare(bundle.playbackEvents, totalMs: bundle.totalMs);
 
       if (!mounted) return;
       state = state.copyWith(
@@ -346,6 +337,19 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     state = state.copyWith(visualOnlyMode: enabled);
   }
 
+  void setScoreSightReadingMode(bool enabled) {
+    if (state.scoreSightReadingMode == enabled) return;
+    state = state.copyWith(scoreSightReadingMode: enabled);
+  }
+
+  void setScoringStandardCents(double cents) {
+    final normalized = SmartSightSingingScoringConfig.normalizeStandardCents(
+      cents,
+    );
+    if ((state.scoringStandardCents - normalized).abs() < 0.01) return;
+    state = state.copyWith(scoringStandardCents: normalized);
+  }
+
   /// iPad 无声模式下试听旋律（会短暂开启扬声器伴奏）。
   Future<void> previewMelody() async {
     if (state.stage != SightSingingStage.ready || _midiBundle == null) return;
@@ -363,10 +367,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       await NativePlaybackAudioSession.ensurePlaybackActive();
     }
 
-    await _playback.prepare(
-      bundle.playbackEvents,
-      totalMs: bundle.totalMs,
-    );
+    await _playback.prepare(bundle.playbackEvents, totalMs: bundle.totalMs);
 
     try {
       await _playback.start(muteAudio: false);
@@ -382,9 +383,10 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     state = state.copyWith(isPreviewPlaying: true, playbackMs: 0);
 
     _previewTimer?.cancel();
-    final previewMs = bundle.totalMs < _previewMaxMs
+    final previewMs =
+        bundle.totalMs < SmartSightSingingSessionConfig.melodyPreviewMaxMs
         ? bundle.totalMs
-        : _previewMaxMs;
+        : SmartSightSingingSessionConfig.melodyPreviewMaxMs;
     _previewTimer = Timer(Duration(milliseconds: previewMs), () {
       unawaited(_stopPreview());
     });
@@ -452,10 +454,13 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       }
 
       final pitchStream = await capture.start();
-      _pitchSub = pitchStream.listen(_onUserPitch, onError: (Object e, _) {
-        if (!mounted) return;
-        state = state.copyWith(errorMessage: '录音异常：$e');
-      });
+      _pitchSub = pitchStream.listen(
+        _onUserPitch,
+        onError: (Object e, _) {
+          if (!mounted) return;
+          state = state.copyWith(errorMessage: '录音异常：$e');
+        },
+      );
 
       if (!state.visualOnlyMode) {
         unawaited(_warmupAccompanimentPlayback());
@@ -472,13 +477,16 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       return;
     }
 
-    _scoringSession = KtvScoringSession(track: state.track!);
+    _scoringSession = KtvScoringSession(
+      track: state.track!,
+      standardCents: state.scoringStandardCents,
+    );
     _heldUserMidi = -1;
     _heldUserMidiUntilMs = 0;
 
     state = state.copyWith(
       stage: SightSingingStage.countdown,
-      countdownSeconds: _countdownStart,
+      countdownSeconds: SmartSightSingingSessionConfig.countdownStartSeconds,
       userPoints: const <UserPitchPoint>[],
       playbackMs: 0,
       currentScore: 0,
@@ -560,10 +568,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     _scoringSession = null;
     await _stopCaptureSilently();
     if (!mounted) return;
-    state = state.copyWith(
-      stage: SightSingingStage.ready,
-      countdownSeconds: 0,
-    );
+    state = state.copyWith(stage: SightSingingStage.ready, countdownSeconds: 0);
   }
 
   Future<void> stopSinging({bool reset = false}) async {
@@ -698,7 +703,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     if (session == null) return;
 
     final refFrame = state.track?.sampleAt(
-      state.playbackMs - KtvScoringConfig.micLatencyMs,
+      state.playbackMs - SmartSightSingingScoringConfig.micLatencyMs,
     );
     final refMidi = refFrame?.pitched == true ? refFrame!.midi : null;
     final playbackMidi = _playback.activePlaybackPitch?.toDouble();
@@ -710,8 +715,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     );
 
     // UI / 绘制始终用原始检测结果；串音过滤仅作用于打分。
-    var displayMidi =
-        event.pitched && event.midi >= 0 ? event.midi : -1.0;
+    var displayMidi = event.pitched && event.midi >= 0 ? event.midi : -1.0;
     if (displayMidi >= 0) {
       _heldUserMidi = displayMidi;
       _heldUserMidiUntilMs = timeMs + 220;
@@ -739,8 +743,11 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     );
 
     final next = List<UserPitchPoint>.from(state.userPoints)..add(newPoint);
-    if (next.length > _userPointsCap) {
-      next.removeRange(0, next.length - _userPointsCap);
+    if (next.length > SmartSightSingingSessionConfig.userPitchPointCap) {
+      next.removeRange(
+        0,
+        next.length - SmartSightSingingSessionConfig.userPitchPointCap,
+      );
     }
 
     state = state.copyWith(

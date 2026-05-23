@@ -19,6 +19,7 @@ import '../../../core/providers/app_providers.dart';
 ///   - `deleteMsg`             撤回消息
 ///   - `updateAnnouncement`    设置群公告
 ///   - `updateDoNotDisturb`    设置消息免打扰
+///   - `updateTop`             设置群聊置顶
 ///
 /// 请求头 `app-token` / `schoolId` 由 [ApiClient] 统一注入；调用方只需传
 /// 业务字段。所有方法返回 [ApiResponse]，由调用方按 `isSuccess` + `data`
@@ -195,5 +196,64 @@ class ChatRepository {
         'doNotDisturb': doNotDisturb,
       },
     );
+  }
+
+  /// 设置群聊置顶。`top` true=置顶 / false=取消置顶。
+  Future<ApiResponse> updateTop({
+    required String classId,
+    required bool top,
+  }) {
+    return client.post(
+      '$_base/updateTop',
+      data: <String, dynamic>{
+        'classId': classId,
+        'top': top,
+      },
+    );
+  }
+
+  /// 上传图片文件（群聊图片消息），返回 `data` 为可访问的 URL 字符串。
+  Future<ApiResponse> uploadImage({
+    required Uint8List bytes,
+    required String filename,
+  }) {
+    final mime = _imageMime(filename);
+    final form = FormData.fromMap(<String, dynamic>{
+      'file': MultipartFile.fromBytes(
+        bytes,
+        filename: filename,
+        contentType: mime,
+      ),
+    });
+    return client.postFormData('/app/common/v2/fileUpload', data: form);
+  }
+
+  /// 上传本地图片路径，移动端/桌面端相册选择后避免整图读入内存。
+  Future<ApiResponse> uploadImagePath({
+    required String filePath,
+    required String filename,
+  }) {
+    final form = FormData.fromMap(<String, dynamic>{
+      'file': MultipartFile.fromFileSync(
+        filePath,
+        filename: filename,
+        contentType: _imageMime(filename),
+      ),
+    });
+    return client.postFormData('/app/common/v2/fileUpload', data: form);
+  }
+
+  DioMediaType _imageMime(String filename) {
+    final lower = filename.toLowerCase();
+    if (lower.endsWith('.png')) {
+      return DioMediaType('image', 'png');
+    }
+    if (lower.endsWith('.webp')) {
+      return DioMediaType('image', 'webp');
+    }
+    if (lower.endsWith('.gif')) {
+      return DioMediaType('image', 'gif');
+    }
+    return DioMediaType('image', 'jpeg');
   }
 }

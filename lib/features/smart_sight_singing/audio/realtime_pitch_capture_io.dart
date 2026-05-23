@@ -6,21 +6,21 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 
 import '../../../core/audio/native_playback_audio_session.dart';
+import '../config/smart_sight_singing_config.dart';
 import 'live_pitch_detector.dart';
 import 'realtime_pitch_capture.dart';
 
 class _IORealtimePitchCapture implements RealtimePitchCapture {
   _IORealtimePitchCapture({required this.profile})
-      : _frameBuffer = Uint8List(_bufferSize * 2),
-        _detector = LivePitchDetector(
-          sampleRate: _sampleRate.toDouble(),
-          bufferSize: _bufferSize,
-        );
+    : _frameBuffer = Uint8List(
+        SmartSightSingingRealtimePitchConfig.bufferSize * 2,
+      ),
+      _detector = LivePitchDetector(
+        sampleRate: SmartSightSingingRealtimePitchConfig.sampleRate.toDouble(),
+        bufferSize: SmartSightSingingRealtimePitchConfig.bufferSize,
+      );
 
   final RealtimePitchCaptureProfile profile;
-
-  static const int _sampleRate = 44100;
-  static const int _bufferSize = 4096;
 
   final AudioRecorder _recorder = AudioRecorder();
   final LivePitchDetector _detector;
@@ -52,7 +52,7 @@ class _IORealtimePitchCapture implements RealtimePitchCapture {
   RecordConfig get _recordConfig {
     return const RecordConfig(
       encoder: AudioEncoder.pcm16bits,
-      sampleRate: _sampleRate,
+      sampleRate: SmartSightSingingRealtimePitchConfig.sampleRate,
       numChannels: 1,
       echoCancel: false,
       noiseSuppress: false,
@@ -103,18 +103,16 @@ class _IORealtimePitchCapture implements RealtimePitchCapture {
     return controller.stream;
   }
 
-  void _consumeChunk(Uint8List chunk, StreamController<RealtimePitchEvent> out) {
+  void _consumeChunk(
+    Uint8List chunk,
+    StreamController<RealtimePitchEvent> out,
+  ) {
     var offset = 0;
     while (offset < chunk.length) {
       final need = _frameBuffer.length - _filledBytes;
       final available = chunk.length - offset;
       final take = available < need ? available : need;
-      _frameBuffer.setRange(
-        _filledBytes,
-        _filledBytes + take,
-        chunk,
-        offset,
-      );
+      _frameBuffer.setRange(_filledBytes, _filledBytes + take, chunk, offset);
       _filledBytes += take;
       offset += take;
       if (_filledBytes == _frameBuffer.length) {
@@ -141,7 +139,7 @@ class _IORealtimePitchCapture implements RealtimePitchCapture {
     if (!_running || out.isClosed) return;
 
     final amplitude = _measureAmplitude(frame);
-    if (amplitude.rms < 180) {
+    if (amplitude.rms < SmartSightSingingRealtimePitchConfig.minRms) {
       out.add(
         RealtimePitchEvent(
           frequencyHz: 0,
@@ -194,10 +192,17 @@ class _IORealtimePitchCapture implements RealtimePitchCapture {
     }
     final rms = math.sqrt(sumSq / n);
     final peakNorm = (peak / 32767.0).clamp(0.0, 1.0);
-    final rmsNorm = (rms / 900.0).clamp(0.0, 1.0);
+    final rmsNorm =
+        (rms / SmartSightSingingRealtimePitchConfig.amplitudeRmsDivisor).clamp(
+          0.0,
+          1.0,
+        );
     return _AmplitudeSnapshot(
       rms: rms,
-      normalized: math.max(peakNorm * 0.55, rmsNorm),
+      normalized: math.max(
+        peakNorm * SmartSightSingingRealtimePitchConfig.amplitudePeakWeight,
+        rmsNorm,
+      ),
     );
   }
 
@@ -230,5 +235,4 @@ class _AmplitudeSnapshot {
 
 RealtimePitchCapture createPlatformRealtimePitchCapture({
   RealtimePitchCaptureProfile profile = RealtimePitchCaptureProfile.general,
-}) =>
-    _IORealtimePitchCapture(profile: profile);
+}) => _IORealtimePitchCapture(profile: profile);

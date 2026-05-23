@@ -1,4 +1,4 @@
-﻿import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,10 +6,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../audio/midi_sight_singing_service.dart';
 import '../audio/pitch_track.dart';
+import '../config/smart_sight_singing_config.dart';
 import '../state/sight_singing_platform.dart';
 import '../state/smart_sight_singing_controller.dart';
 import '../state/smart_sight_singing_state.dart';
 import 'widgets/karaoke_pitch_track.dart';
+import 'widgets/score_sight_reading_track.dart';
 
 /// demo 页中性色，不使用产品主色。
 abstract final class _DemoUi {
@@ -33,8 +35,7 @@ class SmartSightSingingPage extends ConsumerStatefulWidget {
       _SmartSightSingingPageState();
 }
 
-class _SmartSightSingingPageState
-    extends ConsumerState<SmartSightSingingPage> {
+class _SmartSightSingingPageState extends ConsumerState<SmartSightSingingPage> {
   final TextEditingController _onlineUrlController = TextEditingController();
 
   @override
@@ -43,9 +44,9 @@ class _SmartSightSingingPageState
     if (kIsWeb) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        ref.read(smartSightSingingControllerProvider.notifier).reportError(
-          'Web 端暂不支持智能视唱实时录音，请在 iPad 上使用。',
-        );
+        ref
+            .read(smartSightSingingControllerProvider.notifier)
+            .reportError('Web 端暂不支持智能视唱实时录音，请在 iPad 上使用。');
       });
     }
   }
@@ -59,9 +60,7 @@ class _SmartSightSingingPageState
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(smartSightSingingControllerProvider);
-    final controller = ref.read(
-      smartSightSingingControllerProvider.notifier,
-    );
+    final controller = ref.read(smartSightSingingControllerProvider.notifier);
 
     final ui = DashboardScaleScope.of(context).ui;
 
@@ -77,10 +76,7 @@ class _SmartSightSingingPageState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _Header(
-                  state: state,
-                  onImport: () => controller.importAudio(),
-                ),
+                _Header(state: state, onImport: () => controller.importAudio()),
                 if (state.errorMessage != null) ...[
                   SizedBox(height: ui(12)),
                   if (kDebugMode)
@@ -115,10 +111,7 @@ class _SmartSightSingingPageState
 
 /// 正式环境：单行错误提示（不含 stack）。
 class _UserErrorBanner extends StatelessWidget {
-  const _UserErrorBanner({
-    required this.message,
-    required this.onDismiss,
-  });
+  const _UserErrorBanner({required this.message, required this.onDismiss});
 
   final String message;
   final VoidCallback onDismiss;
@@ -151,7 +144,11 @@ class _UserErrorBanner extends StatelessWidget {
             onTap: onDismiss,
             child: Padding(
               padding: EdgeInsets.all(ui(4)),
-              child: Icon(Icons.close, size: ui(18), color: Colors.red.shade700),
+              child: Icon(
+                Icons.close,
+                size: ui(18),
+                color: Colors.red.shade700,
+              ),
             ),
           ),
         ],
@@ -200,7 +197,11 @@ class _DebugErrorPanel extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.bug_report_outlined, color: Colors.red.shade700, size: ui(18)),
+              Icon(
+                Icons.bug_report_outlined,
+                color: Colors.red.shade700,
+                size: ui(18),
+              ),
               SizedBox(width: ui(6)),
               Text(
                 '调试错误（stage: ${_stageLabel(stage)}）',
@@ -420,10 +421,7 @@ class _Body extends StatelessWidget {
       case SightSingingStage.analyzing:
         return _AnalyzingHint(state: state);
       case SightSingingStage.selectTrack:
-        return _TrackSelectionPanel(
-          state: state,
-          controller: controller,
-        );
+        return _TrackSelectionPanel(state: state, controller: controller);
       case SightSingingStage.countdown:
         final track = state.track;
         if (track == null || track.isEmpty) {
@@ -443,12 +441,13 @@ class _Body extends StatelessWidget {
                 _ScoreBoard(state: state),
                 SizedBox(height: ui(12)),
                 Expanded(
-                  child: KaraokePitchTrack(
+                  child: _PracticeTrackView(
                     track: track,
                     playbackMs: 0,
                     userPoints: const <UserPitchPoint>[],
                     currentUserMidi: state.currentUserMidi,
                     currentUserAmplitude: state.currentUserAmplitude,
+                    scoreSightReadingMode: state.scoreSightReadingMode,
                   ),
                 ),
                 SizedBox(height: ui(12)),
@@ -477,12 +476,13 @@ class _Body extends StatelessWidget {
             _ScoreBoard(state: state),
             SizedBox(height: ui(12)),
             Expanded(
-              child: KaraokePitchTrack(
+              child: _PracticeTrackView(
                 track: track,
                 playbackMs: state.playbackMs,
                 userPoints: state.userPoints,
                 currentUserMidi: state.currentUserMidi,
                 currentUserAmplitude: state.currentUserAmplitude,
+                scoreSightReadingMode: state.scoreSightReadingMode,
               ),
             ),
             SizedBox(height: ui(12)),
@@ -490,6 +490,43 @@ class _Body extends StatelessWidget {
           ],
         );
     }
+  }
+}
+
+class _PracticeTrackView extends StatelessWidget {
+  const _PracticeTrackView({
+    required this.track,
+    required this.playbackMs,
+    required this.userPoints,
+    required this.currentUserMidi,
+    required this.currentUserAmplitude,
+    required this.scoreSightReadingMode,
+  });
+
+  final PitchTrack track;
+  final int playbackMs;
+  final List<UserPitchPoint> userPoints;
+  final double currentUserMidi;
+  final double currentUserAmplitude;
+  final bool scoreSightReadingMode;
+
+  @override
+  Widget build(BuildContext context) {
+    if (scoreSightReadingMode) {
+      return ScoreSightReadingTrack(
+        track: track,
+        playbackMs: playbackMs,
+        currentUserMidi: currentUserMidi,
+        currentUserAmplitude: currentUserAmplitude,
+      );
+    }
+    return KaraokePitchTrack(
+      track: track,
+      playbackMs: playbackMs,
+      userPoints: userPoints,
+      currentUserMidi: currentUserMidi,
+      currentUserAmplitude: currentUserAmplitude,
+    );
   }
 }
 
@@ -660,10 +697,7 @@ class _AnalyzingHint extends StatelessWidget {
 }
 
 class _SingingModeBanner extends StatelessWidget {
-  const _SingingModeBanner({
-    required this.state,
-    required this.controller,
-  });
+  const _SingingModeBanner({required this.state, required this.controller});
 
   final SightSingingState state;
   final SmartSightSingingController controller;
@@ -698,10 +732,10 @@ class _SingingModeBanner extends StatelessWidget {
                   visualOnly
                       ? '无声跟唱：不播放伴奏，请对照音符条演唱。'
                       : (isIosTablet
-                          ? 'iPad 跟唱：伴奏按 MIDI 原力度播放，音量由实体键调节；'
-                              '麦克风实时识别你的音高并绘制轨迹。'
-                          : '伴奏按 MIDI 原力度播放，音量由实体键调节；'
-                              '麦克风实时识别你的音高并绘制轨迹。'),
+                            ? 'iPad 跟唱：伴奏按 MIDI 原力度播放，音量由实体键调节；'
+                                  '麦克风实时识别你的音高并绘制轨迹。'
+                            : '伴奏按 MIDI 原力度播放，音量由实体键调节；'
+                                  '麦克风实时识别你的音高并绘制轨迹。'),
                   style: TextStyle(
                     fontSize: ui(12),
                     color: _DemoUi.accentMuted,
@@ -709,37 +743,70 @@ class _SingingModeBanner extends StatelessWidget {
                     height: 1.4,
                   ),
                 ),
-                if (isIosTablet) ...[
-                  SizedBox(height: ui(8)),
-                  Row(
-                    children: [
-                      Text(
-                        '无声跟唱',
-                        style: TextStyle(
-                          fontSize: ui(12),
-                          color: _DemoUi.accent,
-                          fontFamily: 'PingFang SC',
-                        ),
-                      ),
-                      SizedBox(width: ui(8)),
-                      Switch.adaptive(
+                SizedBox(height: ui(8)),
+                Wrap(
+                  spacing: ui(18),
+                  runSpacing: ui(8),
+                  children: [
+                    _ModeSwitch(
+                      label: '谱例视唱',
+                      value: state.scoreSightReadingMode,
+                      onChanged: controller.setScoreSightReadingMode,
+                    ),
+                    if (isIosTablet)
+                      _ModeSwitch(
+                        label: '无声跟唱',
                         value: visualOnly,
-                        onChanged: state.isPreviewPlaying ||
+                        onChanged:
+                            state.isPreviewPlaying ||
                                 state.stage == SightSingingStage.singing ||
                                 state.stage == SightSingingStage.countdown
                             ? null
-                            : (enabled) =>
-                                controller.setVisualOnlyMode(enabled),
-                        activeTrackColor: _DemoUi.accent,
+                            : controller.setVisualOnlyMode,
                       ),
-                    ],
-                  ),
-                ],
+                  ],
+                ),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ModeSwitch extends StatelessWidget {
+  const _ModeSwitch({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String label;
+  final bool value;
+  final ValueChanged<bool>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: ui(12),
+            color: onChanged == null ? _DemoUi.textSecondary : _DemoUi.accent,
+            fontFamily: 'PingFang SC',
+          ),
+        ),
+        SizedBox(width: ui(8)),
+        Switch.adaptive(
+          value: value,
+          onChanged: onChanged,
+          activeTrackColor: _DemoUi.accent,
+        ),
+      ],
     );
   }
 }
@@ -752,14 +819,13 @@ class _ScoreBoard extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final ref = state.track?.sampleAt(state.playbackMs);
-    final refName = ref != null
-        ? PitchUtils.midiToNoteName(ref.midi)
-        : '--';
+    final refName = ref != null ? PitchUtils.midiToNoteName(ref.midi) : '--';
     final userName = state.currentUserMidi >= 0
         ? PitchUtils.midiToNoteName(state.currentUserMidi)
-        : state.currentUserAmplitude > 0.012
-            ? '拾音中'
-            : '--';
+        : state.currentUserAmplitude >
+              SmartSightSingingViewConfig.pickupLabelMinAmplitude
+        ? '拾音中'
+        : '--';
 
     final progress = state.track == null || state.track!.totalMs == 0
         ? 0.0
@@ -860,10 +926,7 @@ class _ScoreCell extends StatelessWidget {
 }
 
 class _TrackSelectionPanel extends StatelessWidget {
-  const _TrackSelectionPanel({
-    required this.state,
-    required this.controller,
-  });
+  const _TrackSelectionPanel({required this.state, required this.controller});
 
   final SightSingingState state;
   final SmartSightSingingController controller;
@@ -931,8 +994,8 @@ class _TrackSelectionPanel extends StatelessWidget {
               summary == null
                   ? '请选择一条含音符的轨道'
                   : summary.hasNotes
-                      ? '已选轨 ${summary.trackIndex} · ${summary.noteCount} 个音符 · ${summary.pitchRangeLabel}'
-                      : '轨 ${summary.trackIndex} 无音符，请换选',
+                  ? '已选轨 ${summary.trackIndex} · ${summary.noteCount} 个音符 · ${summary.pitchRangeLabel}'
+                  : '轨 ${summary.trackIndex} 无音符，请换选',
               style: TextStyle(
                 fontSize: ui(13),
                 color: const Color(0xFF1A1A1A),
@@ -982,13 +1045,12 @@ class _TrackListTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final disabled = !summary.hasNotes;
-    final borderColor =
-        selected ? _DemoUi.accent : _DemoUi.border;
+    final borderColor = selected ? _DemoUi.accent : _DemoUi.border;
     final bg = selected
         ? _DemoUi.surfaceSelected
         : disabled
-            ? const Color(0xFFFAFAFC)
-            : Colors.white;
+        ? const Color(0xFFFAFAFC)
+        : Colors.white;
 
     return Material(
       color: bg,
@@ -1011,8 +1073,8 @@ class _TrackListTile extends StatelessWidget {
                 color: disabled
                     ? const Color(0xFFB0B6C2)
                     : selected
-                        ? _DemoUi.accent
-                        : _DemoUi.textSecondary,
+                    ? _DemoUi.accent
+                    : _DemoUi.textSecondary,
                 size: ui(20),
               ),
               SizedBox(width: ui(10)),
@@ -1136,16 +1198,20 @@ class _Controls extends StatelessWidget {
           countdown
               ? '倒计时中，请准备…'
               : state.stage == SightSingingStage.finished
-                  ? '本次演唱结束 · 综合得分 ${state.currentScore}'
-                  : singing
-                      ? (state.visualOnlyMode
-                          ? '无声跟唱中…请对照音符条保持音准'
-                          : '正在跟唱中…保持音准更稳更高分')
-                      : (state.isPreviewPlaying
-                          ? '试听中…熟悉旋律后可开始跟唱'
-                          : state.stage == SightSingingStage.ready
-                              ? '准备就绪：点击「开始跟唱」后将采集麦克风并绘制你的音高'
-                              : '准备就绪，点击「开始跟唱」即可'),
+              ? '本次演唱结束 · 综合得分 ${state.currentScore}'
+              : singing
+              ? (state.scoreSightReadingMode
+                    ? '谱例视唱中…看谱保持节奏和音准'
+                    : state.visualOnlyMode
+                    ? '无声跟唱中…请对照音符条保持音准'
+                    : '正在跟唱中…保持音准更稳更高分')
+              : (state.isPreviewPlaying
+                    ? '试听中…熟悉旋律后可开始跟唱'
+                    : state.stage == SightSingingStage.ready
+                    ? (state.scoreSightReadingMode
+                          ? '准备就绪：点击「开始跟唱」后看谱视唱'
+                          : '准备就绪：点击「开始跟唱」后将采集麦克风并绘制你的音高')
+                    : '准备就绪，点击「开始跟唱」即可'),
           style: TextStyle(
             fontSize: ui(13),
             color: const Color(0xFF1A1A1A),
@@ -1181,12 +1247,12 @@ class _Controls extends StatelessWidget {
             SizedBox(width: ui(10)),
           ],
           _ActionButton(
-            label: state.stage == SightSingingStage.finished
-                ? '重新跟唱'
-                : '开始跟唱',
+            label: state.stage == SightSingingStage.finished ? '重新跟唱' : '开始跟唱',
             icon: Icons.mic_rounded,
             primary: true,
-            onTap: state.isPreviewPlaying ? null : () => controller.startSinging(),
+            onTap: state.isPreviewPlaying
+                ? null
+                : () => controller.startSinging(),
           ),
         ],
       ],
@@ -1213,13 +1279,13 @@ class _ActionButton extends StatelessWidget {
     final bg = disabled
         ? const Color(0xFFE5E5EF)
         : primary
-            ? _DemoUi.accent
-            : Colors.white;
+        ? _DemoUi.accent
+        : Colors.white;
     final fg = disabled
         ? const Color(0xFFB0B6C2)
         : primary
-            ? Colors.white
-            : _DemoUi.accent;
+        ? Colors.white
+        : _DemoUi.accent;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(ui(24)),

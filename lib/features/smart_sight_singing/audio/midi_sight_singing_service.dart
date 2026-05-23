@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import '../config/smart_sight_singing_config.dart';
 import 'ktv_pitch_guide.dart';
 import 'midi_file_parser.dart';
 import 'pitch_track.dart';
@@ -81,10 +82,6 @@ class MidiSightSingingException implements Exception {
 }
 
 abstract final class MidiSightSingingService {
-  static const int _percussionChannel = 9;
-  static const int _melodyMidiMin = 55;
-  static const int _melodyMidiMax = 84;
-
   /// 解析 MIDI 并生成各轨摘要，不自动构建参考轨。
   static MidiParsePreview parsePreview(Uint8List bytes) {
     final parsed = MidiFileParser.parse(bytes);
@@ -124,7 +121,10 @@ abstract final class MidiSightSingingService {
         .map(
           (n) => KtvNoteSegment(
             startMs: n.startMs.round(),
-            endMs: math.max(n.endMs.round(), n.startMs.round() + 40),
+            endMs: math.max(
+              n.endMs.round(),
+              n.startMs.round() + SmartSightSingingMidiConfig.minMidiNoteMs,
+            ),
             midi: n.pitch.toDouble(),
           ),
         )
@@ -141,28 +141,29 @@ abstract final class MidiSightSingingService {
       frames: const <PitchFrame>[],
       notes: notes,
       totalMs: totalMs,
-      frameStepMs: 23,
+      frameStepMs: SmartSightSingingMidiConfig.referenceFrameStepMs,
       minMidi: range.minMidi,
       maxMidi: range.maxMidi,
     );
 
-    final playbackEvents = melodyNotes
-        .where(
-          (n) =>
-              n.channel != _percussionChannel &&
-              n.pitch > 0 &&
-              n.velocity > 0 &&
-              n.endMs > n.startMs,
-        )
-        .map(
-          (n) => MidiPlaybackEvent(
-            timeMs: n.startMs.round(),
-            pitch: n.pitch,
-            velocity: n.velocity,
-          ),
-        )
-        .toList(growable: false)
-      ..sort((a, b) => a.timeMs.compareTo(b.timeMs));
+    final playbackEvents =
+        melodyNotes
+            .where(
+              (n) =>
+                  n.channel != SmartSightSingingMidiConfig.percussionChannel &&
+                  n.pitch > 0 &&
+                  n.velocity > 0 &&
+                  n.endMs > n.startMs,
+            )
+            .map(
+              (n) => MidiPlaybackEvent(
+                timeMs: n.startMs.round(),
+                pitch: n.pitch,
+                velocity: n.velocity,
+              ),
+            )
+            .toList(growable: false)
+          ..sort((a, b) => a.timeMs.compareTo(b.timeMs));
 
     return MidiSightSingingBundle(
       track: track,
@@ -214,12 +215,24 @@ abstract final class MidiSightSingingService {
       if (notes.isEmpty) continue;
 
       final pitches = notes.map((n) => n.pitch).toList();
-      final vocalCount =
-          pitches.where((p) => p >= _melodyMidiMin && p <= _melodyMidiMax).length;
-      final lowCount = pitches.where((p) => p < 50).length;
-      final score = vocalCount * 2.0 -
-          lowCount * 1.5 -
-          (notes.length - 180).abs() * 0.08;
+      final vocalCount = pitches
+          .where(
+            (p) =>
+                p >= SmartSightSingingMidiConfig.melodyMidiMin &&
+                p <= SmartSightSingingMidiConfig.melodyMidiMax,
+          )
+          .length;
+      final lowCount = pitches
+          .where(
+            (p) => p < SmartSightSingingMidiConfig.lowPitchPenaltyBelowMidi,
+          )
+          .length;
+      final score =
+          vocalCount * SmartSightSingingMidiConfig.vocalPitchWeight -
+          lowCount * SmartSightSingingMidiConfig.lowPitchPenaltyWeight -
+          (notes.length - SmartSightSingingMidiConfig.idealMelodyNoteCount)
+                  .abs() *
+              SmartSightSingingMidiConfig.noteCountDistancePenalty;
 
       if (score > bestScore) {
         bestScore = score;

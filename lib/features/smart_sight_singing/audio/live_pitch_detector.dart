@@ -3,18 +3,27 @@ import 'dart:typed_data';
 
 import 'package:pitch_detector_dart/pitch_detector.dart';
 
+import '../config/smart_sight_singing_config.dart';
 import 'pitch_track.dart';
 
 /// 实时单帧音高分析（YIN + 自相关互补，兼容 iPad 麦克风）。
 class LivePitchDetector {
-  LivePitchDetector({
-    this.sampleRate = 44100,
-    this.bufferSize = 4096,
-  })  : _yin = PitchDetector(
-          audioSampleRate: sampleRate.toDouble(),
-          bufferSize: bufferSize,
-        ),
-        _hann = _buildHannWindow(bufferSize);
+  LivePitchDetector({double? sampleRate, int? bufferSize})
+    : sampleRate =
+          sampleRate ??
+          SmartSightSingingRealtimePitchConfig.sampleRate.toDouble(),
+      bufferSize =
+          bufferSize ?? SmartSightSingingRealtimePitchConfig.bufferSize,
+      _yin = PitchDetector(
+        audioSampleRate:
+            sampleRate ??
+            SmartSightSingingRealtimePitchConfig.sampleRate.toDouble(),
+        bufferSize:
+            bufferSize ?? SmartSightSingingRealtimePitchConfig.bufferSize,
+      ),
+      _hann = _buildHannWindow(
+        bufferSize ?? SmartSightSingingRealtimePitchConfig.bufferSize,
+      );
 
   final double sampleRate;
   final int bufferSize;
@@ -48,18 +57,24 @@ class LivePitchDetector {
 
     if (best.pitched && best.frequencyHz > 0) {
       if (_lastHz != null &&
-          (best.frequencyHz - _lastHz!).abs() / _lastHz! < 0.08) {
+          (best.frequencyHz - _lastHz!).abs() / _lastHz! <
+              SmartSightSingingRealtimePitchConfig.stableFrequencyDiffRatio) {
         _stableCount++;
       } else {
         _stableCount = 1;
       }
       _lastHz = best.frequencyHz;
       // 单帧 YIN 偶发跳音时，用上一稳定值平滑。
-      if (_stableCount >= 2 && _lastHz != null) {
+      if (_stableCount >=
+              SmartSightSingingRealtimePitchConfig.stableFrameCount &&
+          _lastHz != null) {
         best = LivePitchResult(
           pitched: true,
           frequencyHz: _lastHz!,
-          confidence: math.max(best.confidence, 0.55),
+          confidence: math.max(
+            best.confidence,
+            SmartSightSingingRealtimePitchConfig.smoothedConfidenceFloor,
+          ),
           source: best.source,
         );
       }
@@ -111,7 +126,8 @@ class LivePitchDetector {
       if (!result.pitched || hz <= 0 || !hz.isFinite) {
         return LivePitchResult.empty;
       }
-      if (hz < 65 || hz > 1400) {
+      if (hz < SmartSightSingingRealtimePitchConfig.minFrequencyHz ||
+          hz > SmartSightSingingRealtimePitchConfig.maxFrequencyHz) {
         return LivePitchResult.empty;
       }
       return LivePitchResult(
@@ -138,8 +154,16 @@ class LivePitchDetector {
       x[i] -= mean;
     }
 
-    final minLag = (sampleRate / 1200).round().clamp(2, bufferSize ~/ 2);
-    final maxLag = (sampleRate / 65).round().clamp(minLag + 1, bufferSize ~/ 2);
+    final minLag =
+        (sampleRate /
+                SmartSightSingingRealtimePitchConfig
+                    .autocorrelationMaxFrequencyHz)
+            .round()
+            .clamp(2, bufferSize ~/ 2);
+    final maxLag =
+        (sampleRate / SmartSightSingingRealtimePitchConfig.minFrequencyHz)
+            .round()
+            .clamp(minLag + 1, bufferSize ~/ 2);
 
     var bestLag = -1;
     var bestCorr = 0.0;
@@ -164,12 +188,18 @@ class LivePitchDetector {
       }
     }
 
-    if (bestLag <= 0 || bestCorr < 0.32) {
+    if (bestLag <= 0 ||
+        bestCorr <
+            SmartSightSingingRealtimePitchConfig
+                .autocorrelationMinCorrelation) {
       return LivePitchResult.empty;
     }
 
     final hz = sampleRate / bestLag;
-    if (hz < 65 || hz > 1400) return LivePitchResult.empty;
+    if (hz < SmartSightSingingRealtimePitchConfig.minFrequencyHz ||
+        hz > SmartSightSingingRealtimePitchConfig.maxFrequencyHz) {
+      return LivePitchResult.empty;
+    }
 
     return LivePitchResult(
       pitched: true,
@@ -182,7 +212,11 @@ class LivePitchDetector {
   LivePitchResult _pickBetter(LivePitchResult a, LivePitchResult b) {
     if (!a.pitched) return b;
     if (!b.pitched) return a;
-    if (b.confidence > a.confidence + 0.08) return b;
+    if (b.confidence >
+        a.confidence +
+            SmartSightSingingRealtimePitchConfig.sourceSwitchConfidenceMargin) {
+      return b;
+    }
     return a;
   }
 }
@@ -209,6 +243,5 @@ class LivePitchResult {
     source: LivePitchSource.yin,
   );
 
-  double get midi =>
-      pitched ? PitchUtils.hzToMidi(frequencyHz) : double.nan;
+  double get midi => pitched ? PitchUtils.hzToMidi(frequencyHz) : double.nan;
 }

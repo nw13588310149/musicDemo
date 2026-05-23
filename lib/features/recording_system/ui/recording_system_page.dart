@@ -2453,7 +2453,7 @@ class _RecordingStageBody extends StatelessWidget {
 const double _kRecordingWaveSectionHeight = 110;
 const double _kRecordingWaveTopInset = 20;
 /// 波形柱中心间距（设计稿 px）；越小柱越密。
-const double _kRecordingWaveBarSpacing = 2;
+const double _kRecordingWaveBarSpacing = 1;
 const double _kRecordingScaleTopGap = 15;
 const double _kRecordingScaleSectionHeight = 58;
 const double _kRecordingMajorTickHeight = 12;
@@ -2597,7 +2597,34 @@ class _PreviewDarkWavePanel extends StatefulWidget {
 class _PreviewDarkWavePanelState extends State<_PreviewDarkWavePanel> {
   double? _localDragRatio;
 
+  /// 锁定首次解析到的时长，避免 iOS 播放过程中 just_audio 微调
+  /// duration 导致刻度 / 游标比例抖动。
+  int? _lockedTotalMs;
+
   double? get _activeDragRatio => widget.dragRatio ?? _localDragRatio;
+
+  @override
+  void didUpdateWidget(covariant _PreviewDarkWavePanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.waveform, widget.waveform)) {
+      _lockedTotalMs = null;
+    }
+  }
+
+  int _stableTotalMs(int rawTotal) {
+    if (_lockedTotalMs != null && _lockedTotalMs! > 0) {
+      return _lockedTotalMs!;
+    }
+    return rawTotal;
+  }
+
+  void _maybeLockTotal(int rawTotal) {
+    if (rawTotal <= 0 || _lockedTotalMs != null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _lockedTotalMs != null) return;
+      setState(() => _lockedTotalMs = rawTotal);
+    });
+  }
 
   void _updateDragRatio(double? ratio) {
     if (widget.onDragRatioChanged != null) {
@@ -2657,9 +2684,11 @@ class _PreviewDarkWavePanelState extends State<_PreviewDarkWavePanel> {
                   return ValueListenableBuilder<int>(
                     valueListenable: widget.durationMs,
                     builder: (context, durationValue, _) {
-                      final total = durationValue > 0
+                      final rawTotal = durationValue > 0
                           ? durationValue
                           : widget.fallbackDurationMs;
+                      _maybeLockTotal(rawTotal);
+                      final total = _stableTotalMs(rawTotal);
                       // 拖拽中：用本地 _dragRatio；否则用真实播放
                       // position 推算的 ratio。
                       final ratio = _activeDragRatio ??
@@ -2832,11 +2861,13 @@ class _WaveWithScalePainter extends CustomPainter {
 
     if (truncateAtPlayhead) {
       final count = samples.length;
-      for (var i = 0; i < count; i++) {
-        final x = count <= 1
-            ? cursorX / 2
-            : (i / (count - 1)) * cursorX;
-        if (x > cursorX) break;
+      if (count <= 0) return;
+      // 最新样本锚定在游标，固定水平间距；避免 count 增加时
+      // (i/(count-1))*cursorX 重算导致 iPad 上整段波形左右跳动。
+      final pitch = spacing;
+      for (var i = count - 1; i >= 0; i--) {
+        final x = cursorX - (count - 1 - i) * pitch;
+        if (x + barWidth / 2 < 0) break;
         final amp = samples[i].clamp(0.05, 1.0);
         final halfH = maxHalfH * amp;
         canvas.drawLine(
@@ -2848,9 +2879,8 @@ class _WaveWithScalePainter extends CustomPainter {
       return;
     }
 
-    final maxBars = math.max(1, (width / spacing).floor());
-    final barCount = math.min(samples.length, maxBars);
-    if (barCount <= 0) return;
+    // 试听/播放：按固定栅格铺满全宽，样本只决定柱高，不改变柱位。
+    final barCount = math.max(1, (width / spacing).floor());
     final stride = width / barCount;
     final maxAmp = samples.fold<double>(
       0.0,
