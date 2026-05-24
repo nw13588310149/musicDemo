@@ -321,8 +321,12 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
 
   void _stopMetronome({required bool resetBeat}) {
     _metronomeStartSeq += 1;
+    final wasPlaying = state.metronomePlaying;
     _cancelMetronomeScheduler();
-    _audioEngine.stopAllImmediately();
+
+    if (wasPlaying) {
+      _audioEngine.stopAllImmediately();
+    }
 
     state = state.copyWith(
       metronomePlaying: false,

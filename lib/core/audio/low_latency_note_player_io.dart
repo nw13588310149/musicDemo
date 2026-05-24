@@ -74,7 +74,7 @@ class _IoLowLatencyNotePlayer implements LowLatencyNotePlayer {
     if (_disposed || !_assetByKey.containsKey(key) || !_nativeReady) {
       return false;
     }
-    _invokeNativePlay(key, volume: volume);
+    unawaited(play(key, volume: volume));
     return true;
   }
 
@@ -84,8 +84,17 @@ class _IoLowLatencyNotePlayer implements LowLatencyNotePlayer {
     final safeVolume = volume.clamp(0.0, 1.0).toDouble();
 
     if (_nativeReady) {
-      _invokeNativePlay(key, volume: safeVolume);
-      return;
+      try {
+        await _channel.invokeMethod<void>('play', <String, Object>{
+          'key': key,
+          'volume': safeVolume,
+        });
+        return;
+      } on PlatformException catch (error, stack) {
+        debugPrint('LowLatencyNotePlayer native play failed: $error\n$stack');
+      } on MissingPluginException catch (error, stack) {
+        debugPrint('LowLatencyNotePlayer native play missing: $error\n$stack');
+      }
     }
 
     final player = await _loadFallbackPlayer(key);
@@ -106,17 +115,6 @@ class _IoLowLatencyNotePlayer implements LowLatencyNotePlayer {
     }
 
     await _playFallback(player, volume: safeVolume);
-  }
-
-  void _invokeNativePlay(String key, {required double volume}) {
-    _channel
-        .invokeMethod<void>('play', <String, Object>{
-          'key': key,
-          'volume': volume,
-        })
-        .catchError((Object error, StackTrace stack) {
-          debugPrint('LowLatencyNotePlayer native play failed: $error\n$stack');
-        });
   }
 
   Future<AudioPlayer?> _loadFallbackPlayer(String key) async {
