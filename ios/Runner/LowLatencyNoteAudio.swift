@@ -12,6 +12,10 @@ final class LowLatencyNoteAudio {
   private let queue = DispatchQueue(label: "com.yyzl.music.lowLatencyNotes")
   private var buffersByKey: [String: AVAudioPCMBuffer] = [:]
   private var activeNodes: [AVAudioPlayerNode] = []
+  private var playerPool: [PoolSlot] = []
+  private var playerPoolFormat: AVAudioFormat?
+  private var playerPoolStealCursor = 0
+  private let playerPoolSize = 16
   private var prepared = false
 
   init(messenger: FlutterBinaryMessenger) {
@@ -102,22 +106,13 @@ final class LowLatencyNoteAudio {
           throw LowLatencyNoteAudioError.bufferNotPrepared(key)
         }
 
-        let node = AVAudioPlayerNode()
-        node.volume = max(0, min(volume, 1))
-        self.engine.attach(node)
-        self.engine.connect(node, to: self.engine.mainMixerNode, format: buffer.format)
-        self.activeNodes.append(node)
-
         try self.ensureEngineRunning()
-        node.scheduleBuffer(buffer, at: nil, options: []) { [weak self, weak node] in
-          guard let self = self, let node = node else { return }
-          self.queue.async {
-            node.stop()
-            self.engine.detach(node)
-            self.activeNodes.removeAll { $0 === node }
-          }
+
+        if self.canUsePlayerPool(format: buffer.format) {
+          try self.playFromPool(buffer: buffer, volume: volume)
+        } else {
+          try self.playWithEphemeralNode(buffer: buffer, volume: volume)
         }
-        node.play()
 
         DispatchQueue.main.async {
           result(nil)
@@ -136,12 +131,95 @@ final class LowLatencyNoteAudio {
     }
   }
 
+  private func canUsePlayerPool(format: AVAudioFormat) -> Bool {
+    guard let poolFormat = playerPoolFormat else {
+      return true
+    }
+    return poolFormat.sampleRate == format.sampleRate
+      && poolFormat.channelCount == format.channelCount
+      && poolFormat.commonFormat == format.commonFormat
+  }
+
+  private func ensurePlayerPool(format: AVAudioFormat) throws {
+    if !playerPool.isEmpty {
+      return
+    }
+    playerPoolFormat = format
+    for index in 0..<playerPoolSize {
+      let node = AVAudioPlayerNode()
+      engine.attach(node)
+      engine.connect(node, to: engine.mainMixerNode, format: format)
+      playerPool.append(PoolSlot(node: node, index: index))
+    }
+  }
+
+  private func playFromPool(buffer: AVAudioPCMBuffer, volume: Float) throws {
+    try ensurePlayerPool(format: buffer.format)
+    let slot = acquirePoolSlot()
+    let node = slot.node
+    node.volume = max(0, min(volume, 1))
+    node.scheduleBuffer(buffer, at: nil, options: []) { [weak self] in
+      guard let self = self else { return }
+      self.queue.async {
+        self.releasePoolSlot(index: slot.index)
+      }
+    }
+    if !node.isPlaying {
+      node.play()
+    }
+  }
+
+  private func playWithEphemeralNode(buffer: AVAudioPCMBuffer, volume: Float) throws {
+    let node = AVAudioPlayerNode()
+    node.volume = max(0, min(volume, 1))
+    engine.attach(node)
+    engine.connect(node, to: engine.mainMixerNode, format: buffer.format)
+    activeNodes.append(node)
+
+    node.scheduleBuffer(buffer, at: nil, options: []) { [weak self, weak node] in
+      guard let self = self, let node = node else { return }
+      self.queue.async {
+        node.stop()
+        self.engine.detach(node)
+        self.activeNodes.removeAll { $0 === node }
+      }
+    }
+    node.play()
+  }
+
+  private func acquirePoolSlot() -> PoolSlot {
+    if let idleIndex = playerPool.firstIndex(where: { !$0.busy }) {
+      playerPool[idleIndex].busy = true
+      return playerPool[idleIndex]
+    }
+
+    let stealIndex = playerPoolStealCursor % playerPool.count
+    playerPoolStealCursor += 1
+    let node = playerPool[stealIndex].node
+    node.stop()
+    node.reset()
+    playerPool[stealIndex].busy = true
+    return playerPool[stealIndex]
+  }
+
+  private func releasePoolSlot(index: Int) {
+    guard playerPool.indices.contains(index) else { return }
+    playerPool[index].busy = false
+  }
+
   private func stopAll() {
     queue.async { [weak self] in
       guard let self = self else { return }
       let nodes = self.activeNodes
       self.activeNodes.removeAll()
       self.fadeOutAndDetach(nodes: nodes)
+
+      for index in self.playerPool.indices {
+        let node = self.playerPool[index].node
+        node.stop()
+        node.reset()
+        self.playerPool[index].busy = false
+      }
     }
   }
 
@@ -151,6 +229,15 @@ final class LowLatencyNoteAudio {
       let nodes = self.activeNodes
       self.activeNodes.removeAll()
       self.fadeOutAndDetach(nodes: nodes)
+
+      for slot in self.playerPool {
+        slot.node.stop()
+        self.engine.detach(slot.node)
+      }
+      self.playerPool.removeAll()
+      self.playerPoolFormat = nil
+      self.playerPoolStealCursor = 0
+
       self.buffersByKey.removeAll()
       self.prepared = false
     }
@@ -212,6 +299,12 @@ final class LowLatencyNoteAudio {
     try file.read(into: buffer)
     return buffer
   }
+}
+
+private struct PoolSlot {
+  let node: AVAudioPlayerNode
+  let index: Int
+  var busy = false
 }
 
 private enum LowLatencyNoteAudioError: Error, CustomStringConvertible {

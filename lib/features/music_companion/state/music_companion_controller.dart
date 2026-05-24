@@ -43,6 +43,7 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
   Timer? _metronomeTimer;
   Stopwatch? _metronomeStopwatch;
   int _metronomeGeneration = 0;
+  int _metronomeStartSeq = 0;
   int _metronomeTickCount = 0;
   double _metronomeLastTickMs = 0;
 
@@ -167,7 +168,6 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
       return;
     }
     state = state.copyWith(metronomeToneIndex: index);
-    _restartMetronomeIfNeeded();
   }
 
   void setMetronomeSignature(int index) {
@@ -178,7 +178,9 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
       metronomeSignatureIndex: index,
       metronomeActiveBeat: -1,
     );
-    _restartMetronomeIfNeeded();
+    if (state.metronomePlaying) {
+      _metronomeTickCount = 0;
+    }
   }
 
   void setMetronomeBpm(double bpm) {
@@ -186,8 +188,14 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
     if (next == state.metronomeBpm) {
       return;
     }
+    if (state.metronomePlaying) {
+      final stopwatch = _metronomeStopwatch;
+      if (stopwatch != null) {
+        // 避免提速后立刻补打多个节拍，造成 native 播放队列堆积。
+        _metronomeLastTickMs = stopwatch.elapsedMicroseconds / 1000;
+      }
+    }
     state = state.copyWith(metronomeBpm: next);
-    _restartMetronomeIfNeeded();
   }
 
   void nudgeMetronomeBpm(int delta) {
@@ -203,6 +211,7 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
   }
 
   Future<void> _startMetronome() async {
+    final startSeq = ++_metronomeStartSeq;
     try {
       await NativePlaybackAudioSession.ensurePlaybackActive();
       await _audioEngine.ensureMetronomeInitialized();
@@ -212,8 +221,9 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
       state = state.copyWith(errorMessage: '节拍器音频加载失败，请稍后重试。');
       return;
     }
-    if (!mounted) return;
-    _stopMetronome(resetBeat: false);
+    if (!mounted || startSeq != _metronomeStartSeq) return;
+
+    _cancelMetronomeScheduler();
 
     state = state.copyWith(
       metronomePlaying: true,
@@ -222,8 +232,6 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
     );
 
     _metronomeGeneration += 1;
-    _metronomeTickCount = 0;
-    _metronomeLastTickMs = 0;
     _metronomeStopwatch = Stopwatch()..start();
 
     _scheduleMetronomeTick(_metronomeGeneration);
@@ -301,14 +309,7 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
     }
   }
 
-  void _restartMetronomeIfNeeded() {
-    if (!state.metronomePlaying) {
-      return;
-    }
-    unawaited(_startMetronome());
-  }
-
-  void _stopMetronome({required bool resetBeat}) {
+  void _cancelMetronomeScheduler() {
     _metronomeTimer?.cancel();
     _metronomeTimer = null;
     _metronomeStopwatch?.stop();
@@ -316,6 +317,12 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
     _metronomeTickCount = 0;
     _metronomeLastTickMs = 0;
     _metronomeGeneration += 1;
+  }
+
+  void _stopMetronome({required bool resetBeat}) {
+    _metronomeStartSeq += 1;
+    _cancelMetronomeScheduler();
+    _audioEngine.stopAllImmediately();
 
     state = state.copyWith(
       metronomePlaying: false,
