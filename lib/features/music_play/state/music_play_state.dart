@@ -144,20 +144,31 @@ class MusicPlayShareClass {
   const MusicPlayShareClass({
     required this.id,
     required this.name,
+    this.avatarUrl = '',
     required this.checked,
   });
 
   final String id;
   final String name;
+  final String avatarUrl;
   final bool checked;
 
-  MusicPlayShareClass copyWith({bool? checked}) =>
-      MusicPlayShareClass(id: id, name: name, checked: checked ?? this.checked);
+  MusicPlayShareClass copyWith({bool? checked}) => MusicPlayShareClass(
+    id: id,
+    name: name,
+    avatarUrl: avatarUrl,
+    checked: checked ?? this.checked,
+  );
 
   factory MusicPlayShareClass.fromJson(Map raw) {
     return MusicPlayShareClass(
       id: raw['id']?.toString() ?? '',
-      name: raw['name']?.toString() ?? '',
+      name: (raw['groupName'] ?? raw['name'] ?? raw['className'] ?? '')
+          .toString()
+          .trim(),
+      avatarUrl: (raw['logo'] ?? raw['groupLogo'] ?? raw['avatarUrl'] ?? '')
+          .toString()
+          .trim(),
       checked: false,
     );
   }

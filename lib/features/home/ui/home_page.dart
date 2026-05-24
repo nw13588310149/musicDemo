@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+
+import '../../../core/widgets/app_loading_indicator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/route_paths.dart';
@@ -13,7 +15,6 @@ import '../state/home_dashboard_state.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../../smart_campus/state/smart_campus_controller.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
-import 'package:the_road_of_music_flutter/core/theme/app_theme.dart';
 
 class HomePage extends ConsumerWidget {
   const HomePage({super.key});
@@ -127,18 +128,8 @@ class _HomePageViewState extends ConsumerState<_HomePageView> {
                 ),
               ),
               if (state.loading)
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: Container(
-                      color: Colors.white.withValues(alpha: 0.35),
-                      alignment: Alignment.center,
-                      child: const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    ),
-                  ),
+                const Positioned.fill(
+                  child: AppLoadingOverlay(),
                 ),
             ],
           ),

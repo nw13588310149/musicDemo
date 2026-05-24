@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/route_paths.dart';
@@ -55,9 +56,7 @@ class MyCollectionPage extends ConsumerWidget {
                 child: Padding(
                   padding: EdgeInsets.fromLTRB(ui(20), ui(82), ui(20), ui(20)),
                   child: state.loading && state.items.isEmpty
-                      ? const Center(
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
+                      ? const Center(child: AppLoadingIndicator())
                       : state.items.isEmpty
                       ? const _CollectionEmpty()
                       : _CollectionGrid(
@@ -75,7 +74,7 @@ class MyCollectionPage extends ConsumerWidget {
           const Positioned.fill(
             child: ColoredBox(
               color: Color(0x22000000),
-              child: Center(child: CircularProgressIndicator()),
+              child: Center(child: AppLoadingIndicator()),
             ),
           ),
       ],
@@ -603,10 +602,7 @@ class _SongCollectionCardState extends State<_SongCollectionCard> {
                   ),
                 ),
                 SizedBox(width: ui(8)),
-                _SongActionButton(
-                  key: _menuTriggerKey,
-                  onTap: _openActionMenu,
-                ),
+                _SongActionButton(key: _menuTriggerKey, onTap: _openActionMenu),
               ],
             ),
           ],
@@ -1035,11 +1031,14 @@ class _VideoCollectionCard extends StatelessWidget {
                                             width: 16.0 * s,
                                             height: 16.0 * s,
                                             fit: BoxFit.cover,
-                                            errorBuilder: (_, _, _) => Container(
-                                              width: 16.0 * s,
-                                              height: 16.0 * s,
-                                              color: const Color(0xFFE0DEFF),
-                                            ),
+                                            errorBuilder: (_, _, _) =>
+                                                Container(
+                                                  width: 16.0 * s,
+                                                  height: 16.0 * s,
+                                                  color: const Color(
+                                                    0xFFE0DEFF,
+                                                  ),
+                                                ),
                                           ),
                                         ),
                                         SizedBox(width: 4.0 * s),
@@ -1457,8 +1456,9 @@ class _CollectionShareDrawer extends ConsumerWidget {
       classes: state.shareClasses
           .map(
             (c) => ClassShareItem(
-              id: '${c.id}',
+              id: c.id,
               name: c.name,
+              avatarUrl: c.avatarUrl,
               checked: c.selected,
             ),
           )
@@ -1468,9 +1468,8 @@ class _CollectionShareDrawer extends ConsumerWidget {
       loading: state.busy && !hasClasses,
       sending: state.busy && hasClasses,
       onToggleClass: (id) {
-        final intId = int.tryParse(id) ?? 0;
-        if (intId > 0) {
-          controller.toggleShareClass(intId);
+        if (id.isNotEmpty) {
+          controller.toggleShareClass(id);
         }
       },
       onSend: () async {

@@ -54,6 +54,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -1228,14 +1229,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
                                         Border.all(color: Colors.white, width: 2),
                                   ),
                                   child: uploading
-                                      ? const SizedBox(
-                                          width: 12,
-                                          height: 12,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            color: Colors.white,
-                                          ),
-                                        )
+                                      ? const AppLoadingIndicator(size: 16, color: Colors.white)
                                       : const Icon(
                                           Icons.camera_alt_rounded,
                                           size: 13,
@@ -1647,7 +1641,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
       return Container(
         color: _kPageBg,
         alignment: Alignment.center,
-        child: const CircularProgressIndicator(color: _kPurple),
+        child: const AppLoadingIndicator(),
       );
     }
     // 空列表时不再「整页占位」，仍按双栏布局渲染：左栏给 _ConversationListPane
@@ -3928,7 +3922,7 @@ class _ChatBodyBoard extends StatelessWidget {
                   ? const _NoSelectionHint()
                   : loading
                   ? const Center(
-                      child: CircularProgressIndicator(color: _kPurple),
+                      child: AppLoadingIndicator(),
                     )
                   : messages.isEmpty
                   ? Center(
@@ -3957,14 +3951,7 @@ class _ChatBodyBoard extends StatelessWidget {
                             padding: EdgeInsets.symmetric(vertical: ui(8)),
                             child: Center(
                               child: loadingOlder
-                                  ? SizedBox(
-                                      width: ui(16),
-                                      height: ui(16),
-                                      child: const CircularProgressIndicator(
-                                        strokeWidth: 1.6,
-                                        color: _kPurple,
-                                      ),
-                                    )
+                                  ? const AppLoadingIndicator()
                                   : Text(
                                       '上滑加载更多',
                                       style: TextStyle(
@@ -4797,11 +4784,7 @@ class _ImageBubbleView extends StatelessWidget {
               color: Colors.black.withValues(alpha: child == null ? 0 : 0.18),
             ),
             Center(
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: _kPurple,
-                value: progress,
-              ),
+              child: AppLoadingIndicator(value: progress),
             ),
           ],
         ),

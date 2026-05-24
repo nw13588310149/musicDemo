@@ -50,6 +50,7 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
 
   Future<void> _prepareAudio() async {
     try {
+      await NativePlaybackAudioSession.ensurePlaybackActive();
       await _audioEngine.ensurePianoInitialized();
       if (!mounted) return;
       state = state.copyWith(
@@ -85,31 +86,6 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
       if (tab != MusicCompanionTab.metronome) {
         await NativePlaybackAudioSession.ensurePlaybackActive();
       }
-    }
-  }
-
-  Future<void> activateAudio() async {
-    try {
-      if (!_audioEngine.isPianoReady) {
-        await _audioEngine.ensurePianoInitialized();
-      }
-      if (!mounted) return;
-      if (!_audioEngine.tryPlayNoteFromUserGesture('C4', volume: 0.02)) {
-        await _audioEngine.activateByUserGesture();
-      }
-      if (!mounted) return;
-      state = state.copyWith(
-        audioReady: _audioEngine.isPianoReady,
-        errorMessage: null,
-      );
-    } catch (error, stack) {
-      debugPrint('MusicCompanion activateAudio: $error\n$stack');
-      if (!mounted) return;
-      state = state.copyWith(
-        errorMessage: state.audioReady
-            ? '播放失败，请再试一次'
-            : '音频尚未就绪，请稍候再试',
-      );
     }
   }
 
@@ -230,7 +206,6 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
     try {
       await NativePlaybackAudioSession.ensurePlaybackActive();
       await _audioEngine.ensureMetronomeInitialized();
-      await activateAudio();
     } catch (error, stack) {
       debugPrint('MusicCompanion _startMetronome init: $error\n$stack');
       if (!mounted) return;

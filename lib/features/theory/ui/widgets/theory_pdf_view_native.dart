@@ -1,7 +1,11 @@
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:pdfrx/pdfrx.dart';
+
+/// 乐理 PDF 预览区背景（与 Web iframe、pdfrx backgroundColor 一致）。
+const Color kTheoryPdfBackgroundColor = Color(0xFFFAFAFB);
 
 class TheoryPdfView extends StatelessWidget {
   const TheoryPdfView({
@@ -16,7 +20,7 @@ class TheoryPdfView extends StatelessWidget {
   final String authToken;
   final bool interactive;
 
-  /// 全屏对话框内：黑底、零边距，与外层 [Material] 无缝贴合。
+  /// 全屏对话框内：浅灰底、零边距，与外层 [Material] 无缝贴合。
   final bool fullscreen;
 
   @override
@@ -24,26 +28,29 @@ class TheoryPdfView extends StatelessWidget {
     final headers = <String, String>{
       if (authToken.isNotEmpty) 'app-token': authToken,
     };
-    return PdfViewer.uri(
-      Uri.parse(url),
-      headers: headers.isEmpty ? null : headers,
-      withCredentials: true,
-      params: PdfViewerParams(
-        backgroundColor:
-            fullscreen ? Colors.black : const Color(0xFFFAFAFB),
-        margin: fullscreen ? 0 : 12,
-        // iOS：禁止长按选字 / 复制（pdfrx textSelectionParams.enabled=false）。
-        textSelectionParams: Platform.isIOS
-            ? const PdfTextSelectionParams(
-                enabled: false,
-                showContextMenuAutomatically: false,
-              )
-            : null,
-        // 去掉每一页四周默认的黑色 drop shadow（pdfrx 默认值是
-        // BoxShadow(color: Colors.black54, blurRadius: 4, ...)），
-        // 让 PDF 干净地贴在卡片背景上。
-        pageDropShadow: null,
-        loadingBannerBuilder: (context, bytesDownloaded, totalBytes) {
+    const backgroundColor = kTheoryPdfBackgroundColor;
+    return ColoredBox(
+      color: backgroundColor,
+      child: PdfViewer.uri(
+        Uri.parse(url),
+        headers: headers.isEmpty ? null : headers,
+        withCredentials: true,
+        params: PdfViewerParams(
+          backgroundColor: backgroundColor,
+          margin: fullscreen ? 0 : 12,
+          panEnabled: interactive,
+          // iOS：禁止长按选字 / 复制（pdfrx textSelectionParams.enabled=false）。
+          textSelectionParams: Platform.isIOS
+              ? const PdfTextSelectionParams(
+                  enabled: false,
+                  showContextMenuAutomatically: false,
+                )
+              : null,
+          // 去掉每一页四周默认的黑色 drop shadow（pdfrx 默认值是
+          // BoxShadow(color: Colors.black54, blurRadius: 4, ...)），
+          // 让 PDF 干净地贴在卡片背景上。
+          pageDropShadow: null,
+          loadingBannerBuilder: (context, bytesDownloaded, totalBytes) {
           final progress = (totalBytes != null && totalBytes > 0)
               ? bytesDownloaded / totalBytes
               : null;
@@ -51,15 +58,7 @@ class TheoryPdfView extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                SizedBox(
-                  width: 32,
-                  height: 32,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    value: progress,
-                    color: const Color(0xFF8741FF),
-                  ),
-                ),
+                AppLoadingIndicator(value: progress),
                 const SizedBox(height: 12),
                 Text(
                   progress == null
@@ -121,6 +120,7 @@ class TheoryPdfView extends StatelessWidget {
             ),
           );
         },
+      ),
       ),
     );
   }

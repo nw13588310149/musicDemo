@@ -469,6 +469,14 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
     state = state.copyWith(mainView: SmartCampusMainView.leaveApproval);
   }
 
+  /// 任课老师 / 班主任「我的请假」入口：查看本人请假记录并发起新申请。
+  void openMyTeacherLeave() {
+    if (state.mainView == SmartCampusMainView.myTeacherLeave) {
+      return;
+    }
+    state = state.copyWith(mainView: SmartCampusMainView.myTeacherLeave);
+  }
+
   /// 管理员端「学生管理」入口：进入全量在籍学生总览页（banner + 标题/副标题
   /// + 4 张彩色渐变统计卡（在籍 / 住校 / 异动 / 名册总数）+ 学籍状态 5 tabs
   /// (全部 / 在籍 / 休学 / 转学 / 毕业) + 全部班级 dropdown + 搜索框

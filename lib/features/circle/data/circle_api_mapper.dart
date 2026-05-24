@@ -202,18 +202,40 @@ List<CircleComment> _parseEmbeddedComments(Map<String, dynamic> m) {
 }
 
 CircleComment _mapComment(Map<String, dynamic> m) {
+  // v2 评论作者信息在嵌套 `user` 里；顶层 userId / comment 等字段平铺。
+  final userObj = m['user'];
+  final user = userObj is Map
+      ? Map<String, dynamic>.from(userObj)
+      : const <String, dynamic>{};
+
   final id = _pickString(m, const ['id', 'commentId']);
-  final authorId = _pickString(m, const ['userId', 'createUserId', 'authorId']);
-  final name = _pickString(m, const [
+  final authorId = _pickString({...user, ...m}, const [
+    'userId',
+    'createUserId',
+    'authorId',
+    'id',
+  ]);
+  final name = _pickString({...m, ...user}, const [
     'nickname',
+    'realname',
     'realName',
     'userName',
     'userNickname',
     'name',
   ]);
-  final avatarRaw = _pickString(m, const ['headUrl', 'avatar', 'avatarUrl']);
-  final role = _pickString(m, const ['identity', 'roleName']);
-  final text = _pickString(m, const ['content', 'text', 'comment', 'body']);
+  final avatarRaw = _pickString({...m, ...user}, const [
+    'headUrl',
+    'avatar',
+    'avatarUrl',
+    'userHeadUrl',
+  ]);
+  final role = _pickString({...m, ...user}, const [
+    'identity',
+    'roleName',
+    'userRole',
+    'role',
+  ]);
+  final text = _pickString(m, const ['comment', 'content', 'text', 'body']);
   final likeCount = _asInt(m['likeCount'] ?? m['likes']);
   final liked = _truthy(m['isLike'] ?? m['liked'] ?? m['thumbUp']);
 

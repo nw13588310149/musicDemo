@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -285,14 +286,7 @@ class _NativeImagePreview extends StatelessWidget {
         fit: BoxFit.contain,
         alignment: Alignment.center,
         placeholder: (context, _) => const Center(
-          child: SizedBox(
-            width: 32,
-            height: 32,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: Color(0xFF8741FF),
-            ),
-          ),
+          child: AppLoadingIndicator(),
         ),
         errorWidget: (context, _, _) => const Center(
           child: Icon(
@@ -333,15 +327,7 @@ class _NativePdfPreview extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                SizedBox(
-                  width: 32,
-                  height: 32,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    value: progress,
-                    color: const Color(0xFF8741FF),
-                  ),
-                ),
+                AppLoadingIndicator(value: progress),
                 const SizedBox(height: 12),
                 Text(
                   progress == null
@@ -519,7 +505,7 @@ class _HomeworkMediaKitPlayerState extends State<_HomeworkMediaKitPlayer> {
       if (vc == null) {
         return const ColoredBox(
           color: Color(0xFF0B081A),
-          child: Center(child: CircularProgressIndicator()),
+          child: Center(child: AppLoadingIndicator(color: Colors.white)),
         );
       }
       return ColoredBox(

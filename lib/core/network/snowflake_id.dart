@@ -1,0 +1,112 @@
+import 'dart:convert';
+
+/// 从 JSON 字段读取雪花 long id。
+///
+/// Web 端只允许 [String]（响应侧 [BigIntSafeTransformer] 会把 16+ 位整数
+/// 解码为 String）；若已是精度受损的 [num]，直接丢弃，避免把错误 id 继续
+/// 传给下游接口。原生端额外允许 [int]。
+String? readSnowflakeId(dynamic raw) {
+  if (raw == null) return null;
+  if (raw is String) {
+    final s = raw.trim();
+    return s.isEmpty ? null : s;
+  }
+  if (raw is int) return raw.toString();
+  if (raw is num) {
+    // Web 端若已落为 double，toString 可能是近似值；仍优于直接丢弃导致列表空白。
+    final s = raw.toStringAsFixed(0);
+    return s.isEmpty ? null : s;
+  }
+  final s = raw.toString().trim();
+  return s.isEmpty ? null : s;
+}
+
+/// 按 [keys] 顺序读取第一个合法的雪花 id 字符串。
+String? pickFirstSnowflakeId(Map<dynamic, dynamic> json, List<String> keys) {
+  for (final key in keys) {
+    final id = readSnowflakeId(json[key]);
+    if (id != null) return id;
+  }
+  return null;
+}
+
+/// 构造 POST JSON 文本，强制 `classId` / `id` 等字段以 **带引号的字符串**
+/// 写入请求体。Web 端直接 `jsonEncode(Map)` 仍可能把大整数变成 IEEE-754
+/// number，因此 studentList 等接口改用手写 JSON 字符串 + `data: String` 发送。
+String encodeSnowflakeSafeRequestBody(Map<String, dynamic> body) {
+  final entries = <String>[];
+  body.forEach((key, value) {
+    if (value == null) return;
+    final encodedKey = jsonEncode(key);
+    if (isSnowflakeJsonKey(key)) {
+      final id = readSnowflakeId(value) ?? (value is String ? value.trim() : null);
+      if (id == null || id.isEmpty) return;
+      entries.add('$encodedKey:${jsonEncode(id)}');
+      return;
+    }
+    if (value is String) {
+      entries.add('$encodedKey:${jsonEncode(value)}');
+      return;
+    }
+    if (value is num || value is bool) {
+      entries.add('$encodedKey:$value');
+      return;
+    }
+    entries.add('$encodedKey:${jsonEncode(value)}');
+  });
+  return '{${entries.join(',')}}';
+}
+
+const Set<String> snowflakeJsonKeys = {
+  'id',
+  'classId',
+  'archiveId',
+  'teacherId',
+  'studentId',
+  'userId',
+  'headTeacherId',
+  'courseId',
+  'fromUserId',
+  'toUserId',
+  'bedId',
+  'cId',
+};
+
+bool isSnowflakeJsonKey(String key) {
+  if (snowflakeJsonKeys.contains(key)) return true;
+  return key.endsWith('Id');
+}
+
+/// 请求体序列化前，把雪花 id 字段强制保持/转换为 JSON 字符串。
+Object? coerceSnowflakeRequestValue(String key, Object? value) {
+  if (!isSnowflakeJsonKey(key)) return value;
+  // studentList 等接口用空串表示「全部班级」，不能转成 null 被省略。
+  if (value is String && value.isEmpty) return value;
+  return readSnowflakeId(value);
+}
+
+/// 递归处理 POST body，确保 `classId` / `id` 等字段以字符串形态进入
+/// `jsonEncode`，避免 Web 端把 19 位雪花 id 变成 IEEE-754 双精度整数。
+Object? coerceSnowflakeRequestData(Object? data, [String? key]) {
+  if (data is Map) {
+    return {
+      for (final entry in data.entries)
+        entry.key.toString(): coerceSnowflakeRequestData(
+          coerceSnowflakeRequestValue(entry.key.toString(), entry.value),
+          entry.key.toString(),
+        ),
+    };
+  }
+  if (data is List) {
+    if (key == 'classIdList') {
+      return [
+        for (final item in data) coerceSnowflakeRequestValue('classId', item),
+      ];
+    }
+    if (key == 'id') {
+      return [for (final item in data) coerceSnowflakeRequestValue('id', item)];
+    }
+    return [for (final item in data) coerceSnowflakeRequestData(item)];
+  }
+  return data;
+}

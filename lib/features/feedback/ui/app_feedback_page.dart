@@ -1,6 +1,7 @@
 ﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -146,15 +147,7 @@ class _AppFeedbackPageState extends ConsumerState<AppFeedbackPage> {
                     Expanded(
                       child: _loading
                           ? const Center(
-                              child: SizedBox(
-                                width: 28,
-                                height: 28,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.4,
-                                  valueColor:
-                                      AlwaysStoppedAnimation(_kPurple),
-                                ),
-                              ),
+                              child: AppLoadingIndicator(),
                             )
                           : (_records.isEmpty
                                 ? const _FeedbackEmptyHint()
@@ -468,14 +461,7 @@ class _SubmitButton extends StatelessWidget {
             ],
           ),
           child: busy
-              ? SizedBox(
-                  width: ui(18),
-                  height: ui(18),
-                  child: const CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation(Colors.white),
-                  ),
-                )
+              ? const AppLoadingIndicator(size: 16, color: Colors.white)
               : Text(
                   label,
                   style: TextStyle(

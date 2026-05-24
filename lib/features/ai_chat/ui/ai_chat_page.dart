@@ -1,6 +1,7 @@
 ﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -275,11 +276,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
               ),
               child: state.sessionsLoading && state.sessions.isEmpty
                   ? const Center(
-                      child: SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
+                      child: AppLoadingIndicator(),
                     )
                   : ListView(
                       padding: EdgeInsets.zero,
@@ -879,7 +876,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
         ),
         Expanded(
           child: state.messagesLoading && state.messages.isEmpty
-              ? const Center(child: CircularProgressIndicator())
+              ? const Center(child: AppLoadingIndicator())
               : Listener(
                   // 用户手指压下 / 抬起时同步 _userTouchingList。压下后立刻把
                   // 还没执行完的「贴底滚动」级联取消，避免它在用户拖拽过程中
@@ -1433,14 +1430,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
         ),
         child: Center(
           child: loading
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: _purple,
-                  ),
-                )
+              ? const AppLoadingIndicator()
               : AppAssetGraphic(iconAsset, width: 20, height: 20),
         ),
       ),

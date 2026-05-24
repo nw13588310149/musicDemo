@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -337,10 +338,7 @@ class _NotesListView extends ConsumerWidget {
         ),
         if (state.busy)
           Positioned.fill(
-            child: ColoredBox(
-              color: const Color(0x22000000),
-              child: const Center(child: CircularProgressIndicator()),
-            ),
+            child: const AppLoadingOverlay(scrimColor: Color(0x22000000)),
           ),
       ],
     );
@@ -606,9 +604,7 @@ class _NotesContentArea extends StatelessWidget {
               children: [
                 Positioned.fill(
                   child: state.loading
-                      ? const Center(
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
+                      ? const Center(child: AppLoadingIndicator())
                       : state.visibleNotes.isEmpty
                       ? const _EmptyPanel()
                       : GridView.builder(
@@ -1807,11 +1803,7 @@ class _SecondaryActionButton extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (busy)
-                SizedBox(
-                  width: ui(16),
-                  height: ui(16),
-                  child: const CircularProgressIndicator(strokeWidth: 2),
-                )
+                const AppLoadingIndicator()
               else
                 Icon(icon, size: ui(18), color: foreground),
               SizedBox(width: ui(6)),

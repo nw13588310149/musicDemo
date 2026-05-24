@@ -1,6 +1,7 @@
 ﻿import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -314,14 +315,7 @@ class AuthFigmaPrimaryButton extends StatelessWidget {
         ),
         onPressed: loading ? null : onPressed,
         child: loading
-            ? SizedBox(
-                width: _s(16),
-                height: _s(16),
-                child: const CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              )
+            ? const AppLoadingIndicator(size: 16, color: Colors.white)
             : Text(
                 text,
                 style: TextStyle(

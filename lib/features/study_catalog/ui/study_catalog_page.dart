@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/route_paths.dart';
@@ -201,7 +202,7 @@ class _ContentPanel extends StatelessWidget {
             ),
           Expanded(
             child: state.loading && state.lessonGroups.isEmpty
-                ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                ? const Center(child: AppLoadingIndicator())
                 : state.lessonGroups.isEmpty
                 ? CourseEmptyPlaceholder(schoolMode: state.schoolMode)
                 : Padding(

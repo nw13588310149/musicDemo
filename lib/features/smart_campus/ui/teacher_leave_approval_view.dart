@@ -6,40 +6,27 @@
 //      路由到本视图。返回：banner 左上角返回按钮 → onBack。
 //
 // 视觉（Figma 970 设计宽）：
-//   1. banner（62 高, 4deg #F9EDFF→white 渐变, 圆角 16, 顶部居中"请假审批"
-//      16/600 + 副标题 12/#B6B5BB；左 12 返回按钮 32×32 白底 outline #F3F2F3）。
-//   2. 紫色提示 12/#B6B5BB「默认由家长在小程序审批后再由班主任审批；已与
-//      家长充分沟通的可选择班主任直接审批。补课协调以教务安排为准。」
-//   3. 4 张统计卡（100 高）：
-//      A. 「待审批」橙渐变 196deg rgba(255,168,70,.16)→0
-//      B. 「审批中」紫渐变 196deg rgba(147,70,255,.14)→0
-//      C. 「已通过」绿渐变 196deg #DCFFE7→white 73%
-//      D. 「已拒绝」红渐变 196deg #FFE2DC→white 73%
-//      数值字体 32 Barlow / 标签 14/500 black。
-//   4. 备案说明 12/#6D6B75「备案说明：病假超过规定天数或跨周末离校等情形，
-//      通过后系统将提醒年级组备案；驳回须填写原因，学生端与家长端均可查看。」
-//   5. Tabs row（44 高）：白底圆角 8 容器 + 6 个 pill：
-//      全部 / 待我审批 / 审批中 / 已通过 / 已拒绝 / 已撤销，激活态 #0B081A
-//      黑底白字 14/500，未激活 #6D6B75 14/500 透明底；右侧搜索框 324×44。
-//   6. 双列卡片网格（每张 477 宽，padding 12，白底圆角 12，gap 16）：
-//      · header：头像 40 + 姓名 14/500 + 学号 12/#B6B5BB + "病假" 12 + "时长4小时"
-//        12/#6D6B75 + 状态徽章（审批中紫底紫字 / 已通过 #E4FFED+#12CE51 /
-//        已拒绝 #FFE4E5+#FF323C / 已撤销 灰底灰字）。
-//      · 灰底信息块 #F5F6FA padding 16：请假时间 / 请假事由 / 申请时间 /
-//        路径；中间一段 horizontal stepper：
-//           家长 [已通过] ─────────── 班主任 [待审批/已通过/已拒绝]
-//        进度点：未到为白底灰描边，激活/到达态使用对应色填充（待审批用
-//        #FF6A00 橙；通过用 #12CE51 绿；拒绝用 #FF323C 红）；最后一行备注。
-//      · 仅"审批中"卡片 footer 多一行：紫渐变"通过"按钮 + 描边"驳回"按钮，
-//        点击"驳回"打开 GradientHeaderDialog 形式的"驳回申请"弹窗。
+//   1. banner（62 高，背景图 xiaoquan/bg.png，圆角 16，标题「请假审批」；
+//      左 12 返回按钮 32×32 白底 outline #F3F2F3）。
+//   2. 4 张统计卡（100 高）：待审批 / 审批中 / 已通过 / 已拒绝。
+//   3. Tabs row + 搜索框 + 双列卡片网格（家长 → 班主任 stepper）。
 // =============================================================================
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 
+import '../../../core/constants/app_assets.dart';
+import '../../../core/network/api_response.dart';
+import '../../../core/widgets/app_asset_graphic.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
+import '../data/student_leave_data.dart';
+import '../data/teacher_repository.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // —— 颜色 ————————————————————————————————————————————————————————
@@ -72,82 +59,163 @@ enum _StatusTab {
 
   const _StatusTab(this.label);
   final String label;
+
+  int? get apiStatus => switch (this) {
+    _StatusTab.mine => 1,
+    _StatusTab.approved => 3,
+    _ => null,
+  };
 }
 
-enum _LeaveStatus {
-  reviewing('审批中', _kPurpleSoftBg, _kPurple),
-  approved('已通过', _kGreenSoftBg, _kGreen),
-  rejected('已拒绝', _kRedSoftBg, _kRed),
-  withdrawn('已撤销', Color(0xFFEFEFEF), _kTextSecondary);
+extension _StudentLeaveStatusStyle on StudentLeaveStatus {
+  Color get bg => switch (this) {
+    StudentLeaveStatus.waitingParent => _kOrangeSoftBg,
+    StudentLeaveStatus.waitingTeacher => _kPurpleSoftBg,
+    StudentLeaveStatus.parentRejected => _kRedSoftBg,
+    StudentLeaveStatus.approved => _kGreenSoftBg,
+    StudentLeaveStatus.teacherRejected => _kRedSoftBg,
+  };
 
-  const _LeaveStatus(this.label, this.bg, this.fg);
-  final String label;
-  final Color bg;
-  final Color fg;
+  Color get fg => switch (this) {
+    StudentLeaveStatus.waitingParent => _kOrange,
+    StudentLeaveStatus.waitingTeacher => _kPurple,
+    StudentLeaveStatus.parentRejected => _kRed,
+    StudentLeaveStatus.approved => _kGreen,
+    StudentLeaveStatus.teacherRejected => _kRed,
+  };
 }
 
-/// 审批节点状态。
-enum _StepStatus {
-  pending('待审批', _kOrange, _kOrangeSoftBg),
-  approved('已通过', _kGreen, _kGreenSoftBg),
-  rejected('已拒绝', _kRed, _kRedSoftBg);
+extension _StudentLeaveStepStyle on StudentLeaveStepStatus {
+  Color get color => switch (this) {
+    StudentLeaveStepStatus.pending => _kOrange,
+    StudentLeaveStepStatus.approved => _kGreen,
+    StudentLeaveStepStatus.rejected => _kRed,
+  };
 
-  const _StepStatus(this.label, this.color, this.softBg);
-  final String label;
-  final Color color;
-  final Color softBg;
-}
-
-class _LeaveRequest {
-  const _LeaveRequest({
-    required this.studentName,
-    required this.studentNo,
-    required this.leaveType,
-    required this.duration,
-    required this.timeRange,
-    required this.reason,
-    required this.appliedAt,
-    required this.path,
-    required this.status,
-    required this.parentStep,
-    required this.headTeacherStep,
-    required this.note,
-  });
-
-  final String studentName;
-  final String studentNo;
-  final String leaveType;
-  final String duration;
-  final String timeRange;
-  final String reason;
-  final String appliedAt;
-  final String path;
-  final _LeaveStatus status;
-  final _StepStatus parentStep;
-  final _StepStatus headTeacherStep;
-  final String note;
+  Color get softBg => switch (this) {
+    StudentLeaveStepStatus.pending => _kOrangeSoftBg,
+    StudentLeaveStepStatus.approved => _kGreenSoftBg,
+    StudentLeaveStepStatus.rejected => _kRedSoftBg,
+  };
 }
 
 // —— 顶级视图 ——————————————————————————————————————————————————————
 
-class TeacherLeaveApprovalView extends StatefulWidget {
+class TeacherLeaveApprovalView extends ConsumerStatefulWidget {
   const TeacherLeaveApprovalView({super.key, required this.onBack});
 
   final VoidCallback onBack;
 
   @override
-  State<TeacherLeaveApprovalView> createState() =>
+  ConsumerState<TeacherLeaveApprovalView> createState() =>
       _TeacherLeaveApprovalViewState();
 }
 
-class _TeacherLeaveApprovalViewState extends State<TeacherLeaveApprovalView> {
+class _TeacherLeaveApprovalViewState
+    extends ConsumerState<TeacherLeaveApprovalView> {
   _StatusTab _tab = _StatusTab.all;
-  late List<_LeaveRequest> _requests;
+  List<StudentLeaveRecord> _requests = const [];
+  int _pendingCount = 0;
+  int _reviewingCount = 0;
+  int _approvedCount = 0;
+  int _rejectedCount = 0;
+  bool _loading = false;
+  String? _loadError;
+  int _listToken = 0;
 
   @override
   void initState() {
     super.initState();
-    _requests = _demoRequests();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_loadStats());
+      unawaited(_loadList());
+    });
+  }
+
+  Future<void> _loadStats() async {
+    final repo = ref.read(teacherRepositoryProvider);
+    final results = await Future.wait([
+      repo.headTeacherStudentLeaveList(current: 1, size: 1, status: 1),
+      repo.headTeacherStudentLeaveList(current: 1, size: 1, status: 0),
+      repo.headTeacherStudentLeaveList(current: 1, size: 1, status: 3),
+      repo.headTeacherStudentLeaveList(current: 1, size: 1, status: 2),
+      repo.headTeacherStudentLeaveList(current: 1, size: 1, status: 4),
+    ]);
+    if (!mounted) return;
+
+    int total(ApiResponse resp) =>
+        parseStudentLeaveTotal(resp.data) ??
+        (resp.isSuccess ? parseStudentLeaveList(resp.data).length : 0);
+
+    setState(() {
+      _pendingCount = results[0].isSuccess ? total(results[0]) : 0;
+      _reviewingCount = results[1].isSuccess ? total(results[1]) : 0;
+      _approvedCount = results[2].isSuccess ? total(results[2]) : 0;
+      _rejectedCount = (results[3].isSuccess ? total(results[3]) : 0) +
+          (results[4].isSuccess ? total(results[4]) : 0);
+    });
+  }
+
+  Future<void> _loadList() async {
+    final token = ++_listToken;
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
+    final repo = ref.read(teacherRepositoryProvider);
+    final resp = await repo.headTeacherStudentLeaveList(
+      current: 1,
+      size: 200,
+      status: _tab.apiStatus,
+    );
+    if (!mounted || token != _listToken) return;
+
+    if (!resp.isSuccess) {
+      setState(() {
+        _requests = const [];
+        _loading = false;
+        _loadError =
+            resp.msg.isEmpty ? '加载学生请假列表失败' : resp.msg;
+      });
+      return;
+    }
+
+    setState(() {
+      _requests = _filterTab(parseStudentLeaveList(resp.data));
+      _loading = false;
+      _loadError = null;
+    });
+  }
+
+  List<StudentLeaveRecord> _filterTab(List<StudentLeaveRecord> source) {
+    return switch (_tab) {
+      _StatusTab.all => source,
+      _StatusTab.mine => source
+          .where((r) => r.status == StudentLeaveStatus.waitingTeacher)
+          .toList(),
+      _StatusTab.reviewing => source
+          .where(
+            (r) =>
+                r.status == StudentLeaveStatus.waitingParent ||
+                r.status == StudentLeaveStatus.waitingTeacher,
+          )
+          .toList(),
+      _StatusTab.approved => source
+          .where((r) => r.status == StudentLeaveStatus.approved)
+          .toList(),
+      _StatusTab.rejected => source
+          .where(
+            (r) =>
+                r.status == StudentLeaveStatus.parentRejected ||
+                r.status == StudentLeaveStatus.teacherRejected,
+          )
+          .toList(),
+      _StatusTab.withdrawn => const [],
+    };
+  }
+
+  Future<void> _reloadAll() async {
+    await Future.wait([_loadStats(), _loadList()]);
   }
 
   @override
@@ -162,90 +230,84 @@ class _TeacherLeaveApprovalViewState extends State<TeacherLeaveApprovalView> {
           children: [
             _Banner(onBack: widget.onBack),
             SizedBox(height: ui(16)),
-            const _StatsRow(
-              pendingCount: 1,
-              reviewingCount: 2,
-              approvedCount: 2,
-              rejectedCount: 1,
-            ),
-            SizedBox(height: ui(8)),
-            Padding(
-              padding: EdgeInsets.only(left: ui(8)),
-              child: Text(
-                '默认由家长在小程序审批后再由班主任审批；已与家长充分沟通的可选择班主任直接审批。补课协调以教务安排为准。',
-                style: TextStyle(
-                  fontSize: ui(12),
-                  color: _kTextHint,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w400,
-                  height: 1.5,
-                ),
-              ),
-            ),
-            SizedBox(height: ui(8)),
-            Text(
-              '备案说明：病假超过规定天数或跨周末离校等情形，通过后系统将提醒年级组备案；驳回须填写原因，学生端与家长端均可查看。',
-              style: TextStyle(
-                fontSize: ui(12),
-                color: _kTextSecondary,
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w400,
-                height: 1.5,
-              ),
+            _StatsRow(
+              pendingCount: _pendingCount,
+              reviewingCount: _reviewingCount,
+              approvedCount: _approvedCount,
+              rejectedCount: _rejectedCount,
             ),
             SizedBox(height: ui(16)),
-            _TabsRow(current: _tab, onTap: (t) => setState(() => _tab = t)),
-            SizedBox(height: ui(16)),
-            _CardsGrid(
-              records: _filtered(),
-              onApprove: _onApprove,
-              onReject: _onReject,
+            _TabsRow(
+              current: _tab,
+              onTap: (t) {
+                if (_tab == t) return;
+                setState(() => _tab = t);
+                unawaited(_loadList());
+              },
             ),
+            SizedBox(height: ui(16)),
+            if (_loading && _requests.isEmpty)
+              Padding(
+                padding: EdgeInsets.symmetric(vertical: ui(40)),
+                child: const Center(child: AppLoadingIndicator()),
+              )
+            else
+              _CardsGrid(
+                records: _requests,
+                emptyMessage: _loadError ?? '暂无相关申请',
+                onApprove: _onApprove,
+                onReject: _onReject,
+              ),
           ],
         ),
       ),
     );
   }
 
-  List<_LeaveRequest> _filtered() {
-    switch (_tab) {
-      case _StatusTab.all:
-        return _requests;
-      case _StatusTab.mine:
-      case _StatusTab.reviewing:
-        return _requests
-            .where((r) => r.status == _LeaveStatus.reviewing)
-            .toList();
-      case _StatusTab.approved:
-        return _requests
-            .where((r) => r.status == _LeaveStatus.approved)
-            .toList();
-      case _StatusTab.rejected:
-        return _requests
-            .where((r) => r.status == _LeaveStatus.rejected)
-            .toList();
-      case _StatusTab.withdrawn:
-        return _requests
-            .where((r) => r.status == _LeaveStatus.withdrawn)
-            .toList();
-    }
-  }
-
-  void _onApprove(_LeaveRequest record) {
-    AppToast.show(
-      context,
-      '已通过 ${record.studentName} 的${record.leaveType}申请（演示）',
+  Future<void> _onApprove(StudentLeaveRecord record) async {
+    final repo = ref.read(teacherRepositoryProvider);
+    final resp = await repo.headTeacherStudentLeaveAudit(
+      id: record.id,
+      status: 3,
     );
+    if (!mounted) return;
+    if (!resp.isSuccess) {
+      AppToast.show(
+        context,
+        resp.msg.isEmpty ? '审批失败' : resp.msg,
+        type: AppToastType.error,
+      );
+      return;
+    }
+    AppToast.show(context, '已通过 ${record.studentName} 的${record.leaveType}申请');
+    await _reloadAll();
   }
 
-  Future<void> _onReject(_LeaveRequest record) async {
+  Future<void> _onReject(StudentLeaveRecord record) async {
     final reason = await _showRejectDialog(context, record: record);
     if (!mounted) return;
     if (reason == null || reason.trim().isEmpty) return;
+
+    final repo = ref.read(teacherRepositoryProvider);
+    final resp = await repo.headTeacherStudentLeaveAudit(
+      id: record.id,
+      status: 4,
+      teacherAuditReason: reason.trim(),
+    );
+    if (!mounted) return;
+    if (!resp.isSuccess) {
+      AppToast.show(
+        context,
+        resp.msg.isEmpty ? '驳回失败' : resp.msg,
+        type: AppToastType.error,
+      );
+      return;
+    }
     AppToast.show(
       context,
-      '已驳回 ${record.studentName} 的${record.leaveType}申请：$reason（演示）',
+      '已驳回 ${record.studentName} 的${record.leaveType}申请',
     );
+    await _reloadAll();
   }
 }
 
@@ -264,12 +326,12 @@ class _Banner extends StatelessWidget {
       height: ui(62),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.bottomCenter,
-          end: Alignment.topCenter,
-          colors: [Colors.white, Color(0xFFF9EDFF)],
-        ),
         borderRadius: BorderRadius.circular(ui(16)),
+        image: DecorationImage(
+          image: AssetImage(AppAssets.xiaoquanHeaderBg),
+          fit: BoxFit.cover,
+          alignment: Alignment.centerRight,
+        ),
       ),
       child: Stack(
         children: [
@@ -311,19 +373,6 @@ class _Banner extends StatelessWidget {
                       fontWeight: AppFont.w600,
                       height: 1.2,
                     ),
-                  ),
-                  SizedBox(height: ui(2)),
-                  Text(
-                    '查看本班学生请假材料、家长节点与审批路径；与家长链路一致。通过或驳回后同步到学生端与年级备案（演示）。',
-                    style: TextStyle(
-                      fontSize: ui(12),
-                      color: _kTextHint,
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w400,
-                      height: 1.4,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
@@ -479,7 +528,7 @@ class _TabsRow extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Container(
-          height: ui(44),
+          constraints: BoxConstraints(minHeight: ui(44)),
           padding: EdgeInsets.fromLTRB(ui(4), ui(4), ui(3), ui(4)),
           decoration: BoxDecoration(
             color: Colors.white,
@@ -490,7 +539,7 @@ class _TabsRow extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               for (var i = 0; i < _StatusTab.values.length; i++) ...[
-                if (i != 0) SizedBox(width: ui(16)),
+                if (i != 0) SizedBox(width: ui(8)),
                 _TabPill(
                   label: _StatusTab.values[i].label,
                   active: _StatusTab.values[i] == current,
@@ -507,13 +556,14 @@ class _TabsRow extends StatelessWidget {
             color: Colors.white,
             borderRadius: BorderRadius.circular(ui(12)),
           ),
-          padding: EdgeInsets.symmetric(horizontal: ui(24)),
+          padding: EdgeInsets.fromLTRB(ui(14), 0, ui(24), 0),
           child: Row(
             children: [
-              Icon(
-                Icons.search_rounded,
-                size: ui(16),
-                color: const Color(0xFFC6C6C6),
+              AppAssetGraphic(
+                AppAssets.shellV2Search,
+                width: ui(16),
+                height: ui(16),
+                fit: BoxFit.contain,
               ),
               SizedBox(width: ui(8)),
               Expanded(
@@ -553,7 +603,7 @@ class _TabPill extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(ui(6)),
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(10)),
+        padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(7)),
         decoration: BoxDecoration(
           color: active ? _kTextDark : Colors.transparent,
           borderRadius: BorderRadius.circular(ui(active ? 6 : 8)),
@@ -565,7 +615,7 @@ class _TabPill extends StatelessWidget {
             color: active ? Colors.white : _kTextSecondary,
             fontFamily: 'PingFang SC',
             fontWeight: AppFont.w500,
-            height: 1.0,
+            height: 1.2,
           ),
         ),
       ),
@@ -578,13 +628,15 @@ class _TabPill extends StatelessWidget {
 class _CardsGrid extends StatelessWidget {
   const _CardsGrid({
     required this.records,
+    required this.emptyMessage,
     required this.onApprove,
     required this.onReject,
   });
 
-  final List<_LeaveRequest> records;
-  final ValueChanged<_LeaveRequest> onApprove;
-  final ValueChanged<_LeaveRequest> onReject;
+  final List<StudentLeaveRecord> records;
+  final String emptyMessage;
+  final ValueChanged<StudentLeaveRecord> onApprove;
+  final ValueChanged<StudentLeaveRecord> onReject;
 
   @override
   Widget build(BuildContext context) {
@@ -594,7 +646,7 @@ class _CardsGrid extends StatelessWidget {
         padding: EdgeInsets.symmetric(vertical: ui(40)),
         child: Center(
           child: Text(
-            '暂无相关申请',
+            emptyMessage,
             style: TextStyle(
               fontSize: ui(14),
               color: _kTextHint,
@@ -638,14 +690,14 @@ class _LeaveCard extends StatelessWidget {
     required this.onReject,
   });
 
-  final _LeaveRequest record;
+  final StudentLeaveRecord record;
   final VoidCallback onApprove;
   final VoidCallback onReject;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final showActions = record.status == _LeaveStatus.reviewing;
+    final showActions = record.status.canTeacherAudit;
 
     return Container(
       padding: EdgeInsets.all(ui(12)),
@@ -690,25 +742,15 @@ class _LeaveCard extends StatelessWidget {
 class _CardHeader extends StatelessWidget {
   const _CardHeader({required this.record});
 
-  final _LeaveRequest record;
+  final StudentLeaveRecord record;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final avatar = record.headUrl;
     return Row(
       children: [
-        Container(
-          width: ui(40),
-          height: ui(40),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(ui(8)),
-            image: const DecorationImage(
-              image: AssetImage('assets/images/schoolA/30.png'),
-              fit: BoxFit.cover,
-            ),
-          ),
-        ),
+        _StudentAvatar(name: record.studentName, avatarUrl: avatar),
         SizedBox(width: ui(8)),
         Expanded(
           child: SingleChildScrollView(
@@ -750,7 +792,7 @@ class _CardHeader extends StatelessWidget {
                 ),
                 SizedBox(width: ui(12)),
                 Text(
-                  '时长${record.duration}',
+                  record.durationLabel,
                   style: TextStyle(
                     fontSize: ui(12),
                     color: _kTextSecondary,
@@ -770,10 +812,54 @@ class _CardHeader extends StatelessWidget {
   }
 }
 
+class _StudentAvatar extends StatelessWidget {
+  const _StudentAvatar({required this.name, this.avatarUrl});
+
+  final String name;
+  final String? avatarUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final initial = name.isNotEmpty ? name.characters.first : '·';
+    final placeholder = Container(
+      width: ui(40),
+      height: ui(40),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: const Color(0xFFDAD2FF),
+        borderRadius: BorderRadius.circular(ui(8)),
+      ),
+      child: Text(
+        initial,
+        style: TextStyle(
+          fontSize: ui(16),
+          height: 1.0,
+          fontWeight: AppFont.w600,
+          color: _kPurple,
+          fontFamily: 'PingFang SC',
+        ),
+      ),
+    );
+    final url = avatarUrl?.trim() ?? '';
+    if (url.isEmpty) return placeholder;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(ui(8)),
+      child: Image.network(
+        url,
+        width: ui(40),
+        height: ui(40),
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => placeholder,
+      ),
+    );
+  }
+}
+
 class _StatusBadge extends StatelessWidget {
   const _StatusBadge({required this.status});
 
-  final _LeaveStatus status;
+  final StudentLeaveStatus status;
 
   @override
   Widget build(BuildContext context) {
@@ -801,7 +887,7 @@ class _StatusBadge extends StatelessWidget {
 class _CardBody extends StatelessWidget {
   const _CardBody({required this.record});
 
-  final _LeaveRequest record;
+  final StudentLeaveRecord record;
 
   @override
   Widget build(BuildContext context) {
@@ -880,8 +966,8 @@ class _InfoLine extends StatelessWidget {
 class _StepperBar extends StatelessWidget {
   const _StepperBar({required this.parent, required this.headTeacher});
 
-  final _StepStatus parent;
-  final _StepStatus headTeacher;
+  final StudentLeaveStepStatus parent;
+  final StudentLeaveStepStatus headTeacher;
 
   @override
   Widget build(BuildContext context) {
@@ -909,7 +995,7 @@ class _StepNode extends StatelessWidget {
   });
 
   final String label;
-  final _StepStatus status;
+  final StudentLeaveStepStatus status;
   final bool isFirst;
 
   @override
@@ -951,7 +1037,7 @@ class _StepNode extends StatelessWidget {
         Container(
           padding: EdgeInsets.symmetric(horizontal: ui(4), vertical: ui(2)),
           decoration: BoxDecoration(
-            color: status == _StepStatus.approved
+            color: status == StudentLeaveStepStatus.approved
                 ? Colors.white
                 : status.softBg,
             borderRadius: BorderRadius.circular(ui(4)),
@@ -960,7 +1046,9 @@ class _StepNode extends StatelessWidget {
             status.label,
             style: TextStyle(
               fontSize: ui(12),
-              color: status == _StepStatus.approved ? _kTextHint : status.color,
+              color: status == StudentLeaveStepStatus.approved
+                  ? _kTextHint
+                  : status.color,
               fontFamily: 'PingFang SC',
               fontWeight: AppFont.w400,
               height: 15.24 / 12,
@@ -1025,7 +1113,7 @@ class _CardActionButton extends StatelessWidget {
 
 Future<String?> _showRejectDialog(
   BuildContext context, {
-  required _LeaveRequest record,
+  required StudentLeaveRecord record,
 }) {
   final controller = TextEditingController();
   return showScaledDialog<String>(
@@ -1117,67 +1205,4 @@ Future<String?> _showRejectDialog(
       );
     },
   );
-}
-
-// —— Demo data ————————————————————————————————————————————————————————
-
-List<_LeaveRequest> _demoRequests() {
-  return [
-    const _LeaveRequest(
-      studentName: '王晴',
-      studentNo: 'G3030201',
-      leaveType: '病假',
-      duration: '4小时',
-      timeRange: '2026-04-02 08:00 - 2026-04-02 12:00',
-      reason: '发热就诊，需上午门诊检查。',
-      appliedAt: '2026-04-01 18:00',
-      path: '家长小程序 - 班主任',
-      status: _LeaveStatus.reviewing,
-      parentStep: _StepStatus.approved,
-      headTeacherStep: _StepStatus.pending,
-      note: '已知晓注意休息',
-    ),
-    const _LeaveRequest(
-      studentName: '王晴',
-      studentNo: 'G3030201',
-      leaveType: '病假',
-      duration: '4小时',
-      timeRange: '2026-04-02 08:00 - 2026-04-02 12:00',
-      reason: '发热就诊，需上午门诊检查。',
-      appliedAt: '2026-04-01 18:00',
-      path: '家长小程序 - 班主任',
-      status: _LeaveStatus.approved,
-      parentStep: _StepStatus.approved,
-      headTeacherStep: _StepStatus.approved,
-      note: '同意',
-    ),
-    const _LeaveRequest(
-      studentName: '王晴',
-      studentNo: 'G3030201',
-      leaveType: '病假',
-      duration: '4小时',
-      timeRange: '2026-04-02 08:00 - 2026-04-02 12:00',
-      reason: '发热就诊，需上午门诊检查。',
-      appliedAt: '2026-04-01 18:00',
-      path: '家长小程序 - 班主任',
-      status: _LeaveStatus.approved,
-      parentStep: _StepStatus.approved,
-      headTeacherStep: _StepStatus.approved,
-      note: '同意',
-    ),
-    const _LeaveRequest(
-      studentName: '王晴',
-      studentNo: 'G3030201',
-      leaveType: '病假',
-      duration: '4小时',
-      timeRange: '2026-04-02 08:00 - 2026-04-02 12:00',
-      reason: '发热就诊，需上午门诊检查。',
-      appliedAt: '2026-04-01 18:00',
-      path: '家长小程序 - 班主任',
-      status: _LeaveStatus.rejected,
-      parentStep: _StepStatus.approved,
-      headTeacherStep: _StepStatus.rejected,
-      note: '请补充证明材料后再申请',
-    ),
-  ];
 }

@@ -1,11 +1,13 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_assets.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/class_share_drawer.dart';
 import '../../../core/widgets/image_gallery_viewer.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../state/theory_controller.dart';
@@ -29,9 +31,20 @@ class _TheoryPageState extends ConsumerState<TheoryPage> {
     final args = TheoryPageArgs.fromRaw(
       ModalRoute.of(context)?.settings.arguments,
     );
-    final state = ref.watch(theoryControllerProvider(args));
+    // 分享抽屉勾选班级只改 classList，不应触发整页（尤其 Web PDF iframe /
+    // 长 HTML）重建，否则极易卡顿。
+    final loading = ref.watch(
+      theoryControllerProvider(args).select((s) => s.loading),
+    );
+    final detail = ref.watch(
+      theoryControllerProvider(args).select((s) => s.detail),
+    );
+    final answerEndMode = ref.watch(
+      theoryControllerProvider(args).select((s) => s.args.answerEndMode),
+    );
     final controller = ref.read(theoryControllerProvider(args).notifier);
     final ui = DashboardScaleScope.of(context).ui;
+    final pdfInteractive = !_imageGalleryOpen && !_shareDialogShowing;
 
     ref.listen<TheoryState>(theoryControllerProvider(args), (previous, next) {
       final message = next.errorMessage;
@@ -41,7 +54,7 @@ class _TheoryPageState extends ConsumerState<TheoryPage> {
       }
 
       if (next.shareDialogVisible && !_shareDialogShowing) {
-        _shareDialogShowing = true;
+        setState(() => _shareDialogShowing = true);
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _showShareDialog(context, args);
         });
@@ -50,18 +63,18 @@ class _TheoryPageState extends ConsumerState<TheoryPage> {
 
     return ShellPageSurface(
       padding: EdgeInsets.fromLTRB(ui(12), ui(12), ui(12), ui(12)),
-      child: state.loading && !state.hasDetail
-          ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+      child: loading && detail == null
+          ? const Center(child: AppLoadingIndicator())
           : Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
                 _TheoryHeader(
-                  state: state,
+                  detail: detail,
+                  answerEndMode: answerEndMode,
                   onBack: () => Navigator.of(context).maybePop(),
                   onShare: controller.openShareDialog,
                   onToggleFavorite: controller.toggleFavorite,
                   onOpenAssignment: () {
-                    final detail = state.detail;
                     if (detail == null || !detail.hasAssignmentImages) {
                       AppToast.show(context, '暂无课程作业图片');
                       return;
@@ -72,7 +85,6 @@ class _TheoryPageState extends ConsumerState<TheoryPage> {
                     );
                   },
                   onOpenAnswer: () {
-                    final detail = state.detail;
                     if (detail == null || !detail.hasAnswerImages) {
                       AppToast.show(context, '暂无答案图片');
                       return;
@@ -87,9 +99,14 @@ class _TheoryPageState extends ConsumerState<TheoryPage> {
                 SizedBox(height: ui(12)),
                 Expanded(
                   child: _TheoryContent(
-                    state: state,
-                    pdfInteractive: !_imageGalleryOpen,
-                    onRequestFullscreen: () => _openFullscreenPdf(state),
+                    detail: detail,
+                    answerEndMode: answerEndMode,
+                    pdfInteractive: pdfInteractive,
+                    onRequestFullscreen: () {
+                      if (detail != null) {
+                        _openFullscreenPdf(detail);
+                      }
+                    },
                   ),
                 ),
               ],
@@ -117,15 +134,14 @@ class _TheoryPageState extends ConsumerState<TheoryPage> {
 
   /// 把当前 PDF 推到根 Navigator 的全屏对话框里铺满整块屏幕。
   /// - 用 `useRootNavigator: true` 跨过 ShellLayout / 左侧导航；
-  /// - 黑色背景 + opaque + fade 过渡，视觉上类似播放器全屏；
+  /// - 浅灰背景 + opaque + fade 过渡；
   /// - 右上角放"退出全屏"按钮（同一颗 [_PdfFullscreenToggle]，状态置为
   ///   `expanded: true`），点击 = `Navigator.maybePop` 关闭对话框；
   /// - PDF 在全屏对话框内是新建的 [TheoryPdfView] 实例（pdfrx 没有跨 widget
   ///   保持滚动位置的便捷 API），首次进入会重新渲染，符合 1.0 中"在新窗口打开"
   ///   的体验。
-  Future<void> _openFullscreenPdf(TheoryState state) async {
-    final detail = state.detail;
-    if (detail == null || !detail.hasPdf) {
+  Future<void> _openFullscreenPdf(TheoryDetail detail) async {
+    if (!detail.hasPdf) {
       AppToast.show(context, 'PDF 尚未加载完成');
       return;
     }
@@ -140,7 +156,7 @@ class _TheoryPageState extends ConsumerState<TheoryPage> {
       context: context,
       useRootNavigator: true,
       fullscreenDialog: true,
-      barrierColor: Colors.black,
+      barrierColor: kTheoryPdfBackgroundColor,
       barrierDismissible: false,
       barrierLabel: '退出全屏',
       transitionDuration: const Duration(milliseconds: 200),
@@ -166,36 +182,20 @@ class _TheoryPageState extends ConsumerState<TheoryPage> {
     if (!mounted) {
       return;
     }
-    final scale = DashboardScaleScope.of(context);
-    await showGeneralDialog<void>(
+    await showClassShareDrawer<void>(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.20),
-      barrierDismissible: true,
-      barrierLabel: '关闭分享',
-      transitionDuration: const Duration(milliseconds: 240),
-      pageBuilder: (dialogContext, animation, secondaryAnimation) {
-        return DashboardScaleScope(
-          data: scale,
-          child: _ShareDrawer(args: args),
-        );
-      },
-      transitionBuilder: (context, animation, secondary, child) {
-        final offset = Tween<Offset>(
-          begin: const Offset(-1, 0),
-          end: Offset.zero,
-        ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOut));
-        return SlideTransition(position: offset, child: child);
-      },
+      scale: DashboardScaleScope.of(context),
+      child: _TheoryShareDrawer(args: args),
     );
-    _shareDialogShowing = false;
     if (mounted) {
+      setState(() => _shareDialogShowing = false);
       ref.read(theoryControllerProvider(args).notifier).closeShareDialog();
     }
   }
 }
 
-class _ShareDrawer extends ConsumerWidget {
-  const _ShareDrawer({required this.args});
+class _TheoryShareDrawer extends ConsumerWidget {
+  const _TheoryShareDrawer({required this.args});
 
   final TheoryPageArgs args;
 
@@ -203,311 +203,44 @@ class _ShareDrawer extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(theoryControllerProvider(args));
     final controller = ref.read(theoryControllerProvider(args).notifier);
-    final ui = DashboardScaleScope.of(context).ui;
 
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Material(
-        color: Colors.white,
-        child: SizedBox(
-          width: ui(600),
-          height: double.infinity,
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: ui(20), vertical: ui(20)),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const _DrawerTitle(title: '分享课件'),
-                SizedBox(height: ui(20)),
-                const Divider(height: 1, color: Color(0xFFF3F2F3)),
-                SizedBox(height: ui(24)),
-                _ShareTargetCard(detail: state.detail),
-                SizedBox(height: ui(28)),
-                Text(
-                  '您的班级群',
-                  style: TextStyle(
-                    color: const Color(0xFF0B081A),
-                    fontSize: ui(16),
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w600,
-                  ),
-                ),
-                SizedBox(height: ui(16)),
-                Expanded(
-                  child: state.classLoading
-                      ? const Center(
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : state.classList.isEmpty
-                      ? const _ShareDrawerEmpty()
-                      : ListView.separated(
-                          padding: EdgeInsets.zero,
-                          itemCount: state.classList.length,
-                          separatorBuilder: (_, _) => SizedBox(height: ui(12)),
-                          itemBuilder: (context, index) {
-                            final cls = state.classList[index];
-                            return _ClassRow(
-                              cls: cls,
-                              onTap: () => controller.toggleClass(cls.id),
-                            );
-                          },
-                        ),
-                ),
-                SizedBox(height: ui(12)),
-                _SendButton(
-                  loading: state.sending,
-                  onTap: () async {
-                    final success = await controller.sendShare();
-                    if (!context.mounted) {
-                      return;
-                    }
-                    if (success) {
-                      Navigator.of(context).maybePop();
-                    }
-                  },
-                ),
-              ],
+    return ClassShareDrawer(
+      title: '分享课件',
+      targetCard: ShareTargetCard(
+        label: '您将分享的课件',
+        title: state.detail?.title ?? '',
+        placeholderIcon: Icons.menu_book_outlined,
+      ),
+      classes: state.classList
+          .map(
+            (cls) => ClassShareItem(
+              id: cls.id,
+              name: cls.name,
+              avatarUrl: cls.avatarUrl,
+              checked: cls.checked,
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _DrawerTitle extends StatelessWidget {
-  const _DrawerTitle({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Row(
-      children: [
-        Container(
-          width: ui(3.25),
-          height: ui(14.85),
-          decoration: BoxDecoration(
-            color: const Color(0xFF8741FF),
-            borderRadius: BorderRadius.circular(ui(6)),
-          ),
-        ),
-        SizedBox(width: ui(4)),
-        Text(
-          title,
-          style: TextStyle(
-            color: const Color(0xFF0B081A),
-            fontSize: ui(16),
-            fontFamily: 'PingFang SC',
-            fontWeight: AppFont.w600,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ShareTargetCard extends StatelessWidget {
-  const _ShareTargetCard({required this.detail});
-
-  final TheoryDetail? detail;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      height: ui(106),
-      padding: EdgeInsets.symmetric(horizontal: ui(24), vertical: ui(20)),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF4F4FF),
-        borderRadius: BorderRadius.circular(ui(16)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  '您将分享的课件',
-                  style: TextStyle(
-                    color: const Color(0xFF0B081A),
-                    fontSize: ui(14),
-                    fontFamily: 'PingFang SC',
-                  ),
-                ),
-                SizedBox(height: ui(10)),
-                Text(
-                  detail?.title ?? '',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: const Color(0xFF0B081A),
-                    fontSize: ui(16),
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          SizedBox(width: ui(16)),
-          Container(
-            width: ui(75.76),
-            height: ui(55.27),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xFFF1E8FD), Color(0xFFDDC4FF)],
-              ),
-              borderRadius: BorderRadius.circular(ui(6.82)),
-            ),
-            child: const Icon(
-              Icons.menu_book_outlined,
-              color: Color(0xFFA773FF),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ClassRow extends StatelessWidget {
-  const _ClassRow({required this.cls, required this.onTap});
-
-  final TheoryShareClass cls;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    final checked = cls.checked;
-    return Material(
-      color: const Color(0xFFF5F6FA),
-      borderRadius: BorderRadius.circular(ui(16)),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(ui(16)),
-        onTap: onTap,
-        child: Container(
-          height: ui(80),
-          padding: EdgeInsets.symmetric(horizontal: ui(16)),
-          child: Row(
-            children: [
-              Container(
-                width: ui(24),
-                height: ui(24),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: checked
-                        ? const Color(0xFF8741FF)
-                        : const Color(0xFFCECED1),
-                    width: 1,
-                  ),
-                ),
-                child: checked
-                    ? Icon(
-                        Icons.check_rounded,
-                        size: ui(16),
-                        color: const Color(0xFF8741FF),
-                      )
-                    : null,
-              ),
-              SizedBox(width: ui(16)),
-              Expanded(
-                child: Text(
-                  cls.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.black,
-                    fontSize: ui(16),
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ShareDrawerEmpty extends StatelessWidget {
-  const _ShareDrawerEmpty();
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Center(
-      child: Text(
-        '暂无班级群',
-        style: TextStyle(
-          color: const Color(0xFFB6B5BB),
-          fontSize: ui(14),
-          fontFamily: 'PingFang SC',
-        ),
-      ),
-    );
-  }
-}
-
-class _SendButton extends StatelessWidget {
-  const _SendButton({required this.loading, required this.onTap});
-
-  final bool loading;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return GestureDetector(
-      onTap: loading ? null : onTap,
-      child: Container(
-        height: ui(48),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.centerRight,
-            end: Alignment.centerLeft,
-            colors: [Color(0xFFB68EFF), Color(0xFF8640FF)],
-          ),
-          borderRadius: BorderRadius.circular(ui(12)),
-        ),
-        child: loading
-            ? SizedBox(
-                width: ui(20),
-                height: ui(20),
-                child: const CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                ),
-              )
-            : Text(
-                '发送',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: ui(14),
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w500,
-                  height: 24 / 14,
-                ),
-              ),
-      ),
+          )
+          .toList(growable: false),
+      loading: state.classLoading,
+      sending: state.sending,
+      onToggleClass: controller.toggleClass,
+      onSend: () async {
+        final success = await controller.sendShare();
+        if (!context.mounted) {
+          return;
+        }
+        if (success) {
+          Navigator.of(context).maybePop();
+        }
+      },
     );
   }
 }
 
 class _TheoryHeader extends StatelessWidget {
   const _TheoryHeader({
-    required this.state,
+    required this.detail,
+    required this.answerEndMode,
     required this.onBack,
     required this.onShare,
     required this.onToggleFavorite,
@@ -515,7 +248,8 @@ class _TheoryHeader extends StatelessWidget {
     required this.onOpenAnswer,
   });
 
-  final TheoryState state;
+  final TheoryDetail? detail;
+  final bool answerEndMode;
   final VoidCallback onBack;
   final VoidCallback onShare;
   final VoidCallback onToggleFavorite;
@@ -525,9 +259,8 @@ class _TheoryHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final detail = state.detail;
     final showAssignmentBtn =
-        !state.args.answerEndMode && (detail?.showsAssignmentButton ?? true);
+        !answerEndMode && (detail?.showsAssignmentButton ?? true);
     // detail 为空（首屏 loading）时按钮也展示，但 disable 样式由 chip 内部处理。
     final favorite = detail?.favorite ?? false;
 
@@ -642,12 +375,14 @@ class _FavoriteChipButton extends StatelessWidget {
 
 class _TheoryContent extends ConsumerWidget {
   const _TheoryContent({
-    required this.state,
+    required this.detail,
+    required this.answerEndMode,
     required this.pdfInteractive,
     required this.onRequestFullscreen,
   });
 
-  final TheoryState state;
+  final TheoryDetail? detail;
+  final bool answerEndMode;
   final bool pdfInteractive;
 
   /// PDF 卡片右上角"全屏"按钮被点击时的回调。
@@ -656,48 +391,56 @@ class _TheoryContent extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ui = DashboardScaleScope.of(context).ui;
-    final detail = state.detail;
     final token = ref.watch(appStorageProvider).token;
 
     if (detail == null) {
       return const _TheoryEmptyState(message: '加载中…');
     }
-    if (detail.hasPdf) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(ui(8)),
-        child: Stack(
-          children: <Widget>[
-            Positioned.fill(
-              child: TheoryPdfView(
-                url: detail.pdfUrl,
-                authToken: token,
-                interactive: pdfInteractive,
+    final resolved = detail!;
+    if (resolved.hasPdf) {
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          color: kTheoryPdfBackgroundColor,
+          borderRadius: BorderRadius.circular(ui(8)),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(ui(8)),
+          child: Stack(
+            children: <Widget>[
+              Positioned.fill(
+                child: RepaintBoundary(
+                  child: TheoryPdfView(
+                    url: resolved.pdfUrl,
+                    authToken: token,
+                    interactive: pdfInteractive,
+                  ),
+                ),
               ),
-            ),
-            // 右上角浮动"全屏"按钮：
-            // - Native：点击后把 PDF 推到根 Navigator 的全屏对话框；
-            // - Web：iframe 直接调浏览器 Fullscreen API（HtmlElementView
-            //   在 Flutter dialog 里嵌入 iframe 会被 platform view 层
-            //   遮住，所以走原生 fullscreen 反而最干净）；
-            //   退出 = 用户按 Esc 或浏览器自带的退出全屏按钮。
-            Positioned(
-              // 设计稿要求按钮整体下移 16 逻辑像素，避开 PDF 顶部
-              // 工具栏 / 页眉。
-              top: ui(12) + ui(16),
-              right: ui(12),
-              child: _PdfFullscreenToggle(
-                expanded: false,
-                onTap: onRequestFullscreen,
+              // 右上角浮动"全屏"按钮：
+              // - Native：点击后把 PDF 推到根 Navigator 的全屏对话框；
+              // - Web：iframe 直接调浏览器 Fullscreen API（HtmlElementView
+              //   在 Flutter dialog 里嵌入 iframe 会被 platform view 层
+              //   遮住，所以走原生 fullscreen 反而最干净）；
+              //   退出 = 用户按 Esc 或浏览器自带的退出全屏按钮。
+              Positioned(
+                // 设计稿要求按钮整体下移 16 逻辑像素，避开 PDF 顶部
+                // 工具栏 / 页眉。
+                top: ui(12) + ui(16),
+                right: ui(12),
+                child: _PdfFullscreenToggle(
+                  expanded: false,
+                  onTap: onRequestFullscreen,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
     }
-    if (detail.hasHtmlContent) {
+    if (resolved.hasHtmlContent) {
       return _TheoryHtmlView(
-        htmlText: detail.htmlContent,
-        answerEndMode: state.args.answerEndMode,
+        htmlText: resolved.htmlContent,
+        answerEndMode: answerEndMode,
       );
     }
     return const _TheoryEmptyState(message: '暂无课程内容');
@@ -708,10 +451,7 @@ class _TheoryContent extends ConsumerWidget {
 /// - [expanded] = false：显示放大图标，点击进入全屏；
 /// - [expanded] = true：显示缩小图标，点击退出全屏。
 class _PdfFullscreenToggle extends StatelessWidget {
-  const _PdfFullscreenToggle({
-    required this.expanded,
-    required this.onTap,
-  });
+  const _PdfFullscreenToggle({required this.expanded, required this.onTap});
 
   final bool expanded;
   final VoidCallback onTap;
@@ -769,9 +509,9 @@ class _PdfFullscreenToggle extends StatelessWidget {
   }
 }
 
-/// PDF 全屏对话框：覆盖整个 app 窗口的黑色背景 + 占满屏幕的 [TheoryPdfView]，
+/// PDF 全屏对话框：覆盖整个 app 窗口的浅灰背景 + 占满屏幕的 [TheoryPdfView]，
 /// 右上角放退出按钮。PDF 本身不套 [SafeArea]，避免 iOS 底部 Home 指示条
-/// 区域留出黑边；仅退出按钮避开刘海。
+/// 区域留出异色边；仅退出按钮避开刘海。
 class _PdfFullscreenView extends StatelessWidget {
   const _PdfFullscreenView({required this.url, required this.authToken});
 
@@ -782,7 +522,7 @@ class _PdfFullscreenView extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Material(
-      color: Colors.black,
+      color: kTheoryPdfBackgroundColor,
       child: Stack(
         fit: StackFit.expand,
         children: <Widget>[
@@ -798,10 +538,7 @@ class _PdfFullscreenView extends StatelessWidget {
               alignment: Alignment.topRight,
               child: Padding(
                 // 与卡片态保持视觉一致：同样下移 16 逻辑像素。
-                padding: EdgeInsets.only(
-                  top: ui(12) + ui(16),
-                  right: ui(12),
-                ),
+                padding: EdgeInsets.only(top: ui(12) + ui(16), right: ui(12)),
                 child: _PdfFullscreenToggle(
                   expanded: true,
                   onTap: () =>
@@ -830,10 +567,7 @@ class _PdfFullscreenView extends StatelessWidget {
 ///   宽度按设计尺寸渲染；
 /// - 整个内容包在 [SingleChildScrollView] 里支持竖向滚动浏览。
 class _TheoryHtmlView extends StatelessWidget {
-  const _TheoryHtmlView({
-    required this.htmlText,
-    this.answerEndMode = false,
-  });
+  const _TheoryHtmlView({required this.htmlText, this.answerEndMode = false});
 
   final String htmlText;
 
@@ -988,8 +722,7 @@ List<Widget> _parseTheoryHtmlBlocks(
     final src = _theoryImgSrcRegExp.firstMatch(tag)?.group(2)?.trim();
     if (src != null && src.isNotEmpty) {
       final widthAttr = _theoryImgWidthRegExp.firstMatch(tag)?.group(2) ?? '';
-      final heightAttr =
-          _theoryImgHeightRegExp.firstMatch(tag)?.group(2) ?? '';
+      final heightAttr = _theoryImgHeightRegExp.firstMatch(tag)?.group(2) ?? '';
       final fillWidth = widthAttr.endsWith('%');
       final designW = fillWidth ? null : double.tryParse(widthAttr);
       final designH = double.tryParse(heightAttr);
@@ -1049,11 +782,7 @@ class _TheoryHtmlImage extends StatelessWidget {
         placeholder: (context, _) => const SizedBox(
           height: 80,
           child: Center(
-            child: SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
+            child: AppLoadingIndicator(),
           ),
         ),
         errorWidget: (context, _, _) => Container(
@@ -1083,8 +812,7 @@ class _TheoryHtmlImage extends StatelessWidget {
         fit: BoxFit.contain,
         fadeInDuration: Duration.zero,
         fadeOutDuration: Duration.zero,
-        placeholder: (context, _) =>
-            SizedBox(width: w ?? 40, height: h ?? 40),
+        placeholder: (context, _) => SizedBox(width: w ?? 40, height: h ?? 40),
         errorWidget: (context, _, _) => Container(
           width: w ?? 60,
           height: h ?? 60,

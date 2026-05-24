@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -32,7 +33,7 @@ class InfoPage extends ConsumerWidget {
       padding: EdgeInsets.zero,
       color: const Color(0xFFEFF3FC),
       child: state.loading && state.user.isEmpty
-          ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+          ? const Center(child: AppLoadingIndicator())
           : _InfoCard(state: state, controller: controller),
     );
   }

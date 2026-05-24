@@ -3,11 +3,14 @@
 // ignore_for_file: unused_element_parameter
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/constants/app_assets.dart';
 import '../../../core/network/api_response.dart';
 import '../../../core/network/media_url.dart';
+import '../../../core/network/snowflake_id.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/popup_selector_field.dart';
 import '../../shell/ui/shell_layout.dart';
@@ -80,6 +83,7 @@ class _StudentRecord {
     this.studentStatus = '',
     this.major = '',
     this.fullMajor = '',
+    this.introduce = '',
   });
 
   factory _StudentRecord.fromJson(Map<String, dynamic> json) {
@@ -128,6 +132,13 @@ class _StudentRecord {
       'status',
       'enrollStatus',
     ], '');
+    final introduce = _pickString(json, [
+      'introduce',
+      'intro',
+      'bio',
+      'description',
+      'remark',
+    ], '');
     return _StudentRecord(
       id: id,
       name: name,
@@ -138,6 +149,7 @@ class _StudentRecord {
       studentStatus: studentStatus,
       major: major,
       fullMajor: fullMajor,
+      introduce: introduce,
     );
   }
 
@@ -162,6 +174,17 @@ class _StudentRecord {
 
   /// 完整专业描述（部门·学科…）。空时由 UI 决定渲染「—」。
   final String fullMajor;
+
+  /// 个人简介 / 备注。
+  final String introduce;
+
+  /// 卡片第二行：简介优先，否则专业。
+  String get summaryLine {
+    if (introduce.isNotEmpty) return introduce;
+    if (major.isNotEmpty) return major;
+    if (fullMajor.isNotEmpty) return fullMajor;
+    return '—';
+  }
 }
 
 class _TeacherOption {
@@ -171,20 +194,48 @@ class _TeacherOption {
     this.workNo = '',
     this.subject = '',
     this.dept = '',
+    this.avatarUrl = '',
+    this.introduce = '',
+    this.teacherStatus = '',
   });
 
   factory _TeacherOption.fromJson(Map<String, dynamic> json) {
+    final nickname = _pickString(json, ['nickname', 'nickName'], '');
+    final realname = _pickString(json, ['realname', 'realName'], '');
+    final name = nickname.isNotEmpty
+        ? nickname
+        : (realname.isNotEmpty
+              ? realname
+              : _pickString(json, [
+                  'name',
+                  'teacherName',
+                  'userName',
+                ], ''));
+    final rawAvatar = _pickString(json, [
+      'headUrl',
+      'avatarUrl',
+      'avatar',
+      'headImg',
+    ], '');
+    final avatarUrl = rawAvatar.isEmpty ? '' : MediaUrl.resolve(rawAvatar);
+    final introduce = _pickString(json, [
+      'introduce',
+      'intro',
+      'bio',
+      'description',
+    ], '');
+    final teacherStatus = _pickString(json, [
+      'teacherStatus',
+      'status',
+      'workStatus',
+    ], '');
+    final id =
+        readSnowflakeId(json['id'] ?? json['teacherId'] ?? json['userId']) ??
+        _pickString(json, ['id', 'teacherId', 'userId'], '');
+
     return _TeacherOption(
-      id: _pickString(json, ['id', 'teacherId', 'userId'], ''),
-      // 后端实际返回 realname / nickname；保留旧字段名做兜底。
-      name: _pickString(json, [
-        'realname',
-        'realName',
-        'nickname',
-        'name',
-        'teacherName',
-        'userName',
-      ], ''),
+      id: id,
+      name: name,
       workNo: _pickString(json, [
         'no',
         'workNo',
@@ -204,7 +255,11 @@ class _TeacherOption {
         'departmentName',
         'orgName',
         'archiveName',
+        'schoolCampusName',
       ], ''),
+      avatarUrl: avatarUrl,
+      introduce: introduce,
+      teacherStatus: teacherStatus,
     );
   }
 
@@ -213,6 +268,17 @@ class _TeacherOption {
   final String workNo;
   final String subject;
   final String dept;
+  final String avatarUrl;
+  final String introduce;
+  final String teacherStatus;
+
+  /// 卡片第二行摘要：简介优先，否则学科 / 部门。
+  String get summaryLine {
+    if (introduce.isNotEmpty) return introduce;
+    if (subject.isNotEmpty) return subject;
+    if (dept.isNotEmpty) return dept;
+    return '—';
+  }
 }
 
 class _ClassroomOption {
@@ -531,10 +597,12 @@ List<Map<String, dynamic>> _extractList(ApiResponse resp) {
             ? raw['records'] as List
             : (raw is Map && raw['list'] is List
                   ? raw['list'] as List
-                  : const []));
+                  : (raw is Map && raw['data'] is List
+                        ? raw['data'] as List
+                        : const [])));
   return [
     for (final item in list)
-      if (item is Map) item.cast<String, dynamic>(),
+      if (item is Map) Map<String, dynamic>.from(item),
   ];
 }
 
@@ -597,6 +665,10 @@ class _AdminClassManagementViewState
   /// 班级 id → 已加载的学生名单。`null` 表示尚未拉取，空 List 表示已拉取且为空。
   final Map<String, List<_StudentRecord>?> _classStudents = {};
   final Set<String> _classStudentsLoading = {};
+
+  /// 班级 id → 已加载的任课老师（`teacherList(classId:)`）。
+  final Map<String, List<_TeacherOption>?> _classTeachers = {};
+  final Set<String> _classTeachersLoading = {};
 
   /// 用于穿梭框「人员库」的所有学生（懒加载，drawer 打开时拉一次）。
   List<_StudentRecord>? _studentPool;
@@ -685,6 +757,8 @@ class _AdminClassManagementViewState
       _loading = false;
       _classStudents.clear();
       _classStudentsLoading.clear();
+      _classTeachers.clear();
+      _classTeachersLoading.clear();
       // 默认展开第一张，便于快速预览。
       _expanded = parsed.isNotEmpty ? {parsed.first.id} : const {};
     });
@@ -817,6 +891,35 @@ class _AdminClassManagementViewState
     return list;
   }
 
+  /// 拉取指定班级的任课老师：`teacherList(classId:)`，与详情抽屉共享缓存。
+  Future<List<_TeacherOption>> _ensureClassTeachers(_ClassEntry entry) async {
+    final cached = _classTeachers[entry.id];
+    if (cached != null) return cached;
+    if (_classTeachersLoading.contains(entry.id)) return const [];
+
+    _classTeachersLoading.add(entry.id);
+    final cid = entry.id;
+    final repo = ref.read(adminRepositoryProvider);
+    final resp = cid.isNotEmpty
+        ? await repo.teacherList(classId: cid)
+        : ApiResponse.failure('班级 id 缺失');
+    if (!mounted) return const [];
+
+    final list = <_TeacherOption>[];
+    if (resp.isSuccess) {
+      for (final m in _extractList(resp)) {
+        final t = _TeacherOption.fromJson(m);
+        if (t.name.isNotEmpty) list.add(t);
+      }
+    }
+
+    setState(() {
+      _classTeachers[entry.id] = list;
+      _classTeachersLoading.remove(entry.id);
+    });
+    return list;
+  }
+
   Future<List<_StudentRecord>> _reloadClassStudents(_ClassEntry entry) =>
       _ensureClassStudents(entry, force: true);
 
@@ -927,6 +1030,7 @@ class _AdminClassManagementViewState
     // 父侧 _classStudents 缓存里若已有学生（之前展开过 / classDetail 已拉过），
     // 直接给抽屉，避免点开瞬间的 loading 空态。
     final cachedStudents = _classStudents[entry.id];
+    final cachedTeachers = _classTeachers[entry.id];
     showGeneralDialog<void>(
       context: context,
       barrierDismissible: true,
@@ -939,9 +1043,9 @@ class _AdminClassManagementViewState
           data: scale,
           child: _ClassDetailDrawer(
             entry: entry,
-            initialTeachers: _teachers,
+            initialTeachers: cachedTeachers,
             initialStudents: cachedStudents,
-            ensureOptions: _ensureOptions,
+            ensureClassTeachers: _ensureClassTeachers,
             ensureClassStudents: _ensureClassStudents,
           ),
         ),
@@ -1116,17 +1220,6 @@ class _AdminClassManagementViewState
                     fontFamily: 'PingFang SC',
                   ),
                 ),
-                if (_loading) ...[
-                  SizedBox(width: ui(8)),
-                  SizedBox(
-                    width: ui(14),
-                    height: ui(14),
-                    child: const CircularProgressIndicator(
-                      strokeWidth: 1.5,
-                      valueColor: AlwaysStoppedAnimation<Color>(_kPurple),
-                    ),
-                  ),
-                ],
               ],
             ),
             SizedBox(height: ui(12)),
@@ -1200,12 +1293,12 @@ class _Banner extends StatelessWidget {
     return Container(
       height: ui(62),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.bottomCenter,
-          end: Alignment.topCenter,
-          colors: [Colors.white, Color(0xFFF9EDFF)],
-        ),
         borderRadius: BorderRadius.circular(ui(16)),
+        image: DecorationImage(
+          image: AssetImage(AppAssets.xiaoquanHeaderBg),
+          fit: BoxFit.cover,
+          alignment: Alignment.centerRight,
+        ),
       ),
       child: Stack(
         children: [
@@ -1521,14 +1614,7 @@ class _ClassCard extends StatelessWidget {
               SizedBox(
                 height: ui(64),
                 child: const Center(
-                  child: SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 1.5,
-                      valueColor: AlwaysStoppedAnimation<Color>(_kPurple),
-                    ),
-                  ),
+                  child: AppLoadingIndicator(),
                 ),
               )
             else if (entry.students.isEmpty)
@@ -1828,7 +1914,9 @@ class _StudentMiniCard extends StatelessWidget {
                       ),
                       SizedBox(height: ui(2)),
                       Text(
-                        student.major.isEmpty ? '—' : student.major,
+                        student.summaryLine,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: ui(12),
                           height: 1.2,
@@ -3273,14 +3361,7 @@ class _TransferList extends StatelessWidget {
           Expanded(
             child: loading
                 ? const Center(
-                    child: SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 1.5,
-                        valueColor: AlwaysStoppedAnimation<Color>(_kPurple),
-                      ),
-                    ),
+                    child: AppLoadingIndicator(),
                   )
                 : students.isEmpty
                 ? Center(
@@ -3337,7 +3418,7 @@ class _TransferList extends StatelessWidget {
                             SizedBox(width: ui(12)),
                             Expanded(
                               child: Text(
-                                s.fullMajor.isEmpty ? '—' : s.fullMajor,
+                                s.summaryLine,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
@@ -3564,14 +3645,7 @@ class _TeacherTransferList extends StatelessWidget {
           Expanded(
             child: loading
                 ? const Center(
-                    child: SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 1.5,
-                        valueColor: AlwaysStoppedAnimation<Color>(_kPurple),
-                      ),
-                    ),
+                    child: AppLoadingIndicator(),
                   )
                 : teachers.isEmpty
                 ? Center(
@@ -3689,27 +3763,23 @@ class _TeacherTransferList extends StatelessWidget {
 /// 行政班右抽屉详情视图。
 ///
 /// 数据来源：
-/// - 班级基本信息 / 班主任资料：直接复用列表里同一条 [_ClassEntry]，
-///   不再额外查 `classDetail` 接口；
-/// - 任课老师：把 [_ClassEntry.teacherIds] 按逗号拆分后，与父组件已缓存的
-///   `_TeacherOption` 列表逐项对齐，命中不到的 id 仅展示 id 文本；
-/// - 学生名单：通过 `ensureClassStudents` 走 cache 拉 `studentList`，
-///   与展开式预览共享同一份缓存。
+/// - 班级基本信息 / 班主任资料：直接复用列表里同一条 [_ClassEntry]；
+/// - 任课老师：`teacherList(classId:)` 按班级拉取，展示完整教师卡片；
+/// - 学生名单：通过 `ensureClassStudents` 走 cache 拉 `studentList`。
 class _ClassDetailDrawer extends StatefulWidget {
   const _ClassDetailDrawer({
     required this.entry,
     required this.initialTeachers,
     required this.initialStudents,
-    required this.ensureOptions,
+    required this.ensureClassTeachers,
     required this.ensureClassStudents,
   });
 
   final _ClassEntry entry;
-  final List<_TeacherOption> initialTeachers;
-
-  /// 父组件已缓存的本班学生；null = 还没拉到，drawer 自己再补一次请求。
+  final List<_TeacherOption>? initialTeachers;
   final List<_StudentRecord>? initialStudents;
-  final Future<_OptionsResult> Function() ensureOptions;
+  final Future<List<_TeacherOption>> Function(_ClassEntry entry)
+  ensureClassTeachers;
   final Future<List<_StudentRecord>> Function(_ClassEntry entry)
   ensureClassStudents;
 
@@ -3718,8 +3788,8 @@ class _ClassDetailDrawer extends StatefulWidget {
 }
 
 class _ClassDetailDrawerState extends State<_ClassDetailDrawer> {
-  late List<_TeacherOption> _allTeachers = [...widget.initialTeachers];
-  bool _teachersLoading = false;
+  late List<_TeacherOption> _teachers = [...?widget.initialTeachers];
+  late bool _teachersLoading = widget.initialTeachers == null;
 
   late List<_StudentRecord> _students = [...?widget.initialStudents];
   late bool _studentsLoading = widget.initialStudents == null;
@@ -3727,19 +3797,14 @@ class _ClassDetailDrawerState extends State<_ClassDetailDrawer> {
   @override
   void initState() {
     super.initState();
-    if (widget.initialTeachers.isEmpty) {
-      _teachersLoading = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        final result = await widget.ensureOptions();
-        if (!mounted) return;
-        setState(() {
-          _allTeachers = [...result.teachers];
-          _teachersLoading = false;
-        });
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final teachers = await widget.ensureClassTeachers(widget.entry);
+      if (!mounted) return;
+      setState(() {
+        _teachers = [...teachers];
+        _teachersLoading = false;
       });
-    }
-    // 学生：始终走一次 ensureClassStudents（命中缓存就是 O(1)），
-    // 这样即便父组件从未展开过该班，详情抽屉也能补齐学生卡片。
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final list = await widget.ensureClassStudents(widget.entry);
       if (!mounted) return;
@@ -3750,25 +3815,10 @@ class _ClassDetailDrawerState extends State<_ClassDetailDrawer> {
     });
   }
 
-  /// 把 `teacherIds` 逗号串解析成 `_TeacherOption` 列表，命中不到的 id 走兜底
-  /// （展示 id 字面，避免「教师库还没拉到」时整段空白）。
-  List<_TeacherOption> _resolvedTeachers() {
-    final ids = _TransferClassDrawerState._parseTeacherIds(
-      widget.entry.teacherIds,
-    );
-    if (ids.isEmpty) return const [];
-    final byId = {for (final t in _allTeachers) t.id: t};
-    return [
-      for (final id in ids)
-        byId[id] ?? _TeacherOption(id: id, name: '教师 $id'),
-    ];
-  }
-
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final entry = widget.entry;
-    final teachers = _resolvedTeachers();
 
     return Material(
       color: Colors.transparent,
@@ -3845,15 +3895,15 @@ class _ClassDetailDrawerState extends State<_ClassDetailDrawer> {
                         ),
                         SizedBox(height: ui(20)),
                         _ClassDetailSection(
-                          title: '任课老师 (${teachers.length})',
+                          title: '任课老师 (${_teachers.length})',
                           loading: _teachersLoading,
-                          child: teachers.isEmpty
+                          child: _teachers.isEmpty
                               ? _ClassDetailEmpty(
                                   label: _teachersLoading
                                       ? '正在加载…'
                                       : '该班暂无任课老师',
                                 )
-                              : _TeacherChipList(teachers: teachers),
+                              : _TeacherMiniGrid(teachers: _teachers),
                         ),
                         SizedBox(height: ui(20)),
                         _ClassDetailSection(
@@ -4010,14 +4060,7 @@ class _ClassDetailSection extends StatelessWidget {
             ),
             if (loading) ...[
               SizedBox(width: ui(8)),
-              SizedBox(
-                width: ui(12),
-                height: ui(12),
-                child: const CircularProgressIndicator(
-                  strokeWidth: 1.5,
-                  valueColor: AlwaysStoppedAnimation<Color>(_kPurple),
-                ),
-              ),
+              const AppLoadingIndicator(),
             ],
           ],
         ),
@@ -4196,55 +4239,144 @@ class _HeadTeacherCard extends StatelessWidget {
   }
 }
 
-class _TeacherChipList extends StatelessWidget {
-  const _TeacherChipList({required this.teachers});
+class _TeacherMiniGrid extends StatelessWidget {
+  const _TeacherMiniGrid({required this.teachers});
 
   final List<_TeacherOption> teachers;
 
   @override
   Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const gap = 11.0;
+        final cols = constraints.maxWidth >= 900
+            ? 3
+            : (constraints.maxWidth >= 600 ? 2 : 1);
+        final cardWidth = (constraints.maxWidth - gap * (cols - 1)) / cols;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final t in teachers)
+              SizedBox(
+                width: cardWidth,
+                child: _TeacherMiniCard(teacher: t),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _TeacherMiniCard extends StatelessWidget {
+  const _TeacherMiniCard({required this.teacher});
+
+  final _TeacherOption teacher;
+
+  @override
+  Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Wrap(
-      spacing: ui(8),
-      runSpacing: ui(8),
-      children: [
-        for (final t in teachers)
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(8)),
-            decoration: BoxDecoration(
-              color: _kSubBg,
-              borderRadius: BorderRadius.circular(ui(8)),
-            ),
+    final statusLabel =
+        teacher.teacherStatus.isEmpty ? '在岗' : teacher.teacherStatus;
+    final onDuty = statusLabel.contains('在岗');
+    return Container(
+      constraints: BoxConstraints(minHeight: ui(64)),
+      decoration: BoxDecoration(
+        color: _kSubBg,
+        borderRadius: BorderRadius.circular(ui(12)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        children: [
+          Padding(
+            padding: EdgeInsets.fromLTRB(ui(12), ui(12), ui(50), ui(12)),
             child: Row(
-              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text(
-                  t.name,
-                  style: TextStyle(
-                    fontSize: ui(13),
-                    height: 1.2,
-                    fontWeight: AppFont.w500,
-                    color: _kTextPrimary,
-                    fontFamily: 'PingFang SC',
+                _MiniAvatar(
+                  name: teacher.name,
+                  avatarUrl: teacher.avatarUrl,
+                ),
+                SizedBox(width: ui(8)),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              teacher.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: ui(14),
+                                height: 1.2,
+                                fontWeight: AppFont.w500,
+                                color: _kTextPrimary,
+                                fontFamily: 'PingFang SC',
+                              ),
+                            ),
+                          ),
+                          SizedBox(width: ui(8)),
+                          Text(
+                            teacher.workNo.isEmpty ? '—' : teacher.workNo,
+                            style: TextStyle(
+                              fontSize: ui(12),
+                              height: 1.2,
+                              color: _kTextHint,
+                              fontFamily: 'PingFang SC',
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: ui(2)),
+                      Text(
+                        teacher.summaryLine,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: ui(12),
+                          height: 1.2,
+                          color: _kTextPrimary,
+                          fontFamily: 'PingFang SC',
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                if (t.workNo.isNotEmpty) ...[
-                  SizedBox(width: ui(6)),
-                  Text(
-                    t.workNo,
-                    style: TextStyle(
-                      fontSize: ui(12),
-                      height: 1.2,
-                      color: _kTextHint,
-                      fontFamily: 'PingFang SC',
-                    ),
-                  ),
-                ],
               ],
             ),
           ),
-      ],
+          Positioned(
+            right: 0,
+            top: 0,
+            child: Container(
+              height: ui(22),
+              padding: EdgeInsets.symmetric(horizontal: ui(8)),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: onDuty ? const Color(0xFFDFFCF0) : _kPurpleLightTag,
+                borderRadius: BorderRadius.only(
+                  topRight: Radius.circular(ui(12)),
+                  bottomLeft: Radius.circular(ui(12)),
+                ),
+              ),
+              child: Text(
+                statusLabel,
+                style: TextStyle(
+                  fontSize: ui(12),
+                  height: 1.0,
+                  color: onDuty ? const Color(0xFF0CAC40) : _kPurple,
+                  fontFamily: 'PingFang SC',
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

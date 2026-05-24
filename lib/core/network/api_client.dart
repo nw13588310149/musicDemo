@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -170,7 +169,7 @@ class ApiClient {
       final trimmed = body.trim();
       if (trimmed.isNotEmpty) {
         try {
-          final decoded = jsonDecode(trimmed);
+          final decoded = decodeBigIntSafeJson(trimmed);
           if (decoded is Map<String, dynamic>) {
             return ApiResponse.fromJson(decoded);
           }

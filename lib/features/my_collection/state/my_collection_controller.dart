@@ -18,10 +18,7 @@ class MyCollectionController extends StateNotifier<MyCollectionState> {
   MyCollectionController({required MyCollectionRepository repository})
     : _repository = repository,
       super(
-        const MyCollectionState(
-          loading: true,
-          tabs: kCollectionDefaultTabs,
-        ),
+        const MyCollectionState(loading: true, tabs: kCollectionDefaultTabs),
       ) {
     unawaited(refresh());
   }
@@ -105,18 +102,26 @@ class MyCollectionController extends StateNotifier<MyCollectionState> {
       if (raw is! Map<String, dynamic>) {
         continue;
       }
-      final id = _toInt(raw['id']);
-      final name = raw['name']?.toString().trim() ?? '';
-      if (id <= 0 || name.isEmpty) {
+      final id = _toIdString(raw['id']);
+      final name = (raw['groupName'] ?? raw['name'] ?? raw['className'] ?? '')
+          .toString()
+          .trim();
+      final avatarUrl =
+          (raw['logo'] ?? raw['groupLogo'] ?? raw['avatarUrl'] ?? '')
+              .toString()
+              .trim();
+      if (id.isEmpty || name.isEmpty) {
         continue;
       }
-      classes.add(CollectionShareClass(id: id, name: name));
+      classes.add(
+        CollectionShareClass(id: id, name: name, avatarUrl: avatarUrl),
+      );
     }
     state = state.copyWith(shareTarget: item, shareClasses: classes);
     return null;
   }
 
-  void toggleShareClass(int id) {
+  void toggleShareClass(String id) {
     state = state.copyWith(
       shareClasses: state.shareClasses.map((item) {
         if (item.id != id) {
@@ -330,7 +335,12 @@ class MyCollectionController extends StateNotifier<MyCollectionState> {
   }
 
   String _resolveAvatar(Map<String, dynamic> target) {
-    for (final key in <String>['avatarUrl', 'headImg', 'avatar', 'userAvatar']) {
+    for (final key in <String>[
+      'avatarUrl',
+      'headImg',
+      'avatar',
+      'userAvatar',
+    ]) {
       final value = target[key]?.toString().trim() ?? '';
       if (value.isNotEmpty && value.toLowerCase() != 'string') {
         return value;
@@ -367,6 +377,13 @@ class MyCollectionController extends StateNotifier<MyCollectionState> {
       return value.toInt();
     }
     return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  String _toIdString(dynamic value) {
+    if (value == null) return '';
+    if (value is int) return value.toString();
+    if (value is num) return value.toInt().toString();
+    return value.toString().trim();
   }
 
   String _fallbackMessage(String raw, {String fallback = '操作失败，请稍后重试'}) {

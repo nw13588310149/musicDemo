@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:pdfrx/pdfrx.dart';
 
 /// 原生平台（iOS / Android / 桌面）通用文件内嵌预览。
@@ -78,15 +79,7 @@ class _CoursewarePdfPreview extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                SizedBox(
-                  width: 32,
-                  height: 32,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    value: progress,
-                    color: const Color(0xFF8741FF),
-                  ),
-                ),
+                AppLoadingIndicator(value: progress),
                 const SizedBox(height: 12),
                 Text(
                   progress == null
@@ -171,14 +164,7 @@ class _CoursewareImagePreview extends StatelessWidget {
             width: constraints.maxWidth,
             height: constraints.maxHeight,
             placeholder: (context, _) => const Center(
-              child: SizedBox(
-                width: 32,
-                height: 32,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Color(0xFF8741FF),
-                ),
-              ),
+              child: AppLoadingIndicator(),
             ),
             errorWidget: (context, _, _) => const Center(
               child: Icon(

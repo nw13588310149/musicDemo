@@ -170,6 +170,21 @@ class _CircleImmersiveViewState extends State<CircleImmersiveView> {
             },
           ),
 
+          if (state.commentPanelOpen)
+            Positioned(
+              top: 0,
+              left: 0,
+              bottom: 0,
+              right: ui(420),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: controller.closeCommentPanel,
+                child: ColoredBox(
+                  color: Colors.black.withValues(alpha: 0.45),
+                ),
+              ),
+            ),
+
           _AnimatedCommentPanel(
             visible: state.commentPanelOpen,
             child: CircleCommentPanel(
@@ -194,15 +209,6 @@ class _CircleImmersiveViewState extends State<CircleImmersiveView> {
             ),
           ),
 
-          if (state.commentPanelOpen)
-            Positioned.fill(
-              right: ui(420),
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: controller.closeCommentPanel,
-                child: const SizedBox.shrink(),
-              ),
-            ),
         ],
       ),
     );
@@ -230,12 +236,14 @@ class _ImmersiveSlide extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final isDouyinLayout =
+        post.mediaKind == PostMediaKind.video ||
+        post.mediaKind == PostMediaKind.audio;
+
     return Stack(
       fit: StackFit.expand,
       children: [
         Positioned.fill(
-          // 图片 / 视频 / 音频 三种形态由 CircleMediaPlayer 内部按
-          // post.mediaKind 自动分支；视频和音频会按需创建 / 释放 Player。
           child: CircleMediaPlayer(post: post),
         ),
 
@@ -244,59 +252,149 @@ class _ImmersiveSlide extends StatelessWidget {
             top: ui(16),
             right: ui(16),
             child: Material(
-              color: Colors.black.withValues(alpha: 0.35),
+              color: Colors.white.withValues(alpha: 0.28),
               borderRadius: BorderRadius.circular(ui(8)),
               child: InkWell(
                 onTap: onDeletePost,
                 borderRadius: BorderRadius.circular(ui(8)),
                 child: Padding(
                   padding: EdgeInsets.all(ui(8)),
-                  child: Icon(
-                    Icons.delete_outline_rounded,
-                    color: Colors.white,
-                    size: ui(22),
+                  child: Image.asset(
+                    AppAssets.coursewareActionDelete,
+                    width: ui(22),
+                    height: ui(22),
+                    fit: BoxFit.contain,
                   ),
                 ),
               ),
             ),
           ),
 
+        // 视频 / 音频帖：抖音式轻渐变；图片保留原渐变。
         Positioned(
           left: 0,
           right: 0,
           bottom: 0,
-          height: ui(220),
-          child: const DecoratedBox(
+          height: isDouyinLayout ? ui(180) : ui(220),
+          child: DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [
-                  Color(0x000B081A),
-                  Color(0xCC0B081A),
-                  Color(0xFF0B081A),
-                ],
-                stops: [0, 0.6, 1],
+                colors: isDouyinLayout
+                    ? const [
+                        Color(0x00000000),
+                        Color(0x66000000),
+                        Color(0x99000000),
+                      ]
+                    : const [
+                        Color(0x000B081A),
+                        Color(0xCC0B081A),
+                        Color(0xFF0B081A),
+                      ],
+                stops: isDouyinLayout ? const [0, 0.55, 1] : const [0, 0.6, 1],
               ),
             ),
           ),
         ),
 
+        // 左下：作者 + 文案（视频/音频收窄右侧，给操作栏留位）。
         Positioned(
-          left: ui(32),
-          right: ui(160),
-          bottom: ui(28),
-          child: _ImmersiveTextBlock(post: post),
+          left: ui(isDouyinLayout ? 12 : 32),
+          right: ui(isDouyinLayout ? 88 : 160),
+          bottom: ui(isDouyinLayout ? 16 : 28),
+          child: isDouyinLayout
+              ? _DouyinVideoTextBlock(post: post)
+              : _ImmersiveTextBlock(post: post),
         ),
 
+        // 右下：点赞 / 评论 / 收藏（视频/音频更靠右、整体上移）。
         Positioned(
-          right: ui(28),
-          bottom: ui(32),
+          right: ui(isDouyinLayout ? 10 : 28),
+          bottom: ui(isDouyinLayout ? 72 : 32),
           child: _ImmersiveActions(
             post: post,
             onLike: onLike,
             onComment: onComment,
             onFavorite: onFavorite,
+            compact: isDouyinLayout,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 抖音风左下信息区：@昵称 → 正文 → 时间，纵向排列。
+class _DouyinVideoTextBlock extends StatelessWidget {
+  const _DouyinVideoTextBlock({required this.post});
+
+  final CirclePost post;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '@${post.author.name}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: ui(16),
+            fontFamily: 'PingFang SC',
+            fontWeight: AppFont.w600,
+            height: 1.25,
+            shadows: const [
+              Shadow(color: Color(0x80000000), blurRadius: 4),
+            ],
+          ),
+        ),
+        if (post.author.role.isNotEmpty) ...[
+          SizedBox(height: ui(4)),
+          Text(
+            post.author.role,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.75),
+              fontSize: ui(12),
+              fontFamily: 'PingFang SC',
+              height: 1.2,
+            ),
+          ),
+        ],
+        if (post.text.trim().isNotEmpty) ...[
+          SizedBox(height: ui(8)),
+          Text(
+            post.text,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: ui(14),
+              fontFamily: 'PingFang SC',
+              height: 1.35,
+              shadows: const [
+                Shadow(color: Color(0x80000000), blurRadius: 4),
+              ],
+            ),
+          ),
+        ],
+        if (post.badges.isNotEmpty) ...[
+          SizedBox(height: ui(6)),
+          CircleBadgeRow(badges: post.badges),
+        ],
+        SizedBox(height: ui(6)),
+        Text(
+          post.timeLabel,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.55),
+            fontSize: ui(12),
+            fontFamily: 'PingFang SC',
           ),
         ),
       ],
@@ -375,42 +473,50 @@ class _ImmersiveActions extends StatelessWidget {
     required this.onLike,
     required this.onComment,
     required this.onFavorite,
+    this.compact = false,
   });
 
   final CirclePost post;
   final VoidCallback onLike;
   final VoidCallback onComment;
   final VoidCallback onFavorite;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final avatarSize = compact ? ui(48) : ui(44);
+    final gapAfterAvatar = compact ? ui(16) : ui(20);
+    final gapBetween = compact ? ui(14) : ui(16);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _ImmersiveAvatar(url: post.author.avatarUrl, size: ui(44)),
-        SizedBox(height: ui(20)),
+        _ImmersiveAvatar(url: post.author.avatarUrl, size: avatarSize),
+        SizedBox(height: gapAfterAvatar),
         CircleActionButton(
           iconAsset: AppAssets.schoolIconLiked,
           count: post.likeCount,
           onTap: onLike,
           dark: true,
+          iconSize: compact ? ui(32) : null,
           coloredIcon: post.liked ? const Color(0xFFFF323C) : Colors.white,
         ),
-        SizedBox(height: ui(16)),
+        SizedBox(height: gapBetween),
         CircleActionButton(
           iconAsset: AppAssets.schoolIconComment,
           count: post.commentCount,
           onTap: onComment,
           dark: true,
+          iconSize: compact ? ui(32) : null,
           coloredIcon: Colors.white,
         ),
-        SizedBox(height: ui(16)),
+        SizedBox(height: gapBetween),
         CircleActionButton(
           iconAsset: AppAssets.schoolIconFavorite,
           count: post.favoriteCount,
           onTap: onFavorite,
           dark: true,
+          iconSize: compact ? ui(32) : null,
           coloredIcon: post.favorited ? const Color(0xFFFFB400) : Colors.white,
         ),
       ],
@@ -462,17 +568,36 @@ class _AnimatedCommentPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final radius = ui(16);
+    // 外扩 2px，由外层 [CirclePage] ClipRRect 裁切，避免圆角 anti-alias 缝。
+    const bleed = 2.0;
     return AnimatedPositioned(
       duration: const Duration(milliseconds: 240),
       curve: Curves.easeOutCubic,
-      top: 0,
-      bottom: 0,
-      right: visible ? 0 : -ui(440),
-      width: ui(420),
+      top: -ui(bleed),
+      bottom: -ui(bleed),
+      right: visible ? -ui(bleed) : -ui(440),
+      width: ui(420 + bleed * 2),
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: 180),
         opacity: visible ? 1 : 0,
-        child: child,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topRight: Radius.circular(radius),
+              bottomRight: Radius.circular(radius),
+            ),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.only(
+              topRight: Radius.circular(radius),
+              bottomRight: Radius.circular(radius),
+            ),
+            clipBehavior: Clip.hardEdge,
+            child: child,
+          ),
+        ),
       ),
     );
   }

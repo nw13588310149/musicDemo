@@ -3,6 +3,8 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 
+import 'snowflake_id.dart';
+
 /// Dio Transformer，在 JSON 解码前把 16+ 位整数替换成 JSON 字符串。
 ///
 /// ### 背景
@@ -12,11 +14,12 @@ import 'package:dio/dio.dart';
 ///   `1801911384317390848` → `1801911384317390850`（丢 2）
 ///
 /// ### 修复方案
-/// 在 `jsonDecode` 之前，把 JSON 文本中作为 **值** 出现的 16+ 位整数
-/// 用双引号包裹，使其在解码后保持为 `String` 而非精度受损的 `double`。
+/// - **响应**：在 `jsonDecode` 之前，把 JSON 文本中作为 **值** 出现的 16+ 位整数
+///   用双引号包裹，使其在解码后保持为 `String` 而非精度受损的 `double`。
+/// - **请求**：序列化前递归把 `classId` / `id` 等雪花字段强制保持为 String，
+///   并对 `jsonEncode` 输出再做一次大整数引号兜底。
 ///
-/// 正则只匹配"值位置"（冒号或左方括号/逗号之后），不会误改字段名或
-/// 字符串内容中的数字序列。
+/// 替换时 **跳过 JSON 字符串内部**，避免误改 `teacherIds` 等逗号分隔 id 字段。
 class BigIntSafeTransformer implements Transformer {
   const BigIntSafeTransformer();
 
@@ -28,14 +31,78 @@ class BigIntSafeTransformer implements Transformer {
     r'([:\[,]\s*)(-?\d{16,})(?=\s*[,\}\]])',
   );
 
+  /// 响应体解码：大整数引号兜底后再 `jsonDecode`。
+  static dynamic decodeBigIntSafeJson(String raw) => _safeDecode(raw);
+
+  /// 请求体序列化：雪花 id 字段保持 String + 大整数引号兜底。
+  static String encodeBigIntSafeJson(Object? data) => _safeEncode(data);
+
+  /// 仅在 JSON 字符串 **外部** 把裸大整数包上引号。
+  ///
+  /// 旧实现用全文件 `replaceAllMapped`，会把
+  /// `"teacherIds":"1788...,1800137392287985665,..."` 字符串内部的 id 也改掉，
+  /// 导致 JSON 非法、`classList` / `studentList` 整页解析失败。
+  static String _patchBigIntLiteralsOutsideStrings(String raw) {
+    final out = StringBuffer();
+    var i = 0;
+    var inString = false;
+    var escape = false;
+
+    while (i < raw.length) {
+      final ch = raw[i];
+
+      if (inString) {
+        out.write(ch);
+        if (escape) {
+          escape = false;
+        } else if (ch == r'\') {
+          escape = true;
+        } else if (ch == '"') {
+          inString = false;
+        }
+        i++;
+        continue;
+      }
+
+      if (ch == '"') {
+        inString = true;
+        out.write(ch);
+        i++;
+        continue;
+      }
+
+      final rest = raw.substring(i);
+      final match = _bigIntRe.matchAsPrefix(rest);
+      if (match != null) {
+        out.write('${match.group(1)}"${match.group(2)}"');
+        i += match.end;
+        continue;
+      }
+
+      out.write(ch);
+      i++;
+    }
+
+    return out.toString();
+  }
+
+  /// 请求体序列化：雪花 id 字段保持 String + 大整数引号兜底。
+  static String _safeEncode(Object? data) {
+    final coerced = coerceSnowflakeRequestData(data);
+    final encoded = jsonEncode(coerced);
+    return _patchBigIntLiteralsOutsideStrings(encoded);
+  }
+
   /// 将 JSON 文本中的大整数包裹为字符串，再走标准 `jsonDecode`。
   static dynamic _safeDecode(String raw) {
     if (raw.isEmpty) return null;
-    final patched = raw.replaceAllMapped(
-      _bigIntRe,
-      (m) => '${m.group(1)}"${m.group(2)}"',
-    );
-    return jsonDecode(patched);
+    final patched = _patchBigIntLiteralsOutsideStrings(raw);
+    try {
+      return jsonDecode(patched);
+    } catch (_) {
+      // 补丁失败时退回原始 JSON，至少保证页面能渲染。
+      return jsonDecode(raw);
+    }
   }
 
   // ── Transformer interface ──────────────────────────────────────────────────
@@ -46,7 +113,7 @@ class BigIntSafeTransformer implements Transformer {
     if (data == null) return '';
     if (data is String) return data;
     if (data is FormData) return data.toString();
-    return jsonEncode(data);
+    return _safeEncode(data);
   }
 
   @override
@@ -89,3 +156,11 @@ class BigIntSafeTransformer implements Transformer {
     }
   }
 }
+
+/// 响应 JSON 文本安全解码（16+ 位整数 → String）。
+dynamic decodeBigIntSafeJson(String raw) =>
+    BigIntSafeTransformer.decodeBigIntSafeJson(raw);
+
+/// 请求 JSON 安全编码（雪花 id 字段 → 带引号字符串）。
+String encodeBigIntSafeJson(Object? data) =>
+    BigIntSafeTransformer.encodeBigIntSafeJson(data);

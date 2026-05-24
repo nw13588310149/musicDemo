@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 
 import '../../../../app/router/route_paths.dart';
 
@@ -46,14 +47,7 @@ class AuthPrimaryButton extends StatelessWidget {
           ),
           onPressed: loading ? null : onPressed,
           child: loading
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
+              ? const AppLoadingIndicator(size: 16, color: Colors.white)
               : Text(
                   text,
                   style: const TextStyle(

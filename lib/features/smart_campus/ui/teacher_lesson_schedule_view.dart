@@ -38,6 +38,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_response.dart';
@@ -1188,9 +1189,7 @@ class _TeacherLessonScheduleViewState
                             borderRadius: BorderRadius.circular(ui(12)),
                           ),
                           alignment: Alignment.center,
-                          child: const CircularProgressIndicator(
-                            color: _kPurple,
-                          ),
+                          child: const AppLoadingIndicator(),
                         ),
                       ),
                     ),
@@ -2662,7 +2661,7 @@ class _ApplyRecordsDrawerState extends ConsumerState<_ApplyRecordsDrawer> {
 
   Widget _buildBody(BuildContext context, double Function(double) ui) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+      return const Center(child: AppLoadingIndicator());
     }
     if (_error != null) {
       return Center(

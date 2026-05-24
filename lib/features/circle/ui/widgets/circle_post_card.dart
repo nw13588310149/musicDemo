@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 
+import '../../../../core/constants/app_assets.dart';
 import '../../../shell/ui/shell_layout.dart';
 import '../../state/circle_state.dart';
 import 'circle_action_buttons.dart';
@@ -28,52 +30,51 @@ class CirclePostCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(ui(16)),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(ui(16)),
-        onTap: onTap,
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(ui(12), ui(12), ui(12), ui(8)),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _CardAuthor(post: post, onDeletePost: onDeletePost),
-              SizedBox(height: ui(8)),
-              Text(
-                post.text,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: const Color(0xFF0B081A),
-                  fontSize: ui(14),
-                  fontFamily: 'PingFang SC',
-                  height: 19.6 / 14,
-                ),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(ui(16)),
+        ),
+        padding: EdgeInsets.fromLTRB(ui(12), ui(12), ui(12), ui(8)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _CardAuthor(post: post, onDeletePost: onDeletePost),
+            SizedBox(height: ui(8)),
+            Text(
+              post.text,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: const Color(0xFF0B081A),
+                fontSize: ui(14),
+                fontFamily: 'PingFang SC',
+                height: 19.6 / 14,
               ),
-              SizedBox(height: ui(6)),
-              Text(
-                post.timeLabel,
-                style: TextStyle(
-                  color: const Color(0xFFB6B5BB),
-                  fontSize: ui(14),
-                  fontFamily: 'PingFang SC',
-                ),
+            ),
+            SizedBox(height: ui(6)),
+            Text(
+              post.timeLabel,
+              style: TextStyle(
+                color: const Color(0xFFB6B5BB),
+                fontSize: ui(14),
+                fontFamily: 'PingFang SC',
               ),
-              SizedBox(height: ui(13)),
-              _CardImage(post: post),
-              SizedBox(height: ui(12)),
-              CircleActionRow(
-                post: post,
-                onLike: onLike,
-                onComment: onComment,
-                onFavorite: onFavorite,
-              ),
-              SizedBox(height: ui(4)),
-            ],
-          ),
+            ),
+            SizedBox(height: ui(13)),
+            _CardImage(post: post),
+            SizedBox(height: ui(12)),
+            CircleActionRow(
+              post: post,
+              onLike: onLike,
+              onComment: onComment,
+              onFavorite: onFavorite,
+            ),
+            SizedBox(height: ui(4)),
+          ],
         ),
       ),
     );
@@ -133,17 +134,20 @@ class _CardAuthor extends StatelessWidget {
           ),
         ),
         if (onDeletePost != null)
-          IconButton(
-            padding: EdgeInsets.zero,
-            constraints: BoxConstraints(
-              minWidth: ui(32),
-              minHeight: ui(32),
-            ),
-            onPressed: onDeletePost,
-            icon: Icon(
-              Icons.delete_outline_rounded,
-              size: ui(20),
-              color: const Color(0xFFB6B5BB),
+          GestureDetector(
+            onTap: onDeletePost,
+            behavior: HitTestBehavior.opaque,
+            child: SizedBox(
+              width: ui(32),
+              height: ui(32),
+              child: Center(
+                child: Image.asset(
+                  AppAssets.coursewareActionDelete,
+                  width: ui(20),
+                  height: ui(20),
+                  fit: BoxFit.contain,
+                ),
+              ),
             ),
           ),
       ],
@@ -234,11 +238,7 @@ class _ImageCover extends StatelessWidget {
         return Container(
           color: const Color(0xFFEFEFF4),
           alignment: Alignment.center,
-          child: SizedBox(
-            width: ui(20),
-            height: ui(20),
-            child: const CircularProgressIndicator(strokeWidth: 2),
-          ),
+          child: const AppLoadingIndicator(),
         );
       },
     );

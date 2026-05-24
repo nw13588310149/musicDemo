@@ -9,6 +9,7 @@ import 'dart:math' as math;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:chinese_font_library/chinese_font_library.dart';
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
@@ -26,7 +27,6 @@ import '../data/video_publisher_data.dart';
 import '../state/video_tutorial_controller.dart';
 import '../state/video_tutorial_state.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
-import 'package:the_road_of_music_flutter/core/theme/app_theme.dart';
 
 const int _kVideoPreloadLimit = 8;
 const int _kVideoPrecacheWidth = 720;
@@ -135,16 +135,12 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
   }
 
   Future<void> _openVideoDetail(VideoListItem item) async {
-    await _runOpenDetail(
-      (notifier) => notifier.openDetail(item),
-    );
+    await _runOpenDetail((notifier) => notifier.openDetail(item));
   }
 
   /// 通过视频 id 直接打开详情面板，用于"我的收藏"等只携带 id 的入口。
   Future<void> _openVideoDetailById(String id) async {
-    await _runOpenDetail(
-      (notifier) => notifier.openDetailById(id),
-    );
+    await _runOpenDetail((notifier) => notifier.openDetailById(id));
   }
 
   /// 共用：调用 controller 加载详情 → push 右侧详情路由 → 关闭面板。
@@ -155,7 +151,9 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
     if (_isDetailOpening) return;
     _isDetailOpening = true;
 
-    final notifier = ref.read(videoTutorialControllerProvider(_pageArgs).notifier);
+    final notifier = ref.read(
+      videoTutorialControllerProvider(_pageArgs).notifier,
+    );
     final message = await load(notifier);
 
     if (!mounted) {
@@ -186,7 +184,9 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
 
     _isDetailOpening = false;
     if (mounted) {
-      ref.read(videoTutorialControllerProvider(_pageArgs).notifier).closeDetail();
+      ref
+          .read(videoTutorialControllerProvider(_pageArgs).notifier)
+          .closeDetail();
     }
   }
 
@@ -199,7 +199,9 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
     if (_scrollController.hasClients) {
       _scrollController.jumpTo(0);
     }
-    await ref.read(videoTutorialControllerProvider(_pageArgs).notifier).selectMenu(id);
+    await ref
+        .read(videoTutorialControllerProvider(_pageArgs).notifier)
+        .selectMenu(id);
   }
 
   Future<void> _selectChildMenu(String? id) async {
@@ -244,8 +246,9 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
           // ── 视频列表区：仅此区域可滚动 ──────────────────────────────────
           Expanded(
             child: AppRefreshIndicator(
-              onRefresh: () =>
-                  ref.read(videoTutorialControllerProvider(_pageArgs).notifier).refresh(),
+              onRefresh: () => ref
+                  .read(videoTutorialControllerProvider(_pageArgs).notifier)
+                  .refresh(),
               child: CustomScrollView(
                 key: const PageStorageKey<String>('video_tutorial_scroll'),
                 controller: _scrollController,
@@ -288,7 +291,7 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
                   if (state.loading && state.videoList.isEmpty)
                     const SliverFillRemaining(
                       hasScrollBody: false,
-                      child: Center(child: CircularProgressIndicator()),
+                      child: Center(child: AppLoadingIndicator()),
                     )
                   else if (state.videoList.isEmpty)
                     SliverFillRemaining(
@@ -346,7 +349,7 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: EdgeInsets.zero,
-                        child: const Center(child: CircularProgressIndicator()),
+                        child: const Center(child: AppLoadingIndicator()),
                       ),
                     ),
                   if (!state.loadingMore &&
@@ -640,7 +643,9 @@ class _VideoDetailSheetState extends ConsumerState<_VideoDetailSheet>
       setState(() => _loadingSwitch = false);
       return;
     }
-    final detail = ref.read(videoTutorialControllerProvider(widget.pageArgs)).detail;
+    final detail = ref
+        .read(videoTutorialControllerProvider(widget.pageArgs))
+        .detail;
     if (detail != null) {
       setState(() {
         _currentDetail = detail;
@@ -728,13 +733,19 @@ class _VideoDetailSheetState extends ConsumerState<_VideoDetailSheet>
       _showMsg(msg);
     } else {
       final isFav =
-          ref.read(videoTutorialControllerProvider(widget.pageArgs)).detail?.isFavorite ?? false;
+          ref
+              .read(videoTutorialControllerProvider(widget.pageArgs))
+              .detail
+              ?.isFavorite ??
+          false;
       _showMsg(isFav ? '收藏成功' : '已取消收藏');
     }
   }
 
   Future<void> _showShareSheet() async {
-    final notifier = ref.read(videoTutorialControllerProvider(widget.pageArgs).notifier);
+    final notifier = ref.read(
+      videoTutorialControllerProvider(widget.pageArgs).notifier,
+    );
     if (!mounted) return;
     await showClassShareDrawer<void>(
       context: context,
@@ -779,7 +790,9 @@ class _VideoDetailSheetState extends ConsumerState<_VideoDetailSheet>
 
   @override
   Widget build(BuildContext context) {
-    final ctrlState = ref.watch(videoTutorialControllerProvider(widget.pageArgs));
+    final ctrlState = ref.watch(
+      videoTutorialControllerProvider(widget.pageArgs),
+    );
     final detail = ctrlState.detail ?? _currentDetail;
 
     return Column(
@@ -897,6 +910,7 @@ class _VideoShareDrawerState extends State<_VideoShareDrawer> {
             (item) => ClassShareItem(
               id: item.id,
               name: item.name,
+              avatarUrl: item.avatarUrl,
               checked: _selected.contains(item.id),
             ),
           )
@@ -1324,10 +1338,7 @@ class _ProfessionalPlayerState extends State<_ProfessionalPlayer> {
                 if (_isBuffering && !_isCompleted)
                   const Positioned.fill(
                     child: Center(
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2.5,
-                      ),
+                      child: AppLoadingIndicator(color: Colors.white),
                     ),
                   ),
 
@@ -2500,10 +2511,7 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                 if (_isBuffering && _activeGesture == _GestureMode.none)
                   const Positioned.fill(
                     child: Center(
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2.5,
-                      ),
+                      child: AppLoadingIndicator(color: Colors.white),
                     ),
                   ),
 
@@ -2568,64 +2576,64 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                             child: Padding(
                               padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
                               child: Row(
-                              children: [
-                                GestureDetector(
-                                  onTap: () => Navigator.of(context).pop(),
-                                  child: Container(
-                                    width: 32,
-                                    height: 32,
-                                    decoration: BoxDecoration(
-                                      color: const Color(
-                                        0xFF212028,
-                                      ).withValues(alpha: 0.8),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    alignment: Alignment.center,
-                                    child: Image.asset(
-                                      AppAssets.videoV2Back,
+                                children: [
+                                  GestureDetector(
+                                    onTap: () => Navigator.of(context).pop(),
+                                    child: Container(
                                       width: 32,
                                       height: 32,
-                                      fit: BoxFit.contain,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    widget.title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                                // 倍速徽章
-                                if (((_rate - 1.0).abs() > 0.01) &&
-                                    !_isLongPressSpeed)
-                                  Container(
-                                    margin: const EdgeInsets.only(right: 8),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 3,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF8741FF),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Text(
-                                      '${_rate.toStringAsFixed(2).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '')}x',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
+                                      decoration: BoxDecoration(
+                                        color: const Color(
+                                          0xFF212028,
+                                        ).withValues(alpha: 0.8),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: Image.asset(
+                                        AppAssets.videoV2Back,
+                                        width: 32,
+                                        height: 32,
+                                        fit: BoxFit.contain,
                                       ),
                                     ),
                                   ),
-                              ],
-                            ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      widget.title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                  // 倍速徽章
+                                  if (((_rate - 1.0).abs() > 0.01) &&
+                                      !_isLongPressSpeed)
+                                    Container(
+                                      margin: const EdgeInsets.only(right: 8),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF8741FF),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        '${_rate.toStringAsFixed(2).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '')}x',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
@@ -2670,7 +2678,12 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Padding(
-                                  padding: const EdgeInsets.fromLTRB(8, 0, 14, 0),
+                                  padding: const EdgeInsets.fromLTRB(
+                                    8,
+                                    0,
+                                    14,
+                                    0,
+                                  ),
                                   child: SliderTheme(
                                     data: SliderTheme.of(context).copyWith(
                                       trackHeight: 3,
@@ -2735,7 +2748,8 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                         padding: EdgeInsets.zero,
                                         constraints: const BoxConstraints(
                                           minWidth: _kVideoCtrlFullscreenBtnHit,
-                                          minHeight: _kVideoCtrlFullscreenBtnHit,
+                                          minHeight:
+                                              _kVideoCtrlFullscreenBtnHit,
                                         ),
                                       ),
                                       const SizedBox(
@@ -2791,7 +2805,8 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                         padding: EdgeInsets.zero,
                                         constraints: const BoxConstraints(
                                           minWidth: _kVideoCtrlFullscreenBtnHit,
-                                          minHeight: _kVideoCtrlFullscreenBtnHit,
+                                          minHeight:
+                                              _kVideoCtrlFullscreenBtnHit,
                                         ),
                                       ),
                                       const SizedBox(width: _kVideoCtrlTimeGap),
@@ -2812,12 +2827,14 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                               ? Icons.volume_up_rounded
                                               : Icons.volume_off_rounded,
                                           color: Colors.white,
-                                          size: _kVideoCtrlFullscreenVolumeIconSize,
+                                          size:
+                                              _kVideoCtrlFullscreenVolumeIconSize,
                                         ),
                                         padding: EdgeInsets.zero,
                                         constraints: const BoxConstraints(
                                           minWidth: _kVideoCtrlFullscreenBtnHit,
-                                          minHeight: _kVideoCtrlFullscreenBtnHit,
+                                          minHeight:
+                                              _kVideoCtrlFullscreenBtnHit,
                                         ),
                                       ),
                                       const SizedBox(
@@ -2837,7 +2854,8 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                         padding: EdgeInsets.zero,
                                         constraints: const BoxConstraints(
                                           minWidth: _kVideoCtrlFullscreenBtnHit,
-                                          minHeight: _kVideoCtrlFullscreenBtnHit,
+                                          minHeight:
+                                              _kVideoCtrlFullscreenBtnHit,
                                         ),
                                       ),
                                       const SizedBox(width: _kVideoCtrlTimeGap),
@@ -3104,7 +3122,7 @@ class _PlayerPlaceholder extends StatelessWidget {
         if (loading)
           const Positioned.fill(
             child: Center(
-              child: CircularProgressIndicator(color: Colors.white),
+              child: AppLoadingIndicator(color: Colors.white),
             ),
           ),
       ],

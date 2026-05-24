@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/route_paths.dart';
@@ -42,7 +43,7 @@ class QuizPracticePage extends ConsumerWidget {
           child: ShellPageSurface(
             padding: EdgeInsets.symmetric(horizontal: ui(25)),
             child: state.loading && state.summaries.isEmpty
-                ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                ? const Center(child: AppLoadingIndicator())
                 : _PracticeRingRow(
                     summaries: state.summaries,
                     onSelect: (summary) =>

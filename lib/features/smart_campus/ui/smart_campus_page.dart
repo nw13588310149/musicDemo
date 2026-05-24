@@ -17,7 +17,6 @@ import 'admin_student_management_view.dart';
 import 'admin_teacher_management_view.dart';
 import 'dorm_manager_check_by_room_view.dart';
 import 'dorm_manager_check_history_view.dart';
-import 'dorm_manager_check_in_view.dart';
 import 'dorm_manager_home_view.dart';
 import 'group_chat_view.dart';
 import 'principal_mailbox_view.dart';
@@ -37,6 +36,7 @@ import 'teacher_dorm_dynamic_view.dart';
 import 'teacher_dorm_history_view.dart';
 import 'teacher_home_school_view.dart';
 import 'teacher_leave_approval_view.dart';
+import 'teacher_my_leave_view.dart';
 import 'teacher_lesson_schedule_view.dart';
 import 'teacher_student_roster_view.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -264,6 +264,11 @@ class SmartCampusPage extends ConsumerWidget {
       if (state.mainView == SmartCampusMainView.examReview) {
         return TeacherExamReviewView(onBack: controller.backToDashboard);
       }
+      // 任课老师 / 班主任「我的请假」：banner + 3 张统计卡 + tabs +
+      // 紫渐变「发起请假」+ 双列只读卡片；发起请假打开右侧抽屉表单。
+      if (state.mainView == SmartCampusMainView.myTeacherLeave) {
+        return TeacherMyLeaveView(onBack: controller.backToDashboard);
+      }
       // 班主任端"请假审批"独立视图：banner + 4 张统计卡 + 提示与备案说明 +
       // 6 状态 tabs(全部/待我审批/审批中/已通过/已拒绝/已撤销) + 搜索框 +
       // 双列卡片网格(头像/学号/类型/时长/状态徽章 + 灰底信息块: 请假时间/
@@ -323,6 +328,7 @@ class SmartCampusPage extends ConsumerWidget {
         onOpenStudentRoster: controller.openStudentRoster,
         onOpenHomeworkReview: controller.openHomeworkReview,
         onOpenExamReview: controller.openExamReview,
+        onOpenMyTeacherLeave: controller.openMyTeacherLeave,
         onOpenLeaveApproval: controller.openLeaveApproval,
         onOpenDormDynamic: controller.openDormDynamic,
         onOpenDormHistory: controller.openDormHistory,
@@ -396,8 +402,7 @@ class SmartCampusPage extends ConsumerWidget {
     }
 
     // 宿管端：复用 admin / 教师端的「群聊 / 校长信箱 / 校圈」全站入口，
-    // 「按宿舍查寝 / 查寝历史 / 打卡管理」已接入独立视图，其余 1 项
-    // 「宿管请假」目前先保留占位回调，待对应独立视图就位后再接入。
+    // 「按宿舍查寝 / 查寝历史」已接入独立视图，「宿管请假」目前先保留占位回调。
     if (state.selectedRole == SmartCampusRole.dormManager) {
       if (state.mainView == SmartCampusMainView.principalMailbox) {
         return PrincipalMailboxView(onBack: controller.backToDashboard);
@@ -420,11 +425,6 @@ class SmartCampusPage extends ConsumerWidget {
           onBack: controller.backToDashboard,
         );
       }
-      if (state.mainView == SmartCampusMainView.dormCheckInManagement) {
-        return DormManagerCheckInView(
-          onBack: controller.backToDashboard,
-        );
-      }
       if (state.mainView == SmartCampusMainView.dashboard) {
         return DormManagerHomeView(
           shellDisplayName: shellState.user.displayName,
@@ -437,7 +437,6 @@ class SmartCampusPage extends ConsumerWidget {
           onOpenSchoolCircle: openSchoolCircle,
           onOpenDormCheckByRoom: controller.openDormCheckByRoom,
           onOpenDormCheckHistory: controller.openDormHistory,
-          onOpenCheckInManagement: controller.openDormCheckInManagement,
         );
       }
     }
@@ -582,6 +581,8 @@ class _SmartCampusPlaceholder extends StatelessWidget {
         return '请假管理';
       case SmartCampusMainView.leaveApproval:
         return '请假审批';
+      case SmartCampusMainView.myTeacherLeave:
+        return '我的请假';
       case SmartCampusMainView.dormCheck:
         return '查寝管理';
       case SmartCampusMainView.dormDynamic:
@@ -611,7 +612,7 @@ class _SmartCampusPlaceholder extends StatelessWidget {
       case SmartCampusMainView.scheduleManagement:
         return '排课与课表';
       case SmartCampusMainView.dormLeaveApproval:
-        return '宿管请假审批';
+        return '教师请假审批';
       case SmartCampusMainView.faceLibrary:
         return '人脸库';
       case SmartCampusMainView.notificationManagement:

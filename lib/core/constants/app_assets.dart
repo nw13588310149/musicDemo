@@ -417,6 +417,7 @@ abstract final class AppAssets {
   static const quizRecommendBubble = 'assets/images/smart_dictation/tj.png';
 
   /// 校圈（社区动态）
+  static const xiaoquanHeaderBg = 'assets/images/xiaoquan/bg.png';
   static const schoolIconPin = 'assets/images/school/1.png';
   static const schoolIconHot = 'assets/images/school/2.png';
   static const schoolIconLiked = 'assets/images/school/3.png';

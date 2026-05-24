@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_response.dart';
+import '../../../core/network/snowflake_id.dart';
 import '../../../core/providers/app_providers.dart';
 
 /// 任课老师端相关接口的 Repository。
@@ -176,12 +177,12 @@ class TeacherRepository {
 
   // ============== 学生管理（班主任端） ==============
 
-  /// 班级学生列表（分页）。`classId` 为 `"0"` 表示全部班级；具体班级传雪花 **字符串**。
+  /// 班级学生列表（分页）。`classId` 为空串表示全部班级；具体班级传雪花 **字符串**。
   ///
-  /// 请求体：`archiveId`、`classId`（全部时为数字 `0`，与后端示例一致）、`current`、
-  /// `keyword`、`size`、`studentStatus`、`type`。
+  /// 请求体：`archiveId`、`classId`（全部时为 `""`）、`current`、`keyword`、`size`、
+  /// `studentStatus`、`type`。
   Future<ApiResponse> studentList({
-    String classId = '0',
+    String classId = '',
     int current = 1,
     int size = 10,
     String keyword = '',
@@ -189,8 +190,10 @@ class TeacherRepository {
     int type = 0,
     int archiveId = 0,
   }) {
-    final Object classIdBody =
-        classId == '0' || classId.isEmpty ? 0 : classId;
+    final normalized = classId.trim();
+    final classIdBody = (normalized.isEmpty || normalized == '0')
+        ? ''
+        : normalized;
     final body = <String, dynamic>{
       'archiveId': archiveId,
       'classId': classIdBody,
@@ -338,6 +341,100 @@ class TeacherRepository {
     return client.post(
       '$_base/studentHomeworkDetail',
       data: <String, dynamic>{'id': id},
+    );
+  }
+
+  // ============== 班主任 · 学生请假审批 ==============
+
+  /// 学生请假列表（`AppSchoolStudentLeaveTeacherListBO`）。
+  ///
+  /// `status`: 0-待家长审批 / 1-家长同意 / 2-家长拒绝 / 3-老师同意 /
+  /// 4-老师拒绝；不传 = 全部。
+  Future<ApiResponse> headTeacherStudentLeaveList({
+    int current = 1,
+    int size = 200,
+    int? status,
+  }) {
+    final body = <String, dynamic>{
+      'current': current,
+      'size': size,
+    };
+    if (status != null) body['status'] = status;
+    return client.post('$_base/headTeacherStudentLeaveList', data: body);
+  }
+
+  /// 学生请假审批：`status` 3=同意 / 4=拒绝。
+  Future<ApiResponse> headTeacherStudentLeaveAudit({
+    required String id,
+    required int status,
+    String? teacherAuditReason,
+  }) {
+    return client.post(
+      '$_base/headTeacherStudentLeaveAudit',
+      data: <String, dynamic>{
+        'id': readSnowflakeId(id) ?? id,
+        'status': status,
+        if (teacherAuditReason != null && teacherAuditReason.isNotEmpty)
+          'teacherAuditReason': teacherAuditReason,
+      },
+    );
+  }
+
+  // ============== 教师请假（任课老师 / 班主任 · 我的请假） ==============
+
+  /// 我的请假列表。
+  ///
+  /// `POST /app/school/v2/teacher/teacherLeaveList`
+  ///
+  /// 请求体 `AppSchoolTeacherLeaveListBO`：
+  /// - `current` / `size`：分页
+  /// - `status`：0-待审批 / 1-已批准 / 2-已拒绝；不传 = 全部
+  ///
+  /// 返回 `BasePageResponse<AppSchoolTeacherLeave>`（`records` + `total` +
+  /// `pages`），单条字段含 `type` / `startTime` / `endTime` / `leaveDuration` /
+  /// `leaveReason` / `shiftHandover` / `status` / `auditReason` / `auditTime` /
+  /// `createTime` / 嵌套 `teacher`（`UserInfoRes`）等。
+  Future<ApiResponse> teacherLeaveList({
+    int current = 1,
+    int size = 200,
+    int? status,
+  }) {
+    final body = <String, dynamic>{
+      'current': current,
+      'size': size,
+    };
+    if (status != null) body['status'] = status;
+    return client.post('$_base/teacherLeaveList', data: body);
+  }
+
+  /// 发起请假申请。
+  ///
+  /// `POST /app/school/v2/teacher/teacherLeaveSave`
+  ///
+  /// 请求体 `AppSchoolTeacherLeaveSaveBO`：
+  /// - `type`：0-病假 / 1-事假
+  /// - `startTime` / `endTime`：`date-time`，提交格式 `yyyy-MM-dd HH:mm:ss`
+  /// - `leaveDuration`：请假时长（字符串，如 `"2"` 或 `"2天"`）
+  /// - `leaveReason`：请假原因
+  /// - `shiftHandover`：交接班说明
+  Future<ApiResponse> teacherLeaveSave({
+    required int type,
+    required String startTime,
+    required String endTime,
+    required String leaveDuration,
+    required String leaveReason,
+    String shiftHandover = '',
+  }) {
+    return client.post(
+      '$_base/teacherLeaveSave',
+      data: <String, dynamic>{
+        'type': type,
+        'startTime': startTime,
+        'endTime': endTime,
+        'leaveDuration': leaveDuration,
+        'leaveReason': leaveReason,
+        'shiftHandover': shiftHandover,
+      },
     );
   }
 }

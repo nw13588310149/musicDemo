@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../state/circle_controller.dart';
+import '../state/circle_permissions_provider.dart';
 import '../state/circle_state.dart';
 import 'widgets/circle_immersive_view.dart';
 import 'widgets/circle_list_view.dart';
@@ -38,7 +39,7 @@ class CirclePage extends ConsumerWidget {
                   child: _CircleBody(
                     state: state,
                     controller: controller,
-                    permissions: circlePermissionsFromShell(ref),
+                    permissions: ref.watch(circlePermissionsProvider),
                   ),
                 ),
                 // 沉浸模式下铺满全屏显示视频/图片，FAB 会挡视线，隐藏掉。
@@ -60,7 +61,7 @@ class CirclePage extends ConsumerWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Header: 渐变背景 + 返回按钮 + 标题 "校圈" + 沉浸/列表 切换胶囊
+// Header: 背景图 + 返回按钮 + 标题 "校圈" + 沉浸/列表 切换胶囊
 // ─────────────────────────────────────────────────────────────────────
 
 class _CircleHeader extends StatelessWidget {
@@ -81,16 +82,12 @@ class _CircleHeader extends StatelessWidget {
       height: ui(62),
       padding: EdgeInsets.symmetric(horizontal: ui(20)),
       decoration: BoxDecoration(
-        // 对角线浅紫渐变：左下白 → 右上 #F9EDFF；
-        // 在 970×62 这种又宽又矮的矩形里，让粉色只在右上角隐约可见，
-        // 大部分区域保持纯白。
-        gradient: const LinearGradient(
-          begin: Alignment.bottomLeft,
-          end: Alignment.topRight,
-          colors: [Colors.white, Colors.white, Color(0xFFF9EDFF)],
-          stops: [0.0, 0.55, 1.0],
-        ),
         borderRadius: BorderRadius.circular(ui(16)),
+        image: DecorationImage(
+          image: AssetImage(AppAssets.xiaoquanHeaderBg),
+          fit: BoxFit.cover,
+          alignment: Alignment.centerRight,
+        ),
       ),
       child: Row(
         children: [

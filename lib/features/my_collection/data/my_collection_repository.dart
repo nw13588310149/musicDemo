@@ -46,7 +46,7 @@ class MyCollectionRepository {
   }
 
   Future<ApiResponse> shareToClass({
-    required int classId,
+    required String classId,
     required int type,
     required Map<String, dynamic> payload,
   }) {

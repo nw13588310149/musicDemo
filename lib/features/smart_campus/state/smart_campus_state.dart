@@ -12,6 +12,7 @@ enum SmartCampusMainView {
   groupChat,
   leaveManagement,
   leaveApproval,
+  myTeacherLeave,
   dormCheck,
   dormDynamic,
   dormHistory,

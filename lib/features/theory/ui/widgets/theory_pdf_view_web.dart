@@ -8,6 +8,9 @@ import 'package:web/web.dart' as web;
 /// 多个 [TheoryPdfView] 同时存活时也优先全屏最近一个。
 web.HTMLIFrameElement? _activeTheoryPdfIframe;
 
+/// 乐理 PDF 预览区背景（与 Native pdfrx、iframe 背景一致）。
+const Color kTheoryPdfBackgroundColor = Color(0xFFFAFAFB);
+
 /// Web 端 PDF 显示：用 iframe 直接交给浏览器原生 PDF Viewer 渲染。
 /// 这样可以避开浏览器对跨域 fetch 的 CORS 限制（PDF 静态 CDN 通常不会
 /// 给前端 origin 配置 Access-Control-Allow-Origin），与 1.0 行为一致。

@@ -44,6 +44,7 @@
 // =============================================================================
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -802,10 +803,7 @@ class _TeacherHomeworkReviewViewState
             Center(
               child: Padding(
                 padding: EdgeInsets.only(top: ui(60)),
-                child: CircularProgressIndicator(
-                  color: _kPurple,
-                  strokeWidth: 2,
-                ),
+                child: AppLoadingIndicator(),
               ),
             )
           else if (_all.isEmpty)
@@ -1252,14 +1250,7 @@ class _StatsPanel extends StatelessWidget {
             Center(
               child: Padding(
                 padding: EdgeInsets.symmetric(vertical: ui(8)),
-                child: SizedBox(
-                  width: ui(20),
-                  height: ui(20),
-                  child: CircularProgressIndicator(
-                    color: _kPurple,
-                    strokeWidth: 2,
-                  ),
-                ),
+                child: AppLoadingIndicator(),
               ),
             )
           else
@@ -1424,10 +1415,7 @@ class _BodyRow extends StatelessWidget {
                     ),
                     padding: EdgeInsets.symmetric(vertical: ui(60)),
                     child: Center(
-                      child: CircularProgressIndicator(
-                        color: _kPurple,
-                        strokeWidth: 2,
-                      ),
+                      child: AppLoadingIndicator(),
                     ),
                   )
                 : _HomeworkDetailPanel(
@@ -2447,14 +2435,7 @@ class _PublishDrawerState extends ConsumerState<_PublishDrawer> {
                                 SizedBox(
                                   height: ui(48),
                                   child: Center(
-                                    child: SizedBox(
-                                      width: ui(22),
-                                      height: ui(22),
-                                      child: CircularProgressIndicator(
-                                        color: _kPurple,
-                                        strokeWidth: 2,
-                                      ),
-                                    ),
+                                    child: AppLoadingIndicator(),
                                   ),
                                 )
                               else if (_subjects.isEmpty)
@@ -2553,10 +2534,7 @@ class _PublishDrawerState extends ConsumerState<_PublishDrawer> {
                     SizedBox(height: ui(12)),
                     if (_loadingClasses)
                       Center(
-                        child: CircularProgressIndicator(
-                          color: _kPurple,
-                          strokeWidth: 2,
-                        ),
+                        child: AppLoadingIndicator(),
                       )
                     else
                       for (var i = 0; i < _classList.length; i++) ...[
@@ -2907,10 +2885,7 @@ class _HistoryDrawerState extends ConsumerState<_HistoryDrawer> {
                 Center(
                   child: Padding(
                     padding: EdgeInsets.only(top: ui(40)),
-                    child: CircularProgressIndicator(
-                      color: _kPurple,
-                      strokeWidth: 2,
-                    ),
+                    child: AppLoadingIndicator(),
                   ),
                 )
               else if (_items.isEmpty)
@@ -3264,10 +3239,7 @@ class _ReviewDrawerState extends ConsumerState<_ReviewDrawer> {
                       Center(
                         child: Padding(
                           padding: EdgeInsets.symmetric(vertical: ui(12)),
-                          child: CircularProgressIndicator(
-                            color: _kPurple,
-                            strokeWidth: 2,
-                          ),
+                          child: AppLoadingIndicator(),
                         ),
                       )
                     else if (_hasAttachment)

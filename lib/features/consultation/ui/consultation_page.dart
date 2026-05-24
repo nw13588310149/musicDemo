@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/route_paths.dart';
@@ -43,9 +44,7 @@ class ConsultationPage extends ConsumerWidget {
             _ConsultationHeader(onBack: () => Navigator.of(context).maybePop()),
             Expanded(
               child: state.loading && state.items.isEmpty
-                  ? const Center(
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
+                  ? const Center(child: AppLoadingIndicator())
                   : state.items.isEmpty
                   ? const _ConsultationEmpty()
                   : _ConsultationBody(

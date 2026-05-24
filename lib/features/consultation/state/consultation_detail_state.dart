@@ -20,10 +20,7 @@ class ConsultationDetailArgs {
         return ConsultationDetailArgs(id: id, sourceName: sourceName);
       }
       if (id is num) {
-        return ConsultationDetailArgs(
-          id: id.toInt(),
-          sourceName: sourceName,
-        );
+        return ConsultationDetailArgs(id: id.toInt(), sourceName: sourceName);
       }
       final parsed = int.tryParse(id?.toString() ?? '');
       if (parsed != null) {
@@ -110,6 +107,7 @@ class ConsultationClass {
   const ConsultationClass({
     required this.id,
     required this.name,
+    this.avatarUrl = '',
     required this.checked,
   });
 
@@ -117,15 +115,25 @@ class ConsultationClass {
   /// 的 JS Number（53 位精度）下会丢失末位精度，所以这里始终保持字符串。
   final String id;
   final String name;
+  final String avatarUrl;
   final bool checked;
 
-  ConsultationClass copyWith({bool? checked}) =>
-      ConsultationClass(id: id, name: name, checked: checked ?? this.checked);
+  ConsultationClass copyWith({bool? checked}) => ConsultationClass(
+    id: id,
+    name: name,
+    avatarUrl: avatarUrl,
+    checked: checked ?? this.checked,
+  );
 
   factory ConsultationClass.fromJson(Map raw) {
     return ConsultationClass(
       id: raw['id']?.toString() ?? '',
-      name: raw['name']?.toString() ?? '',
+      name: (raw['groupName'] ?? raw['name'] ?? raw['className'] ?? '')
+          .toString()
+          .trim(),
+      avatarUrl: (raw['logo'] ?? raw['groupLogo'] ?? raw['avatarUrl'] ?? '')
+          .toString()
+          .trim(),
       checked: false,
     );
   }

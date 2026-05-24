@@ -41,17 +41,25 @@ class CollectionShareClass {
   const CollectionShareClass({
     required this.id,
     required this.name,
+    this.avatarUrl = '',
     this.selected = false,
   });
 
-  final int id;
+  final String id;
   final String name;
+  final String avatarUrl;
   final bool selected;
 
-  CollectionShareClass copyWith({int? id, String? name, bool? selected}) {
+  CollectionShareClass copyWith({
+    String? id,
+    String? name,
+    String? avatarUrl,
+    bool? selected,
+  }) {
     return CollectionShareClass(
       id: id ?? this.id,
       name: name ?? this.name,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
       selected: selected ?? this.selected,
     );
   }

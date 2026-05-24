@@ -12,10 +12,10 @@ import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 /// 左主栏（约 697 宽）自上而下：
 /// 1. **顶部统计行**：5 张小白卡（今日批次 / 待审补卡 / 晚归登记 / 异常未闭环 /
 ///    在寝率 98%）+ 1 张「待处理 12」紫色高亮卡，共占 697 宽。
-/// 2. **宿管 7 项快捷入口卡**（697×255）：5+2 网格，每格 44×44 `#EAE5FF`
+/// 2. **宿管 6 项快捷入口卡**（697×255）：5+1 网格，每格 44×44 `#EAE5FF`
 ///    圆角底 + 28×28 图标 + 14/500 文案。
-///    - 按宿舍查寝（16.png）/ 查寝历史（17.png）/ 打卡管理（18.png）/
-///      宿管请假（19.png）/ 校圈（adminHome/10.png）
+///    - 按宿舍查寝（16.png）/ 查寝历史（17.png）/ 宿管请假（19.png）/
+///      校圈（adminHome/10.png）
 ///    - 群聊（adminHome/8.png，带 10+ 红色角标）/ 校长信箱（adminHome/9.png）
 /// 3. **当前事项 + 今日值班** 两张 340×340 大白卡并排：
 ///    - 当前事项：单一灰底 92 高时间卡（紫色「晚查」徽标 + 21:50-22:25 +
@@ -44,7 +44,6 @@ class DormManagerHomeView extends StatelessWidget {
     this.onOpenSchoolCircle,
     this.onOpenDormCheckByRoom,
     this.onOpenDormCheckHistory,
-    this.onOpenCheckInManagement,
     this.onOpenDormManagerLeave,
   });
 
@@ -72,7 +71,6 @@ class DormManagerHomeView extends StatelessWidget {
   /// 宿管专属快捷入口；后续按需要可接入对应独立视图（目前先保留回调）。
   final VoidCallback? onOpenDormCheckByRoom;
   final VoidCallback? onOpenDormCheckHistory;
-  final VoidCallback? onOpenCheckInManagement;
   final VoidCallback? onOpenDormManagerLeave;
 
   @override
@@ -96,7 +94,6 @@ class DormManagerHomeView extends StatelessWidget {
                   onOpenSchoolCircle: onOpenSchoolCircle,
                   onOpenDormCheckByRoom: onOpenDormCheckByRoom,
                   onOpenDormCheckHistory: onOpenDormCheckHistory,
-                  onOpenCheckInManagement: onOpenCheckInManagement,
                   onOpenDormManagerLeave: onOpenDormManagerLeave,
                 ),
                 SizedBox(height: ui(16)),
@@ -185,7 +182,6 @@ class _QuickAction {
 const _dormQuickActions = <_QuickAction>[
   _QuickAction('按宿舍查寝', 'assets/images/schoolA/16.png'),
   _QuickAction('查寝历史', 'assets/images/schoolA/17.png'),
-  _QuickAction('打卡管理', 'assets/images/schoolA/18.png'),
   _QuickAction('宿管请假', 'assets/images/schoolA/19.png'),
   _QuickAction('校圈', 'assets/images/adminHome/10.png'),
   _QuickAction('群聊', 'assets/images/adminHome/8.png', badge: '10+'),
@@ -429,7 +425,7 @@ class _PendingCard extends StatelessWidget {
 }
 
 // ============================================================================
-// 2. 宿管 7 项快捷入口
+// 2. 宿管 6 项快捷入口
 // ============================================================================
 
 class _DormQuickActionsCard extends StatelessWidget {
@@ -439,7 +435,6 @@ class _DormQuickActionsCard extends StatelessWidget {
     this.onOpenSchoolCircle,
     this.onOpenDormCheckByRoom,
     this.onOpenDormCheckHistory,
-    this.onOpenCheckInManagement,
     this.onOpenDormManagerLeave,
   });
 
@@ -448,7 +443,6 @@ class _DormQuickActionsCard extends StatelessWidget {
   final VoidCallback? onOpenSchoolCircle;
   final VoidCallback? onOpenDormCheckByRoom;
   final VoidCallback? onOpenDormCheckHistory;
-  final VoidCallback? onOpenCheckInManagement;
   final VoidCallback? onOpenDormManagerLeave;
 
   VoidCallback? _resolveTap(String label) {
@@ -463,8 +457,6 @@ class _DormQuickActionsCard extends StatelessWidget {
         return onOpenDormCheckByRoom;
       case '查寝历史':
         return onOpenDormCheckHistory;
-      case '打卡管理':
-        return onOpenCheckInManagement;
       case '宿管请假':
         return onOpenDormManagerLeave;
     }

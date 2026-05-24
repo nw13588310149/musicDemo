@@ -44,6 +44,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -360,7 +361,7 @@ class _StudentMyHomeworkViewState extends ConsumerState<StudentMyHomeworkView> {
               if (_loadingList && _records.isEmpty)
                 SizedBox(
                   height: ui(200),
-                  child: const Center(child: CircularProgressIndicator()),
+                  child: const Center(child: AppLoadingIndicator()),
                 )
               else if (!_loadingList && _records.isEmpty)
                 SizedBox(
@@ -2736,14 +2737,7 @@ class _UploadFileTile extends StatelessWidget {
               ),
               SizedBox(width: ui(8)),
               if (uploading)
-                SizedBox(
-                  width: ui(14),
-                  height: ui(14),
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: const AlwaysStoppedAnimation<Color>(_kPurple),
-                  ),
-                )
+                AppLoadingIndicator()
               else
                 InkWell(
                   onTap: hasError ? onRetry : onRemove,

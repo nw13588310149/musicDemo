@@ -9,7 +9,7 @@ import 'package:media_kit/media_kit.dart';
 import '../../../core/network/api_response.dart';
 import '../../../core/network/media_url.dart';
 import '../../music_companion/audio/music_companion_audio_engine.dart';
-import '../../smart_campus/data/book_share_payload.dart';
+import '../../smart_campus/data/chat_share_payload.dart';
 import '../data/music_play_repository.dart';
 import 'music_play_state.dart';
 

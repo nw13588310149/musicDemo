@@ -2,6 +2,7 @@
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -1293,11 +1294,7 @@ class _SearchDropdownPanel extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     if (loading) {
       return Center(
-        child: SizedBox(
-          width: ui(28),
-          height: ui(28),
-          child: const CircularProgressIndicator(strokeWidth: 2),
-        ),
+        child: const AppLoadingIndicator(),
       );
     }
     if (list.isEmpty) {

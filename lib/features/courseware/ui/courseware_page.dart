@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -11,7 +12,7 @@ import '../../../core/constants/app_assets.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/widgets/action_menu.dart';
 import '../../../core/widgets/app_toast.dart';
-import '../../../core/widgets/cloud_folder_more_menu_button.dart';
+import '../../../core/widgets/cloud_folder_card_artwork.dart';
 import '../../../core/widgets/class_share_drawer.dart';
 import '../../../core/widgets/image_gallery_viewer.dart';
 import '../../../core/widgets/scaled_dialog.dart';
@@ -64,7 +65,9 @@ class _MyCloudDrivePageState extends ConsumerState<MyCloudDrivePage> {
         audioUrl: raw['audioUrl']?.toString() ?? '',
         imageUrls: (raw['imageUrls'] as List?)?.cast<String>() ?? const [],
       );
-      if (item.id > 0 || item.audioUrl.isNotEmpty || item.imageUrls.isNotEmpty) {
+      if (item.id > 0 ||
+          item.audioUrl.isNotEmpty ||
+          item.imageUrls.isNotEmpty) {
         ref.read(cloudDriveControllerProvider.notifier).openPreview(item);
       }
     });
@@ -256,13 +259,7 @@ class _MyCloudDrivePageState extends ConsumerState<MyCloudDrivePage> {
                           borderRadius: BorderRadius.circular(ui(16)),
                         ),
                         child: Center(
-                          child: SizedBox(
-                            width: ui(28),
-                            height: ui(28),
-                            child: const CircularProgressIndicator(
-                              strokeWidth: 2,
-                            ),
-                          ),
+                          child: const AppLoadingIndicator(),
                         ),
                       ),
                     ),
@@ -503,6 +500,7 @@ class _MyCloudDrivePageState extends ConsumerState<MyCloudDrivePage> {
                   (item) => ClassShareItem(
                     id: item.id,
                     name: item.name,
+                    avatarUrl: item.avatarUrl,
                     checked: selected.contains(item.id),
                   ),
                 )
@@ -581,17 +579,10 @@ class _FileRenameInlineOverlay extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Center(
-                    child: Text(
-                      '重命名资料',
-                      style: appDialogTitleTextStyle(ui),
-                    ),
+                    child: Text('重命名资料', style: appDialogTitleTextStyle(ui)),
                   ),
                   SizedBox(
-                    height: ui(
-                      appDialogGapBeforeFirstInput(
-                        topInset: 25,
-                      ),
-                    ),
+                    height: ui(appDialogGapBeforeFirstInput(topInset: 25)),
                   ),
                   SizedBox(
                     height: ui(45),
@@ -858,9 +849,7 @@ class _CloudContentArea extends StatelessWidget {
               children: [
                 Positioned.fill(
                   child: state.loading
-                      ? const Center(
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
+                      ? const Center(child: AppLoadingIndicator())
                       : state.categories.isEmpty
                       ? const _CloudEmptyState(message: '暂无文件')
                       : state.isFolderView
@@ -1579,7 +1568,14 @@ class _FolderCardState extends State<_FolderCard> {
               borderRadius: BorderRadius.circular(ui(14)),
               child: Stack(
                 children: [
-                  Positioned.fill(child: _FolderArtwork(item: item)),
+                  Positioned.fill(
+                    child: CloudFolderCardArtwork(
+                      hasContent: item.hasContent,
+                      isCreateShortcut: isCreate,
+                      menuTriggerKey: isCreate ? null : _menuTriggerKey,
+                      onMenuTap: isCreate ? null : _openActionMenu,
+                    ),
+                  ),
                   Positioned(
                     left: ui(10),
                     bottom: ui(28),
@@ -1606,16 +1602,6 @@ class _FolderCardState extends State<_FolderCard> {
                       ),
                     ),
                   ),
-                  // 右上角操作菜单（仅真实文件夹显示，新建快捷方式不显示）
-                  if (!isCreate)
-                    Positioned(
-                      top: ui(32),
-                      right: ui(12),
-                      child: CloudFolderMoreMenuButton(
-                        key: _menuTriggerKey,
-                        onTap: _openActionMenu,
-                      ),
-                    ),
                 ],
               ),
             ),
@@ -1921,20 +1907,6 @@ class _FloatingCreateButton extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-class _FolderArtwork extends StatelessWidget {
-  const _FolderArtwork({required this.item});
-
-  final CloudFolderItem item;
-
-  @override
-  Widget build(BuildContext context) {
-    final asset = item.isCreateShortcut || item.title.contains('新建文件夹')
-        ? AppAssets.cloudFolderEmptyBg
-        : AppAssets.cloudFolderFilledBg;
-    return Image.asset(asset, fit: BoxFit.cover, gaplessPlayback: true);
   }
 }
 
@@ -2420,10 +2392,7 @@ class _PreviewImagePager extends StatelessWidget {
                           child: SizedBox(
                             width: ui(28),
                             height: ui(28),
-                            child: CircularProgressIndicator(
-                              strokeWidth: ui(2),
-                              color: const Color(0xFF8741FF),
-                            ),
+                            child: AppLoadingIndicator(),
                           ),
                         ),
                         errorWidget: (_, _, _) => Center(
@@ -3158,10 +3127,7 @@ class _PreviewScoreSheetState extends State<_PreviewScoreSheet> {
                         child: SizedBox(
                           width: ui(28),
                           height: ui(28),
-                          child: CircularProgressIndicator(
-                            strokeWidth: ui(2),
-                            color: const Color(0xFF8741FF),
-                          ),
+                          child: AppLoadingIndicator(),
                         ),
                       ),
                     ),
@@ -4111,17 +4077,10 @@ class _UploadDialogState extends State<_UploadDialog> {
                 children: [
                   // ── title ──
                   Center(
-                    child: Text(
-                      '上传课件',
-                      style: appDialogTitleTextStyle(ui),
-                    ),
+                    child: Text('上传课件', style: appDialogTitleTextStyle(ui)),
                   ),
                   SizedBox(
-                    height: ui(
-                      appDialogGapBeforeFirstInput(
-                        topInset: 25,
-                      ),
-                    ),
+                    height: ui(appDialogGapBeforeFirstInput(topInset: 25)),
                   ),
 
                   // ── courseware title input ──
@@ -4411,15 +4370,9 @@ class _UploadDialogState extends State<_UploadDialog> {
                 child: Container(
                   color: Colors.black.withValues(alpha: 0.45),
                   child: Center(
-                    child: SizedBox(
-                      width: ui(28),
-                      height: ui(28),
-                      child: CircularProgressIndicator(
-                        value: slot.progress > 0 ? slot.progress : null,
-                        strokeWidth: ui(2.5),
-                        color: Colors.white,
-                        backgroundColor: Colors.white.withValues(alpha: 0.3),
-                      ),
+                    child: AppLoadingIndicator(
+                      value: slot.progress > 0 ? slot.progress : null,
+                      color: Colors.white,
                     ),
                   ),
                 ),

@@ -33,12 +33,15 @@
 //      #FF6A00 待审核 / #0CAC40·#12CE51 已通过
 // =============================================================================
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/constants/app_assets.dart';
 import '../../../core/network/api_response.dart';
 import '../../../core/widgets/app_date_time_pickers.dart';
 import '../../../core/widgets/app_toast.dart';
@@ -125,6 +128,7 @@ class _AdminScheduleManagementViewState
   List<({String id, String name})> _classes = const [];
   String? _selectedClassId;
   String _selectedClassName = '加载中…';
+  bool _classesLoading = true;
 
   /// 「小课申请审核」用的字典：申请记录里只有 ID（classId / classroomId /
   /// subjectId / teacherId），需要查字典还原成名称才能在卡片上显示。
@@ -378,8 +382,8 @@ class _AdminScheduleManagementViewState
   List<_ApplyRecord>? _applies;
   String? _applyError;
 
-  /// 当前班级下「待审核」小课申请数量（角标）。优先取列表接口里
-  /// `status=0` 查询返回的分页 total；拿不到时再数列表里的 pending。
+  /// 全量「待审核」小课申请数量（角标）。来自 `schoolSmallCourseApplyList`
+  /// `status=0` 的分页 total。
   int _pendingApplyCount = 0;
 
   @override
@@ -387,6 +391,7 @@ class _AdminScheduleManagementViewState
     super.initState();
     _weekStart = _mondayOf(DateTime.now());
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      unawaited(_loadPendingApplyCount());
       // 接口要求 classId 必填 → 必须先拉班级列表，拿到第 1 项作为默认班级，
       // 再依次拉左侧时间表（按 classId 维度）+ 课表，保证 lineNum → slotIdx
       // 映射在解析课表前到位。
@@ -406,6 +411,7 @@ class _AdminScheduleManagementViewState
       await Future.wait([_loadTimeConfig(), _loadApplyDirectories()]);
       if (!mounted) return;
       _loadSchedule();
+      unawaited(_loadPendingApplyCount());
       _loadApplies();
     });
   }
@@ -453,9 +459,17 @@ class _AdminScheduleManagementViewState
   }
 
   Future<void> _loadClasses() async {
+    setState(() => _classesLoading = true);
     final repo = ref.read(adminRepositoryProvider);
     final resp = await repo.classList();
-    if (!mounted || !resp.isSuccess) return;
+    if (!mounted) return;
+    if (!resp.isSuccess) {
+      setState(() {
+        _classesLoading = false;
+        _selectedClassName = '选择班级';
+      });
+      return;
+    }
     final rows = _extractList(resp);
     final list = <({String id, String name})>[];
     final nameById = <String, String>{};
@@ -471,7 +485,35 @@ class _AdminScheduleManagementViewState
     setState(() {
       _classes = list;
       _classNameById = nameById;
+      _classesLoading = false;
+      if (list.isNotEmpty &&
+          (_selectedClassId == null ||
+              !list.any((c) => c.id == _selectedClassId))) {
+        _selectedClassId = list.first.id;
+        _selectedClassName = list.first.name;
+      } else if (_selectedClassId != null) {
+        _selectedClassName = nameById[_selectedClassId] ?? _selectedClassName;
+      } else {
+        _selectedClassName = '选择班级';
+      }
     });
+  }
+
+  /// 顶部「小课申请审核」角标：全量待审核条数（`status=0` 分页 total）。
+  Future<void> _loadPendingApplyCount() async {
+    final repo = ref.read(adminRepositoryProvider);
+    final resp = await repo.schoolSmallCourseApplyList(
+      current: 1,
+      size: 1,
+      status: 0,
+    );
+    if (!mounted) return;
+
+    var pendingTotal = 0;
+    if (resp.isSuccess) {
+      pendingTotal = _extractPageTotal(resp) ?? 0;
+    }
+    setState(() => _pendingApplyCount = pendingTotal);
   }
 
   /// 拉「小课申请审核」要用的字典 —— 教室 / 教师 / 科目（per 班级）。
@@ -824,36 +866,12 @@ class _AdminScheduleManagementViewState
   }
 
   Future<void> _loadApplies() async {
-    final classId = _selectedClassId;
-    if (classId == null || classId.isEmpty) {
-      if (!mounted) return;
-      setState(() {
-        _applies = const [];
-        _applyError = null;
-        _applyLoading = false;
-        _pendingApplyCount = 0;
-      });
-      return;
-    }
-
     setState(() => _applyLoading = true);
     final repo = ref.read(adminRepositoryProvider);
 
-    // 并行：① 全量列表用于渲染；② 仅待审核 + 最小 size，用分页 total 做角标。
-    final results = await Future.wait([
-      repo.schoolSmallCourseApplyList(current: 1, size: 100, classId: classId),
-      repo.schoolSmallCourseApplyList(
-        current: 1,
-        size: 1,
-        classId: classId,
-        status: 0,
-      ),
-    ]);
+    final listResp = await repo.schoolSmallCourseApplyList(current: 1, size: 100);
 
     if (!mounted) return;
-
-    final listResp = results[0];
-    final pendingResp = results[1];
 
     if (!listResp.isSuccess) {
       setState(() {
@@ -861,7 +879,6 @@ class _AdminScheduleManagementViewState
             listResp.msg.isEmpty ? '加载小班课申请失败' : listResp.msg;
         _applies = const [];
         _applyLoading = false;
-        _pendingApplyCount = 0;
       });
       return;
     }
@@ -881,21 +898,10 @@ class _AdminScheduleManagementViewState
       if (r.id.isNotEmpty) parsed.add(r);
     }
 
-    var pendingTotal = 0;
-    if (pendingResp.isSuccess) {
-      pendingTotal =
-          _extractPageTotal(pendingResp) ??
-          parsed.where((r) => r.status == _ApplyStatus.pending).length;
-    } else {
-      pendingTotal =
-          parsed.where((r) => r.status == _ApplyStatus.pending).length;
-    }
-
     setState(() {
       _applies = parsed;
       _applyError = null;
       _applyLoading = false;
-      _pendingApplyCount = pendingTotal;
     });
   }
 
@@ -1059,7 +1065,7 @@ class _AdminScheduleManagementViewState
       return;
     }
     AppToast.show(context, '已通过 ${record.title}');
-    await _loadApplies();
+    await Future.wait([_loadApplies(), _loadPendingApplyCount()]);
   }
 
   Future<void> _reject(_ApplyRecord record) async {
@@ -1077,7 +1083,7 @@ class _AdminScheduleManagementViewState
       return;
     }
     AppToast.show(context, '已驳回 ${record.title}');
-    await _loadApplies();
+    await Future.wait([_loadApplies(), _loadPendingApplyCount()]);
   }
 
   // —— Build ————————————————————————————————————————————————
@@ -1103,6 +1109,7 @@ class _AdminScheduleManagementViewState
                 setState(() => _tab = t);
                 if (t == _AdminScheduleTab.applyAudit) {
                   _loadApplies();
+                  unawaited(_loadPendingApplyCount());
                 }
               },
             ),
@@ -1127,11 +1134,12 @@ class _AdminScheduleManagementViewState
           padding: EdgeInsets.fromLTRB(ui(20), ui(0), ui(20), ui(12)),
           child: Row(
             children: [
-              _ClassDropdownPill(
-                label: _selectedClassName,
-                onTap: () async {
-                  final picked = await _pickClass(context);
-                  if (picked == null || !mounted) return;
+              _ScheduleClassFilterField(
+                options: _classes,
+                selectedClassId: _selectedClassId,
+                loading: _classesLoading,
+                onChanged: (picked) async {
+                  if (picked.id == _selectedClassId) return;
                   setState(() {
                     _selectedClassId = picked.id;
                     _selectedClassName = picked.name;
@@ -1141,7 +1149,6 @@ class _AdminScheduleManagementViewState
                   await _loadTimeConfig();
                   if (!mounted) return;
                   _loadSchedule();
-                  await _loadApplies();
                 },
               ),
               const Spacer(),
@@ -1184,7 +1191,7 @@ class _AdminScheduleManagementViewState
                         borderRadius: BorderRadius.circular(ui(12)),
                       ),
                       alignment: Alignment.center,
-                      child: const CircularProgressIndicator(color: _kPurple),
+                      child: const AppLoadingIndicator(),
                     ),
                   ),
                 ),
@@ -1219,7 +1226,7 @@ class _AdminScheduleManagementViewState
             Padding(
               padding: EdgeInsets.symmetric(vertical: ui(40)),
               child: const Center(
-                child: CircularProgressIndicator(color: _kPurple),
+                child: AppLoadingIndicator(),
               ),
             )
           else if (list.isEmpty)
@@ -1233,70 +1240,6 @@ class _AdminScheduleManagementViewState
             ),
         ],
       ),
-    );
-  }
-
-  /// 班级选择器：来自 `classList` 的真实班级。返回 (id, name) 元组；
-  /// 点取消或列表为空都返回 null。`classId` 必填，所以这里不再提供
-  /// "全校统一课表" 的伪选项。
-  Future<({String id, String name})?> _pickClass(BuildContext context) async {
-    if (_classes.isEmpty) return null;
-    return showScaledDialog<({String id, String name})>(
-      context: context,
-      builder: (dialogContext) {
-        final ui = DashboardScaleScope.of(dialogContext).ui;
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: EdgeInsets.symmetric(
-            horizontal: ui(32),
-            vertical: ui(24),
-          ),
-          child: Container(
-            width: ui(360),
-            constraints: BoxConstraints(maxHeight: ui(420)),
-            padding: EdgeInsets.all(ui(8)),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(ui(16)),
-            ),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (final c in _classes)
-                    InkWell(
-                      onTap: () => Navigator.of(
-                        dialogContext,
-                      ).pop((id: c.id, name: c.name)),
-                      borderRadius: BorderRadius.circular(ui(8)),
-                      child: Container(
-                        width: double.infinity,
-                        padding: EdgeInsets.symmetric(
-                          horizontal: ui(16),
-                          vertical: ui(14),
-                        ),
-                        child: Text(
-                          c.name,
-                          style: TextStyle(
-                            fontSize: ui(14),
-                            color: c.id == _selectedClassId
-                                ? _kPurple
-                                : _kTextDark,
-                            fontFamily: 'PingFang SC',
-                            fontWeight: c.id == _selectedClassId
-                                ? AppFont.w600
-                                : AppFont.w400,
-                            height: 1.2,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
     );
   }
 }
@@ -1317,7 +1260,7 @@ class _AdminScheduleHeader extends StatelessWidget {
   final _AdminScheduleTab tab;
   final ValueChanged<_AdminScheduleTab> onTabChanged;
 
-  /// 当前班级下待审核申请数；≤0 时不显示角标。
+  /// 全量待审核申请数；≤0 时不显示角标。
   final int applyPendingCount;
 
   @override
@@ -1331,10 +1274,10 @@ class _AdminScheduleHeader extends StatelessWidget {
           topLeft: Radius.circular(ui(16)),
           topRight: Radius.circular(ui(16)),
         ),
-        gradient: const LinearGradient(
-          begin: Alignment.bottomLeft,
-          end: Alignment.topRight,
-          colors: [Colors.white, Color(0xFFF9EDFF)],
+        image: DecorationImage(
+          image: AssetImage(AppAssets.xiaoquanHeaderBg),
+          fit: BoxFit.cover,
+          alignment: Alignment.centerRight,
         ),
       ),
       child: Stack(
@@ -1514,44 +1457,102 @@ class _AdminTabChip extends StatelessWidget {
 // tab 1 - 子 header：班级 dropdown + 查看/编辑
 // =============================================================================
 
-class _ClassDropdownPill extends StatelessWidget {
-  const _ClassDropdownPill({required this.label, required this.onTap});
+class _ScheduleClassFilterField extends StatefulWidget {
+  const _ScheduleClassFilterField({
+    required this.options,
+    required this.selectedClassId,
+    required this.loading,
+    required this.onChanged,
+  });
 
-  final String label;
-  final VoidCallback onTap;
+  final List<({String id, String name})> options;
+  final String? selectedClassId;
+  final bool loading;
+  final ValueChanged<({String id, String name})> onChanged;
+
+  @override
+  State<_ScheduleClassFilterField> createState() =>
+      _ScheduleClassFilterFieldState();
+}
+
+class _ScheduleClassFilterFieldState extends State<_ScheduleClassFilterField> {
+  final _fieldKey = GlobalKey();
+  bool _open = false;
+
+  ({String id, String name})? get _selected {
+    for (final o in widget.options) {
+      if (o.id == widget.selectedClassId) return o;
+    }
+    return null;
+  }
+
+  String get _label {
+    if (widget.loading) return '加载班级…';
+    return _selected?.name ?? '选择班级';
+  }
+
+  Future<void> _openMenu() async {
+    if (widget.loading || widget.options.isEmpty) return;
+    final fieldCtx = _fieldKey.currentContext;
+    if (fieldCtx == null) return;
+    setState(() => _open = true);
+    final selected = await showAppPopupSelector<({String id, String name})>(
+      anchorContext: fieldCtx,
+      items: widget.options,
+      value: _selected,
+      itemLabel: (o) => o.name,
+      width: DashboardScaleScope.of(fieldCtx).ui(280),
+    );
+    if (!mounted) return;
+    setState(() => _open = false);
+    if (selected != null) widget.onChanged(selected);
+  }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(ui(8)),
+      key: _fieldKey,
+      onTap: _openMenu,
+      borderRadius: BorderRadius.circular(ui(12)),
       child: Container(
-        height: ui(36),
-        padding: EdgeInsets.symmetric(horizontal: ui(16)),
+        width: ui(220),
+        height: ui(44),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(ui(8)),
+          borderRadius: BorderRadius.circular(ui(12)),
           border: Border.all(color: _kBorderSoft),
         ),
+        padding: EdgeInsets.symmetric(horizontal: ui(16)),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: ui(12),
-                color: _kTextDark,
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w400,
-                height: 20 / 12,
+            Icon(
+              Icons.school_outlined,
+              size: ui(16),
+              color: const Color(0xFFC6C6C6),
+            ),
+            SizedBox(width: ui(10)),
+            Expanded(
+              child: Text(
+                _label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: ui(14),
+                  height: 1.2,
+                  color: _kTextDark,
+                  fontFamily: 'PingFang SC',
+                ),
               ),
             ),
-            SizedBox(width: ui(6)),
-            Icon(
-              Icons.keyboard_arrow_down_rounded,
-              size: ui(16),
-              color: _kTextDark,
+            AnimatedRotation(
+              turns: _open ? 0.5 : 0,
+              duration: const Duration(milliseconds: 160),
+              child: Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: ui(18),
+                color: const Color(0xFFC6C6C6),
+              ),
             ),
           ],
         ),
@@ -2963,8 +2964,7 @@ class _AdminEditCourseDrawerState
   String? _subjectId;
   bool _loadingSubjects = false;
 
-  // 颜色：支持色板（_palette[1] 默认）+ 自定义"取色"模式（仍使用调色板里的
-  // 当前色，不再单独调出 native picker，与 teacher 端一致）。
+  // 颜色：色板选择（_palette[1] 默认）。
   static const List<Color> _palette = <Color>[
     Color(0xFF1E1E1E),
     Color(0xFFE6D0FF),
@@ -2982,7 +2982,6 @@ class _AdminEditCourseDrawerState
   ];
 
   Color _color = _palette[1];
-  bool _customMode = false;
   String _reuse = '不复用';
   bool _submitting = false;
 
@@ -3200,7 +3199,10 @@ class _AdminEditCourseDrawerState
                     SizedBox(height: ui(12)),
                     _ReadonlyField(text: widget.slotLabel),
                     SizedBox(height: ui(20)),
-                    const _SectionLabel(label: '班级'),
+                    const _SectionLabel(
+                      icon: Icons.school_outlined,
+                      label: '班级',
+                    ),
                     SizedBox(height: ui(12)),
                     PopupSelectorField<String>(
                       value: _classId ?? '',
@@ -3290,28 +3292,8 @@ class _AdminEditCourseDrawerState
                     SizedBox(height: ui(12)),
                     _ColorSwatchRow(
                       colors: _palette,
-                      selected: _customMode ? null : _color,
-                      onSelect: (c) => setState(() {
-                        _color = c;
-                        _customMode = false;
-                      }),
-                    ),
-                    SizedBox(height: ui(12)),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _ColorModeChip(
-                          label: _hexLabel,
-                          selected: !_customMode,
-                          onTap: () => setState(() => _customMode = false),
-                        ),
-                        SizedBox(width: ui(12)),
-                        _ColorModeChip(
-                          label: '取色',
-                          selected: _customMode,
-                          onTap: () => setState(() => _customMode = true),
-                        ),
-                      ],
+                      selected: _color,
+                      onSelect: (c) => setState(() => _color = c),
                     ),
                     SizedBox(height: ui(20)),
                     const _SectionLabel(
@@ -3477,28 +3459,38 @@ class _ColorSwatchRow extends StatelessWidget {
   final Color? selected;
   final ValueChanged<Color> onSelect;
 
+  static bool _sameColor(Color? a, Color b) {
+    if (a == null) return false;
+    return a.toARGB32() == b.toARGB32();
+  }
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
       height: ui(48),
-      padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(14)),
+      padding: EdgeInsets.symmetric(horizontal: ui(16)),
+      alignment: Alignment.centerLeft,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(ui(8)),
         border: Border.all(color: _kInnerGray, width: 1),
       ),
-      child: Row(
-        children: [
-          for (var i = 0; i < colors.length; i++) ...[
-            if (i > 0) SizedBox(width: ui(16)),
-            _ColorSwatch(
-              color: colors[i],
-              isSelected: selected == colors[i],
-              onTap: () => onSelect(colors[i]),
-            ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        child: Row(
+          children: [
+            for (var i = 0; i < colors.length; i++) ...[
+              if (i > 0) SizedBox(width: ui(12)),
+              _ColorSwatch(
+                color: colors[i],
+                isSelected: _sameColor(selected, colors[i]),
+                onTap: () => onSelect(colors[i]),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -3518,65 +3510,37 @@ class _ColorSwatch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return InkWell(
+    const dotSize = 22.0;
+    const ringWidth = 2.0;
+    const outerSize = dotSize + ringWidth * 2;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: onTap,
-      customBorder: const CircleBorder(),
-      child: Container(
-        width: ui(20),
-        height: ui(20),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: isSelected ? Colors.white : color,
-          border: Border.all(
-            color: isSelected ? color : _kBorderSoft,
-            width: 1,
+      child: SizedBox(
+        width: ui(outerSize),
+        height: ui(outerSize),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: isSelected ? _kPurple : Colors.transparent,
+              width: ui(ringWidth),
+            ),
           ),
-        ),
-        child: isSelected
-            ? Container(
-                width: ui(14),
-                height: ui(14),
-                decoration: BoxDecoration(shape: BoxShape.circle, color: color),
-              )
-            : null,
-      ),
-    );
-  }
-}
-
-class _ColorModeChip extends StatelessWidget {
-  const _ColorModeChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(ui(8)),
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: ui(48), vertical: ui(12)),
-        decoration: BoxDecoration(
-          color: selected ? const Color(0xFFEFE5FF) : _kInnerGray,
-          borderRadius: BorderRadius.circular(ui(8)),
-          border: selected ? Border.all(color: _kPurple, width: 1) : null,
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: ui(16),
-            color: selected ? _kPurple : Colors.black,
-            fontFamily: 'PingFang SC',
-            fontWeight: AppFont.w600,
-            height: 1,
+          child: Center(
+            child: Container(
+              width: ui(dotSize),
+              height: ui(dotSize),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: color,
+                border: Border.all(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  width: 1,
+                ),
+              ),
+            ),
           ),
         ),
       ),

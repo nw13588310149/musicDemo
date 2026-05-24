@@ -17,6 +17,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -233,10 +234,7 @@ class _TeacherClassWorkbenchViewState
           banner,
           SizedBox(height: ui(80)),
           Center(
-            child: CircularProgressIndicator(
-              color: _kPurple,
-              strokeWidth: 2,
-            ),
+            child: AppLoadingIndicator(),
           ),
         ],
       );
@@ -667,10 +665,7 @@ class _NoticeSectionState extends ConsumerState<_NoticeSection> {
               ? Padding(
                   padding: EdgeInsets.symmetric(vertical: ui(20)),
                   child: Center(
-                    child: CircularProgressIndicator(
-                      color: _kPurple,
-                      strokeWidth: 2,
-                    ),
+                    child: AppLoadingIndicator(),
                   ),
                 )
               : _notices.isEmpty
@@ -2329,7 +2324,7 @@ class _StudentsTabState extends ConsumerState<_StudentsTab> {
           ),
           SizedBox(height: ui(40)),
           Center(
-            child: CircularProgressIndicator(color: _kPurple, strokeWidth: 2),
+            child: AppLoadingIndicator(),
           ),
         ],
       );
@@ -3902,10 +3897,7 @@ class _StudentDetailPanelState extends ConsumerState<_StudentDetailPanel> {
               Expanded(
                 child: _loadingDetail
                     ? Center(
-                        child: CircularProgressIndicator(
-                          color: _kPurple,
-                          strokeWidth: 2,
-                        ),
+                        child: AppLoadingIndicator(),
                       )
                     : SingleChildScrollView(
                         padding: EdgeInsets.fromLTRB(
@@ -4137,14 +4129,7 @@ class _StudentDetailPanelState extends ConsumerState<_StudentDetailPanel> {
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
                                     if (_saving)
-                                      SizedBox(
-                                        width: ui(16),
-                                        height: ui(16),
-                                        child: const CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: Colors.white,
-                                        ),
-                                      )
+                                      const AppLoadingIndicator(size: 16, color: Colors.white)
                                     else
                                       Icon(
                                         Icons.check_rounded,

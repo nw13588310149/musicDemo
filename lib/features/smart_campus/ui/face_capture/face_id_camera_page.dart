@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../core/theme/app_font.dart';
@@ -271,7 +272,7 @@ class _FaceIdCameraPageState extends State<FaceIdCameraPage> {
                   child: _initError != null
                       ? _ErrorPane(message: _initError!)
                       : _switchingCamera
-                      ? const Center(child: CircularProgressIndicator(color: Colors.white))
+                      ? const Center(child: AppLoadingIndicator(color: Colors.white))
                       : _controller?.value.isInitialized == true
                       ? LayoutBuilder(
                           builder: (context, constraints) {
@@ -295,7 +296,7 @@ class _FaceIdCameraPageState extends State<FaceIdCameraPage> {
                           },
                         )
                       : const Center(
-                          child: CircularProgressIndicator(color: Colors.white),
+                          child: AppLoadingIndicator(color: Colors.white),
                         ),
                 ),
               ),

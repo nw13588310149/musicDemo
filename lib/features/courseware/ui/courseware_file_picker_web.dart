@@ -25,9 +25,10 @@ Future<List<CoursewarePickedFile>> pickCoursewareFilesImpl({
   CoursewarePickType type = CoursewarePickType.any,
 }) {
   // accept 用于约束系统选择器只显示对应类型，并在移动浏览器上让
-  // image/audio 直接拉起相册 / 录音器，避免再走"文件管理"。
+  // image/video/audio 直接拉起相册 / 录音器，避免再走"文件管理"。
   final accept = switch (type) {
     CoursewarePickType.image => 'image/*',
+    CoursewarePickType.video => 'video/*',
     CoursewarePickType.audio => 'audio/*',
     CoursewarePickType.any => '*/*',
   };

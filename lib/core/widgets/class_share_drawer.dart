@@ -1,17 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 import '../../features/shell/ui/shell_layout.dart';
-import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
+import '../network/media_url.dart';
 
 class ClassShareItem {
   const ClassShareItem({
     required this.id,
     required this.name,
+    this.avatarUrl = '',
     this.checked = false,
   });
 
   final String id;
   final String name;
+  final String avatarUrl;
   final bool checked;
 }
 
@@ -100,9 +104,7 @@ class ClassShareDrawer extends StatelessWidget {
                 SizedBox(height: ui(16)),
                 Expanded(
                   child: loading
-                      ? const Center(
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
+                      ? const Center(child: AppLoadingIndicator())
                       : classes.isEmpty
                       ? const _ShareDrawerEmpty()
                       : ListView.separated(
@@ -260,34 +262,21 @@ class _ClassShareRow extends StatelessWidget {
     return Material(
       color: const Color(0xFFF5F6FA),
       borderRadius: BorderRadius.circular(ui(16)),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(ui(16)),
+      child: GestureDetector(
         onTap: onTap,
+        behavior: HitTestBehavior.opaque,
         child: Container(
           height: ui(80),
           padding: EdgeInsets.symmetric(horizontal: ui(16)),
           child: Row(
             children: [
-              Container(
-                width: ui(24),
-                height: ui(24),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: item.checked
-                        ? const Color(0xFF8741FF)
-                        : const Color(0xFFCECED1),
-                    width: 1,
-                  ),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(ui(8)),
+                child: SizedBox(
+                  width: ui(44),
+                  height: ui(44),
+                  child: _ClassAvatar(item: item),
                 ),
-                child: item.checked
-                    ? Icon(
-                        Icons.check_rounded,
-                        size: ui(16),
-                        color: const Color(0xFF8741FF),
-                      )
-                    : null,
               ),
               SizedBox(width: ui(16)),
               Expanded(
@@ -303,8 +292,77 @@ class _ClassShareRow extends StatelessWidget {
                   ),
                 ),
               ),
+              SizedBox(width: ui(16)),
+              Container(
+                width: ui(24),
+                height: ui(24),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: item.checked
+                      ? const Color(0xFF8741FF)
+                      : Colors.transparent,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: item.checked
+                        ? const Color(0xFF8741FF)
+                        : const Color(0xFFCECED1),
+                    width: 1,
+                  ),
+                ),
+                child: item.checked
+                    ? Icon(
+                        Icons.check_rounded,
+                        size: ui(16),
+                        color: Colors.white,
+                      )
+                    : null,
+              ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ClassAvatar extends StatelessWidget {
+  const _ClassAvatar({required this.item});
+
+  final ClassShareItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final avatarUrl = MediaUrl.resolve(item.avatarUrl);
+    if (avatarUrl.isNotEmpty) {
+      return Image.network(
+        avatarUrl,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => _ClassAvatarFallback(item: item),
+      );
+    }
+    return _ClassAvatarFallback(item: item);
+  }
+}
+
+class _ClassAvatarFallback extends StatelessWidget {
+  const _ClassAvatarFallback({required this.item});
+
+  final ClassShareItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final text = item.name.trim().isEmpty ? '群' : item.name.trim()[0];
+    return Container(
+      alignment: Alignment.center,
+      color: const Color(0xFFEDE6FF),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: const Color(0xFF8741FF),
+          fontSize: ui(16),
+          fontFamily: 'PingFang SC',
+          fontWeight: AppFont.w600,
         ),
       ),
     );
@@ -353,14 +411,7 @@ class _ShareSendButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(ui(12)),
         ),
         child: loading
-            ? SizedBox(
-                width: ui(20),
-                height: ui(20),
-                child: const CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                ),
-              )
+            ? const AppLoadingIndicator(size: 16, color: Colors.white)
             : Text(
                 '发送',
                 style: TextStyle(

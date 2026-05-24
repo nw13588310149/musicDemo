@@ -2,6 +2,10 @@ import 'package:flutter/foundation.dart';
 
 /// 校圈删除权限（前端展示用；最终以后端校验为准）。
 ///
+/// 管理员判定：`myInfo` 的 role/identity + `/teacher/teacherRole` 返回的
+/// roles CSV（含 `headmaster` / `manager` / `principal` / `admin` 任一即
+/// 视为最高权限管理员）。
+///
 /// - 删帖：管理员任意删；普通用户仅删自己发布的帖子。
 /// - 删评论：管理员任意删；评论作者删自己的评论；**帖子作者**可删自己
 ///   帖子下的任意评论（普通用户管理自己动态下的评论）。
@@ -28,7 +32,53 @@ class CirclePermissions {
   static bool shellUserIsAdmin({required String role, required String identity}) {
     if (role.trim().toLowerCase() == 'admin') return true;
     if (identity.contains('管理员')) return true;
+    if (identity.contains('校长')) return true;
     return false;
+  }
+
+  /// `teacherRole` 接口 `roles` CSV 里表示管理员/校长的 token。
+  /// 与 [SmartCampusController._teacherRoleTokenToCampus] 对齐。
+  static const Set<String> _teacherRoleAdminTokens = {
+    'headmaster',
+    'manager',
+    'principal',
+    'admin',
+  };
+
+  static bool teacherRoleTokenIsAdmin(String token) {
+    return _teacherRoleAdminTokens.contains(token.trim().toLowerCase());
+  }
+
+  /// 解析 `/app/school/v2/teacher/teacherRole` 返回体，判断身份集合中是否
+  /// 包含管理员。多重身份时只要含 admin 类 token，即视为最高权限管理员。
+  static bool teacherRoleDataHasAdmin(dynamic data) {
+    if (data is! List) return false;
+    for (final item in data) {
+      if (item is! Map) continue;
+      final raw = item['roles'];
+      if (raw is! String || raw.isEmpty) continue;
+      for (final token in raw.split(',')) {
+        if (teacherRoleTokenIsAdmin(token)) return true;
+      }
+    }
+    return false;
+  }
+
+  /// 是否应调用 `teacherRole` 以补全校圈管理员判定。
+  ///
+  /// 已从 myInfo 判定为管理员 / 学生时跳过；其余身份（如 `teacher`、
+  /// `headTeacher`）仍可能通过 teacherRole 携带 `headmaster` 等管理员 token。
+  static bool shouldFetchTeacherRole({
+    required String role,
+    required String identity,
+  }) {
+    if (shellUserIsAdmin(role: role, identity: identity)) return false;
+    final normalized = role.trim().toLowerCase().replaceAll(RegExp(r'[_\-]'), '');
+    if (normalized == 'student' || normalized == 'stu' || normalized == 'pupil') {
+      return false;
+    }
+    if (identity.contains('学生') || identity.contains('同学')) return false;
+    return true;
   }
 }
 

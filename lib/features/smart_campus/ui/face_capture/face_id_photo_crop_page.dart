@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 
 import '../../../../core/theme/app_font.dart';
 import '../../../../core/widgets/app_toast.dart';
@@ -283,7 +284,7 @@ class _FaceIdPhotoCropPageState extends State<FaceIdPhotoCropPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircularProgressIndicator(color: Colors.white),
+            AppLoadingIndicator(color: Colors.white),
             SizedBox(height: 12),
             Text(
               '正在加载图片…',
@@ -304,7 +305,7 @@ class _FaceIdPhotoCropPageState extends State<FaceIdPhotoCropPage> {
     }
     final displayBytes = _displayBytes;
     if (displayBytes == null) {
-      return const Center(child: CircularProgressIndicator(color: Colors.white));
+      return const Center(child: AppLoadingIndicator(color: Colors.white));
     }
 
     return LayoutBuilder(
@@ -356,7 +357,7 @@ class _FaceIdCropViewport extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (viewportSize == Size.zero || imageSize == Size.zero) {
-      return const Center(child: CircularProgressIndicator(color: Colors.white));
+      return const Center(child: AppLoadingIndicator(color: Colors.white));
     }
 
     final drawW = imageSize.width * scale;

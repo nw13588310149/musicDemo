@@ -9,18 +9,17 @@ import '../data/video_tutorial_repository.dart';
 import 'video_tutorial_state.dart';
 
 final videoTutorialControllerProvider = StateNotifierProvider.autoDispose
-    .family<VideoTutorialController, VideoTutorialState, VideoTutorialPageArgs>((
-      ref,
-      args,
-    ) {
-      final repository = ref.watch(videoTutorialRepositoryProvider);
-      final storage = ref.watch(appStorageProvider);
-      return VideoTutorialController(
-        repository: repository,
-        storage: storage,
-        args: args,
-      );
-    });
+    .family<VideoTutorialController, VideoTutorialState, VideoTutorialPageArgs>(
+      (ref, args) {
+        final repository = ref.watch(videoTutorialRepositoryProvider);
+        final storage = ref.watch(appStorageProvider);
+        return VideoTutorialController(
+          repository: repository,
+          storage: storage,
+          args: args,
+        );
+      },
+    );
 
 class VideoTutorialController extends StateNotifier<VideoTutorialState> {
   VideoTutorialController({
@@ -304,11 +303,18 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
         continue;
       }
       final id = _toIdString(item['id']);
-      final name = item['name']?.toString() ?? '';
+      final name =
+          (item['groupName'] ?? item['name'] ?? item['className'] ?? '')
+              .toString()
+              .trim();
+      final avatarUrl =
+          (item['logo'] ?? item['groupLogo'] ?? item['avatarUrl'] ?? '')
+              .toString()
+              .trim();
       if (id.isEmpty || name.isEmpty) {
         continue;
       }
-      result.add(VideoShareClassItem(id: id, name: name));
+      result.add(VideoShareClassItem(id: id, name: name, avatarUrl: avatarUrl));
     }
     return result;
   }
@@ -743,10 +749,15 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
 }
 
 class VideoShareClassItem {
-  const VideoShareClassItem({required this.id, required this.name});
+  const VideoShareClassItem({
+    required this.id,
+    required this.name,
+    this.avatarUrl = '',
+  });
 
   final String id;
   final String name;
+  final String avatarUrl;
 }
 
 class _VideoListCacheEntry {

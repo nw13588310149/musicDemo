@@ -1,8 +1,10 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shell/ui/shell_layout.dart';
+import '../data/admin_repository.dart';
 import '../state/smart_campus_state.dart';
 import 'widgets/role_switcher_buttons.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -15,7 +17,7 @@ import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 /// 2. **管理端 10 项快捷入口卡**（697×255）：5×2 网格，每个 cell
 ///    `43.73 #EAE5FF` 圆角底 + `assets/images/adminHome/{1..10}.png`
 ///    + 14/PingFang/500 文案；学生管理(1) → 教师管理(2) → 班级编辑(3) →
-///    排课与课表(4) → 宿管请假审批(5) → 人脸库(6) → 通知管理(7) →
+///    排课与课表(4) → 教师请假审批(5) → 人脸库(6) → 通知管理(7) →
 ///    群聊(8) → 校长信箱(9) → 校圈治理(10)。
 /// 3. **数据看板**：白底卡 + 7 天紫色平滑曲线 + 浅紫渐变填充
 ///    （5 刻度 100/95/90/85/80/0 + 横轴 周一-周日）。
@@ -24,15 +26,14 @@ import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 ///    - 工作提醒：3 条预警卡，红色「预警」徽章 + 标题 + 副标题 + 灰小点。
 ///
 /// 右栏（256 宽）固定为单张白卡：
-/// - 顶部 72 圆形头像 + 「管理员」16/500 + 绿点「运行中」+
-///   「音乐学科 一级教师」+ 黄底「管理员」徽章；
-/// - 「主项 / 副项 / 带班」3 行键值；
+/// - 顶部 72 圆形头像 + 姓名 16/500 + 绿点「运行中」+ 黄底「管理员」徽章；
+/// - 「岗位 / 部门 / 权限」3 行键值；
 /// - 「校级通知」title + 滚动通知列表，每条卡含分类徽章
 ///   （教研室 / 场地 / 大师课）+ 内容 + 时间 + 红 / 灰未读点。
 ///
 /// 不带 `onBack` —— 这就是 admin 角色下 `mainView == dashboard` 的根视图，
 /// 不会被 `controller.backToDashboard()` 弹出。
-class AdminHomeView extends StatelessWidget {
+class AdminHomeView extends ConsumerStatefulWidget {
   const AdminHomeView({
     super.key,
     required this.shellDisplayName,
@@ -89,7 +90,7 @@ class AdminHomeView extends StatelessWidget {
   /// 「排课与课表」管理端独立入口：进入 [AdminScheduleManagementView]。
   final VoidCallback? onOpenScheduleManagement;
 
-  /// 「宿管请假审批」管理端独立入口：进入 [AdminDormLeaveApprovalView]。
+  /// 「教师请假审批」管理端独立入口：进入 [AdminDormLeaveApprovalView]。
   final VoidCallback? onOpenDormLeaveApproval;
 
   /// 「人脸库」管理端独立入口：进入 [AdminFaceLibraryView]。
@@ -100,6 +101,69 @@ class AdminHomeView extends StatelessWidget {
 
   /// 「签课管理」管理端独立入口：进入 [AdminSignManagementView]。
   final VoidCallback? onOpenSignManagement;
+
+  @override
+  ConsumerState<AdminHomeView> createState() => _AdminHomeViewState();
+}
+
+class _AdminHomeViewState extends ConsumerState<AdminHomeView> {
+  /// `indexSum` 接口返回的 8 项统计；`-1` 表示尚未拉到 / 失败 → 显示 0。
+  int _studentCount = -1;
+  int _teacherCount = -1;
+  int _classCount = -1;
+  int _toDoTodayCount = -1;
+  int _leaveStatus0Count = -1;
+  int _smallCourseSignStatus5Count = -1;
+  int _userFaceNotRecordedCount = -1;
+  int _postStatus0Count = -1;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadIndexSum());
+  }
+
+  Future<void> _loadIndexSum() async {
+    final repo = ref.read(adminRepositoryProvider);
+    final resp = await repo.indexSum();
+    if (!mounted) return;
+
+    if (!resp.isSuccess || resp.data is! Map) return;
+    final m = (resp.data as Map).cast<String, dynamic>();
+    int n(dynamic v) {
+      if (v == null) return 0;
+      if (v is int) return v;
+      if (v is num) return v.toInt();
+      return int.tryParse(v.toString()) ?? 0;
+    }
+
+    setState(() {
+      _studentCount = n(m['studentCount']);
+      _teacherCount = n(m['teacherCount']);
+      _classCount = n(m['classCount']);
+      _toDoTodayCount = n(m['toDoTodayCount']);
+      _leaveStatus0Count = n(m['leaveStatus0Count']);
+      _smallCourseSignStatus5Count = n(m['smallCourseSignStatus5Count']);
+      _userFaceNotRecordedCount = n(m['userFaceNotRecordedCount']);
+      _postStatus0Count = n(m['postStatus0Count']);
+    });
+  }
+
+  int _display(int value) => value < 0 ? 0 : value;
+
+  List<_StatItem> get _statsRow1 => [
+    _StatItem('${_display(_studentCount)}', '在籍学生'),
+    _StatItem('${_display(_teacherCount)}', '任课老师'),
+    _StatItem('${_display(_classCount)}', '本学期班级'),
+    _StatItem('${_display(_toDoTodayCount)}', '今日待办', highlight: true),
+  ];
+
+  List<_StatItem> get _statsRow2 => [
+    _StatItem('${_display(_leaveStatus0Count)}', '教职工待审批请假'),
+    _StatItem('${_display(_smallCourseSignStatus5Count)}', '小班课待审核'),
+    _StatItem('${_display(_userFaceNotRecordedCount)}', '人脸待补录'),
+    _StatItem('${_display(_postStatus0Count)}', '今日校圈'),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -114,22 +178,22 @@ class AdminHomeView extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const _StatsRow(stats: _statsRow1),
+                _StatsRow(stats: _statsRow1),
                 SizedBox(height: ui(12)),
-                const _StatsRow(stats: _statsRow2),
+                _StatsRow(stats: _statsRow2),
                 SizedBox(height: ui(16)),
                 _QuickActionsCard(
-                  onOpenGroupChat: onOpenGroupChat,
-                  onOpenPrincipalMailbox: onOpenPrincipalMailbox,
-                  onOpenSchoolCircle: onOpenSchoolCircle,
-                  onOpenStudentManagement: onOpenStudentManagement,
-                  onOpenTeacherManagement: onOpenTeacherManagement,
-                  onOpenClassManagement: onOpenClassManagement,
-                  onOpenScheduleManagement: onOpenScheduleManagement,
-                  onOpenDormLeaveApproval: onOpenDormLeaveApproval,
-                  onOpenFaceLibrary: onOpenFaceLibrary,
-                  onOpenNotificationManagement: onOpenNotificationManagement,
-                  onOpenSignManagement: onOpenSignManagement,
+                  onOpenGroupChat: widget.onOpenGroupChat,
+                  onOpenPrincipalMailbox: widget.onOpenPrincipalMailbox,
+                  onOpenSchoolCircle: widget.onOpenSchoolCircle,
+                  onOpenStudentManagement: widget.onOpenStudentManagement,
+                  onOpenTeacherManagement: widget.onOpenTeacherManagement,
+                  onOpenClassManagement: widget.onOpenClassManagement,
+                  onOpenScheduleManagement: widget.onOpenScheduleManagement,
+                  onOpenDormLeaveApproval: widget.onOpenDormLeaveApproval,
+                  onOpenFaceLibrary: widget.onOpenFaceLibrary,
+                  onOpenNotificationManagement: widget.onOpenNotificationManagement,
+                  onOpenSignManagement: widget.onOpenSignManagement,
                 ),
                 SizedBox(height: ui(24)),
                 const _SectionTitle(title: '数据看板'),
@@ -169,11 +233,11 @@ class AdminHomeView extends StatelessWidget {
           SizedBox(
             width: ui(256),
             child: _AdminSidePanel(
-              displayName: shellDisplayName,
-              avatarUrl: avatarUrl,
-              availableRoles: availableRoles,
-              selectedRole: selectedRole,
-              onSelectRole: onSelectRole,
+              displayName: widget.shellDisplayName,
+              avatarUrl: widget.avatarUrl,
+              availableRoles: widget.availableRoles,
+              selectedRole: widget.selectedRole,
+              onSelectRole: widget.onSelectRole,
             ),
           ),
         ],
@@ -193,20 +257,6 @@ class _StatItem {
   final String label;
   final bool highlight;
 }
-
-const _statsRow1 = <_StatItem>[
-  _StatItem('75', '在籍学生'),
-  _StatItem('73', '任课老师'),
-  _StatItem('68', '本学期班级'),
-  _StatItem('4', '今日待办', highlight: true),
-];
-
-const _statsRow2 = <_StatItem>[
-  _StatItem('23', '待审宿管假'),
-  _StatItem('67', '人脸待补录'),
-  _StatItem('43', '通知草稿'),
-  _StatItem('32', '校圈待处理'),
-];
 
 class _QuickAction {
   const _QuickAction(
@@ -230,7 +280,7 @@ const _quickActions = <_QuickAction>[
   _QuickAction('班级编辑', 'assets/images/adminHome/3.png'),
   _QuickAction('排课与课表', 'assets/images/adminHome/4.png'),
   _QuickAction('签课管理', 'assets/images/adminHome/4.png'),
-  _QuickAction('宿管请假审批', 'assets/images/adminHome/5.png'),
+  _QuickAction('教师请假审批', 'assets/images/adminHome/5.png'),
   _QuickAction('人脸库', 'assets/images/adminHome/6.png'),
   _QuickAction('通知管理', 'assets/images/adminHome/7.png'),
   _QuickAction('群聊', 'assets/images/adminHome/8.png'),
@@ -389,7 +439,7 @@ class _QuickActionsCard extends StatelessWidget {
         return onOpenScheduleManagement;
       case '签课管理':
         return onOpenSignManagement;
-      case '宿管请假审批':
+      case '教师请假审批':
         return onOpenDormLeaveApproval;
       case '人脸库':
         return onOpenFaceLibrary;
@@ -1216,16 +1266,6 @@ class _ProfileHeader extends StatelessWidget {
                       ),
                     ],
                   ),
-                  SizedBox(height: ui(6)),
-                  Text(
-                    '音乐学科 一级教师',
-                    style: TextStyle(
-                      fontSize: ui(12),
-                      height: 1.2,
-                      color: const Color(0xFF6D6B75),
-                      fontFamily: 'PingFang SC',
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -1266,11 +1306,11 @@ class _ProfileInfoRows extends StatelessWidget {
     return const Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _InfoLine(label: '主项：', value: '合声基础'),
+        _InfoLine(label: '岗位：', value: '教务管理员'),
         SizedBox(height: 4),
-        _InfoLine(label: '副项：', value: '钢琴'),
+        _InfoLine(label: '部门：', value: '教务处'),
         SizedBox(height: 4),
-        _InfoLine(label: '带班：', value: '高三音乐实验班'),
+        _InfoLine(label: '权限：', value: '全校管理'),
       ],
     );
   }

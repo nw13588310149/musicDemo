@@ -1,13 +1,16 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show ValueListenable, debugPrint;
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/action_menu.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/class_share_drawer.dart';
+import '../../../core/widgets/cloud_folder_card_artwork.dart';
 import '../../../core/widgets/cloud_folder_more_menu_button.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
@@ -56,9 +59,7 @@ class _RecordingSystemPageState extends ConsumerState<RecordingSystemPage>
       if (!mounted) {
         return;
       }
-      ref
-          .read(recordingSystemControllerProvider.notifier)
-          .enterListHome();
+      ref.read(recordingSystemControllerProvider.notifier).enterListHome();
     });
   }
 
@@ -68,9 +69,7 @@ class _RecordingSystemPageState extends ConsumerState<RecordingSystemPage>
     // 这里不能 await：State.dispose 是同步的。controller.abandonActiveSession
     // 内部全部包了 try-catch，且对 stream / timer 的 cancel 不需要等待回执，
     // 把它当成"发出指令立刻返回"即可。
-    ref
-        .read(recordingSystemControllerProvider.notifier)
-        .abandonActiveSession();
+    ref.read(recordingSystemControllerProvider.notifier).abandonActiveSession();
     super.dispose();
   }
 
@@ -234,13 +233,7 @@ class _RecordingListViewState extends ConsumerState<_RecordingListView> {
                           borderRadius: BorderRadius.circular(ui(16)),
                         ),
                         child: Center(
-                          child: SizedBox(
-                            width: ui(28),
-                            height: ui(28),
-                            child: const CircularProgressIndicator(
-                              strokeWidth: 2,
-                            ),
-                          ),
+                          child: const AppLoadingIndicator(),
                         ),
                       ),
                     ),
@@ -869,9 +862,7 @@ class _RecordingContentArea extends StatelessWidget {
               children: [
                 Positioned.fill(
                   child: state.loading
-                      ? const Center(
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
+                      ? const Center(child: AppLoadingIndicator())
                       : state.categories.isEmpty
                       ? const _RecordingEmpty(message: '暂无分类')
                       : isInsideFolder
@@ -1234,12 +1225,11 @@ class _RecordingFolderCardState extends State<_RecordingFolderCard> {
               borderRadius: BorderRadius.circular(ui(14)),
               child: Stack(
                 children: [
-                  // 与「我的云盘」相同的文件夹底图（已含日期/大小占位区位置）。
                   Positioned.fill(
-                    child: Image.asset(
-                      AppAssets.cloudFolderFilledBg,
-                      fit: BoxFit.cover,
-                      gaplessPlayback: true,
+                    child: CloudFolderCardArtwork(
+                      hasContent: item.count > 0,
+                      menuTriggerKey: _menuTriggerKey,
+                      onMenuTap: _openActionMenu,
                     ),
                   ),
                   if (item.dateLabel.isNotEmpty)
@@ -1269,15 +1259,6 @@ class _RecordingFolderCardState extends State<_RecordingFolderCard> {
                         fontFamily: 'Barlow',
                         fontWeight: FontWeight.w500,
                       ),
-                    ),
-                  ),
-                  // 右上角操作菜单热区（覆盖底图自带的三点位置）。
-                  Positioned(
-                    top: ui(32),
-                    right: ui(12),
-                    child: CloudFolderMoreMenuButton(
-                      key: _menuTriggerKey,
-                      onTap: _openActionMenu,
                     ),
                   ),
                 ],
@@ -1716,8 +1697,8 @@ class _RecordingEditorView extends ConsumerWidget {
             leftPill: buildLeftPill(),
             rightPill: _SoundControlButton(
               asset: AppAssets.soundFinishButton,
-              onTap: state.previewSource != null &&
-                      state.previewSource!.isNotEmpty
+              onTap:
+                  state.previewSource != null && state.previewSource!.isNotEmpty
                   ? controller.requestSaveDialog
                   : null,
             ),
@@ -1760,8 +1741,7 @@ class _RecordingEditorView extends ConsumerWidget {
                         '录制不能低于5秒',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          fontSize:
-                              DashboardScaleScope.of(context).ui(12),
+                          fontSize: DashboardScaleScope.of(context).ui(12),
                           color: const Color(0xFFB6B5BB),
                           fontFamily: 'PingFang SC',
                           fontWeight: AppFont.w400,
@@ -1781,8 +1761,8 @@ class _RecordingEditorView extends ConsumerWidget {
                         asset: AppAssets.soundFinishButton,
                         onTap: canFinish
                             ? () async {
-                                final message =
-                                    await controller.finishRecording();
+                                final message = await controller
+                                    .finishRecording();
                                 if (message != null && context.mounted) {
                                   _showMessage(context, message);
                                 }
@@ -1794,8 +1774,7 @@ class _RecordingEditorView extends ConsumerWidget {
             startRecordingButton: isInitialIdle
                 ? _StartRecordingButton(
                     onTap: () async {
-                      final message =
-                          await controller.enterRecordingControls();
+                      final message = await controller.enterRecordingControls();
                       if (message != null && context.mounted) {
                         _showMessage(context, message);
                       }
@@ -1974,7 +1953,7 @@ class _RecordingStage extends ConsumerStatefulWidget {
 
 class _RecordingStageState extends ConsumerState<_RecordingStage> {
   BuildContext? _saveDialogContext;
-  BuildContext? _shareDialogContext;
+  bool _shareDialogShowing = false;
 
   @override
   void initState() {
@@ -2005,12 +1984,11 @@ class _RecordingStageState extends ConsumerState<_RecordingStage> {
         Navigator.of(saveCtx).pop();
       } catch (_) {}
     }
-    final shareCtx = _shareDialogContext;
-    _shareDialogContext = null;
-    if (shareCtx != null) {
+    if (_shareDialogShowing) {
       try {
-        Navigator.of(shareCtx).pop();
+        Navigator.of(context).pop();
       } catch (_) {}
+      _shareDialogShowing = false;
     }
     super.dispose();
   }
@@ -2038,19 +2016,16 @@ class _RecordingStageState extends ConsumerState<_RecordingStage> {
   }
 
   Future<void> _openShareDialog() async {
-    if (_shareDialogContext != null) {
+    if (_shareDialogShowing) {
       return;
     }
-    await showScaledDialog<void>(
+    _shareDialogShowing = true;
+    await showClassShareDrawer<void>(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.5),
-      barrierDismissible: false,
-      builder: (dialogCtx) {
-        _shareDialogContext = dialogCtx;
-        return const _ShareRecordingDialog();
-      },
+      scale: DashboardScaleScope.of(context),
+      child: const _RecordingShareDrawer(),
     );
-    _shareDialogContext = null;
+    _shareDialogShowing = false;
     if (!mounted) {
       return;
     }
@@ -2069,12 +2044,10 @@ class _RecordingStageState extends ConsumerState<_RecordingStage> {
   }
 
   void _closeShareDialog() {
-    final ctx = _shareDialogContext;
-    if (ctx == null) {
+    if (!_shareDialogShowing) {
       return;
     }
-    _shareDialogContext = null;
-    Navigator.of(ctx).pop();
+    Navigator.of(context).maybePop();
   }
 
   @override
@@ -2278,8 +2251,9 @@ class _PlaybackSeekBodyState extends State<_PlaybackSeekBody> {
         return ValueListenableBuilder<int>(
           valueListenable: widget.controller.previewDurationMs,
           builder: (context, durationMs, _) {
-            final totalMs =
-                durationMs > 0 ? durationMs : widget.fallbackDurationMs;
+            final totalMs = durationMs > 0
+                ? durationMs
+                : widget.fallbackDurationMs;
             final playbackRatio = totalMs <= 0
                 ? 0.0
                 : (positionMs / totalMs).clamp(0.0, 1.0).toDouble();
@@ -2452,6 +2426,7 @@ class _RecordingStageBody extends StatelessWidget {
 /// 波形容器内部布局（设计稿 px，经 [DashboardScaleData.ui] 缩放）。
 const double _kRecordingWaveSectionHeight = 110;
 const double _kRecordingWaveTopInset = 20;
+
 /// 波形柱中心间距（设计稿 px）；越小柱越密。
 const double _kRecordingWaveBarSpacing = 1;
 const double _kRecordingScaleTopGap = 15;
@@ -2506,10 +2481,7 @@ class _DarkWaveFrame extends StatelessWidget {
 /// 由 `record` 包的 onAmplitudeChanged 灌进去），用 [_WaveWithScalePainter]
 /// 把最近 N 个振幅样本画成滚动柱状波形，并在底部绘制时间刻度条。
 class _LiveDarkWavePanel extends StatelessWidget {
-  const _LiveDarkWavePanel({
-    required this.samples,
-    required this.elapsedMs,
-  });
+  const _LiveDarkWavePanel({required this.samples, required this.elapsedMs});
 
   final ValueListenable<List<double>> samples;
   final ValueListenable<int> elapsedMs;
@@ -2532,10 +2504,7 @@ class _LiveDarkWavePanel extends StatelessWidget {
                         ? 0.0
                         : (elapsedValue / totalMs).clamp(0.0, 1.0).toDouble();
                     return CustomPaint(
-                      size: Size(
-                        constraints.maxWidth,
-                        constraints.maxHeight,
-                      ),
+                      size: Size(constraints.maxWidth, constraints.maxHeight),
                       painter: _WaveWithScalePainter(
                         samples: snapshot,
                         progressRatio: progressRatio,
@@ -2691,12 +2660,13 @@ class _PreviewDarkWavePanelState extends State<_PreviewDarkWavePanel> {
                       final total = _stableTotalMs(rawTotal);
                       // 拖拽中：用本地 _dragRatio；否则用真实播放
                       // position 推算的 ratio。
-                      final ratio = _activeDragRatio ??
+                      final ratio =
+                          _activeDragRatio ??
                           (total <= 0
                               ? 0.0
                               : (positionValue / total)
-                                  .clamp(0.0, 1.0)
-                                  .toDouble());
+                                    .clamp(0.0, 1.0)
+                                    .toDouble());
                       return CustomPaint(
                         size: size,
                         painter: _WaveWithScalePainter(
@@ -2783,7 +2753,8 @@ class _WaveWithScalePainter extends CustomPainter {
     if (size.width <= 0 || size.height <= 0) return;
 
     final waveSectionBottom = waveSectionHeight;
-    final waveTop = math.min(waveTopInset, math.max(waveSectionBottom - 1, 0))
+    final waveTop = math
+        .min(waveTopInset, math.max(waveSectionBottom - 1, 0))
         .toDouble();
     final waveBottom = waveSectionBottom;
     final waveHeight = math.max(waveBottom - waveTop, 1.0);
@@ -3072,8 +3043,9 @@ class _DarkScrubberPanelState extends State<_DarkScrubberPanel> {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final displayRatio =
-        (_activeDragRatio ?? widget.progressRatio).clamp(0.0, 1.0).toDouble();
+    final displayRatio = (_activeDragRatio ?? widget.progressRatio)
+        .clamp(0.0, 1.0)
+        .toDouble();
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(ui(20)),
@@ -3330,11 +3302,7 @@ class _RecordTransportControls extends StatelessWidget {
           onTap: onSeekBack,
         ),
         SizedBox(width: ui(52)),
-        _SoundIconButton(
-          asset: centerAsset,
-          size: ui(72),
-          onTap: onCenterTap,
-        ),
+        _SoundIconButton(asset: centerAsset, size: ui(72), onTap: onCenterTap),
         SizedBox(width: ui(52)),
         _SoundIconButton(
           asset: AppAssets.soundSeekForward15,
@@ -3444,162 +3412,164 @@ class _SaveRecordingDialog extends ConsumerWidget {
             // 极端短屏（外接键盘 / 浮窗模式）下兜底：键盘 + 弹窗高度 >
             // 屏幕高度时也能滚动到底部，避免内容被裁掉。
             child: Container(
-          width: ui(428),
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(ui(24)),
-            gradient: const LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: <Color>[Color(0xFFD2C6FF), Colors.white, Colors.white],
-              stops: <double>[0, 0.33, 1],
-            ),
-          ),
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(ui(24), ui(36), ui(24), ui(28)),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Text(
-                    '保存录音文件',
-                    style: appDialogTitleTextStyle(ui),
-                  ),
+              width: ui(428),
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(ui(24)),
+                gradient: const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: <Color>[
+                    Color(0xFFD2C6FF),
+                    Colors.white,
+                    Colors.white,
+                  ],
+                  stops: <double>[0, 0.33, 1],
                 ),
-                SizedBox(height: ui(28)),
-                Text(
-                  '您可选择喜欢的音效',
-                  style: TextStyle(
-                    fontSize: ui(14),
-                    color: const Color(0xFF0B081A),
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w500,
-                    height: 20 / 14,
-                  ),
-                ),
-                SizedBox(height: ui(12)),
-                Row(
-                  children: List<Widget>.generate(labels.length, (index) {
-                    final active = state.selectedEffectIndex == index;
-                    return Expanded(
-                      child: Padding(
-                        padding: EdgeInsets.only(
-                          right: index == labels.length - 1 ? 0 : ui(12),
-                        ),
-                        child: _EffectThumb(
-                          imageAsset: thumbs[index],
-                          active: active,
-                          onTap: () => controller.selectEffect(index),
-                        ),
-                      ),
-                    );
-                  }),
-                ),
-                SizedBox(height: ui(8)),
-                Row(
-                  children: List<Widget>.generate(labels.length, (index) {
-                    return Expanded(
-                      child: Padding(
-                        padding: EdgeInsets.only(
-                          right: index == labels.length - 1 ? 0 : ui(12),
-                        ),
-                        child: Text(
-                          labels[index],
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: ui(14),
-                            color: const Color(0xFF0B081A),
-                            fontFamily: 'PingFang SC',
-                            fontWeight: AppFont.w400,
-                            height: 20 / 14,
-                          ),
-                        ),
-                      ),
-                    );
-                  }),
-                ),
-                SizedBox(height: ui(20)),
-                Text(
-                  '作品名称',
-                  style: TextStyle(
-                    fontSize: ui(14),
-                    color: const Color(0xFF0B081A),
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w500,
-                    height: 20 / 14,
-                  ),
-                ),
-                SizedBox(height: ui(8)),
-                _SaveTitleField(
-                  initialValue: state.pendingTitle,
-                  onChanged: controller.updatePendingTitle,
-                ),
-                SizedBox(height: ui(24)),
-                Row(
+              ),
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(ui(24), ui(36), ui(24), ui(28)),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: _DialogActionButton(
-                        label: '取消',
-                        primary: false,
-                        onTap: controller.closeSaveDialog,
+                    Center(
+                      child: Text('保存录音文件', style: appDialogTitleTextStyle(ui)),
+                    ),
+                    SizedBox(height: ui(28)),
+                    Text(
+                      '您可选择喜欢的音效',
+                      style: TextStyle(
+                        fontSize: ui(14),
+                        color: const Color(0xFF0B081A),
+                        fontFamily: 'PingFang SC',
+                        fontWeight: AppFont.w500,
+                        height: 20 / 14,
                       ),
                     ),
-                    SizedBox(width: ui(16)),
-                    Expanded(
-                      child: _DialogActionButton(
-                        label: '确认',
-                        primary: true,
-                        onTap: () async {
-                          // 严格按这个顺序，否则 iPad 必现框架异常
-                          // "This exception was thrown because the
-                          // deactivated widget's ancestor was looked up..."：
-                          //
-                          //   1) await saveCurrentRecording() -> 上传 + 入库
-                          //   2) 失败 -> Toast，弹窗保持打开让用户重试
-                          //   3) 成功 -> **先** Toast（此时 dialog 还在树上，
-                          //      `Overlay.maybeOf(context)` 能拿到 root
-                          //      Overlay），**再** closeSaveDialog 同步把
-                          //      dialog pop 掉
-                          //   4) 切回列表 + 刷新延迟到下一帧执行：dialog
-                          //      pop 动画需要至少一帧再拆 viewMode 对应的
-                          //      Stage widget，否则父子树同帧 dispose 再次
-                          //      触发 deactivated ancestor lookup
-                          //
-                          // 最外层再裹一层 try-catch 兜底：万一 controller
-                          // 内部还有未捕获到的同步 / 异步异常逃出来，也不
-                          // 让它通过 Future error 冒泡到 framework，更不让
-                          // toast 显示一坨英文 stack。原文走 debugPrint。
-                          String? message;
-                          try {
-                            message = await controller.saveCurrentRecording();
-                          } catch (error, stack) {
-                            debugPrint(
-                              '[recording] save dialog uncaught: '
-                              '$error\n$stack',
-                            );
-                            message = '保存录音失败，请稍后重试';
-                          }
-                          if (!context.mounted) {
-                            return;
-                          }
-                          if (message != null) {
-                            _showMessage(context, message);
-                            return;
-                          }
-                          _showMessage(context, '录音已保存');
-                          controller.closeSaveDialog();
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            controller.finishSaveAndReturnToList();
-                          });
-                        },
+                    SizedBox(height: ui(12)),
+                    Row(
+                      children: List<Widget>.generate(labels.length, (index) {
+                        final active = state.selectedEffectIndex == index;
+                        return Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.only(
+                              right: index == labels.length - 1 ? 0 : ui(12),
+                            ),
+                            child: _EffectThumb(
+                              imageAsset: thumbs[index],
+                              active: active,
+                              onTap: () => controller.selectEffect(index),
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                    SizedBox(height: ui(8)),
+                    Row(
+                      children: List<Widget>.generate(labels.length, (index) {
+                        return Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.only(
+                              right: index == labels.length - 1 ? 0 : ui(12),
+                            ),
+                            child: Text(
+                              labels[index],
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: ui(14),
+                                color: const Color(0xFF0B081A),
+                                fontFamily: 'PingFang SC',
+                                fontWeight: AppFont.w400,
+                                height: 20 / 14,
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                    SizedBox(height: ui(20)),
+                    Text(
+                      '作品名称',
+                      style: TextStyle(
+                        fontSize: ui(14),
+                        color: const Color(0xFF0B081A),
+                        fontFamily: 'PingFang SC',
+                        fontWeight: AppFont.w500,
+                        height: 20 / 14,
                       ),
+                    ),
+                    SizedBox(height: ui(8)),
+                    _SaveTitleField(
+                      initialValue: state.pendingTitle,
+                      onChanged: controller.updatePendingTitle,
+                    ),
+                    SizedBox(height: ui(24)),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _DialogActionButton(
+                            label: '取消',
+                            primary: false,
+                            onTap: controller.closeSaveDialog,
+                          ),
+                        ),
+                        SizedBox(width: ui(16)),
+                        Expanded(
+                          child: _DialogActionButton(
+                            label: '确认',
+                            primary: true,
+                            onTap: () async {
+                              // 严格按这个顺序，否则 iPad 必现框架异常
+                              // "This exception was thrown because the
+                              // deactivated widget's ancestor was looked up..."：
+                              //
+                              //   1) await saveCurrentRecording() -> 上传 + 入库
+                              //   2) 失败 -> Toast，弹窗保持打开让用户重试
+                              //   3) 成功 -> **先** Toast（此时 dialog 还在树上，
+                              //      `Overlay.maybeOf(context)` 能拿到 root
+                              //      Overlay），**再** closeSaveDialog 同步把
+                              //      dialog pop 掉
+                              //   4) 切回列表 + 刷新延迟到下一帧执行：dialog
+                              //      pop 动画需要至少一帧再拆 viewMode 对应的
+                              //      Stage widget，否则父子树同帧 dispose 再次
+                              //      触发 deactivated ancestor lookup
+                              //
+                              // 最外层再裹一层 try-catch 兜底：万一 controller
+                              // 内部还有未捕获到的同步 / 异步异常逃出来，也不
+                              // 让它通过 Future error 冒泡到 framework，更不让
+                              // toast 显示一坨英文 stack。原文走 debugPrint。
+                              String? message;
+                              try {
+                                message = await controller
+                                    .saveCurrentRecording();
+                              } catch (error, stack) {
+                                debugPrint(
+                                  '[recording] save dialog uncaught: '
+                                  '$error\n$stack',
+                                );
+                                message = '保存录音失败，请稍后重试';
+                              }
+                              if (!context.mounted) {
+                                return;
+                              }
+                              if (message != null) {
+                                _showMessage(context, message);
+                                return;
+                              }
+                              _showMessage(context, '录音已保存');
+                              controller.closeSaveDialog();
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                controller.finishSaveAndReturnToList();
+                              });
+                            },
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
-            ),
-          ),
+              ),
             ),
           ),
         ),
@@ -3797,178 +3767,54 @@ class _DialogActionButton extends StatelessWidget {
   }
 }
 
-class _ShareRecordingDialog extends ConsumerWidget {
-  const _ShareRecordingDialog();
+class _RecordingShareDrawer extends ConsumerWidget {
+  const _RecordingShareDrawer();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(recordingSystemControllerProvider);
     final controller = ref.read(recordingSystemControllerProvider.notifier);
-    final ui = DashboardScaleScope.of(context).ui;
+    final preview = state.previewItem;
 
-    return Material(
-      color: const Color(0xCC000000),
-      child: Center(
-        child: Container(
-          width: ui(420),
-          padding: EdgeInsets.fromLTRB(ui(24), ui(24), ui(24), ui(20)),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(ui(24)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Text(
-                    '分享到班级',
-                    style: TextStyle(
-                      fontSize: ui(18),
-                      color: const Color(0xFF0B081A),
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w600,
-                    ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: controller.closeShareDialog,
-                    icon: const Icon(Icons.close_rounded),
-                  ),
-                ],
-              ),
-              SizedBox(height: ui(8)),
-              Text(
-                '选择需要分享的班级后，系统会逐个发送录音作品。',
-                style: TextStyle(
-                  fontSize: ui(13),
-                  color: const Color(0xFF7C8496),
-                  fontFamily: 'PingFang SC',
-                ),
-              ),
-              SizedBox(height: ui(18)),
-              ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: ui(280)),
-                child: state.shareClasses.isEmpty
-                    ? Center(
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(vertical: ui(24)),
-                          child: Text(
-                            '暂无可分享的班级',
-                            style: TextStyle(
-                              fontSize: ui(14),
-                              color: const Color(0xFF99A0B0),
-                              fontFamily: 'PingFang SC',
-                            ),
-                          ),
-                        ),
-                      )
-                    : ListView.separated(
-                        shrinkWrap: true,
-                        itemCount: state.shareClasses.length,
-                        separatorBuilder: (_, _) => SizedBox(height: ui(8)),
-                        itemBuilder: (context, index) {
-                          final item = state.shareClasses[index];
-                          return InkWell(
-                            onTap: () => controller.toggleShareClass(item.id),
-                            borderRadius: BorderRadius.circular(ui(14)),
-                            child: Container(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: ui(14),
-                                vertical: ui(12),
-                              ),
-                              decoration: BoxDecoration(
-                                color: item.selected
-                                    ? const Color(0xFFF3EEFF)
-                                    : const Color(0xFFF8FAFF),
-                                borderRadius: BorderRadius.circular(ui(14)),
-                                border: Border.all(
-                                  color: item.selected
-                                      ? const Color(0xFFB18BFF)
-                                      : const Color(0xFFE7EBF5),
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    item.selected
-                                        ? Icons.check_circle_rounded
-                                        : Icons.radio_button_unchecked_rounded,
-                                    color: item.selected
-                                        ? const Color(0xFF8B5CFF)
-                                        : const Color(0xFFB5BDCF),
-                                  ),
-                                  SizedBox(width: ui(10)),
-                                  Expanded(
-                                    child: Text(
-                                      item.name,
-                                      style: TextStyle(
-                                        fontSize: ui(14),
-                                        color: const Color(0xFF0B081A),
-                                        fontFamily: 'PingFang SC',
-                                        fontWeight: AppFont.w500,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-              ),
-              SizedBox(height: ui(20)),
-              Row(
-                children: [
-                  Expanded(
-                    child: _DialogActionButton(
-                      label: '取消',
-                      primary: false,
-                      onTap: controller.closeShareDialog,
-                    ),
-                  ),
-                  SizedBox(width: ui(16)),
-                  Expanded(
-                    child: _DialogActionButton(
-                      label: '确认分享',
-                      primary: true,
-                      onTap: () async {
-                        // 与保存对话框同款兜底：所有异常都收成中文 toast，
-                        // 不允许 framework / 网络层的英文 toString 直接
-                        // 显示给用户。
-                        String? message;
-                        try {
-                          message = await controller.sendShare();
-                        } catch (error, stack) {
-                          debugPrint(
-                            '[recording] share dialog uncaught: '
-                            '$error\n$stack',
-                          );
-                          message = '分享失败，请稍后重试';
-                        }
-                        if (!context.mounted) {
-                          return;
-                        }
-                        // 与保存对话框同样的 deactivated-context 防护：
-                        // 成功 -> 先 toast（dialog 还 mounted，能拿到
-                        // root Overlay），再 closeShareDialog；失败 ->
-                        // 直接 toast，dialog 保持打开让用户重试。
-                        if (message != null) {
-                          _showMessage(context, message);
-                          return;
-                        }
-                        _showMessage(context, '分享成功');
-                        controller.closeShareDialog();
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
+    return ClassShareDrawer(
+      title: '分享录音',
+      targetCard: ShareTargetCard(
+        label: '您将分享的录音',
+        title: preview?.name ?? '',
+        placeholderIcon: Icons.mic_rounded,
       ),
+      classes: state.shareClasses
+          .map(
+            (item) => ClassShareItem(
+              id: item.id,
+              name: item.name,
+              avatarUrl: item.avatarUrl,
+              checked: item.selected,
+            ),
+          )
+          .toList(growable: false),
+      loading: false,
+      sending: state.busy,
+      onToggleClass: controller.toggleShareClass,
+      onSend: () async {
+        String? message;
+        try {
+          message = await controller.sendShare();
+        } catch (error, stack) {
+          debugPrint('[recording] share drawer uncaught: $error\n$stack');
+          message = '分享失败，请稍后重试';
+        }
+        if (!context.mounted) {
+          return;
+        }
+        if (message != null) {
+          _showMessage(context, message);
+          return;
+        }
+        _showMessage(context, '分享成功');
+        Navigator.of(context).maybePop();
+        controller.closeShareDialog();
+      },
     );
   }
 }

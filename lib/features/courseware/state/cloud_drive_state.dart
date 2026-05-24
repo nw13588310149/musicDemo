@@ -76,6 +76,7 @@ class CloudFolderItem {
     required this.title,
     this.sizeLabel = '10MB',
     this.dateLabel = '2026.04.07',
+    this.fileCount = 0,
     this.isCreateShortcut = false,
   });
 
@@ -83,13 +84,17 @@ class CloudFolderItem {
   final String title;
   final String sizeLabel;
   final String dateLabel;
+  final int fileCount;
   final bool isCreateShortcut;
+
+  bool get hasContent => fileCount > 0;
 
   CloudFolderItem copyWith({
     int? id,
     String? title,
     String? sizeLabel,
     String? dateLabel,
+    int? fileCount,
     bool? isCreateShortcut,
   }) {
     return CloudFolderItem(
@@ -97,6 +102,7 @@ class CloudFolderItem {
       title: title ?? this.title,
       sizeLabel: sizeLabel ?? this.sizeLabel,
       dateLabel: dateLabel ?? this.dateLabel,
+      fileCount: fileCount ?? this.fileCount,
       isCreateShortcut: isCreateShortcut ?? this.isCreateShortcut,
     );
   }
@@ -159,17 +165,20 @@ class CloudShareClassItem {
   const CloudShareClassItem({
     required this.id,
     required this.name,
+    this.avatarUrl = '',
     this.selected = false,
   });
 
   final String id;
   final String name;
+  final String avatarUrl;
   final bool selected;
 
   CloudShareClassItem copyWith({bool? selected}) {
     return CloudShareClassItem(
       id: id,
       name: name,
+      avatarUrl: avatarUrl,
       selected: selected ?? this.selected,
     );
   }

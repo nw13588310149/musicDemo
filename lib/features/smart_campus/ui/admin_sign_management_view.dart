@@ -33,11 +33,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_date_time_pickers.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/popup_selector_field.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/admin_repository.dart';
 import '../data/course_sign_data.dart';
@@ -182,72 +185,80 @@ class _SignBanner extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
       decoration: BoxDecoration(
-        color: _kCardBg,
         borderRadius: BorderRadius.circular(ui(16)),
-        border: Border.all(color: _kBorderSoft),
+        image: DecorationImage(
+          image: AssetImage(AppAssets.xiaoquanHeaderBg),
+          fit: BoxFit.cover,
+          alignment: Alignment.centerRight,
+        ),
       ),
       padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(12)),
-      child: Row(
+      child: Stack(
+        alignment: Alignment.center,
         children: [
-          // 返回按钮
-          InkWell(
-            onTap: onBack,
-            borderRadius: BorderRadius.circular(ui(8)),
-            child: Container(
-              width: ui(32),
-              height: ui(32),
-              decoration: BoxDecoration(
-                color: _kCardBg,
-                borderRadius: BorderRadius.circular(ui(8)),
-                border: Border.all(color: _kBorderSoft),
-              ),
-              child: Icon(
-                Icons.chevron_left_rounded,
-                size: ui(20),
-                color: const Color(0xFF1C274C),
-              ),
-            ),
-          ),
-          SizedBox(width: ui(12)),
-          // 标题
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Text(
-                '签课管理',
-                style: TextStyle(
-                  fontSize: ui(16),
-                  color: _kTextDark,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w600,
-                  height: 1,
+              // 返回按钮
+              InkWell(
+                onTap: onBack,
+                borderRadius: BorderRadius.circular(ui(8)),
+                child: Container(
+                  width: ui(32),
+                  height: ui(32),
+                  decoration: BoxDecoration(
+                    color: _kCardBg,
+                    borderRadius: BorderRadius.circular(ui(8)),
+                    border: Border.all(color: _kBorderSoft),
+                  ),
+                  child: Icon(
+                    Icons.chevron_left_rounded,
+                    size: ui(20),
+                    color: const Color(0xFF1C274C),
+                  ),
                 ),
               ),
-              SizedBox(height: ui(2)),
-              Text(
-                '大课一键入册 · 小课全流程签到 · 补签审核',
-                style: TextStyle(
-                  fontSize: ui(11),
-                  color: _kTextHint,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w400,
-                  height: 1,
-                ),
+              SizedBox(width: ui(12)),
+              // 标题
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '签课管理',
+                    style: TextStyle(
+                      fontSize: ui(16),
+                      color: _kTextDark,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w600,
+                      height: 1,
+                    ),
+                  ),
+                  SizedBox(height: ui(2)),
+                  Text(
+                    '大课一键入册 · 小课全流程签到 · 补签审核',
+                    style: TextStyle(
+                      fontSize: ui(11),
+                      color: _kTextHint,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w400,
+                      height: 1,
+                    ),
+                  ),
+                ],
+              ),
+              const Spacer(),
+              // 补签审核入口
+              _MakeupBadgeButton(
+                count: pendingMakeupCount,
+                onTap: onOpenMakeupAudit,
               ),
             ],
           ),
-          SizedBox(width: ui(20)),
-          // 自定义分段控制（避免 TabBar 在 Row 中无界宽的布局错误）
+          // 大课 / 小课切换：相对 banner 宽度居中
           _SegmentControl(
             selected: selectedTab,
             onSelect: onSelectTab,
-          ),
-          const Spacer(),
-          // 补签审核入口
-          _MakeupBadgeButton(
-            count: pendingMakeupCount,
-            onTap: onOpenMakeupAudit,
           ),
         ],
       ),
@@ -435,7 +446,7 @@ class _LargeClassTab extends ConsumerStatefulWidget {
 }
 
 class _LargeClassTabState extends ConsumerState<_LargeClassTab> {
-  List<CourseSignClassOption> _classes = const [];
+  List<_ClassFilterOption> _classOptions = _kFallbackClassOptions;
   String? _selectedClassId;
   String _selectedDate = todayIsoDate();
   List<CourseSignSession> _sessions = const [];
@@ -460,23 +471,22 @@ class _LargeClassTabState extends ConsumerState<_LargeClassTab> {
         ? parseCourseSignClassList(resp.data)
         : const <CourseSignClassOption>[];
     setState(() {
-      _classes = classes;
-      _selectedClassId =
-          classes.isNotEmpty ? classes.first.id : null;
+      _classOptions = _buildClassFilterOptions(classes);
+      if (_selectedClassId != null &&
+          !_classOptions.any((o) => o.id == _selectedClassId)) {
+        _selectedClassId = null;
+      }
       _loadingClasses = false;
     });
-    if (_selectedClassId != null) {
-      await _loadSignData();
-    }
+    await _loadSignData();
   }
 
   Future<void> _loadSignData() async {
-    final classId = _selectedClassId;
-    if (classId == null || classId.isEmpty) return;
     setState(() {
       _loadingData = true;
       _expandedIndex = null;
     });
+    final classId = _selectedClassId ?? '';
     final repo = ref.read(adminRepositoryProvider);
     final results = await Future.wait([
       repo.courseSignSum0(classId: classId, date: _selectedDate),
@@ -513,8 +523,7 @@ class _LargeClassTabState extends ConsumerState<_LargeClassTab> {
   }
 
   Future<void> _refreshStats() async {
-    final classId = _selectedClassId;
-    if (classId == null || classId.isEmpty) return;
+    final classId = _selectedClassId ?? '';
     final repo = ref.read(adminRepositoryProvider);
     final resp = await repo.courseSignSum0(
       classId: classId,
@@ -572,10 +581,10 @@ class _LargeClassTabState extends ConsumerState<_LargeClassTab> {
           _FilterBar(
             selectedClassId: _selectedClassId,
             selectedDate: _selectedDate,
-            classOptions: _classes,
+            classOptions: _classOptions,
             loading: _loadingClasses,
             onClassChanged: (id) {
-              if (id == null || id == _selectedClassId) return;
+              if (id == _selectedClassId) return;
               setState(() => _selectedClassId = id);
               unawaited(_loadSignData());
             },
@@ -588,9 +597,9 @@ class _LargeClassTabState extends ConsumerState<_LargeClassTab> {
           if (_loadingData)
             Padding(
               padding: EdgeInsets.symmetric(vertical: ui(40)),
-              child: const Center(child: CircularProgressIndicator()),
+              child: const Center(child: AppLoadingIndicator()),
             )
-          else if (_selectedClassId == null)
+          else if (_classOptions.length <= 1)
             _EmptyHint(text: '暂无大班班级，请先在班级编组中创建')
           else if (_sessions.isEmpty)
             _EmptyHint(text: '所选日期暂无大课签到记录')
@@ -972,7 +981,7 @@ class _SmallClassTab extends ConsumerStatefulWidget {
 }
 
 class _SmallClassTabState extends ConsumerState<_SmallClassTab> {
-  List<CourseSignClassOption> _classes = const [];
+  List<_ClassFilterOption> _classOptions = _kFallbackClassOptions;
   String? _selectedClassId;
   String _selectedDate = todayIsoDate();
   List<CourseSignSession> _sessions = const [];
@@ -997,20 +1006,19 @@ class _SmallClassTabState extends ConsumerState<_SmallClassTab> {
         ? parseCourseSignClassList(resp.data)
         : const <CourseSignClassOption>[];
     setState(() {
-      _classes = classes;
-      _selectedClassId =
-          classes.isNotEmpty ? classes.first.id : null;
+      _classOptions = _buildClassFilterOptions(classes);
+      if (_selectedClassId != null &&
+          !_classOptions.any((o) => o.id == _selectedClassId)) {
+        _selectedClassId = null;
+      }
       _loadingClasses = false;
     });
-    if (_selectedClassId != null) {
-      await _loadSignData();
-    }
+    await _loadSignData();
   }
 
   Future<void> _loadSignData() async {
-    final classId = _selectedClassId;
-    if (classId == null || classId.isEmpty) return;
     setState(() => _loadingData = true);
+    final classId = _selectedClassId ?? '';
     final repo = ref.read(adminRepositoryProvider);
     final results = await Future.wait([
       repo.courseSignSum1(classId: classId, date: _selectedDate),
@@ -1061,10 +1069,10 @@ class _SmallClassTabState extends ConsumerState<_SmallClassTab> {
           _FilterBar(
             selectedClassId: _selectedClassId,
             selectedDate: _selectedDate,
-            classOptions: _classes,
+            classOptions: _classOptions,
             loading: _loadingClasses,
             onClassChanged: (id) {
-              if (id == null || id == _selectedClassId) return;
+              if (id == _selectedClassId) return;
               setState(() => _selectedClassId = id);
               unawaited(_loadSignData());
             },
@@ -1077,9 +1085,9 @@ class _SmallClassTabState extends ConsumerState<_SmallClassTab> {
           if (_loadingData)
             Padding(
               padding: EdgeInsets.symmetric(vertical: ui(40)),
-              child: const Center(child: CircularProgressIndicator()),
+              child: const Center(child: AppLoadingIndicator()),
             )
-          else if (_selectedClassId == null)
+          else if (_classOptions.length <= 1)
             _EmptyHint(text: '暂无小班班级，请先在班级编组中创建')
           else if (_sessions.isEmpty)
             _EmptyHint(text: '所选日期暂无小课签到记录')
@@ -2322,6 +2330,134 @@ class _MakeupStatusBadge extends StatelessWidget {
 // 共用小组件
 // =============================================================================
 
+const _kAllClasses = '全部班级';
+
+class _ClassFilterOption {
+  const _ClassFilterOption({required this.id, required this.label});
+
+  /// `null` = 全部班级。
+  final String? id;
+  final String label;
+
+  static const all = _ClassFilterOption(id: null, label: _kAllClasses);
+
+  @override
+  bool operator ==(Object other) =>
+      other is _ClassFilterOption && other.id == id && other.label == label;
+
+  @override
+  int get hashCode => Object.hash(id, label);
+}
+
+const _kFallbackClassOptions = <_ClassFilterOption>[_ClassFilterOption.all];
+
+List<_ClassFilterOption> _buildClassFilterOptions(
+  List<CourseSignClassOption> classes,
+) {
+  return [
+    _ClassFilterOption.all,
+    ...classes.map((c) => _ClassFilterOption(id: c.id, label: c.name)),
+  ];
+}
+
+class _ClassFilterField extends StatefulWidget {
+  const _ClassFilterField({
+    required this.options,
+    required this.selectedClassId,
+    required this.loading,
+    required this.onChanged,
+  });
+
+  final List<_ClassFilterOption> options;
+  final String? selectedClassId;
+  final bool loading;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  State<_ClassFilterField> createState() => _ClassFilterFieldState();
+}
+
+class _ClassFilterFieldState extends State<_ClassFilterField> {
+  final _fieldKey = GlobalKey();
+  bool _open = false;
+
+  _ClassFilterOption get _selected => widget.options.firstWhere(
+    (o) => o.id == widget.selectedClassId,
+    orElse: () => _ClassFilterOption.all,
+  );
+
+  String get _label => widget.loading ? '加载班级…' : _selected.label;
+
+  Future<void> _openMenu() async {
+    if (widget.loading) return;
+    final fieldCtx = _fieldKey.currentContext;
+    if (fieldCtx == null) return;
+    setState(() => _open = true);
+    final selected = await showAppPopupSelector<_ClassFilterOption>(
+      anchorContext: fieldCtx,
+      items: widget.options,
+      value: _selected,
+      itemLabel: (o) => o.label,
+      width: DashboardScaleScope.of(fieldCtx).ui(280),
+    );
+    if (!mounted) return;
+    setState(() => _open = false);
+    if (selected != null) widget.onChanged(selected.id);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return InkWell(
+      key: _fieldKey,
+      onTap: _openMenu,
+      borderRadius: BorderRadius.circular(ui(12)),
+      child: Container(
+        width: ui(220),
+        height: ui(44),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(ui(12)),
+          border: Border.all(color: _kBorderSoft),
+        ),
+        padding: EdgeInsets.symmetric(horizontal: ui(16)),
+        child: Row(
+          children: [
+            Icon(
+              Icons.school_outlined,
+              size: ui(16),
+              color: const Color(0xFFC6C6C6),
+            ),
+            SizedBox(width: ui(10)),
+            Expanded(
+              child: Text(
+                _label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: ui(14),
+                  height: 1.2,
+                  color: _kTextDark,
+                  fontFamily: 'PingFang SC',
+                ),
+              ),
+            ),
+            AnimatedRotation(
+              turns: _open ? 0.5 : 0,
+              duration: const Duration(milliseconds: 160),
+              child: Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: ui(18),
+                color: const Color(0xFFC6C6C6),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _FilterBar extends StatelessWidget {
   const _FilterBar({
     required this.selectedClassId,
@@ -2334,7 +2470,7 @@ class _FilterBar extends StatelessWidget {
 
   final String? selectedClassId;
   final String selectedDate;
-  final List<CourseSignClassOption> classOptions;
+  final List<_ClassFilterOption> classOptions;
   final bool loading;
   final ValueChanged<String?> onClassChanged;
   final ValueChanged<String> onDateChanged;
@@ -2342,47 +2478,13 @@ class _FilterBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final hasSelection = classOptions.any((c) => c.id == selectedClassId);
     return Row(
       children: [
-        Container(
-          height: ui(34),
-          padding: EdgeInsets.symmetric(horizontal: ui(10)),
-          decoration: BoxDecoration(
-            color: _kCardBg,
-            borderRadius: BorderRadius.circular(ui(8)),
-            border: Border.all(color: _kBorderSoft),
-          ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String?>(
-              value: hasSelection ? selectedClassId : null,
-              isDense: true,
-              hint: Text(
-                loading ? '加载班级…' : '选择班级',
-                style: TextStyle(
-                  fontSize: ui(12),
-                  fontFamily: 'PingFang SC',
-                  color: _kTextHint,
-                ),
-              ),
-              items: classOptions
-                  .map(
-                    (c) => DropdownMenuItem(
-                      value: c.id,
-                      child: Text(
-                        c.name,
-                        style: TextStyle(
-                          fontSize: ui(12),
-                          fontFamily: 'PingFang SC',
-                          color: _kTextDark,
-                        ),
-                      ),
-                    ),
-                  )
-                  .toList(),
-              onChanged: loading ? null : onClassChanged,
-            ),
-          ),
+        _ClassFilterField(
+          options: classOptions,
+          selectedClassId: selectedClassId,
+          loading: loading,
+          onChanged: onClassChanged,
         ),
         SizedBox(width: ui(10)),
         // 日期 picker pill
@@ -2404,32 +2506,31 @@ class _FilterBar extends StatelessWidget {
               onDateChanged(iso);
             }
           },
-          borderRadius: BorderRadius.circular(ui(8)),
+          borderRadius: BorderRadius.circular(ui(12)),
           child: Container(
-            height: ui(34),
-            padding: EdgeInsets.symmetric(horizontal: ui(10)),
+            height: ui(44),
+            padding: EdgeInsets.symmetric(horizontal: ui(16)),
             decoration: BoxDecoration(
-              color: _kCardBg,
-              borderRadius: BorderRadius.circular(ui(8)),
-              border: Border.all(color: _kBorderSoft),
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(ui(12)),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
                   Icons.calendar_today_rounded,
-                  size: ui(13),
+                  size: ui(16),
                   color: _kPurple,
                 ),
-                SizedBox(width: ui(5)),
+                SizedBox(width: ui(10)),
                 Text(
                   selectedDate,
                   style: TextStyle(
-                    fontSize: ui(12),
+                    fontSize: ui(14),
+                    height: 1.2,
                     color: _kTextDark,
                     fontFamily: 'PingFang SC',
                     fontWeight: AppFont.w400,
-                    height: 1,
                   ),
                 ),
               ],

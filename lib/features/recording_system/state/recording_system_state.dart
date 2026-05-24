@@ -80,17 +80,25 @@ class RecordingShareClass {
   const RecordingShareClass({
     required this.id,
     required this.name,
+    this.avatarUrl = '',
     this.selected = false,
   });
 
   final String id;
   final String name;
+  final String avatarUrl;
   final bool selected;
 
-  RecordingShareClass copyWith({String? id, String? name, bool? selected}) {
+  RecordingShareClass copyWith({
+    String? id,
+    String? name,
+    String? avatarUrl,
+    bool? selected,
+  }) {
     return RecordingShareClass(
       id: id ?? this.id,
       name: name ?? this.name,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
       selected: selected ?? this.selected,
     );
   }

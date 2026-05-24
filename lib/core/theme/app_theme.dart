@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import 'app_font.dart';
+import '../widgets/app_loading_indicator.dart';
 
 class AppTheme {
   static const _primaryColor = Color(0xFF00C9A4);
@@ -55,6 +56,7 @@ class AppTheme {
       // 或 `color: ...` 单独覆盖（例如夜色背景下的白色 loading）。
       progressIndicatorTheme: const ProgressIndicatorThemeData(
         color: brandColor,
+        strokeWidth: kAppLoadingIndicatorStrokeWidth,
         circularTrackColor: Color(0x1A8741FF),
         linearTrackColor: Color(0x1A8741FF),
       ),

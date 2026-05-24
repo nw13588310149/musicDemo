@@ -6,40 +6,24 @@
 //      路由到本视图。返回：banner 左上角返回按钮 → onBack。
 //
 // 视觉（Figma 970 设计宽）：
-//   1. 顶部 banner（62 高）：白→#F9EDFF 渐变；左 32 返回；居中 "学生名册"
-//      16/600；圆角 16；与签课管理 banner 风格一致。
-//   2. 筛选行（44 高，spaceBetween）：
-//        · 左 120 宽白底 12 圆角胶囊：14/400 「全部班级 ▾」班级筛选
-//          ─ 点击弹下拉菜单（白底 12 圆角，命中项紫色 + check）。
-//        · 右 324 宽白底 44 高搜索框：圆形 magnifier 图标 + 占位
-//          「搜索姓名、工号、任课方向」14/400 #D1D1D1；可输入实时搜索。
-//   3. 三张统计卡（一行平铺，100 高 12 圆角）：
-//        · 当前列表：196° 紫白渐变 #E7DCFF→white；32px Barlow 数值 + "当前列表"
-//          14/500 黑标签；右下半透紫色装饰圆。
-//        · 男：196° 绿白渐变 #DCFFE7→white；同布局。
-//        · 女：196° 橙白渐变 #FFE2DC→white；同布局。
-//      数值随筛选/搜索结果联动（filtered.length / male / female）。
-//   4. 学生卡网格（315×104 白卡，3 列 12 gap，Wrap 自适应）：每张卡左 40 头像，
-//      右上「详情 ›」紫色 link，主区按行展示：
-//        · 姓名 14/500 + 14×14 蓝色"已认证"小图标（isFeatured 时）
-//        · 宿舍 12/400（女生公寓 A-602）
-//        · 学号 12/400 #B6B5BB（G3030201）
-//        · 标签 Wrap：班级 / 任课方向（灰底 #F5F6FA / fg #6D6B75）+
-//          住校 / 合唱团 等（紫底 #A773FF / fg white），11/400。
-//
-// 颜色：白卡 / #F5F6FA 灰底 / #F3F2F3 边 / #8741FF 主紫 / #A773FF 标签紫 /
-//      #325BFF 已认证蓝 / #B6B5BB 提示灰
-// 字体：PingFang SC（标题 14/16/600 / 正文 11/12/14）+ Barlow（数值 32）
+//   1. 顶部 banner（62 高）：背景图 xiaoquan/bg.png；左返回；居中 "学生名册"
+//   2. 筛选行：班级 dropdown + 搜索框
+//   3. 三张统计卡：当前列表 / 男 / 女
+//   4. 学生卡 3 列网格（对齐管理员「学生管理」）：姓名+学号 / 班级 / 住宿 +
+//      右上角学籍状态徽章；整卡可点 → 右侧「学生档案」抽屉（含成绩走势）。
 // =============================================================================
 
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/constants/app_assets.dart';
 import '../../../core/network/media_url.dart';
+import '../../../core/network/snowflake_id.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../data/teacher_repository.dart';
@@ -48,136 +32,280 @@ import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // ---- 配色 -------------------------------------------------------------------
 const Color _kCardBg = Colors.white;
-const Color _kPageBgChip = Color(0xFFF5F6FA);
 const Color _kBorderSoft = Color(0xFFF3F2F3);
 const Color _kTextDark = Color(0xFF0B081A);
-const Color _kTextSecondary = Color(0xFF6D6B75);
+const Color _kTextPrimary = Color(0xFF0B081A);
+const Color _kTextSub = Color(0xFF6D6B75);
 const Color _kTextHint = Color(0xFFB6B5BB);
 const Color _kTextPlaceholder = Color(0xFFD1D1D1);
 const Color _kSearchIcon = Color(0xFFC6C6C6);
 const Color _kPurple = Color(0xFF8741FF);
+const Color _kPurpleSoft = Color(0xFFDAD2FF);
+const Color _kPageBgChip = Color(0xFFF5F6FA);
+const Color _kTextSecondary = Color(0xFF6D6B75);
 const Color _kPurpleTag = Color(0xFFA773FF);
-const Color _kVerifyBlue = Color(0xFF325BFF);
+
+// ---- 学籍状态 ---------------------------------------------------------------
+
+enum _StudentStatus { enrolled, suspended, transferring, graduated }
+
+_StudentStatus _parseStudentStatus(dynamic raw) {
+  if (raw == null) return _StudentStatus.enrolled;
+  final s = raw.toString().toLowerCase();
+  if (s == '1' || s == 'enrolled' || raw.toString().contains('在籍')) {
+    return _StudentStatus.enrolled;
+  }
+  if (s == '2' || s == 'suspended' || raw.toString().contains('休学')) {
+    return _StudentStatus.suspended;
+  }
+  if (s == '3' || s == 'transferring' || raw.toString().contains('转学')) {
+    return _StudentStatus.transferring;
+  }
+  if (s == '4' || s == 'graduated' || raw.toString().contains('毕业')) {
+    return _StudentStatus.graduated;
+  }
+  return _StudentStatus.enrolled;
+}
+
+extension on _StudentStatus {
+  String get label {
+    switch (this) {
+      case _StudentStatus.enrolled:
+        return '在籍';
+      case _StudentStatus.suspended:
+        return '休学';
+      case _StudentStatus.transferring:
+        return '转学';
+      case _StudentStatus.graduated:
+        return '毕业';
+    }
+  }
+
+  Color get bg {
+    switch (this) {
+      case _StudentStatus.enrolled:
+        return _kPurpleSoft;
+      case _StudentStatus.suspended:
+        return const Color(0xFFFFE7C2);
+      case _StudentStatus.transferring:
+        return const Color(0xFFD2EAFF);
+      case _StudentStatus.graduated:
+        return const Color(0xFFE0E0E0);
+    }
+  }
+
+  Color get fg {
+    switch (this) {
+      case _StudentStatus.enrolled:
+        return _kPurple;
+      case _StudentStatus.suspended:
+        return const Color(0xFFE89B30);
+      case _StudentStatus.transferring:
+        return const Color(0xFF1F77E0);
+      case _StudentStatus.graduated:
+        return const Color(0xFF6D6B75);
+    }
+  }
+}
 
 // ---- 数据模型 ---------------------------------------------------------------
 
 class _Student {
   const _Student({
-    required this.apiId,
-    required this.id,
+    required this.userId,
     required this.name,
-    required this.dorm,
-    required this.avatarSeed,
-    required this.isMale,
-    required this.tags,
-    required this.badges,
-    this.headUrl,
-    this.mobile,
-    this.parentPhone,
-    this.subtitle,
+    required this.studentId,
+    required this.classInfo,
+    required this.dormInfo,
+    required this.status,
+    this.avatarUrl = '',
+    this.faceImgUrl = '',
+    this.tags = const [],
+    this.direction = '—',
+    this.adminClass = '—',
+    this.dorm = '—',
+    this.phone = '—',
+    this.parentPhone = '—',
+    this.recentChange = '无',
+    this.remark = '—',
+    this.gender = '',
   });
 
-  /// 后端学生主键（雪花字符串），用于 [TeacherRepository.studentDetail]。
-  final String apiId;
-
-  /// 工号 / 学号展示。
-  final String id;
+  final String userId;
   final String name;
-  final String dorm;
-
-  /// placeholder 头像随机色，0/1/2 → 紫/橙/绿（保证不同卡片颜色不一致）。
-  final int avatarSeed;
-  final bool isMale;
-
-  /// 灰底 tag（班级名 / 班级职务等）。
+  final String studentId;
+  final String classInfo;
+  final String dormInfo;
+  final _StudentStatus status;
+  final String avatarUrl;
+  final String faceImgUrl;
   final List<String> tags;
+  final String direction;
+  final String adminClass;
+  final String dorm;
+  final String phone;
+  final String parentPhone;
+  final String recentChange;
+  final String remark;
+  final String gender;
 
-  /// 紫底 tag（住校 / 合唱团 等身份徽标）。
-  final List<String> badges;
+  bool get isMale {
+    final g = gender.trim();
+    return g == '1' || g == '男';
+  }
 
-  /// 头像完整 URL；为空时用首字渐变。
-  final String? headUrl;
+  factory _Student.fromJson(Map<String, dynamic> json) {
+    final nickname = _pickString(json, ['nickname', 'nickName'], '');
+    final realname = _pickString(json, ['realname', 'realName'], '');
+    final name = nickname.isNotEmpty
+        ? nickname
+        : (realname.isNotEmpty
+            ? realname
+            : _pickString(json, ['name', 'stuName', 'studentName'], '未命名'));
 
-  final String? mobile;
-  final String? parentPhone;
-  final String? subtitle;
+    final headUrlRaw =
+        _pickString(json, ['headUrl', 'avatar', 'avatarUrl'], '');
+    final avatarUrl =
+        headUrlRaw.isNotEmpty ? MediaUrl.resolve(headUrlRaw) : '';
 
-  factory _Student.fromMap(Map<dynamic, dynamic> m) {
-    final name = (m['realname']?.toString().trim().isNotEmpty == true)
-        ? m['realname'].toString().trim()
-        : ((m['nickname']?.toString().trim().isNotEmpty == true)
-            ? m['nickname'].toString().trim()
-            : '—');
-    final sid = m['id']?.toString().trim() ?? '';
-    final studentNo = m['studentNo']?.toString().trim().isNotEmpty == true
-        ? m['studentNo'].toString().trim()
-        : (m['code']?.toString().trim() ?? '');
-    final display = studentNo.isNotEmpty ? studentNo : sid;
-    final rawHead =
-        m['headUrl']?.toString().trim() ?? m['avatar']?.toString().trim() ?? '';
-    final headUrl = rawHead.isEmpty ? null : MediaUrl.resolve(rawHead);
-    final g = m['gender']?.toString().trim() ?? '';
-    final isMale = g == '1' || g == '男';
-    final dorm = m['dormitory']?.toString().trim().isNotEmpty == true
-        ? m['dormitory'].toString().trim()
-        : (m['dorm']?.toString().trim().isNotEmpty == true
-            ? m['dorm'].toString().trim()
-            : '—');
-    final className = m['className']?.toString().trim() ?? '';
-    final tags = <String>[];
-    if (className.isNotEmpty) tags.add(className);
-    final role =
-        m['classRole']?.toString().trim() ?? m['role']?.toString().trim() ?? '';
-    if (role.isNotEmpty) tags.add(role);
-    final tagsRaw = m['tags']?.toString().trim() ?? '';
-    final badges = tagsRaw
-        .split(',')
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
-        .toList();
-    final st = m['studentStatus']?.toString().trim() ?? '';
-    if (st.isNotEmpty && !badges.contains(st)) {
-      badges.insert(0, st);
+    final studentNo = _pickString(json, [
+      'no',
+      'studentNo',
+      'studentId',
+      'stuNo',
+      'stuId',
+      'code',
+      'studentCode',
+    ], '');
+
+    var className = '';
+    final bigClass = json['bigClass'];
+    if (bigClass is Map) {
+      className = _pickString(
+        Map<String, dynamic>.from(bigClass),
+        ['name', 'className', 'groupName', 'fullName'],
+        '',
+      );
     }
+    if (className.isEmpty) {
+      className = _pickString(json, [
+        'className',
+        'class',
+        'gradeName',
+        'classFullName',
+      ], '');
+    }
+
+    final directionName = _pickString(json, [
+      'directionName',
+      'direction',
+      'directionText',
+      'majorDirection',
+    ], '—');
+
+    final bedInfo = _pickString(json, ['bedInfo'], '');
+    final bedIdRaw = json['bedId'];
+    final hasBedId = bedIdRaw != null &&
+        '$bedIdRaw'.trim().isNotEmpty &&
+        '$bedIdRaw' != '0' &&
+        bedIdRaw != 0;
+    final isLiving = hasBedId || bedInfo.isNotEmpty;
+    final dormName = bedInfo.isNotEmpty
+        ? bedInfo
+        : _pickString(json, [
+            'dorm',
+            'dormName',
+            'roomName',
+            'apartment',
+            'dormitory',
+          ], '');
+
+    final phone = _pickString(json, [
+      'phone',
+      'mobile',
+      'studentPhone',
+      'stuPhone',
+      'tel',
+    ], '');
+    final parentPhone = _pickString(json, [
+      'parentPhone',
+      'parentMobile',
+      'fatherPhone',
+      'motherPhone',
+      'guardianPhone',
+      'guardianMobile',
+    ], phone);
+    final remark = _pickString(json, [
+      'remark',
+      'comment',
+      'description',
+      'note',
+      'introduce',
+    ], '');
+    final gender = _pickString(json, ['gender', 'sex'], '');
+    final faceImgRaw = _pickString(json, ['faceImg'], '');
+    final tags = _parseTags(json['tags']);
+
+    final classInfo = className.isEmpty ? '—' : className;
+    final dormInfo = isLiving
+        ? (dormName.isEmpty ? '宿舍' : '宿舍·$dormName')
+        : '走读';
+
+    final userId =
+        readSnowflakeId(json['id'] ?? json['userId'] ?? json['stuId']) ?? '';
+
     return _Student(
-      apiId: sid,
-      id: display.isEmpty ? '—' : display,
+      userId: userId,
       name: name,
-      dorm: dorm,
-      avatarSeed: name.isNotEmpty ? name.codeUnitAt(0) % 3 : 0,
-      isMale: isMale,
+      studentId: studentNo,
+      classInfo: classInfo,
+      dormInfo: dormInfo,
+      status: _parseStudentStatus(
+        json['studentStatus'] ?? json['status'] ?? json['stuStatus'],
+      ),
+      avatarUrl: avatarUrl,
+      faceImgUrl: faceImgRaw,
       tags: tags,
-      badges: badges,
-      headUrl: headUrl,
-      mobile: m['mobile']?.toString().trim(),
-      parentPhone: m['parentMobile']?.toString().trim().isNotEmpty == true
-          ? m['parentMobile'].toString().trim()
-          : m['guardianMobile']?.toString().trim(),
-      subtitle: m['major']?.toString().trim().isNotEmpty == true
-          ? m['major'].toString().trim()
-          : m['introduce']?.toString().trim(),
+      direction: directionName,
+      adminClass: className.isEmpty ? '—' : className,
+      dorm: isLiving ? (dormName.isEmpty ? '宿舍' : dormName) : '走读',
+      phone: phone.isEmpty ? '—' : phone,
+      parentPhone: parentPhone.isEmpty ? '—' : parentPhone,
+      recentChange: _pickString(json, [
+        'lastChange',
+        'recentChange',
+        'changeDesc',
+        'transferRemark',
+      ], '无'),
+      remark: remark.isEmpty ? '—' : remark,
+      gender: gender,
     );
   }
 }
 
-const _kAllClassesLabel = '全部班级';
-
-class _RosterClassOption {
-  const _RosterClassOption({required this.id, required this.label});
-  final String id;
-  final String label;
+String _pickString(
+  Map<String, dynamic> json,
+  List<String> keys,
+  String fallback,
+) {
+  for (final k in keys) {
+    final v = json[k];
+    if (v == null) continue;
+    final s = v.toString().trim();
+    if (s.isNotEmpty) return s;
+  }
+  return fallback;
 }
 
-List<Map<dynamic, dynamic>> _coerceRecords(dynamic raw) {
-  if (raw is Map) {
-    final inner = raw['records'] ?? raw['list'] ?? raw['data'];
-    if (inner is List) {
-      return inner.whereType<Map>().toList();
-    }
-    return const [];
-  }
-  if (raw is List) return raw.whereType<Map>().toList();
-  return const [];
+List<String> _parseTags(dynamic raw) {
+  if (raw == null) return const [];
+  final s = raw.toString().trim();
+  if (s.isEmpty || s.toLowerCase() == 'null') return const [];
+  return s
+      .split(RegExp(r'[,，]'))
+      .map((t) => t.trim())
+      .where((t) => t.isNotEmpty)
+      .toList();
 }
 
 String? _nonEmptyStr(dynamic v) {
@@ -205,10 +333,30 @@ String _detailPick(
   return fallback;
 }
 
-String? _resolveHeadUrl(_Student row, Map<String, dynamic>? d) {
+String _resolveHeadUrl(_Student row, Map<String, dynamic>? d) {
   final raw = _nonEmptyStr(d?['headUrl']) ?? _nonEmptyStr(d?['avatar']);
   if (raw != null) return MediaUrl.resolve(raw);
-  return row.headUrl;
+  return row.avatarUrl;
+}
+
+const _kAllClassesLabel = '全部班级';
+
+class _RosterClassOption {
+  const _RosterClassOption({required this.id, required this.label});
+  final String id;
+  final String label;
+}
+
+List<Map<dynamic, dynamic>> _coerceRecords(dynamic raw) {
+  if (raw is Map) {
+    final inner = raw['records'] ?? raw['list'] ?? raw['data'];
+    if (inner is List) {
+      return inner.whereType<Map>().toList();
+    }
+    return const [];
+  }
+  if (raw is List) return raw.whereType<Map>().toList();
+  return const [];
 }
 
 // =============================================================================
@@ -232,9 +380,9 @@ class _TeacherStudentRosterViewState extends ConsumerState<TeacherStudentRosterV
   Timer? _searchDebounce;
 
   List<_RosterClassOption> _classOptions = [
-    const _RosterClassOption(id: '0', label: _kAllClassesLabel),
+    const _RosterClassOption(id: '', label: _kAllClassesLabel),
   ];
-  String _selectedClassId = '0';
+  String _selectedClassId = '';
   String _selectedClassLabel = _kAllClassesLabel;
 
   List<_Student> _all = [];
@@ -259,7 +407,7 @@ class _TeacherStudentRosterViewState extends ConsumerState<TeacherStudentRosterV
     final res = await ref.read(teacherRepositoryProvider).classList();
     if (!mounted) return;
     final opts = <_RosterClassOption>[
-      const _RosterClassOption(id: '0', label: _kAllClassesLabel),
+      const _RosterClassOption(id: '', label: _kAllClassesLabel),
     ];
     if (res.isSuccess) {
       final raw = res.data;
@@ -305,10 +453,16 @@ class _TeacherStudentRosterViewState extends ConsumerState<TeacherStudentRosterV
       AppToast.show(context, res.msg);
     }
     setState(() {
-      _all = rows.map(_Student.fromMap).toList();
+      _all = rows
+          .map((m) => _Student.fromJson(Map<String, dynamic>.from(m)))
+          .toList();
       _listTotal = total > 0 ? total : _all.length;
       _loadingStudents = false;
     });
+  }
+
+  void _openProfile(_Student s) {
+    _openStudentDetailDrawer(context, s);
   }
 
   void _onClassPicked(_RosterClassOption opt) {
@@ -358,10 +512,7 @@ class _TeacherStudentRosterViewState extends ConsumerState<TeacherStudentRosterV
             Center(
               child: Padding(
                 padding: EdgeInsets.only(top: ui(48)),
-                child: CircularProgressIndicator(
-                  color: _kPurple,
-                  strokeWidth: 2,
-                ),
+                child: AppLoadingIndicator(),
               ),
             )
           else if (!_loadingStudents && list.isEmpty)
@@ -377,7 +528,7 @@ class _TeacherStudentRosterViewState extends ConsumerState<TeacherStudentRosterV
           else
             _StudentCardsGrid(
               students: list,
-              onOpenStudentDetail: (s) => _openStudentDetailDrawer(context, s),
+              onTap: _openProfile,
             ),
         ],
       ),
@@ -386,7 +537,7 @@ class _TeacherStudentRosterViewState extends ConsumerState<TeacherStudentRosterV
 }
 
 // =============================================================================
-// 顶部 banner（白→#F9EDFF 渐变，居中标题 + 左返回）
+// 顶部 banner（背景图 xiaoquan/bg.png，居中标题 + 左返回）
 // =============================================================================
 
 class _RosterBanner extends StatelessWidget {
@@ -400,12 +551,13 @@ class _RosterBanner extends StatelessWidget {
     return Container(
       width: double.infinity,
       height: ui(62),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(ui(16)),
-        gradient: const LinearGradient(
-          begin: Alignment.bottomLeft,
-          end: Alignment.topRight,
-          colors: [Colors.white, Color(0xFFF9EDFF)],
+        image: DecorationImage(
+          image: AssetImage(AppAssets.xiaoquanHeaderBg),
+          fit: BoxFit.cover,
+          alignment: Alignment.centerRight,
         ),
       ),
       child: Stack(
@@ -441,7 +593,7 @@ class _RosterBanner extends StatelessWidget {
                   color: _kTextDark,
                   fontFamily: 'PingFang SC',
                   fontWeight: AppFont.w600,
-                  height: 1,
+                  height: 1.2,
                 ),
               ),
             ),
@@ -922,32 +1074,31 @@ class _StatTrioCard extends StatelessWidget {
 }
 
 // =============================================================================
-// 学生卡 grid（315×104，3 列 12 gap）
+// 学生卡 3 列网格（对齐管理员「学生管理」）
 // =============================================================================
 
 class _StudentCardsGrid extends StatelessWidget {
   const _StudentCardsGrid({
     required this.students,
-    required this.onOpenStudentDetail,
+    required this.onTap,
   });
 
   final List<_Student> students;
-  final ValueChanged<_Student> onOpenStudentDetail;
+  final ValueChanged<_Student> onTap;
 
   @override
   Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
     if (students.isEmpty) {
       return _RosterEmptyState();
     }
     return LayoutBuilder(
-      builder: (context, c) {
-        final gap = ui(12);
-        // Figma 970 设计宽下：3 列 315 + 2*12 gap = 969；自适应到任何容器宽度。
-        final columns = c.maxWidth >= ui(720)
+      builder: (context, constraints) {
+        const gap = 12.0;
+        final cols = constraints.maxWidth >= 900
             ? 3
-            : (c.maxWidth >= ui(480) ? 2 : 1);
-        final cardWidth = (c.maxWidth - gap * (columns - 1)) / columns;
+            : (constraints.maxWidth >= 600 ? 2 : 1);
+        final cardWidth =
+            (constraints.maxWidth - gap * (cols - 1)) / cols;
         return Wrap(
           spacing: gap,
           runSpacing: gap,
@@ -955,10 +1106,7 @@ class _StudentCardsGrid extends StatelessWidget {
             for (final s in students)
               SizedBox(
                 width: cardWidth,
-                child: _StudentCard(
-                  data: s,
-                  onOpenDetail: () => onOpenStudentDetail(s),
-                ),
+                child: _StudentCard(student: s, onTap: () => onTap(s)),
               ),
           ],
         );
@@ -1002,210 +1150,128 @@ class _RosterEmptyState extends StatelessWidget {
 }
 
 class _StudentCard extends StatelessWidget {
-  const _StudentCard({required this.data, required this.onOpenDetail});
+  const _StudentCard({required this.student, required this.onTap});
 
-  final _Student data;
-  final VoidCallback onOpenDetail;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    // Figma 设计稿单行 tag 时高度恰好 104；标签换行/单行不一时，宽容地让卡片
-    // 自适应高度（去掉固定 height 避免 BOTTOM OVERFLOWED）。最小高度仍按 104
-    // 给一个底线，保证视觉一致。
-    return Container(
-      constraints: BoxConstraints(minHeight: ui(104)),
-      decoration: BoxDecoration(
-        color: _kCardBg,
-        borderRadius: BorderRadius.circular(ui(12)),
-      ),
-      padding: EdgeInsets.fromLTRB(ui(12), ui(8), ui(12), ui(8)),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _StudentAvatar(
-            seed: data.avatarSeed,
-            name: data.name,
-            imageUrl: data.headUrl,
-          ),
-          SizedBox(width: ui(8)),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Flexible(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Flexible(
-                            child: Text(
-                              data.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: ui(14),
-                                color: _kTextDark,
-                                fontFamily: 'PingFang SC',
-                                fontWeight: AppFont.w500,
-                                height: 1.2,
-                              ),
-                            ),
-                          ),
-                          SizedBox(width: ui(4)),
-                          Icon(
-                            Icons.workspace_premium_rounded,
-                            size: ui(14),
-                            color: _kVerifyBlue,
-                          ),
-                        ],
-                      ),
-                    ),
-                    SizedBox(width: ui(8)),
-                    _DetailLink(onTap: onOpenDetail),
-                  ],
-                ),
-                SizedBox(height: ui(6)),
-                Text(
-                  data.dorm,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: ui(12),
-                    color: _kTextDark,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w400,
-                    height: 1.2,
-                  ),
-                ),
-                SizedBox(height: ui(4)),
-                Text(
-                  data.id,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: ui(12),
-                    color: _kTextHint,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w400,
-                    height: 1.2,
-                  ),
-                ),
-                SizedBox(height: ui(4)),
-                _TagWrap(tags: data.tags, badges: data.badges),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// 40×40 头像（有 URL 时网络图；否则首字渐变）。
-class _StudentAvatar extends StatelessWidget {
-  const _StudentAvatar({
-    required this.seed,
-    required this.name,
-    this.imageUrl,
-  });
-
-  final int seed;
-  final String name;
-  final String? imageUrl;
-
-  static const List<List<Color>> _kPalette = [
-    [Color(0xFFE7DCFF), Color(0xFFCBB1FF)], // 紫
-    [Color(0xFFFFE2DC), Color(0xFFFFB199)], // 橙
-    [Color(0xFFDCFFE7), Color(0xFF85FFAD)], // 绿
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    final colors = _kPalette[seed % _kPalette.length];
-    final initial = name.isEmpty ? '·' : name.characters.first;
-    final url = imageUrl?.trim();
-    if (url != null && url.isNotEmpty) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(ui(8)),
-        child: SizedBox(
-          width: ui(40),
-          height: ui(40),
-          child: CachedNetworkImage(
-            imageUrl: url,
-            fit: BoxFit.cover,
-            placeholder: (_, _) => _avatarPlaceholder(ui, colors, initial),
-            errorWidget: (_, _, _) => _avatarPlaceholder(ui, colors, initial),
-          ),
-        ),
-      );
-    }
-    return _avatarPlaceholder(ui, colors, initial);
-  }
-
-  Widget _avatarPlaceholder(
-    double Function(double) ui,
-    List<Color> colors,
-    String initial,
-  ) {
-    return Container(
-      width: ui(40),
-      height: ui(40),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(ui(8)),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: colors,
-        ),
-      ),
-      child: Text(
-        initial,
-        style: TextStyle(
-          fontSize: ui(16),
-          color: _kTextDark,
-          fontFamily: 'PingFang SC',
-          fontWeight: AppFont.w500,
-          height: 1,
-        ),
-      ),
-    );
-  }
-}
-
-class _DetailLink extends StatelessWidget {
-  const _DetailLink({required this.onTap});
-
+  final _Student student;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return InkWell(
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: onTap,
-      borderRadius: BorderRadius.circular(ui(4)),
-      child: Padding(
-        padding: EdgeInsets.symmetric(vertical: ui(2)),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
+      child: Container(
+        height: ui(78),
+        decoration: BoxDecoration(
+          color: _kCardBg,
+          borderRadius: BorderRadius.circular(ui(12)),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Stack(
           children: [
-            Text(
-              '详情',
-              style: TextStyle(
-                fontSize: ui(14),
-                color: _kPurple,
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w400,
-                height: 1.2,
+            Padding(
+              padding: EdgeInsets.fromLTRB(ui(12), ui(8), ui(46), ui(8)),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _Avatar(name: student.name, avatarUrl: student.avatarUrl),
+                  SizedBox(width: ui(8)),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                student.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textHeightBehavior: const TextHeightBehavior(
+                                  applyHeightToFirstAscent: false,
+                                  applyHeightToLastDescent: false,
+                                ),
+                                style: TextStyle(
+                                  fontSize: ui(14),
+                                  height: 1.0,
+                                  fontWeight: AppFont.w500,
+                                  color: _kTextPrimary,
+                                  fontFamily: 'PingFang SC',
+                                ),
+                              ),
+                            ),
+                            if (student.studentId.isNotEmpty) ...[
+                              SizedBox(width: ui(8)),
+                              Text(
+                                student.studentId,
+                                style: TextStyle(
+                                  fontSize: ui(12),
+                                  height: 1.2,
+                                  color: _kTextHint,
+                                  fontFamily: 'PingFang SC',
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        SizedBox(height: ui(4)),
+                        Text(
+                          student.classInfo,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: ui(12),
+                            height: 1.2,
+                            color: _kTextPrimary,
+                            fontFamily: 'PingFang SC',
+                          ),
+                        ),
+                        SizedBox(height: ui(4)),
+                        Text(
+                          student.dormInfo,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: ui(12),
+                            height: 1.2,
+                            color: _kTextSub,
+                            fontFamily: 'PingFang SC',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
-            SizedBox(width: ui(2)),
-            Icon(Icons.chevron_right_rounded, size: ui(16), color: _kPurple),
+            Positioned(
+              right: 0,
+              top: 0,
+              child: Container(
+                height: ui(22),
+                padding: EdgeInsets.symmetric(horizontal: ui(8)),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: student.status.bg,
+                  borderRadius: BorderRadius.only(
+                    topRight: Radius.circular(ui(12)),
+                    bottomLeft: Radius.circular(ui(12)),
+                  ),
+                ),
+                child: Text(
+                  student.status.label,
+                  style: TextStyle(
+                    fontSize: ui(12),
+                    height: 1.0,
+                    color: student.status.fg,
+                    fontFamily: 'PingFang SC',
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -1213,67 +1279,46 @@ class _DetailLink extends StatelessWidget {
   }
 }
 
-class _TagWrap extends StatelessWidget {
-  const _TagWrap({required this.tags, required this.badges});
+class _Avatar extends StatelessWidget {
+  const _Avatar({required this.name, this.avatarUrl = '', this.size = 40});
 
-  final List<String> tags;
-  final List<String> badges;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    final pills = <Widget>[
-      for (final t in tags) _TagPill(label: t, isAccent: false),
-      for (final b in badges) _TagPill(label: b, isAccent: true),
-    ];
-    if (pills.isEmpty) return const SizedBox.shrink();
-    final children = <Widget>[];
-    for (var i = 0; i < pills.length; i++) {
-      if (i > 0) children.add(SizedBox(width: ui(4)));
-      children.add(pills[i]);
-    }
-    // Figma 设计稿要求所有 tag 在一行内排列；当卡片宽度被压缩到放不下时，
-    // 用 SingleChildScrollView + NeverScrollableScrollPhysics 静默水平裁剪
-    // 尾部 tag，避免 Wrap 换行视觉错位，也不会触发 RenderFlex 的
-    // BOTTOM OVERFLOWED 警告。
-    return SizedBox(
-      height: ui(16),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        physics: const NeverScrollableScrollPhysics(),
-        child: Row(mainAxisSize: MainAxisSize.min, children: children),
-      ),
-    );
-  }
-}
-
-class _TagPill extends StatelessWidget {
-  const _TagPill({required this.label, required this.isAccent});
-
-  final String label;
-  final bool isAccent;
+  final String name;
+  final String avatarUrl;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      height: ui(16),
-      padding: EdgeInsets.symmetric(horizontal: ui(4), vertical: ui(1)),
+    final initial = name.isEmpty ? '·' : name.characters.first;
+    final placeholder = Container(
+      width: ui(size),
+      height: ui(size),
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: isAccent ? _kPurpleTag : _kPageBgChip,
-        borderRadius: BorderRadius.circular(ui(4)),
+        color: _kPurpleSoft,
+        borderRadius: BorderRadius.circular(ui(8)),
       ),
       child: Text(
-        label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
+        initial,
         style: TextStyle(
-          fontSize: ui(11),
-          color: isAccent ? Colors.white : _kTextSecondary,
+          fontSize: ui(size * 0.4),
+          fontWeight: AppFont.w500,
+          color: _kPurple,
           fontFamily: 'PingFang SC',
-          fontWeight: AppFont.w400,
-          height: 1.25,
+        ),
+      ),
+    );
+    if (avatarUrl.trim().isEmpty) return placeholder;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(ui(8)),
+      child: SizedBox(
+        width: ui(size),
+        height: ui(size),
+        child: CachedNetworkImage(
+          imageUrl: avatarUrl,
+          fit: BoxFit.cover,
+          placeholder: (_, _) => placeholder,
+          errorWidget: (_, _, _) => placeholder,
         ),
       ),
     );
@@ -1360,7 +1405,7 @@ class _StudentDetailDrawerState extends ConsumerState<_StudentDetailDrawer> {
   }
 
   Future<void> _loadDetail() async {
-    final id = widget.data.apiId.trim();
+    final id = widget.data.userId.trim();
     if (id.isEmpty) return;
     setState(() => _detailLoading = true);
     final res = await ref.read(teacherRepositoryProvider).studentDetail(id: id);
@@ -1514,19 +1559,15 @@ class _ProfileBlock extends StatelessWidget {
         data.name;
     final idLine = _nonEmptyStr(d?['studentNo']) ??
         _nonEmptyStr(d?['code']) ??
-        data.id;
+        data.studentId;
     final subtitle = _nonEmptyStr(d?['major']) ??
         _nonEmptyStr(d?['introduce']) ??
-        _nonEmptyStr(data.subtitle);
+        (data.direction != '—' ? data.direction : null);
     final head = _resolveHeadUrl(data, d);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        _StudentAvatar(
-          seed: data.avatarSeed,
-          name: displayName,
-          imageUrl: head,
-        ),
+        _Avatar(name: displayName, avatarUrl: head, size: 40),
         SizedBox(width: ui(12)),
         Expanded(
           child: Column(
@@ -1608,7 +1649,10 @@ class _InfoList extends StatelessWidget {
           _nonEmptyStr(d?['classRole']) ?? _nonEmptyStr(d?['role']);
       return role != null ? <String>[cn, role] : <String>[cn];
     }
-    return data.tags;
+    if (data.classInfo.isNotEmpty && data.classInfo != '—') {
+      return [data.classInfo];
+    }
+    return const [];
   }
 
   List<String> _badgeTags() {
@@ -1620,7 +1664,7 @@ class _InfoList extends StatelessWidget {
           .where((e) => e.isNotEmpty)
           .toList();
     }
-    return data.badges;
+    return data.tags;
   }
 
   @override
@@ -1630,12 +1674,12 @@ class _InfoList extends StatelessWidget {
     final mobile = _detailPick(
       d,
       const ['mobile', 'phone'],
-      data.mobile ?? '—',
+      data.phone,
     );
     final parentPhone = _detailPick(
       d,
       const ['parentMobile', 'guardianMobile', 'parentPhone'],
-      data.parentPhone ?? '—',
+      data.parentPhone,
     );
     final classTags = _classTags();
     final badges = _badgeTags();
@@ -2247,7 +2291,7 @@ void _showParentContactDialog(
   final parentPhone = _detailPick(
     d,
     const ['parentMobile', 'guardianMobile', 'parentPhone'],
-    data.parentPhone ?? '—',
+    data.parentPhone,
   );
   // 弹窗使用 root navigator + showScaledDialog，自动堆叠在右抽屉之上，
   // 关闭时不会连带关掉抽屉。
@@ -2268,11 +2312,7 @@ void _showParentContactDialog(
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                _StudentAvatar(
-                  seed: data.avatarSeed,
-                  name: data.name,
-                  imageUrl: data.headUrl,
-                ),
+                _Avatar(name: data.name, avatarUrl: data.avatarUrl, size: 40),
                 SizedBox(width: ui(12)),
                 Expanded(
                   child: Column(
@@ -2291,7 +2331,7 @@ void _showParentContactDialog(
                       ),
                       SizedBox(height: ui(4)),
                       Text(
-                        data.id,
+                        data.studentId,
                         style: TextStyle(
                           fontSize: ui(12),
                           color: _kTextHint,

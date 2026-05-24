@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -871,14 +872,7 @@ class _AnalyzingHint extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(
-            width: ui(64),
-            height: ui(64),
-            child: const CircularProgressIndicator(
-              strokeWidth: 4,
-              color: _DemoUi.accent,
-            ),
-          ),
+          const AppLoadingIndicator(),
           SizedBox(height: ui(18)),
           Text(
             '正在解析「${state.audioName ?? 'MIDI'}」…',

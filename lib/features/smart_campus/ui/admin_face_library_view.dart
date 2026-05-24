@@ -49,6 +49,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -2711,7 +2712,7 @@ class _LibraryTable extends StatelessWidget {
           if (loading)
             Padding(
               padding: EdgeInsets.symmetric(vertical: ui(48)),
-              child: const Center(child: CircularProgressIndicator()),
+              child: const Center(child: AppLoadingIndicator()),
             )
           else if (records.isEmpty)
             Padding(

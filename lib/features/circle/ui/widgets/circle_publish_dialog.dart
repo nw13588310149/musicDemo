@@ -167,9 +167,24 @@ class _CirclePublishDialogState extends ConsumerState<_CirclePublishDialog> {
     return name.substring(i + 1).toLowerCase();
   }
 
+  CoursewarePickType get _pickTypeForKind {
+    switch (_kind) {
+      case PostMediaKind.image:
+        return CoursewarePickType.image;
+      case PostMediaKind.video:
+        return CoursewarePickType.video;
+      case PostMediaKind.audio:
+        return CoursewarePickType.audio;
+    }
+  }
+
   Future<void> _pickFile() async {
     if (_uploading) return;
-    final files = await pickCoursewareFiles(allowMultiple: false);
+    // 图片 / 视频在 iOS 端走 FileType.image / video，直接拉起系统相册。
+    final files = await pickCoursewareFiles(
+      allowMultiple: false,
+      type: _pickTypeForKind,
+    );
     if (files.isEmpty || !mounted) return;
     final f = files.first;
     final ext = _extOf(f.name);

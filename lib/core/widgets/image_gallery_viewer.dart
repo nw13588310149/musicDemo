@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:flutter/gestures.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
@@ -109,14 +110,7 @@ class _ImageGalleryViewerState extends State<ImageGalleryViewer> {
                         return const SizedBox.shrink();
                       }
                       return const Center(
-                        child: SizedBox(
-                          width: 32,
-                          height: 32,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        ),
+                        child: AppLoadingIndicator(color: Colors.white),
                       );
                     },
                     onPageChanged: (i) => setState(() => _currentIndex = i),

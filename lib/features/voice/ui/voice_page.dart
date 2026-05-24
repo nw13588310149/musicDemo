@@ -1,4 +1,5 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -454,7 +455,7 @@ class _VoiceBody extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
 
     if (loading && !hasAnyLessons) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+      return const Center(child: AppLoadingIndicator());
     }
     if (!hasAnyLessons) {
       return CourseEmptyPlaceholder(schoolMode: schoolMode);

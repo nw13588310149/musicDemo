@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 
 import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/class_share_drawer.dart';
 import '../../../core/widgets/image_gallery_viewer.dart';
 import '../../piano/ui/piano_keyboard.dart';
 import '../../shell/ui/shell_layout.dart';
@@ -72,9 +74,7 @@ class _MusicPlayPageState extends ConsumerState<MusicPlayPage> {
         child: state.loading && !state.hasDetail
             ? Padding(
                 padding: EdgeInsets.fromLTRB(ui(12), ui(12), ui(12), ui(12)),
-                child: const Center(
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
+                child: const Center(child: AppLoadingIndicator()),
               )
             : (state.isVocalOrInstrumental
                   ? Padding(
@@ -348,15 +348,13 @@ class _MusicPlayPageState extends ConsumerState<MusicPlayPage> {
     return () => _skipSeconds(controller, state, 5);
   }
 
-  String _resolveLeftAsset(MusicPlayState state) =>
-      _useLessonNavigation(state)
-          ? 'assets/images/home/shang.png'
-          : 'assets/images/home/left.png';
+  String _resolveLeftAsset(MusicPlayState state) => _useLessonNavigation(state)
+      ? 'assets/images/home/shang.png'
+      : 'assets/images/home/left.png';
 
-  String _resolveRightAsset(MusicPlayState state) =>
-      _useLessonNavigation(state)
-          ? 'assets/images/home/xia.png'
-          : 'assets/images/home/right.png';
+  String _resolveRightAsset(MusicPlayState state) => _useLessonNavigation(state)
+      ? 'assets/images/home/xia.png'
+      : 'assets/images/home/right.png';
 
   Future<void> _showShareDialog(
     BuildContext context,
@@ -365,26 +363,10 @@ class _MusicPlayPageState extends ConsumerState<MusicPlayPage> {
     if (!mounted) {
       return;
     }
-    final scale = DashboardScaleScope.of(context);
-    await showGeneralDialog<void>(
+    await showClassShareDrawer<void>(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.20),
-      barrierDismissible: true,
-      barrierLabel: '关闭分享',
-      transitionDuration: const Duration(milliseconds: 240),
-      pageBuilder: (dialogContext, animation, secondaryAnimation) {
-        return DashboardScaleScope(
-          data: scale,
-          child: _ShareDrawer(args: args),
-        );
-      },
-      transitionBuilder: (context, animation, secondary, child) {
-        final offset = Tween<Offset>(
-          begin: const Offset(-1, 0),
-          end: Offset.zero,
-        ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOut));
-        return SlideTransition(position: offset, child: child);
-      },
+      scale: DashboardScaleScope.of(context),
+      child: _MusicPlayShareDrawer(args: args),
     );
     _shareDialogShowing = false;
     if (mounted) {
@@ -393,8 +375,8 @@ class _MusicPlayPageState extends ConsumerState<MusicPlayPage> {
   }
 }
 
-class _ShareDrawer extends ConsumerWidget {
-  const _ShareDrawer({required this.args});
+class _MusicPlayShareDrawer extends ConsumerWidget {
+  const _MusicPlayShareDrawer({required this.args});
 
   final MusicPlayPageArgs args;
 
@@ -402,320 +384,37 @@ class _ShareDrawer extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(musicPlayControllerProvider(args));
     final controller = ref.read(musicPlayControllerProvider(args).notifier);
-    final ui = DashboardScaleScope.of(context).ui;
 
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Material(
-        color: Colors.white,
-        child: SizedBox(
-          width: ui(600),
-          height: double.infinity,
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: ui(20), vertical: ui(20)),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const _DrawerTitle(title: '分享课件'),
-                SizedBox(height: ui(20)),
-                const Divider(height: 1, color: Color(0xFFF3F2F3)),
-                SizedBox(height: ui(24)),
-                _ShareTargetCard(detail: state.detail),
-                SizedBox(height: ui(28)),
-                Text(
-                  '您的班级群',
-                  style: TextStyle(
-                    color: const Color(0xFF0B081A),
-                    fontSize: ui(16),
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w600,
-                  ),
-                ),
-                SizedBox(height: ui(16)),
-                Expanded(
-                  child: state.classLoading
-                      ? const Center(
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : state.classList.isEmpty
-                      ? const _ShareDrawerEmpty()
-                      : ListView.separated(
-                          padding: EdgeInsets.zero,
-                          itemCount: state.classList.length,
-                          separatorBuilder: (_, _) => SizedBox(height: ui(12)),
-                          itemBuilder: (context, index) {
-                            final cls = state.classList[index];
-                            return _ClassRow(
-                              cls: cls,
-                              onTap: () => controller.toggleClass(cls.id),
-                            );
-                          },
-                        ),
-                ),
-                SizedBox(height: ui(12)),
-                _SendButton(
-                  loading: state.sending,
-                  onTap: () async {
-                    final success = await controller.sendShare();
-                    if (!context.mounted) {
-                      return;
-                    }
-                    if (success) {
-                      Navigator.of(context).maybePop();
-                    }
-                  },
-                ),
-              ],
+    return ClassShareDrawer(
+      title: '分享课件',
+      targetCard: ShareTargetCard(
+        label: '您将分享的课件',
+        title: state.detail?.title ?? '',
+        coverUrl: state.detail?.coverUrl ?? '',
+        placeholderIcon: Icons.library_music_rounded,
+      ),
+      classes: state.classList
+          .map(
+            (cls) => ClassShareItem(
+              id: cls.id,
+              name: cls.name,
+              avatarUrl: cls.avatarUrl,
+              checked: cls.checked,
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _DrawerTitle extends StatelessWidget {
-  const _DrawerTitle({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Row(
-      children: [
-        Container(
-          width: ui(3.25),
-          height: ui(14.85),
-          decoration: BoxDecoration(
-            color: const Color(0xFF8741FF),
-            borderRadius: BorderRadius.circular(ui(6)),
-          ),
-        ),
-        SizedBox(width: ui(4)),
-        Text(
-          title,
-          style: TextStyle(
-            color: const Color(0xFF0B081A),
-            fontSize: ui(16),
-            fontFamily: 'PingFang SC',
-            fontWeight: AppFont.w600,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ShareTargetCard extends StatelessWidget {
-  const _ShareTargetCard({required this.detail});
-
-  final MusicPlayDetail? detail;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    final coverUrl = detail?.coverUrl ?? '';
-    final imageProvider =
-        coverUrl.startsWith('http://') || coverUrl.startsWith('https://')
-        ? NetworkImage(coverUrl)
-        : (coverUrl.isNotEmpty ? AssetImage(coverUrl) : null) as ImageProvider?;
-
-    return Container(
-      height: ui(106),
-      padding: EdgeInsets.symmetric(horizontal: ui(24), vertical: ui(20)),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF4F4FF),
-        borderRadius: BorderRadius.circular(ui(16)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  '您将分享的课件',
-                  style: TextStyle(
-                    color: const Color(0xFF0B081A),
-                    fontSize: ui(14),
-                    fontFamily: 'PingFang SC',
-                  ),
-                ),
-                SizedBox(height: ui(10)),
-                Text(
-                  detail?.title ?? '',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: const Color(0xFF0B081A),
-                    fontSize: ui(16),
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          SizedBox(width: ui(16)),
-          Container(
-            width: ui(75.76),
-            height: ui(55.27),
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xFFF1E8FD), Color(0xFFDDC4FF)],
-              ),
-              borderRadius: BorderRadius.circular(ui(6.82)),
-            ),
-            child: imageProvider == null
-                ? const Icon(
-                    Icons.library_music_rounded,
-                    color: Color(0xFFA773FF),
-                  )
-                : Image(
-                    image: imageProvider,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => const Icon(
-                      Icons.library_music_rounded,
-                      color: Color(0xFFA773FF),
-                    ),
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ClassRow extends StatelessWidget {
-  const _ClassRow({required this.cls, required this.onTap});
-
-  final MusicPlayShareClass cls;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    final checked = cls.checked;
-    return Material(
-      color: const Color(0xFFF5F6FA),
-      borderRadius: BorderRadius.circular(ui(16)),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(ui(16)),
-        onTap: onTap,
-        child: Container(
-          height: ui(80),
-          padding: EdgeInsets.symmetric(horizontal: ui(16)),
-          child: Row(
-            children: [
-              Container(
-                width: ui(24),
-                height: ui(24),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: checked
-                        ? const Color(0xFF8741FF)
-                        : const Color(0xFFCECED1),
-                    width: 1,
-                  ),
-                ),
-                child: checked
-                    ? Icon(
-                        Icons.check_rounded,
-                        size: ui(16),
-                        color: const Color(0xFF8741FF),
-                      )
-                    : null,
-              ),
-              SizedBox(width: ui(16)),
-              Expanded(
-                child: Text(
-                  cls.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.black,
-                    fontSize: ui(16),
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ShareDrawerEmpty extends StatelessWidget {
-  const _ShareDrawerEmpty();
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Center(
-      child: Text(
-        '暂无班级群',
-        style: TextStyle(
-          color: const Color(0xFFB6B5BB),
-          fontSize: ui(14),
-          fontFamily: 'PingFang SC',
-        ),
-      ),
-    );
-  }
-}
-
-class _SendButton extends StatelessWidget {
-  const _SendButton({required this.loading, required this.onTap});
-
-  final bool loading;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return GestureDetector(
-      onTap: loading ? null : onTap,
-      child: Container(
-        height: ui(48),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.centerRight,
-            end: Alignment.centerLeft,
-            colors: [Color(0xFFB68EFF), Color(0xFF8640FF)],
-          ),
-          borderRadius: BorderRadius.circular(ui(12)),
-        ),
-        child: loading
-            ? SizedBox(
-                width: ui(20),
-                height: ui(20),
-                child: const CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                ),
-              )
-            : Text(
-                '发送',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: ui(14),
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w500,
-                  height: 24 / 14,
-                ),
-              ),
-      ),
+          )
+          .toList(growable: false),
+      loading: state.classLoading,
+      sending: state.sending,
+      onToggleClass: controller.toggleClass,
+      onSend: () async {
+        final success = await controller.sendShare();
+        if (!context.mounted) {
+          return;
+        }
+        if (success) {
+          Navigator.of(context).maybePop();
+        }
+      },
     );
   }
 }
@@ -1054,7 +753,8 @@ class _AnswerPanelState extends State<_AnswerPanel> {
         Row(
           children: [
             const Spacer(),
-            if (widget.pitchSemitones != null && widget.onPitchChanged != null) ...[
+            if (widget.pitchSemitones != null &&
+                widget.onPitchChanged != null) ...[
               _TransposeChipButton(
                 pitchSemitones: widget.pitchSemitones!,
                 onPitchChanged: widget.onPitchChanged!,
@@ -1366,11 +1066,7 @@ class _PlaybackBar extends StatelessWidget {
             ),
           ),
           SizedBox(width: ui(16)),
-          _InlineImageIcon(
-            asset: leftAsset,
-            onTap: onSkipBackward,
-            size: 24,
-          ),
+          _InlineImageIcon(asset: leftAsset, onTap: onSkipBackward, size: 24),
           SizedBox(width: ui(8)),
           GestureDetector(
             onTap: onTogglePlay,
@@ -1391,11 +1087,7 @@ class _PlaybackBar extends StatelessWidget {
             ),
           ),
           SizedBox(width: ui(8)),
-          _InlineImageIcon(
-            asset: rightAsset,
-            onTap: onSkipForward,
-            size: 24,
-          ),
+          _InlineImageIcon(asset: rightAsset, onTap: onSkipForward, size: 24),
           SizedBox(width: ui(12)),
           _SpeedChip(speed: state.speed, onSpeedChanged: onSpeedChanged),
           SizedBox(width: ui(14)),
@@ -1411,10 +1103,7 @@ class _PlaybackBar extends StatelessWidget {
           // 多曲目时（1.0 中 `urlList?.length > 1 && isArr`）显示
           // 循环模式 + 播放列表 chip。视觉沿用 2.0 的极简 chip 风格。
           if ((detail?.tracks.length ?? 0) > 1) ...[
-            _LoopModeChip(
-              mode: state.playMode,
-              onTap: onTogglePlayMode,
-            ),
+            _LoopModeChip(mode: state.playMode, onTap: onTogglePlayMode),
             SizedBox(width: ui(8)),
             _PlaylistChip(
               tracks: detail?.tracks ?? const <MusicPlayTrack>[],
@@ -1483,7 +1172,10 @@ class _PlaybackBar extends StatelessWidget {
   ///
   /// 兜底字符串 "音频1" 与 1.0 设计稿一致；副标题永远不为空，避免播放条
   /// 因一行高度突变出现"标题往下漂移"。
-  String _resolveSecondaryTitle(MusicPlayDetail? detail, MusicPlayTrack? track) {
+  String _resolveSecondaryTitle(
+    MusicPlayDetail? detail,
+    MusicPlayTrack? track,
+  ) {
     if (detail == null) {
       return '音频1';
     }
@@ -1800,7 +1492,7 @@ class _LongTextPanel extends StatelessWidget {
 }
 
 /// 声乐/器乐课程左侧使用的浅色简介卡片。
-/// 复用 detail.longTextHtml（`longText1`），保留富文本样式并统一为 PingFang SC。
+/// 复用 detail.longTextHtml（`longText1`），排版对齐 AI 聊天正文。
 class _DescriptionCard extends StatelessWidget {
   const _DescriptionCard({required this.htmlText});
 
@@ -1809,13 +1501,9 @@ class _DescriptionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final trimmed = musicPlayHtmlForcePingFangSc(htmlText.trim());
-    final baseStyle = TextStyle(
-      color: const Color(0xFF0B081A),
-      fontSize: ui(13),
-      fontFamily: 'PingFang SC',
-      fontWeight: AppFont.w400,
-      height: 1.4,
+    final trimmed = musicPlayHtmlStripInlineTypography(htmlText.trim());
+    final baseStyle = musicPlayAiBodyTextStyle(
+      fontSize: ui(kMusicPlayAiBodyFontSize),
     );
 
     return Container(
@@ -1835,7 +1523,7 @@ class _DescriptionCard extends StatelessWidget {
                   : HtmlWidget(
                       trimmed,
                       textStyle: baseStyle,
-                      customStylesBuilder: musicPlayHtmlCustomStyles,
+                      customStylesBuilder: musicPlayDescriptionHtmlCustomStyles,
                     ),
             ),
           ),
@@ -2216,10 +1904,7 @@ class _SpeedMenuCardState extends State<_SpeedMenuCard> {
     final selectedIndex = widget.options.indexOf(widget.current);
     final initialOffset = selectedIndex < 0
         ? 0.0
-        : math.max(
-            0.0,
-            (selectedIndex - 2) * widget.itemHeight,
-          );
+        : math.max(0.0, (selectedIndex - 2) * widget.itemHeight);
     _scrollController = ScrollController(initialScrollOffset: initialOffset);
   }
 
@@ -2383,9 +2068,7 @@ class _TransposeChipButton extends StatefulWidget {
 
   /// 半音档位（从大到小，便于升调用户在弹窗第一屏看到正向区间）。
   /// 与 [MusicPlayController.setPitchSemitones] 的 `clamp(-12, 12)` 一致。
-  static final List<int> options = <int>[
-    for (var v = 12; v >= -12; v--) v,
-  ];
+  static final List<int> options = <int>[for (var v = 12; v >= -12; v--) v];
 
   /// 弹窗每一行展示的纯档位值（"原调" / "+N" / "-N"）。
   static String formatPitch(int value) {
@@ -2882,10 +2565,7 @@ class _PlaylistDrawerState extends State<_PlaylistDrawer>
             decoration: BoxDecoration(
               color: const Color(0xFFEFF3FC),
               border: Border(
-                right: BorderSide(
-                  color: const Color(0xFFE4E1EC),
-                  width: 1,
-                ),
+                right: BorderSide(color: const Color(0xFFE4E1EC), width: 1),
               ),
               boxShadow: [
                 // 仅给抽屉的右边缘加一道淡阴影，做出"浮在导航之上"的层次。
@@ -2906,12 +2586,7 @@ class _PlaylistDrawerState extends State<_PlaylistDrawer>
                   SizedBox(
                     height: ui(56),
                     child: Padding(
-                      padding: EdgeInsets.fromLTRB(
-                        ui(16),
-                        0,
-                        ui(8),
-                        0,
-                      ),
+                      padding: EdgeInsets.fromLTRB(ui(16), 0, ui(8), 0),
                       child: Row(
                         children: [
                           Expanded(

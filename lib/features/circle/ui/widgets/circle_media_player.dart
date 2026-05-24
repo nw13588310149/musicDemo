@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -9,12 +10,8 @@ import '../../state/circle_state.dart';
 
 /// 沉浸模式下的统一媒体播放壳：
 /// - **图片**：盖一张大图 + 加载/失败兜底
-/// - **视频**：基于 `media_kit` 的内联视频播放（自动播放，离开/dispose 释放）
-/// - **音频**：渐变封面 + 中央 play/pause + 底部进度条
-///
-/// 之所以做成单独 widget 而不是写在 `_ImmersiveSlide` 里，是因为它需要
-/// `StatefulWidget` 持有 `Player`/`VideoController`，并保证翻页时
-/// **彻底 dispose 旧的 Player**（不然多个 voice 同时在响、退出再进还会"漏播"）。
+/// - **视频**：`media_kit` 全屏 cover + 抖音式播放/暂停与全屏进度拖动
+/// - **音频**：同款交互（AnimatedIcons.play_pause + 全屏/底部进度条）
 class CircleMediaPlayer extends StatefulWidget {
   const CircleMediaPlayer({
     super.key,
@@ -23,8 +20,6 @@ class CircleMediaPlayer extends StatefulWidget {
   });
 
   final CirclePost post;
-
-  /// 内联视频/音频是否自动开始播放。默认 true（沉浸模式翻到这一帧就播）。
   final bool autoPlay;
 
   @override
@@ -34,14 +29,6 @@ class CircleMediaPlayer extends StatefulWidget {
 class _CircleMediaPlayerState extends State<CircleMediaPlayer> {
   Player? _player;
   VideoController? _videoController;
-  StreamSubscription<Duration>? _posSub;
-  StreamSubscription<Duration>? _durSub;
-  StreamSubscription<bool>? _playingSub;
-
-  bool _isPlaying = false;
-  Duration _position = Duration.zero;
-  Duration _duration = Duration.zero;
-  bool _disposed = false;
 
   @override
   void initState() {
@@ -70,30 +57,17 @@ class _CircleMediaPlayerState extends State<CircleMediaPlayer> {
     if (widget.post.mediaKind == PostMediaKind.video) {
       _videoController = VideoController(player);
     }
-    _posSub = player.stream.position.listen((p) {
-      if (_disposed) return;
-      setState(() => _position = p);
-    });
-    _durSub = player.stream.duration.listen((d) {
-      if (_disposed) return;
-      setState(() => _duration = d);
-    });
-    _playingSub = player.stream.playing.listen((p) {
-      if (_disposed) return;
-      setState(() => _isPlaying = p);
-    });
-    unawaited(player.open(Media(url), play: widget.autoPlay));
+    unawaited(_openAndLoop(player, url));
+  }
+
+  Future<void> _openAndLoop(Player player, String url) async {
+    await player.setPlaylistMode(PlaylistMode.single);
+    await player.open(Media(url), play: widget.autoPlay);
   }
 
   void _teardownPlayer() {
-    _posSub?.cancel();
-    _durSub?.cancel();
-    _playingSub?.cancel();
-    _posSub = _durSub = null;
-    _playingSub = null;
     final player = _player;
     if (player != null) {
-      // 同步 pause 让声音/画面立刻消失，再 unawaited dispose 释放原生资源。
       try {
         unawaited(player.pause());
       } catch (_) {}
@@ -101,26 +75,12 @@ class _CircleMediaPlayerState extends State<CircleMediaPlayer> {
     }
     _player = null;
     _videoController = null;
-    _isPlaying = false;
-    _position = Duration.zero;
-    _duration = Duration.zero;
   }
 
   @override
   void dispose() {
-    _disposed = true;
     _teardownPlayer();
     super.dispose();
-  }
-
-  Future<void> _togglePlay() async {
-    final player = _player;
-    if (player == null) return;
-    if (_isPlaying) {
-      await player.pause();
-    } else {
-      await player.play();
-    }
   }
 
   @override
@@ -138,41 +98,15 @@ class _CircleMediaPlayerState extends State<CircleMediaPlayer> {
     if (url.isEmpty || controller == null) {
       return _ImageBackdrop(url: widget.post.imageUrl);
     }
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        Video(
-          controller: controller,
-          fit: BoxFit.contain,
-          controls: NoVideoControls,
-        ),
-        // 用一层透明 GestureDetector 接管点击播放/暂停，比 chewie 更轻量。
-        Positioned.fill(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: _togglePlay,
-            child: AnimatedOpacity(
-              opacity: _isPlaying ? 0 : 1,
-              duration: const Duration(milliseconds: 180),
-              child: Center(child: _BigPlayButton()),
-            ),
-          ),
-        ),
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: 0,
-          child: _ProgressBar(
-            position: _position,
-            duration: _duration,
-            onSeek: (target) => unawaited(_player?.seek(target) ?? Future.value()),
-          ),
-        ),
-      ],
+    return Video(
+      controller: controller,
+      fit: BoxFit.cover,
+      controls: _douyinVideoControls,
     );
   }
 
   Widget _buildAudioBody() {
+    final player = _player;
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -190,27 +124,261 @@ class _CircleMediaPlayerState extends State<CircleMediaPlayer> {
           )
         else
           const _AudioBackdrop(),
-        Positioned.fill(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: _togglePlay,
-            child: Center(
-              child: _BigPlayButton(playing: _isPlaying),
+        if (player != null)
+          Positioned.fill(
+            child: _DouyinMediaControls(player: player),
+          ),
+      ],
+    );
+  }
+}
+
+/// 视频层控件：全屏手势 + 底部进度条。
+Widget _douyinVideoControls(VideoState state) {
+  return _DouyinMediaControls(player: state.widget.controller.player);
+}
+
+/// 抖音式全屏媒体控件：
+/// - **单击**任意位置：播放 / 暂停
+/// - **全屏横向滑动**：拖动进度（拖动时暂停，松手恢复）
+/// - **纵向滑动**：不拦截，交给外层 PageView 翻页
+/// - 底部细进度条随播放更新；拖动时变粗并显示时间
+class _DouyinMediaControls extends StatefulWidget {
+  const _DouyinMediaControls({required this.player});
+
+  final Player player;
+
+  @override
+  State<_DouyinMediaControls> createState() => _DouyinMediaControlsState();
+}
+
+class _DouyinMediaControlsState extends State<_DouyinMediaControls>
+    with SingleTickerProviderStateMixin {
+  StreamSubscription<Duration>? _posSub;
+  StreamSubscription<Duration>? _durSub;
+  StreamSubscription<bool>? _playingSub;
+
+  Duration _position = Duration.zero;
+  Duration _duration = Duration.zero;
+  bool _playing = false;
+
+  bool _dragging = false;
+  double _dragRatio = 0;
+  bool _resumeAfterDrag = false;
+
+  late final AnimationController _iconAnimation = AnimationController(
+    vsync: this,
+    value: widget.player.state.playing ? 1 : 0,
+    duration: const Duration(milliseconds: 200),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _playing = widget.player.state.playing;
+    _position = widget.player.state.position;
+    _duration = widget.player.state.duration;
+    _posSub = widget.player.stream.position.listen((p) {
+      if (mounted && !_dragging) setState(() => _position = p);
+    });
+    _durSub = widget.player.stream.duration.listen((d) {
+      if (mounted) setState(() => _duration = d);
+    });
+    _playingSub = widget.player.stream.playing.listen((p) {
+      if (!mounted) return;
+      setState(() => _playing = p);
+      if (p) {
+        _iconAnimation.forward();
+      } else {
+        _iconAnimation.reverse();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _posSub?.cancel();
+    _durSub?.cancel();
+    _playingSub?.cancel();
+    _iconAnimation.dispose();
+    super.dispose();
+  }
+
+  double get _displayRatio {
+    if (_dragging) return _dragRatio;
+    final totalMs = _duration.inMilliseconds;
+    if (totalMs <= 0) return 0;
+    return (_position.inMilliseconds / totalMs).clamp(0.0, 1.0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        return RawGestureDetector(
+          behavior: HitTestBehavior.translucent,
+          gestures: <Type, GestureRecognizerFactory>{
+            TapGestureRecognizer:
+                GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
+              () => TapGestureRecognizer(),
+              (TapGestureRecognizer instance) {
+                instance.onTap = () {
+                  if (!_dragging) widget.player.playOrPause();
+                };
+              },
+            ),
+            HorizontalDragGestureRecognizer:
+                GestureRecognizerFactoryWithHandlers<
+                    HorizontalDragGestureRecognizer>(
+              () => HorizontalDragGestureRecognizer(),
+              (HorizontalDragGestureRecognizer instance) {
+                instance.onStart = (d) => _onDragStart(d.localPosition.dx, width);
+                instance.onUpdate = (d) =>
+                    _onDragUpdate(d.localPosition.dx, width);
+                instance.onEnd = (_) => unawaited(_onDragEnd());
+                instance.onCancel = _onDragCancel;
+              },
+            ),
+          },
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (_dragging)
+                ColoredBox(color: Colors.black.withValues(alpha: 0.12)),
+              if (!_dragging && !_playing)
+                Center(
+                  child: AnimatedIcon(
+                    progress: _iconAnimation,
+                    icon: AnimatedIcons.play_pause,
+                    size: ui(56),
+                    color: Colors.white,
+                  ),
+                ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: _buildProgressBar(ui, width),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildProgressBar(double Function(double) ui, double width) {
+    final barHeight = _dragging ? ui(6) : ui(2);
+    return Padding(
+      padding: EdgeInsets.only(bottom: _dragging ? ui(4) : 0),
+      child: SizedBox(
+        height: ui(44),
+        width: double.infinity,
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            curve: Curves.easeOut,
+            height: barHeight,
+            width: width,
+            child: Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.centerLeft,
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.25),
+                    borderRadius: BorderRadius.circular(barHeight / 2),
+                  ),
+                ),
+                FractionallySizedBox(
+                  widthFactor: _displayRatio,
+                  alignment: Alignment.centerLeft,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(barHeight / 2),
+                    ),
+                  ),
+                ),
+                if (_dragging)
+                  Positioned(
+                    left: (width * _displayRatio).clamp(0.0, width) - ui(6),
+                    top: (barHeight - ui(12)) / 2,
+                    child: Container(
+                      width: ui(12),
+                      height: ui(12),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
         ),
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: 0,
-          child: _ProgressBar(
-            position: _position,
-            duration: _duration,
-            onSeek: (target) => unawaited(_player?.seek(target) ?? Future.value()),
-          ),
-        ),
-      ],
+      ),
     );
+  }
+
+  void _onDragStart(double dx, double width) {
+    if (width <= 0 || _duration.inMilliseconds <= 0) return;
+    _resumeAfterDrag = widget.player.state.playing;
+    if (_resumeAfterDrag) {
+      unawaited(widget.player.pause());
+    }
+    final ratio = (dx / width).clamp(0.0, 1.0);
+    setState(() {
+      _dragging = true;
+      _dragRatio = ratio;
+    });
+    unawaited(_seekToRatio(ratio));
+  }
+
+  void _onDragUpdate(double dx, double width) {
+    if (!_dragging || width <= 0 || _duration.inMilliseconds <= 0) return;
+    final ratio = (dx / width).clamp(0.0, 1.0);
+    if (ratio == _dragRatio) return;
+    setState(() => _dragRatio = ratio);
+    unawaited(_seekToRatio(ratio));
+  }
+
+  Future<void> _onDragEnd() async {
+    if (!_dragging) return;
+    final ratio = _dragRatio;
+    final resume = _resumeAfterDrag;
+    setState(() {
+      _dragging = false;
+      _resumeAfterDrag = false;
+    });
+    await _seekToRatio(ratio);
+    if (resume && mounted) {
+      await widget.player.play();
+    }
+  }
+
+  void _onDragCancel() {
+    if (!_dragging) return;
+    final resume = _resumeAfterDrag;
+    setState(() {
+      _dragging = false;
+      _resumeAfterDrag = false;
+    });
+    if (resume) {
+      unawaited(widget.player.play());
+    }
+  }
+
+  Future<void> _seekToRatio(double ratio) async {
+    if (_duration.inMilliseconds <= 0) return;
+    final target = Duration(
+      milliseconds: (_duration.inMilliseconds * ratio).round(),
+    );
+    await widget.player.seek(target);
   }
 }
 
@@ -251,132 +419,5 @@ class _AudioBackdrop extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-class _BigPlayButton extends StatelessWidget {
-  const _BigPlayButton({this.playing = false});
-
-  final bool playing;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      width: ui(76),
-      height: ui(76),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.5),
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white.withValues(alpha: 0.6), width: 1),
-      ),
-      child: Icon(
-        playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-        color: Colors.white,
-        size: ui(44),
-      ),
-    );
-  }
-}
-
-class _ProgressBar extends StatelessWidget {
-  const _ProgressBar({
-    required this.position,
-    required this.duration,
-    required this.onSeek,
-  });
-
-  final Duration position;
-  final Duration duration;
-  final ValueChanged<Duration> onSeek;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    final total = duration.inMilliseconds <= 0 ? 1 : duration.inMilliseconds;
-    final ratio = (position.inMilliseconds / total).clamp(0.0, 1.0);
-    return Padding(
-      padding: EdgeInsets.fromLTRB(ui(20), 0, ui(20), ui(80)),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final width = constraints.maxWidth;
-              return GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTapDown: (d) => _emit(d.localPosition.dx, width),
-                onHorizontalDragUpdate: (d) =>
-                    _emit(d.localPosition.dx, width),
-                child: SizedBox(
-                  height: ui(20),
-                  child: Stack(
-                    alignment: Alignment.centerLeft,
-                    children: [
-                      Container(
-                        height: ui(3),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.25),
-                          borderRadius: BorderRadius.circular(ui(2)),
-                        ),
-                      ),
-                      Container(
-                        height: ui(3),
-                        width: width * ratio,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(ui(2)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-          SizedBox(height: ui(6)),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                _fmt(position),
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: ui(12),
-                  fontFamily: 'PingFang SC',
-                  height: 1,
-                ),
-              ),
-              Text(
-                _fmt(duration),
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.7),
-                  fontSize: ui(12),
-                  fontFamily: 'PingFang SC',
-                  height: 1,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _emit(double dx, double width) {
-    if (width <= 0 || duration.inMilliseconds <= 0) return;
-    final r = (dx / width).clamp(0.0, 1.0);
-    final target = Duration(
-      milliseconds: (duration.inMilliseconds * r).round(),
-    );
-    onSeek(target);
-  }
-
-  static String _fmt(Duration d) {
-    if (d == Duration.zero) return '00:00';
-    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return '$m:$s';
   }
 }

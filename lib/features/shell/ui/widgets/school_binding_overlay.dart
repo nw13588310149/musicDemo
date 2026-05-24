@@ -1,6 +1,7 @@
 ﻿import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -569,14 +570,7 @@ class _PrimaryButton extends StatelessWidget {
           ],
         ),
         child: loading
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                ),
-              )
+            ? const AppLoadingIndicator(size: 16, color: Colors.white)
             : Text(
                 label,
                 style: TextStyle(

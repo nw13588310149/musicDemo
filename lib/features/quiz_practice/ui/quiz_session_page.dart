@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 
@@ -74,7 +75,7 @@ class _QuizSessionPageState extends ConsumerState<QuizSessionPage> {
     return ShellPageSurface(
       padding: EdgeInsets.zero,
       child: state.loading
-          ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+          ? const Center(child: AppLoadingIndicator())
           : Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [

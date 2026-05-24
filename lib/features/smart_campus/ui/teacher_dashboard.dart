@@ -1,10 +1,15 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 
+import '../../../core/network/api_response.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../school/data/school_repository.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/smart_campus_dashboard_data.dart';
+import '../data/teacher_repository.dart';
 import '../state/smart_campus_state.dart';
 import 'widgets/role_switcher_buttons.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -20,7 +25,7 @@ void _showActionPending(BuildContext context, String label) {
 /// 与学生端 / 管理员端走的是不同的视觉系统：
 /// - 顶部 6 张统计卡（4 个数值 + 「本周课时」 + 紫色「下一节」）
 /// - 中间为 `#EFF3FC` 浅紫面板，承载 8 宫功能矩阵
-/// - 右栏 256 宽白底面板：头像 + 在岗胶囊 + 主项/副项/带班 +
+/// - 右栏 256 宽白底面板：头像 + 运行中胶囊 + 岗位/权限/职责 +
 ///   任课老师 / 班主任 tab 切换 + 通知列表
 ///
 /// `selectedRole` 来自全局 `smartCampusControllerProvider`，dashboard 内
@@ -63,6 +68,7 @@ class TeacherDashboardLayout extends StatefulWidget {
     this.onOpenStudentRoster,
     this.onOpenHomeworkReview,
     this.onOpenExamReview,
+    this.onOpenMyTeacherLeave,
     this.onOpenLeaveApproval,
     this.onOpenDormDynamic,
     this.onOpenDormHistory,
@@ -130,6 +136,9 @@ class TeacherDashboardLayout extends StatefulWidget {
   /// 右考试详情(月考同步说明 + 4 项指标 + 学生提交表)，仅查看不可新建考试，
   /// 通过右抽屉查看历史月考 / 进入评分点评）。
   final VoidCallback? onOpenExamReview;
+
+  /// 任课老师 / 班主任「我的请假」入口：查看本人请假记录并发起申请。
+  final VoidCallback? onOpenMyTeacherLeave;
 
   /// 班主任「请假审批」入口：进入审批本班学生请假申请的页面（4 张统计卡 +
   /// 提示与备案说明 + 6 状态 tabs + 搜索框 + 双列申请卡片，审批中卡片
@@ -270,6 +279,7 @@ class _TeacherDashboardLayoutState extends State<TeacherDashboardLayout> {
                   onOpenStudentRoster: widget.onOpenStudentRoster,
                   onOpenHomeworkReview: widget.onOpenHomeworkReview,
                   onOpenExamReview: widget.onOpenExamReview,
+                  onOpenMyTeacherLeave: widget.onOpenMyTeacherLeave,
                   onOpenLeaveApproval: widget.onOpenLeaveApproval,
                   onOpenDormDynamic: widget.onOpenDormDynamic,
                   onOpenDormHistory: widget.onOpenDormHistory,
@@ -318,6 +328,7 @@ class _TeacherDashboardLayoutState extends State<TeacherDashboardLayout> {
                 onOpenStudentRoster: widget.onOpenStudentRoster,
                 onOpenHomeworkReview: widget.onOpenHomeworkReview,
                 onOpenExamReview: widget.onOpenExamReview,
+                onOpenMyTeacherLeave: widget.onOpenMyTeacherLeave,
                 onOpenLeaveApproval: widget.onOpenLeaveApproval,
                 onOpenDormDynamic: widget.onOpenDormDynamic,
                 onOpenDormHistory: widget.onOpenDormHistory,
@@ -377,6 +388,7 @@ class _TeacherMainColumn extends StatelessWidget {
     this.onOpenStudentRoster,
     this.onOpenHomeworkReview,
     this.onOpenExamReview,
+    this.onOpenMyTeacherLeave,
     this.onOpenLeaveApproval,
     this.onOpenDormDynamic,
     this.onOpenDormHistory,
@@ -401,6 +413,7 @@ class _TeacherMainColumn extends StatelessWidget {
   final VoidCallback? onOpenStudentRoster;
   final VoidCallback? onOpenHomeworkReview;
   final VoidCallback? onOpenExamReview;
+  final VoidCallback? onOpenMyTeacherLeave;
   final VoidCallback? onOpenLeaveApproval;
   final VoidCallback? onOpenDormDynamic;
   final VoidCallback? onOpenDormHistory;
@@ -427,24 +440,21 @@ class _TeacherMainColumn extends StatelessWidget {
       onOpenStudentRoster: onOpenStudentRoster,
       onOpenHomeworkReview: onOpenHomeworkReview,
       onOpenExamReview: onOpenExamReview,
+      onOpenMyTeacherLeave: onOpenMyTeacherLeave,
       onOpenLeaveApproval: onOpenLeaveApproval,
       onOpenDormDynamic: onOpenDormDynamic,
       onOpenDormHistory: onOpenDormHistory,
       onOpenHomeSchool: onOpenHomeSchool,
     );
 
-    // 任课老师：当前课程 + 今日课表；班主任：当前事项 + 班务
+    // 任课老师：当前课程 + 今日课表；班主任：待办提醒 + 近期动态
     Widget bottomSection({required bool fill}) {
       if (data.role == SmartCampusRole.headTeacher) {
         return _HeadTeacherBoardSection(
-          onOpenWorkbench: onOpenClassWorkbench,
           fillRemaining: fill,
         );
       }
-      return _TeacherScheduleSection(
-        onOpenMySchedule: onOpenMySchedule,
-        fillRemaining: fill,
-      );
+      return _TeacherScheduleSection(fillRemaining: fill);
     }
 
     if (fillRemaining) {
@@ -630,6 +640,7 @@ class _TeacherActionPanel extends StatelessWidget {
     this.onOpenStudentRoster,
     this.onOpenHomeworkReview,
     this.onOpenExamReview,
+    this.onOpenMyTeacherLeave,
     this.onOpenLeaveApproval,
     this.onOpenDormDynamic,
     this.onOpenDormHistory,
@@ -652,6 +663,7 @@ class _TeacherActionPanel extends StatelessWidget {
   final VoidCallback? onOpenStudentRoster;
   final VoidCallback? onOpenHomeworkReview;
   final VoidCallback? onOpenExamReview;
+  final VoidCallback? onOpenMyTeacherLeave;
   final VoidCallback? onOpenLeaveApproval;
   final VoidCallback? onOpenDormDynamic;
   final VoidCallback? onOpenDormHistory;
@@ -716,6 +728,9 @@ class _TeacherActionPanel extends StatelessWidget {
       // 仅可查看与评分，不可新建考试，通过右抽屉历史月考 / 评分 进入操作）。
       case '考评管理':
         return onOpenExamReview;
+      // 任课老师 / 班主任「我的请假」→ 查看本人请假记录并发起申请。
+      case '我的请假':
+        return onOpenMyTeacherLeave;
       // 班主任专属：「请假审批」→ 进入审批本班学生请假申请的总览页（4 张
       // 统计卡 + 提示与备案说明 + 6 状态 tabs + 搜索 + 双列申请卡片，审批中
       // 卡片底部"通过 / 驳回"按钮，"驳回"打开 GradientHeaderDialog 弹窗）。
@@ -892,7 +907,7 @@ class _TeacherActionTile extends StatelessWidget {
 }
 
 // =============================================================================
-// 右栏：头像 + 在岗 + 标签 + 主项/副项/带班 + Tab + 通知
+// 右栏：头像 + 运行中 + 岗位信息 + Tab + 通知
 // =============================================================================
 
 class _TeacherSidebar extends StatelessWidget {
@@ -1035,9 +1050,14 @@ class _TeacherProfileBlock extends StatelessWidget {
     final displayName = shellDisplayName.isNotEmpty
         ? shellDisplayName
         : profile.name;
+    final isHeadTeacher = data.role == SmartCampusRole.headTeacher;
+    final roleFallback = isHeadTeacher ? '班主任' : '任课老师';
+    final infoLines = isHeadTeacher
+        ? _headTeacherInfoLines()
+        : _courseTeacherInfoLines();
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(ui(20), ui(24), ui(20), 0),
+      padding: EdgeInsets.fromLTRB(ui(16), ui(24), ui(16), 0),
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -1048,74 +1068,70 @@ class _TeacherProfileBlock extends StatelessWidget {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _TeacherAvatar(avatarUrl: avatarUrl, size: ui(72)),
+                  _TeacherAvatar(
+                    avatarUrl: avatarUrl,
+                    size: ui(72),
+                    fallbackName: displayName,
+                  ),
                   SizedBox(width: ui(12)),
                   Expanded(
-                    child: Padding(
-                      padding: EdgeInsets.only(top: ui(8)),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Row(
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  displayName,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: ui(16),
-                                    color: const Color(0xFF0B081A),
-                                    fontWeight: FontWeight.w500,
-                                    height: 1.1,
-                                  ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(height: ui(8)),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                displayName.isEmpty ? roleFallback : displayName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: ui(16),
+                                  height: 1.2,
+                                  fontWeight: AppFont.w500,
+                                  color: const Color(0xFF0B081A),
+                                  fontFamily: 'PingFang SC',
                                 ),
                               ),
-                              SizedBox(width: ui(6)),
-                              _TeacherStatusChip(label: profile.title),
-                            ],
-                          ),
-                          SizedBox(height: ui(6)),
-                          Text(
-                            profile.organization,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: ui(12),
-                              color: const Color(0xFF6D6B75),
-                              fontWeight: FontWeight.w400,
-                              height: 1.2,
                             ),
-                          ),
-                        ],
-                      ),
+                            SizedBox(width: ui(6)),
+                            const _TeacherStatusChip(
+                              label: '运行中',
+                              compact: true,
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
-              SizedBox(height: ui(14)),
-              _TeacherDetailLines(lines: profile.detailLines),
+              SizedBox(height: ui(20)),
+              _TeacherDetailLines(lines: infoLines),
             ],
           ),
-          // 头像右下方的「老师」黄色胶囊
           Positioned(
-            left: ui(58),
-            top: ui(62),
+            left: ui(18),
+            top: ui(60),
             child: Container(
-              padding: EdgeInsets.symmetric(horizontal: ui(7), vertical: ui(2)),
+              padding: EdgeInsets.symmetric(
+                horizontal: ui(7),
+                vertical: ui(2),
+              ),
               decoration: BoxDecoration(
-                color: const Color(0xFFDBEE49),
+                color: const Color(0xFFFFC13C),
                 borderRadius: BorderRadius.circular(ui(10)),
                 border: Border.all(color: Colors.white, width: 1),
               ),
               child: Text(
-                profile.badgeLabel,
+                profile.badgeLabel.isNotEmpty ? profile.badgeLabel : roleFallback,
                 style: TextStyle(
                   fontSize: ui(11),
+                  height: 1.2,
                   color: const Color(0xFF0B081A),
-                  fontWeight: FontWeight.w400,
-                  height: 1,
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w400,
                 ),
               ),
             ),
@@ -1126,11 +1142,34 @@ class _TeacherProfileBlock extends StatelessWidget {
   }
 }
 
+/// 班主任侧栏信息行（不依赖班级接口，对齐管理员「岗位 / 权限 / 职责」结构）。
+List<String> _headTeacherInfoLines() {
+  return const [
+    '岗位：班主任',
+    '权限：本班班务管理',
+    '职责：请假查寝、班务协同与家校沟通',
+  ];
+}
+
+/// 任课老师侧栏信息行（与班主任同一结构，文案按授课场景）。
+List<String> _courseTeacherInfoLines() {
+  return const [
+    '岗位：任课老师',
+    '权限：授课与课堂管理',
+    '职责：按课表授课，负责签到、批改与课堂反馈',
+  ];
+}
+
 class _TeacherAvatar extends StatelessWidget {
-  const _TeacherAvatar({required this.avatarUrl, required this.size});
+  const _TeacherAvatar({
+    required this.avatarUrl,
+    required this.size,
+    this.fallbackName,
+  });
 
   final String avatarUrl;
   final double size;
+  final String? fallbackName;
 
   @override
   Widget build(BuildContext context) {
@@ -1155,6 +1194,23 @@ class _TeacherAvatar extends StatelessWidget {
   }
 
   Widget _fallback(double Function(double) ui) {
+    final name = fallbackName?.trim() ?? '';
+    if (name.isNotEmpty) {
+      return Container(
+        color: const Color(0xFFEAE5FF),
+        alignment: Alignment.center,
+        child: Text(
+          name.characters.first,
+          style: TextStyle(
+            fontSize: ui(28),
+            height: 1.0,
+            color: const Color(0xFF8741FF),
+            fontFamily: 'PingFang SC',
+            fontWeight: AppFont.w500,
+          ),
+        ),
+      );
+    }
     return Container(
       color: const Color(0xFFEAE5FF),
       alignment: Alignment.center,
@@ -1168,19 +1224,26 @@ class _TeacherAvatar extends StatelessWidget {
 }
 
 class _TeacherStatusChip extends StatelessWidget {
-  const _TeacherStatusChip({required this.label});
+  const _TeacherStatusChip({required this.label, this.compact = false});
 
   final String label;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: ui(8), vertical: ui(6)),
+      padding: EdgeInsets.symmetric(
+        horizontal: ui(compact ? 6 : 8),
+        vertical: ui(compact ? 3 : 6),
+      ),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(ui(4)),
-        border: Border.all(color: const Color(0xFFF3F2F3)),
+        border: Border.all(
+          color: const Color(0xFFF3F2F3),
+          width: compact ? 0.5 : 1,
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1197,10 +1260,11 @@ class _TeacherStatusChip extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              fontSize: ui(12),
+              fontSize: ui(compact ? 11 : 12),
               color: const Color(0xFF0B081A),
-              fontWeight: FontWeight.w400,
-              height: 1,
+              fontWeight: compact ? AppFont.w400 : FontWeight.w400,
+              height: 1.0,
+              fontFamily: compact ? 'PingFang SC' : null,
             ),
           ),
         ],
@@ -1471,9 +1535,10 @@ class _TeacherNoticeCard extends StatelessWidget {
 // =============================================================================
 // 当前课程 + 今日课表（白色双卡区）
 //
-// 视觉与学生端 `_StudentDualSection` 保持一致：
-//   - 标题在白卡之外（"当前课程" / "今日课表"），「今日课表」右侧带「查看完整课表 >」入口
-//   - 标题→白卡间距 ui(20)
+// 视觉与班主任端 `_HeadTeacherBoardSection` 保持一致：
+//   - 标题在白卡之外（"当前课程" / "今日课表"），无额外操作按钮
+//   - 顶部 ui(12) 间距 + 标题→白卡 ui(20)
+//   - 数据来自 `/app/school/v2/teacher/courseList`（当日）+ `schoolTimeConfigList`（节次时间）
 //   - 白卡 padding 12 / radius 16 / 浅阴影
 //   - 白卡内部为灰底（#F5F6FA, radius 12）子卡，子卡右上 L 型角标承载状态色
 //   - 子卡时段用 Text.rich 三段式（起 #1A1A1A 600 / "- " #B6B5BB 600 / 止 #0B081A 600）
@@ -1519,98 +1584,121 @@ class _LessonScheduleData {
   final List<_LessonRowData> teachers;
 }
 
-// 教师端示例数据（与学生端示例配色一致）。
-// TODO：接入真实接口后改由 dashboard data + controller 注入。
-const List<_LessonRowData> _kCurrentLessonTeachers = [
-  _LessonRowData(
-    avatarSeed: '贾',
-    teacherName: '贾恩海',
-    courseName: '视唱课',
-    courseColor: Color(0xFF8741FF),
-    courseBg: Color(0xFFEAE5FF),
-    tag: '大课',
-    tagDotColor: Color(0xFFA773FF),
-    hint: '45分钟·艺术楼 报告厅',
-  ),
-  _LessonRowData(
-    avatarSeed: '李',
-    teacherName: '李泽芮',
-    courseName: '竹笛课',
-    courseColor: Color(0xFF0CAC40),
-    courseBg: Color(0xFFDFFCF0),
-    tag: '小课',
-    tagDotColor: Color(0xFF0CAC40),
-    hint: '45分钟·音乐体验课',
-  ),
-];
-
-const _LessonScheduleData _kCurrentLesson = _LessonScheduleData(
-  time: '07:00 - 07:45',
-  status: '正在进行',
-  statusColor: Color(0xFF0B081A),
-  statusBg: Color(0xFFEAE5FF),
-  teachers: _kCurrentLessonTeachers,
-);
-
-const List<_LessonScheduleData> _kTodayLessons = [
-  _LessonScheduleData(
-    time: '08:00 - 08:30',
-    status: '即将开始',
-    statusColor: Color(0xFF0B081A),
-    statusBg: Color(0xFFEAE5FF),
-    teachers: [
-      _LessonRowData(
-        avatarSeed: '陈',
-        teacherName: '陈江凯',
-        courseName: '视唱课',
-        courseColor: Color(0xFF8741FF),
-        courseBg: Color(0xFFEAE5FF),
-        tag: '大课',
-        tagDotColor: Color(0xFFA773FF),
-        hint: '45分钟·艺术楼 报告厅',
-      ),
-      _LessonRowData(
-        avatarSeed: '李',
-        teacherName: '李梓燕',
-        courseName: '竹笛课',
-        courseColor: Color(0xFF0CAC40),
-        courseBg: Color(0xFFDFFCF0),
-        tag: '小课',
-        tagDotColor: Color(0xFF0CAC40),
-        hint: '45分钟·音乐体验课',
-      ),
-    ],
-  ),
-  _LessonScheduleData(
-    time: '07:00 - 07:45',
-    status: '已结束',
-    statusColor: Color(0xFFB6B5BB),
-    statusBg: Color(0xFFE6E9F1),
-    teachers: [
-      _LessonRowData(
-        avatarSeed: '郝',
-        teacherName: '郝江',
-        courseName: '竹笛课',
-        courseColor: Color(0xFF0CAC40),
-        courseBg: Color(0xFFDFFCF0),
-        tag: '小课',
-        tagDotColor: Color(0xFF0CAC40),
-        hint: '45分钟·艺术楼 报告厅',
-      ),
-    ],
-  ),
-];
-
-class _TeacherScheduleSection extends StatelessWidget {
-  const _TeacherScheduleSection({
-    this.onOpenMySchedule,
-    this.fillRemaining = false,
+class _DashboardTimeConfig {
+  const _DashboardTimeConfig({
+    required this.lineNum,
+    required this.start,
+    required this.end,
   });
 
-  final VoidCallback? onOpenMySchedule;
+  final int lineNum;
+  final String start;
+  final String end;
+}
+
+const List<_DashboardTimeConfig> _kDefaultDashboardTimeConfigs = [
+  _DashboardTimeConfig(lineNum: 1, start: '08:00', end: '08:40'),
+  _DashboardTimeConfig(lineNum: 2, start: '08:50', end: '09:35'),
+  _DashboardTimeConfig(lineNum: 3, start: '09:50', end: '10:30'),
+  _DashboardTimeConfig(lineNum: 4, start: '10:30', end: '11:25'),
+  _DashboardTimeConfig(lineNum: 5, start: '14:00', end: '14:45'),
+];
+
+enum _LessonSlotPhase { inProgress, upcoming, ended }
+
+class _TeacherScheduleSection extends ConsumerStatefulWidget {
+  const _TeacherScheduleSection({this.fillRemaining = false});
 
   /// true：父级提供有界高度，宽屏下双卡通过 `Expanded(cardsRow)` 撑满剩余高度。
   final bool fillRemaining;
+
+  @override
+  ConsumerState<_TeacherScheduleSection> createState() =>
+      _TeacherScheduleSectionState();
+}
+
+class _TeacherScheduleSectionState extends ConsumerState<_TeacherScheduleSection> {
+  bool _loading = true;
+  _LessonScheduleData? _currentLesson;
+  List<_LessonScheduleData> _todayLessons = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadSchedule());
+  }
+
+  String _isoDate(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  Future<void> _loadSchedule() async {
+    if (!mounted) return;
+    setState(() => _loading = true);
+
+    final teacherRepo = ref.read(teacherRepositoryProvider);
+    final schoolRepo = ref.read(schoolRepositoryProvider);
+    final today = DateTime.now();
+    final todayIso = _isoDate(today);
+
+    var timeConfigs = _kDefaultDashboardTimeConfigs;
+    try {
+      final classResp = await teacherRepo.classList();
+      if (classResp.isSuccess) {
+        String? classId;
+        for (final m in _scheduleExtractList(classResp)) {
+          final id = _schedulePickString(m, ['id', 'classId'], '');
+          if (id.isNotEmpty) {
+            classId = id;
+            break;
+          }
+        }
+        if (classId != null && classId.isNotEmpty) {
+          final tcResp =
+              await schoolRepo.schoolTimeConfigList(classId: classId);
+          if (tcResp.isSuccess) {
+            final parsed = _parseDashboardTimeConfigs(tcResp);
+            if (parsed.isNotEmpty) timeConfigs = parsed;
+          }
+        }
+      }
+
+      final courseResp = await teacherRepo.courseList(
+        beginDate: todayIso,
+        endDate: todayIso,
+      );
+      if (!mounted) return;
+
+      if (!courseResp.isSuccess) {
+        if (courseResp.msg.isNotEmpty) {
+          AppToast.show(context, courseResp.msg);
+        }
+        setState(() {
+          _loading = false;
+          _currentLesson = null;
+          _todayLessons = const [];
+        });
+        return;
+      }
+
+      final built = _buildDashboardSchedule(
+        courseResp: courseResp,
+        timeConfigs: timeConfigs,
+        now: today,
+      );
+      setState(() {
+        _loading = false;
+        _currentLesson = built.current;
+        _todayLessons = built.today;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _currentLesson = null;
+        _todayLessons = const [];
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1626,35 +1714,15 @@ class _TeacherScheduleSection extends StatelessWidget {
       ),
     );
 
-    Widget scheduleTitle() => Row(
-      children: [
-        Text(
-          '今日课表',
-          style: TextStyle(
-            fontSize: ui(18),
-            color: const Color(0xFF1A1A1A),
-            fontWeight: FontWeight.w500,
-            height: 1,
-          ),
-        ),
-        const Spacer(),
-        InkWell(
-          onTap: onOpenMySchedule,
-          borderRadius: BorderRadius.circular(ui(6)),
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: ui(2), vertical: ui(2)),
-            child: Text(
-              '查看完整课表 >',
-              style: TextStyle(
-                fontSize: ui(14),
-                color: const Color(0xFF6D6B75),
-                fontWeight: FontWeight.w400,
-                height: 1,
-              ),
-            ),
-          ),
-        ),
-      ],
+    final currentPanel = _CurrentLessonPanel(
+      lesson: _currentLesson,
+      loading: _loading,
+      fillHeight: widget.fillRemaining,
+    );
+    final todayPanel = _TodaySchedulePanel(
+      lessons: _todayLessons,
+      loading: _loading,
+      fillHeight: widget.fillRemaining,
     );
 
     return LayoutBuilder(
@@ -1663,67 +1731,484 @@ class _TeacherScheduleSection extends StatelessWidget {
         final stackVertically = !cw.isFinite || cw < ui(690);
 
         if (stackVertically) {
-          // 紧凑模式：标题→白卡顺序堆叠（不撑满，沿用 SingleChildScrollView 滚动）。
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              sectionTitle('当前课程'),
-              SizedBox(height: ui(20)),
-              const _CurrentLessonPanel(lesson: _kCurrentLesson),
-              SizedBox(height: ui(20)),
-              scheduleTitle(),
-              SizedBox(height: ui(20)),
-              const _TodaySchedulePanel(lessons: _kTodayLessons),
-            ],
+          return Padding(
+            padding: EdgeInsets.only(top: ui(12)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                sectionTitle('当前课程'),
+                SizedBox(height: ui(20)),
+                currentPanel,
+                SizedBox(height: ui(20)),
+                sectionTitle('今日课表'),
+                SizedBox(height: ui(20)),
+                todayPanel,
+              ],
+            ),
           );
         }
 
-        // 宽屏：标题行 + 双卡行
         final cardsRow = Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Expanded(child: _CurrentLessonPanel(lesson: _kCurrentLesson)),
+            Expanded(child: currentPanel),
             SizedBox(width: ui(16)),
-            const Expanded(child: _TodaySchedulePanel(lessons: _kTodayLessons)),
+            Expanded(child: todayPanel),
           ],
         );
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: fillRemaining ? MainAxisSize.max : MainAxisSize.min,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(child: sectionTitle('当前课程')),
-                SizedBox(width: ui(16)),
-                Expanded(child: scheduleTitle()),
-              ],
-            ),
-            SizedBox(height: ui(20)),
-            if (fillRemaining)
-              // 父级有界高度：白卡撑满剩余高度
-              Expanded(child: cardsRow)
-            else
-              // 父级高度无界：用 IntrinsicHeight 让两侧等高
-              IntrinsicHeight(child: cardsRow),
-          ],
+        return Padding(
+          padding: EdgeInsets.only(top: ui(12)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: widget.fillRemaining ? MainAxisSize.max : MainAxisSize.min,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: sectionTitle('当前课程')),
+                  SizedBox(width: ui(16)),
+                  Expanded(child: sectionTitle('今日课表')),
+                ],
+              ),
+              SizedBox(height: ui(20)),
+              if (widget.fillRemaining)
+                Expanded(child: cardsRow)
+              else
+                IntrinsicHeight(child: cardsRow),
+            ],
+          ),
         );
       },
     );
   }
 }
 
+class _BuiltDashboardSchedule {
+  const _BuiltDashboardSchedule({this.current, required this.today});
+
+  final _LessonScheduleData? current;
+  final List<_LessonScheduleData> today;
+}
+
+_BuiltDashboardSchedule _buildDashboardSchedule({
+  required ApiResponse courseResp,
+  required List<_DashboardTimeConfig> timeConfigs,
+  required DateTime now,
+}) {
+  final rows = _extractDashboardCourseRows(courseResp);
+  if (rows.isEmpty) {
+    return const _BuiltDashboardSchedule(today: []);
+  }
+
+  final groups = <String, _DashboardSlotGroup>{};
+  for (final row in rows) {
+    final times = _resolveRowTimes(row, timeConfigs);
+    if (times.start.isEmpty || times.end.isEmpty) continue;
+    final key = '${times.lineNum}|${times.start}|${times.end}';
+    groups.putIfAbsent(
+      key,
+      () => _DashboardSlotGroup(
+        lineNum: times.lineNum,
+        start: times.start,
+        end: times.end,
+        sortKey: _hmSortKey(times.start),
+      ),
+    ).rows.add(row);
+  }
+
+  final sorted = groups.values.toList()
+    ..sort((a, b) {
+      final byStart = a.sortKey.compareTo(b.sortKey);
+      if (byStart != 0) return byStart;
+      return a.lineNum.compareTo(b.lineNum);
+    });
+
+  final allLessons = <_LessonScheduleData>[];
+  final phases = <_LessonSlotPhase>[];
+
+  for (final group in sorted) {
+    final phase = _slotPhase(now, group.start, group.end);
+    final style = _statusStyle(phase);
+    allLessons.add(
+      _LessonScheduleData(
+        time: '${group.start} - ${group.end}',
+        status: style.label,
+        statusColor: style.foreground,
+        statusBg: style.background,
+        teachers: [
+          for (final row in group.rows)
+            _lessonRowFromCourse(row, group.start, group.end),
+        ],
+      ),
+    );
+    phases.add(phase);
+  }
+
+  var currentIdx = -1;
+  for (var i = 0; i < phases.length; i++) {
+    if (phases[i] == _LessonSlotPhase.inProgress) {
+      currentIdx = i;
+      break;
+    }
+  }
+  if (currentIdx < 0) {
+    for (var i = 0; i < phases.length; i++) {
+      if (phases[i] == _LessonSlotPhase.upcoming) {
+        currentIdx = i;
+        break;
+      }
+    }
+  }
+  if (currentIdx < 0) {
+    for (var i = phases.length - 1; i >= 0; i--) {
+      if (phases[i] == _LessonSlotPhase.ended) {
+        currentIdx = i;
+        break;
+      }
+    }
+  }
+
+  final current = currentIdx >= 0 ? allLessons[currentIdx] : null;
+  final today = <_LessonScheduleData>[
+    for (var i = 0; i < allLessons.length; i++)
+      if (i != currentIdx) allLessons[i],
+  ];
+
+  return _BuiltDashboardSchedule(current: current, today: today);
+}
+
+class _DashboardSlotGroup {
+  _DashboardSlotGroup({
+    required this.lineNum,
+    required this.start,
+    required this.end,
+    required this.sortKey,
+  });
+
+  final int lineNum;
+  final String start;
+  final String end;
+  final int sortKey;
+  final List<Map<String, dynamic>> rows = [];
+}
+
+class _ResolvedRowTimes {
+  const _ResolvedRowTimes({
+    required this.lineNum,
+    required this.start,
+    required this.end,
+  });
+
+  final int lineNum;
+  final String start;
+  final String end;
+}
+
+_ResolvedRowTimes _resolveRowTimes(
+  Map<String, dynamic> row,
+  List<_DashboardTimeConfig> configs,
+) {
+  final lineNumRaw = row['lineNum'];
+  final lineNum = lineNumRaw is int
+      ? lineNumRaw
+      : (int.tryParse(lineNumRaw?.toString() ?? '') ?? 0);
+
+  if (lineNum > 0) {
+    for (final c in configs) {
+      if (c.lineNum == lineNum) {
+        return _ResolvedRowTimes(
+          lineNum: lineNum,
+          start: c.start,
+          end: c.end,
+        );
+      }
+    }
+    if (lineNum <= configs.length) {
+      final c = configs[lineNum - 1];
+      return _ResolvedRowTimes(
+        lineNum: lineNum,
+        start: c.start,
+        end: c.end,
+      );
+    }
+  }
+
+  final start = _trimDashboardHm(
+    _schedulePickString(row, [
+      'timeBegin',
+      'startTime',
+      'beginTime',
+      'start',
+    ], ''),
+  );
+  final end = _trimDashboardHm(
+    _schedulePickString(row, [
+      'timeEnd',
+      'endTime',
+      'finishTime',
+      'end',
+    ], ''),
+  );
+  return _ResolvedRowTimes(lineNum: lineNum, start: start, end: end);
+}
+
+_LessonRowData _lessonRowFromCourse(
+  Map<String, dynamic> row,
+  String start,
+  String end,
+) {
+  final typeRaw = row['type'];
+  final type = typeRaw is int
+      ? typeRaw
+      : (int.tryParse(typeRaw?.toString() ?? '') ?? 0);
+  final isSmall = type == 2;
+
+  final className = _schedulePickString(row, ['className', 'class'], '');
+  final teacher = _schedulePickString(row, [
+    'teacherRealname',
+    'teacherName',
+    'realname',
+    'realName',
+    'teacherNickname',
+    'teacher',
+  ], '');
+  final subjectName = _schedulePickString(row, [
+    'subjectName',
+    'courseName',
+    'subject',
+    'name',
+  ], '—');
+  final classroom = _schedulePickString(row, [
+    'classroomName',
+    'roomName',
+    'classroom',
+  ], '');
+
+  final displayName = className.isNotEmpty
+      ? className
+      : (teacher.isNotEmpty ? teacher : '—');
+  final avatarSeed = displayName.isEmpty ? '?' : displayName;
+
+  var courseColor = isSmall
+      ? const Color(0xFF0CAC40)
+      : const Color(0xFF8741FF);
+  var courseBg = isSmall
+      ? const Color(0xFFDFFCF0)
+      : const Color(0xFFEAE5FF);
+  var tagDotColor = courseColor;
+
+  final hex = _schedulePickString(row, ['color'], '');
+  final parsed = _parseDashboardHexColor(hex);
+  if (parsed != null) {
+    courseColor = parsed;
+    courseBg = parsed.withValues(alpha: 0.14);
+    tagDotColor = parsed;
+  }
+
+  final mins = _minutesBetweenHm(start, end);
+  final hintParts = <String>[];
+  if (mins > 0) hintParts.add('$mins分钟');
+  if (classroom.isNotEmpty) hintParts.add(classroom);
+  final hint = hintParts.isEmpty ? '—' : hintParts.join('·');
+
+  return _LessonRowData(
+    avatarSeed: avatarSeed,
+    teacherName: displayName,
+    courseName: subjectName,
+    courseColor: courseColor,
+    courseBg: courseBg,
+    tag: isSmall ? '小课' : '大课',
+    tagDotColor: tagDotColor,
+    hint: hint,
+  );
+}
+
+List<_DashboardTimeConfig> _parseDashboardTimeConfigs(ApiResponse resp) {
+  final list = <_DashboardTimeConfig>[];
+  for (final m in _scheduleExtractList(resp)) {
+    final lineNumRaw = m['lineNum'];
+    final lineNum = lineNumRaw is int
+        ? lineNumRaw
+        : (int.tryParse(lineNumRaw?.toString() ?? '') ?? 0);
+    if (lineNum < 1) continue;
+    final start = _trimDashboardHm(
+      _schedulePickString(m, [
+        'timeBegin',
+        'startTime',
+        'beginTime',
+        'start',
+      ], ''),
+    );
+    final end = _trimDashboardHm(
+      _schedulePickString(m, [
+        'timeEnd',
+        'endTime',
+        'finishTime',
+        'end',
+      ], ''),
+    );
+    if (start.isEmpty || end.isEmpty) continue;
+    list.add(_DashboardTimeConfig(lineNum: lineNum, start: start, end: end));
+  }
+  list.sort((a, b) => a.lineNum.compareTo(b.lineNum));
+  return list;
+}
+
+List<Map<String, dynamic>> _extractDashboardCourseRows(ApiResponse resp) {
+  final raw = resp.data;
+  final list = <Map<String, dynamic>>[];
+  if (raw is Map) {
+    for (final entry in raw.entries) {
+      final v = entry.value;
+      if (v is List) {
+        for (final item in v) {
+          if (item is Map) {
+            list.add(Map<String, dynamic>.from(item));
+          }
+        }
+      }
+    }
+  } else if (raw is List) {
+    for (final item in raw) {
+      if (item is Map) {
+        list.add(Map<String, dynamic>.from(item));
+      }
+    }
+  }
+  return list;
+}
+
+List<Map<String, dynamic>> _scheduleExtractList(ApiResponse resp) {
+  dynamic raw = resp.data;
+  if (raw is Map && raw.containsKey('data')) {
+    final d = raw['data'];
+    if (d is List) {
+      raw = d;
+    } else if (d is Map) {
+      raw = d;
+    }
+  }
+  final list = raw is List
+      ? raw
+      : (raw is Map && raw['records'] is List
+            ? raw['records'] as List
+            : (raw is Map && raw['list'] is List
+                  ? raw['list'] as List
+                  : const []));
+  return [
+    for (final item in list)
+      if (item is Map) Map<String, dynamic>.from(item),
+  ];
+}
+
+String _schedulePickString(
+  Map<String, dynamic> json,
+  List<String> keys,
+  String fallback,
+) {
+  for (final k in keys) {
+    final v = json[k];
+    if (v == null) continue;
+    final s = v.toString().trim();
+    if (s.isNotEmpty) return s;
+  }
+  return fallback;
+}
+
+String _trimDashboardHm(String s) {
+  if (s.isEmpty) return s;
+  final parts = s.split(':');
+  if (parts.length >= 2) {
+    return '${parts[0]}:${parts[1]}';
+  }
+  return s;
+}
+
+int _hmSortKey(String hm) {
+  final dt = _parseTodayHm(hm);
+  if (dt == null) return 0;
+  return dt.hour * 60 + dt.minute;
+}
+
+DateTime? _parseTodayHm(String hm) {
+  final parts = hm.split(':');
+  if (parts.length < 2) return null;
+  final h = int.tryParse(parts[0]);
+  final m = int.tryParse(parts[1]);
+  if (h == null || m == null) return null;
+  final now = DateTime.now();
+  return DateTime(now.year, now.month, now.day, h, m);
+}
+
+int _minutesBetweenHm(String start, String end) {
+  final s = _parseTodayHm(start);
+  final e = _parseTodayHm(end);
+  if (s == null || e == null) return 0;
+  return e.difference(s).inMinutes;
+}
+
+_LessonSlotPhase _slotPhase(DateTime now, String startHm, String endHm) {
+  final start = _parseTodayHm(startHm);
+  final end = _parseTodayHm(endHm);
+  if (start == null || end == null) return _LessonSlotPhase.upcoming;
+  if (now.isBefore(start)) return _LessonSlotPhase.upcoming;
+  if (now.isAfter(end)) return _LessonSlotPhase.ended;
+  return _LessonSlotPhase.inProgress;
+}
+
+({String label, Color foreground, Color background}) _statusStyle(
+  _LessonSlotPhase phase,
+) {
+  switch (phase) {
+    case _LessonSlotPhase.inProgress:
+      return (
+        label: '正在进行',
+        foreground: const Color(0xFF0B081A),
+        background: const Color(0xFFEAE5FF),
+      );
+    case _LessonSlotPhase.upcoming:
+      return (
+        label: '即将开始',
+        foreground: const Color(0xFF0B081A),
+        background: const Color(0xFFEAE5FF),
+      );
+    case _LessonSlotPhase.ended:
+      return (
+        label: '已结束',
+        foreground: const Color(0xFFB6B5BB),
+        background: const Color(0xFFE6E9F1),
+      );
+  }
+}
+
+Color? _parseDashboardHexColor(String hex) {
+  var s = hex.trim();
+  if (s.isEmpty) return null;
+  if (s.startsWith('#')) s = s.substring(1);
+  if (s.length == 6) s = 'FF$s';
+  if (s.length != 8) return null;
+  final v = int.tryParse(s, radix: 16);
+  if (v == null) return null;
+  return Color(v);
+}
+
 class _CurrentLessonPanel extends StatelessWidget {
-  const _CurrentLessonPanel({required this.lesson});
+  const _CurrentLessonPanel({
+    this.lesson,
+    this.loading = false,
+    this.fillHeight = false,
+  });
 
   final _LessonScheduleData? lesson;
+  final bool loading;
+  final bool fillHeight;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
+    final panel = Container(
       padding: EdgeInsets.fromLTRB(ui(12), ui(12), ui(12), ui(12)),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -1736,22 +2221,34 @@ class _CurrentLessonPanel extends StatelessWidget {
           ),
         ],
       ),
-      child: lesson == null
-          ? const _LessonEmptyHint(text: '暂无当前课程')
-          : _LessonScheduleCard(data: lesson!),
+      child: _wrapScrollable(
+        fillHeight: fillHeight,
+        child: loading
+            ? const _LessonLoadingHint()
+            : lesson == null
+            ? const _LessonEmptyHint(text: '暂无当前课程')
+            : _LessonScheduleCard(data: lesson!),
+      ),
     );
+    return fillHeight ? SizedBox.expand(child: panel) : panel;
   }
 }
 
 class _TodaySchedulePanel extends StatelessWidget {
-  const _TodaySchedulePanel({required this.lessons});
+  const _TodaySchedulePanel({
+    required this.lessons,
+    this.loading = false,
+    this.fillHeight = false,
+  });
 
   final List<_LessonScheduleData> lessons;
+  final bool loading;
+  final bool fillHeight;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
+    final panel = Container(
       padding: EdgeInsets.fromLTRB(ui(12), ui(12), ui(12), ui(12)),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -1764,18 +2261,60 @@ class _TodaySchedulePanel extends StatelessWidget {
           ),
         ],
       ),
-      child: lessons.isEmpty
-          ? const _LessonEmptyHint(text: '今日暂无课表')
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (var i = 0; i < lessons.length; i++) ...[
-                  if (i > 0) SizedBox(height: ui(8)),
-                  _LessonScheduleCard(data: lessons[i]),
+      child: _wrapScrollable(
+        fillHeight: fillHeight,
+        child: loading
+            ? const _LessonLoadingHint()
+            : lessons.isEmpty
+            ? const _LessonEmptyHint(text: '今日暂无课表')
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (var i = 0; i < lessons.length; i++) ...[
+                    if (i > 0) SizedBox(height: ui(8)),
+                    _LessonScheduleCard(data: lessons[i]),
+                  ],
                 ],
-              ],
-            ),
+              ),
+      ),
+    );
+    return fillHeight ? SizedBox.expand(child: panel) : panel;
+  }
+}
+
+/// 宽屏撑满剩余高度时，白卡内部可滚动，避免课表条目过多导致 BOTTOM OVERFLOW。
+Widget _wrapScrollable({required bool fillHeight, required Widget child}) {
+  if (!fillHeight) return child;
+  return Column(
+    mainAxisSize: MainAxisSize.max,
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Expanded(
+        child: SingleChildScrollView(
+          physics: const ClampingScrollPhysics(),
+          child: child,
+        ),
+      ),
+    ],
+  );
+}
+
+class _LessonLoadingHint extends StatelessWidget {
+  const _LessonLoadingHint();
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(vertical: ui(36)),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F6FA),
+        borderRadius: BorderRadius.circular(ui(12)),
+      ),
+      alignment: Alignment.center,
+      child: const AppLoadingIndicator(),
     );
   }
 }
@@ -2090,12 +2629,10 @@ class _LessonSeedAvatar extends StatelessWidget {
 }
 
 // =============================================================================
-// 班主任端：当前事项 + 班务（白色双卡区）
+// 班主任端：待办提醒 + 近期动态（白色双卡区）
 //
-// 与「当前课程 / 今日课表」共用同一外层布局（标题行 + 白卡 + Expanded 撑满），
-// 子卡视觉简化为 时间(Barlow 18 600 三段式) + 标题 + 紫色标签：
-//   - 白卡 padding 12 / radius 16 / 浅阴影；子卡灰底 #F5F6FA / radius 12
-//   - 「班务」标题右侧带「班级工作台 >」入口
+// 与「当前课程 / 今日课表」共用同一外层布局（标题行 + 白卡 + Expanded 撑满）。
+// 左卡聚焦需处理事项（请假审批 / 查寝异常 / 家校未读）；右卡展示班级侧最新动态。
 // =============================================================================
 
 class _BoardItemData {
@@ -2117,42 +2654,35 @@ class _BoardItemData {
 const Color _kBoardTagPurple = Color(0xFF8741FF);
 const Color _kBoardTagPurpleSoft = Color(0xFFDAD2FF);
 
-const List<_BoardItemData> _kHeadTeacherCurrentItems = [
+const List<_BoardItemData> _kHeadTeacherTodoItems = [
   _BoardItemData(
-    time: '07:00 - 07:45',
-    title: '班会材料·校考志愿说明',
-    tag: '班会',
+    time: '待审批',
+    title: '学生请假申请待处理',
+    tag: '请假',
     tagForeground: _kBoardTagPurple,
     tagBackground: _kBoardTagPurpleSoft,
   ),
   _BoardItemData(
-    time: '07:50 - 08:35',
-    title: '校考志愿说明演讲',
-    tag: '演讲',
+    time: '待确认',
+    title: '查寝异常记录待跟进',
+    tag: '查寝',
     tagForeground: _kBoardTagPurple,
     tagBackground: _kBoardTagPurpleSoft,
   ),
 ];
 
-const List<_BoardItemData> _kHeadTeacherBoardItems = [
+const List<_BoardItemData> _kHeadTeacherRecentItems = [
   _BoardItemData(
-    time: '07:00 - 07:45',
-    title: '班会材料·校考志愿说明',
-    tag: '班会',
+    time: '待回复',
+    title: '家长留言待处理',
+    tag: '家校',
     tagForeground: _kBoardTagPurple,
     tagBackground: _kBoardTagPurpleSoft,
   ),
   _BoardItemData(
-    time: '09:00 - 09:45',
-    title: '校考志愿说明演讲',
-    tag: '演讲',
-    tagForeground: _kBoardTagPurple,
-    tagBackground: _kBoardTagPurpleSoft,
-  ),
-  _BoardItemData(
-    time: '10:00 - 10:45',
-    title: '校考志愿说明演讲',
-    tag: '演讲',
+    time: '已发布',
+    title: '班级通知同步至家长端',
+    tag: '通知',
     tagForeground: _kBoardTagPurple,
     tagBackground: _kBoardTagPurpleSoft,
   ),
@@ -2160,12 +2690,8 @@ const List<_BoardItemData> _kHeadTeacherBoardItems = [
 
 class _HeadTeacherBoardSection extends StatelessWidget {
   const _HeadTeacherBoardSection({
-    this.onOpenWorkbench,
     this.fillRemaining = false,
   });
-
-  /// 「班级工作台 >」入口（班务白卡标题右侧）。
-  final VoidCallback? onOpenWorkbench;
 
   /// true：父级提供有界高度，宽屏下双卡通过 `Expanded(cardsRow)` 撑满剩余高度。
   final bool fillRemaining;
@@ -2184,55 +2710,33 @@ class _HeadTeacherBoardSection extends StatelessWidget {
       ),
     );
 
-    Widget boardTitle() => Row(
-      children: [
-        Text(
-          '班务',
-          style: TextStyle(
-            fontSize: ui(18),
-            color: const Color(0xFF1A1A1A),
-            fontWeight: FontWeight.w500,
-            height: 1,
-          ),
-        ),
-        const Spacer(),
-        InkWell(
-          onTap: onOpenWorkbench,
-          borderRadius: BorderRadius.circular(ui(6)),
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: ui(2), vertical: ui(2)),
-            child: Text(
-              '班级工作台 >',
-              style: TextStyle(
-                fontSize: ui(14),
-                color: const Color(0xFF6D6B75),
-                fontWeight: FontWeight.w400,
-                height: 1,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-
     return LayoutBuilder(
       builder: (context, constraints) {
         final cw = constraints.maxWidth;
         final stackVertically = !cw.isFinite || cw < ui(690);
 
         if (stackVertically) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              sectionTitle('当前事项'),
-              SizedBox(height: ui(20)),
-              const _BoardPanel(items: _kHeadTeacherCurrentItems),
-              SizedBox(height: ui(20)),
-              boardTitle(),
-              SizedBox(height: ui(20)),
-              const _BoardPanel(items: _kHeadTeacherBoardItems),
-            ],
+          return Padding(
+            padding: EdgeInsets.only(top: ui(12)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                sectionTitle('待办提醒'),
+                SizedBox(height: ui(20)),
+                const _BoardPanel(
+                  items: _kHeadTeacherTodoItems,
+                  emptyHint: '暂无待办',
+                ),
+                SizedBox(height: ui(20)),
+                sectionTitle('近期动态'),
+                SizedBox(height: ui(20)),
+                const _BoardPanel(
+                  items: _kHeadTeacherRecentItems,
+                  emptyHint: '暂无近期动态',
+                ),
+              ],
+            ),
           );
         }
 
@@ -2240,31 +2744,42 @@ class _HeadTeacherBoardSection extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Expanded(
-              child: _BoardPanel(items: _kHeadTeacherCurrentItems),
+              child: _BoardPanel(
+                items: _kHeadTeacherTodoItems,
+                emptyHint: '暂无待办',
+              ),
             ),
             SizedBox(width: ui(16)),
-            const Expanded(child: _BoardPanel(items: _kHeadTeacherBoardItems)),
+            const Expanded(
+              child: _BoardPanel(
+                items: _kHeadTeacherRecentItems,
+                emptyHint: '暂无近期动态',
+              ),
+            ),
           ],
         );
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: fillRemaining ? MainAxisSize.max : MainAxisSize.min,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(child: sectionTitle('当前事项')),
-                SizedBox(width: ui(16)),
-                Expanded(child: boardTitle()),
-              ],
-            ),
-            SizedBox(height: ui(20)),
-            if (fillRemaining)
-              Expanded(child: cardsRow)
-            else
-              IntrinsicHeight(child: cardsRow),
-          ],
+        return Padding(
+          padding: EdgeInsets.only(top: ui(12)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: fillRemaining ? MainAxisSize.max : MainAxisSize.min,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: sectionTitle('待办提醒')),
+                  SizedBox(width: ui(16)),
+                  Expanded(child: sectionTitle('近期动态')),
+                ],
+              ),
+              SizedBox(height: ui(20)),
+              if (fillRemaining)
+                Expanded(child: cardsRow)
+              else
+                IntrinsicHeight(child: cardsRow),
+            ],
+          ),
         );
       },
     );
@@ -2272,9 +2787,10 @@ class _HeadTeacherBoardSection extends StatelessWidget {
 }
 
 class _BoardPanel extends StatelessWidget {
-  const _BoardPanel({required this.items});
+  const _BoardPanel({required this.items, this.emptyHint = '暂无事项'});
 
   final List<_BoardItemData> items;
+  final String emptyHint;
 
   @override
   Widget build(BuildContext context) {
@@ -2293,7 +2809,7 @@ class _BoardPanel extends StatelessWidget {
         ],
       ),
       child: items.isEmpty
-          ? const _LessonEmptyHint(text: '暂无事项')
+          ? _LessonEmptyHint(text: emptyHint)
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
@@ -2428,7 +2944,7 @@ List<InlineSpan> _splitBoardTime(String time, double Function(double) ui) {
 //
 // 复用老师端视觉系统：
 //   - 主区：6 张统计卡 + 10 项功能矩阵（5×2，82×70 按钮）+ 当前课程/今日课表 双卡
-//   - 侧栏 256：头像 + 在校胶囊 + 详细信息（主项/副项/班级/宿舍）+ 通知列表
+//   - 侧栏 256：头像 + 身份胶囊 + 岗位/权限/职责 + 通知列表
 //     注意：学生端**没有**老师/班主任 tab 切换，所以 _TeacherSidebar 的
 //     selectedTab/onTabSelected 都不传。
 //

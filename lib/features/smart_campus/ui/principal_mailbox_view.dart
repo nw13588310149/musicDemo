@@ -29,6 +29,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -1003,14 +1004,7 @@ class _UploadTile extends StatelessWidget {
   Widget _buildFilled(double Function(num) ui, _AttachmentSlot s) {
     final Widget statusIcon;
     if (s.isUploading) {
-      statusIcon = SizedBox(
-        width: ui(14),
-        height: ui(14),
-        child: const CircularProgressIndicator(
-          strokeWidth: 2,
-          valueColor: AlwaysStoppedAnimation(_kPurple),
-        ),
-      );
+      statusIcon = const AppLoadingIndicator();
     } else if (s.isDone) {
       statusIcon = Icon(
         Icons.check_circle_rounded,
@@ -1137,14 +1131,7 @@ class _SubmitButton extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (busy)
-                SizedBox(
-                  width: ui(18),
-                  height: ui(18),
-                  child: const CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation(Colors.white),
-                  ),
-                )
+                const AppLoadingIndicator(size: 16, color: Colors.white)
               else
                 Icon(Icons.send_rounded, color: Colors.white, size: ui(22)),
               SizedBox(width: ui(8)),
@@ -1198,14 +1185,7 @@ class _SubmittedList extends StatelessWidget {
           Expanded(
             child: loading
                 ? const Center(
-                    child: SizedBox(
-                      width: 28,
-                      height: 28,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.4,
-                        valueColor: AlwaysStoppedAnimation(_kPurple),
-                      ),
-                    ),
+                    child: AppLoadingIndicator(),
                   )
                 : (records.isEmpty
                       ? _EmptyHint(status: status, onWriteNew: onWriteNew)

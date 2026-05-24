@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_response.dart';
 import '../../../core/network/media_url.dart';
-import '../../smart_campus/data/book_share_payload.dart';
+import '../../smart_campus/data/chat_share_payload.dart';
 import '../data/theory_repository.dart';
 import 'theory_state.dart';
 

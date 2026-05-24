@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../music_companion/ui/widgets/piano_visualizer.dart';
@@ -190,7 +191,7 @@ class SmartDictationV2Page extends ConsumerWidget {
                 children: [
                   Expanded(
                     child: state.bootstrapping
-                        ? const Center(child: CircularProgressIndicator())
+                        ? const Center(child: AppLoadingIndicator())
                         : _Content(
                             ui: ui,
                             state: state,
@@ -487,7 +488,7 @@ class _Content extends StatelessWidget {
 
     if (state.activeMode == SmartDictationMode.stage) {
       if (state.loadingLessons) {
-        return const Center(child: CircularProgressIndicator());
+        return const Center(child: AppLoadingIndicator());
       }
       if (state.activeLessons.isEmpty) {
         return Center(

@@ -2,8 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data' show BytesBuilder, Uint8List;
 
-import 'package:flutter/foundation.dart'
-    show ValueNotifier, debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart' show ValueNotifier, debugPrint, kIsWeb;
 import 'package:flutter/services.dart'
     show MissingPluginException, PlatformException;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -691,7 +690,9 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       }
 
       final isFreshStart =
-          _amplitudeHistory.isEmpty && elapsedMs.value == 0 && _elapsedOffsetMs == 0;
+          _amplitudeHistory.isEmpty &&
+          elapsedMs.value == 0 &&
+          _elapsedOffsetMs == 0;
       if (isFreshStart) {
         _resetSessionSegments();
         _resetWaveform();
@@ -950,7 +951,9 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       bytes,
       segmentDurationMs: _segmentDurationMsForCommit(durationMs),
     );
-    final sessionPreview = await _buildSessionPreviewAssets(durationMs: durationMs);
+    final sessionPreview = await _buildSessionPreviewAssets(
+      durationMs: durationMs,
+    );
     if (sessionPreview == null) return _zhNoValidRecording;
 
     _preparedPlayerSource = null;
@@ -1071,7 +1074,9 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       bytes,
       segmentDurationMs: _segmentDurationMsForCommit(durationMs),
     );
-    final sessionPreview = await _buildSessionPreviewAssets(durationMs: durationMs);
+    final sessionPreview = await _buildSessionPreviewAssets(
+      durationMs: durationMs,
+    );
     if (sessionPreview == null) return _zhNoValidRecording;
 
     _preparedPlayerSource = null;
@@ -1599,9 +1604,17 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     for (final raw in response.data as List) {
       if (raw is! Map<String, dynamic>) continue;
       final id = _toIdString(raw['id']);
-      final name = raw['name']?.toString().trim() ?? '';
+      final name = (raw['groupName'] ?? raw['name'] ?? raw['className'] ?? '')
+          .toString()
+          .trim();
+      final avatarUrl =
+          (raw['logo'] ?? raw['groupLogo'] ?? raw['avatarUrl'] ?? '')
+              .toString()
+              .trim();
       if (id.isEmpty || name.isEmpty) continue;
-      classes.add(RecordingShareClass(id: id, name: name));
+      classes.add(
+        RecordingShareClass(id: id, name: name, avatarUrl: avatarUrl),
+      );
     }
     state = state.copyWith(showShareDialog: true, shareClasses: classes);
     return null;
@@ -1750,8 +1763,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
   Future<String?> _ensurePreviewPlayerReady() async {
     final source = state.previewSource;
     if (source == null || source.isEmpty) return _zhNoSourceToPlay;
-    if (_sessionPreviewUsesMultiSource ||
-        source == _sessionMultiPreviewToken) {
+    if (_sessionPreviewUsesMultiSource || source == _sessionMultiPreviewToken) {
       return _prepareSessionPreviewPlayer(
         totalDurationMs: _effectivePreviewDurationMs(),
       );
@@ -1759,7 +1771,9 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     return _preparePreviewPlayerForUI(source);
   }
 
-  Future<String?> _prepareSessionPreviewPlayer({required int totalDurationMs}) async {
+  Future<String?> _prepareSessionPreviewPlayer({
+    required int totalDurationMs,
+  }) async {
     if (!_sessionPreviewUsesMultiSource) {
       final source = state.previewSource;
       if (source == null || source.isEmpty) return _zhNoSourceToPlay;

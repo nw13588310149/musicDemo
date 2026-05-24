@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../smart_campus/data/chat_share_payload.dart';
 import '../data/consultation_repository.dart';
 import 'consultation_detail_state.dart';
 
@@ -111,12 +112,12 @@ class ConsultationDetailController
       return false;
     }
     state = state.copyWith(sending: true, clearErrorMessage: true);
-    final content = jsonEncode(<String, dynamic>{
-      'id': detail.id,
-      'title': detail.title,
-      'shortText3': detail.coverUrl,
-      'updateTime': detail.updateTime,
-    });
+    final content = jsonEncode(buildNewsShareContent(
+      id: detail.id,
+      title: detail.title,
+      coverUrl: detail.coverUrl,
+      updateTime: detail.updateTime,
+    ));
 
     var sentCount = 0;
     for (final cls in selected) {

@@ -60,7 +60,9 @@ final class LowLatencyNoteAudio {
     queue.async { [weak self] in
       guard let self = self else { return }
       do {
-        try self.configureSession()
+        // AVAudioSession 由 Dart [NativePlaybackAudioSession] 统一管理。
+        // 此处若在 prepare 里强制 playAndRecord/measurement，音乐伴侣 / musicPlay
+        // 纯播放场景在 iPad 上会出现音量偏低，且与节拍器启动时的 playback 配置冲突。
 
         var loaded = 0
         for (key, asset) in assets {
@@ -173,18 +175,6 @@ final class LowLatencyNoteAudio {
         }
       }
     }
-  }
-
-  private func configureSession() throws {
-    let session = AVAudioSession.sharedInstance()
-    // 与 Dart [NativePlaybackAudioSession.ensureSightSingingCaptureActive] 一致：
-    // 跟唱时需同时外放钢琴 + 采集麦克风，不能用纯 playback（会掐断 record 流）。
-    try session.setCategory(
-      .playAndRecord,
-      mode: .measurement,
-      options: [.mixWithOthers, .defaultToSpeaker, .allowBluetooth]
-    )
-    try session.setActive(true)
   }
 
   private func ensureEngineRunning() throws {

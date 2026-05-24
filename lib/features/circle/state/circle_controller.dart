@@ -3,7 +3,6 @@ import 'dart:convert' show jsonEncode;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../shell/state/shell_controller.dart';
 import '../data/circle_api_mapper.dart';
 import '../data/circle_repository.dart';
 import 'circle_state.dart';
@@ -385,16 +384,4 @@ class CircleController extends StateNotifier<CircleState> {
         if (p.id == postId) update(p) else p,
     ];
   }
-}
-
-/// 供 UI 读取当前登录用户，计算 [CirclePermissions]。
-CirclePermissions circlePermissionsFromShell(WidgetRef ref) {
-  final user = ref.watch(shellControllerProvider).user;
-  return CirclePermissions(
-    currentUserId: user.id,
-    isAdmin: CirclePermissions.shellUserIsAdmin(
-      role: user.role,
-      identity: user.identity,
-    ),
-  );
 }

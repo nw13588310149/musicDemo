@@ -39,6 +39,7 @@
 import 'package:flutter/material.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 
+import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../shell/ui/shell_layout.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -387,10 +388,10 @@ class _AttendanceBanner extends StatelessWidget {
       height: ui(62),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(ui(16)),
-        gradient: const LinearGradient(
-          begin: Alignment.bottomLeft,
-          end: Alignment.topRight,
-          colors: [Colors.white, Color(0xFFF9EDFF)],
+        image: DecorationImage(
+          image: AssetImage(AppAssets.xiaoquanHeaderBg),
+          fit: BoxFit.cover,
+          alignment: Alignment.centerRight,
         ),
       ),
       child: Stack(
@@ -2316,10 +2317,10 @@ class _HistoryBanner extends StatelessWidget {
       height: ui(62),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(ui(16)),
-        gradient: const LinearGradient(
-          begin: Alignment.bottomLeft,
-          end: Alignment.topRight,
-          colors: [Colors.white, Color(0xFFF9EDFF)],
+        image: DecorationImage(
+          image: AssetImage(AppAssets.xiaoquanHeaderBg),
+          fit: BoxFit.cover,
+          alignment: Alignment.centerRight,
         ),
       ),
       child: Stack(

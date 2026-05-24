@@ -1,4 +1,5 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 
 import '../../../../core/constants/app_assets.dart';
@@ -60,7 +61,7 @@ class _CircleCommentPanelState extends State<CircleCommentPanel> {
     final ui = DashboardScaleScope.of(context).ui;
     final post = widget.post;
     return Material(
-      color: Colors.white,
+      color: Colors.transparent,
       child: Column(
         children: [
           _PanelHeader(count: post?.commentCount ?? 0, onClose: widget.onClose),
@@ -72,16 +73,7 @@ class _CircleCommentPanelState extends State<CircleCommentPanel> {
                     children: [
                       if (widget.commentsLoading)
                         const Center(
-                          child: SizedBox(
-                            width: 28,
-                            height: 28,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.4,
-                              valueColor: AlwaysStoppedAnimation(
-                                Color(0xFF8741FF),
-                              ),
-                            ),
-                          ),
+                          child: AppLoadingIndicator(),
                         ),
                       if (!widget.commentsLoading)
                         (post.comments.isEmpty
@@ -220,25 +212,7 @@ class _CommentTile extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        ClipOval(
-          child: SizedBox(
-            width: ui(36),
-            height: ui(36),
-            child: Image.network(
-              comment.author.avatarUrl,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stack) => Container(
-                color: const Color(0xFFEAE5FF),
-                alignment: Alignment.center,
-                child: Icon(
-                  Icons.person,
-                  color: const Color(0xFF8741FF),
-                  size: ui(20),
-                ),
-              ),
-            ),
-          ),
-        ),
+        _CommentAvatar(url: comment.author.avatarUrl, size: ui(36)),
         SizedBox(width: ui(10)),
         Expanded(
           child: Column(
@@ -246,6 +220,8 @@ class _CommentTile extends StatelessWidget {
             children: [
               Text(
                 comment.author.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: const Color(0xFF0B081A),
                   fontSize: ui(14),
@@ -264,17 +240,20 @@ class _CommentTile extends StatelessWidget {
                 ),
               ),
               SizedBox(height: ui(6)),
-              Row(
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: ui(12),
+                runSpacing: ui(4),
                 children: [
-                  Text(
-                    comment.timeLabel,
-                    style: TextStyle(
-                      color: const Color(0xFFB6B5BB),
-                      fontSize: ui(12),
-                      fontFamily: 'PingFang SC',
+                  if (comment.timeLabel.isNotEmpty)
+                    Text(
+                      comment.timeLabel,
+                      style: TextStyle(
+                        color: const Color(0xFFB6B5BB),
+                        fontSize: ui(12),
+                        fontFamily: 'PingFang SC',
+                      ),
                     ),
-                  ),
-                  SizedBox(width: ui(12)),
                   Text(
                     '回复',
                     style: TextStyle(
@@ -283,31 +262,72 @@ class _CommentTile extends StatelessWidget {
                       fontFamily: 'PingFang SC',
                     ),
                   ),
+                  if (showDelete && onDelete != null)
+                    GestureDetector(
+                      onTap: onDelete,
+                      behavior: HitTestBehavior.opaque,
+                      child: Text(
+                        '删除',
+                        style: TextStyle(
+                          color: const Color(0xFFB6B5BB),
+                          fontSize: ui(12),
+                          fontFamily: 'PingFang SC',
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ],
           ),
         ),
         SizedBox(width: ui(8)),
-        if (showDelete && onDelete != null)
-          Padding(
-            padding: EdgeInsets.only(top: ui(2)),
-            child: InkWell(
-              onTap: onDelete,
-              borderRadius: BorderRadius.circular(ui(4)),
-              child: Padding(
-                padding: EdgeInsets.all(ui(4)),
-                child: Icon(
-                  Icons.delete_outline_rounded,
-                  size: ui(18),
-                  color: const Color(0xFFB6B5BB),
-                ),
-              ),
-            ),
-          ),
-        SizedBox(width: ui(4)),
         _CommentLike(comment: comment, onTap: onLike),
       ],
+    );
+  }
+}
+
+class _CommentAvatar extends StatelessWidget {
+  const _CommentAvatar({required this.url, required this.size});
+
+  final String url;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return ClipOval(
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: url.isEmpty
+            ? Container(
+                color: const Color(0xFFEAE5FF),
+                alignment: Alignment.center,
+                child: Icon(
+                  Icons.person,
+                  color: const Color(0xFF8741FF),
+                  size: ui(20),
+                ),
+              )
+            : Image.network(
+                url,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stack) => Container(
+                  color: const Color(0xFFEAE5FF),
+                  alignment: Alignment.center,
+                  child: Icon(
+                    Icons.person,
+                    color: const Color(0xFF8741FF),
+                    size: ui(20),
+                  ),
+                ),
+                loadingBuilder: (context, child, progress) {
+                  if (progress == null) return child;
+                  return Container(color: const Color(0xFFF3F4F8));
+                },
+              ),
+      ),
     );
   }
 }

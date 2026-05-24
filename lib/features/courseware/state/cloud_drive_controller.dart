@@ -561,11 +561,18 @@ class CloudDriveController extends StateNotifier<CloudDriveState> {
         continue;
       }
       final id = _toIdString(item['id']);
-      final name = item['name']?.toString() ?? '';
+      final name =
+          (item['groupName'] ?? item['name'] ?? item['className'] ?? '')
+              .toString()
+              .trim();
+      final avatarUrl =
+          (item['logo'] ?? item['groupLogo'] ?? item['avatarUrl'] ?? '')
+              .toString()
+              .trim();
       if (id.isEmpty || name.isEmpty) {
         continue;
       }
-      result.add(CloudShareClassItem(id: id, name: name));
+      result.add(CloudShareClassItem(id: id, name: name, avatarUrl: avatarUrl));
     }
     return result;
   }
@@ -970,6 +977,7 @@ class CloudDriveController extends StateNotifier<CloudDriveState> {
           title: name,
           sizeLabel: _resolveSizeLabel(item),
           dateLabel: _resolveDateLabel(item),
+          fileCount: _resolveFolderFileCount(item),
         ),
       );
     }
@@ -1160,6 +1168,32 @@ class CloudDriveController extends StateNotifier<CloudDriveState> {
       }
     }
     return '10MB';
+  }
+
+  int _resolveFolderFileCount(Map<String, dynamic> item) {
+    for (final key in const [
+      'count',
+      'fileCount',
+      'recordingCount',
+      'total',
+      'num',
+      'kjCount',
+    ]) {
+      if (item.containsKey(key)) {
+        return _toInt(item[key]);
+      }
+    }
+    for (final key in const ['totalFileSize', 'fileSize', 'size']) {
+      final raw = item[key];
+      if (raw is num && raw > 0) {
+        return 1;
+      }
+      final parsed = double.tryParse(raw?.toString() ?? '');
+      if (parsed != null && parsed > 0) {
+        return 1;
+      }
+    }
+    return 0;
   }
 
   String _resolveDateLabel(Map<String, dynamic> item) {

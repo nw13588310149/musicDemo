@@ -28,6 +28,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 
 import '../../../core/widgets/app_toast.dart';
 import '../../shell/ui/shell_layout.dart';
@@ -556,14 +557,7 @@ class _RefreshLocationButton extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (busy)
-              SizedBox(
-                width: ui(14),
-                height: ui(14),
-                child: const CircularProgressIndicator(
-                  strokeWidth: 1.6,
-                  color: Color(0xFF1C274C),
-                ),
-              )
+              const AppLoadingIndicator()
             else
               Icon(
                 Icons.my_location_rounded,

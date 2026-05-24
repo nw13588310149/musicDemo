@@ -13,6 +13,7 @@ class CloudFolderMoreMenuButton extends StatelessWidget {
     required this.onTap,
     this.iconLogicalSize = 20,
     this.hitLogicalExtent = 34,
+    this.iconOpacity = 1,
   });
 
   final VoidCallback onTap;
@@ -22,6 +23,9 @@ class CloudFolderMoreMenuButton extends StatelessWidget {
 
   /// 点击热区边长（逻辑像素）。
   final double hitLogicalExtent;
+
+  /// 图标透明度；文件夹卡片可设为 0，仅保留底图上的 ⋯ 与点击热区。
+  final double iconOpacity;
 
   @override
   Widget build(BuildContext context) {
@@ -34,12 +38,15 @@ class CloudFolderMoreMenuButton extends StatelessWidget {
         width: ui(hitLogicalExtent),
         height: ui(hitLogicalExtent),
         child: Center(
-          child: Image.asset(
-            AppAssets.cloudActionMore,
-            width: icon,
-            height: icon,
-            fit: BoxFit.contain,
-            gaplessPlayback: true,
+          child: Opacity(
+            opacity: iconOpacity.clamp(0, 1),
+            child: Image.asset(
+              AppAssets.cloudActionMore,
+              width: icon,
+              height: icon,
+              fit: BoxFit.contain,
+              gaplessPlayback: true,
+            ),
           ),
         ),
       ),

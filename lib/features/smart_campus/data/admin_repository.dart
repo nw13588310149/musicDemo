@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_response.dart';
+import '../../../core/network/snowflake_id.dart';
 import '../../../core/providers/app_providers.dart';
 
 /// 管理员（教务管理端）相关接口的 Repository。
@@ -19,6 +20,7 @@ import '../../../core/providers/app_providers.dart';
 ///   - `schoolSmallCourseApplyAudit` 小班课申请审核
 ///   - `schoolSmallCourseApplyDetail` 小班课申请详情
 ///   - `schoolSmallCourseApplyList`  小班课申请列表
+///   - `indexSum`                  管理员首页统计汇总
 ///   - `studentList`               学生下拉列表
 ///   - `teacherList`               教师下拉列表
 ///
@@ -35,6 +37,29 @@ class AdminRepository {
   final ApiClient client;
 
   static const _base = '/app/school/v2/manager';
+
+  // ============== 首页统计 ==============
+
+  /// 管理员智慧校园首页统计汇总（`IndexSumRes`）。
+  ///
+  /// 返回数据结构：
+  /// ```json
+  /// {
+  ///   "data": {
+  ///     "studentCount": 0,                    // 在籍学生
+  ///     "teacherCount": 0,                    // 老师数量
+  ///     "classCount": 0,                      // 班级数量
+  ///     "leaveStatus0Count": 0,               // 教职工待审批请假
+  ///     "postStatus0Count": 0,                // 校圈待审核数量
+  ///     "smallCourseSignStatus5Count": 0,     // 小班课待审核数量
+  ///     "userFaceNotRecordedCount": 0,        // 人脸待补录
+  ///     "toDoTodayCount": 0                   // 今日待办
+  ///   }
+  /// }
+  /// ```
+  Future<ApiResponse> indexSum() {
+    return client.post('$_base/indexSum');
+  }
 
   // ============== 下拉 / 列表 ==============
 
@@ -62,41 +87,25 @@ class AdminRepository {
     return client.post('$_base/classroomList', data: body);
   }
 
-  /// 学生下拉 / 名册列表。
+  /// 学生下拉 / 名册列表（`SchoolStudentSearchReq`）。
   ///
-  /// 对齐后端最新签名：
-  /// ```json
-  /// {
-  ///   "archiveId": "0",
-  ///   "classId": "0",
-  ///   "current": 1,
-  ///   "keyword": "张三",
-  ///   "size": 10,
-  ///   "studentStatus": "string"
-  /// }
-  /// ```
-  ///
-  /// `archiveId` / `classId` 均为雪花 long，必须以 **字符串** 形式传输，
-  /// 否则在 web 端经 JS number(53bit) 转换会丢精度。
-  ///
-  /// 各参数均可选；空值不会被序列化进 body。`current` / `size` 默认
-  /// 1 / 200，需要分页时由调用方覆盖。
+  /// - [classId]：具体班级传雪花 id 字符串；`null` / 空串 = 全部班级（body 里写 `""`）
+  /// - [studentStatus]：在籍 / 休学 / 转学 / 毕业
   Future<ApiResponse> studentList({
-    String? archiveId,
     String? classId,
     int current = 1,
     int size = 200,
     String? keyword,
     String? studentStatus,
   }) {
-    final body = <String, dynamic>{'current': current, 'size': size};
-    if (archiveId != null && archiveId.isNotEmpty) {
-      body['archiveId'] = archiveId;
-    }
-    // classId 为雪花 long，body 中保持 String 类型，避免 JS number 精度截断。
-    if (classId != null && classId.isNotEmpty) {
-      body['classId'] = classId;
-    }
+    final body = <String, dynamic>{
+      // 全部班级必须传空串，不能省略也不能传 "0"。
+      'classId': (classId != null && classId.isNotEmpty)
+          ? (readSnowflakeId(classId) ?? classId)
+          : '',
+      'current': current,
+      'size': size,
+    };
     if (keyword != null && keyword.isNotEmpty) body['keyword'] = keyword;
     if (studentStatus != null && studentStatus.isNotEmpty) {
       body['studentStatus'] = studentStatus;
@@ -109,9 +118,10 @@ class AdminRepository {
   /// `id` 为 `studentList` 响应中每条记录的 `id` 字段（数据库主键，雪花 long），
   /// 以字符串形态传输，避免 web 端 JS number 精度丢失。
   Future<ApiResponse> studentDetail({required String id}) {
-    return client.post('$_base/studentDetail', data: <String, dynamic>{
-      'id': id,
-    });
+    return client.post(
+      '$_base/studentDetail',
+      data: <String, dynamic>{'id': readSnowflakeId(id) ?? id},
+    );
   }
 
   /// 学生总览统计。`schoolId` 已由 [ApiClient] 通过 header 自动注入，
@@ -134,12 +144,23 @@ class AdminRepository {
 
   /// 教师列表。
   ///
-  /// `classId` 为雪花 long，以字符串形态传输，避免 web 端 JS number 精度截断。
+  /// `classId` 为空串表示全部班级；具体班级传雪花 id 字符串。
   Future<ApiResponse> teacherList({String? classId, String? keyword}) {
-    final body = <String, dynamic>{};
-    if (classId != null && classId.isNotEmpty) body['classId'] = classId;
+    final body = <String, dynamic>{
+      'classId': (classId != null && classId.isNotEmpty)
+          ? (readSnowflakeId(classId) ?? classId)
+          : '',
+    };
     if (keyword != null && keyword.isNotEmpty) body['keyword'] = keyword;
     return client.post('$_base/teacherList', data: body);
+  }
+
+  /// 教师详情。`id` 为教师 userId（雪花 long 字符串）。
+  Future<ApiResponse> teacherDetail({required String id}) {
+    return client.post(
+      '$_base/teacherDetail',
+      data: <String, dynamic>{'id': readSnowflakeId(id) ?? id},
+    );
   }
 
   /// 教师总览统计（全校口径）。
@@ -304,10 +325,10 @@ class AdminRepository {
   }) {
     final body = <String, dynamic>{
       'current': current,
-      'size': 10000,
-      'classId': "",
+      'size': size,
+      'classId': (classId == null || classId.isEmpty) ? '' : classId,
       'teacherId': (teacherId == null || teacherId.isEmpty) ? '' : teacherId,
-      'status':  '',
+      'status': status == null ? '' : status,
     };
     return client.post('$_base/schoolSmallCourseApplyList', data: body);
   }
@@ -457,6 +478,49 @@ class AdminRepository {
         'courseId': courseId,
         'studentId': studentId,
         'status': status,
+      },
+    );
+  }
+
+  // ============== 教师请假审批 ==============
+
+  /// 教师请假列表（`AppSchoolTeacherLeaveListBO`）。
+  ///
+  /// `status`: 0-待审批 / 1-已批准 / 2-已拒绝；不传 = 全部。
+  Future<ApiResponse> teacherLeaveList({
+    int current = 1,
+    int size = 200,
+    int? status,
+  }) {
+    final body = <String, dynamic>{
+      'current': current,
+      'size': size,
+    };
+    if (status != null) body['status'] = status;
+    return client.post('$_base/teacherLeaveList', data: body);
+  }
+
+  /// 教师请假详情。`id` 为雪花 long 字符串。
+  Future<ApiResponse> teacherLeaveDetail({required String id}) {
+    return client.post(
+      '$_base/teacherLeaveDetail',
+      data: <String, dynamic>{'id': readSnowflakeId(id) ?? id},
+    );
+  }
+
+  /// 教师请假审批：`status` 1=批准 / 2=拒绝。
+  Future<ApiResponse> teacherLeaveAudit({
+    required String id,
+    required int status,
+    String? auditReason,
+  }) {
+    return client.post(
+      '$_base/teacherLeaveAudit',
+      data: <String, dynamic>{
+        'id': readSnowflakeId(id) ?? id,
+        'status': status,
+        if (auditReason != null && auditReason.isNotEmpty)
+          'auditReason': auditReason,
       },
     );
   }
