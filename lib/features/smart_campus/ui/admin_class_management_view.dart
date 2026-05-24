@@ -1114,7 +1114,7 @@ class _AdminClassManagementViewState
     final resp = await repo.classSave(body);
     if (!mounted) return false;
     if (!resp.isSuccess) {
-      AppToast.show(context, resp.msg.isEmpty ? '创建班级失败' : resp.msg);
+      AppToast.show(context, resp.displayMsg);
       return false;
     }
     AppToast.show(context, '班级创建成功');
@@ -1163,7 +1163,7 @@ class _AdminClassManagementViewState
     final resp = await repo.classUpdate(body);
     if (!mounted) return false;
     if (!resp.isSuccess) {
-      AppToast.show(context, resp.msg.isEmpty ? '调班保存失败' : resp.msg);
+      AppToast.show(context, resp.displayMsg);
       return false;
     }
     AppToast.show(context, '调班保存成功');

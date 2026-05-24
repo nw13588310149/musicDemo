@@ -708,15 +708,15 @@ Future<void> _editProvince(
   PersonalCenterController controller,
   Map<String, dynamic> user,
 ) async {
-  final provinces = await controller.ensureProvinces();
+  final result = await controller.ensureProvinces();
   if (!context.mounted) return;
-  if (provinces.isEmpty) {
-    _toast(context, '加载省份失败，请稍后重试');
+  if (result.provinces.isEmpty) {
+    _toast(context, result.error ?? '');
     return;
   }
   final selected = await showAppProvincePicker(
     context: context,
-    provinces: provinces,
+    provinces: result.provinces,
     selected: user['province']?.toString(),
   );
   if (selected == null || !context.mounted) {
@@ -805,13 +805,12 @@ Future<void> _editAvatar(
     filename: picked.filename,
   );
   if (!context.mounted) return;
-  if (upload.error != null) {
+  if (upload.error != null && upload.error!.isNotEmpty) {
     _toast(context, upload.error!);
     return;
   }
   final path = upload.path;
   if (path == null || path.isEmpty) {
-    _toast(context, '上传失败');
     return;
   }
   final err = await controller.updateProfileFields(<String, dynamic>{

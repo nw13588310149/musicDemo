@@ -212,11 +212,12 @@ class _CommentTile extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _CommentAvatar(url: comment.author.avatarUrl, size: ui(36)),
-        SizedBox(width: ui(10)),
+        _CommentAvatar(url: comment.author.avatarUrl, size: ui(44)),
+        SizedBox(width: ui(11)),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 comment.author.name,
@@ -224,19 +225,30 @@ class _CommentTile extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: const Color(0xFF0B081A),
-                  fontSize: ui(14),
+                  fontSize: ui(16),
                   fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w500,
+                  fontWeight: AppFont.w600,
                 ),
               ),
-              SizedBox(height: ui(4)),
+              Transform.translate(
+                offset: Offset(0, -ui(2)),
+                child: Text(
+                  formatCircleAuthorRole(comment.author.role),
+                  style: TextStyle(
+                    color: const Color(0xFFB6B5BB),
+                    fontSize: ui(13),
+                    fontFamily: 'PingFang SC',
+                  ),
+                ),
+              ),
+              SizedBox(height: ui(8)),
               Text(
                 comment.text,
                 style: TextStyle(
-                  color: const Color(0xFF1A1A1A),
+                  color: const Color(0xFF000000),
                   fontSize: ui(14),
                   fontFamily: 'PingFang SC',
-                  height: 20 / 14,
+                  height: 19.6 / 14,
                 ),
               ),
               SizedBox(height: ui(6)),
@@ -295,7 +307,6 @@ class _CommentAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
     return ClipOval(
       child: SizedBox(
         width: size,
@@ -307,7 +318,7 @@ class _CommentAvatar extends StatelessWidget {
                 child: Icon(
                   Icons.person,
                   color: const Color(0xFF8741FF),
-                  size: ui(20),
+                  size: size * 0.55,
                 ),
               )
             : Image.network(
@@ -319,7 +330,7 @@ class _CommentAvatar extends StatelessWidget {
                   child: Icon(
                     Icons.person,
                     color: const Color(0xFF8741FF),
-                    size: ui(20),
+                    size: size * 0.55,
                   ),
                 ),
                 loadingBuilder: (context, child, progress) {
@@ -338,31 +349,41 @@ class _CommentLike extends StatelessWidget {
   final CircleComment comment;
   final VoidCallback onTap;
 
+  static const _activeCanvasExtent = 94.0;
+  static const _inactiveCanvasExtent = 80.0;
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final color = comment.liked
-        ? const Color(0xFFFF323C)
-        : const Color(0xFFB6B5BB);
+    final iconAsset =
+        comment.liked ? AppAssets.circleFav1 : AppAssets.circleFav2;
+    final baseSize = ui(20);
+    final iconBoxSize = baseSize * _activeCanvasExtent / _inactiveCanvasExtent;
+    final visualSize =
+        iconAsset == AppAssets.circleFav2 ? iconBoxSize : baseSize;
+
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          ColorFiltered(
-            colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
-            child: AppAssetGraphic(
-              AppAssets.schoolIconLiked,
-              width: ui(18),
-              height: ui(18),
+          SizedBox(
+            width: iconBoxSize,
+            height: iconBoxSize,
+            child: Center(
+              child: AppAssetGraphic(
+                iconAsset,
+                width: visualSize,
+                height: visualSize,
+              ),
             ),
           ),
           SizedBox(height: ui(2)),
           Text(
             formatCircleCount(comment.likeCount),
             style: TextStyle(
-              color: color,
+              color: const Color(0xFF0B081A),
               fontSize: ui(12),
               fontFamily: 'PingFang SC',
               height: 1,

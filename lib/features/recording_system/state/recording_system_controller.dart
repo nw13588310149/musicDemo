@@ -34,15 +34,20 @@ const int _kLiveWaveSampleCap = 80;
 /// Amplitude normalization for the waveform painter.
 ///
 /// `record` normally reports dBFS: negative values, where -60 is very quiet
-/// and 0 is peak. Some Web implementations surface already-normalized linear
-/// values instead, so keep those as-is rather than turning every positive
-/// sample into a full-height bar.
+/// and 0 is peak. Convert that back toward linear energy before applying a
+/// small visual lift, so room noise stays close to the center line while voice
+/// peaks still feel responsive like the iPad Voice Memos waveform.
 double _normalizeAmplitudeDb(double current) {
   if (!current.isFinite) return 0;
-  if (current > 0 && current <= 1) return current.toDouble();
-  if (current > 1 && current <= 100) return (current / 100).toDouble();
+  if (current > 0 && current <= 1) {
+    return math.pow(current.clamp(0.0, 1.0), 0.72).toDouble();
+  }
+  if (current > 1 && current <= 100) {
+    return math.pow((current / 100).clamp(0.0, 1.0), 0.72).toDouble();
+  }
   final clamped = current.clamp(-60.0, 0.0);
-  return ((clamped + 60.0) / 60.0).toDouble();
+  final linear = math.pow(10.0, clamped / 20.0).toDouble();
+  return math.pow((linear * 2.2).clamp(0.0, 1.0), 0.72).toDouble();
 }
 
 /// Recording system controller, backed by:
@@ -142,29 +147,17 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       '\u5f53\u524d\u5e73\u53f0\u6682\u4e0d\u652f\u6301\u5f55\u97f3\uff0c\u8bf7\u5728 iPad / \u79fb\u52a8\u7aef\u4f7f\u7528\u3002';
   static const _zhLoadListFailed =
       '\u52a0\u8f7d\u5f55\u97f3\u5217\u8868\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5';
-  static const _zhLoadFoldersFailed =
-      '\u52a0\u8f7d\u6587\u4ef6\u5939\u5931\u8d25';
   static const _zhLoadRecordingsFailed = '\u52a0\u8f7d\u5f55\u97f3\u5931\u8d25';
   static const _zhSwitchCategoryFailed = '\u5207\u6362\u5206\u7c7b\u5931\u8d25';
   static const _zhBackToFoldersFailed =
       '\u8fd4\u56de\u6587\u4ef6\u5939\u5217\u8868\u5931\u8d25';
   static const _zhEnterCategoryName =
       '\u8bf7\u8f93\u5165\u5206\u7c7b\u540d\u79f0';
-  static const _zhCreateCategoryFailed = '\u65b0\u5efa\u5206\u7c7b\u5931\u8d25';
-  static const _zhDeleteCategoryFailed = '\u5220\u9664\u5206\u7c7b\u5931\u8d25';
-  static const _zhRenameCategoryFailed =
-      '\u91cd\u547d\u540d\u5206\u7c7b\u5931\u8d25';
   static const _zhInvalidCategory = '\u65e0\u6548\u7684\u5206\u7c7b';
   static const _zhEnterFolderName =
       '\u8bf7\u8f93\u5165\u6587\u4ef6\u5939\u540d\u79f0';
   static const _zhPickCategoryFirst =
       '\u8bf7\u5148\u9009\u62e9\u4e00\u4e2a\u5206\u7c7b';
-  static const _zhCreateFolderFailed =
-      '\u65b0\u5efa\u6587\u4ef6\u5939\u5931\u8d25';
-  static const _zhRenameFolderFailed =
-      '\u91cd\u547d\u540d\u6587\u4ef6\u5939\u5931\u8d25';
-  static const _zhDeleteFolderFailed =
-      '\u5220\u9664\u6587\u4ef6\u5939\u5931\u8d25';
   static const _zhInvalidFolder = '\u65e0\u6548\u7684\u6587\u4ef6\u5939';
   static const _zhMicPermission =
       '\u8bf7\u5728\u8bbe\u7f6e\u4e2d\u6388\u4e88\u9ea6\u514b\u98ce\u6743\u9650';
@@ -205,25 +198,17 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       '\u6ca1\u6709\u53ef\u4fdd\u5b58\u7684\u5f55\u97f3\u6587\u4ef6';
   static const _zhPickCategory = '\u8bf7\u9009\u62e9\u4e00\u4e2a\u5206\u7c7b';
   static const _zhEnterTitle = '\u8bf7\u8f93\u5165\u4f5c\u54c1\u540d\u79f0';
-  static const _zhUploadFailed =
-      '\u4e0a\u4f20\u5f55\u97f3\u6587\u4ef6\u5931\u8d25';
   static const _zhUploadNoPath =
       '\u4e0a\u4f20\u6210\u529f\u4f46\u672a\u8fd4\u56de\u6587\u4ef6\u8def\u5f84';
   static const _zhSaveRecordingFailed = '\u4fdd\u5b58\u5f55\u97f3\u5931\u8d25';
-  static const _zhDeleteRecordingFailed =
-      '\u5220\u9664\u5f55\u97f3\u5931\u8d25';
   static const _zhInvalidRecording =
       '\u65e0\u6548\u7684\u5f55\u97f3\u4f5c\u54c1';
   static const _zhRecordingPathMissing =
       '\u5f55\u97f3\u6587\u4ef6\u8def\u5f84\u7f3a\u5931';
-  static const _zhRenameFailed = '\u91cd\u547d\u540d\u5931\u8d25';
   static const _zhSaveBeforeShare =
       '\u8bf7\u5148\u4fdd\u5b58\u5f55\u97f3\u518d\u5206\u4eab';
-  static const _zhLoadClassesFailed =
-      '\u52a0\u8f7d\u73ed\u7ea7\u5217\u8868\u5931\u8d25';
   static const _zhPickAtLeastOneClass =
       '\u8bf7\u9009\u62e9\u81f3\u5c11\u4e00\u4e2a\u73ed\u7ea7';
-  static const _zhShareFailed = '\u5206\u4eab\u5931\u8d25';
 
   // ?????????????????????????????????????????????????????????????????????
   // List / folder / category catalog (unchanged from the previous
@@ -275,7 +260,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
         pendingTitle: '',
         errorMessage: folderResponse == null || folderResponse.isSuccess
             ? null
-            : _fallbackMessage(folderResponse.msg, _zhLoadFoldersFailed),
+            : folderResponse.displayMsg,
       );
     } catch (_) {
       if (!mounted) return;
@@ -309,9 +294,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
         showSaveDialog: false,
         showShareDialog: false,
         shareClasses: const <RecordingShareClass>[],
-        errorMessage: response.isSuccess
-            ? null
-            : _fallbackMessage(response.msg, _zhLoadFoldersFailed),
+        errorMessage: response.isSuccess ? null : response.displayMsg,
       );
     } catch (_) {
       if (!mounted) return;
@@ -348,9 +331,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
         showSaveDialog: false,
         showShareDialog: false,
         shareClasses: const <RecordingShareClass>[],
-        errorMessage: response.isSuccess
-            ? null
-            : _fallbackMessage(response.msg, _zhLoadRecordingsFailed),
+        errorMessage: response.isSuccess ? null : response.displayMsg,
       );
     } catch (_) {
       if (!mounted) return;
@@ -389,9 +370,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       state = state.copyWith(
         loading: false,
         folders: _parseFolders(response.data, categoryId),
-        errorMessage: response.isSuccess
-            ? null
-            : _fallbackMessage(response.msg, _zhLoadFoldersFailed),
+        errorMessage: response.isSuccess ? null : response.displayMsg,
       );
     } catch (_) {
       if (!mounted) return;
@@ -424,7 +403,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     final response = await _repository.addCategory(trimmed);
     state = state.copyWith(busy: false);
     if (!response.isSuccess) {
-      return _fallbackMessage(response.msg, _zhCreateCategoryFailed);
+      return response.displayMsg;
     }
     await refresh();
     return null;
@@ -435,7 +414,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     final response = await _repository.deleteCategory(id);
     state = state.copyWith(busy: false);
     if (!response.isSuccess) {
-      return _fallbackMessage(response.msg, _zhDeleteCategoryFailed);
+      return response.displayMsg;
     }
     await refresh();
     return null;
@@ -449,7 +428,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     final response = await _repository.renameCategory(id, trimmed);
     state = state.copyWith(busy: false);
     if (!response.isSuccess) {
-      return _fallbackMessage(response.msg, _zhRenameCategoryFailed);
+      return response.displayMsg;
     }
     await refresh();
     return null;
@@ -467,7 +446,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     );
     state = state.copyWith(busy: false);
     if (!response.isSuccess) {
-      return _fallbackMessage(response.msg, _zhCreateFolderFailed);
+      return response.displayMsg;
     }
     await _reloadFolders(categoryId);
     return null;
@@ -485,7 +464,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     );
     state = state.copyWith(busy: false);
     if (!response.isSuccess) {
-      return _fallbackMessage(response.msg, _zhRenameFolderFailed);
+      return response.displayMsg;
     }
     await _reloadFolders(folder.categoryId);
     return null;
@@ -497,7 +476,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     final response = await _repository.deleteFolder(folder.id);
     state = state.copyWith(busy: false);
     if (!response.isSuccess) {
-      return _fallbackMessage(response.msg, _zhDeleteFolderFailed);
+      return response.displayMsg;
     }
     await _reloadFolders(folder.categoryId);
     return null;
@@ -1449,7 +1428,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       );
       if (!uploadResponse.isSuccess) {
         if (mounted) state = state.copyWith(busy: false);
-        return _fallbackMessage(uploadResponse.msg, _zhUploadFailed);
+        return uploadResponse.displayMsg;
       }
       final filePath = parseUploadResult(uploadResponse.data).savable;
       if (filePath.isEmpty) {
@@ -1466,7 +1445,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       );
       if (!saveResponse.isSuccess) {
         if (mounted) state = state.copyWith(busy: false);
-        return _fallbackMessage(saveResponse.msg, _zhSaveRecordingFailed);
+        return saveResponse.displayMsg;
       }
 
       if (mounted) state = state.copyWith(busy: false);
@@ -1534,7 +1513,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     final response = await _repository.deleteRecording(item.id);
     state = state.copyWith(busy: false);
     if (!response.isSuccess) {
-      return _fallbackMessage(response.msg, _zhDeleteRecordingFailed);
+      return response.displayMsg;
     }
     final remaining = state.items
         .where((entry) => entry.id != item.id)
@@ -1574,7 +1553,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     );
     state = state.copyWith(busy: false);
     if (!response.isSuccess) {
-      return _fallbackMessage(response.msg, _zhRenameFailed);
+      return response.displayMsg;
     }
     final currentFolderId = state.currentFolderId;
     if (currentFolderId > 0) {
@@ -1598,7 +1577,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     final response = await _repository.getClassList();
     state = state.copyWith(busy: false);
     if (!response.isSuccess || response.data is! List) {
-      return _fallbackMessage(response.msg, _zhLoadClassesFailed);
+      return response.displayMsg;
     }
     final classes = <RecordingShareClass>[];
     for (final raw in response.data as List) {
@@ -1656,7 +1635,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       );
       if (!response.isSuccess) {
         if (mounted) state = state.copyWith(busy: false);
-        return _fallbackMessage(response.msg, _zhShareFailed);
+        return response.displayMsg;
       }
     }
     if (mounted) state = state.copyWith(busy: false);
@@ -2121,25 +2100,6 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
       return '';
     }
     return text;
-  }
-
-  /// ??? / ??? msg ???????????
-  ///
-  /// - ???? -> ??????????? [fallback]?
-  /// - ??????????????????? dio ??? Flutter / Dart
-  ///   ?? toString ?? msg ???"This exception was thrown because the
-  ///   deactivated widget's ancestor was looked up..." / "FormatException:..."
-  ///   / "type 'Null' is not a subtype of..."?-> ???? [fallback]???
-  ///   ???????? framework ?????? debugPrint ????????
-  /// - ???????????
-  String _fallbackMessage(String raw, String fallback) {
-    final trimmed = raw.trim();
-    if (trimmed.isEmpty) return fallback;
-    if (_looksLikeRuntimeException(trimmed)) {
-      debugPrint('[recording] suppressed raw msg -> "$trimmed"');
-      return fallback;
-    }
-    return trimmed;
   }
 
   /// ??????[text] ?????? Flutter / Dart / ????? toString?

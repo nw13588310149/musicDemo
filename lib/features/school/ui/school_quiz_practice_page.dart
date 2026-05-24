@@ -65,17 +65,17 @@ class SchoolQuizPracticePage extends ConsumerWidget {
     int schoolId,
     QuizPracticeSummary summary,
   ) async {
-    final ready = await controller.ensurePracticeReady(summary.type);
-    if (!context.mounted) return;
-    if (ready == null || ready.allCount <= 0) {
+    final canInitializeInSession =
+        summary.type != QuizPracticeType.error && !summary.statusInitialized;
+    if (summary.allCount <= 0 && !canInitializeInSession) {
       AppToast.show(context, '暂无可练习题目');
       return;
     }
     final args = QuizSessionPageArgs(
-      practiceType: ready.type,
-      practiceId: ready.practiceId,
-      startIndex: ready.doneCount,
-      allCount: ready.allCount,
+      practiceType: summary.type,
+      practiceId: summary.practiceId,
+      startIndex: summary.doneCount,
+      allCount: summary.allCount,
       schoolId: schoolId,
     );
     await Navigator.pushNamed(context, RoutePaths.campAnswer, arguments: args);
@@ -265,7 +265,7 @@ class _PracticeRingCard extends StatelessWidget {
                       Text(
                         summary.type.label,
                         style: TextStyle(
-                          color: const Color(0xFF000000),
+                          color: Colors.black,
                           fontSize: ui(14),
                           fontWeight: AppFont.w400,
                           fontFamily: 'PingFang SC',

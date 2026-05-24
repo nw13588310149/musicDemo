@@ -247,7 +247,7 @@ class _MyNotesPageState extends ConsumerState<MyNotesPage> {
       final message = await ref
           .read(myNotesControllerProvider.notifier)
           .saveCurrentNote(bytes);
-      if (message != null && mounted) {
+      if (message != null && message.isNotEmpty && mounted) {
         _showMessage(message);
         return;
       }
@@ -256,7 +256,7 @@ class _MyNotesPageState extends ConsumerState<MyNotesPage> {
       }
     } catch (_) {
       if (mounted) {
-        _showMessage('保存失败，请稍后重试');
+        return;
       }
     }
   }

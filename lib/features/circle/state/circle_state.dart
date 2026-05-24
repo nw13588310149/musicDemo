@@ -190,6 +190,7 @@ class CirclePost {
     required this.comments,
     this.mediaKind = PostMediaKind.image,
     this.mediaUrls = const <String>[],
+    this.hasExplicitAspectRatio = false,
   });
 
   final String id;
@@ -207,6 +208,10 @@ class CirclePost {
 
   /// 列表瀑布流所需的图片宽高比（width / height），用于决定卡片高度。
   final double imageAspectRatio;
+
+  /// [imageAspectRatio] 是否来自接口给出的真实宽高，而不是前端兜底值。
+  final bool hasExplicitAspectRatio;
+
   final int likeCount;
   final int commentCount;
   final int favoriteCount;
@@ -251,6 +256,7 @@ class CirclePost {
       comments: comments ?? this.comments,
       mediaKind: mediaKind,
       mediaUrls: mediaUrls,
+      hasExplicitAspectRatio: hasExplicitAspectRatio,
     );
   }
 }

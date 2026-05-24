@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/network/api_response.dart';
 import '../data/quiz_practice_repository.dart';
 import '../data/quiz_question_parser.dart';
 import 'quiz_practice_state.dart';
@@ -48,19 +49,23 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
     }
 
     // practiceId 缺失时（直接通过 deep link 进入），先调用 create 兜底。
+    ApiResponse? createdResponse;
     if (practiceId == null || practiceId <= 0) {
-      final created = await _repository.createPractice(
+      createdResponse = await _repository.createPractice(
         schoolId: args.schoolId,
         practiceType: args.practiceType.apiKey,
       );
       if (!mounted) return;
-      if (created.isSuccess && created.data is Map) {
-        practiceId = _toInt((created.data as Map)['practiceId']);
+      if (createdResponse.isSuccess && createdResponse.data is Map) {
+        practiceId = _toInt((createdResponse.data as Map)['practiceId']);
       }
     }
 
     if (practiceId == null || practiceId <= 0) {
-      state = state.copyWith(loading: false, errorMessage: '初始化练习失败，请稍后重试');
+      state = state.copyWith(
+        loading: false,
+        errorMessage: createdResponse?.displayMsg ?? '',
+      );
       return;
     }
 
@@ -74,7 +79,7 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
     if (!response.isSuccess) {
       state = state.copyWith(
         loading: false,
-        errorMessage: response.msg.isEmpty ? '题目加载失败' : response.msg,
+        errorMessage: response.displayMsg,
       );
       return;
     }
@@ -122,7 +127,7 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
 
     if (!response.isSuccess) {
       state = state.copyWith(
-        errorMessage: response.msg.isEmpty ? '提交失败' : response.msg,
+        errorMessage: response.displayMsg,
       );
       return;
     }

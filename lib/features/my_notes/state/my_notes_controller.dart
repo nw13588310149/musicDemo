@@ -56,10 +56,10 @@ class MyNotesController extends StateNotifier<MyNotesState> {
         notes: notes,
         errorMessage: notesResponse.isSuccess
             ? null
-            : _fallbackMessage(notesResponse.msg, '加载笔记失败'),
+            : notesResponse.displayMsg,
       );
     } catch (_) {
-      state = state.copyWith(loading: false, errorMessage: '加载笔记失败，请稍后重试');
+      state = state.copyWith(loading: false, errorMessage: '');
     }
   }
 
@@ -91,13 +91,13 @@ class MyNotesController extends StateNotifier<MyNotesState> {
         notes: _parseNotes(response.data),
         errorMessage: response.isSuccess
             ? null
-            : _fallbackMessage(response.msg, '加载笔记失败'),
+            : response.displayMsg,
         clearEditingNote: true,
         clearEditorBackgroundImageUrl: true,
         strokes: const <NoteStroke>[],
       );
     } catch (_) {
-      state = state.copyWith(loading: false, errorMessage: '加载笔记失败，请稍后重试');
+      state = state.copyWith(loading: false, errorMessage: '');
     }
   }
 
@@ -118,7 +118,7 @@ class MyNotesController extends StateNotifier<MyNotesState> {
     final response = await _repository.addCategory(trimmed);
     state = state.copyWith(busy: false);
     if (!response.isSuccess) {
-      return _fallbackMessage(response.msg, '新增分类失败');
+      return response.displayMsg;
     }
     await refresh();
     return null;
@@ -132,7 +132,7 @@ class MyNotesController extends StateNotifier<MyNotesState> {
     final response = await _repository.deleteCategory(id);
     state = state.copyWith(busy: false);
     if (!response.isSuccess) {
-      return _fallbackMessage(response.msg, '删除分类失败');
+      return response.displayMsg;
     }
     await refresh();
     return null;
@@ -152,7 +152,7 @@ class MyNotesController extends StateNotifier<MyNotesState> {
     final response = await _repository.updateCategory(id: id, name: trimmed);
     state = state.copyWith(busy: false);
     if (!response.isSuccess) {
-      return _fallbackMessage(response.msg, '重命名分类失败');
+      return response.displayMsg;
     }
     await refresh();
     return null;
@@ -163,7 +163,7 @@ class MyNotesController extends StateNotifier<MyNotesState> {
     final response = await _repository.deleteNote(id);
     state = state.copyWith(busy: false);
     if (!response.isSuccess) {
-      return _fallbackMessage(response.msg, '删除笔记失败');
+      return response.displayMsg;
     }
     // `selectCategory(currentId)` short-circuits when the requested category
     // matches the active one, so use `refresh()` instead to force a re-fetch
@@ -197,7 +197,7 @@ class MyNotesController extends StateNotifier<MyNotesState> {
     );
     state = state.copyWith(busy: false);
     if (!response.isSuccess) {
-      return _fallbackMessage(response.msg, '重命名失败');
+      return response.displayMsg;
     }
     // Same as deleteNote: `selectCategory(currentId)` would early-return,
     // so go through `refresh()` to actually re-pull the notes list and
@@ -324,7 +324,7 @@ class MyNotesController extends StateNotifier<MyNotesState> {
     );
     if (!uploadResponse.isSuccess) {
       state = state.copyWith(busy: false);
-      return _fallbackMessage(uploadResponse.msg, '上传笔记失败');
+      return uploadResponse.displayMsg;
     }
 
     // 上传成功后保存的是相对 `path`（例如 `app/upload/.../xxx.png`），后端
@@ -332,7 +332,7 @@ class MyNotesController extends StateNotifier<MyNotesState> {
     final imagePath = parseUploadResult(uploadResponse.data).savable;
     if (imagePath.isEmpty) {
       state = state.copyWith(busy: false);
-      return '上传结果异常，请稍后重试';
+      return uploadResponse.displayMsg;
     }
 
     final title = state.draftTitle.trim().isEmpty
@@ -355,7 +355,7 @@ class MyNotesController extends StateNotifier<MyNotesState> {
           );
     if (!saveResponse.isSuccess) {
       state = state.copyWith(busy: false);
-      return _fallbackMessage(saveResponse.msg, '保存笔记失败');
+      return saveResponse.displayMsg;
     }
 
     state = state.copyWith(busy: false);
@@ -475,9 +475,6 @@ class MyNotesController extends StateNotifier<MyNotesState> {
     return text == 'true' || text == '1';
   }
 
-  String _fallbackMessage(String raw, String fallback) {
-    return raw.trim().isEmpty ? fallback : raw.trim();
-  }
 }
 
 extension _FirstOrNull<T> on Iterable<T> {

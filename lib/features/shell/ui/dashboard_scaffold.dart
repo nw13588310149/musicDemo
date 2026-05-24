@@ -46,7 +46,7 @@ class DashboardScaffold extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final scale = DashboardScaleScope.fromSize(constraints.biggest);
-        final scaledSidebarWidth = scale.ui(sidebarWidth);
+        final targetSidebarWidth = scale.ui(sidebarWidth);
         final scaledContentPadding = EdgeInsets.fromLTRB(
           scale.ui(contentPadding.left),
           scale.ui(contentPadding.top),
@@ -72,53 +72,62 @@ class DashboardScaffold extends StatelessWidget {
               color: backgroundColor,
               child: SafeArea(
                 bottom: false,
-                child: Stack(
-                  clipBehavior: Clip.hardEdge,
-                  children: [
-                    // 主内容区仍随键盘收缩，输入框可正常上推。
-                    Padding(
-                      padding: EdgeInsets.only(left: scaledSidebarWidth),
-                      child: Padding(
-                        padding: scaledContentPadding,
-                        child: Column(
-                          children: [
-                            topBar,
-                            SizedBox(height: scale.ui(contentGap)),
-                            Expanded(child: child),
-                          ],
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween<double>(end: targetSidebarWidth),
+                  duration: const Duration(milliseconds: 280),
+                  curve: Curves.easeInOutCubic,
+                  builder: (context, animatedSidebarWidth, _) {
+                    return Stack(
+                      clipBehavior: Clip.hardEdge,
+                      children: [
+                        // 主内容区仍随键盘收缩，输入框可正常上推。
+                        Padding(
+                          padding: EdgeInsets.only(
+                            left: animatedSidebarWidth,
+                          ),
+                          child: Padding(
+                            padding: scaledContentPadding,
+                            child: Column(
+                              children: [
+                                topBar,
+                                SizedBox(height: scale.ui(contentGap)),
+                                Expanded(child: child),
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                    // 侧栏脱离键盘 inset 的布局流，始终贴满左侧固定高度。
-                    Positioned(
-                      left: 0,
-                      top: 0,
-                      width: scaledSidebarWidth,
-                      height: fixedSidebarHeight,
-                      child: MediaQuery.removeViewInsets(
-                        removeBottom: true,
-                        context: context,
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 280),
-                          curve: Curves.easeInOutCubic,
-                          width: scaledSidebarWidth,
+                        // 侧栏脱离键盘 inset 的布局流，左边固定，右边界随宽度平滑收缩/展开。
+                        Positioned(
+                          left: 0,
+                          top: 0,
+                          width: animatedSidebarWidth,
                           height: fixedSidebarHeight,
-                          child: sidebar,
+                          child: MediaQuery.removeViewInsets(
+                            removeBottom: true,
+                            context: context,
+                            child: ClipRect(
+                              child: SizedBox(
+                                width: animatedSidebarWidth,
+                                height: fixedSidebarHeight,
+                                child: sidebar,
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                    if (floatingChild != null)
-                      Positioned(
-                        right: scale.ui(16),
-                        bottom: scale.ui(18),
-                        child: floatingChild!,
-                      ),
-                    // overlayChild 放在 Stack 最后，确保 z-order 在所有
-                    // 业务内容（含 floatingChild）之上，且 Positioned.fill
-                    // 能拦截所有手势——绑定学校弹窗依赖这点做「不可关闭」。
-                    if (overlayChild != null)
-                      Positioned.fill(child: overlayChild!),
-                  ],
+                        if (floatingChild != null)
+                          Positioned(
+                            right: scale.ui(16),
+                            bottom: scale.ui(18),
+                            child: floatingChild!,
+                          ),
+                        // overlayChild 放在 Stack 最后，确保 z-order 在所有
+                        // 业务内容（含 floatingChild）之上，且 Positioned.fill
+                        // 能拦截所有手势——绑定学校弹窗依赖这点做「不可关闭」。
+                        if (overlayChild != null)
+                          Positioned.fill(child: overlayChild!),
+                      ],
+                    );
+                  },
                 ),
               ),
             ),

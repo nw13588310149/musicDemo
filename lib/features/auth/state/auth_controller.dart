@@ -78,7 +78,7 @@ class AuthController extends StateNotifier<AuthState> {
     if (!success) {
       return AuthActionResult(
         success: false,
-        message: response.msg.isEmpty ? '验证码发送失败，请稍后再试' : response.msg,
+        message: response.displayMsg,
       );
     }
 
@@ -105,7 +105,7 @@ class AuthController extends StateNotifier<AuthState> {
       if (response.code != 0) {
         return AuthActionResult(
           success: false,
-          message: response.msg.isEmpty ? '登录失败，请检查账号或密码' : response.msg,
+          message: response.displayMsg,
         );
       }
 
@@ -163,7 +163,7 @@ class AuthController extends StateNotifier<AuthState> {
       if (response.code != 0) {
         return AuthActionResult(
           success: false,
-          message: response.msg.isEmpty ? '注册失败，请稍后重试' : response.msg,
+          message: response.displayMsg,
         );
       }
 
@@ -208,7 +208,7 @@ class AuthController extends StateNotifier<AuthState> {
       if (response.code != 0) {
         return AuthActionResult(
           success: false,
-          message: response.msg.isEmpty ? '重置失败，请稍后再试' : response.msg,
+          message: response.displayMsg,
         );
       }
 

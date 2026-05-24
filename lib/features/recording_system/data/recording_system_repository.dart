@@ -35,7 +35,7 @@ class RecordingSystemRepository {
   /// 把"主端点的真实业务失败 msg"覆盖成"fallback 端点的 404"，
   /// 让上层 toast 显示成无意义的 "Http status error [404]"。
   /// 现在只保留主端点，主端点失败即直接把它的 ApiResponse 透传给
-  /// controller，由 `_fallbackMessage` 决定展示策略。
+  /// controller 直接展示后端返回的 msg。
   static const _kUploadEndpoint = '/app/common/v2/fileUpload';
 
   Future<ApiResponse> uploadRecording({

@@ -6,22 +6,39 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../../shell/ui/shell_layout.dart';
+import '../../data/circle_video_cache.dart';
 import '../../state/circle_state.dart';
 import 'circle_video_play_button.dart';
 
+/// 从 [VideoParams] 读取显示宽高（含 90° / 270° 旋转）。
+(double, double)? _displaySizeFromVideoParams(VideoParams params) {
+  final dw = params.dw;
+  final dh = params.dh;
+  if (dw == null || dh == null || dw <= 0 || dh <= 0) return null;
+  final rotate = params.rotate ?? 0;
+  if (rotate == 90 || rotate == 270) {
+    return (dh.toDouble(), dw.toDouble());
+  }
+  return (dw.toDouble(), dh.toDouble());
+}
+
 /// 沉浸模式下的统一媒体播放壳：
 /// - **图片**：盖一张大图 + 加载/失败兜底
-/// - **视频**：`media_kit` 全屏 cover + 抖音式播放/暂停与全屏进度拖动
+/// - **视频**：`media_kit` 播放；竖屏 cover、横屏 contain（抖音式）+ 全屏进度拖动
 /// - **音频**：同款交互（AnimatedIcons.play_pause + 全屏/底部进度条）
 class CircleMediaPlayer extends StatefulWidget {
   const CircleMediaPlayer({
     super.key,
     required this.post,
     this.autoPlay = true,
+    this.isActive = true,
   });
 
   final CirclePost post;
   final bool autoPlay;
+
+  /// 仅当前可见帖创建/播放媒体，避免 PageView 邻页同时占用解码器。
+  final bool isActive;
 
   @override
   State<CircleMediaPlayer> createState() => _CircleMediaPlayerState();
@@ -30,35 +47,106 @@ class CircleMediaPlayer extends StatefulWidget {
 class _CircleMediaPlayerState extends State<CircleMediaPlayer> {
   Player? _player;
   VideoController? _videoController;
+  bool _loadingMedia = false;
+  int _setupGeneration = 0;
+  double? _videoAspectRatio;
+  StreamSubscription<VideoParams>? _videoParamsSub;
+  StreamSubscription<int?>? _videoWidthSub;
+  StreamSubscription<int?>? _videoHeightSub;
 
   @override
   void initState() {
     super.initState();
-    _setupForCurrentPost();
+    if (widget.isActive) {
+      unawaited(_setupForCurrentPost());
+    }
   }
 
   @override
   void didUpdateWidget(covariant CircleMediaPlayer oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.post.id != widget.post.id ||
+    final postChanged = oldWidget.post.id != widget.post.id ||
         oldWidget.post.primaryMediaUrl != widget.post.primaryMediaUrl ||
-        oldWidget.post.mediaKind != widget.post.mediaKind) {
+        oldWidget.post.mediaKind != widget.post.mediaKind;
+    final activeChanged = oldWidget.isActive != widget.isActive;
+
+    if (postChanged) {
       _teardownPlayer();
-      _setupForCurrentPost();
+      if (widget.isActive) {
+        unawaited(_setupForCurrentPost());
+      }
+      return;
+    }
+
+    if (activeChanged) {
+      if (widget.isActive) {
+        unawaited(_setupForCurrentPost());
+      } else {
+        _teardownPlayer();
+      }
     }
   }
 
-  void _setupForCurrentPost() {
+  Future<void> _setupForCurrentPost() async {
+    if (!widget.isActive) return;
+
     final url = widget.post.primaryMediaUrl;
-    if (url.isEmpty) return;
-    if (widget.post.mediaKind == PostMediaKind.image) return;
+    if (url.isEmpty || widget.post.mediaKind == PostMediaKind.image) return;
+
+    final generation = ++_setupGeneration;
+    final needsCache = CircleVideoCache.needsLocalCache(url);
+    if (needsCache && mounted) {
+      setState(() => _loadingMedia = true);
+    }
+
+    var playbackSource = url;
+    if (needsCache) {
+      try {
+        playbackSource = await CircleVideoCache.resolvePlaybackSource(url);
+      } catch (_) {
+        playbackSource = url;
+      }
+    }
+
+    if (!mounted ||
+        generation != _setupGeneration ||
+        !widget.isActive ||
+        widget.post.primaryMediaUrl != url) {
+      return;
+    }
 
     final player = Player();
     _player = player;
     if (widget.post.mediaKind == PostMediaKind.video) {
       _videoController = VideoController(player);
     }
-    unawaited(_openAndLoop(player, url));
+
+    try {
+      var opened = false;
+      try {
+        await _openAndLoop(player, playbackSource);
+        opened = true;
+      } catch (_) {
+        if (playbackSource != url) {
+          await _openAndLoop(player, url);
+          opened = true;
+        } else {
+          rethrow;
+        }
+      }
+      if (opened &&
+          widget.post.mediaKind == PostMediaKind.video &&
+          generation == _setupGeneration &&
+          mounted) {
+        _attachVideoLayoutListener(player);
+      }
+    } catch (_) {
+      _teardownPlayer();
+    } finally {
+      if (mounted && generation == _setupGeneration) {
+        setState(() => _loadingMedia = false);
+      }
+    }
   }
 
   Future<void> _openAndLoop(Player player, String url) async {
@@ -66,7 +154,82 @@ class _CircleMediaPlayerState extends State<CircleMediaPlayer> {
     await player.open(Media(url), play: widget.autoPlay);
   }
 
+  void _attachVideoLayoutListener(Player player) {
+    _detachVideoLayoutListener();
+    void syncLayout() => _syncVideoLayout(player);
+
+    syncLayout();
+    _videoParamsSub = player.stream.videoParams.listen((_) => syncLayout());
+    _videoWidthSub = player.stream.width.listen((_) => syncLayout());
+    _videoHeightSub = player.stream.height.listen((_) => syncLayout());
+  }
+
+  void _syncVideoLayout(Player player) {
+    final aspect = _resolvedVideoAspectRatio(player);
+    if (!mounted) return;
+    if (_videoAspectRatio != null &&
+        (_videoAspectRatio! - aspect).abs() <= 0.001) {
+      return;
+    }
+    setState(() => _videoAspectRatio = aspect);
+  }
+
+  double? _displayAspectFromPlayer(Player player) {
+    final fromParams = _displaySizeFromVideoParams(player.state.videoParams);
+    if (fromParams != null) {
+      return fromParams.$1 / fromParams.$2;
+    }
+    final w = player.state.width;
+    final h = player.state.height;
+    if (w != null && h != null && w > 0 && h > 0) {
+      return w / h;
+    }
+    return null;
+  }
+
+  double _resolvedVideoAspectRatio(Player player) {
+    final fromDecoder = _displayAspectFromPlayer(player);
+    final fromPost = widget.post.imageAspectRatio;
+
+    if (fromDecoder != null) {
+      // 接口没有视频宽高时，最终比例完全以播放器加载后的解码元数据为准。
+      // 只有接口明确给出 videoWidth/videoHeight 时，才用它纠正解码器可能缺失 rotate 的情况。
+      if (widget.post.hasExplicitAspectRatio &&
+          fromDecoder > 1 &&
+          fromPost <= 1) {
+        return fromPost;
+      }
+      return fromDecoder;
+    }
+    return _fallbackVideoAspectRatio();
+  }
+
+  /// 解码完成前兜底：优先帖子比例；横图封面时退回 9:16。
+  double _fallbackVideoAspectRatio() {
+    final api = widget.post.imageAspectRatio;
+    if (widget.post.mediaKind == PostMediaKind.video) {
+      if (api <= 1) return api;
+      return 9 / 16;
+    }
+    return api;
+  }
+
+  void _detachVideoLayoutListener() {
+    _videoParamsSub?.cancel();
+    _videoWidthSub?.cancel();
+    _videoHeightSub?.cancel();
+    _videoParamsSub = null;
+    _videoWidthSub = null;
+    _videoHeightSub = null;
+    _videoAspectRatio = null;
+  }
+
+  double get _effectiveVideoAspectRatio =>
+      _videoAspectRatio ?? _fallbackVideoAspectRatio();
+
   void _teardownPlayer() {
+    _setupGeneration++;
+    _detachVideoLayoutListener();
     final player = _player;
     if (player != null) {
       try {
@@ -76,6 +239,7 @@ class _CircleMediaPlayerState extends State<CircleMediaPlayer> {
     }
     _player = null;
     _videoController = null;
+    _loadingMedia = false;
   }
 
   @override
@@ -97,12 +261,24 @@ class _CircleMediaPlayerState extends State<CircleMediaPlayer> {
     final controller = _videoController;
     final url = widget.post.primaryMediaUrl;
     if (url.isEmpty || controller == null) {
-      return _ImageBackdrop(url: widget.post.imageUrl);
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          _ImageBackdrop(url: widget.post.imageUrl),
+          if (_loadingMedia)
+            const Center(
+              child: CircularProgressIndicator(
+                color: Colors.white70,
+                strokeWidth: 2,
+              ),
+            ),
+        ],
+      );
     }
-    return Video(
+    return _ImmersiveDouyinVideoFrame(
       controller: controller,
-      fit: BoxFit.cover,
-      controls: _douyinVideoControls,
+      player: _player!,
+      aspectRatio: _effectiveVideoAspectRatio,
     );
   }
 
@@ -134,12 +310,92 @@ class _CircleMediaPlayerState extends State<CircleMediaPlayer> {
   }
 }
 
-/// 视频层控件：全屏手势 + 底部进度条。
-Widget _douyinVideoControls(VideoState state) {
-  return _DouyinMediaControls(
-    player: state.widget.controller.player,
-    listStylePlayPause: true,
-  );
+/// 沉浸视频渲染：竖屏 cover 铺满，横屏 contain 留黑边；控件叠在最上层。
+class _ImmersiveDouyinVideoFrame extends StatelessWidget {
+  const _ImmersiveDouyinVideoFrame({
+    required this.controller,
+    required this.player,
+    required this.aspectRatio,
+  });
+
+  final VideoController controller;
+  final Player player;
+  final double aspectRatio;
+
+  @override
+  Widget build(BuildContext context) {
+    final isPortrait = aspectRatio <= 1;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxW = constraints.maxWidth;
+        final maxH = constraints.maxHeight;
+        final fittedSize = _containSize(
+          maxWidth: maxW,
+          maxHeight: maxH,
+          aspectRatio: aspectRatio,
+        );
+
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            const ColoredBox(color: Color(0xFF000000)),
+            if (isPortrait)
+              Center(
+                child: SizedBox(
+                  width: fittedSize.width,
+                  height: fittedSize.height,
+                  child: Video(
+                    controller: controller,
+                    width: fittedSize.width,
+                    height: fittedSize.height,
+                    fit: BoxFit.fill,
+                    aspectRatio: aspectRatio,
+                    fill: const Color(0xFF000000),
+                    controls: (_) => const SizedBox.shrink(),
+                  ),
+                ),
+              )
+            else
+              Center(
+                child: SizedBox(
+                  width: fittedSize.width,
+                  height: fittedSize.height,
+                  child: Video(
+                    controller: controller,
+                    width: fittedSize.width,
+                    height: fittedSize.height,
+                    fit: BoxFit.fill,
+                    aspectRatio: aspectRatio,
+                    fill: const Color(0xFF000000),
+                    controls: (_) => const SizedBox.shrink(),
+                  ),
+                ),
+              ),
+            Positioned.fill(
+              child: _DouyinMediaControls(
+                player: player,
+                listStylePlayPause: true,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Size _containSize({
+    required double maxWidth,
+    required double maxHeight,
+    required double aspectRatio,
+  }) {
+    if (maxWidth <= 0 || maxHeight <= 0 || aspectRatio <= 0) {
+      return Size.zero;
+    }
+    final byHeight = Size(maxHeight * aspectRatio, maxHeight);
+    if (byHeight.width <= maxWidth) return byHeight;
+    return Size(maxWidth, maxWidth / aspectRatio);
+  }
 }
 
 /// 抖音式全屏媒体控件：
@@ -173,6 +429,7 @@ class _DouyinMediaControlsState extends State<_DouyinMediaControls>
   bool _dragging = false;
   double _dragRatio = 0;
   bool _resumeAfterDrag = false;
+  DateTime _lastPositionUiUpdate = DateTime.fromMillisecondsSinceEpoch(0);
 
   AnimationController? _iconAnimation;
 
@@ -190,7 +447,14 @@ class _DouyinMediaControlsState extends State<_DouyinMediaControls>
     _position = widget.player.state.position;
     _duration = widget.player.state.duration;
     _posSub = widget.player.stream.position.listen((p) {
-      if (mounted && !_dragging) setState(() => _position = p);
+      if (!mounted || _dragging) return;
+      final now = DateTime.now();
+      if (now.difference(_lastPositionUiUpdate) <
+          const Duration(milliseconds: 120)) {
+        return;
+      }
+      _lastPositionUiUpdate = now;
+      setState(() => _position = p);
     });
     _durSub = widget.player.stream.duration.listen((d) {
       if (mounted) setState(() => _duration = d);

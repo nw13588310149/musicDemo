@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/network/api_response.dart';
 import '../data/my_collection_repository.dart';
 import 'my_collection_state.dart';
 
@@ -39,12 +40,12 @@ class MyCollectionController extends StateNotifier<MyCollectionState> {
         items: _parseItems(itemResponse.data, activeType),
         errorMessage: itemResponse.isSuccess
             ? null
-            : _fallbackMessage(itemResponse.msg),
+            : _apiError(itemResponse),
         shareClasses: const <CollectionShareClass>[],
         clearShareTarget: true,
       );
     } catch (_) {
-      state = state.copyWith(loading: false, errorMessage: '加载收藏失败，请稍后重试');
+      state = state.copyWith(loading: false, errorMessage: '');
     }
   }
 
@@ -67,10 +68,10 @@ class MyCollectionController extends StateNotifier<MyCollectionState> {
         items: _parseItems(response.data, type),
         errorMessage: response.isSuccess
             ? null
-            : _fallbackMessage(response.msg),
+            : _apiError(response),
       );
     } catch (_) {
-      state = state.copyWith(loading: false, errorMessage: '加载收藏失败，请稍后重试');
+      state = state.copyWith(loading: false, errorMessage: '');
     }
   }
 
@@ -82,7 +83,7 @@ class MyCollectionController extends StateNotifier<MyCollectionState> {
     );
     state = state.copyWith(busy: false);
     if (!response.isSuccess) {
-      return _fallbackMessage(response.msg);
+      return _apiError(response);
     }
     state = state.copyWith(
       items: state.items.where((entry) => entry.id != item.id).toList(),
@@ -95,7 +96,7 @@ class MyCollectionController extends StateNotifier<MyCollectionState> {
     final response = await _repository.getClassList();
     state = state.copyWith(busy: false);
     if (!response.isSuccess || response.data is! List) {
-      return _fallbackMessage(response.msg, fallback: '加载班级列表失败');
+      return _apiError(response);
     }
     final classes = <CollectionShareClass>[];
     for (final raw in response.data as List) {
@@ -158,7 +159,7 @@ class MyCollectionController extends StateNotifier<MyCollectionState> {
       );
       if (!response.isSuccess) {
         state = state.copyWith(busy: false);
-        return _fallbackMessage(response.msg, fallback: '分享失败');
+        return _apiError(response);
       }
     }
     state = state.copyWith(
@@ -386,7 +387,5 @@ class MyCollectionController extends StateNotifier<MyCollectionState> {
     return value.toString().trim();
   }
 
-  String _fallbackMessage(String raw, {String fallback = '操作失败，请稍后重试'}) {
-    return raw.trim().isEmpty ? fallback : raw.trim();
-  }
+  String _apiError(ApiResponse response) => response.displayMsg;
 }

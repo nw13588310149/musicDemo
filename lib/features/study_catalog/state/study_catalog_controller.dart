@@ -85,7 +85,7 @@ class StudyCatalogController extends StateNotifier<StudyCatalogState> {
       state = state.copyWith(
         bootstrapping: false,
         loading: false,
-        errorMessage: '${state.config.title}页面初始化失败，请稍后重试',
+        errorMessage: '',
       );
     }
   }
@@ -147,9 +147,7 @@ class StudyCatalogController extends StateNotifier<StudyCatalogState> {
           bootstrapping: false,
           loading: false,
           lessonGroups: const <StudyCatalogLessonGroup>[],
-          errorMessage: response.msg.isEmpty
-              ? '${state.config.title}教材加载失败'
-              : response.msg,
+          errorMessage: response.displayMsg,
         );
         return;
       }

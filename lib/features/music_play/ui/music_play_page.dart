@@ -761,43 +761,21 @@ class _AnswerPanelState extends State<_AnswerPanel> {
               ),
               SizedBox(width: ui(10)),
             ],
-            Container(
-              height: ui(28),
-              padding: EdgeInsets.all(ui(2)),
-              decoration: BoxDecoration(
-                color: const Color(0xFFE1E2E5),
-                borderRadius: BorderRadius.circular(ui(8)),
-              ),
-              child: Row(
-                children: widget.useStaffSimplifiedToggle
-                    ? [
-                        _TogglePill(
-                          label: '五线谱',
-                          active: state.showAnswer,
-                          onTap: () => widget.onToggleAnswer(true),
-                        ),
-                        SizedBox(width: ui(4)),
-                        _TogglePill(
-                          label: '简谱',
-                          active: !state.showAnswer,
-                          onTap: () => widget.onToggleAnswer(false),
-                        ),
-                      ]
-                    : [
-                        _TogglePill(
-                          label: '关闭',
-                          active: !state.showAnswer,
-                          onTap: () => widget.onToggleAnswer(false),
-                        ),
-                        SizedBox(width: ui(4)),
-                        _TogglePill(
-                          label: '答案',
-                          active: state.showAnswer,
-                          onTap: () => widget.onToggleAnswer(true),
-                        ),
-                      ],
-              ),
-            ),
+            widget.useStaffSimplifiedToggle
+                ? _SegmentSwitch(
+                    selectedIndex: state.showAnswer ? 0 : 1,
+                    leftLabel: '五线谱',
+                    rightLabel: '简谱',
+                    onLeftTap: () => widget.onToggleAnswer(true),
+                    onRightTap: () => widget.onToggleAnswer(false),
+                  )
+                : _SegmentSwitch(
+                    selectedIndex: state.showAnswer ? 1 : 0,
+                    leftLabel: '关闭',
+                    rightLabel: '答案',
+                    onLeftTap: () => widget.onToggleAnswer(false),
+                    onRightTap: () => widget.onToggleAnswer(true),
+                  ),
           ],
         ),
         SizedBox(height: ui(18)),
@@ -1616,15 +1594,96 @@ class _SecondaryChipButton extends StatelessWidget {
 }
 
 /// 白底描边的 chip 按钮，对应图稿"升降调"等次要操作。
-class _TogglePill extends StatelessWidget {
-  const _TogglePill({
+class _SegmentSwitch extends StatelessWidget {
+  const _SegmentSwitch({
+    required this.selectedIndex,
+    required this.leftLabel,
+    required this.rightLabel,
+    required this.onLeftTap,
+    required this.onRightTap,
+  });
+
+  final int selectedIndex;
+  final String leftLabel;
+  final String rightLabel;
+  final VoidCallback onLeftTap;
+  final VoidCallback onRightTap;
+
+  static const _switchWidth = 104.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+
+    return SizedBox(
+      width: ui(_switchWidth),
+      child: Container(
+        height: ui(28),
+        padding: EdgeInsets.all(ui(2)),
+        decoration: BoxDecoration(
+          color: const Color(0xFFE1E2E5),
+          borderRadius: BorderRadius.circular(ui(8)),
+        ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final segmentWidth = constraints.maxWidth / 2;
+            return SizedBox(
+              height: constraints.maxHeight,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  AnimatedPositioned(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOut,
+                    left: selectedIndex * segmentWidth,
+                    top: 0,
+                    bottom: 0,
+                    width: segmentWidth,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF8741FF),
+                        borderRadius: BorderRadius.circular(ui(6)),
+                      ),
+                    ),
+                  ),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: _SegmentSwitchItem(
+                          label: leftLabel,
+                          selected: selectedIndex == 0,
+                          onTap: onLeftTap,
+                        ),
+                      ),
+                      Expanded(
+                        child: _SegmentSwitchItem(
+                          label: rightLabel,
+                          selected: selectedIndex == 1,
+                          onTap: onRightTap,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _SegmentSwitchItem extends StatelessWidget {
+  const _SegmentSwitchItem({
     required this.label,
-    required this.active,
+    required this.selected,
     required this.onTap,
   });
 
   final String label;
-  final bool active;
+  final bool selected;
   final VoidCallback onTap;
 
   @override
@@ -1632,22 +1691,20 @@ class _TogglePill extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        width: ui(50),
-        height: ui(24),
-        decoration: BoxDecoration(
-          color: active ? const Color(0xFF8741FF) : Colors.transparent,
-          borderRadius: BorderRadius.circular(ui(6)),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          style: TextStyle(
-            color: active ? Colors.white : const Color(0xFF000000),
-            fontSize: ui(12),
-            fontFamily: 'PingFang SC',
-            fontWeight: active ? AppFont.w500 : AppFont.w400,
-            height: 1,
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox.expand(
+        child: Center(
+          child: AnimatedDefaultTextStyle(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            style: TextStyle(
+              color: selected ? Colors.white : const Color(0xFF000000),
+              fontSize: ui(12),
+              fontFamily: 'PingFang SC',
+              fontWeight: selected ? AppFont.w500 : AppFont.w400,
+              height: 1,
+            ),
+            child: Text(label),
           ),
         ),
       ),

@@ -232,9 +232,7 @@ class _RecordingListViewState extends ConsumerState<_RecordingListView> {
                           color: Colors.white.withValues(alpha: 0.48),
                           borderRadius: BorderRadius.circular(ui(16)),
                         ),
-                        child: Center(
-                          child: const AppLoadingIndicator(),
-                        ),
+                        child: Center(child: const AppLoadingIndicator()),
                       ),
                     ),
                   ),
@@ -2481,8 +2479,8 @@ class _DarkWaveFrame extends StatelessWidget {
 }
 
 /// 录制中的暗色波形面板。订阅 [samples]（来自 controller.liveAmplitudes，
-/// 由 `record` 包的 onAmplitudeChanged 灌进去），用 [_WaveWithScalePainter]
-/// 把最近 N 个振幅样本画成滚动柱状波形，并在底部绘制时间刻度条。
+/// 由 `record` 包的 onAmplitudeChanged 灌进去），用 iPad Voice Memos 风格
+/// 的固定中线 + 左滚波形展示实时输入。
 class _LiveDarkWavePanel extends StatelessWidget {
   const _LiveDarkWavePanel({required this.samples, required this.elapsedMs});
 
@@ -2501,24 +2499,18 @@ class _LiveDarkWavePanel extends StatelessWidget {
               builder: (context, elapsedValue, _) {
                 return ValueListenableBuilder<List<double>>(
                   valueListenable: samples,
-                  builder: (context, snapshot, __) {
-                    final totalMs = math.max(elapsedValue, 8000);
-                    final progressRatio = totalMs <= 0
-                        ? 0.0
-                        : (elapsedValue / totalMs).clamp(0.0, 1.0).toDouble();
+                  builder: (context, snapshot, _) {
                     return CustomPaint(
                       size: Size(constraints.maxWidth, constraints.maxHeight),
-                      painter: _WaveWithScalePainter(
+                      painter: _IosLiveRecordingWavePainter(
                         samples: snapshot,
-                        progressRatio: progressRatio,
-                        totalDurationMs: totalMs,
-                        truncateAtPlayhead: true,
+                        elapsedMs: elapsedValue,
                         waveSectionHeight: ui(_kRecordingWaveSectionHeight),
                         waveTopInset: ui(_kRecordingWaveTopInset),
                         scaleTopGap: ui(_kRecordingScaleTopGap),
                         scaleSectionHeight: ui(_kRecordingScaleSectionHeight),
                         bottomInset: ui(_kRecordingWaveBottomPad),
-                        barWidth: ui(1.5),
+                        barWidth: ui(2.2),
                         spacing: ui(_kRecordingLiveWaveBarSpacing),
                         cursorThickness: ui(2),
                         playheadDotRadius: ui(3),
@@ -2536,6 +2528,278 @@ class _LiveDarkWavePanel extends StatelessWidget {
         },
       ),
     );
+  }
+}
+
+/// Live recording waveform that mirrors the iPad Voice Memos interaction:
+/// the current recording point stays fixed near the middle while captured
+/// audio scrolls left as rounded vertical capsules.
+class _IosLiveRecordingWavePainter extends CustomPainter {
+  _IosLiveRecordingWavePainter({
+    required this.samples,
+    required this.elapsedMs,
+    required this.waveSectionHeight,
+    required this.waveTopInset,
+    required this.scaleTopGap,
+    required this.scaleSectionHeight,
+    required this.bottomInset,
+    required this.barWidth,
+    required this.spacing,
+    required this.cursorThickness,
+    required this.playheadDotRadius,
+    required this.labelFontSize,
+    required this.majorTickHeight,
+    required this.minorTickHeight,
+    required this.scaleContentOffset,
+  });
+
+  final List<double> samples;
+  final int elapsedMs;
+  final double waveSectionHeight;
+  final double waveTopInset;
+  final double scaleTopGap;
+  final double scaleSectionHeight;
+  final double bottomInset;
+  final double barWidth;
+  final double spacing;
+  final double cursorThickness;
+  final double playheadDotRadius;
+  final double labelFontSize;
+  final double majorTickHeight;
+  final double minorTickHeight;
+  final double scaleContentOffset;
+
+  static const _waveBg = Color(0xFF141414);
+  static const _scaleBg = Color(0xFF1E1E1E);
+  static const _waveBarColor = Color(0xFFFFFFFF);
+  static const _mutedBarColor = Color(0x66FFFFFF);
+  static const _guideLineColor = Color.fromRGBO(255, 255, 255, 0.10);
+  static const _tickColor = Color(0xFF888888);
+  static const _playheadColor = Color(0xFFFF453A);
+  static const _samplePeriodMs = 80.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.width <= 0 || size.height <= 0) return;
+
+    final waveSectionBottom = waveSectionHeight;
+    final waveTop = math
+        .min(waveTopInset, math.max(waveSectionBottom - 1, 0))
+        .toDouble();
+    final waveBottom = waveSectionBottom;
+    final waveHeight = math.max(waveBottom - waveTop, 1.0);
+    final centerY = waveTop + waveHeight / 2;
+    final scaleTop = waveSectionBottom + scaleTopGap;
+    final scaleBottom = scaleTop + scaleSectionHeight;
+    final contentBottom = scaleBottom + bottomInset;
+    final cursorX = size.width * 0.5;
+
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, size.width, waveSectionBottom),
+      Paint()..color = _waveBg,
+    );
+    canvas.drawRect(
+      Rect.fromLTWH(0, waveSectionBottom, size.width, scaleTopGap),
+      Paint()..color = _waveBg,
+    );
+    canvas.drawRect(
+      Rect.fromLTWH(0, scaleTop, size.width, scaleSectionHeight),
+      Paint()..color = _scaleBg,
+    );
+    if (contentBottom < size.height) {
+      canvas.drawRect(
+        Rect.fromLTWH(0, scaleBottom, size.width, size.height - scaleBottom),
+        Paint()..color = _waveBg,
+      );
+    }
+
+    _paintCenterGuide(canvas, size.width, centerY);
+    _paintWaveform(canvas, cursorX, waveTop, waveBottom, centerY);
+    _paintPlayhead(canvas, waveTop, waveBottom, cursorX);
+    _paintLiveScale(canvas, size, scaleTop, cursorX);
+  }
+
+  void _paintCenterGuide(Canvas canvas, double width, double centerY) {
+    final paint = Paint()
+      ..color = _guideLineColor
+      ..strokeWidth = 1;
+    canvas.drawLine(Offset(0, centerY), Offset(width, centerY), paint);
+  }
+
+  void _paintWaveform(
+    Canvas canvas,
+    double cursorX,
+    double waveTop,
+    double waveBottom,
+    double centerY,
+  ) {
+    final waveHeight = waveBottom - waveTop;
+    final maxBarHeight = math.max(waveHeight - 8, 8.0);
+    final minBarHeight = math.max(barWidth, 2.0);
+    final radius = Radius.circular(barWidth);
+    final paint = Paint()..color = _waveBarColor;
+
+    if (samples.isEmpty) {
+      _paintIdleLine(canvas, cursorX, centerY, minBarHeight, radius);
+      return;
+    }
+
+    final pitch = math.max(spacing, barWidth + 1);
+    final newestIndex = samples.length - 1;
+    for (var i = newestIndex; i >= 0; i--) {
+      final age = newestIndex - i;
+      final x = cursorX - age * pitch;
+      if (x + barWidth / 2 < 0) break;
+
+      final visual = _visualAmplitudeAt(i);
+      final barHeight = minBarHeight + visual * (maxBarHeight - minBarHeight);
+      final rect = Rect.fromCenter(
+        center: Offset(x, centerY),
+        width: barWidth,
+        height: barHeight,
+      );
+      final fade = (x / math.max(cursorX, 1)).clamp(0.38, 1.0).toDouble();
+      paint.color = Color.lerp(_mutedBarColor, _waveBarColor, fade)!;
+      canvas.drawRRect(RRect.fromRectAndRadius(rect, radius), paint);
+    }
+  }
+
+  void _paintIdleLine(
+    Canvas canvas,
+    double cursorX,
+    double centerY,
+    double minBarHeight,
+    Radius radius,
+  ) {
+    final paint = Paint()..color = _mutedBarColor;
+    for (var i = 1; i <= 10; i++) {
+      final x = cursorX - i * math.max(spacing, barWidth + 1);
+      if (x < 0) break;
+      final rect = Rect.fromCenter(
+        center: Offset(x, centerY),
+        width: barWidth,
+        height: minBarHeight,
+      );
+      canvas.drawRRect(RRect.fromRectAndRadius(rect, radius), paint);
+    }
+  }
+
+  double _visualAmplitudeAt(int index) {
+    final current = samples[index].clamp(0.0, 1.0).toDouble();
+    final previous = index > 0 ? samples[index - 1].clamp(0.0, 1.0) : current;
+    final next = index + 1 < samples.length
+        ? samples[index + 1].clamp(0.0, 1.0)
+        : current;
+    final smoothed = current * 0.64 + previous * 0.18 + next * 0.18;
+    final gated = smoothed < 0.025 ? 0.0 : smoothed;
+    return math.pow(gated.clamp(0.0, 1.0), 0.82).toDouble();
+  }
+
+  void _paintPlayhead(
+    Canvas canvas,
+    double waveTop,
+    double waveBottom,
+    double cursorX,
+  ) {
+    final linePaint = Paint()
+      ..color = _playheadColor
+      ..strokeWidth = cursorThickness
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(
+      Offset(cursorX, waveTop),
+      Offset(cursorX, waveBottom - 1),
+      linePaint,
+    );
+
+    final dotPaint = Paint()..color = _playheadColor;
+    canvas.drawCircle(Offset(cursorX, waveTop), playheadDotRadius, dotPaint);
+    canvas.drawCircle(
+      Offset(cursorX, waveBottom - 1),
+      playheadDotRadius,
+      dotPaint,
+    );
+  }
+
+  void _paintLiveScale(
+    Canvas canvas,
+    Size size,
+    double scaleTop,
+    double cursorX,
+  ) {
+    final elapsed = math.max(elapsedMs, 0);
+    final pitch = math.max(spacing, barWidth + 1);
+    final pixelsPerMs = pitch / _samplePeriodMs;
+    final visiblePastMs = (cursorX / pixelsPerMs).ceil();
+    final visibleFutureMs = ((size.width - cursorX) / pixelsPerMs).ceil();
+    final firstTickMs = ((elapsed - visiblePastMs) ~/ 200) * 200;
+    final lastTickMs = ((elapsed + visibleFutureMs) ~/ 200 + 1) * 200;
+
+    final tickPaint = Paint()
+      ..color = _tickColor
+      ..strokeWidth = 1
+      ..strokeCap = StrokeCap.butt;
+    final labelStyle = TextStyle(
+      color: _tickColor,
+      fontSize: labelFontSize,
+      fontFamily: 'PingFang SC',
+      fontWeight: AppFont.w400,
+      height: 1,
+    );
+    final majorTop = scaleTop + 4 + scaleContentOffset;
+    final labelTop = scaleTop + majorTickHeight + 10 + scaleContentOffset;
+
+    for (
+      var tickMs = math.max(firstTickMs, 0);
+      tickMs <= lastTickMs;
+      tickMs += 200
+    ) {
+      final x = cursorX - (elapsed - tickMs) * pixelsPerMs;
+      if (x < 0 || x > size.width) continue;
+      final isMajor = tickMs % 1000 == 0;
+      final tickHeight = isMajor ? majorTickHeight : minorTickHeight;
+      final tickTop = isMajor
+          ? majorTop
+          : majorTop + (majorTickHeight - minorTickHeight);
+      canvas.drawLine(
+        Offset(x, tickTop),
+        Offset(x, tickTop + tickHeight),
+        tickPaint,
+      );
+
+      if (!isMajor) continue;
+      final label = _formatScaleLabel(tickMs);
+      final tp = TextPainter(
+        text: TextSpan(text: label, style: labelStyle),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, Offset(x - tp.width / 2, labelTop));
+    }
+  }
+
+  String _formatScaleLabel(int milliseconds) {
+    final totalSeconds = milliseconds ~/ 1000;
+    final minutes = totalSeconds ~/ 60;
+    final seconds = (totalSeconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+
+  @override
+  bool shouldRepaint(covariant _IosLiveRecordingWavePainter oldDelegate) {
+    return !identical(oldDelegate.samples, samples) ||
+        oldDelegate.elapsedMs != elapsedMs ||
+        oldDelegate.waveSectionHeight != waveSectionHeight ||
+        oldDelegate.waveTopInset != waveTopInset ||
+        oldDelegate.scaleTopGap != scaleTopGap ||
+        oldDelegate.scaleSectionHeight != scaleSectionHeight ||
+        oldDelegate.bottomInset != bottomInset ||
+        oldDelegate.barWidth != barWidth ||
+        oldDelegate.spacing != spacing ||
+        oldDelegate.cursorThickness != cursorThickness ||
+        oldDelegate.playheadDotRadius != playheadDotRadius ||
+        oldDelegate.labelFontSize != labelFontSize ||
+        oldDelegate.majorTickHeight != majorTickHeight ||
+        oldDelegate.minorTickHeight != minorTickHeight ||
+        oldDelegate.scaleContentOffset != scaleContentOffset;
   }
 }
 
@@ -3551,12 +3815,11 @@ class _SaveRecordingDialog extends ConsumerWidget {
                                   '[recording] save dialog uncaught: '
                                   '$error\n$stack',
                                 );
-                                message = '保存录音失败，请稍后重试';
                               }
                               if (!context.mounted) {
                                 return;
                               }
-                              if (message != null) {
+                              if (message != null && message.isNotEmpty) {
                                 _showMessage(context, message);
                                 return;
                               }
@@ -3805,12 +4068,11 @@ class _RecordingShareDrawer extends ConsumerWidget {
           message = await controller.sendShare();
         } catch (error, stack) {
           debugPrint('[recording] share drawer uncaught: $error\n$stack');
-          message = '分享失败，请稍后重试';
         }
         if (!context.mounted) {
           return;
         }
-        if (message != null) {
+        if (message != null && message.isNotEmpty) {
           _showMessage(context, message);
           return;
         }

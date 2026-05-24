@@ -359,16 +359,16 @@ class _CirclePublishDialogState extends ConsumerState<_CirclePublishDialog> {
     if (_submitting || !_canSubmit) return;
     setState(() => _submitting = true);
     final controller = ref.read(circleControllerProvider.notifier);
-    final ok = await controller.publishPost(
+    final message = await controller.publishPost(
       content: _textCtrl.text.trim(),
       kind: _kind,
       mediaUrl: _uploadedPath!,
       coverImg: _coverUploadedPath ?? '',
     );
     if (!mounted) return;
-    if (!ok) {
+    if (message != null && message.isNotEmpty) {
       setState(() => _submitting = false);
-      AppToast.show(context, '发布失败，请稍后再试');
+      AppToast.show(context, message);
       return;
     }
     AppToast.show(context, '动态已发布');

@@ -63,9 +63,9 @@ class _CircleImmersiveViewState extends State<CircleImmersiveView> {
   }
 
   Future<void> _togglePostLike(BuildContext context, String postId) async {
-    final ok = await widget.controller.toggleLike(postId);
-    if (!context.mounted) return;
-    if (!ok) AppToast.show(context, '操作失败，请稍后再试');
+    final message = await widget.controller.toggleLike(postId);
+    if (!context.mounted || message == null || message.isEmpty) return;
+    AppToast.show(context, message);
   }
 
   Future<void> _submitComment(
@@ -73,9 +73,9 @@ class _CircleImmersiveViewState extends State<CircleImmersiveView> {
     String postId,
     String text,
   ) async {
-    final ok = await widget.controller.addComment(postId, text);
-    if (!context.mounted) return;
-    if (!ok) AppToast.show(context, '发送失败');
+    final message = await widget.controller.addComment(postId, text);
+    if (!context.mounted || message == null || message.isEmpty) return;
+    AppToast.show(context, message);
   }
 
   Future<void> _toggleCommentLike(
@@ -83,9 +83,10 @@ class _CircleImmersiveViewState extends State<CircleImmersiveView> {
     String postId,
     String commentId,
   ) async {
-    final ok = await widget.controller.toggleCommentLike(postId, commentId);
-    if (!context.mounted) return;
-    if (!ok) AppToast.show(context, '操作失败，请稍后再试');
+    final message =
+        await widget.controller.toggleCommentLike(postId, commentId);
+    if (!context.mounted || message == null || message.isEmpty) return;
+    AppToast.show(context, message);
   }
 
   Future<void> _confirmDeletePost(BuildContext context, CirclePost post) async {
@@ -95,9 +96,11 @@ class _CircleImmersiveViewState extends State<CircleImmersiveView> {
       content: '确定删除这条动态吗？删除后不可恢复。',
     );
     if (!ok || !context.mounted) return;
-    final success = await widget.controller.deletePost(post.id);
+    final message = await widget.controller.deletePost(post.id);
     if (!context.mounted) return;
-    if (!success) AppToast.show(context, '删除失败');
+    if (message != null && message.isNotEmpty) {
+      AppToast.show(context, message);
+    }
   }
 
   Future<void> _confirmDeleteComment(
@@ -112,12 +115,14 @@ class _CircleImmersiveViewState extends State<CircleImmersiveView> {
     if (!ok || !context.mounted) return;
     final postId = _activePostId();
     if (postId == null) return;
-    final success = await widget.controller.deleteComment(
+    final message = await widget.controller.deleteComment(
       postId: postId,
       commentId: commentId,
     );
     if (!context.mounted) return;
-    if (!success) AppToast.show(context, '删除失败');
+    if (message != null && message.isNotEmpty) {
+      AppToast.show(context, message);
+    }
   }
 
   @override
@@ -159,6 +164,7 @@ class _CircleImmersiveViewState extends State<CircleImmersiveView> {
               final post = posts[index];
               return _ImmersiveSlide(
                 post: post,
+                isActive: index == state.immersiveIndex,
                 canDeletePost: widget.permissions.canDeletePost(post),
                 onDeletePost: widget.permissions.canDeletePost(post)
                     ? () => _confirmDeletePost(context, post)
@@ -170,20 +176,11 @@ class _CircleImmersiveViewState extends State<CircleImmersiveView> {
             },
           ),
 
-          if (state.commentPanelOpen)
-            Positioned(
-              top: 0,
-              left: 0,
-              bottom: 0,
-              right: ui(420),
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: controller.closeCommentPanel,
-                child: ColoredBox(
-                  color: Colors.black.withValues(alpha: 0.45),
-                ),
-              ),
-            ),
+          _AnimatedCommentScrim(
+            visible: state.commentPanelOpen,
+            panelWidth: ui(420),
+            onTap: controller.closeCommentPanel,
+          ),
 
           _AnimatedCommentPanel(
             visible: state.commentPanelOpen,
@@ -219,6 +216,7 @@ class _CircleImmersiveViewState extends State<CircleImmersiveView> {
 class _ImmersiveSlide extends StatelessWidget {
   const _ImmersiveSlide({
     required this.post,
+    required this.isActive,
     required this.onLike,
     required this.onComment,
     required this.onFavorite,
@@ -227,6 +225,7 @@ class _ImmersiveSlide extends StatelessWidget {
   });
 
   final CirclePost post;
+  final bool isActive;
   final VoidCallback onLike;
   final VoidCallback onComment;
   final VoidCallback onFavorite;
@@ -244,7 +243,10 @@ class _ImmersiveSlide extends StatelessWidget {
       fit: StackFit.expand,
       children: [
         Positioned.fill(
-          child: CircleMediaPlayer(post: post),
+          child: CircleMediaPlayer(
+            post: post,
+            isActive: isActive,
+          ),
         ),
 
         if (canDeletePost && onDeletePost != null)
@@ -554,6 +556,44 @@ class _ImmersiveAvatar extends StatelessWidget {
   }
 }
 
+/// 评论区打开时，左侧背景遮罩做淡入淡出过渡。
+class _AnimatedCommentScrim extends StatelessWidget {
+  const _AnimatedCommentScrim({
+    required this.visible,
+    required this.panelWidth,
+    required this.onTap,
+  });
+
+  final bool visible;
+  final double panelWidth;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      top: 0,
+      left: 0,
+      bottom: 0,
+      right: panelWidth,
+      child: IgnorePointer(
+        ignoring: !visible,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: AnimatedOpacity(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            opacity: visible ? 1 : 0,
+            child: ColoredBox(
+              color: Colors.black.withValues(alpha: 0.38),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// 用 AnimatedPositioned 包装的右侧滑入面板。
 class _AnimatedCommentPanel extends StatelessWidget {
   const _AnimatedCommentPanel({required this.visible, required this.child});
@@ -577,20 +617,20 @@ class _AnimatedCommentPanel extends StatelessWidget {
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: 180),
         opacity: visible ? 1 : 0,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.only(
-              topRight: Radius.circular(radius),
-              bottomRight: Radius.circular(radius),
-            ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.only(
+            topRight: Radius.circular(radius),
+            bottomRight: Radius.circular(radius),
           ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.only(
-              topRight: Radius.circular(radius),
-              bottomRight: Radius.circular(radius),
+          clipBehavior: Clip.hardEdge,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.only(
+                topRight: Radius.circular(radius),
+                bottomRight: Radius.circular(radius),
+              ),
             ),
-            clipBehavior: Clip.hardEdge,
             child: child,
           ),
         ),

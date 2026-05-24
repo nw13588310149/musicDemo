@@ -5,6 +5,16 @@ import '../../../../core/widgets/app_asset_graphic.dart';
 import '../../../shell/ui/shell_layout.dart';
 import '../../state/circle_state.dart';
 
+/// 列表态「已点赞 / 已收藏」资源画布边长；未激活资源为 80px，需等比放大对齐。
+const _kListActiveCanvasExtent = 94.0;
+const _kListInactiveCanvasExtent = 80.0;
+
+bool _usesListInactiveCanvas(String asset) {
+  return asset == AppAssets.circleFav2 ||
+      asset == AppAssets.circleMsg1 ||
+      asset == AppAssets.circleSc2;
+}
+
 /// 单个操作按钮（点赞 / 评论 / 收藏），支持 light / dark 两种调色。
 class CircleActionButton extends StatelessWidget {
   const CircleActionButton({
@@ -32,14 +42,29 @@ class CircleActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final size = iconSize ?? (dark ? ui(28) : ui(20));
+    final baseSize = iconSize ?? (dark ? ui(28) : ui(20));
+    final listIconBoxSize =
+        baseSize * _kListActiveCanvasExtent / _kListInactiveCanvasExtent;
+    final visualSize = !dark && _usesListInactiveCanvas(iconAsset)
+        ? listIconBoxSize
+        : baseSize;
+    final boxSize = dark ? baseSize : listIconBoxSize;
 
-    final iconWidget = coloredIcon == null
-        ? AppAssetGraphic(iconAsset, width: size, height: size)
+    final graphic = coloredIcon == null
+        ? AppAssetGraphic(iconAsset, width: visualSize, height: visualSize)
         : ColorFiltered(
             colorFilter: ColorFilter.mode(coloredIcon!, BlendMode.srcIn),
-            child: AppAssetGraphic(iconAsset, width: size, height: size),
+            child: AppAssetGraphic(
+              iconAsset,
+              width: visualSize,
+              height: visualSize,
+            ),
           );
+    final iconWidget = SizedBox(
+      width: boxSize,
+      height: boxSize,
+      child: Center(child: graphic),
+    );
     final textWidget = Text(
       formatCircleCount(count),
       style: TextStyle(

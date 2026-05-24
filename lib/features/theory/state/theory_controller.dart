@@ -31,7 +31,7 @@ class TheoryController extends StateNotifier<TheoryState> {
       if (!mounted) {
         return;
       }
-      state = state.copyWith(loading: false, errorMessage: '页面初始化失败，请稍后重试');
+      state = state.copyWith(loading: false, errorMessage: '');
     }
   }
 
@@ -58,9 +58,7 @@ class TheoryController extends StateNotifier<TheoryState> {
         detailResponse.data is! Map<String, dynamic>) {
       state = state.copyWith(
         loading: false,
-        errorMessage: detailResponse.msg.isEmpty
-            ? '加载乐理详情失败'
-            : detailResponse.msg,
+        errorMessage: detailResponse.displayMsg,
       );
       return;
     }
@@ -104,7 +102,7 @@ class TheoryController extends StateNotifier<TheoryState> {
     }
     if (!response.isSuccess) {
       state = state.copyWith(
-        errorMessage: response.msg.isEmpty ? '收藏状态更新失败' : response.msg,
+        errorMessage: response.displayMsg,
       );
       return;
     }
@@ -146,7 +144,7 @@ class TheoryController extends StateNotifier<TheoryState> {
     if (!response.isSuccess) {
       state = state.copyWith(
         classLoading: false,
-        errorMessage: response.msg.isEmpty ? '获取班级群失败' : response.msg,
+        errorMessage: response.displayMsg,
       );
       return;
     }
@@ -209,7 +207,7 @@ class TheoryController extends StateNotifier<TheoryState> {
       if (!response.isSuccess) {
         state = state.copyWith(
           sending: false,
-          errorMessage: response.msg.isEmpty ? '发送失败' : response.msg,
+          errorMessage: response.displayMsg,
         );
         return false;
       }

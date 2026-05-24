@@ -134,8 +134,8 @@ class AppToast {
         : 'assets/images/home/error.png';
 
     return Container(
-      width: ui(340),
-      height: ui(48),
+      width: ui(380),
+      height: ui(54),
       padding: EdgeInsets.symmetric(horizontal: ui(12)),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(ui(8)),
@@ -164,10 +164,10 @@ class AppToast {
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: const Color(0xFF0B081A),
-                fontSize: ui(14),
+                fontSize: ui(16),
                 fontFamily: 'PingFang SC',
                 fontWeight: AppFont.w500,
-                height: 20 / 14,
+                height: 22 / 16,
               ),
             ),
           ),

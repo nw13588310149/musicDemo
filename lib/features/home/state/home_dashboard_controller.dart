@@ -81,7 +81,14 @@ class HomeDashboardController extends StateNotifier<HomeDashboardState> {
         newsItems: newsItems,
         weekItems: weekItems,
         courseNotices: notices,
-        errorMessage: hasAnyData ? '' : '暂无数据，请稍后重试',
+        errorMessage: hasAnyData
+            ? ''
+            : _firstApiError([
+                myInfoResponse,
+                bannerResponse,
+                latestResponse,
+                nextCourseResponse,
+              ]),
       );
     } catch (_) {
       if (!mounted) return;
@@ -90,7 +97,7 @@ class HomeDashboardController extends StateNotifier<HomeDashboardState> {
         weekItems: state.weekItems.isEmpty
             ? _emptyWeekItems()
             : state.weekItems,
-        errorMessage: '首页加载失败，请稍后重试',
+        errorMessage: '',
       );
     } finally {
       _refreshInFlight = false;
@@ -393,6 +400,15 @@ class HomeDashboardController extends StateNotifier<HomeDashboardState> {
       return data;
     }
     return const {};
+  }
+
+  String _firstApiError(List<ApiResponse> responses) {
+    for (final response in responses) {
+      if (!response.isSuccess && response.displayMsg.isNotEmpty) {
+        return response.displayMsg;
+      }
+    }
+    return '';
   }
 
   int _toInt(dynamic value) {

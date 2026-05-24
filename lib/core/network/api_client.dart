@@ -287,6 +287,6 @@ class ApiClient {
     if (error.message != null && error.message!.isNotEmpty) {
       return error.message!;
     }
-    return '请求失败，请稍后重试';
+    return '';
   }
 }

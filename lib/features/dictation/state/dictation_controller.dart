@@ -81,7 +81,7 @@ class DictationController extends StateNotifier<DictationState> {
       state = state.copyWith(
         bootstrapping: false,
         loading: false,
-        errorMessage: '听写页面初始化失败，请稍后重试',
+        errorMessage: '',
       );
     }
   }
@@ -136,7 +136,7 @@ class DictationController extends StateNotifier<DictationState> {
         bootstrapping: false,
         loading: false,
         lessonGroups: const <DictationLessonGroup>[],
-        errorMessage: response.msg.isEmpty ? '听写教材加载失败' : response.msg,
+        errorMessage: response.displayMsg,
       );
       return;
     }

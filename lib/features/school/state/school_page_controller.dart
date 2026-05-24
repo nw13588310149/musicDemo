@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/network/api_response.dart';
 import '../data/school_repository.dart';
 import 'school_page_state.dart';
 
@@ -77,7 +78,14 @@ class SchoolPageController extends StateNotifier<SchoolPageState> {
       bannerItems: bannerItems,
       learningItems: learningItems,
       newsItems: newsItems,
-      errorMessage: hasAnyData ? '' : '暂无校园数据，请稍后重试',
+      errorMessage: hasAnyData
+          ? ''
+          : _firstApiError([
+              schoolResponse,
+              bannerResponse,
+              progressResponse,
+              latestResponse,
+            ]),
     );
   }
 
@@ -234,5 +242,14 @@ class SchoolPageController extends StateNotifier<SchoolPageState> {
       return value;
     }
     return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  String _firstApiError(List<ApiResponse> responses) {
+    for (final response in responses) {
+      if (!response.isSuccess && response.displayMsg.isNotEmpty) {
+        return response.displayMsg;
+      }
+    }
+    return '';
   }
 }

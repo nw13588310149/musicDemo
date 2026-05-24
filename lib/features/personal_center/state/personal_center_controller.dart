@@ -181,7 +181,7 @@ class PersonalCenterController extends StateNotifier<PersonalCenterState> {
     }
     final r = await _repository.editMyInfo(changes);
     if (r.code != 0) {
-      return r.msg.isEmpty ? '修改失败' : r.msg;
+      return r.displayMsg;
     }
     await refreshUserOnly();
     _syncShellUserProfile();
@@ -208,27 +208,27 @@ class PersonalCenterController extends StateNotifier<PersonalCenterState> {
   }) async {
     final r = await _repository.uploadFile(bytes: bytes, filename: filename);
     if (r.code != 0) {
-      return (path: null, url: null, error: r.msg.isEmpty ? '上传失败' : r.msg);
+      return (path: null, url: null, error: r.displayMsg);
     }
     final result = parseUploadResult(r.data);
     if (result.isEmpty) {
-      return (path: null, url: null, error: '上传失败');
+      return (path: null, url: null, error: r.displayMsg);
     }
     return (path: result.savable, url: result.displayable, error: null);
   }
 
   /// 拉取省份列表；只在首次需要时调用。
-  Future<List<String>> ensureProvinces() async {
+  Future<({List<String> provinces, String? error})> ensureProvinces() async {
     if (state.provinces.isNotEmpty) {
-      return state.provinces;
+      return (provinces: state.provinces, error: null);
     }
     final r = await _repository.provinceCityList();
     if (r.code != 0) {
-      return const <String>[];
+      return (provinces: const <String>[], error: r.displayMsg);
     }
     final raw = r.data;
     if (raw is! List<dynamic>) {
-      return const <String>[];
+      return (provinces: const <String>[], error: r.displayMsg);
     }
     final names = <String>[];
     for (final item in raw) {
@@ -240,7 +240,7 @@ class PersonalCenterController extends StateNotifier<PersonalCenterState> {
       }
     }
     state = state.copyWith(provinces: names);
-    return names;
+    return (provinces: names, error: null);
   }
 
   /// 修改密码，成功返回 null，失败返回错误信息。
@@ -253,7 +253,7 @@ class PersonalCenterController extends StateNotifier<PersonalCenterState> {
       newPassword: newPassword,
     );
     if (r.code != 0) {
-      return r.msg.isEmpty ? '修改失败' : r.msg;
+      return r.displayMsg;
     }
     return null;
   }

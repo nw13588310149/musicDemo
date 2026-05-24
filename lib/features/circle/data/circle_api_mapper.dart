@@ -110,15 +110,21 @@ CirclePost _mapPost(Map<String, dynamic> m) {
     if (legacy.isNotEmpty) firstImage = MediaUrl.resolve(legacy.first);
   }
 
-  final w = _asDouble(m['imageWidth'] ?? m['width'] ?? m['imgWidth']);
-  final h = _asDouble(m['imageHeight'] ?? m['height'] ?? m['imgHeight']);
+  final videoW = _asDouble(m['videoWidth']);
+  final videoH = _asDouble(m['videoHeight']);
+  final imageW = _asDouble(m['imageWidth'] ?? m['width'] ?? m['imgWidth']);
+  final imageH = _asDouble(m['imageHeight'] ?? m['height'] ?? m['imgHeight']);
+  final hasExplicitAspectRatio =
+      mediaKind == PostMediaKind.video && videoW > 0 && videoH > 0;
   double aspect;
-  if (w > 0 && h > 0) {
-    aspect = w / h;
+  if (hasExplicitAspectRatio) {
+    aspect = videoW / videoH;
+  } else if (mediaKind != PostMediaKind.video && imageW > 0 && imageH > 0) {
+    aspect = imageW / imageH;
   } else {
-    // 视频帖默认 16:9 横向，音频帖默认 1:1，图片/文章帖默认 3:4 偏竖。
+    // 视频真实比例由播放器加载后识别；列表封面无视频宽高时先按竖图占位。
     aspect = switch (mediaKind) {
-      PostMediaKind.video => 16 / 9,
+      PostMediaKind.video => 9 / 16,
       PostMediaKind.audio => 1.0,
       PostMediaKind.image => 3 / 4,
     };
@@ -154,6 +160,7 @@ CirclePost _mapPost(Map<String, dynamic> m) {
     timeLabel: _pickString(m, const ['createTime', 'time', 'publishTime', 'createdAt']),
     imageUrl: firstImage,
     imageAspectRatio: aspect,
+    hasExplicitAspectRatio: hasExplicitAspectRatio,
     likeCount: likeCount,
     commentCount: commentCount,
     favoriteCount: favoriteCount,

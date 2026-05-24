@@ -1696,6 +1696,7 @@ class _PracticeOptionGrid extends StatelessWidget {
                       selected: playable.contains(opt),
                       themeHighlight: revealCorrect && opt == correctOption,
                       enabled: answerEnabled && playable.contains(opt),
+                      shakeOnTap: true,
                       onTap: () => onSubmit(opt),
                     ),
                 ],
@@ -1735,6 +1736,7 @@ class _PracticeOptionGrid extends StatelessWidget {
                     selected: playable.contains(opt),
                     themeHighlight: revealCorrect && opt == correctOption,
                     enabled: answerEnabled && playable.contains(opt),
+                    shakeOnTap: true,
                     onTap: () => onSubmit(opt),
                   ),
               ],
@@ -2866,7 +2868,11 @@ class _NoteNameText extends StatelessWidget {
 
 /// Large option chip used in the top selection grid of the smart practice view.
 /// Note chips are 52×52 (absolute track); interval/chord chips are 98×56.
-class _SmartOptionChip extends StatelessWidget {
+///
+/// 当 [shakeOnTap] 为 true 且 [enabled] 为 true 时，点击会播放一段
+/// 左右摇摆（摇头）反馈动画——用于练习视图中的答题选项，给用户即时
+/// 的触觉式视觉反馈。
+class _SmartOptionChip extends StatefulWidget {
   const _SmartOptionChip({
     required this.ui,
     required this.label,
@@ -2875,6 +2881,7 @@ class _SmartOptionChip extends StatelessWidget {
     this.isNoteChip = false,
     this.enabled = true,
     this.themeHighlight = false,
+    this.shakeOnTap = false,
   });
 
   final double Function(num) ui;
@@ -2884,12 +2891,77 @@ class _SmartOptionChip extends StatelessWidget {
   final bool isNoteChip;
   final bool enabled;
   final bool themeHighlight;
+  final bool shakeOnTap;
+
+  @override
+  State<_SmartOptionChip> createState() => _SmartOptionChipState();
+}
+
+class _SmartOptionChipState extends State<_SmartOptionChip>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _shakeCtrl;
+  late final Animation<double> _shakeOffset;
+
+  @override
+  void initState() {
+    super.initState();
+    _shakeCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 360),
+    );
+    // 衰减式左右摇摆：6→-6→4→-4→0，节奏快、回正自然，
+    // 视觉上像「摇头」反馈。
+    _shakeOffset = TweenSequence<double>(<TweenSequenceItem<double>>[
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 0.0, end: -6.0)
+            .chain(CurveTween(curve: Curves.easeOut)),
+        weight: 1,
+      ),
+      TweenSequenceItem(
+        tween: Tween<double>(begin: -6.0, end: 6.0)
+            .chain(CurveTween(curve: Curves.easeInOut)),
+        weight: 2,
+      ),
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 6.0, end: -4.0)
+            .chain(CurveTween(curve: Curves.easeInOut)),
+        weight: 2,
+      ),
+      TweenSequenceItem(
+        tween: Tween<double>(begin: -4.0, end: 3.0)
+            .chain(CurveTween(curve: Curves.easeInOut)),
+        weight: 2,
+      ),
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 3.0, end: 0.0)
+            .chain(CurveTween(curve: Curves.easeIn)),
+        weight: 1,
+      ),
+    ]).animate(_shakeCtrl);
+  }
+
+  @override
+  void dispose() {
+    _shakeCtrl.dispose();
+    super.dispose();
+  }
+
+  void _handleTap() {
+    if (!widget.enabled) {
+      return;
+    }
+    if (widget.shakeOnTap) {
+      _shakeCtrl.forward(from: 0);
+    }
+    widget.onTap();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final w = isNoteChip ? ui(52) : ui(98);
-    final h = isNoteChip ? ui(52) : ui(56);
-    final highlighted = themeHighlight || selected;
+    final ui = widget.ui;
+    final w = widget.isNoteChip ? ui(52) : ui(98);
+    final h = widget.isNoteChip ? ui(52) : ui(56);
+    final highlighted = widget.themeHighlight || widget.selected;
     final textColor = highlighted ? Colors.white : const Color(0xFF0B081A);
     final textStyle = TextStyle(
       fontSize: ui(16),
@@ -2898,9 +2970,9 @@ class _SmartOptionChip extends StatelessWidget {
       color: textColor,
       height: 28 / 16,
     );
-    final hasChinese = label.contains(RegExp(r'[\u4e00-\u9fff/]'));
+    final hasChinese = widget.label.contains(RegExp(r'[\u4e00-\u9fff/]'));
 
-    final child = Container(
+    final chip = Container(
       width: w,
       height: h,
       decoration: BoxDecoration(
@@ -2910,13 +2982,13 @@ class _SmartOptionChip extends StatelessWidget {
       padding: EdgeInsets.all(ui(0.5)),
       child: Container(
         decoration: BoxDecoration(
-          gradient: themeHighlight
+          gradient: widget.themeHighlight
               ? const LinearGradient(
                   begin: Alignment.centerRight,
                   end: Alignment.centerLeft,
                   colors: <Color>[Color(0xFFB68EFF), Color(0xFF8640FF)],
                 )
-              : selected
+              : widget.selected
               ? const LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
@@ -2932,16 +3004,30 @@ class _SmartOptionChip extends StatelessWidget {
         ),
         alignment: Alignment.center,
         child: hasChinese
-            ? Text(label, style: textStyle, textAlign: TextAlign.center)
-            : isNoteChip
-            ? _NoteNameText(ui: ui, note: label, style: textStyle)
-            : Text.rich(_buildNoteSpan(label, textStyle)),
+            ? Text(widget.label, style: textStyle, textAlign: TextAlign.center)
+            : widget.isNoteChip
+            ? _NoteNameText(ui: ui, note: widget.label, style: textStyle)
+            : Text.rich(_buildNoteSpan(widget.label, textStyle)),
       ),
     );
 
+    final animatedChip = widget.shakeOnTap
+        ? AnimatedBuilder(
+            animation: _shakeOffset,
+            builder: (_, child) => Transform.translate(
+              offset: Offset(_shakeOffset.value, 0),
+              child: child,
+            ),
+            child: chip,
+          )
+        : chip;
+
     return IgnorePointer(
-      ignoring: !enabled,
-      child: GestureDetector(onTap: enabled ? onTap : null, child: child),
+      ignoring: !widget.enabled,
+      child: GestureDetector(
+        onTap: widget.enabled ? _handleTap : null,
+        child: animatedChip,
+      ),
     );
   }
 }

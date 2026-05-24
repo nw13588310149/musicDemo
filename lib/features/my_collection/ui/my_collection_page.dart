@@ -278,7 +278,7 @@ class _CollectionTabs extends StatelessWidget {
     // 不设固定总高度：固定 44px + 上下 padding 后，留给文字的垂直空间不足，
     // 中文（尤其 PingFang）笔画底部会被裁切；高度交给 Row + Tab 子项撑开。
     return Container(
-      padding: EdgeInsets.fromLTRB(ui(4), ui(6), ui(3), ui(6)),
+      padding: EdgeInsets.all(ui(4)),
       decoration: BoxDecoration(
         color: const Color(0xFFF5F6FA),
         borderRadius: BorderRadius.circular(ui(8)),

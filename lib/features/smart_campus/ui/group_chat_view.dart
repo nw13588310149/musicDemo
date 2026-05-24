@@ -320,7 +320,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
     if (!mounted) return;
     if (res.code != 0) {
       setState(() => _conversations = const []);
-      AppToast.show(context, res.msg.isEmpty ? '群聊列表加载失败' : res.msg);
+      AppToast.show(context, res.displayMsg);
       return;
     }
     final list = _sortConversations(_parseConversations(res.data));
@@ -400,7 +400,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
     if (!mounted || seq != _msgLoadSeq) return;
     if (res.code != 0) {
       setState(() => _loadingMessages = false);
-      AppToast.show(context, res.msg.isEmpty ? '消息加载失败' : res.msg);
+      AppToast.show(context, res.displayMsg);
       return;
     }
     final parsed = _parseMessages(res.data);
@@ -433,7 +433,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
     if (!mounted || seq != _msgLoadSeq) return;
     if (res.code != 0) {
       setState(() => _loadingOlder = false);
-      AppToast.show(context, res.msg.isEmpty ? '加载更多失败' : res.msg);
+      AppToast.show(context, res.displayMsg);
       return;
     }
     final older = _parseMessages(res.data);
@@ -781,7 +781,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
         _messages = _messages.where((m) => m.id != tempId).toList();
         _inputController.text = text;
       });
-      AppToast.show(context, res.msg.isEmpty ? '发送失败' : res.msg);
+      AppToast.show(context, res.displayMsg);
     }
   }
 
@@ -812,7 +812,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
       AppToast.show(context, '已撤回');
     } else {
       setState(() => _recalling.remove(msgId));
-      AppToast.show(context, res.msg.isEmpty ? '撤回失败' : res.msg);
+      AppToast.show(context, res.displayMsg);
     }
   }
 
@@ -838,7 +838,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
         _muteSaving = false;
         _muted = !next;
       });
-      AppToast.show(context, res.msg.isEmpty ? '设置失败' : res.msg);
+      AppToast.show(context, res.displayMsg);
     }
   }
 
@@ -874,7 +874,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
         _pinSaving = false;
         _pinned = !next;
       });
-      AppToast.show(context, res.msg.isEmpty ? '设置失败' : res.msg);
+      AppToast.show(context, res.displayMsg);
     }
   }
 
@@ -936,7 +936,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
       if (!uploadRes.isSuccess) {
         _removeAndWarn(
           tempId,
-          uploadRes.msg.isEmpty ? '图片上传失败' : uploadRes.msg,
+          uploadRes.displayMsg,
         );
         setState(() => _sending = false);
         return;
@@ -971,7 +971,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
           }).toList();
         });
       } else {
-        _removeAndWarn(tempId, sendRes.msg.isEmpty ? '发送失败' : sendRes.msg);
+        _removeAndWarn(tempId, sendRes.displayMsg);
         setState(() => _sending = false);
       }
     } catch (_) {
@@ -1004,7 +1004,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
       });
       AppToast.show(context, '群公告已更新');
     } else {
-      AppToast.show(context, res.msg.isEmpty ? '保存失败' : res.msg);
+      AppToast.show(context, res.displayMsg);
     }
   }
 
@@ -1092,7 +1092,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
     if (!mounted) return;
     setState(() => _groupProfileSaving = false);
     if (!res.isSuccess) {
-      AppToast.show(context, res.msg.isEmpty ? '群资料保存失败' : res.msg);
+      AppToast.show(context, res.displayMsg);
       return;
     }
     setState(() {
@@ -1157,7 +1157,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
               if (!uploadRes.isSuccess) {
                 AppToast.show(
                   context,
-                  uploadRes.msg.isEmpty ? '头像上传失败' : uploadRes.msg,
+                  uploadRes.displayMsg,
                 );
                 return;
               }
@@ -1545,7 +1545,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
       final uploadRes = await _repo.uploadVoice(bytes: bytes, filename: filename);
       if (!mounted) return;
       if (!uploadRes.isSuccess) {
-        _removeAndWarn(tempId, uploadRes.msg.isEmpty ? '语音上传失败' : uploadRes.msg);
+        _removeAndWarn(tempId, uploadRes.displayMsg);
         return;
       }
 
@@ -1584,7 +1584,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
           }).toList();
         });
       } else {
-        _removeAndWarn(tempId, sendRes.msg.isEmpty ? '发送失败' : sendRes.msg);
+        _removeAndWarn(tempId, sendRes.displayMsg);
       }
     } catch (_) {
       if (mounted) _removeAndWarn(tempId, '语音发送失败');
@@ -4477,11 +4477,11 @@ class _TextBubbleView extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final baseStyle = TextStyle(
-      fontSize: ui(13),
+      fontSize: ui(14),
       color: _kTextDark,
       fontFamily: 'PingFang SC',
       fontWeight: AppFont.w400,
-      height: 24 / 13,
+      height: 1.7,
     );
     return Container(
       padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(8)),

@@ -27,6 +27,52 @@ require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelpe
 
 flutter_ios_podfile_setup
 
+def patch_file_picker_ios_phpicker_group
+  plugin_path = File.join(
+    __dir__,
+    'Pods',
+    '.symlinks',
+    'plugins',
+    'file_picker',
+    'ios',
+    'file_picker',
+    'Sources',
+    'file_picker',
+    'FilePickerPlugin.m'
+  )
+  return unless File.exist?(plugin_path)
+
+  source = File.read(plugin_path)
+  return if source.include?('leavePickerGroup')
+
+  patched = source.dup
+  patched.sub!(
+    '    self.group = dispatch_group_create();',
+    "    self.group = dispatch_group_create();\n    dispatch_group_t pickerGroup = self.group;"
+  )
+  patched.sub!(
+    '        dispatch_group_enter(_group);',
+    '        dispatch_group_enter(pickerGroup);'
+  )
+  patched.sub!(
+    "        PHPickerResult * result = [results objectAtIndex:index];\n        \n        dispatch_async(processQueue, ^{",
+    "        PHPickerResult * result = [results objectAtIndex:index];\n        __block BOOL didLeavePickerGroup = NO;\n        void (^leavePickerGroup)(void) = ^{\n            @synchronized (result) {\n                if (didLeavePickerGroup) {\n                    return;\n                }\n                didLeavePickerGroup = YES;\n            }\n            dispatch_group_leave(pickerGroup);\n        };\n        \n        dispatch_async(processQueue, ^{"
+  )
+  patched.gsub!('dispatch_group_leave(self->_group);', 'leavePickerGroup();')
+  patched.sub!(
+    '    dispatch_group_notify(_group, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0),^{',
+    '    dispatch_group_notify(pickerGroup, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0),^{'
+  )
+
+  if patched == source
+    Pod::UI.warn 'file_picker iOS PHPicker group patch was not applied; plugin source layout may have changed.'
+    return
+  end
+
+  File.write(plugin_path, patched)
+  Pod::UI.puts 'Applied file_picker iOS PHPicker dispatch_group crash patch.'
+end
+
 target 'Runner' do
   use_frameworks!
   use_modular_headers!
@@ -40,6 +86,8 @@ target 'Runner' do
 end
 
 post_install do |installer|
+  patch_file_picker_ios_phpicker_group
+
   # 注意：不要在这里主动调用 flutter_soloud 的 build_cmake.sh。
   # 该脚本必须由 Xcode 构建时调用（依赖 PLATFORM_NAME 等环境变量），
   # 在 post_install 阶段裸跑会立刻报 "PLATFORM_NAME is not set" 并把

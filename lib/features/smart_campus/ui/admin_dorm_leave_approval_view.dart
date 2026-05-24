@@ -164,7 +164,7 @@ class _AdminDormLeaveApprovalViewState
         _requests = const [];
         _loading = false;
         _loadError =
-            resp.msg.isEmpty ? '加载教师请假列表失败' : resp.msg;
+            resp.displayMsg;
       });
       return;
     }
@@ -249,7 +249,7 @@ class _AdminDormLeaveApprovalViewState
     if (!resp.isSuccess) {
       AppToast.show(
         context,
-        resp.msg.isEmpty ? '审批失败' : resp.msg,
+        resp.displayMsg,
         type: AppToastType.error,
       );
       return;
@@ -273,7 +273,7 @@ class _AdminDormLeaveApprovalViewState
     if (!resp.isSuccess) {
       AppToast.show(
         context,
-        resp.msg.isEmpty ? '驳回失败' : resp.msg,
+        resp.displayMsg,
         type: AppToastType.error,
       );
       return;

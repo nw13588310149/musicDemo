@@ -104,7 +104,7 @@ class ConsultationController extends StateNotifier<ConsultationState> {
           items: reset ? const <ConsultationItem>[] : state.items,
           hasMore: reset ? true : state.hasMore,
           errorMessage: reset
-              ? (response.msg.isEmpty ? '资讯加载失败' : response.msg)
+              ? (response.displayMsg)
               : state.errorMessage,
         );
         return;

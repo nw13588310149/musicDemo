@@ -115,7 +115,7 @@ class SchoolBindingController extends StateNotifier<SchoolBindingState> {
     if (response.code != 0) {
       state = state.copyWith(
         submitting: false,
-        errorMessage: response.msg.isEmpty ? '提交失败，请稍后重试' : response.msg,
+        errorMessage: response.displayMsg,
       );
       return false;
     }

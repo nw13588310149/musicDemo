@@ -67,7 +67,7 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
         _ensureTrackLessonsLoaded(state.activeTrack),
       ]);
     } catch (_) {
-      state = state.copyWith(errorMessage: '智能听写初始化失败，请稍后重试');
+      state = state.copyWith(errorMessage: '');
     }
 
     state = state.copyWith(bootstrapping: false);
@@ -103,6 +103,13 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
     state = state.copyWith(loadingLessons: true, clearErrorMessage: true);
     try {
       final response = await _repository.getSmartDictationList(type: type);
+      if (!response.isSuccess) {
+        state = state.copyWith(
+          loadingLessons: false,
+          errorMessage: response.displayMsg,
+        );
+        return;
+      }
       final lessons = _parseLessons(response.data);
       _loadedTracks.add(track);
       switch (track) {
@@ -120,10 +127,7 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
           state = state.copyWith(loadingLessons: false, chordLessons: lessons);
       }
     } catch (_) {
-      state = state.copyWith(
-        loadingLessons: false,
-        errorMessage: '关卡列表加载失败，请稍后重试',
-      );
+      state = state.copyWith(loadingLessons: false, errorMessage: '');
     }
   }
 
@@ -782,13 +786,17 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
     );
 
     try {
-      await _repository.saveSmartDictationRecord(
+      final response = await _repository.saveSmartDictationRecord(
         smartDictationId: session.linkedLessonId,
         stars: stars,
       );
+      if (!response.isSuccess) {
+        state = state.copyWith(errorMessage: response.displayMsg);
+        return;
+      }
       await _refreshTrackLessons(session.track);
     } catch (_) {
-      state = state.copyWith(errorMessage: '成绩保存失败，请稍后重试');
+      state = state.copyWith(errorMessage: '');
     }
   }
 

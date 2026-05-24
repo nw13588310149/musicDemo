@@ -114,9 +114,10 @@ class CircleController extends StateNotifier<CircleState> {
   }
 
   // ── 点赞（帖子）──────────────────────────────────────────────────
-  Future<bool> toggleLike(String postId) async {
+  /// 成功返回 `null`；失败返回接口 [msg]。
+  Future<String?> toggleLike(String postId) async {
     final post = _findPost(postId);
-    if (post == null) return false;
+    if (post == null) return '';
     final liked = !post.liked;
     final delta = liked ? 1 : -1;
     state = state.copyWith(
@@ -130,7 +131,7 @@ class CircleController extends StateNotifier<CircleState> {
     final resp = liked
         ? await _repo.postsLike(postsId: postId)
         : await _repo.postsUnlike(postsId: postId);
-    if (resp.isSuccess) return true;
+    if (resp.isSuccess) return null;
     state = state.copyWith(
       posts: _mapPosts(postId, (p) {
         return p.copyWith(
@@ -139,7 +140,7 @@ class CircleController extends StateNotifier<CircleState> {
         );
       }),
     );
-    return false;
+    return resp.displayMsg;
   }
 
   /// 收藏：当前后端 openapi 未提供对应接口，仅本地切换 UI 状态。
@@ -181,7 +182,8 @@ class CircleController extends StateNotifier<CircleState> {
   /// - `medias`：JSON 字符串数组 `'["url"]'`
   /// - `type`：1 图片 / 2 视频 / 3 音频
   /// 上传成功后立即重新拉取列表。
-  Future<bool> publishPost({
+  /// 成功返回 `null`；失败返回接口 [msg]。
+  Future<String?> publishPost({
     required String content,
     required PostMediaKind kind,
     required String mediaUrl,
@@ -201,9 +203,9 @@ class CircleController extends StateNotifier<CircleState> {
       'type': type,
     };
     final resp = await _repo.myPostsSave(body);
-    if (!resp.isSuccess) return false;
+    if (!resp.isSuccess) return resp.displayMsg;
     await refreshPosts();
-    return true;
+    return null;
   }
 
   // ── 评论面板 ──────────────────────────────────────────────────────
@@ -253,14 +255,14 @@ class CircleController extends StateNotifier<CircleState> {
     }
   }
 
-  Future<bool> toggleCommentLike(String postId, String commentId) async {
+  Future<String?> toggleCommentLike(String postId, String commentId) async {
     final post = _findPost(postId);
-    if (post == null) return false;
+    if (post == null) return '';
     CircleComment? target;
     for (final c in post.comments) {
       if (c.id == commentId) target = c;
     }
-    if (target == null) return false;
+    if (target == null) return '';
     final liked = !target.liked;
     final delta = liked ? 1 : -1;
 
@@ -283,7 +285,7 @@ class CircleController extends StateNotifier<CircleState> {
     final resp = liked
         ? await _repo.postsCommentLike(commentId: commentId)
         : await _repo.postsCommentUnlike(commentId: commentId);
-    if (resp.isSuccess) return true;
+    if (resp.isSuccess) return null;
 
     state = state.copyWith(
       posts: _mapPosts(postId, (p) {
@@ -300,35 +302,35 @@ class CircleController extends StateNotifier<CircleState> {
         return p.copyWith(comments: updated);
       }),
     );
-    return false;
+    return resp.displayMsg;
   }
 
-  Future<bool> addComment(String postId, String text, {String replyId = '0'}) async {
+  Future<String?> addComment(String postId, String text, {String replyId = '0'}) async {
     final trimmed = text.trim();
-    if (trimmed.isEmpty) return false;
+    if (trimmed.isEmpty) return '';
     final resp = await _repo.postsCommentSave(
       postsId: postId,
       comment: trimmed,
       replyId: replyId,
     );
-    if (!resp.isSuccess) return false;
+    if (!resp.isSuccess) return resp.displayMsg;
     await loadCommentsForPost(postId);
-    return true;
+    return null;
   }
 
-  Future<bool> deleteComment({
+  Future<String?> deleteComment({
     required String postId,
     required String commentId,
   }) async {
     final resp = await _repo.postsCommentDelete(commentId: commentId);
-    if (!resp.isSuccess) return false;
+    if (!resp.isSuccess) return resp.displayMsg;
     await loadCommentsForPost(postId);
-    return true;
+    return null;
   }
 
-  Future<bool> deletePost(String postId) async {
+  Future<String?> deletePost(String postId) async {
     final resp = await _repo.postsDelete(postsId: postId);
-    if (!resp.isSuccess) return false;
+    if (!resp.isSuccess) return resp.displayMsg;
 
     final oldVisible = state.visiblePosts;
     final delVisIndex = oldVisible.indexWhere((p) => p.id == postId);
@@ -355,7 +357,7 @@ class CircleController extends StateNotifier<CircleState> {
       commentTargetPostId: closePanel ? '' : state.commentTargetPostId,
       clearCommentsLoading: closePanel,
     );
-    return true;
+    return null;
   }
 
   bool _matchesSearch(CirclePost p) {

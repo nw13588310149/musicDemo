@@ -215,7 +215,7 @@ class _PrincipalMailboxViewState extends ConsumerState<PrincipalMailboxView> {
       );
       if (!mounted) return;
       if (!resp.isSuccess) {
-        _toast(resp.msg.isEmpty ? '加载失败' : resp.msg);
+        _toast(resp.displayMsg);
         setState(() => _loadingList = false);
         return;
       }
@@ -259,7 +259,7 @@ class _PrincipalMailboxViewState extends ConsumerState<PrincipalMailboxView> {
       );
       if (!mounted) return;
       if (!resp.isSuccess) {
-        _toast(resp.msg.isEmpty ? '提交失败' : resp.msg);
+        _toast(resp.displayMsg);
         setState(() => _submitting = false);
         return;
       }

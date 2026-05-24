@@ -227,17 +227,18 @@ class ShellController extends StateNotifier<ShellState> {
   }
 
   /// 拉取省份列表（懒加载缓存），与 1.0 `getCity` 行为一致。
-  Future<List<String>> loadProvinces() async {
+  /// 失败时 [error] 为接口返回的 msg。
+  Future<({List<String> provinces, String? error})> loadProvinces() async {
     if (_cachedProvinces.isNotEmpty) {
-      return _cachedProvinces;
+      return (provinces: _cachedProvinces, error: null);
     }
     final response = await _repository.provinceCityList();
     if (response.code != 0) {
-      return const <String>[];
+      return (provinces: const <String>[], error: response.displayMsg);
     }
     final raw = response.data;
     if (raw is! List<dynamic>) {
-      return const <String>[];
+      return (provinces: const <String>[], error: response.displayMsg);
     }
     final names = <String>[];
     for (final item in raw) {
@@ -249,7 +250,7 @@ class ShellController extends StateNotifier<ShellState> {
       }
     }
     _cachedProvinces = names;
-    return names;
+    return (provinces: names, error: null);
   }
 
   /// 切换所在地区；成功返回 null，失败返回错误信息。
@@ -258,7 +259,7 @@ class ShellController extends StateNotifier<ShellState> {
   Future<String?> updateProvince(String province) async {
     final response = await _repository.updateProvince(province);
     if (response.code != 0) {
-      return response.msg.isEmpty ? '修改失败' : response.msg;
+      return response.displayMsg;
     }
     await refreshUserAndSchool();
     return null;

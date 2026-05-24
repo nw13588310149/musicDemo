@@ -2614,7 +2614,7 @@ class _ApplyRecordsDrawerState extends ConsumerState<_ApplyRecordsDrawer> {
     if (!resp.isSuccess) {
       setState(() {
         _loading = false;
-        _error = resp.msg.isEmpty ? '加载失败' : resp.msg;
+        _error = resp.displayMsg;
       });
       return;
     }
@@ -3327,7 +3327,7 @@ class _ApplySmallLessonDrawerState
     setState(() => _submitting = false);
 
     if (!resp.isSuccess) {
-      AppToast.show(context, resp.msg.isEmpty ? '提交失败' : resp.msg);
+      AppToast.show(context, resp.displayMsg);
       return;
     }
     if (courseList.length > 1) {

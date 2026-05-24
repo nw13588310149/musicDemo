@@ -7,6 +7,9 @@ class ApiResponse {
 
   bool get isSuccess => code == 0 || code == 200;
 
+  /// 供 UI 展示的后端提示文案，直接使用接口返回的 [msg]。
+  String get displayMsg => msg.trim();
+
   factory ApiResponse.fromJson(Map<String, dynamic> json) {
     final codeValue = json['code'];
     final parsedCode = codeValue is int

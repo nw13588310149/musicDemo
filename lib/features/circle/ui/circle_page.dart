@@ -80,7 +80,7 @@ class _CircleHeader extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
       height: ui(62),
-      padding: EdgeInsets.symmetric(horizontal: ui(20)),
+      padding: EdgeInsets.only(left: ui(15), right: ui(20)),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(ui(16)),
         image: DecorationImage(
@@ -161,7 +161,7 @@ class _CircleModeSwitch extends StatelessWidget {
         height: ui(36),
         padding: EdgeInsets.all(ui(2)),
         decoration: BoxDecoration(
-          color: const Color(0xFFE6E9F1),
+          color: const Color(0xFFF0F2FC),
           borderRadius: BorderRadius.circular(ui(8)),
         ),
         child: LayoutBuilder(
@@ -238,7 +238,7 @@ class _ModeSegment extends StatelessWidget {
             duration: const Duration(milliseconds: 180),
             curve: Curves.easeOut,
             style: TextStyle(
-              color: selected ? Colors.white : const Color(0xFFB6B5BB),
+              color: selected ? Colors.white : const Color(0xFF000000),
               fontSize: ui(12),
               fontFamily: 'PingFang SC',
               fontWeight: selected ? AppFont.w500 : AppFont.w400,

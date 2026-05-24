@@ -876,7 +876,7 @@ class _AdminScheduleManagementViewState
     if (!listResp.isSuccess) {
       setState(() {
         _applyError =
-            listResp.msg.isEmpty ? '加载小班课申请失败' : listResp.msg;
+            listResp.displayMsg;
         _applies = const [];
         _applyLoading = false;
       });
@@ -916,7 +916,7 @@ class _AdminScheduleManagementViewState
     if (!resp.isSuccess) {
       AppToast.show(
         context,
-        resp.msg.isEmpty ? '加载详情失败' : resp.msg,
+        resp.displayMsg,
       );
       return;
     }
@@ -1061,7 +1061,7 @@ class _AdminScheduleManagementViewState
     );
     if (!mounted) return;
     if (!resp.isSuccess) {
-      AppToast.show(context, resp.msg.isEmpty ? '审核失败' : resp.msg);
+      AppToast.show(context, resp.displayMsg);
       return;
     }
     AppToast.show(context, '已通过 ${record.title}');
@@ -1079,7 +1079,7 @@ class _AdminScheduleManagementViewState
     );
     if (!mounted) return;
     if (!resp.isSuccess) {
-      AppToast.show(context, resp.msg.isEmpty ? '驳回失败' : resp.msg);
+      AppToast.show(context, resp.displayMsg);
       return;
     }
     AppToast.show(context, '已驳回 ${record.title}');
@@ -3129,7 +3129,7 @@ class _AdminEditCourseDrawerState
     setState(() => _submitting = false);
 
     if (!resp.isSuccess) {
-      AppToast.show(context, resp.msg.isEmpty ? '提交失败' : resp.msg);
+      AppToast.show(context, resp.displayMsg);
       return;
     }
     if (rows.length > 1) {

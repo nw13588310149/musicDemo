@@ -79,7 +79,7 @@ class CloudDriveController extends StateNotifier<CloudDriveState> {
     state = state.copyWith(busy: false);
     if (!response.isSuccess) {
       state = state.copyWith(
-        errorMessage: response.msg.isEmpty ? '文件上传失败' : response.msg,
+        errorMessage: response.displayMsg,
       );
       return null;
     }
@@ -326,7 +326,7 @@ class CloudDriveController extends StateNotifier<CloudDriveState> {
     final response = await _repository.addCategory(trimmed);
     state = state.copyWith(busy: false);
     if (!response.isSuccess) {
-      return response.msg.isEmpty ? '新增分类失败' : response.msg;
+      return response.displayMsg;
     }
 
     await refresh();
@@ -342,7 +342,7 @@ class CloudDriveController extends StateNotifier<CloudDriveState> {
     final response = await _repository.deleteCategory(id);
     state = state.copyWith(busy: false);
     if (!response.isSuccess) {
-      return response.msg.isEmpty ? '删除分类失败' : response.msg;
+      return response.displayMsg;
     }
     await refresh();
     return null;
@@ -362,7 +362,7 @@ class CloudDriveController extends StateNotifier<CloudDriveState> {
     final response = await _repository.renameCategory(id, trimmed);
     state = state.copyWith(busy: false);
     if (!response.isSuccess) {
-      return response.msg.isEmpty ? '重命名失败' : response.msg;
+      return response.displayMsg;
     }
     await refresh();
     return null;
@@ -387,7 +387,7 @@ class CloudDriveController extends StateNotifier<CloudDriveState> {
     );
     state = state.copyWith(busy: false);
     if (!response.isSuccess) {
-      return response.msg.isEmpty ? '新建文件夹失败' : response.msg;
+      return response.displayMsg;
     }
     await _refreshFoldersOnly();
     return null;
@@ -415,7 +415,7 @@ class CloudDriveController extends StateNotifier<CloudDriveState> {
     );
     state = state.copyWith(busy: false);
     if (!response.isSuccess) {
-      return response.msg.isEmpty ? '重命名失败' : response.msg;
+      return response.displayMsg;
     }
 
     // 如果当前正处于该文件夹详情视图，本地同步更新名称
@@ -436,7 +436,7 @@ class CloudDriveController extends StateNotifier<CloudDriveState> {
     final response = await _repository.deleteFolder(folderId);
     state = state.copyWith(busy: false);
     if (!response.isSuccess) {
-      return response.msg.isEmpty ? '删除文件夹失败' : response.msg;
+      return response.displayMsg;
     }
 
     // 如果删除的是当前文件夹，回到 overview 视图
@@ -473,7 +473,7 @@ class CloudDriveController extends StateNotifier<CloudDriveState> {
     final response = await _repository.updateCoursewareTitle(id, trimmed);
     state = state.copyWith(busy: false);
     if (!response.isSuccess) {
-      return response.msg.isEmpty ? '重命名失败' : response.msg;
+      return response.displayMsg;
     }
     await _refreshFilesOnly();
     return null;
@@ -525,7 +525,7 @@ class CloudDriveController extends StateNotifier<CloudDriveState> {
     state = state.copyWith(busy: false);
 
     if (!response.isSuccess) {
-      return response.msg.isEmpty ? '上传资料失败' : response.msg;
+      return response.displayMsg;
     }
 
     await _refreshFilesOnly();
@@ -542,7 +542,7 @@ class CloudDriveController extends StateNotifier<CloudDriveState> {
     state = state.copyWith(busy: false);
 
     if (!response.isSuccess) {
-      return response.msg.isEmpty ? '删除资料失败' : response.msg;
+      return response.displayMsg;
     }
 
     await _refreshFilesOnly();
@@ -597,7 +597,7 @@ class CloudDriveController extends StateNotifier<CloudDriveState> {
       );
       if (!response.isSuccess) {
         state = state.copyWith(busy: false);
-        return response.msg.isEmpty ? '分享失败' : response.msg;
+        return response.displayMsg;
       }
     }
     state = state.copyWith(busy: false);

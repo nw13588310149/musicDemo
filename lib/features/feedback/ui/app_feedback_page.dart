@@ -63,7 +63,7 @@ class _AppFeedbackPageState extends ConsumerState<AppFeedbackPage> {
       final resp = await _repo.feedbackList(current: 1, size: 50);
       if (!mounted) return;
       if (!resp.isSuccess) {
-        _toast(resp.msg.isEmpty ? '加载失败' : resp.msg);
+        _toast(resp.displayMsg);
         setState(() => _loading = false);
         return;
       }
@@ -90,7 +90,7 @@ class _AppFeedbackPageState extends ConsumerState<AppFeedbackPage> {
       final resp = await _repo.feedbackSave(content: body);
       if (!mounted) return;
       if (!resp.isSuccess) {
-        _toast(resp.msg.isEmpty ? '提交失败' : resp.msg);
+        _toast(resp.displayMsg);
         setState(() => _submitting = false);
         return;
       }

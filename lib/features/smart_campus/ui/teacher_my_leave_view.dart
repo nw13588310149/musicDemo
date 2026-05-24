@@ -151,7 +151,7 @@ class _TeacherMyLeaveViewState extends ConsumerState<TeacherMyLeaveView> {
       setState(() {
         _records = const [];
         _loading = false;
-        _loadError = resp.msg.isEmpty ? '加载请假列表失败' : resp.msg;
+        _loadError = resp.displayMsg;
       });
       return;
     }

@@ -32,7 +32,8 @@ class ShellTopBar extends StatelessWidget {
   final ValueChanged<String> onNavigate;
   final Future<void> Function() onLogout;
   final Future<void> Function() onMarkAllRead;
-  final Future<List<String>> Function() onLoadProvinces;
+  final Future<({List<String> provinces, String? error})> Function()
+      onLoadProvinces;
   final Future<String?> Function(String province) onUpdateProvince;
 
   /// 用户菜单触发按钮的位置 anchor，供自定义 popover 定位使用。
@@ -248,15 +249,15 @@ class ShellTopBar extends StatelessWidget {
   }
 
   Future<void> _handleRegion(BuildContext context) async {
-    final provinces = await onLoadProvinces();
+    final result = await onLoadProvinces();
     if (!context.mounted) return;
-    if (provinces.isEmpty) {
-      _showToast(context, '加载省份失败，请稍后重试');
+    if (result.provinces.isEmpty) {
+      _showToast(context, result.error ?? '');
       return;
     }
     final selected = await showAppProvincePicker(
       context: context,
-      provinces: provinces,
+      provinces: result.provinces,
       selected: state.user.province.isEmpty ? null : state.user.province,
     );
     if (selected == null || !context.mounted) return;

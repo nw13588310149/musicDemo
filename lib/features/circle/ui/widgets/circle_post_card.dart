@@ -94,7 +94,7 @@ class _CardAuthor extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        _Avatar(url: post.author.avatarUrl, size: ui(44)),
+        _Avatar(url: post.author.avatarUrl, size: ui(40)),
         SizedBox(width: ui(11)),
         Expanded(
           child: Column(
@@ -182,10 +182,44 @@ class _Avatar extends StatelessWidget {
   }
 }
 
-class _CardImage extends StatelessWidget {
+class _CardImage extends StatefulWidget {
   const _CardImage({required this.post});
 
   final CirclePost post;
+
+  @override
+  State<_CardImage> createState() => _CardImageState();
+}
+
+class _CardImageState extends State<_CardImage> {
+  ImageStream? _imageStream;
+  ImageStreamListener? _imageStreamListener;
+  double? _detectedAspectRatio;
+
+  CirclePost get post => widget.post;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolveMediaAspectRatio();
+  }
+
+  @override
+  void didUpdateWidget(covariant _CardImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.post.id != widget.post.id ||
+        oldWidget.post.imageUrl != widget.post.imageUrl ||
+        oldWidget.post.mediaKind != widget.post.mediaKind) {
+      _detectedAspectRatio = null;
+      _resolveMediaAspectRatio();
+    }
+  }
+
+  @override
+  void dispose() {
+    _clearImageStreamListener();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -194,7 +228,7 @@ class _CardImage extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(ui(12)),
       child: AspectRatio(
-        aspectRatio: post.imageAspectRatio,
+        aspectRatio: _effectiveAspectRatio,
         child: switch (post.mediaKind) {
           PostMediaKind.image => _ImageCover(url: post.imageUrl),
           PostMediaKind.video => _VideoCover(post: post),
@@ -202,6 +236,48 @@ class _CardImage extends StatelessWidget {
         },
       ),
     );
+  }
+
+  double get _effectiveAspectRatio =>
+      _detectedAspectRatio ?? _safeAspectRatio(post.imageAspectRatio);
+
+  double _safeAspectRatio(double value) {
+    if (value <= 0 || value.isNaN || value.isInfinite) return 3 / 4;
+    return value.clamp(0.35, 2.4);
+  }
+
+  void _resolveMediaAspectRatio() {
+    _clearImageStreamListener();
+    final url = post.imageUrl;
+    if (url.isEmpty) return;
+
+    final provider = NetworkImage(url);
+    final stream = provider.resolve(const ImageConfiguration());
+    late final ImageStreamListener listener;
+    listener = ImageStreamListener(
+      (info, _) {
+        final width = info.image.width;
+        final height = info.image.height;
+        if (height <= 0 || width <= 0 || !mounted) return;
+        final aspect = _safeAspectRatio(width / height);
+        if ((_detectedAspectRatio ?? 0) == aspect) return;
+        setState(() => _detectedAspectRatio = aspect);
+      },
+      onError: (_, _) {},
+    );
+    _imageStream = stream;
+    _imageStreamListener = listener;
+    stream.addListener(listener);
+  }
+
+  void _clearImageStreamListener() {
+    final stream = _imageStream;
+    final listener = _imageStreamListener;
+    if (stream != null && listener != null) {
+      stream.removeListener(listener);
+    }
+    _imageStream = null;
+    _imageStreamListener = null;
   }
 }
 

@@ -136,11 +136,11 @@ class CircleListView extends StatelessWidget {
 
   Future<void> _withToast(
     BuildContext context,
-    Future<bool> Function() action,
+    Future<String?> Function() action,
   ) async {
-    final ok = await action();
-    if (!context.mounted) return;
-    if (!ok) AppToast.show(context, '操作失败，请稍后再试');
+    final message = await action();
+    if (!context.mounted || message == null || message.isEmpty) return;
+    AppToast.show(context, message);
   }
 
   Future<void> _confirmDeletePost(
@@ -153,9 +153,11 @@ class CircleListView extends StatelessWidget {
       content: '确定删除这条动态吗？删除后不可恢复。',
     );
     if (!ok || !context.mounted) return;
-    final success = await controller.deletePost(post.id);
+    final message = await controller.deletePost(post.id);
     if (!context.mounted) return;
-    if (!success) AppToast.show(context, '删除失败');
+    if (message != null && message.isNotEmpty) {
+      AppToast.show(context, message);
+    }
   }
 
   void _onCardTap(String postId) {

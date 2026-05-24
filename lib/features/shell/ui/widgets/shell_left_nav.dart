@@ -13,6 +13,8 @@ import '../shell_layout.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 const _kDuration = Duration(milliseconds: 280);
 const _kCurve = Curves.easeInOutCubic;
+const _kSelectionDuration = Duration(milliseconds: 180);
+const _kSelectionCurve = Curves.easeOut;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ShellLeftNav — 持有 AnimationController 以驱动所有子动画
@@ -95,6 +97,15 @@ class _ShellLeftNavState extends State<ShellLeftNav>
     return current.startsWith('$navRoute/');
   }
 
+  int _activeNavIndex() {
+    for (var i = 0; i < widget.state.navItems.length; i++) {
+      if (_isActive(widget.state.navItems[i].route)) {
+        return i;
+      }
+    }
+    return 0;
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -149,29 +160,18 @@ class _ShellLeftNavState extends State<ShellLeftNav>
                   Expanded(
                     child: Padding(
                       padding: EdgeInsets.symmetric(horizontal: hPad),
-                      child: ListView.separated(
-                        padding: EdgeInsets.only(
-                          bottom: widget.state.footerNavItem != null
-                              ? ui(54)
-                              : 0,
-                        ),
-                        physics: const ClampingScrollPhysics(),
-                        itemCount: widget.state.navItems.length,
-                        separatorBuilder: (context, index) =>
-                            SizedBox(height: ui(4)),
-                        itemBuilder: (context, index) {
-                          final item = widget.state.navItems[index];
-                          return _NavTile(
-                            item: item,
-                            progress: t,
-                            labelOpacity: _labelOpacity.value,
-                            labelWidthFactor: _labelWidth.value,
-                            tilePadLeft: tilePadLeft,
-                            tilePadRight: tilePadRight,
-                            active: _isActive(item.route),
-                            onTap: () => widget.onNavigate(item.route),
-                          );
-                        },
+                      child: _NavListWithSlider(
+                        navItems: widget.state.navItems,
+                        activeIndex: _activeNavIndex(),
+                        progress: t,
+                        labelOpacity: _labelOpacity.value,
+                        labelWidthFactor: _labelWidth.value,
+                        tilePadLeft: tilePadLeft,
+                        tilePadRight: tilePadRight,
+                        bottomPadding: widget.state.footerNavItem != null
+                            ? ui(54)
+                            : 0,
+                        onNavigate: widget.onNavigate,
                       ),
                     ),
                   ),
@@ -196,7 +196,7 @@ class _ShellLeftNavState extends State<ShellLeftNav>
               // ── 缩放切换按钮（右下角）─────────────────────────────────────
               Positioned(
                 right: 0,
-                bottom: ui(57),
+                bottom: ui(40),
                 child: GestureDetector(
                   onTap: widget.onToggleCollapse,
                   behavior: HitTestBehavior.opaque,
@@ -226,6 +226,116 @@ class _ShellLeftNavState extends State<ShellLeftNav>
                 ),
               ),
             ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _NavListWithSlider — 共享滑动选中背景 + 列表项
+// ─────────────────────────────────────────────────────────────────────────────
+class _NavListWithSlider extends StatelessWidget {
+  const _NavListWithSlider({
+    required this.navItems,
+    required this.activeIndex,
+    required this.progress,
+    required this.labelOpacity,
+    required this.labelWidthFactor,
+    required this.tilePadLeft,
+    required this.tilePadRight,
+    required this.bottomPadding,
+    required this.onNavigate,
+  });
+
+  final List<ShellNavItem> navItems;
+  final int activeIndex;
+  final double progress;
+  final double labelOpacity;
+  final double labelWidthFactor;
+  final double tilePadLeft;
+  final double tilePadRight;
+  final double bottomPadding;
+  final ValueChanged<String> onNavigate;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final tileHeight = ui(48);
+    final separator = ui(4);
+    final stride = tileHeight + separator;
+    final listHeight = navItems.isEmpty
+        ? 0.0
+        : navItems.length * stride - separator;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxWidth = constraints.maxWidth;
+        final collapsedIndicatorSize = ui(40);
+        final indicatorWidth = collapsedIndicatorSize +
+            (maxWidth - collapsedIndicatorSize) * (1 - progress);
+        final indicatorHeight = collapsedIndicatorSize +
+            (tileHeight - collapsedIndicatorSize) * (1 - progress);
+        final indicatorLeft = (maxWidth - indicatorWidth) / 2 * progress;
+        final indicatorTopInset =
+            (tileHeight - collapsedIndicatorSize) / 2 * progress;
+
+        return SingleChildScrollView(
+          padding: EdgeInsets.only(bottom: bottomPadding),
+          physics: const ClampingScrollPhysics(),
+          child: SizedBox(
+            width: maxWidth,
+            height: listHeight,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                if (navItems.isNotEmpty)
+                  TweenAnimationBuilder<double>(
+                    tween: Tween<double>(end: activeIndex * stride),
+                    duration: _kSelectionDuration,
+                    curve: _kSelectionCurve,
+                    builder: (context, top, child) {
+                      return Positioned(
+                        left: indicatorLeft,
+                        top: top + indicatorTopInset,
+                        width: indicatorWidth,
+                        height: indicatorHeight,
+                        child: child!,
+                      );
+                    },
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(ui(12)),
+                        image: const DecorationImage(
+                          image: AssetImage(AppAssets.leftNavActiveBg),
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    ),
+                  ),
+                Column(
+                  children: [
+                    for (var i = 0; i < navItems.length; i++) ...[
+                      SizedBox(
+                        height: tileHeight,
+                        child: _NavTile(
+                          item: navItems[i],
+                          progress: progress,
+                          labelOpacity: labelOpacity,
+                          labelWidthFactor: labelWidthFactor,
+                          tilePadLeft: tilePadLeft,
+                          tilePadRight: tilePadRight,
+                          active: i == activeIndex,
+                          onTap: () => onNavigate(navItems[i].route),
+                        ),
+                      ),
+                      if (i < navItems.length - 1) SizedBox(height: separator),
+                    ],
+                  ],
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -333,24 +443,8 @@ class _NavTile extends StatelessWidget {
     final scale = DashboardScaleScope.of(context);
     final ui = scale.ui;
 
-    // 选中态背景：从「写死的 #202020」改为「PNG 平铺」。
-    // - active.png 本身是深色 + 圆角矩形，作为 DecorationImage 平铺即可。
-    // - 用 BoxFit.cover：图本身约 3:1 的横向比例，展开态横长矩形天然契合，
-    //   折叠态 40×40 也能铺满（cover 会裁掉横向两侧，但图是纯色横块，
-    //   裁掉中段同色像素肉眼不可分辨，安全）。
-    // - 外层仍保留 borderRadius.circular(12)，把图边缘任何透明 / 半透明
-    //   渐变像素裁掉，避免「图自带圆角 + 容器无圆角」时四角露出底色的白。
-    final activeBg = active
-        ? const DecorationImage(
-            image: AssetImage(AppAssets.leftNavActiveBg),
-            fit: BoxFit.cover,
-          )
-        : null;
-    // 设计稿：未选中文案 opacity 0.70 + #0B081A；选中项白字
-    final textColor = active
-        ? Colors.white
-        : const Color(0xFF0B081A).withValues(alpha: 0.7);
-
+    // 选中背景由 [_NavListWithSlider] 统一滑动；此处 tile 背景保持透明。
+    const inactiveTextColor = Color(0xFF0B081A);
     final collapsed = progress > 0.5;
 
     return Material(
@@ -364,17 +458,13 @@ class _NavTile extends StatelessWidget {
           constraints: BoxConstraints(minHeight: ui(48)),
           alignment: collapsed ? Alignment.center : Alignment.centerLeft,
           child: collapsed
-              // 折叠态：bg 收成 40×40 正方形，包住 icon；命中区仍是 48 高。
-              ? Container(
+              // 折叠态：40×40 命中区包住 icon；背景由滑动指示器承担。
+              ? SizedBox(
                   width: ui(40),
                   height: ui(40),
-                  decoration: BoxDecoration(
-                    image: activeBg,
-                    borderRadius: BorderRadius.circular(ui(12)),
-                  ),
-                  alignment: Alignment.center,
                   child: Stack(
                     clipBehavior: Clip.none,
+                    alignment: Alignment.center,
                     children: [
                       _buildIcon(context),
                       if (item.badge > 0)
@@ -386,12 +476,8 @@ class _NavTile extends StatelessWidget {
                     ],
                   ),
                 )
-              // 展开态：bg 横铺整条 tile，左 16 / 右 10 / 上下 12 内边距。
-              : Container(
-                  decoration: BoxDecoration(
-                    image: activeBg,
-                    borderRadius: BorderRadius.circular(ui(12)),
-                  ),
+              // 展开态：左 16 / 右 10 / 上下 12 内边距。
+              : Padding(
                   padding: EdgeInsets.only(
                     left: tilePadLeft,
                     right: tilePadRight,
@@ -409,30 +495,31 @@ class _NavTile extends StatelessWidget {
                             alignment: Alignment.centerLeft,
                             child: Opacity(
                               opacity: labelOpacity,
-                              // 设计稿：inline-flex，图标→文案→角标 按内容自然宽度紧凑排列
-                              // 角标紧贴文案（设计稿 4px 间隙），不挤占「智慧校园」
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
                                   SizedBox(width: ui(8)),
                                   Flexible(
-                                    child: Text(
-                                      item.label,
-                                      maxLines: 1,
-                                      softWrap: false,
-                                      overflow: TextOverflow.clip,
-                                      // PingFang SC 在 iOS / Web (Safari/
-                                      // CanvasKit) 上缺少 CoreText 的字面
-                                      // 灰度补偿，直接写 FontWeight.w500
-                                      // 视觉上比设计稿轻一档，必须走
-                                      // AppFont.w500 让平台层把字重统一上浮。
+                                    child: AnimatedDefaultTextStyle(
+                                      duration: _kSelectionDuration,
+                                      curve: _kSelectionCurve,
                                       style: TextStyle(
                                         fontSize: ui(15),
                                         height: 1,
                                         fontFamily: 'PingFang SC',
                                         fontWeight: AppFont.w500,
-                                        color: textColor,
+                                        color: active
+                                            ? Colors.white
+                                            : inactiveTextColor.withValues(
+                                                alpha: 0.7,
+                                              ),
+                                      ),
+                                      child: Text(
+                                        item.label,
+                                        maxLines: 1,
+                                        softWrap: false,
+                                        overflow: TextOverflow.clip,
                                       ),
                                     ),
                                   ),
@@ -457,14 +544,23 @@ class _NavTile extends StatelessWidget {
   Widget _buildIcon(BuildContext context) {
     final scale = DashboardScaleScope.of(context);
     final ui = scale.ui;
-    return AppAssetGraphic(
-      active ? item.activeIcon : item.icon,
-      width: ui(24),
-      height: ui(24),
-      fit: BoxFit.contain,
-      colorFilter: active
-          ? const ColorFilter.mode(Colors.white, BlendMode.srcIn)
-          : null,
+    return AnimatedSwitcher(
+      duration: _kSelectionDuration,
+      switchInCurve: _kSelectionCurve,
+      switchOutCurve: Curves.easeIn,
+      transitionBuilder: (child, animation) {
+        return FadeTransition(opacity: animation, child: child);
+      },
+      child: AppAssetGraphic(
+        key: ValueKey<bool>(active),
+        active ? item.activeIcon : item.icon,
+        width: ui(24),
+        height: ui(24),
+        fit: BoxFit.contain,
+        colorFilter: active
+            ? const ColorFilter.mode(Colors.white, BlendMode.srcIn)
+            : null,
+      ),
     );
   }
 }

@@ -180,7 +180,7 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
         : _repository.getVideoDetail(item.id));
     if (!response.isSuccess) {
       state = state.copyWith(detailLoading: false);
-      return response.msg.isEmpty ? '加载视频详情失败' : response.msg;
+      return response.displayMsg;
     }
 
     final detail = _parseVideoDetail(response.data);
@@ -232,7 +232,7 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
         : _repository.getVideoDetail(id));
     if (!response.isSuccess) {
       state = state.copyWith(detailLoading: false, showDetailPanel: false);
-      return response.msg.isEmpty ? '加载视频详情失败' : response.msg;
+      return response.displayMsg;
     }
 
     final detail = _parseVideoDetail(response.data);
@@ -274,7 +274,7 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
     state = state.copyWith(busy: false);
 
     if (!response.isSuccess) {
-      return response.msg.isEmpty ? '收藏状态更新失败' : response.msg;
+      return response.displayMsg;
     }
 
     final updatedDetail = detail.copyWith(isFavorite: !detail.isFavorite);
@@ -345,7 +345,7 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
       );
       if (!response.isSuccess) {
         state = state.copyWith(busy: false);
-        return response.msg.isEmpty ? '发送失败' : response.msg;
+        return response.displayMsg;
       }
     }
 
@@ -396,7 +396,7 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
       state = state.copyWith(
         loading: false,
         loadingMore: false,
-        errorMessage: response.msg.isEmpty ? '视频列表加载失败' : response.msg,
+        errorMessage: response.displayMsg,
       );
       return;
     }

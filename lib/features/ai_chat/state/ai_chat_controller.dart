@@ -85,7 +85,7 @@ class AiChatController extends StateNotifier<AiChatState> {
       final response = await _repository.getSessionList(robot: _chatRobot);
       if (!response.isSuccess) {
         state = state.copyWith(sessionsLoading: false);
-        return response.msg.isEmpty ? '加载会话列表失败' : response.msg;
+        return response.displayMsg;
       }
 
       final sessions = _normalizeSessionList(response.data);
@@ -159,7 +159,7 @@ class AiChatController extends StateNotifier<AiChatState> {
       );
       if (!response.isSuccess) {
         state = state.copyWith(uploadingAttachment: false);
-        return response.msg.isEmpty ? '附件上传失败' : response.msg;
+        return response.displayMsg;
       }
       final url = _extractAttachmentUrl(response.data);
       if (url.isEmpty) {
@@ -174,7 +174,7 @@ class AiChatController extends StateNotifier<AiChatState> {
       return null;
     } catch (_) {
       state = state.copyWith(uploadingAttachment: false);
-      return '附件上传失败，请稍后重试';
+      return '';
     }
   }
 
@@ -190,7 +190,7 @@ class AiChatController extends StateNotifier<AiChatState> {
     try {
       final response = await _repository.deleteSession(session.id);
       if (!response.isSuccess) {
-        return response.msg.isEmpty ? '删除会话失败' : response.msg;
+        return response.displayMsg;
       }
 
       final nextSessions = state.sessions
@@ -257,7 +257,7 @@ class AiChatController extends StateNotifier<AiChatState> {
         if (!createResponse.isSuccess) {
           _setPendingMessageStatus(pendingId, AiChatMessageStatus.failed);
           state = state.copyWith(waitingAssistant: false, sending: false);
-          return createResponse.msg.isEmpty ? '创建会话失败' : createResponse.msg;
+          return createResponse.displayMsg;
         }
 
         final createdSessionId = _extractSessionId(createResponse.data);
@@ -301,7 +301,7 @@ class AiChatController extends StateNotifier<AiChatState> {
         _setPendingMessageStatus(pendingId, AiChatMessageStatus.failed);
         _cancelAiStream(removeStreamingMessage: true);
         state = state.copyWith(waitingAssistant: false, sending: false);
-        return sendResponse.msg.isEmpty ? '发送失败' : sendResponse.msg;
+        return sendResponse.displayMsg;
       }
 
       _setPendingMessageStatus(pendingId, AiChatMessageStatus.sent);
@@ -357,7 +357,7 @@ class AiChatController extends StateNotifier<AiChatState> {
         _setPendingMessageStatus(message.id, AiChatMessageStatus.failed);
         _cancelAiStream(removeStreamingMessage: true);
         state = state.copyWith(waitingAssistant: false, sending: false);
-        return sendResponse.msg.isEmpty ? '重新发送失败' : sendResponse.msg;
+        return sendResponse.displayMsg;
       }
 
       _setPendingMessageStatus(message.id, AiChatMessageStatus.sent);
@@ -669,7 +669,7 @@ class AiChatController extends StateNotifier<AiChatState> {
       final response = await _repository.getMessages(sessionId);
       if (!response.isSuccess) {
         state = state.copyWith(messagesLoading: false);
-        return response.msg.isEmpty ? '加载消息失败' : response.msg;
+        return response.displayMsg;
       }
 
       final messages = _normalizeMessageList(response.data);

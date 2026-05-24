@@ -9,7 +9,8 @@ import 'courseware_file_picker_io.dart'
 ///   `FilePicker.FileType.image`，移动端通常会直接拉起系统相册；
 /// - [video] ：视频资源 —— Web 走 `accept="video/*"`、IO 走
 ///   `FilePicker.FileType.video`，iOS 会直接拉起相册；
-/// - [audio] ：音频资源 —— Web `accept="audio/*"`、IO `FileType.audio`。
+/// - [audio] ：音频资源 —— Web `accept="audio/*"`；IO 在 iOS 上走
+///   `FileType.custom`（文件选择器），其它平台走 `FileType.audio`。
 enum CoursewarePickType { any, image, video, audio }
 
 /// Picked file data.

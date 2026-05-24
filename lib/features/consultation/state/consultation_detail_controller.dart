@@ -40,7 +40,7 @@ class ConsultationDetailController
     if (!response.isSuccess) {
       state = state.copyWith(
         loading: false,
-        errorMessage: response.msg.isEmpty ? '加载失败' : response.msg,
+        errorMessage: response.displayMsg,
       );
       return;
     }
@@ -71,7 +71,7 @@ class ConsultationDetailController
     if (!response.isSuccess) {
       state = state.copyWith(
         classLoading: false,
-        errorMessage: response.msg.isEmpty ? '获取班级群失败' : response.msg,
+        errorMessage: response.displayMsg,
       );
       return;
     }
@@ -131,7 +131,7 @@ class ConsultationDetailController
       } else {
         state = state.copyWith(
           sending: false,
-          errorMessage: response.msg.isEmpty ? '发送失败' : response.msg,
+          errorMessage: response.displayMsg,
         );
         return false;
       }
