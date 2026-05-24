@@ -2909,31 +2909,31 @@ class _SmartOptionChipState extends State<_SmartOptionChip>
       vsync: this,
       duration: const Duration(milliseconds: 360),
     );
-    // 衰减式左右摇摆：6→-6→4→-4→0，节奏快、回正自然，
+    // 衰减式左右摇摆：8→-8→5→-5→4→0，节奏快、回正自然，
     // 视觉上像「摇头」反馈。
     _shakeOffset = TweenSequence<double>(<TweenSequenceItem<double>>[
       TweenSequenceItem(
-        tween: Tween<double>(begin: 0.0, end: -6.0)
+        tween: Tween<double>(begin: 0.0, end: -8.0)
             .chain(CurveTween(curve: Curves.easeOut)),
         weight: 1,
       ),
       TweenSequenceItem(
-        tween: Tween<double>(begin: -6.0, end: 6.0)
+        tween: Tween<double>(begin: -8.0, end: 8.0)
             .chain(CurveTween(curve: Curves.easeInOut)),
         weight: 2,
       ),
       TweenSequenceItem(
-        tween: Tween<double>(begin: 6.0, end: -4.0)
+        tween: Tween<double>(begin: 8.0, end: -5.0)
             .chain(CurveTween(curve: Curves.easeInOut)),
         weight: 2,
       ),
       TweenSequenceItem(
-        tween: Tween<double>(begin: -4.0, end: 3.0)
+        tween: Tween<double>(begin: -5.0, end: 4.0)
             .chain(CurveTween(curve: Curves.easeInOut)),
         weight: 2,
       ),
       TweenSequenceItem(
-        tween: Tween<double>(begin: 3.0, end: 0.0)
+        tween: Tween<double>(begin: 4.0, end: 0.0)
             .chain(CurveTween(curve: Curves.easeIn)),
         weight: 1,
       ),

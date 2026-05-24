@@ -159,14 +159,14 @@ List<HomeQuickAction> buildQuickActions(bool _) {
       route: RoutePaths.answerQuestions,
     ),
     HomeQuickAction(
-      name: '资讯',
+      name: '群聊',
       icon: AppAssets.homeBtn7,
-      route: RoutePaths.consultation,
+      route: RoutePaths.smartCampus,
     ),
     HomeQuickAction(
-      name: '商城',
+      name: '资讯',
       icon: AppAssets.homeBtn8,
-      route: RoutePaths.aiSong,
+      route: RoutePaths.consultation,
     ),
     HomeQuickAction(
       name: '校圈',

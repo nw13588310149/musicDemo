@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/action_menu.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/course_empty_placeholder.dart';
 import '../../../core/widgets/class_share_drawer.dart';
 import '../../../core/widgets/cloud_folder_card_artwork.dart';
 import '../../../core/widgets/cloud_folder_more_menu_button.dart';
@@ -862,17 +863,21 @@ class _RecordingContentArea extends StatelessWidget {
                   child: state.loading
                       ? const Center(child: AppLoadingIndicator())
                       : state.categories.isEmpty
-                      ? const _RecordingEmpty(message: '暂无分类')
+                      ? const CourseEmptyPlaceholder(message: '暂无分类')
                       : isInsideFolder
                       ? (visibleFiles.isEmpty
-                            ? const _RecordingEmpty(message: '当前文件夹下还没有录音')
+                            ? const CourseEmptyPlaceholder(
+                                message: '当前文件夹下还没有录音',
+                              )
                             : _RecordingFilesGrid(
                                 items: visibleFiles,
                                 onOpen: onOpenItem,
                                 onAction: onItemAction,
                               ))
                       : (visibleFolders.isEmpty
-                            ? const _RecordingEmpty(message: '当前分类下还没有文件夹')
+                            ? const CourseEmptyPlaceholder(
+                                message: '当前分类下还没有文件夹',
+                              )
                             : _RecordingFoldersGrid(
                                 items: visibleFolders,
                                 onOpen: onOpenFolder,
@@ -1546,39 +1551,6 @@ class _RecordingFab extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _RecordingEmpty extends StatelessWidget {
-  const _RecordingEmpty({this.message = '暂无录音'});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Image.asset(
-            'assets/images/404/ly.png',
-            width: ui(200),
-            height: ui(200),
-            fit: BoxFit.contain,
-          ),
-          Text(
-            message,
-            style: TextStyle(
-              fontSize: ui(15),
-              color: const Color(0xFF0B081A),
-              fontFamily: 'PingFang SC',
-              fontWeight: AppFont.w500,
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -2425,8 +2397,8 @@ class _RecordingStageBody extends StatelessWidget {
 const double _kRecordingWaveSectionHeight = 110;
 const double _kRecordingWaveTopInset = 20;
 
-/// 波形柱中心间距（设计稿 px）；越小柱越密。
-const double _kRecordingWaveBarSpacing = 1;
+/// 波形柱中心间距（设计稿 px）；播放态保持留白，避免柱线粘连。
+const double _kRecordingWaveBarSpacing = 3;
 
 /// 录制中实时波形柱间距（比试听略宽，避免柱线挤在一起）。
 const double _kRecordingLiveWaveBarSpacing = 3;
@@ -2531,9 +2503,8 @@ class _LiveDarkWavePanel extends StatelessWidget {
   }
 }
 
-/// Live recording waveform that mirrors the iPad Voice Memos interaction:
-/// the current recording point stays fixed near the middle while captured
-/// audio scrolls left as rounded vertical capsules.
+/// Live recording waveform: the recording point starts at the left edge, moves
+/// across the whole panel, then keeps the newest sample pinned at the right.
 class _IosLiveRecordingWavePainter extends CustomPainter {
   _IosLiveRecordingWavePainter({
     required this.samples,
@@ -2592,7 +2563,7 @@ class _IosLiveRecordingWavePainter extends CustomPainter {
     final scaleTop = waveSectionBottom + scaleTopGap;
     final scaleBottom = scaleTop + scaleSectionHeight;
     final contentBottom = scaleBottom + bottomInset;
-    final cursorX = size.width * 0.5;
+    final cursorX = _liveCursorX(size.width);
 
     canvas.drawRect(
       Rect.fromLTWH(0, 0, size.width, waveSectionBottom),
@@ -2662,6 +2633,15 @@ class _IosLiveRecordingWavePainter extends CustomPainter {
       paint.color = Color.lerp(_mutedBarColor, _waveBarColor, fade)!;
       canvas.drawRRect(RRect.fromRectAndRadius(rect, radius), paint);
     }
+  }
+
+  double _liveCursorX(double width) {
+    final pitch = math.max(spacing, barWidth + 1);
+    final minX = barWidth / 2;
+    final maxX = math.max(minX, width - barWidth / 2);
+    if (samples.isEmpty || elapsedMs <= 0) return minX;
+    final elapsedSpan = (elapsedMs / _samplePeriodMs) * pitch;
+    return (minX + elapsedSpan).clamp(minX, maxX).toDouble();
   }
 
   void _paintIdleLine(
@@ -2946,7 +2926,7 @@ class _PreviewDarkWavePanelState extends State<_PreviewDarkWavePanel> {
                           scaleTopGap: ui(_kRecordingScaleTopGap),
                           scaleSectionHeight: ui(_kRecordingScaleSectionHeight),
                           bottomInset: ui(_kRecordingWaveBottomPad),
-                          barWidth: ui(1.5),
+                          barWidth: ui(1.1),
                           spacing: ui(_kRecordingWaveBarSpacing),
                           cursorThickness: ui(2),
                           playheadDotRadius: ui(3),
@@ -3171,6 +3151,7 @@ class _WaveWithScalePainter extends CustomPainter {
     double scaleHeight,
   ) {
     final totalMs = math.max(totalDurationMs, 1000);
+    final scaleDurationMs = math.max(1000, ((totalMs / 1000).ceil()) * 1000);
     final tickPaint = Paint()
       ..color = _tickColor
       ..strokeWidth = 1
@@ -3186,11 +3167,11 @@ class _WaveWithScalePainter extends CustomPainter {
 
     final majorTop = scaleTop + 4 + scaleContentOffset;
     final labelTop = scaleTop + majorTickHeight + 10 + scaleContentOffset;
-    final lastSecond = totalMs ~/ 1000;
+    final lastSecond = scaleDurationMs ~/ 1000;
 
     for (var sec = 0; sec <= lastSecond; sec++) {
       final ms = sec * 1000;
-      final x = (ms / totalMs) * size.width;
+      final x = (ms / scaleDurationMs) * size.width;
       if (x > size.width) break;
 
       canvas.drawLine(
@@ -3209,8 +3190,8 @@ class _WaveWithScalePainter extends CustomPainter {
       if (sec >= lastSecond) continue;
       for (var minor = 1; minor <= 4; minor++) {
         final minorMs = ms + minor * 200;
-        if (minorMs >= totalMs) break;
-        final mx = (minorMs / totalMs) * size.width;
+        if (minorMs >= scaleDurationMs) break;
+        final mx = (minorMs / scaleDurationMs) * size.width;
         canvas.drawLine(
           Offset(mx, majorTop + (majorTickHeight - minorTickHeight)),
           Offset(mx, majorTop + majorTickHeight),

@@ -28,8 +28,9 @@ import 'recording_system_state.dart';
 const Duration _kStopwatchTickInterval = Duration(milliseconds: 33);
 
 /// Maximum number of amplitude samples we keep around for the live
-/// scrolling waveform notification. Roughly 6.5s @ 80ms/sample.
-const int _kLiveWaveSampleCap = 80;
+/// scrolling waveform notification. Roughly 34s @ 80ms/sample, enough for the
+/// recording panel to fill a wide landscape layout before it starts scrolling.
+const int _kLiveWaveSampleCap = 420;
 
 /// Amplitude normalization for the waveform painter.
 ///
@@ -1114,7 +1115,13 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
   void _onAmplitude(double sample) {
     if (_disposed) return;
     final normalized = _normalizeAmplitudeDb(sample);
-    _amplitudeHistory.add(normalized);
+    final previous = _amplitudeHistory.isEmpty
+        ? normalized
+        : _amplitudeHistory.last;
+    final stabilized = (previous * 0.62 + normalized * 0.38)
+        .clamp(0.0, 1.0)
+        .toDouble();
+    _amplitudeHistory.add(stabilized);
 
     // Update the live notifier with the most recent N samples. We allocate
     // a fresh List so equality comparison fires the listener.

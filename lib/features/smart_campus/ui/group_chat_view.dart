@@ -3186,15 +3186,15 @@ class _ConversationCell extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             SizedBox(
-              width: ui(36),
-              height: ui(36),
+              width: ui(40),
+              height: ui(40),
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
                   _AvatarCircle(
                     avatarUrl: conv.avatarUrl,
                     fallback: conv.name,
-                    size: ui(36),
+                    size: ui(40),
                     radius: ui(8),
                     color: conv.avatarColor,
                   ),
@@ -3240,7 +3240,7 @@ class _ConversationCell extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: ui(13),
+                        fontSize: ui(14),
                         color: _kTextDark,
                         fontFamily: 'PingFang SC',
                         fontWeight: AppFont.w500,
@@ -3710,7 +3710,7 @@ class _ChatHeaderBar extends StatelessWidget {
                           Text(
                             title,
                             style: TextStyle(
-                              fontSize: ui(14),
+                              fontSize: ui(15),
                               color: _kTextDark,
                               fontFamily: 'PingFang SC',
                               fontWeight: AppFont.w600,
@@ -4051,7 +4051,7 @@ class _AnnouncementBar extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.symmetric(horizontal: ui(8), vertical: ui(8)),
+      padding: EdgeInsets.symmetric(horizontal: ui(8), vertical: ui(10)),
       decoration: BoxDecoration(
         color: _kAnnouncementBg,
         borderRadius: BorderRadius.circular(ui(8)),
@@ -5168,22 +5168,22 @@ class _ChatInputBarState extends State<_ChatInputBar> {
                 focusNode: _focusNode,
                 cursorColor: const Color(0xFF8741FF),
                 cursorWidth: 1.5,
-                cursorHeight: ui(15),
+                cursorHeight: ui(14 * 1.7),
                 style: TextStyle(
-                  fontSize: ui(13),
+                  fontSize: ui(14),
                   color: _kTextDark,
                   fontFamily: 'PingFang SC',
                   fontWeight: AppFont.w400,
-                  height: 24 / 13,
+                  height: 1.7,
                 ),
                 decoration: InputDecoration(
                   hintText: '请输入文字',
                   hintStyle: TextStyle(
-                    fontSize: ui(13),
+                    fontSize: ui(14),
                     color: _kTextDivider,
                     fontFamily: 'PingFang SC',
                     fontWeight: AppFont.w400,
-                    height: 24 / 13,
+                    height: 1.7,
                   ),
                   border: InputBorder.none,
                   isCollapsed: true,

@@ -13,8 +13,6 @@ import '../shell_layout.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 const _kDuration = Duration(milliseconds: 280);
 const _kCurve = Curves.easeInOutCubic;
-const _kSelectionDuration = Duration(milliseconds: 180);
-const _kSelectionCurve = Curves.easeOut;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ShellLeftNav — 持有 AnimationController 以驱动所有子动画
@@ -234,7 +232,7 @@ class _ShellLeftNavState extends State<ShellLeftNav>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// _NavListWithSlider — 共享滑动选中背景 + 列表项
+// _NavListWithSlider — 共享选中背景 + 列表项
 // ─────────────────────────────────────────────────────────────────────────────
 class _NavListWithSlider extends StatelessWidget {
   const _NavListWithSlider({
@@ -273,9 +271,11 @@ class _NavListWithSlider extends StatelessWidget {
       builder: (context, constraints) {
         final maxWidth = constraints.maxWidth;
         final collapsedIndicatorSize = ui(40);
-        final indicatorWidth = collapsedIndicatorSize +
+        final indicatorWidth =
+            collapsedIndicatorSize +
             (maxWidth - collapsedIndicatorSize) * (1 - progress);
-        final indicatorHeight = collapsedIndicatorSize +
+        final indicatorHeight =
+            collapsedIndicatorSize +
             (tileHeight - collapsedIndicatorSize) * (1 - progress);
         final indicatorLeft = (maxWidth - indicatorWidth) / 2 * progress;
         final indicatorTopInset =
@@ -291,19 +291,11 @@ class _NavListWithSlider extends StatelessWidget {
               clipBehavior: Clip.none,
               children: [
                 if (navItems.isNotEmpty)
-                  TweenAnimationBuilder<double>(
-                    tween: Tween<double>(end: activeIndex * stride),
-                    duration: _kSelectionDuration,
-                    curve: _kSelectionCurve,
-                    builder: (context, top, child) {
-                      return Positioned(
-                        left: indicatorLeft,
-                        top: top + indicatorTopInset,
-                        width: indicatorWidth,
-                        height: indicatorHeight,
-                        child: child!,
-                      );
-                    },
+                  Positioned(
+                    left: indicatorLeft,
+                    top: activeIndex * stride + indicatorTopInset,
+                    width: indicatorWidth,
+                    height: indicatorHeight,
                     child: DecoratedBox(
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(ui(12)),
@@ -443,7 +435,7 @@ class _NavTile extends StatelessWidget {
     final scale = DashboardScaleScope.of(context);
     final ui = scale.ui;
 
-    // 选中背景由 [_NavListWithSlider] 统一滑动；此处 tile 背景保持透明。
+    // 选中背景由 [_NavListWithSlider] 统一绘制；此处 tile 背景保持透明。
     const inactiveTextColor = Color(0xFF0B081A);
     final collapsed = progress > 0.5;
 
@@ -501,9 +493,11 @@ class _NavTile extends StatelessWidget {
                                 children: [
                                   SizedBox(width: ui(8)),
                                   Flexible(
-                                    child: AnimatedDefaultTextStyle(
-                                      duration: _kSelectionDuration,
-                                      curve: _kSelectionCurve,
+                                    child: Text(
+                                      item.label,
+                                      maxLines: 1,
+                                      softWrap: false,
+                                      overflow: TextOverflow.clip,
                                       style: TextStyle(
                                         fontSize: ui(15),
                                         height: 1,
@@ -514,12 +508,6 @@ class _NavTile extends StatelessWidget {
                                             : inactiveTextColor.withValues(
                                                 alpha: 0.7,
                                               ),
-                                      ),
-                                      child: Text(
-                                        item.label,
-                                        maxLines: 1,
-                                        softWrap: false,
-                                        overflow: TextOverflow.clip,
                                       ),
                                     ),
                                   ),
@@ -544,23 +532,14 @@ class _NavTile extends StatelessWidget {
   Widget _buildIcon(BuildContext context) {
     final scale = DashboardScaleScope.of(context);
     final ui = scale.ui;
-    return AnimatedSwitcher(
-      duration: _kSelectionDuration,
-      switchInCurve: _kSelectionCurve,
-      switchOutCurve: Curves.easeIn,
-      transitionBuilder: (child, animation) {
-        return FadeTransition(opacity: animation, child: child);
-      },
-      child: AppAssetGraphic(
-        key: ValueKey<bool>(active),
-        active ? item.activeIcon : item.icon,
-        width: ui(24),
-        height: ui(24),
-        fit: BoxFit.contain,
-        colorFilter: active
-            ? const ColorFilter.mode(Colors.white, BlendMode.srcIn)
-            : null,
-      ),
+    return AppAssetGraphic(
+      active ? item.activeIcon : item.icon,
+      width: ui(24),
+      height: ui(24),
+      fit: BoxFit.contain,
+      colorFilter: active
+          ? const ColorFilter.mode(Colors.white, BlendMode.srcIn)
+          : null,
     );
   }
 }

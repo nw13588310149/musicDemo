@@ -46,6 +46,12 @@ class _HomePageViewState extends ConsumerState<_HomePageView> {
     Navigator.pushNamed(context, RoutePaths.smartCampus);
   }
 
+  /// 跳转到智慧校园「群聊」视图，与智慧校园 dashboard 快捷入口一致。
+  void _openGroupChat() {
+    ref.read(smartCampusControllerProvider.notifier).openGroupChat();
+    Navigator.pushNamed(context, RoutePaths.smartCampus);
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = widget.state;
@@ -404,9 +410,13 @@ class _HomePageViewState extends ConsumerState<_HomePageView> {
   }
 
   void _onQuickActionTap(HomeQuickAction action) {
-    // 模考 / 商城 暂未实装，统一走 2.0 通用单按钮提示弹窗（"暂未开放"）。
-    if (action.route == RoutePaths.mock || action.route == RoutePaths.aiSong) {
+    // 模考暂未实装，统一走 2.0 通用单按钮提示弹窗（"暂未开放"）。
+    if (action.route == RoutePaths.mock) {
       showInfoDialog(context: context, title: '功能暂未开放');
+      return;
+    }
+    if (action.route == RoutePaths.smartCampus) {
+      _openGroupChat();
       return;
     }
     Navigator.pushNamed(
