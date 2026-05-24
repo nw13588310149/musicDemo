@@ -26,8 +26,14 @@
 // =============================================================================
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 
+import '../../../core/network/api_response.dart';
+import '../../../core/widgets/app_toast.dart';
+import '../../school/data/school_repository.dart';
 import '../../shell/ui/shell_layout.dart';
+import '../data/student_repository.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // ---- 通用配色 ---------------------------------------------------------------
@@ -59,41 +65,282 @@ const double _kTimeColWidth = 120;
 const double _kDayColWidth = 200;
 const double _kHeaderHeight = 60;
 
-class StudentMyScheduleView extends StatefulWidget {
+class _TimeConfig {
+  const _TimeConfig({
+    required this.lineNum,
+    required this.start,
+    required this.end,
+  });
+
+  final int lineNum;
+  final String start;
+  final String end;
+}
+
+const List<_TimeConfig> _kDefaultTimeConfigs = [
+  _TimeConfig(lineNum: 1, start: '08:00', end: '08:40'),
+  _TimeConfig(lineNum: 2, start: '08:50', end: '09:35'),
+  _TimeConfig(lineNum: 3, start: '09:50', end: '10:30'),
+  _TimeConfig(lineNum: 4, start: '10:30', end: '11:25'),
+  _TimeConfig(lineNum: 5, start: '14:00', end: '14:45'),
+];
+
+class StudentMyScheduleView extends ConsumerStatefulWidget {
   const StudentMyScheduleView({super.key, required this.onBack});
 
   final VoidCallback onBack;
 
   @override
-  State<StudentMyScheduleView> createState() => _StudentMyScheduleViewState();
+  ConsumerState<StudentMyScheduleView> createState() =>
+      _StudentMyScheduleViewState();
 }
 
-class _StudentMyScheduleViewState extends State<StudentMyScheduleView> {
-  /// 当前展示的教学周（Figma demo 默认 12）。点击「本周」回到 12。
-  int _currentWeek = 12;
+class _StudentMyScheduleViewState extends ConsumerState<StudentMyScheduleView> {
+  late DateTime _weekStart;
+  int _currentWeek = 1;
+  static const int _baseWeek = 1;
 
-  /// 当前周的展示日期范围（demo 仅做静态映射，真实接入后从课表数据返回）。
+  List<_TimeConfig> _timeConfigs = const [];
+  List<List<List<_ScheduleCardData>>>? _serverCells;
+  bool _scheduleLoading = true;
+
+  List<_TimeConfig> get _activeTimeConfigs =>
+      _timeConfigs.isNotEmpty ? _timeConfigs : _kDefaultTimeConfigs;
+
   String get _dateRangeLabel {
-    // 简化映射：第 12 周 → 03/12 - 03/17，向左减 1 周减 7 天，向右加 7 天。
-    // DateTime 不是 const 构造函数，故 baseStart 用 final 而非 const。
-    const baseWeek = 12;
-    final baseStart = DateTime(2026, 3, 12);
-    final delta = _currentWeek - baseWeek;
-    final start = baseStart.add(Duration(days: delta * 7));
-    final end = start.add(const Duration(days: 5));
+    final start = _weekStart;
+    final end = start.add(const Duration(days: 6));
     return '${_fmt(start)} - ${_fmt(end)}';
   }
 
   String _fmt(DateTime d) =>
       '${d.month.toString().padLeft(2, '0')}/${d.day.toString().padLeft(2, '0')}';
 
-  void _gotoPrev() => setState(() => _currentWeek -= 1);
-  void _gotoNext() => setState(() => _currentWeek += 1);
-  void _gotoCurrent() => setState(() => _currentWeek = 12);
+  String _isoDate(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  DateTime _mondayOf(DateTime d) {
+    final pure = DateTime(d.year, d.month, d.day);
+    return pure.subtract(Duration(days: pure.weekday - 1));
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _weekStart = _mondayOf(DateTime.now());
+    _currentWeek = _baseWeek;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrap());
+  }
+
+  Future<void> _bootstrap() async {
+    await _loadTimeConfigs();
+    await _loadSchedule();
+  }
+
+  Future<void> _loadTimeConfigs({String? classId}) async {
+    var resolvedClassId = classId;
+    if (resolvedClassId == null || resolvedClassId.isEmpty) {
+      final classResp = await ref.read(studentRepositoryProvider).mySchoolClass();
+      if (classResp.isSuccess) {
+        final map = _asMap(classResp.data);
+        final schoolClass = _asMap(map?['schoolClass']);
+        resolvedClassId = _pickString(schoolClass ?? {}, ['id', 'classId'], '');
+      }
+    }
+    if (resolvedClassId == null || resolvedClassId.isEmpty) return;
+
+    final resp = await ref
+        .read(schoolRepositoryProvider)
+        .schoolTimeConfigList(classId: resolvedClassId);
+    if (!mounted || !resp.isSuccess) return;
+
+    final list = <_TimeConfig>[];
+    for (final m in _extractList(resp)) {
+      final lineNumRaw = m['lineNum'];
+      final lineNum = lineNumRaw is int
+          ? lineNumRaw
+          : (int.tryParse(lineNumRaw?.toString() ?? '') ?? 0);
+      if (lineNum < 1) continue;
+      final start = _trimHm(
+        _pickString(m, ['timeBegin', 'startTime', 'beginTime', 'start'], ''),
+      );
+      final end = _trimHm(
+        _pickString(m, ['timeEnd', 'endTime', 'finishTime', 'end'], ''),
+      );
+      if (start.isEmpty || end.isEmpty) continue;
+      list.add(_TimeConfig(lineNum: lineNum, start: start, end: end));
+    }
+    list.sort((a, b) => a.lineNum.compareTo(b.lineNum));
+    if (!mounted || list.isEmpty) return;
+    setState(() => _timeConfigs = list);
+  }
+
+  Future<void> _loadSchedule() async {
+    if (!mounted) return;
+    setState(() => _scheduleLoading = true);
+
+    final start = _weekStart;
+    final end = start.add(const Duration(days: 6));
+    final resp = await ref.read(studentRepositoryProvider).courseList(
+      beginDate: _isoDate(start),
+      endDate: _isoDate(end),
+    );
+    if (!mounted) return;
+
+    if (!resp.isSuccess) {
+      if (resp.msg.isNotEmpty) {
+        AppToast.show(context, resp.msg);
+      }
+      setState(() {
+        _serverCells = _emptyCells();
+        _scheduleLoading = false;
+      });
+      return;
+    }
+
+    final rows = _extractCourseRows(resp);
+    if (rows.isNotEmpty) {
+      final first = _flattenCourseRow(rows.first.row);
+      final classId = _pickString(first, ['classId'], '');
+      if (classId.isNotEmpty && _timeConfigs.isEmpty) {
+        await _loadTimeConfigs(classId: classId);
+      }
+    }
+
+    final cells = _emptyCells();
+    final configs = _activeTimeConfigs;
+    final smallSeq = <int, int>{};
+
+    for (final entry in rows) {
+      final flat = _flattenCourseRow(entry.row);
+      final dateStr = entry.dateKey.isNotEmpty
+          ? entry.dateKey
+          : _pickString(flat, ['date', 'classDate', 'courseDate'], '');
+      final dayIdx = _dayIndex(dateStr);
+      if (dayIdx < 0) continue;
+
+      final lineNumRaw = flat['lineNum'];
+      final lineNum = lineNumRaw is int
+          ? lineNumRaw
+          : (int.tryParse(lineNumRaw?.toString() ?? '') ?? 0);
+      if (lineNum < 1) continue;
+      var slotIdx = configs.indexWhere((c) => c.lineNum == lineNum);
+      if (slotIdx < 0) {
+        slotIdx = (lineNum - 1).clamp(0, configs.length - 1);
+      }
+
+      final cellKey = dayIdx * 1000 + slotIdx;
+      final card = _parseCourseCard(flat, smallSeq[cellKey] ?? 0);
+      smallSeq[cellKey] = (smallSeq[cellKey] ?? 0) + 1;
+      cells[dayIdx][slotIdx].add(card);
+    }
+
+    setState(() {
+      _serverCells = cells;
+      _scheduleLoading = false;
+    });
+  }
+
+  void _gotoPrev() {
+    setState(() {
+      _weekStart = _weekStart.subtract(const Duration(days: 7));
+      _currentWeek -= 1;
+    });
+    _loadSchedule();
+  }
+
+  void _gotoNext() {
+    setState(() {
+      _weekStart = _weekStart.add(const Duration(days: 7));
+      _currentWeek += 1;
+    });
+    _loadSchedule();
+  }
+
+  void _gotoCurrent() {
+    setState(() {
+      _weekStart = _mondayOf(DateTime.now());
+      _currentWeek = _baseWeek;
+    });
+    _loadSchedule();
+  }
+
+  List<_DayHeaderData> _buildDayHeaders() {
+    final today = DateTime.now();
+    const labels = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+    return [
+      for (var i = 0; i < 7; i++)
+        () {
+          final d = _weekStart.add(Duration(days: i));
+          final isToday =
+              d.year == today.year &&
+              d.month == today.month &&
+              d.day == today.day;
+          return _DayHeaderData(
+            weekdayLabel: labels[i],
+            dateLabel:
+                '${d.month.toString().padLeft(2, '0')}/${d.day.toString().padLeft(2, '0')}',
+            today: isToday,
+          );
+        }(),
+    ];
+  }
+
+  List<_TimeSlotData> _buildSlots(List<List<List<_ScheduleCardData>>> cells) {
+    final configs = _activeTimeConfigs;
+    return [
+      for (var i = 0; i < configs.length; i++)
+        _TimeSlotData(
+          start: configs[i].start,
+          end: configs[i].end,
+          height: _calcSlotHeight(i, cells),
+        ),
+    ];
+  }
+
+  double _calcSlotHeight(
+    int slotIdx,
+    List<List<List<_ScheduleCardData>>> cells,
+  ) {
+    var maxCards = 1;
+    for (var d = 0; d < cells.length; d++) {
+      if (slotIdx < cells[d].length) {
+        final n = cells[d][slotIdx].length;
+        if (n > maxCards) maxCards = n;
+      }
+    }
+    return 120.0 + (maxCards - 1) * 102.0;
+  }
+
+  List<List<List<_ScheduleCardData>>> _emptyCells() {
+    final n = _activeTimeConfigs.length;
+    return [
+      for (var d = 0; d < 7; d++)
+        [for (var s = 0; s < n; s++) <_ScheduleCardData>[]],
+    ];
+  }
+
+  int _dayIndex(String dateStr) {
+    if (dateStr.isEmpty) return -1;
+    DateTime? d = DateTime.tryParse(dateStr);
+    if (d == null) {
+      final iso = dateStr.split('T').first;
+      d = DateTime.tryParse(iso);
+    }
+    if (d == null) return -1;
+    final dn = DateTime(d.year, d.month, d.day);
+    final ws = DateTime(_weekStart.year, _weekStart.month, _weekStart.day);
+    final diff = dn.difference(ws).inDays;
+    return (diff < 0 || diff > 6) ? -1 : diff;
+  }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final cells = _serverCells ?? _emptyCells();
+    final slots = _buildSlots(cells);
+    final days = _buildDayHeaders();
+
     return SingleChildScrollView(
       padding: EdgeInsets.only(bottom: ui(20)),
       child: Container(
@@ -116,9 +363,10 @@ class _StudentMyScheduleViewState extends State<StudentMyScheduleView> {
             Padding(
               padding: EdgeInsets.fromLTRB(ui(20), ui(11), ui(20), ui(20)),
               child: _ScheduleGrid(
-                slots: _kDemoSlots,
-                days: _kDemoDays,
-                cells: _kDemoCells,
+                slots: slots,
+                days: days,
+                cells: cells,
+                loading: _scheduleLoading,
               ),
             ),
           ],
@@ -126,6 +374,176 @@ class _StudentMyScheduleViewState extends State<StudentMyScheduleView> {
       ),
     );
   }
+}
+
+Map<String, dynamic>? _asMap(dynamic value) {
+  if (value is Map) return Map<String, dynamic>.from(value);
+  return null;
+}
+
+List<Map<String, dynamic>> _extractList(ApiResponse resp) {
+  dynamic raw = resp.data;
+  if (raw is Map && raw.containsKey('data')) {
+    final d = raw['data'];
+    if (d is List) {
+      raw = d;
+    } else if (d is Map) {
+      raw = d;
+    }
+  }
+  final list = raw is List
+      ? raw
+      : (raw is Map && raw['records'] is List
+            ? raw['records'] as List
+            : (raw is Map && raw['list'] is List
+                  ? raw['list'] as List
+                  : const []));
+  return [
+    for (final item in list)
+      if (item is Map) Map<String, dynamic>.from(item),
+  ];
+}
+
+String _pickString(
+  Map<String, dynamic> json,
+  List<String> keys, [
+  String fallback = '',
+]) {
+  for (final key in keys) {
+    final raw = json[key];
+    if (raw == null) continue;
+    final text = raw.toString().trim();
+    if (text.isNotEmpty) return text;
+  }
+  return fallback;
+}
+
+String _trimHm(String value) {
+  if (value.isEmpty) return value;
+  final parts = value.split(':');
+  if (parts.length >= 2) {
+    return '${parts[0]}:${parts[1]}';
+  }
+  return value;
+}
+
+Map<String, dynamic> _flattenCourseRow(Map<String, dynamic> row) {
+  final flat = Map<String, dynamic>.from(row);
+
+  void mergeNested(String key, List<MapEntry<String, String>> fieldMap) {
+    final nested = row[key];
+    if (nested is! Map) return;
+    final m = Map<String, dynamic>.from(nested);
+    for (final entry in fieldMap) {
+      final v = m[entry.key];
+      if (v == null) continue;
+      final s = v.toString().trim();
+      if (s.isEmpty) continue;
+      flat.putIfAbsent(entry.value, () => s);
+    }
+  }
+
+  mergeNested('teacher', [
+    const MapEntry('realname', 'teacherRealname'),
+    const MapEntry('realName', 'teacherRealname'),
+    const MapEntry('nickname', 'teacherNickname'),
+    const MapEntry('name', 'teacherName'),
+  ]);
+  mergeNested('subject', [
+    const MapEntry('name', 'subjectName'),
+    const MapEntry('subjectName', 'subjectName'),
+  ]);
+  mergeNested('schoolClass', [
+    const MapEntry('name', 'className'),
+    const MapEntry('className', 'className'),
+    const MapEntry('id', 'classId'),
+  ]);
+  mergeNested('schoolClassroom', [
+    const MapEntry('name', 'classroomName'),
+    const MapEntry('roomName', 'classroomName'),
+  ]);
+
+  return flat;
+}
+
+List<({String dateKey, Map<String, dynamic> row})> _extractCourseRows(
+  ApiResponse resp,
+) {
+  final raw = resp.data;
+  final list = <({String dateKey, Map<String, dynamic> row})>[];
+  if (raw is Map) {
+    for (final entry in raw.entries) {
+      final v = entry.value;
+      final key = entry.key.toString();
+      if (v is List) {
+        for (final item in v) {
+          if (item is Map) {
+            list.add((dateKey: key, row: Map<String, dynamic>.from(item)));
+          }
+        }
+      }
+    }
+  } else if (raw is List) {
+    for (final item in raw) {
+      if (item is Map) {
+        list.add((dateKey: '', row: Map<String, dynamic>.from(item)));
+      }
+    }
+  }
+  return list;
+}
+
+_ScheduleCardData _parseCourseCard(Map<String, dynamic> json, int smallIdxInCell) {
+  final typeRaw = json['type'];
+  final type = typeRaw is int
+      ? typeRaw
+      : (int.tryParse(typeRaw?.toString() ?? '') ?? 0);
+  final isSmall = type == 1 || type == 2;
+
+  final location = _pickString(json, [
+    'classroomName',
+    'roomName',
+    'classroom',
+  ], '—');
+  final name = _pickString(json, [
+    'subjectName',
+    'courseName',
+    'subject',
+    'name',
+  ], '—');
+  final teacher = _pickString(json, [
+    'teacherRealname',
+    'teacherName',
+    'realname',
+    'realName',
+    'teacherNickname',
+    'teacher',
+  ], '');
+  final className = _pickString(json, ['className', 'class'], '');
+
+  if (isSmall) {
+    final kind = smallIdxInCell.isEven
+        ? _CardKind.smallOrange
+        : _CardKind.smallBlue;
+    return _ScheduleCardData(
+      kind: kind,
+      location: location,
+      name: name,
+      subline: teacher.isNotEmpty
+          ? teacher
+          : (className.isNotEmpty ? className : '—'),
+    );
+  }
+
+  final subline = teacher.isEmpty
+      ? (className.isEmpty ? '—' : className)
+      : (className.isEmpty ? teacher : '$teacher · $className');
+  return _ScheduleCardData(
+    kind: _CardKind.bigStandard,
+    location: location,
+    name: name,
+    subline: subline,
+  );
 }
 
 // =============================================================================
@@ -327,6 +745,7 @@ class _ScheduleGrid extends StatelessWidget {
     required this.slots,
     required this.days,
     required this.cells,
+    this.loading = false,
   });
 
   final List<_TimeSlotData> slots;
@@ -337,10 +756,22 @@ class _ScheduleGrid extends StatelessWidget {
   /// 7 列 × N 行的格子数据。`cells[dayIndex][slotIndex]` 是该格的课卡列表
   /// （0、1 或 2 张；2 张时纵向堆叠，需要对应 slot 的高度足以容纳）。
   final List<List<List<_ScheduleCardData>>> cells;
+  final bool loading;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    if (loading) {
+      return Container(
+        height: ui(420),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(ui(12)),
+          border: Border.all(color: _kBorderSoft),
+        ),
+        child: const AppLoadingIndicator(),
+      );
+    }
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(ui(12)),
@@ -961,107 +1392,3 @@ class _DayHeaderData {
   final String dateLabel;
   final bool today;
 }
-
-// =============================================================================
-// Demo 数据
-// =============================================================================
-
-/// 5 个时段：120 / 120 / 222 / 128 / 128（与 Figma 左侧节次列严格对齐；
-/// 222 行允许 2 卡纵向堆叠）
-const List<_TimeSlotData> _kDemoSlots = [
-  _TimeSlotData(start: '08:00', end: '08:40', height: 120),
-  _TimeSlotData(start: '08:50', end: '09:35', height: 120),
-  _TimeSlotData(start: '09:50', end: '10:30', height: 222),
-  _TimeSlotData(start: '10:30', end: '11:25', height: 128),
-  _TimeSlotData(start: '14:00', end: '14:45', height: 128),
-];
-
-const List<_DayHeaderData> _kDemoDays = [
-  _DayHeaderData(weekdayLabel: '周一', dateLabel: '03/24', today: true),
-  _DayHeaderData(weekdayLabel: '周二', dateLabel: '03/25'),
-  _DayHeaderData(weekdayLabel: '周三', dateLabel: '03/26'),
-  _DayHeaderData(weekdayLabel: '周四', dateLabel: '03/27'),
-  _DayHeaderData(weekdayLabel: '周五', dateLabel: '03/28'),
-  _DayHeaderData(weekdayLabel: '周六', dateLabel: '03/29'),
-  _DayHeaderData(weekdayLabel: '周日', dateLabel: '03/30'),
-];
-
-// 复用的几张课卡，避免 demo 数据膨胀
-const _ScheduleCardData _kBambooFlute = _ScheduleCardData(
-  kind: _CardKind.smallOrange,
-  location: '艺术楼阶梯教室 2',
-  name: '竹笛课',
-  subline: '高三音乐实验班',
-  capacity: '11/23人',
-);
-
-const _ScheduleCardData _kGuzheng = _ScheduleCardData(
-  kind: _CardKind.smallBlue,
-  location: '艺术楼阶梯教室 2',
-  name: '古筝课',
-  subline: '高三音乐实验班',
-  capacity: '11/23人',
-);
-
-const _ScheduleCardData _kVisualClassStandard = _ScheduleCardData(
-  kind: _CardKind.bigStandard,
-  location: '艺术楼报告厅',
-  name: '视唱练耳·听辩',
-  subline: '赵老师-大班合班',
-);
-
-const _ScheduleCardData _kVisualClassExtended = _ScheduleCardData(
-  kind: _CardKind.bigExtended,
-  location: '艺术楼报告厅',
-  name: '视唱练耳·听辩',
-  subline: '高三年级-大班合班',
-);
-
-/// `_kDemoCells[dayIdx][slotIdx]` = 该格的课卡列表（0、1 或 2 张）。
-/// 7 天 × 5 时段，2 卡堆叠仅用于 222h 时段（slotIdx == 2）。
-final List<List<List<_ScheduleCardData>>> _kDemoCells = [
-  // 周一
-  [
-    [_kBambooFlute],
-    [_kVisualClassStandard],
-    [_kVisualClassStandard, _kBambooFlute],
-    [_kVisualClassStandard],
-    [],
-  ],
-  // 周二
-  [
-    [_kGuzheng],
-    [],
-    [_kVisualClassStandard],
-    [],
-    [],
-  ],
-  // 周三
-  [
-    [_kBambooFlute],
-    [_kVisualClassStandard],
-    [_kGuzheng],
-    [_kVisualClassStandard],
-    [],
-  ],
-  // 周四
-  [
-    [_kVisualClassStandard],
-    [_kVisualClassStandard],
-    [_kVisualClassStandard],
-    [_kVisualClassStandard],
-    [],
-  ],
-  // 周五
-  [
-    [_kVisualClassExtended],
-    [_kVisualClassExtended],
-    [_kVisualClassExtended],
-    [_kVisualClassExtended],
-    [],
-  ],
-  // 周六
-  [[], [], [], [], []],
-  // 周日
-  [[], [], [], [], []],
-];

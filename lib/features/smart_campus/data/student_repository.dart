@@ -6,8 +6,8 @@ import '../../../core/providers/app_providers.dart';
 
 /// 智慧校园 **学生端** `POST /app/school/v2/student/*`。
 ///
-/// 与 [TeacherRepository] 中任课老师调用的 `teacher/...` 路径不同；
-/// 学生「我的作业」使用本类中的 `student/...` 接口。
+/// 与 [TeacherRepository] 中任课老师调用的 `teacher/...` 路径不同。
+/// 学生首页概览 [index]、我的课表 [courseList]、「我的作业」等均走本类。
 final studentRepositoryProvider = Provider<StudentRepository>((ref) {
   final client = ref.watch(apiClientProvider);
   return StudentRepository(client: client);
@@ -19,6 +19,55 @@ class StudentRepository {
   final ApiClient client;
 
   static const _base = '/app/school/v2/student';
+
+  /// 学生首页概览：今日课程、待交作业、学期均分、班级未读通知、月考/统考时间等。
+  Future<ApiResponse> index() {
+    return client.post('$_base/index');
+  }
+
+  /// 我的课表。`beginDate` / `endDate` 为 `yyyy-MM-dd`；后端按 token 过滤当前学生。
+  Future<ApiResponse> courseList({
+    required String beginDate,
+    required String endDate,
+    String? classId,
+    List<String>? classIdList,
+    String? teacherId,
+    int? type,
+  }) {
+    final body = <String, dynamic>{
+      'beginDate': beginDate,
+      'endDate': endDate,
+    };
+    if (classId != null && classId.isNotEmpty) {
+      body['classId'] = classId;
+    }
+    if (classIdList != null && classIdList.isNotEmpty) {
+      body['classIdList'] = classIdList;
+    }
+    if (teacherId != null && teacherId.isNotEmpty) {
+      body['teacherId'] = teacherId;
+    }
+    if (type != null) {
+      body['type'] = type;
+    }
+    return client.post('$_base/courseList', data: body);
+  }
+
+  /// 我的班级：班级信息、班主任、任课老师、同班同学等。
+  Future<ApiResponse> mySchoolClass() {
+    return client.post('$_base/mySchoolClass');
+  }
+
+  /// 班级公告列表（分页）。
+  Future<ApiResponse> schoolClassNoticeList({
+    int current = 1,
+    int size = 10,
+  }) {
+    return client.post(
+      '$_base/schoolClassNotice/list',
+      data: <String, dynamic>{'current': current, 'size': size},
+    );
+  }
 
   /// 我的作业列表（分页）。
   ///

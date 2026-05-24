@@ -232,14 +232,14 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             imagePath: 'assets/images/schoolA/7.png',
           ),
           SmartCampusQuickActionData(
-            label: '请假管理',
+            label: '我的请假',
             icon: Icons.event_note_rounded,
             background: _greenSoft,
             foreground: _green,
             imagePath: 'assets/images/schoolA/8.png',
           ),
           SmartCampusQuickActionData(
-            label: '查寝管理',
+            label: '我的查寝',
             icon: Icons.night_shelter_rounded,
             background: _purpleSoft,
             foreground: _purple,
@@ -258,9 +258,8 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
           title: '在校',
           badgeLabel: '学生',
           statusLabel: '在线',
-          organization: '音乐之路音乐学校',
-          detailLines: ['主项：民族唱法', '副项：钢琴', '班级：高三音乐实验班', '宿舍：女生宿 3号楼·612'],
-          highlightText: '目标院校 · 浙江音乐学院',
+          organization: '',
+          detailLines: [],
         ),
         notices: const [
           SmartCampusNoticeData(

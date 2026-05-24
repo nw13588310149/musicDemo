@@ -54,6 +54,10 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
   /// 切号会导致 myInfo.role 变化，对应的「老师多重身份」缓存需要重新拉取。
   String _lastBackendRole = '';
 
+  /// 最近一次 [applyBackendRole] 解析出的智慧校园身份，供
+  /// [ensureTeacherRolesLoaded] 判断学生端是否需要调 teacher 接口。
+  SmartCampusRole _mappedBackendRole = SmartCampusRole.student;
+
   /// 管理员/校长可在所有身份间切换；其他角色只允许查看自己的视图。
   static const List<SmartCampusRole> _allRoles = [
     SmartCampusRole.student,
@@ -133,6 +137,7 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
     }
 
     final mapped = mapBackendRoleToCampus(role, identity);
+    _mappedBackendRole = mapped;
     final isAdmin = mapped == SmartCampusRole.admin;
     final available = isAdmin ? _allRoles : <SmartCampusRole>[mapped];
 
@@ -175,6 +180,13 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
   ///   始终是「权限最高、最常用」的那个（admin > headTeacher >
   ///   teacher > dormManager）。
   Future<void> ensureTeacherRolesLoaded() async {
+    // 学生端不调用 teacher 专属接口；仅 myInfo.role == teacher 时拉多重身份。
+    if (_mappedBackendRole == SmartCampusRole.student) {
+      return;
+    }
+    if (_lastBackendRole.trim().toLowerCase() != 'teacher') {
+      return;
+    }
     if (_teacherRolesLoaded || _teacherRolesLoading) {
       return;
     }

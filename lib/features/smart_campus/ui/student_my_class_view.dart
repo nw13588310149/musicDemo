@@ -10,8 +10,8 @@
 //   2. 班级信息卡（高 163）：左上 班级名 + 副标题 + 三列信息（班主任 / 辅导员 / 教室）
 //      + 底部"教务与艺术实践办公室·列表展示12/42人"；右上 全班 / 男生 / 女生 三个
 //      100×100 紫色数字统计盒
-//   3. 班级通知：标题行（"班级通知" + "查看全部 >"）+ 白卡内 2 条紫底 #F0E8FC 通知
-//      （数据来自 classNoticeControllerProvider，班主任在「班级工作台」可发布/删除）
+//   3. 班级通知：标题行（"班级通知" + "查看全部 >"）+ 白卡内最多 2 条紫底通知
+//      （数据来自 `/student/schoolClassNotice/list`）
 //   4. 师资：三段（教务老师 / 班主任 / 任课老师），每段一张白卡内若干 308×171 灰底
 //      老师卡（任课卡右上多一个粉色课程标签）
 //   5. 同班同学：标题行（"同班同学" + 搜索框）+ 白卡内 124×124 学生卡 7 列网格，
@@ -25,9 +25,13 @@
 import 'package:flutter/material.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 
+import '../../../core/network/media_url.dart';
+import '../../../core/widgets/app_toast.dart';
+import '../../shell/state/shell_controller.dart';
 import '../../shell/ui/shell_layout.dart';
-import '../state/class_notice_controller.dart';
+import '../data/student_repository.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 const Color _kCardBg = Colors.white;
@@ -44,21 +48,101 @@ const Color _kCoursePink = Color(0xFFFFC8D9);
 const Color _kSelfTagBg = Color(0xFFF7F2FF);
 const Color _kPlaceholder = Color(0xFFD1D1D1);
 
-class StudentMyClassView extends StatefulWidget {
+class StudentMyClassView extends ConsumerStatefulWidget {
   const StudentMyClassView({super.key, required this.onBack});
 
   final VoidCallback onBack;
 
   @override
-  State<StudentMyClassView> createState() => _StudentMyClassViewState();
+  ConsumerState<StudentMyClassView> createState() => _StudentMyClassViewState();
 }
 
-class _StudentMyClassViewState extends State<StudentMyClassView> {
+class _StudentMyClassViewState extends ConsumerState<StudentMyClassView> {
   String _classmateQuery = '';
+  bool _loading = true;
+  _ClassInfoData? _classInfo;
+  List<_ClassNoticeItem> _notices = const [];
+  List<_FacultySectionData> _facultySections = const [];
+  List<_ClassmateData> _classmates = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadPage());
+  }
+
+  Future<void> _loadPage() async {
+    if (!mounted) return;
+    setState(() => _loading = true);
+
+    final repo = ref.read(studentRepositoryProvider);
+    final currentUserId = ref.read(shellControllerProvider).user.id;
+
+    try {
+      final results = await Future.wait([
+        repo.mySchoolClass(),
+        repo.schoolClassNoticeList(current: 1, size: 10),
+      ]);
+      if (!mounted) return;
+
+      final classResp = results[0];
+      final noticeResp = results[1];
+
+      if (!classResp.isSuccess && classResp.msg.isNotEmpty) {
+        AppToast.show(context, classResp.msg);
+      }
+      if (!noticeResp.isSuccess && noticeResp.msg.isNotEmpty) {
+        AppToast.show(context, noticeResp.msg);
+      }
+
+      _ClassInfoData? classInfo;
+      List<_FacultySectionData> facultySections = const [];
+      List<_ClassmateData> classmates = const [];
+      if (classResp.isSuccess) {
+        final parsed = _parseMySchoolClass(classResp.data, currentUserId);
+        classInfo = parsed.classInfo;
+        facultySections = parsed.facultySections;
+        classmates = parsed.classmates;
+      }
+
+      setState(() {
+        _loading = false;
+        _classInfo = classInfo;
+        _facultySections = facultySections;
+        _classmates = classmates;
+        _notices = noticeResp.isSuccess
+            ? _parseClassNotices(noticeResp.data)
+            : const [];
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _classInfo = null;
+        _notices = const [];
+        _facultySections = const [];
+        _classmates = const [];
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    if (_loading) {
+      return SingleChildScrollView(
+        padding: EdgeInsets.only(bottom: ui(24)),
+        child: Column(
+          children: [
+            _MyClassBanner(onBack: widget.onBack),
+            SizedBox(height: ui(120)),
+            const Center(child: AppLoadingIndicator()),
+          ],
+        ),
+      );
+    }
+
+    final classInfo = _classInfo;
     return SingleChildScrollView(
       padding: EdgeInsets.only(bottom: ui(24)),
       child: Column(
@@ -66,14 +150,22 @@ class _StudentMyClassViewState extends State<StudentMyClassView> {
         children: [
           _MyClassBanner(onBack: widget.onBack),
           SizedBox(height: ui(16)),
-          _ClassInfoCard(data: _kDemoClass),
+          if (classInfo != null)
+            _ClassInfoCard(data: classInfo)
+          else
+            _EmptyHintCard(message: '暂无班级信息'),
           SizedBox(height: ui(16)),
-          const _AnnouncementSection(),
-          SizedBox(height: ui(16)),
-          _FacultySection(sections: _kDemoFacultySections),
+          _AnnouncementSection(
+            notices: _notices,
+            onViewAll: _openNoticeDrawer,
+          ),
+          if (_facultySections.isNotEmpty) ...[
+            SizedBox(height: ui(16)),
+            _FacultySection(sections: _facultySections),
+          ],
           SizedBox(height: ui(16)),
           _ClassmateSection(
-            classmates: _kDemoClassmates,
+            classmates: _classmates,
             query: _classmateQuery,
             onQueryChanged: (v) => setState(() => _classmateQuery = v),
           ),
@@ -81,6 +173,299 @@ class _StudentMyClassViewState extends State<StudentMyClassView> {
       ),
     );
   }
+
+  Future<void> _openNoticeDrawer() async {
+    final scaleData =
+        DashboardScaleScope.maybeOf(context) ??
+        DashboardScaleScope.fromSize(MediaQuery.sizeOf(context));
+    await showGeneralDialog<void>(
+      context: context,
+      barrierLabel: '关闭',
+      barrierDismissible: true,
+      barrierColor: Colors.black.withValues(alpha: 0.18),
+      transitionDuration: const Duration(milliseconds: 240),
+      pageBuilder: (ctx, animation, secondary) {
+        return DashboardScaleScope(
+          data: scaleData,
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: Material(
+              color: Colors.transparent,
+              child: _ClassNoticeListDrawer(
+                initialNotices: _notices,
+                onClose: () => Navigator.of(ctx).maybePop(),
+              ),
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (ctx, animation, secondary, child) {
+        return SlideTransition(
+          position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
+              .animate(
+                CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+              ),
+          child: child,
+        );
+      },
+    );
+  }
+}
+
+class _EmptyHintCard extends StatelessWidget {
+  const _EmptyHintCard({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(vertical: ui(32)),
+      decoration: BoxDecoration(
+        color: _kCardBg,
+        borderRadius: BorderRadius.circular(ui(16)),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        message,
+        style: TextStyle(
+          fontSize: ui(14),
+          color: _kTextHint,
+          fontFamily: 'PingFang SC',
+        ),
+      ),
+    );
+  }
+}
+
+class _ClassNoticeItem {
+  const _ClassNoticeItem({
+    required this.id,
+    required this.title,
+    required this.content,
+    required this.date,
+    this.highlighted = false,
+  });
+
+  final String id;
+  final String title;
+  final String content;
+  final String date;
+  final bool highlighted;
+
+  String get text {
+    if (title.isEmpty) return content;
+    if (content.isEmpty) return title;
+    return '$title：$content';
+  }
+}
+
+class _ParsedMySchoolClass {
+  const _ParsedMySchoolClass({
+    required this.classInfo,
+    required this.facultySections,
+    required this.classmates,
+  });
+
+  final _ClassInfoData? classInfo;
+  final List<_FacultySectionData> facultySections;
+  final List<_ClassmateData> classmates;
+}
+
+Map<String, dynamic>? _asMap(dynamic value) {
+  if (value is Map) return Map<String, dynamic>.from(value);
+  return null;
+}
+
+List<Map<String, dynamic>> _asMapList(dynamic value) {
+  if (value is! List) return const [];
+  return [
+    for (final item in value)
+      if (item is Map) Map<String, dynamic>.from(item),
+  ];
+}
+
+String _pickString(Map<String, dynamic> json, List<String> keys, [String fallback = '']) {
+  for (final key in keys) {
+    final raw = json[key];
+    if (raw == null) continue;
+    final text = raw.toString().trim();
+    if (text.isNotEmpty) return text;
+  }
+  return fallback;
+}
+
+String _userDisplayName(Map<String, dynamic>? user) {
+  if (user == null) return '—';
+  return _pickString(user, ['nickname', 'nickName', 'realname', 'realName'], '—');
+}
+
+String _resolveAvatarUrl(Map<String, dynamic>? user) {
+  if (user == null) return '';
+  final raw = _pickString(user, ['headUrl', 'avatar', 'avatarUrl'], '');
+  return raw.isEmpty ? '' : MediaUrl.resolve(raw);
+}
+
+_ParsedMySchoolClass _parseMySchoolClass(dynamic raw, String currentUserId) {
+  final map = _asMap(raw);
+  if (map == null) {
+    return const _ParsedMySchoolClass(
+      classInfo: null,
+      facultySections: [],
+      classmates: [],
+    );
+  }
+
+  final schoolClass = _asMap(map['schoolClass']);
+  final schoolClassroom = _asMap(map['schoolClassroom']);
+  final headTeacher = _asMap(map['headTeacher']);
+  final students = _asMapList(map['studentInfoList']);
+  final teachers = _asMapList(map['teacherList']);
+  final genderCounts = _asMapList(map['genderCountList']);
+
+  var boyCount = 0;
+  var girlCount = 0;
+  for (final item in genderCounts) {
+    final gender = _pickString(item, ['gender'], '');
+    final count = int.tryParse(item['count']?.toString() ?? '') ?? 0;
+    if (gender == '男') {
+      boyCount += count;
+    } else if (gender == '女') {
+      girlCount += count;
+    }
+  }
+  final totalCount = students.isNotEmpty
+      ? students.length
+      : (boyCount + girlCount > 0 ? boyCount + girlCount : 0);
+
+  final className = _pickString(schoolClass ?? {}, ['name', 'groupName'], '我的班级');
+  final typeRaw = schoolClass?['type'];
+  final type = typeRaw is int
+      ? typeRaw
+      : (int.tryParse(typeRaw?.toString() ?? '') ?? 0);
+  final typeLabel = type == 1 ? '小班' : '大班';
+  final description = _pickString(schoolClass ?? {}, ['description'], '');
+  final subtitleParts = <String>[typeLabel];
+  if (description.isNotEmpty) subtitleParts.add(description);
+  final classroom = _pickString(schoolClassroom ?? {}, ['name'], '—');
+  final announcement = _pickString(schoolClass ?? {}, ['announcement'], '');
+  final footer = announcement.isNotEmpty
+      ? announcement
+      : (totalCount > 0 ? '共 $totalCount 人' : '—');
+
+  final classInfo = _ClassInfoData(
+    name: className,
+    subtitle: subtitleParts.join(' · '),
+    headTeacher: _userDisplayName(headTeacher),
+    counselor: '—',
+    classroom: classroom,
+    footer: footer,
+    totalCount: totalCount,
+    boyCount: boyCount,
+    girlCount: girlCount,
+  );
+
+  final facultySections = <_FacultySectionData>[];
+  if (headTeacher != null && _userDisplayName(headTeacher) != '—') {
+    facultySections.add(
+      _FacultySectionData(
+        title: '班主任',
+        members: [_facultyFromUser(headTeacher, role: '班主任')],
+      ),
+    );
+  }
+  if (teachers.isNotEmpty) {
+    facultySections.add(
+      _FacultySectionData(
+        title: '任课老师',
+        members: [
+          for (final teacher in teachers) _facultyFromUser(teacher, role: '任课老师'),
+        ],
+      ),
+    );
+  }
+
+  final classmates = <_ClassmateData>[
+    for (final student in students)
+      _classmateFromUser(
+        student,
+        isSelf: _pickString(student, ['id'], '') == currentUserId,
+      ),
+  ]..sort((a, b) {
+      if (a.isSelf == b.isSelf) return 0;
+      return a.isSelf ? -1 : 1;
+    });
+
+  return _ParsedMySchoolClass(
+    classInfo: classInfo,
+    facultySections: facultySections,
+    classmates: classmates,
+  );
+}
+
+_FacultyMember _facultyFromUser(
+  Map<String, dynamic> user, {
+  required String role,
+}) {
+  final introduce = _pickString(user, ['introduce'], '');
+  final targetSchool = _pickString(user, ['targetSchool'], '');
+  return _FacultyMember(
+    name: _userDisplayName(user),
+    role: role,
+    location: targetSchool.isNotEmpty ? targetSchool : '—',
+    description: introduce.isNotEmpty ? introduce : '—',
+    phone: _pickString(user, ['mobile'], '—'),
+    email: '—',
+    avatarUrl: _resolveAvatarUrl(user),
+  );
+}
+
+_ClassmateData _classmateFromUser(
+  Map<String, dynamic> user, {
+  required bool isSelf,
+}) {
+  final targetSchool = _pickString(user, ['targetSchool'], '');
+  final gender = _pickString(user, ['gender'], '');
+  final major = targetSchool.isNotEmpty
+      ? targetSchool
+      : (gender.isNotEmpty && gender != '未知' ? gender : '—');
+  return _ClassmateData(
+    name: _userDisplayName(user),
+    major: major,
+    avatarUrl: _resolveAvatarUrl(user),
+    isSelf: isSelf,
+  );
+}
+
+List<_ClassNoticeItem> _parseClassNotices(dynamic raw) {
+  final map = _asMap(raw);
+  final records = map == null
+      ? const <Map<String, dynamic>>[]
+      : _asMapList(map['records'] ?? map['list'] ?? map['data']);
+
+  final items = <_ClassNoticeItem>[];
+  for (var i = 0; i < records.length; i++) {
+    final row = records[i];
+    final title = _pickString(row, ['title'], '');
+    final content = _pickString(row, ['content'], '');
+    if (title.isEmpty && content.isEmpty) continue;
+    final createTime = _pickString(row, ['createTime'], '');
+    final date = createTime.length >= 10
+        ? createTime.substring(5, 10)
+        : createTime;
+    items.add(
+      _ClassNoticeItem(
+        id: _pickString(row, ['id'], '$i'),
+        title: title,
+        content: content,
+        date: date.isEmpty ? '—' : date,
+        highlighted: i == 0,
+      ),
+    );
+  }
+  return items;
 }
 
 // =============================================================================
@@ -385,21 +770,30 @@ class _StatBox extends StatelessWidget {
 }
 
 // =============================================================================
-// 班级通知（与班主任「班级工作台 → 概况」共享同一 provider，班主任发布/
-// 删除后这里实时同步）
+// 班级通知（`/student/schoolClassNotice/list`）
 // =============================================================================
 
-class _AnnouncementSection extends ConsumerWidget {
-  const _AnnouncementSection();
+class _AnnouncementSection extends StatelessWidget {
+  const _AnnouncementSection({
+    required this.notices,
+    required this.onViewAll,
+  });
+
+  final List<_ClassNoticeItem> notices;
+  final VoidCallback onViewAll;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final items = ref.watch(classNoticeControllerProvider);
+    final preview = notices.take(2).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _SectionHeader(title: '班级通知', actionLabel: '查看全部', onAction: () {}),
+        _SectionHeader(
+          title: '班级通知',
+          actionLabel: '查看全部',
+          onAction: onViewAll,
+        ),
         SizedBox(height: ui(12)),
         Container(
           width: double.infinity,
@@ -408,8 +802,7 @@ class _AnnouncementSection extends ConsumerWidget {
             color: _kCardBg,
             borderRadius: BorderRadius.circular(ui(16)),
           ),
-          // 学生视角不暴露任何编辑入口；空列表时显示提示文字。
-          child: items.isEmpty
+          child: preview.isEmpty
               ? Padding(
                   padding: EdgeInsets.symmetric(vertical: ui(20)),
                   child: Center(
@@ -425,17 +818,13 @@ class _AnnouncementSection extends ConsumerWidget {
                     ),
                   ),
                 )
-              // IntrinsicHeight：父级是 SingleChildScrollView/Column，给的高度
-              // 约束是 0..Infinity；Row 上若直接用 crossAxisAlignment.stretch
-              // 会触发 RenderFlex 断言（"vertical viewport was given unbounded
-              // height"）。包一层 IntrinsicHeight 把两张通知卡撑到等高。
               : IntrinsicHeight(
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      for (var i = 0; i < items.length && i < 2; i++) ...[
+                      for (var i = 0; i < preview.length; i++) ...[
                         if (i > 0) SizedBox(width: ui(8)),
-                        Expanded(child: _AnnouncementCard(item: items[i])),
+                        Expanded(child: _AnnouncementCard(item: preview[i])),
                       ],
                     ],
                   ),
@@ -449,7 +838,7 @@ class _AnnouncementSection extends ConsumerWidget {
 class _AnnouncementCard extends StatelessWidget {
   const _AnnouncementCard({required this.item});
 
-  final ClassNotice item;
+  final _ClassNoticeItem item;
 
   @override
   Widget build(BuildContext context) {
@@ -515,6 +904,222 @@ class _AnnouncementCard extends StatelessWidget {
   }
 }
 
+class _ClassNoticeListDrawer extends ConsumerStatefulWidget {
+  const _ClassNoticeListDrawer({
+    required this.initialNotices,
+    required this.onClose,
+  });
+
+  final List<_ClassNoticeItem> initialNotices;
+  final VoidCallback onClose;
+
+  @override
+  ConsumerState<_ClassNoticeListDrawer> createState() =>
+      _ClassNoticeListDrawerState();
+}
+
+class _ClassNoticeListDrawerState extends ConsumerState<_ClassNoticeListDrawer> {
+  bool _loading = true;
+  List<_ClassNoticeItem> _notices = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _notices = widget.initialNotices;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadNotices());
+  }
+
+  Future<void> _loadNotices() async {
+    if (!mounted) return;
+    setState(() => _loading = true);
+    try {
+      final resp = await ref
+          .read(studentRepositoryProvider)
+          .schoolClassNoticeList(current: 1, size: 50);
+      if (!mounted) return;
+      if (resp.isSuccess) {
+        setState(() {
+          _notices = _parseClassNotices(resp.data);
+          _loading = false;
+        });
+        return;
+      }
+      if (resp.msg.isNotEmpty) {
+        AppToast.show(context, resp.msg);
+      }
+    } catch (_) {
+      // 保留 initialNotices。
+    }
+    if (!mounted) return;
+    setState(() => _loading = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      width: ui(520),
+      height: double.infinity,
+      decoration: const BoxDecoration(color: Colors.white),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _ClassNoticeDrawerHeader(title: '班级通知', onClose: widget.onClose),
+          Expanded(
+            child: _loading
+                ? const Center(child: AppLoadingIndicator())
+                : _notices.isEmpty
+                ? Center(
+                    child: Text(
+                      '暂无通知',
+                      style: TextStyle(
+                        fontSize: ui(14),
+                        color: _kTextHint,
+                        fontFamily: 'PingFang SC',
+                      ),
+                    ),
+                  )
+                : ListView.separated(
+                    padding: EdgeInsets.fromLTRB(ui(16), ui(16), ui(16), ui(24)),
+                    itemCount: _notices.length,
+                    separatorBuilder: (_, _) => SizedBox(height: ui(12)),
+                    itemBuilder: (context, index) {
+                      return _ClassNoticeDrawerTile(item: _notices[index]);
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ClassNoticeDrawerHeader extends StatelessWidget {
+  const _ClassNoticeDrawerHeader({
+    required this.title,
+    required this.onClose,
+  });
+
+  final String title;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      height: ui(62),
+      padding: EdgeInsets.symmetric(horizontal: ui(12)),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: _kBorderSoft)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: ui(3.25),
+            height: ui(15),
+            decoration: BoxDecoration(
+              color: _kPurple,
+              borderRadius: BorderRadius.circular(ui(6)),
+            ),
+          ),
+          SizedBox(width: ui(4)),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: ui(16),
+              color: _kTextDark,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w600,
+              height: 1.2,
+            ),
+          ),
+          const Spacer(),
+          InkWell(
+            onTap: onClose,
+            borderRadius: BorderRadius.circular(ui(8)),
+            child: Padding(
+              padding: EdgeInsets.all(ui(8)),
+              child: Icon(
+                Icons.close_rounded,
+                size: ui(18),
+                color: _kTextSecondary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ClassNoticeDrawerTile extends StatelessWidget {
+  const _ClassNoticeDrawerTile({required this.item});
+
+  final _ClassNoticeItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(ui(12)),
+      decoration: BoxDecoration(
+        color: _kAnnounceBg,
+        borderRadius: BorderRadius.circular(ui(8)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (item.title.isNotEmpty)
+            Text(
+              item.title,
+              style: TextStyle(
+                fontSize: ui(14),
+                color: _kTextDark,
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w500,
+                height: 20 / 14,
+              ),
+            ),
+          if (item.title.isNotEmpty && item.content.isNotEmpty)
+            SizedBox(height: ui(6)),
+          if (item.content.isNotEmpty)
+            Text(
+              item.content,
+              style: TextStyle(
+                fontSize: ui(13),
+                color: _kTextDark,
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w400,
+                height: 20 / 13,
+              ),
+            ),
+          if (item.title.isEmpty && item.content.isEmpty)
+            Text(
+              '—',
+              style: TextStyle(
+                fontSize: ui(13),
+                color: _kTextHint,
+                fontFamily: 'PingFang SC',
+              ),
+            ),
+          SizedBox(height: ui(8)),
+          Text(
+            item.date,
+            style: TextStyle(
+              fontSize: ui(11),
+              color: _kTextSecondary,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w400,
+              height: 12 / 11,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // =============================================================================
 // 师资
 // =============================================================================
@@ -528,6 +1133,7 @@ class _FacultyMember {
     required this.phone,
     required this.email,
     this.courseTag,
+    this.avatarUrl = '',
   });
 
   final String name;
@@ -536,6 +1142,7 @@ class _FacultyMember {
   final String description;
   final String phone;
   final String email;
+  final String avatarUrl;
 
   /// 任课老师卡片右上角的课程标签（如"形体课"），其他段落为 null。
   final String? courseTag;
@@ -629,23 +1236,14 @@ class _FacultyCard extends StatelessWidget {
       ),
       child: Stack(
         children: [
-          // 头像 40×40 占位
+          // 头像 40×40
           Positioned(
             left: ui(12),
             top: ui(8),
-            child: Container(
-              width: ui(40),
-              height: ui(40),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(ui(8)),
-              ),
-              alignment: Alignment.center,
-              child: Icon(
-                Icons.person_outline_rounded,
-                size: ui(22),
-                color: _kTextHint,
-              ),
+            child: _UserAvatarBox(
+              name: member.name,
+              avatarUrl: member.avatarUrl,
+              size: ui(40),
             ),
           ),
           // 姓名
@@ -826,11 +1424,13 @@ class _ClassmateData {
     required this.major,
     this.role,
     this.isSelf = false,
+    this.avatarUrl = '',
   });
 
   final String name;
   final String major;
   final String? role;
+  final String avatarUrl;
 
   /// 第一格固定为"自己"，强制带紫色"自己"标签，且头像走文字方块占位。
   final bool isSelf;
@@ -990,8 +1590,6 @@ class _ClassmateCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final firstChar = item.name.isNotEmpty ? item.name.characters.first : '?';
-    final showInitial = item.isSelf || _shouldUseInitial(item.name);
     return Container(
       width: ui(124),
       height: ui(124),
@@ -1002,27 +1600,11 @@ class _ClassmateCard extends StatelessWidget {
       child: Column(
         children: [
           SizedBox(height: ui(8)),
-          // 头像：紫色文字方块占位 / 灰色 person 占位
-          Container(
-            width: ui(36),
-            height: ui(36),
-            decoration: BoxDecoration(
-              color: showInitial ? _kPurpleAvatar : Colors.white,
-              borderRadius: BorderRadius.circular(ui(8)),
-            ),
-            alignment: Alignment.center,
-            child: showInitial
-                ? Text(
-                    firstChar,
-                    style: TextStyle(
-                      fontSize: ui(13),
-                      color: Colors.white,
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w500,
-                      height: 1,
-                    ),
-                  )
-                : Icon(Icons.person_rounded, size: ui(20), color: _kTextHint),
+          _UserAvatarBox(
+            name: item.name,
+            avatarUrl: item.avatarUrl,
+            size: ui(36),
+            forceInitial: item.isSelf,
           ),
           SizedBox(height: ui(8)),
           Text(
@@ -1077,12 +1659,58 @@ class _ClassmateCard extends StatelessWidget {
       ),
     );
   }
+}
 
-  /// 演示：约 30% 的同学卡片走"姓首字母 + 紫底"，剩余走灰底 person 占位，
-  /// 与 Figma 中两种头像样式比例大致一致。
-  static bool _shouldUseInitial(String name) {
-    if (name.isEmpty) return false;
-    return name.codeUnits.fold<int>(0, (a, b) => a + b) % 4 == 0;
+class _UserAvatarBox extends StatelessWidget {
+  const _UserAvatarBox({
+    required this.name,
+    required this.avatarUrl,
+    required this.size,
+    this.forceInitial = false,
+  });
+
+  final String name;
+  final String avatarUrl;
+  final double size;
+  final bool forceInitial;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final firstChar = name.isNotEmpty ? name.characters.first : '?';
+    final useInitial = forceInitial || avatarUrl.isEmpty;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: useInitial ? _kPurpleAvatar : Colors.white,
+        borderRadius: BorderRadius.circular(ui(8)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      alignment: Alignment.center,
+      child: useInitial
+          ? Text(
+              firstChar,
+              style: TextStyle(
+                fontSize: ui(13),
+                color: Colors.white,
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w500,
+                height: 1,
+              ),
+            )
+          : Image.network(
+              avatarUrl,
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => Icon(
+                Icons.person_rounded,
+                size: ui(size * 0.55),
+                color: _kTextHint,
+              ),
+            ),
+    );
   }
 }
 
@@ -1159,114 +1787,3 @@ class _SectionHeader extends StatelessWidget {
     );
   }
 }
-
-// =============================================================================
-// Demo 数据
-// =============================================================================
-
-const _ClassInfoData _kDemoClass = _ClassInfoData(
-  name: '高三音乐实验班',
-  subtitle: '高三年级·主项声乐·副项钢琴(演示)',
-  headTeacher: '李老师',
-  counselor: '张辅导员',
-  classroom: '艺术楼3号楼8楼803',
-  footer: '教务与艺术实践办公室·列表展示12/42人',
-  totalCount: 64,
-  boyCount: 23,
-  girlCount: 41,
-);
-
-const String _kDemoTeacherDesc = '负责本专业教学运行、排课与考务协调；有事可先通过班主任汇总。';
-
-const List<_FacultySectionData> _kDemoFacultySections = [
-  _FacultySectionData(
-    title: '教务老师',
-    members: [
-      _FacultyMember(
-        name: '王老师',
-        role: '教务统筹',
-        location: '形体房3号办公室502桌',
-        description: _kDemoTeacherDesc,
-        phone: '18774276813',
-        email: 'npwokszehss@139.com',
-      ),
-      _FacultyMember(
-        name: '王老师',
-        role: '教务统筹',
-        location: '形体房3号办公室502桌',
-        description: _kDemoTeacherDesc,
-        phone: '17028813170',
-        email: 'ksnezowshp@gmail.com',
-      ),
-    ],
-  ),
-  _FacultySectionData(
-    title: '班主任',
-    members: [
-      _FacultyMember(
-        name: '王老师',
-        role: '班主任',
-        location: '形体房3号办公室502桌',
-        description: _kDemoTeacherDesc,
-        phone: '13176645408',
-        email: 'npssw@hotmail.com',
-      ),
-    ],
-  ),
-  _FacultySectionData(
-    title: '任课老师',
-    members: [
-      _FacultyMember(
-        name: '王老师',
-        role: '任课老师',
-        location: '形体房3号办公室502桌',
-        description: _kDemoTeacherDesc,
-        phone: '13126245985',
-        email: 'sowshp@gmail.com',
-        courseTag: '形体课',
-      ),
-      _FacultyMember(
-        name: '李老师',
-        role: '任课老师',
-        location: '形体房3号办公室502桌',
-        description: _kDemoTeacherDesc,
-        phone: '13809981987',
-        email: 'zskohswe@163.com',
-        courseTag: '形体课',
-      ),
-      _FacultyMember(
-        name: '马老师',
-        role: '任课老师',
-        location: '形体房3号办公室502桌',
-        description: _kDemoTeacherDesc,
-        phone: '13338170101',
-        email: 'dssohp@qq.com',
-        courseTag: '形体课',
-      ),
-    ],
-  ),
-];
-
-const List<_ClassmateData> _kDemoClassmates = [
-  _ClassmateData(name: '李思涵', major: '钢琴主项', isSelf: true),
-  _ClassmateData(name: '王琴', major: '声乐主项', role: '学习委员'),
-  _ClassmateData(name: '张音铭', major: '钢琴主项', role: '班长'),
-  _ClassmateData(name: '周静', major: '钢琴主项', role: '纪律委员'),
-  _ClassmateData(name: '赖军', major: '钢琴主项', role: '副班长'),
-  _ClassmateData(name: '贾涛', major: '钢琴主项', role: '艺术委员'),
-  _ClassmateData(name: '郑娟', major: '钢琴主项', role: '团委书记'),
-  _ClassmateData(name: '刘娟', major: '钢琴主项'),
-  _ClassmateData(name: '蒋欣', major: '声乐主项', role: '副班长'),
-  _ClassmateData(name: '赵敏', major: '钢琴主项'),
-  _ClassmateData(name: '崔静', major: '钢琴主项', role: '体育委员'),
-  _ClassmateData(name: '黄娟', major: '钢琴主项'),
-  _ClassmateData(name: '王杰', major: '钢琴主项', role: '学习委员'),
-  _ClassmateData(name: '周涛', major: '钢琴主项', role: '作业委员'),
-  _ClassmateData(name: '杨颖', major: '钢琴主项'),
-  _ClassmateData(name: '杨军', major: '声乐主项', role: '卫生委员'),
-  _ClassmateData(name: '陶丽', major: '钢琴主项'),
-  _ClassmateData(name: '崔静', major: '钢琴主项'),
-  _ClassmateData(name: '郑丽', major: '钢琴主项'),
-  _ClassmateData(name: '邵军', major: '钢琴主项'),
-  _ClassmateData(name: '杨军', major: '钢琴主项'),
-];

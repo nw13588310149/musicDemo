@@ -7,12 +7,16 @@ import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dar
 import '../../../core/network/api_response.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../school/data/school_repository.dart';
+import '../../shell/state/shell_state.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/smart_campus_dashboard_data.dart';
+import '../data/student_repository.dart';
 import '../data/teacher_repository.dart';
 import '../state/smart_campus_state.dart';
 import 'widgets/role_switcher_buttons.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
+
+part 'student_dashboard.dart';
 
 /// 用于尚未迁移完成的快捷按钮：弹一个轻提示，避免"点了没反应"。
 /// 真实视图迁移到 Flutter 后再把对应 onTap 替换成具体回调。
@@ -447,7 +451,7 @@ class _TeacherMainColumn extends StatelessWidget {
       onOpenHomeSchool: onOpenHomeSchool,
     );
 
-    // 任课老师：当前课程 + 今日课表；班主任：待办提醒 + 近期动态
+    // 任课老师：当前课程 + 今日课表；班主任：待办提醒 + 近期动态。
     Widget bottomSection({required bool fill}) {
       if (data.role == SmartCampusRole.headTeacher) {
         return _HeadTeacherBoardSection(
@@ -599,11 +603,11 @@ class _TeacherStatCard extends StatelessWidget {
         ],
       ),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          value,
-          SizedBox(height: ui(6)),
+          Expanded(
+            child: Center(child: value),
+          ),
           Text(
             item.label,
             textAlign: TextAlign.center,
@@ -702,11 +706,12 @@ class _TeacherActionPanel extends StatelessWidget {
       // 数据层已统一改为 "校圈"。
       case '校圈':
         return onOpenSchoolCircle;
-      // 学生端独有：「请假管理」→ 进入"请假补课"页面。
-      case '请假管理':
-        return onOpenLeaveManagement;
-      // 学生端独有：「查寝管理」→ 进入个人查寝/补卡页面。
-      case '查寝管理':
+      // 学生端「我的请假」与教师端同名；学生传 onOpenLeaveManagement，教师传
+      // onOpenMyTeacherLeave，按非空回调区分。
+      case '我的请假':
+        return onOpenLeaveManagement ?? onOpenMyTeacherLeave;
+      // 学生端独有：「我的查寝」→ 进入个人查寝/补卡页面。
+      case '我的查寝':
         return onOpenDormCheck;
       // 任课老师/班主任专属：「签课管理」→ 进入授课签到总览页（5 项统计 +
       // 最近签课记录 + 今日课程 + 大课/小课双模签到操作面板）。
@@ -728,9 +733,6 @@ class _TeacherActionPanel extends StatelessWidget {
       // 仅可查看与评分，不可新建考试，通过右抽屉历史月考 / 评分 进入操作）。
       case '考评管理':
         return onOpenExamReview;
-      // 任课老师 / 班主任「我的请假」→ 查看本人请假记录并发起申请。
-      case '我的请假':
-        return onOpenMyTeacherLeave;
       // 班主任专属：「请假审批」→ 进入审批本班学生请假申请的总览页（4 张
       // 统计卡 + 提示与备案说明 + 6 状态 tabs + 搜索 + 双列申请卡片，审批中
       // 卡片底部"通过 / 驳回"按钮，"驳回"打开 GradientHeaderDialog 弹窗）。
@@ -917,6 +919,7 @@ class _TeacherSidebar extends StatelessWidget {
     required this.shellDisplayName,
     required this.avatarUrl,
     required this.fillHeight,
+    this.shellUser = const ShellUser(),
     this.selectedTab,
     this.onTabSelected,
     this.availableRoles = const [
@@ -938,6 +941,7 @@ class _TeacherSidebar extends StatelessWidget {
   final List<SmartCampusRole> availableRoles;
   final String shellDisplayName;
   final String avatarUrl;
+  final ShellUser shellUser;
   final bool fillHeight;
 
   /// 判断是否需要走"通用多身份"切换器：只要 availableRoles 出现 teacher /
@@ -980,6 +984,7 @@ class _TeacherSidebar extends StatelessWidget {
               data: data,
               shellDisplayName: shellDisplayName,
               avatarUrl: avatarUrl,
+              shellUser: shellUser,
             ),
             SizedBox(height: ui(20)),
             if (selectedTab != null && onTabSelected != null) ...[
@@ -1037,11 +1042,13 @@ class _TeacherProfileBlock extends StatelessWidget {
     required this.data,
     required this.shellDisplayName,
     required this.avatarUrl,
+    this.shellUser = const ShellUser(),
   });
 
   final SmartCampusDashboardData data;
   final String shellDisplayName;
   final String avatarUrl;
+  final ShellUser shellUser;
 
   @override
   Widget build(BuildContext context) {
@@ -1050,11 +1057,17 @@ class _TeacherProfileBlock extends StatelessWidget {
     final displayName = shellDisplayName.isNotEmpty
         ? shellDisplayName
         : profile.name;
+    final isStudent = data.role == SmartCampusRole.student;
     final isHeadTeacher = data.role == SmartCampusRole.headTeacher;
-    final roleFallback = isHeadTeacher ? '班主任' : '任课老师';
-    final infoLines = isHeadTeacher
-        ? _headTeacherInfoLines()
-        : _courseTeacherInfoLines();
+    final roleFallback = isStudent
+        ? '学生'
+        : (isHeadTeacher ? '班主任' : '任课老师');
+    final statusLabel = isStudent ? '在校' : '运行中';
+    final infoLines = isStudent
+        ? _studentInfoLines(shellUser)
+        : (isHeadTeacher
+            ? _headTeacherInfoLines()
+            : _courseTeacherInfoLines());
 
     return Padding(
       padding: EdgeInsets.fromLTRB(ui(16), ui(24), ui(16), 0),
@@ -1096,8 +1109,8 @@ class _TeacherProfileBlock extends StatelessWidget {
                               ),
                             ),
                             SizedBox(width: ui(6)),
-                            const _TeacherStatusChip(
-                              label: '运行中',
+                            _TeacherStatusChip(
+                              label: statusLabel,
                               compact: true,
                             ),
                           ],
@@ -1140,6 +1153,17 @@ class _TeacherProfileBlock extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 学生侧栏信息行（来自 myInfo.user）。
+List<String> _studentInfoLines(ShellUser user) {
+  String display(String value) =>
+      value.trim().isEmpty ? '—' : value.trim();
+  return [
+    '学校：${display(user.school)}',
+    '目标院校：${display(user.targetSchool)}',
+    '性别：${display(user.gender)}',
+  ];
 }
 
 /// 班主任侧栏信息行（不依赖班级接口，对齐管理员「岗位 / 权限 / 职责」结构）。
@@ -2937,163 +2961,4 @@ List<InlineSpan> _splitBoardTime(String time, double Function(double) ui) {
       ),
     ),
   ];
-}
-
-// =============================================================================
-// 学生端智慧校园首页布局
-//
-// 复用老师端视觉系统：
-//   - 主区：6 张统计卡 + 10 项功能矩阵（5×2，82×70 按钮）+ 当前课程/今日课表 双卡
-//   - 侧栏 256：头像 + 身份胶囊 + 岗位/权限/职责 + 通知列表
-//     注意：学生端**没有**老师/班主任 tab 切换，所以 _TeacherSidebar 的
-//     selectedTab/onTabSelected 都不传。
-//
-// 数据由 [smartCampusDashboardDataForRole(SmartCampusRole.student)] 提供。
-// 已实现的回调：
-//   - 我的班级 → onOpenMyClass
-//   - 我的课表 → onOpenMySchedule
-//   - 校长信箱 → onOpenPrincipalMailbox
-//   - 课堂签到 → onOpenCheckIn
-//   - 我的作业 → onOpenMyHomework
-//   - 我的成绩 → onOpenMyGrades
-//   - 群聊 → onOpenGroupChat
-//   - 校圈 → onOpenSchoolCircle（push RoutePaths.circle 全屏页）
-//   - 请假管理 → onOpenLeaveManagement（"请假补课"页）
-//   - 查寝管理 → onOpenDormCheck（个人查寝/补卡页）
-//     `_TeacherActionTile` 统一兜底 SnackBar"页面迁移中"，避免点了无反馈。
-// =============================================================================
-
-class StudentDashboardLayout extends StatelessWidget {
-  const StudentDashboardLayout({
-    super.key,
-    required this.shellDisplayName,
-    required this.avatarUrl,
-    required this.onOpenPrincipalMailbox,
-    required this.onOpenMyClass,
-    required this.onOpenMySchedule,
-    required this.onOpenCheckIn,
-    required this.onOpenMyHomework,
-    required this.onOpenMyGrades,
-    required this.onOpenGroupChat,
-    required this.onOpenSchoolCircle,
-    required this.onOpenLeaveManagement,
-    required this.onOpenDormCheck,
-  });
-
-  final String shellDisplayName;
-  final String avatarUrl;
-  final VoidCallback onOpenPrincipalMailbox;
-  final VoidCallback onOpenMyClass;
-  final VoidCallback onOpenMySchedule;
-  final VoidCallback onOpenCheckIn;
-  final VoidCallback onOpenMyHomework;
-  final VoidCallback onOpenMyGrades;
-  final VoidCallback onOpenGroupChat;
-  final VoidCallback onOpenSchoolCircle;
-  final VoidCallback onOpenLeaveManagement;
-  final VoidCallback onOpenDormCheck;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    final data = smartCampusDashboardDataForRole(SmartCampusRole.student);
-    // 学生端没有"班级工作台"按钮，但 _TeacherMainColumn 签名仍要求该回调，
-    // 这里给一个 noop 即可（永远不会被触发）。
-    void noopOpenWorkbench() {}
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        var cw = constraints.maxWidth;
-        if (!cw.isFinite || cw == double.infinity || cw < 2) {
-          final w = MediaQuery.sizeOf(context).width;
-          cw = (w - ui(ShellLayoutSpec.sidebarWidth) - ui(16) * 2).clamp(
-            240.0,
-            20000.0,
-          );
-        }
-        final isCompact = cw < ui(900);
-        final sidebarWidth = ui(256);
-        final contentGap = ui(16);
-        final mainWidth = isCompact
-            ? cw
-            : math.max(0.0, cw - sidebarWidth - contentGap);
-
-        if (isCompact) {
-          return SingleChildScrollView(
-            padding: EdgeInsets.only(bottom: ui(20)),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _TeacherMainColumn(
-                  data: data,
-                  width: mainWidth,
-                  fillRemaining: false,
-                  onOpenPrincipalMailbox: onOpenPrincipalMailbox,
-                  onOpenMyClass: onOpenMyClass,
-                  onOpenClassWorkbench: noopOpenWorkbench,
-                  onOpenMySchedule: onOpenMySchedule,
-                  onOpenCheckIn: onOpenCheckIn,
-                  onOpenMyHomework: onOpenMyHomework,
-                  onOpenMyGrades: onOpenMyGrades,
-                  onOpenGroupChat: onOpenGroupChat,
-                  onOpenSchoolCircle: onOpenSchoolCircle,
-                  onOpenLeaveManagement: onOpenLeaveManagement,
-                  onOpenDormCheck: onOpenDormCheck,
-                ),
-                SizedBox(height: ui(16)),
-                _TeacherSidebar(
-                  data: data,
-                  width: cw,
-                  shellDisplayName: shellDisplayName,
-                  avatarUrl: avatarUrl,
-                  fillHeight: false,
-                ),
-              ],
-            ),
-          );
-        }
-
-        return Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Positioned(
-              left: 0,
-              top: 0,
-              bottom: 0,
-              width: mainWidth,
-              child: _TeacherMainColumn(
-                data: data,
-                width: mainWidth,
-                fillRemaining: true,
-                onOpenPrincipalMailbox: onOpenPrincipalMailbox,
-                onOpenMyClass: onOpenMyClass,
-                onOpenClassWorkbench: noopOpenWorkbench,
-                onOpenMySchedule: onOpenMySchedule,
-                onOpenCheckIn: onOpenCheckIn,
-                onOpenMyHomework: onOpenMyHomework,
-                onOpenMyGrades: onOpenMyGrades,
-                onOpenGroupChat: onOpenGroupChat,
-                onOpenSchoolCircle: onOpenSchoolCircle,
-                onOpenLeaveManagement: onOpenLeaveManagement,
-                onOpenDormCheck: onOpenDormCheck,
-              ),
-            ),
-            Positioned(
-              right: 0,
-              top: 0,
-              bottom: 0,
-              width: sidebarWidth,
-              child: _TeacherSidebar(
-                data: data,
-                width: sidebarWidth,
-                shellDisplayName: shellDisplayName,
-                avatarUrl: avatarUrl,
-                fillHeight: true,
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
 }

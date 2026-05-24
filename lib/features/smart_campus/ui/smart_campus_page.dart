@@ -101,16 +101,14 @@ class SmartCampusPage extends ConsumerWidget {
     final controller = ref.read(smartCampusControllerProvider.notifier);
     final shellState = ref.watch(shellControllerProvider);
 
-    // 「老师」身份用户进入智慧校园后，按需调用 /app/school/v2/teacher/teacherRole
-    // 取回其在校内的实际身份集合（校长 / 教务管理员 / 宿管 / 班主任 /
-    // 任课老师），由 controller 内部去重 + 排序后扩展 availableRoles，
-    // dashboard 上的身份切换 tab 才会出现真正可用的多端入口。
-    //
-    // 这里直接在 build 中触发：shellControllerProvider 上方已经 watch，
-    // myInfo 回包导致 role 变化时本 widget 会自然重 build；
-    // [SmartCampusController.ensureTeacherRolesLoaded] 自身用 loaded /
-    // loading 双标记做去重，重复 build 也只会发一次请求。
-    if (shellState.user.role.trim().toLowerCase() == 'teacher') {
+    // 仅 `myInfo.role == teacher` 且非学生身份时，拉取 teacherRole 解析
+    // 校内多重身份；学生端（含 role/identity 判定为学生）不调用。
+    final campusRole = mapBackendRoleToCampus(
+      shellState.user.role,
+      shellState.user.identity,
+    );
+    if (campusRole != SmartCampusRole.student &&
+        shellState.user.role.trim().toLowerCase() == 'teacher') {
       controller.ensureTeacherRolesLoaded();
     }
 
@@ -386,8 +384,7 @@ class SmartCampusPage extends ConsumerWidget {
         );
       }
       return StudentDashboardLayout(
-        shellDisplayName: shellState.user.displayName,
-        avatarUrl: shellState.user.avatarUrl,
+        shellUser: shellState.user,
         onOpenPrincipalMailbox: controller.openPrincipalMailbox,
         onOpenMyClass: controller.openMyClass,
         onOpenMySchedule: controller.openMySchedule,

@@ -54,6 +54,9 @@ class ShellUser {
     this.province = '',
     this.role = '',
     this.identity = '',
+    this.gender = '',
+    this.school = '',
+    this.targetSchool = '',
     this.vipExpireDate,
   });
 
@@ -75,6 +78,15 @@ class ShellUser {
   /// `myInfo` 接口的 `user.identity` 原文（中文身份），如「学生 / 老师 /
   /// 班主任 / 宿管 / 管理员」，作为 `role` 字段的兜底。
   final String identity;
+
+  /// `myInfo.user.gender`，如「男 / 女」。
+  final String gender;
+
+  /// `myInfo.user.school` 就读学校。
+  final String school;
+
+  /// `myInfo.user.targetSchool` 目标院校。
+  final String targetSchool;
 
   /// `myInfo.user.vipExpireDate` 解析后的到期时间，单位为本地时间。
   ///

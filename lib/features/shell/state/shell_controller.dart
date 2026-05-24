@@ -174,6 +174,9 @@ class ShellController extends StateNotifier<ShellState> {
           province: userMap['province']?.toString() ?? '',
           role: role,
           identity: userMap['identity']?.toString() ?? '',
+          gender: userMap['gender']?.toString() ?? '',
+          school: userMap['school']?.toString() ?? '',
+          targetSchool: userMap['targetSchool']?.toString() ?? '',
           vipExpireDate: _parseVipExpireDate(userMap['vipExpireDate']),
         ),
       );
