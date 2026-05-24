@@ -65,20 +65,22 @@ class SchoolQuizPracticePage extends ConsumerWidget {
     int schoolId,
     QuizPracticeSummary summary,
   ) async {
-    if (summary.allCount <= 0) {
+    final ready = await controller.ensurePracticeReady(summary.type);
+    if (!context.mounted) return;
+    if (ready == null || ready.allCount <= 0) {
       AppToast.show(context, '暂无可练习题目');
       return;
     }
     final args = QuizSessionPageArgs(
-      practiceType: summary.type,
-      practiceId: summary.practiceId,
-      startIndex: summary.doneCount,
-      allCount: summary.allCount,
+      practiceType: ready.type,
+      practiceId: ready.practiceId,
+      startIndex: ready.doneCount,
+      allCount: ready.allCount,
       schoolId: schoolId,
     );
     await Navigator.pushNamed(context, RoutePaths.campAnswer, arguments: args);
     if (!context.mounted) return;
-    await controller.refresh();
+    await controller.refresh(showLoading: false);
   }
 }
 

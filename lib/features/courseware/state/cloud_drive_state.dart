@@ -54,6 +54,16 @@ enum CloudUploadKind {
   const CloudUploadKind(this.label);
 
   final String label;
+
+  /// 上传对话框「上传文件」标题右侧的格式提示，与各类型的 picker 规则一致。
+  String get uploadTip => switch (this) {
+    CloudUploadKind.image =>
+      '*支持 jpg / png / gif / webp 等格式，15M 以内',
+    CloudUploadKind.score =>
+      '*音频支持 mp3 / wav / m4a 等，图片 15M 以内',
+    CloudUploadKind.courseware =>
+      '*支持 PDF / Word / 图片 / HTML 等格式',
+  };
 }
 
 class CloudCategoryItem {

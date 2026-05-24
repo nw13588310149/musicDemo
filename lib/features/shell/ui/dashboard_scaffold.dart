@@ -53,6 +53,11 @@ class DashboardScaffold extends StatelessWidget {
           scale.ui(contentPadding.right),
           scale.ui(contentPadding.bottom),
         );
+        // 侧栏高度按「无键盘」的可用屏高计算，避免 iOS 软键盘顶起时
+        // 整个 body 收缩导致底部「意见反馈 / 折叠按钮」跟着上移。
+        final mediaQuery = MediaQuery.of(context);
+        final fixedSidebarHeight =
+            mediaQuery.size.height - mediaQuery.padding.top;
 
         return DashboardScaleScope(
           data: scale,
@@ -68,28 +73,39 @@ class DashboardScaffold extends StatelessWidget {
               child: SafeArea(
                 bottom: false,
                 child: Stack(
+                  clipBehavior: Clip.hardEdge,
                   children: [
-                    Row(
-                      children: [
-                        AnimatedContainer(
+                    // 主内容区仍随键盘收缩，输入框可正常上推。
+                    Padding(
+                      padding: EdgeInsets.only(left: scaledSidebarWidth),
+                      child: Padding(
+                        padding: scaledContentPadding,
+                        child: Column(
+                          children: [
+                            topBar,
+                            SizedBox(height: scale.ui(contentGap)),
+                            Expanded(child: child),
+                          ],
+                        ),
+                      ),
+                    ),
+                    // 侧栏脱离键盘 inset 的布局流，始终贴满左侧固定高度。
+                    Positioned(
+                      left: 0,
+                      top: 0,
+                      width: scaledSidebarWidth,
+                      height: fixedSidebarHeight,
+                      child: MediaQuery.removeViewInsets(
+                        removeBottom: true,
+                        context: context,
+                        child: AnimatedContainer(
                           duration: const Duration(milliseconds: 280),
                           curve: Curves.easeInOutCubic,
                           width: scaledSidebarWidth,
+                          height: fixedSidebarHeight,
                           child: sidebar,
                         ),
-                        Expanded(
-                          child: Padding(
-                            padding: scaledContentPadding,
-                            child: Column(
-                              children: [
-                                topBar,
-                                SizedBox(height: scale.ui(contentGap)),
-                                Expanded(child: child),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                     if (floatingChild != null)
                       Positioned(

@@ -251,21 +251,14 @@ class _ImmersiveSlide extends StatelessWidget {
           Positioned(
             top: ui(16),
             right: ui(16),
-            child: Material(
-              color: Colors.white.withValues(alpha: 0.28),
-              borderRadius: BorderRadius.circular(ui(8)),
-              child: InkWell(
-                onTap: onDeletePost,
-                borderRadius: BorderRadius.circular(ui(8)),
-                child: Padding(
-                  padding: EdgeInsets.all(ui(8)),
-                  child: Image.asset(
-                    AppAssets.coursewareActionDelete,
-                    width: ui(22),
-                    height: ui(22),
-                    fit: BoxFit.contain,
-                  ),
-                ),
+            child: GestureDetector(
+              onTap: onDeletePost,
+              behavior: HitTestBehavior.opaque,
+              child: Image.asset(
+                AppAssets.homeDel,
+                width: ui(32),
+                height: ui(32),
+                fit: BoxFit.contain,
               ),
             ),
           ),
@@ -298,20 +291,20 @@ class _ImmersiveSlide extends StatelessWidget {
           ),
         ),
 
-        // 左下：作者 + 文案（视频/音频收窄右侧，给操作栏留位）。
+        // 左下：作者 + 文案；距左 32、距底 29.5。
         Positioned(
-          left: ui(isDouyinLayout ? 12 : 32),
+          left: ui(32),
           right: ui(isDouyinLayout ? 88 : 160),
-          bottom: ui(isDouyinLayout ? 16 : 28),
+          bottom: ui(29.5),
           child: isDouyinLayout
               ? _DouyinVideoTextBlock(post: post)
               : _ImmersiveTextBlock(post: post),
         ),
 
-        // 右下：点赞 / 评论 / 收藏（视频/音频更靠右、整体上移）。
+        // 右下：头像 + 点赞 / 评论 / 收藏；最底部元素距容器底 32。
         Positioned(
-          right: ui(isDouyinLayout ? 10 : 28),
-          bottom: ui(isDouyinLayout ? 72 : 32),
+          right: ui(35),
+          bottom: ui(32),
           child: _ImmersiveActions(
             post: post,
             onLike: onLike,
@@ -325,7 +318,58 @@ class _ImmersiveSlide extends StatelessWidget {
   }
 }
 
-/// 抖音风左下信息区：@昵称 → 正文 → 时间，纵向排列。
+/// 沉浸模式左下：昵称 + 身份同一行、中线对齐；身份与列表模式一致走中文映射。
+class _ImmersiveAuthorLine extends StatelessWidget {
+  const _ImmersiveAuthorLine({
+    required this.post,
+    this.nameShadows,
+  });
+
+  final CirclePost post;
+  final List<Shadow>? nameShadows;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final role = formatCircleAuthorRole(post.author.role);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Flexible(
+          child: Text(
+            '@${post.author.name}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: ui(20),
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w600,
+              height: 1,
+              shadows: nameShadows,
+            ),
+          ),
+        ),
+        if (role.isNotEmpty) ...[
+          SizedBox(width: ui(8)),
+          Text(
+            role,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: const Color(0xFFB6B5BB),
+              fontSize: ui(14),
+              fontFamily: 'PingFang SC',
+              height: 1,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// 抖音风左下信息区：@昵称 + 身份 → 正文 → 时间，纵向排列。
 class _DouyinVideoTextBlock extends StatelessWidget {
   const _DouyinVideoTextBlock({required this.post});
 
@@ -338,35 +382,12 @@ class _DouyinVideoTextBlock extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          '@${post.author.name}',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: ui(16),
-            fontFamily: 'PingFang SC',
-            fontWeight: AppFont.w600,
-            height: 1.25,
-            shadows: const [
-              Shadow(color: Color(0x80000000), blurRadius: 4),
-            ],
-          ),
+        _ImmersiveAuthorLine(
+          post: post,
+          nameShadows: const [
+            Shadow(color: Color(0x80000000), blurRadius: 4),
+          ],
         ),
-        if (post.author.role.isNotEmpty) ...[
-          SizedBox(height: ui(4)),
-          Text(
-            post.author.role,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.75),
-              fontSize: ui(12),
-              fontFamily: 'PingFang SC',
-              height: 1.2,
-            ),
-          ),
-        ],
         if (post.text.trim().isNotEmpty) ...[
           SizedBox(height: ui(8)),
           Text(
@@ -393,7 +414,7 @@ class _DouyinVideoTextBlock extends StatelessWidget {
           post.timeLabel,
           style: TextStyle(
             color: Colors.white.withValues(alpha: 0.55),
-            fontSize: ui(12),
+            fontSize: ui(14),
             fontFamily: 'PingFang SC',
           ),
         ),
@@ -414,33 +435,11 @@ class _ImmersiveTextBlock extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Wrap(
-          crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: ui(12),
-          runSpacing: ui(6),
-          children: [
-            Text(
-              '@${post.author.name}',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: ui(20),
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w600,
-                height: 1.2,
-              ),
-            ),
-            Text(
-              post.author.role,
-              style: TextStyle(
-                color: const Color(0xFFCECED1),
-                fontSize: ui(14),
-                fontFamily: 'PingFang SC',
-                height: 1.2,
-              ),
-            ),
-            for (final b in post.badges) CircleBadgeChip(badge: b),
-          ],
-        ),
+        _ImmersiveAuthorLine(post: post),
+        if (post.badges.isNotEmpty) ...[
+          SizedBox(height: ui(6)),
+          CircleBadgeRow(badges: post.badges),
+        ],
         SizedBox(height: ui(12)),
         Text(
           post.text,
@@ -486,7 +485,7 @@ class _ImmersiveActions extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final avatarSize = compact ? ui(48) : ui(44);
-    final gapAfterAvatar = compact ? ui(16) : ui(20);
+    final gapAfterAvatar = ui(24);
     final gapBetween = compact ? ui(14) : ui(16);
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -494,30 +493,27 @@ class _ImmersiveActions extends StatelessWidget {
         _ImmersiveAvatar(url: post.author.avatarUrl, size: avatarSize),
         SizedBox(height: gapAfterAvatar),
         CircleActionButton(
-          iconAsset: AppAssets.schoolIconLiked,
+          iconAsset: post.liked ? AppAssets.circleFav1 : AppAssets.circleFav,
           count: post.likeCount,
           onTap: onLike,
           dark: true,
-          iconSize: compact ? ui(32) : null,
-          coloredIcon: post.liked ? const Color(0xFFFF323C) : Colors.white,
+          iconSize: compact ? ui(28) : null,
         ),
         SizedBox(height: gapBetween),
         CircleActionButton(
-          iconAsset: AppAssets.schoolIconComment,
+          iconAsset: AppAssets.circleMsg,
           count: post.commentCount,
           onTap: onComment,
           dark: true,
-          iconSize: compact ? ui(32) : null,
-          coloredIcon: Colors.white,
+          iconSize: compact ? ui(28) : null,
         ),
         SizedBox(height: gapBetween),
         CircleActionButton(
-          iconAsset: AppAssets.schoolIconFavorite,
+          iconAsset: post.favorited ? AppAssets.circleSc1 : AppAssets.circleSc,
           count: post.favoriteCount,
           onTap: onFavorite,
           dark: true,
-          iconSize: compact ? ui(32) : null,
-          coloredIcon: post.favorited ? const Color(0xFFFFB400) : Colors.white,
+          iconSize: compact ? ui(28) : null,
         ),
       ],
     );

@@ -2144,22 +2144,13 @@ class _CompletedOverlay extends StatelessWidget {
         children: [
           GestureDetector(
             onTap: onReplay,
-            child: Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 2),
-              ),
-              child: const Icon(
-                Icons.replay_rounded,
-                color: Colors.white,
-                size: 32,
-              ),
+            child: Image.asset(
+              AppAssets.videoV2Reload,
+              width: 52,
+              height: 52,
+              fit: BoxFit.contain,
             ),
           ),
-          const SizedBox(height: 8),
-          const Text('重播', style: TextStyle(color: Colors.white, fontSize: 13)),
           if (nextVideo != null) ...[
             const SizedBox(height: 24),
             const Divider(color: Colors.white24, indent: 40, endIndent: 40),

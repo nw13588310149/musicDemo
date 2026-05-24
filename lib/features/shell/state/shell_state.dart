@@ -114,6 +114,34 @@ class ShellUser {
     }
     return '\u7528\u6237';
   }
+
+  ShellUser copyWith({
+    String? id,
+    String? nickname,
+    String? realname,
+    String? avatarUrl,
+    String? province,
+    String? role,
+    String? identity,
+    String? gender,
+    String? school,
+    String? targetSchool,
+    DateTime? vipExpireDate,
+  }) {
+    return ShellUser(
+      id: id ?? this.id,
+      nickname: nickname ?? this.nickname,
+      realname: realname ?? this.realname,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
+      province: province ?? this.province,
+      role: role ?? this.role,
+      identity: identity ?? this.identity,
+      gender: gender ?? this.gender,
+      school: school ?? this.school,
+      targetSchool: targetSchool ?? this.targetSchool,
+      vipExpireDate: vipExpireDate ?? this.vipExpireDate,
+    );
+  }
 }
 
 class ShellState {

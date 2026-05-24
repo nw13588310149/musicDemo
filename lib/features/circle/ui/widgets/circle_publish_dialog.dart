@@ -40,7 +40,6 @@ class _CirclePublishDialog extends ConsumerStatefulWidget {
 
 class _CirclePublishDialogState extends ConsumerState<_CirclePublishDialog> {
   PostMediaKind _kind = PostMediaKind.image;
-  final TextEditingController _titleCtrl = TextEditingController();
   final TextEditingController _textCtrl = TextEditingController();
 
   String? _fileName;
@@ -67,13 +66,9 @@ class _CirclePublishDialogState extends ConsumerState<_CirclePublishDialog> {
 
   @override
   void dispose() {
-    _titleCtrl.dispose();
     _textCtrl.dispose();
     super.dispose();
   }
-
-  /// 标题非空。
-  bool get _hasTitle => _titleCtrl.text.trim().isNotEmpty;
 
   /// 文本内容是否非空。
   bool get _hasText => _textCtrl.text.trim().isNotEmpty;
@@ -84,13 +79,12 @@ class _CirclePublishDialogState extends ConsumerState<_CirclePublishDialog> {
       _kind == PostMediaKind.video || _kind == PostMediaKind.audio;
 
   /// 提交按钮可用性：
-  /// - 标题、正文必填
+  /// - 正文必填
   /// - 主资源必须上传完成
   /// - 主资源上传中、封面上传中、提交中 → 全部禁用
   /// - 封面**本身可选**：用户可以不传，也可以上传完再发布；只是不能在
   ///   "封面正在上传"的中间态点发布。
   bool get _canSubmit =>
-      _hasTitle &&
       _hasText &&
       _hasUploaded &&
       !_uploading &&
@@ -366,7 +360,6 @@ class _CirclePublishDialogState extends ConsumerState<_CirclePublishDialog> {
     setState(() => _submitting = true);
     final controller = ref.read(circleControllerProvider.notifier);
     final ok = await controller.publishPost(
-      title: _titleCtrl.text.trim(),
       content: _textCtrl.text.trim(),
       kind: _kind,
       mediaUrl: _uploadedPath!,
@@ -404,11 +397,6 @@ class _CirclePublishDialogState extends ConsumerState<_CirclePublishDialog> {
         children: [
           _KindTabs(current: _kind, onChanged: _onSwitchKind),
           const SizedBox(height: 16),
-          _TitleField(
-            controller: _titleCtrl,
-            onChanged: (_) => setState(() {}),
-          ),
-          const SizedBox(height: 12),
           _TextArea(
             controller: _textCtrl,
             hint: '说点什么...（必填）',
@@ -542,56 +530,6 @@ class _KindTabItem extends StatelessWidget {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _TitleField extends StatelessWidget {
-  const _TitleField({required this.controller, required this.onChanged});
-
-  final TextEditingController controller;
-  final ValueChanged<String> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      height: ui(44),
-      decoration: BoxDecoration(
-        color: _kBg,
-        borderRadius: BorderRadius.circular(ui(12)),
-      ),
-      alignment: Alignment.center,
-      child: AppTextField(
-        controller: controller,
-        onChanged: onChanged,
-        maxLines: 1,
-        maxLength: 40,
-        cursorColor: const Color(0xFF8741FF),
-        cursorWidth: 1.5,
-        cursorHeight: ui(16),
-        style: TextStyle(
-          fontSize: ui(14),
-          color: _kText,
-          fontFamily: 'PingFang SC',
-          fontWeight: AppFont.w500,
-          height: 1.4,
-        ),
-        decoration: InputDecoration(
-          hintText: '请输入标题（必填）',
-          counterText: '',
-          hintStyle: TextStyle(
-            fontSize: ui(14),
-            color: _kHint,
-            fontFamily: 'PingFang SC',
-            fontWeight: AppFont.w400,
-            height: 1.4,
-          ),
-          border: InputBorder.none,
-          isCollapsed: true,
-          contentPadding: EdgeInsets.symmetric(horizontal: ui(14)),
         ),
       ),
     );

@@ -104,7 +104,11 @@ class MyCollectionPage extends ConsumerWidget {
         Navigator.pushNamed(
           context,
           RoutePaths.musicPlay,
-          arguments: <String, dynamic>{'id': '$targetId'},
+          arguments: <String, dynamic>{
+            'id': '$targetId',
+            // 与听写课件列表入口一致：收藏进入也默认展示题面，答案由用户主动打开。
+            'closedByDefault': true,
+          },
         );
       case 4: // 声乐
       case 5: // 器乐

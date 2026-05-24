@@ -149,6 +149,9 @@ abstract final class AppAssets {
   /// `Icons.edit_outlined`，统一视觉风格）。
   static const homeRename = 'assets/images/home/rename.png';
 
+  /// 沉浸模式校圈帖子右上角删除按钮。
+  static const homeDel = 'assets/images/home/del.png';
+
   /// 日期选择器输入模式下「切回日历」按钮图标。
   static const homeRili = 'assets/images/home/rili.png';
 
@@ -312,6 +315,7 @@ abstract final class AppAssets {
   static const videoV2Back = 'assets/images/video/2.png';
   static const videoV2CenterPlay = 'assets/images/video/3.png';
   static const videoV2CenterPause = 'assets/images/video/4.png';
+  static const videoV2Reload = 'assets/images/video/reload.png';
   static const videoV2SeekBack15 = 'assets/images/video/5.png';
   static const videoV2SmallPlay = 'assets/images/video/6.png';
   static const videoV2SmallPause = 'assets/images/video/7.png';
@@ -424,6 +428,24 @@ abstract final class AppAssets {
   static const schoolIconComment = 'assets/images/school/4.png';
   static const schoolIconFavorite = 'assets/images/school/5.png';
 
+  /// 校圈列表模式专用图标
+  static const circleDel1 = 'assets/images/circle/del1.png';
+  static const circleFav1 = 'assets/images/circle/fav1.png';
+  static const circleFav2 = 'assets/images/circle/fav2.png';
+  static const circleMsg1 = 'assets/images/circle/msg1.png';
+  static const circleSc1 = 'assets/images/circle/sc1.png';
+  static const circleSc2 = 'assets/images/circle/sc2.png';
+
+  /// 校圈沉浸模式专用图标
+  static const circleFav = 'assets/images/circle/fav.png';
+  static const circleMsg = 'assets/images/circle/msg.png';
+  static const circleSc = 'assets/images/circle/sc.png';
+
+  /// 校圈列表模式预览图左下格式图标
+  static const circleTp = 'assets/images/circle/tp.png';
+  static const circleVideo = 'assets/images/circle/video.png';
+  static const circleMusic = 'assets/images/circle/music.png';
+
   /// 校圈右下角悬浮发布按钮（48×48 紫色「+」）。
   static const schoolFabAdd = 'assets/images/home/add.png';
 
@@ -497,4 +519,5 @@ abstract final class AppAssets {
   static const groupChatSend = 'assets/images/groupChat/send.png';
   static const groupChatPlay = 'assets/images/groupChat/play.png';
   static const groupChatStop = 'assets/images/groupChat/stop.png';
+  static const groupChatKj = 'assets/images/groupChat/kj.png';
 }

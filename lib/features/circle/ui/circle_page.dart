@@ -148,36 +148,75 @@ class _CircleModeSwitch extends StatelessWidget {
   final CircleMode mode;
   final ValueChanged<CircleMode> onChanged;
 
+  static const _switchWidth = 116.0;
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      height: ui(36),
-      padding: EdgeInsets.all(ui(2)),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE6E9F1),
-        borderRadius: BorderRadius.circular(ui(8)),
-      ),
-      child: Row(
-        children: [
-          _ModeChip(
-            label: '沉浸',
-            selected: mode == CircleMode.immersive,
-            onTap: () => onChanged(CircleMode.immersive),
-          ),
-          _ModeChip(
-            label: '列表',
-            selected: mode == CircleMode.list,
-            onTap: () => onChanged(CircleMode.list),
-          ),
-        ],
+    final selectedIndex = mode == CircleMode.immersive ? 0 : 1;
+
+    return SizedBox(
+      width: ui(_switchWidth),
+      child: Container(
+        height: ui(36),
+        padding: EdgeInsets.all(ui(2)),
+        decoration: BoxDecoration(
+          color: const Color(0xFFE6E9F1),
+          borderRadius: BorderRadius.circular(ui(8)),
+        ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final segmentWidth = constraints.maxWidth / 2;
+            return SizedBox(
+              height: constraints.maxHeight,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  AnimatedPositioned(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOut,
+                    left: selectedIndex * segmentWidth,
+                    top: 0,
+                    bottom: 0,
+                    width: segmentWidth,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF8741FF),
+                        borderRadius: BorderRadius.circular(ui(6)),
+                      ),
+                    ),
+                  ),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: _ModeSegment(
+                          label: '沉浸',
+                          selected: mode == CircleMode.immersive,
+                          onTap: () => onChanged(CircleMode.immersive),
+                        ),
+                      ),
+                      Expanded(
+                        child: _ModeSegment(
+                          label: '列表',
+                          selected: mode == CircleMode.list,
+                          onTap: () => onChanged(CircleMode.list),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
       ),
     );
   }
 }
 
-class _ModeChip extends StatelessWidget {
-  const _ModeChip({
+class _ModeSegment extends StatelessWidget {
+  const _ModeSegment({
     required this.label,
     required this.selected,
     required this.onTap,
@@ -192,23 +231,20 @@ class _ModeChip extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     return GestureDetector(
       onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOut,
-        padding: EdgeInsets.symmetric(horizontal: ui(16)),
-        decoration: BoxDecoration(
-          color: selected ? const Color(0xFF8741FF) : Colors.transparent,
-          borderRadius: BorderRadius.circular(ui(6)),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          style: TextStyle(
-            color: selected ? Colors.white : const Color(0xFFB6B5BB),
-            fontSize: ui(12),
-            fontFamily: 'PingFang SC',
-            fontWeight: selected ? AppFont.w500 : AppFont.w400,
-            height: 1,
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox.expand(
+        child: Center(
+          child: AnimatedDefaultTextStyle(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            style: TextStyle(
+              color: selected ? Colors.white : const Color(0xFFB6B5BB),
+              fontSize: ui(12),
+              fontFamily: 'PingFang SC',
+              fontWeight: selected ? AppFont.w500 : AppFont.w400,
+              height: 1,
+            ),
+            child: Text(label),
           ),
         ),
       ),

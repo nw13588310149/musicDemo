@@ -375,3 +375,17 @@ String formatCircleCount(int count) {
   if (value >= 100) return '${value.toStringAsFixed(0)}w';
   return '${value.toStringAsFixed(1)}w';
 }
+
+/// 列表卡片作者身份展示：英文 role 映射为中文，其余原样返回。
+String formatCircleAuthorRole(String role) {
+  switch (role.trim().toLowerCase()) {
+    case 'teacher':
+      return '教师';
+    case 'student':
+    case 'stu':
+    case 'pupil':
+      return '学生';
+    default:
+      return role;
+  }
+}

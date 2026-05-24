@@ -68,23 +68,35 @@ class ConsultationItem {
 class ConsultationState {
   const ConsultationState({
     required this.loading,
+    required this.loadingMore,
     required this.items,
+    required this.currentPage,
+    required this.hasMore,
     required this.errorMessage,
   });
 
   final bool loading;
+  final bool loadingMore;
   final List<ConsultationItem> items;
+  final int currentPage;
+  final bool hasMore;
   final String errorMessage;
 
   ConsultationState copyWith({
     bool? loading,
+    bool? loadingMore,
     List<ConsultationItem>? items,
+    int? currentPage,
+    bool? hasMore,
     String? errorMessage,
     bool clearErrorMessage = false,
   }) {
     return ConsultationState(
       loading: loading ?? this.loading,
+      loadingMore: loadingMore ?? this.loadingMore,
       items: items ?? this.items,
+      currentPage: currentPage ?? this.currentPage,
+      hasMore: hasMore ?? this.hasMore,
       errorMessage: clearErrorMessage
           ? ''
           : (errorMessage ?? this.errorMessage),
@@ -93,7 +105,10 @@ class ConsultationState {
 
   static const ConsultationState initial = ConsultationState(
     loading: true,
+    loadingMore: false,
     items: <ConsultationItem>[],
+    currentPage: 0,
+    hasMore: true,
     errorMessage: '',
   );
 }

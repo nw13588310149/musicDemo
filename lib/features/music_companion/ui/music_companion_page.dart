@@ -60,11 +60,34 @@ class _MusicCompanionV2PageState extends ConsumerState<MusicCompanionV2Page> {
             ),
             SizedBox(height: ui(18)),
             Expanded(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 220),
-                switchInCurve: Curves.easeOutCubic,
-                switchOutCurve: Curves.easeInCubic,
-                child: switch (state.activeTab) {
+              child: ClipRect(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 220),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  // 默认 layoutBuilder 会把新旧页面叠在一起做 cross-fade；
+                  // iOS/iPad 上 Image/Stack 图层容易留下节拍器残影。
+                  layoutBuilder:
+                      (Widget? currentChild, List<Widget> previousChildren) {
+                    return Stack(
+                      fit: StackFit.expand,
+                      clipBehavior: Clip.hardEdge,
+                      children: <Widget>[
+                        if (currentChild != null) currentChild,
+                      ],
+                    );
+                  },
+                  transitionBuilder:
+                      (Widget child, Animation<double> animation) {
+                    return FadeTransition(
+                      opacity: animation,
+                      child: ColoredBox(
+                        color: Colors.white,
+                        child: child,
+                      ),
+                    );
+                  },
+                  child: switch (state.activeTab) {
                   MusicCompanionTab.piano => _VirtualPianoPane(
                     key: const ValueKey<String>('music_piano'),
                     activeNotes: state.activePianoNotes,
@@ -99,6 +122,7 @@ class _MusicCompanionV2PageState extends ConsumerState<MusicCompanionV2Page> {
                     ),
                   ),
                 },
+                ),
               ),
             ),
           ],
@@ -814,143 +838,162 @@ class _TunerPane extends StatelessWidget {
     final scale = DashboardScaleScope.of(context);
     final ui = scale.ui;
     return Padding(
-      padding: EdgeInsets.fromLTRB(ui(18), ui(18), ui(18), ui(18)),
+      padding: EdgeInsets.fromLTRB(ui(18), ui(18), ui(18), ui(12)),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SizedBox(height: ui(58)),
-          Center(
-            child: Container(
-              width: ui(240),
-              height: ui(140),
-              padding: EdgeInsets.all(ui(12)),
-              decoration: BoxDecoration(
-                color: const Color(0xCCE8E9F1),
-                borderRadius: BorderRadius.circular(ui(20)),
-                border: Border.all(color: Colors.white, width: ui(0.4)),
-              ),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(ui(12)),
-                  gradient: const LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: <Color>[Color(0xFF25064A), Color(0xFF090611)],
-                  ),
-                ),
-                child: Center(
-                  child: Text(
-                    state.tunerNote,
-                    style: TextStyle(
-                      fontSize: ui(38),
-                      fontFamily: 'Manrope',
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          SizedBox(height: ui(26)),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Tuner-specific ± stepper icons (6.png / 7.png) at 48×48.
-              _TempoIconButton(
-                asset: 'assets/images/music/6.png',
-                size: ui(48),
-                onTap: onDecreaseFrequency,
-              ),
-              SizedBox(width: ui(22)),
-              Text(
-                '${state.tunerReferenceFrequency}hz',
-                style: TextStyle(
-                  fontSize: ui(20),
-                  fontFamily: 'Manrope',
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF151515),
-                ),
-              ),
-              SizedBox(width: ui(22)),
-              _TempoIconButton(
-                asset: 'assets/images/music/7.png',
-                size: ui(48),
-                onTap: onIncreaseFrequency,
-              ),
-            ],
-          ),
-          SizedBox(height: ui(20)),
-          Row(
-            children: [
-              SizedBox(width: ui(98)),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          Expanded(
+            child: SingleChildScrollView(
+              physics: const ClampingScrollPhysics(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    '特定频段',
-                    style: TextStyle(
-                      fontSize: ui(15),
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w600,
-                      color: const Color(0xFF1A1A1A),
-                    ),
-                  ),
-                  SizedBox(height: ui(12)),
-                  GestureDetector(
-                    onTap: onUse442Hz,
+                  SizedBox(height: ui(58)),
+                  Center(
                     child: Container(
-                      width: ui(86),
-                      height: ui(32),
-                      alignment: Alignment.center,
+                      width: ui(240),
+                      height: ui(140),
+                      padding: EdgeInsets.all(ui(12)),
                       decoration: BoxDecoration(
-                        color: state.tunerReferenceFrequency == 442
-                            ? const Color(0xFF141228)
-                            : const Color(0xFFF4F5FA),
-                        borderRadius: BorderRadius.circular(ui(8)),
+                        color: const Color(0xCCE8E9F1),
+                        borderRadius: BorderRadius.circular(ui(20)),
+                        border: Border.all(color: Colors.white, width: ui(0.4)),
                       ),
-                      child: Text(
-                        '442hz',
-                        style: TextStyle(
-                          fontSize: ui(13),
-                          fontFamily: 'Manrope',
-                          fontWeight: FontWeight.w600,
-                          color: state.tunerReferenceFrequency == 442
-                              ? Colors.white
-                              : const Color(0xFF434A59),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(ui(12)),
+                          gradient: const LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: <Color>[
+                              Color(0xFF25064A),
+                              Color(0xFF090611),
+                            ],
+                          ),
+                        ),
+                        child: Center(
+                          child: Text(
+                            state.tunerNote,
+                            style: TextStyle(
+                              fontSize: ui(38),
+                              fontFamily: 'Manrope',
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
                         ),
                       ),
                     ),
                   ),
+                  SizedBox(height: ui(26)),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _TempoIconButton(
+                        asset: 'assets/images/music/6.png',
+                        size: ui(48),
+                        onTap: onDecreaseFrequency,
+                      ),
+                      SizedBox(width: ui(22)),
+                      Text(
+                        '${state.tunerReferenceFrequency}hz',
+                        style: TextStyle(
+                          fontSize: ui(20),
+                          fontFamily: 'Manrope',
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF151515),
+                        ),
+                      ),
+                      SizedBox(width: ui(22)),
+                      _TempoIconButton(
+                        asset: 'assets/images/music/7.png',
+                        size: ui(48),
+                        onTap: onIncreaseFrequency,
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: ui(20)),
+                  Row(
+                    children: [
+                      SizedBox(width: ui(98)),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '特定频段',
+                            style: TextStyle(
+                              fontSize: ui(15),
+                              fontFamily: 'PingFang SC',
+                              fontWeight: AppFont.w600,
+                              color: const Color(0xFF1A1A1A),
+                            ),
+                          ),
+                          SizedBox(height: ui(12)),
+                          GestureDetector(
+                            onTap: onUse442Hz,
+                            child: Container(
+                              width: ui(86),
+                              height: ui(32),
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: state.tunerReferenceFrequency == 442
+                                    ? const Color(0xFF141228)
+                                    : const Color(0xFFF4F5FA),
+                                borderRadius: BorderRadius.circular(ui(8)),
+                              ),
+                              child: Text(
+                                '442hz',
+                                style: TextStyle(
+                                  fontSize: ui(13),
+                                  fontFamily: 'Manrope',
+                                  fontWeight: FontWeight.w600,
+                                  color: state.tunerReferenceFrequency == 442
+                                      ? Colors.white
+                                      : const Color(0xFF434A59),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ],
               ),
-              const Spacer(),
-            ],
+            ),
           ),
           SizedBox(height: ui(28)),
-          Container(
-            width: ui(740),
-            height: ui(140),
-            padding: EdgeInsets.fromLTRB(ui(24), ui(18), ui(24), ui(18)),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF4F5FD),
-              borderRadius: BorderRadius.circular(ui(16)),
-            ),
-            child: CustomPaint(
-              painter: _TunerRulerPainter(cents: state.tunerCents),
+          Align(
+            child: Container(
+              width: ui(740),
+              height: ui(140),
+              padding: EdgeInsets.fromLTRB(ui(24), ui(18), ui(24), ui(18)),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF4F5FD),
+                borderRadius: BorderRadius.circular(ui(16)),
+              ),
+              child: CustomPaint(
+                painter: _TunerRulerPainter(cents: state.tunerCents),
+              ),
             ),
           ),
           SizedBox(height: ui(14)),
-          Text(
-            state.tunerPermissionGranted
-                ? (state.tunerListening
-                      ? '实时检测中 ${state.tunerDetectedFrequency.toStringAsFixed(1)}Hz'
-                      : '准备开始实时检测')
-                : '麦克风未授权，点击这里重新开启',
-            style: TextStyle(
-              fontSize: ui(12),
-              fontFamily: 'PingFang SC',
-              fontWeight: AppFont.w400,
-              color: const Color(0xFF7B8191),
+          GestureDetector(
+            onTap: state.tunerPermissionGranted ? null : onRetryPermission,
+            behavior: HitTestBehavior.opaque,
+            child: Text(
+              state.tunerPermissionGranted
+                  ? (state.tunerListening
+                        ? '实时检测中 ${state.tunerDetectedFrequency.toStringAsFixed(1)}Hz'
+                        : '准备开始实时检测')
+                  : '麦克风未授权，点击这里重新开启',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: ui(12),
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w400,
+                color: const Color(0xFF7B8191),
+              ),
             ),
           ),
           if (!state.tunerPermissionGranted) ...[

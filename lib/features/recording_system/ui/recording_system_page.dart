@@ -2429,6 +2429,9 @@ const double _kRecordingWaveTopInset = 20;
 
 /// 波形柱中心间距（设计稿 px）；越小柱越密。
 const double _kRecordingWaveBarSpacing = 1;
+
+/// 录制中实时波形柱间距（比试听略宽，避免柱线挤在一起）。
+const double _kRecordingLiveWaveBarSpacing = 3;
 const double _kRecordingScaleTopGap = 15;
 const double _kRecordingScaleSectionHeight = 58;
 const double _kRecordingMajorTickHeight = 12;
@@ -2516,7 +2519,7 @@ class _LiveDarkWavePanel extends StatelessWidget {
                         scaleSectionHeight: ui(_kRecordingScaleSectionHeight),
                         bottomInset: ui(_kRecordingWaveBottomPad),
                         barWidth: ui(1.5),
-                        spacing: ui(_kRecordingWaveBarSpacing),
+                        spacing: ui(_kRecordingLiveWaveBarSpacing),
                         cursorThickness: ui(2),
                         playheadDotRadius: ui(3),
                         labelFontSize: ui(10),

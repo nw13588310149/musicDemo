@@ -100,28 +100,22 @@ class CircleActionRow extends StatelessWidget {
     return Row(
       children: [
         CircleActionButton(
-          iconAsset: AppAssets.schoolIconLiked,
+          iconAsset: post.liked ? AppAssets.circleFav1 : AppAssets.circleFav2,
           count: post.likeCount,
           onTap: onLike,
-          coloredIcon: post.liked
-              ? const Color(0xFFFF323C)
-              : const Color(0xFFB6B5BB),
         ),
         SizedBox(width: ui(16)),
         CircleActionButton(
-          iconAsset: AppAssets.schoolIconComment,
+          iconAsset: AppAssets.circleMsg1,
           count: post.commentCount,
           onTap: onComment,
-          coloredIcon: const Color(0xFFB6B5BB),
         ),
         SizedBox(width: ui(16)),
         CircleActionButton(
-          iconAsset: AppAssets.schoolIconFavorite,
+          iconAsset:
+              post.favorited ? AppAssets.circleSc1 : AppAssets.circleSc2,
           count: post.favoriteCount,
           onTap: onFavorite,
-          coloredIcon: post.favorited
-              ? const Color(0xFFFFB400)
-              : const Color(0xFFB6B5BB),
         ),
       ],
     );

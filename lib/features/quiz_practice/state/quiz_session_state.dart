@@ -106,6 +106,71 @@ class QuizQuestion {
          options.map(htmlHasInlineRich),
        );
 
+  /// 由后台 isolate 预计算字段后构造，避免主线程重复 strip HTML。
+  factory QuizQuestion.fromPayload(Map<String, dynamic> payload) {
+    final rawOptions = payload['options'];
+    final options = rawOptions is List
+        ? rawOptions.map((e) => e?.toString() ?? '').toList(growable: false)
+        : const <String>[];
+    final rawOptionsStripped = payload['optionsStripped'];
+    final optionsStripped = rawOptionsStripped is List
+        ? rawOptionsStripped
+              .map((e) => e?.toString() ?? '')
+              .toList(growable: false)
+        : const <String>[];
+    final rawOptionsHasMedia = payload['optionsHasMedia'];
+    final optionsHasMedia = rawOptionsHasMedia is List
+        ? rawOptionsHasMedia.map((e) => e == true).toList(growable: false)
+        : List<bool>.filled(options.length, false, growable: false);
+    final rawOptionsHasInlineRich = payload['optionsHasInlineRich'];
+    final optionsHasInlineRich = rawOptionsHasInlineRich is List
+        ? rawOptionsHasInlineRich
+              .map((e) => e == true)
+              .toList(growable: false)
+        : List<bool>.filled(options.length, false, growable: false);
+
+    return QuizQuestion._precomputed(
+      itemId: payload['itemId'] as int,
+      questionHtml: payload['questionHtml']?.toString() ?? '',
+      options: options,
+      correctAnswer: payload['correctAnswer'] as int? ?? 0,
+      parseHtml: payload['parseHtml']?.toString() ?? '',
+      userAnswer: payload['userAnswer'] as int?,
+      status: payload['status'] as int? ?? 0,
+      questionStripped: payload['questionStripped']?.toString() ?? '',
+      parseStripped: payload['parseStripped']?.toString() ?? '',
+      optionsStripped: optionsStripped,
+      questionHasMedia: payload['questionHasMedia'] == true,
+      questionHasInlineRich: payload['questionHasInlineRich'] == true,
+      parseHasMedia: payload['parseHasMedia'] == true,
+      parseHasInlineRich: payload['parseHasInlineRich'] == true,
+      optionsHasMedia: optionsHasMedia,
+      optionsHasInlineRich: optionsHasInlineRich,
+    );
+  }
+
+  QuizQuestion._precomputed({
+    required this.itemId,
+    required this.questionHtml,
+    required List<String> options,
+    required this.correctAnswer,
+    required this.parseHtml,
+    required this.userAnswer,
+    required this.status,
+    required this.questionStripped,
+    required this.parseStripped,
+    required List<String> optionsStripped,
+    required this.questionHasMedia,
+    required this.questionHasInlineRich,
+    required this.parseHasMedia,
+    required this.parseHasInlineRich,
+    required List<bool> optionsHasMedia,
+    required List<bool> optionsHasInlineRich,
+  }) : options = List<String>.unmodifiable(options),
+       optionsStripped = List<String>.unmodifiable(optionsStripped),
+       optionsHasMedia = List<bool>.unmodifiable(optionsHasMedia),
+       optionsHasInlineRich = List<bool>.unmodifiable(optionsHasInlineRich);
+
   final int itemId;
 
   /// 题干 HTML。
@@ -138,7 +203,7 @@ class QuizQuestion {
   bool get answered => status != 0;
 
   QuizQuestion copyWith({int? userAnswer, int? status}) {
-    return QuizQuestion(
+    return QuizQuestion._precomputed(
       itemId: itemId,
       questionHtml: questionHtml,
       options: options,
@@ -146,6 +211,15 @@ class QuizQuestion {
       parseHtml: parseHtml,
       userAnswer: userAnswer ?? this.userAnswer,
       status: status ?? this.status,
+      questionStripped: questionStripped,
+      parseStripped: parseStripped,
+      optionsStripped: optionsStripped,
+      questionHasMedia: questionHasMedia,
+      questionHasInlineRich: questionHasInlineRich,
+      parseHasMedia: parseHasMedia,
+      parseHasInlineRich: parseHasInlineRich,
+      optionsHasMedia: optionsHasMedia,
+      optionsHasInlineRich: optionsHasInlineRich,
     );
   }
 }

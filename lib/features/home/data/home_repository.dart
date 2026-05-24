@@ -18,23 +18,30 @@ class HomeRepository {
     return client.post('/app/user/myInfo');
   }
 
-  Future<ApiResponse> getClassList() {
-    return client.post('/app/school/v2/chat/classList');
-  }
-
-  Future<ApiResponse> getCourseList({
+  /// 学生首页周课表统计：`/app/school/v2/student/courseList`（按 token 过滤）。
+  Future<ApiResponse> getStudentCourseList({
     required String beginDate,
     required String endDate,
-    required int id,
-    required bool isTeacher,
   }) {
     return client.post(
-      '/app/school/course/courseList',
+      '/app/school/v2/student/courseList',
       data: <String, dynamic>{
         'beginDate': beginDate,
         'endDate': endDate,
-        'classId': isTeacher ? '' : id,
-        'teacherId': isTeacher ? id : '',
+      },
+    );
+  }
+
+  /// 教师首页周课表统计：`/app/school/v2/teacher/courseList`（按 token 过滤）。
+  Future<ApiResponse> getTeacherCourseList({
+    required String beginDate,
+    required String endDate,
+  }) {
+    return client.post(
+      '/app/school/v2/teacher/courseList',
+      data: <String, dynamic>{
+        'beginDate': beginDate,
+        'endDate': endDate,
       },
     );
   }

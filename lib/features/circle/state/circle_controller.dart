@@ -167,13 +167,12 @@ class CircleController extends StateNotifier<CircleState> {
   ///   "coverImg": "https://.../example1.jpg",
   ///   "description": "描述",
   ///   "medias": "[\"https://.../example1.jpg\"]",
-  ///   "title": "标题",
   ///   "type": 1
   /// }
   /// ```
   ///
   /// 字段映射：
-  /// - `title`：用户填写的「标题」（必填）
+  /// - `title`：接口必填，固定传默认值「标题」（UI 不展示标题输入）
   /// - `content`：用户填写的「正文」（必填）
   /// - `description`：暂时与正文同源（仅做摘要兜底，没有单独输入框）
   /// - `coverImg`：
@@ -183,7 +182,6 @@ class CircleController extends StateNotifier<CircleState> {
   /// - `type`：1 图片 / 2 视频 / 3 音频
   /// 上传成功后立即重新拉取列表。
   Future<bool> publishPost({
-    required String title,
     required String content,
     required PostMediaKind kind,
     required String mediaUrl,
@@ -195,7 +193,7 @@ class CircleController extends StateNotifier<CircleState> {
       PostMediaKind.audio => 3,
     };
     final body = <String, dynamic>{
-      'title': title,
+      'title': '标题',
       'content': content,
       'description': content,
       'coverImg': kind == PostMediaKind.image ? mediaUrl : coverImg,

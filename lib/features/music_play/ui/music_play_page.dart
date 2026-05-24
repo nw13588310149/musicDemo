@@ -765,7 +765,7 @@ class _AnswerPanelState extends State<_AnswerPanel> {
               height: ui(28),
               padding: EdgeInsets.all(ui(2)),
               decoration: BoxDecoration(
-                color: const Color(0xFFF5F6FA),
+                color: const Color(0xFFE1E2E5),
                 borderRadius: BorderRadius.circular(ui(8)),
               ),
               child: Row(
@@ -1643,7 +1643,7 @@ class _TogglePill extends StatelessWidget {
         child: Text(
           label,
           style: TextStyle(
-            color: active ? Colors.white : const Color(0xFFB6B5BB),
+            color: active ? Colors.white : const Color(0xFF000000),
             fontSize: ui(12),
             fontFamily: 'PingFang SC',
             fontWeight: active ? AppFont.w500 : AppFont.w400,

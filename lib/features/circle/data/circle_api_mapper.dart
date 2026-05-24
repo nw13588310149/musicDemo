@@ -64,13 +64,9 @@ CirclePost _mapPost(Map<String, dynamic> m) {
     'role',
   ]);
 
-  final title = _pickString(m, const ['title']);
   final content = _pickString(m, const ['content', 'text', 'postsContent', 'body']);
   final description = _pickString(m, const ['description', 'desc', 'summary']);
-  // 列表卡片只展示一段文本：标题（如有）+ 正文 / 描述拼接，
-  // 与 1.0 校圈卡片视觉一致；老接口没有 title 时退化为单段。
   final composedText = _composePostText(
-    title: title,
     content: content,
     description: description,
   );
@@ -169,24 +165,14 @@ CirclePost _mapPost(Map<String, dynamic> m) {
   );
 }
 
-/// 把"标题 + 正文 / 描述"组合成卡片展示用的文本：
-///   - title + content：`title\ncontent`
-///   - 仅 title：`title`
-///   - 无 title 但有 content：`content`
-///   - 仅 description：`description`
-///   - 三者都为空：返回空串（mapper 调用方会用 hash 兜底 id）
+/// 卡片展示用正文：优先 `content`，否则退回 `description`。
 String _composePostText({
-  required String title,
   required String content,
   required String description,
 }) {
-  final t = title.trim();
   final c = content.trim();
   final d = description.trim();
-  final body = c.isNotEmpty ? c : d;
-  if (t.isEmpty) return body;
-  if (body.isEmpty || body == t) return t;
-  return '$t\n$body';
+  return c.isNotEmpty ? c : d;
 }
 
 List<CircleComment> _parseEmbeddedComments(Map<String, dynamic> m) {

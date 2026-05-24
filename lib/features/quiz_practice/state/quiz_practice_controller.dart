@@ -23,11 +23,47 @@ class QuizPracticeController extends StateNotifier<QuizPracticeState> {
 
   final QuizPracticeRepository _repository;
   final int _schoolId;
+  final Set<QuizPracticeType> _initializingTypes = <QuizPracticeType>{};
 
   int get schoolId => _schoolId;
 
-  Future<void> refresh() async {
-    state = state.copyWith(loading: true, clearErrorMessage: true);
+  /// 进入做题页前确保该练习已 create 初始化，避免 session 页重复请求。
+  Future<QuizPracticeSummary?> ensurePracticeReady(QuizPracticeType type) async {
+    if (type == QuizPracticeType.error) {
+      return state.summaryOf(type);
+    }
+
+    await _waitForSummaryLoaded();
+
+    var summary = state.summaryOf(type);
+    if (summary == null) return null;
+
+    final needsInit =
+        !summary.statusInitialized ||
+        summary.practiceId == null ||
+        summary.practiceId! <= 0;
+    if (needsInit) {
+      await _initializePractice(type);
+      summary = state.summaryOf(type);
+    }
+
+    return summary;
+  }
+
+  Future<void> _waitForSummaryLoaded() async {
+    if (!state.loading || state.summaries.isNotEmpty) return;
+    const maxAttempts = 120;
+    for (var i = 0; i < maxAttempts; i++) {
+      if (!mounted) return;
+      if (!state.loading || state.summaries.isNotEmpty) return;
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+  }
+
+  Future<void> refresh({bool showLoading = true}) async {
+    if (showLoading || state.summaries.isEmpty) {
+      state = state.copyWith(loading: true, clearErrorMessage: true);
+    }
     final response = await _repository.getSummary(schoolId: _schoolId);
     if (!mounted) return;
     if (!response.isSuccess) {
@@ -54,18 +90,30 @@ class QuizPracticeController extends StateNotifier<QuizPracticeState> {
   }
 
   Future<void> _initializePractice(QuizPracticeType type) async {
-    final response = await _repository.createPractice(
-      schoolId: _schoolId,
-      practiceType: type.apiKey,
-    );
-    if (!mounted || !response.isSuccess) return;
-    final updated = _parseSinglePractice(type, response.data);
-    if (updated == null) return;
+    if (_initializingTypes.contains(type)) {
+      while (_initializingTypes.contains(type) && mounted) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+      return;
+    }
 
-    final next = state.summaries
-        .map((s) => s.type == type ? updated : s)
-        .toList(growable: false);
-    state = state.copyWith(summaries: next);
+    _initializingTypes.add(type);
+    try {
+      final response = await _repository.createPractice(
+        schoolId: _schoolId,
+        practiceType: type.apiKey,
+      );
+      if (!mounted || !response.isSuccess) return;
+      final updated = _parseSinglePractice(type, response.data);
+      if (updated == null) return;
+
+      final next = state.summaries
+          .map((s) => s.type == type ? updated : s)
+          .toList(growable: false);
+      state = state.copyWith(summaries: next);
+    } finally {
+      _initializingTypes.remove(type);
+    }
   }
 
   List<QuizPracticeSummary> _parseSummaries(dynamic data) {

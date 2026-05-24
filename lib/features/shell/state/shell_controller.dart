@@ -264,6 +264,30 @@ class ShellController extends StateNotifier<ShellState> {
     return null;
   }
 
+  /// 将 `/myInfo` 用户资料回写到 shell 顶栏（头像 / 昵称等），避免资料页
+  /// 编辑后顶栏仍显示旧值，需等待 30s 轮询才刷新。
+  void applyUserProfile(Map<String, dynamic> userMap) {
+    if (userMap.isEmpty) {
+      return;
+    }
+    final avatarUrl = userMap['headUrl']?.toString() ?? state.user.avatarUrl;
+    final nickname = userMap['nickname']?.toString() ?? state.user.nickname;
+    state = state.copyWith(
+      user: state.user.copyWith(
+        nickname: nickname,
+        realname: userMap['realname']?.toString() ?? state.user.realname,
+        avatarUrl: avatarUrl,
+        province: userMap['province']?.toString() ?? state.user.province,
+        gender: userMap['gender']?.toString() ?? state.user.gender,
+        school: userMap['school']?.toString() ?? state.user.school,
+        targetSchool:
+            userMap['targetSchool']?.toString() ?? state.user.targetSchool,
+      ),
+    );
+    unawaited(_storage.saveAvatarUrl(avatarUrl));
+    unawaited(_storage.saveNickname(nickname));
+  }
+
   @override
   void dispose() {
     _stopPollingTimers();

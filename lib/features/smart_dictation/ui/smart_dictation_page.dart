@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../music_companion/ui/widgets/piano_visualizer.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../audio/smart_dictation_audio_engine.dart';
 import '../state/smart_dictation_controller.dart';
@@ -57,6 +58,25 @@ const _kAbsoluteCanonicalAscending = <String>[
 int _absoluteCanonicalIndex(String displayToken) {
   final c = SmartDictationAudioEngine.canonicalFromToken(displayToken);
   return _kAbsoluteCanonicalAscending.indexOf(c);
+}
+
+/// 1080×810（常见 iPad 横屏逻辑分辨率）下闯关卡片文本区偏窄，
+/// 三星默认 4px 间距视觉上几乎贴在一起，单独加大星标间距。
+bool _isSmartDictationViewport1080x810(BuildContext context) {
+  final candidates = <Size>[
+    DashboardScaleScope.of(context).availableSize,
+    MediaQuery.sizeOf(context),
+  ];
+  for (final size in candidates) {
+    // SafeArea / 浏览器 chrome 会让实际尺寸与 1080×810 有偏差。
+    if (size.width >= 1040 &&
+        size.width <= 1120 &&
+        size.height >= 760 &&
+        size.height <= 840) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /// Full answer grid for practice: all notes in range (absolute) or full pool.
@@ -2260,11 +2280,17 @@ class _PracticeExitDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 与云盘「添加分类」弹窗（showTextInputDialog / GradientHeaderDialog）一致。
+    const gradientMidStop = 0.35;
+    const headerHeight = 169.0;
+    final gapBeforeAction = appDialogGapBeforeFirstInput(
+      topInset: kAppDialogTitlePaddingTop,
+    );
+
     return Material(
       type: MaterialType.transparency,
       child: Stack(
         children: [
-          // full-app dim backdrop
           Positioned.fill(
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
@@ -2272,165 +2298,68 @@ class _PracticeExitDialog extends StatelessWidget {
               child: ColoredBox(color: Colors.black.withValues(alpha: 0.78)),
             ),
           ),
-          // dialog card
           Center(
             child: GestureDetector(
               onTap: () {},
               child: Container(
                 width: ui(420),
-                height: ui(218),
+                clipBehavior: Clip.antiAlias,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(ui(24)),
                   gradient: const LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    stops: <double>[0.0, 0.46, 1.0],
                     colors: <Color>[
                       Color(0xFFD2C6FF),
                       Colors.white,
                       Colors.white,
                     ],
+                    stops: <double>[0, gradientMidStop, 1],
                   ),
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(ui(24)),
-                  child: Stack(
-                    children: [
-                      Positioned(
-                        left: ui(168),
-                        top: -ui(11),
-                        child: ShaderMask(
-                          blendMode: BlendMode.dstIn,
-                          shaderCallback: (Rect rect) {
-                            return const LinearGradient(
-                              begin: Alignment(-0.85, -0.95),
-                              end: Alignment(0.95, 1.0),
-                              colors: <Color>[
-                                Color(0x00000000),
-                                Color(0x22000000),
-                                Color(0x70000000),
-                                Color(0xA0000000),
-                              ],
-                              stops: <double>[0.0, 0.28, 0.66, 1.0],
-                            ).createShader(rect);
-                          },
-                          child: Opacity(
-                            opacity: 0.56,
-                            child: Image.asset(
-                              AppAssets.smartDictationFigmaExitTopImage,
-                              width: ui(288),
-                              height: ui(164),
-                              fit: BoxFit.cover,
+                child: Stack(
+                  children: [
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      top: 0,
+                      child: Image.asset(
+                        AppAssets.coursewareUploadHeader,
+                        height: ui(headerHeight),
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        ui(20),
+                        ui(kAppDialogTitlePaddingTop),
+                        ui(20),
+                        ui(20),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Center(
+                            child: Text(
+                              '是否退出当前练习',
+                              style: appDialogTitleTextStyle(ui),
                             ),
                           ),
-                        ),
-                      ),
-                      Positioned(
-                        top: ui(62),
-                        left: 0,
-                        right: 0,
-                        child: Text(
-                          '是否退出当前练习',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: ui(24),
-                            fontFamily: 'PingFang SC',
-                            fontWeight: AppFont.w500,
-                            color: const Color(0xFF0B081A),
-                            height: 12 / 24,
+                          SizedBox(height: ui(gapBeforeAction)),
+                          AppDialogActionBar(
+                            onCancel: onCancel,
+                            onConfirm: onConfirm,
                           ),
-                        ),
+                        ],
                       ),
-                      Positioned(
-                        left: ui(20),
-                        top: ui(136),
-                        child: SizedBox(
-                          width: ui(182),
-                          child: _ExitDialogButton(
-                            ui: ui,
-                            label: '取消',
-                            onTap: onCancel,
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        left: ui(218),
-                        top: ui(136),
-                        child: SizedBox(
-                          width: ui(182),
-                          child: _ExitDialogButton(
-                            ui: ui,
-                            label: '确认',
-                            primary: true,
-                            onTap: onConfirm,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _ExitDialogButton extends StatelessWidget {
-  const _ExitDialogButton({
-    required this.ui,
-    required this.label,
-    required this.onTap,
-    this.primary = false,
-  });
-
-  final double Function(num) ui;
-  final String label;
-  final VoidCallback onTap;
-  final bool primary;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: ui(45),
-        decoration: BoxDecoration(
-          color: primary ? null : Colors.white,
-          gradient: primary
-              ? const LinearGradient(
-                  begin: Alignment.centerRight,
-                  end: Alignment.centerLeft,
-                  colors: <Color>[Color(0xFFB68EFF), Color(0xFF8640FF)],
-                )
-              : null,
-          borderRadius: BorderRadius.circular(ui(12)),
-          border: primary
-              ? null
-              : Border.all(color: const Color(0xFFF3F2F3), width: 1),
-          boxShadow: <BoxShadow>[
-            BoxShadow(
-              color: primary
-                  ? const Color(0x59AD80FF)
-                  : const Color(0x33B5B5B5),
-              offset: const Offset(0, 16),
-              blurRadius: 20,
-            ),
-          ],
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: ui(16),
-            fontFamily: 'PingFang SC',
-            fontWeight: AppFont.w400,
-            color: primary ? Colors.white : const Color(0xFF0B081A),
-            height: 1,
-          ),
-        ),
       ),
     );
   }
@@ -2543,6 +2472,11 @@ class _LessonTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final compactStageStars = _isSmartDictationViewport1080x810(context);
+    final starGap = compactStageStars ? ui(4) : ui(4);
+    final starSize = compactStageStars ? ui(16) : ui(16);
+    final actionButtonWidth = compactStageStars ? ui(64) : ui(72);
+
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -2593,54 +2527,49 @@ class _LessonTile extends StatelessWidget {
                       if (lesson.unlocked)
                         SizedBox(
                           height: ui(28),
-                          child: Stack(
+                          child: Row(
                             children: [
-                              Align(
-                                alignment: Alignment.centerLeft,
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: List<Widget>.generate(3, (index) {
-                                    final filled =
-                                        index < lesson.stars.clamp(0, 3);
-                                    return Padding(
-                                      padding: EdgeInsets.only(
-                                        right: index == 2 ? 0 : ui(4),
-                                      ),
-                                      child: SizedBox(
-                                        width: ui(16),
-                                        height: ui(16),
-                                        child: Image.asset(
-                                          filled
-                                              ? AppAssets
-                                                    .smartDictationFigmaStarOn
-                                              : AppAssets
-                                                    .smartDictationFigmaStarOff,
-                                          fit: BoxFit.contain,
-                                        ),
-                                      ),
-                                    );
-                                  }),
-                                ),
-                              ),
-                              Align(
-                                alignment: Alignment.centerRight,
-                                child: Container(
-                                  width: ui(72),
-                                  height: ui(28),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF292151),
-                                    borderRadius: BorderRadius.circular(ui(8)),
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: Text(
-                                    '去闯关',
-                                    style: TextStyle(
-                                      fontSize: ui(11),
-                                      color: Colors.white,
-                                      fontFamily: 'PingFang SC',
-                                      fontWeight: AppFont.w500,
-                                      height: 12 / 11,
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: List<Widget>.generate(3, (index) {
+                                  final filled =
+                                      index < lesson.stars.clamp(0, 3);
+                                  return Padding(
+                                    padding: EdgeInsets.only(
+                                      right: index == 2 ? 0 : starGap,
                                     ),
+                                    child: SizedBox(
+                                      width: starSize,
+                                      height: starSize,
+                                      child: Image.asset(
+                                        filled
+                                            ? AppAssets
+                                                  .smartDictationFigmaStarOn
+                                            : AppAssets
+                                                  .smartDictationFigmaStarOff,
+                                        fit: BoxFit.contain,
+                                      ),
+                                    ),
+                                  );
+                                }),
+                              ),
+                              const Spacer(),
+                              Container(
+                                width: actionButtonWidth,
+                                height: ui(28),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF292151),
+                                  borderRadius: BorderRadius.circular(ui(8)),
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  '去闯关',
+                                  style: TextStyle(
+                                    fontSize: ui(11),
+                                    color: Colors.white,
+                                    fontFamily: 'PingFang SC',
+                                    fontWeight: AppFont.w500,
+                                    height: 12 / 11,
                                   ),
                                 ),
                               ),

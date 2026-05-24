@@ -335,7 +335,7 @@ class _HomePageViewState extends ConsumerState<_HomePageView> {
           ),
           const SizedBox(height: 14),
           Text(
-            '通知',
+            '课程',
             style: TextStyle(
               fontSize: 18,
               color: Color(0xFF1A1A1A),
@@ -353,7 +353,7 @@ class _HomePageViewState extends ConsumerState<_HomePageView> {
                     physics: const ClampingScrollPhysics(),
                     itemCount: notices.length,
                     separatorBuilder: (context, index) =>
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 9),
                     itemBuilder: (context, index) {
                       return GestureDetector(
                         onTap: _openMySchedule,
@@ -426,7 +426,7 @@ class _NoticeEmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Text(
-        '暂无通知',
+        '暂无排课',
         style: TextStyle(
           fontSize: 14,
           color: Color(0xFFB6B5BB),

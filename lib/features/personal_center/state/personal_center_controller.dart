@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/upload_result.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/storage/app_storage.dart';
+import '../../shell/state/shell_controller.dart';
 import '../data/personal_center_repository.dart';
 import 'personal_center_state.dart';
 
@@ -15,21 +16,28 @@ final personalCenterControllerProvider =
     >((ref) {
       final repository = ref.watch(personalCenterRepositoryProvider);
       final storage = ref.watch(appStorageProvider);
-      return PersonalCenterController(repository: repository, storage: storage);
+      return PersonalCenterController(
+        repository: repository,
+        storage: storage,
+        ref: ref,
+      );
     });
 
 class PersonalCenterController extends StateNotifier<PersonalCenterState> {
   PersonalCenterController({
     required PersonalCenterRepository repository,
     required AppStorage storage,
+    required Ref ref,
   }) : _repository = repository,
        _storage = storage,
+       _ref = ref,
        super(PersonalCenterState(checkStatusEnabled: storage.hasCheckStatus)) {
     refresh();
   }
 
   final PersonalCenterRepository _repository;
   final AppStorage _storage;
+  final Ref _ref;
 
   Future<void> refresh() async {
     state = state.copyWith(
@@ -176,7 +184,18 @@ class PersonalCenterController extends StateNotifier<PersonalCenterState> {
       return r.msg.isEmpty ? '修改失败' : r.msg;
     }
     await refreshUserOnly();
+    _syncShellUserProfile();
     return null;
+  }
+
+  /// 资料页编辑成功后，立即同步 shell 顶栏头像 / 昵称等展示字段。
+  void _syncShellUserProfile() {
+    if (!_ref.exists(shellControllerProvider)) {
+      return;
+    }
+    _ref
+        .read(shellControllerProvider.notifier)
+        .applyUserProfile(state.user);
   }
 
   /// 上传头像图片。成功时同时返回：

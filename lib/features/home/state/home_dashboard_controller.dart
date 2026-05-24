@@ -9,17 +9,13 @@ import '../data/home_repository.dart';
 import 'home_dashboard_state.dart';
 
 final homeDashboardControllerProvider =
-    StateNotifierProvider.autoDispose<
-      HomeDashboardController,
-      HomeDashboardState
-    >((ref) {
+    StateNotifierProvider<HomeDashboardController, HomeDashboardState>((ref) {
       final repository = ref.watch(homeRepositoryProvider);
       final storage = ref.watch(appStorageProvider);
-      final controller = HomeDashboardController(
+      return HomeDashboardController(
         repository: repository,
         storage: storage,
       );
-      return controller;
     });
 
 class HomeDashboardController extends StateNotifier<HomeDashboardState> {
@@ -38,8 +34,13 @@ class HomeDashboardController extends StateNotifier<HomeDashboardState> {
 
   final HomeRepository _repository;
   final AppStorage _storage;
+  bool _refreshInFlight = false;
 
   Future<void> refresh() async {
+    if (_refreshInFlight) {
+      return;
+    }
+    _refreshInFlight = true;
     try {
       if (!mounted) return;
       state = state.copyWith(
@@ -91,6 +92,8 @@ class HomeDashboardController extends StateNotifier<HomeDashboardState> {
             : state.weekItems,
         errorMessage: '首页加载失败，请稍后重试',
       );
+    } finally {
+      _refreshInFlight = false;
     }
   }
 
@@ -258,24 +261,8 @@ class HomeDashboardController extends StateNotifier<HomeDashboardState> {
 
   Future<List<HomeWeekDayItem>> _buildWeekItems(dynamic myInfoData) async {
     final userMap = _extractUser(myInfoData);
-    final userId = _toInt(userMap['id']);
     final role = userMap['role']?.toString() ?? '';
-    final isTeacher = role == 'teacher';
-
-    int classOrTeacherId = userId;
-    if (!isTeacher) {
-      final classResponse = await _safeRequest(_repository.getClassList);
-      if (classResponse.code == 0 && classResponse.data is List) {
-        final classList = classResponse.data as List;
-        if (classList.isNotEmpty && classList.first is Map<String, dynamic>) {
-          classOrTeacherId = _toInt(
-            (classList.first as Map<String, dynamic>)['id'],
-          );
-        }
-      }
-    }
-
-    if (classOrTeacherId <= 0) {
+    if (role != 'teacher' && role != 'student') {
       return _emptyWeekItems();
     }
 
@@ -285,21 +272,24 @@ class HomeDashboardController extends StateNotifier<HomeDashboardState> {
     final beginDate = _formatDate(monday);
     final endDate = _formatDate(sunday);
 
-    final courseResponse = await _safeRequest(
-      () => _repository.getCourseList(
+    final courseResponse = await _safeRequest(() {
+      if (role == 'teacher') {
+        return _repository.getTeacherCourseList(
+          beginDate: beginDate,
+          endDate: endDate,
+        );
+      }
+      return _repository.getStudentCourseList(
         beginDate: beginDate,
         endDate: endDate,
-        id: classOrTeacherId,
-        isTeacher: isTeacher,
-      ),
-    );
+      );
+    });
 
-    if (courseResponse.code != 0 ||
-        courseResponse.data is! Map<String, dynamic>) {
+    if (courseResponse.code != 0 || courseResponse.data == null) {
       return _emptyWeekItems();
     }
 
-    final courseMap = courseResponse.data as Map<String, dynamic>;
+    final countsByDate = _courseCountsByDate(courseResponse.data);
     const weeks = [
       '\u5468\u4e00',
       '\u5468\u4e8c',
@@ -313,8 +303,7 @@ class HomeDashboardController extends StateNotifier<HomeDashboardState> {
     for (var i = 0; i < 7; i++) {
       final date = monday.add(Duration(days: i));
       final dateText = _formatDate(date);
-      final dayCourses = courseMap[dateText];
-      final count = dayCourses is List ? dayCourses.length : 0;
+      final count = countsByDate[dateText] ?? 0;
 
       items.add(
         HomeWeekDayItem(
@@ -330,6 +319,32 @@ class HomeDashboardController extends StateNotifier<HomeDashboardState> {
       );
     }
     return items;
+  }
+
+  Map<String, int> _courseCountsByDate(dynamic data) {
+    final counts = <String, int>{};
+    if (data is Map) {
+      for (final entry in data.entries) {
+        final key = entry.key.toString();
+        final value = entry.value;
+        counts[key] = value is List ? value.length : 0;
+      }
+      return counts;
+    }
+
+    if (data is List) {
+      for (final item in data) {
+        if (item is! Map) {
+          continue;
+        }
+        final date = item['date']?.toString() ?? '';
+        if (date.isEmpty) {
+          continue;
+        }
+        counts[date] = (counts[date] ?? 0) + 1;
+      }
+    }
+    return counts;
   }
 
   List<HomeWeekDayItem> _emptyWeekItems() {

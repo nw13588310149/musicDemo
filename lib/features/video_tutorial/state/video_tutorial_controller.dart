@@ -330,7 +330,14 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
 
     state = state.copyWith(busy: true);
 
-    final content = jsonEncode(detail.toShareMap());
+    final sharePayload = Map<String, dynamic>.from(detail.toShareMap());
+    if (_args.schoolMode) {
+      sharePayload['schoolMode'] = true;
+      if (_args.schoolId > 0) {
+        sharePayload['schoolId'] = _args.schoolId;
+      }
+    }
+    final content = jsonEncode(sharePayload);
     for (final classId in classIds) {
       final response = await _repository.shareVideo(
         classId: classId,

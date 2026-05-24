@@ -6,6 +6,7 @@ import '../../../shell/ui/shell_layout.dart';
 import '../../state/circle_state.dart';
 import 'circle_action_buttons.dart';
 import 'circle_badges.dart';
+import 'circle_video_play_button.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 /// 列表模式下的单个帖子卡片：作者 / 文字 / 配图 / 操作按钮。
@@ -49,7 +50,7 @@ class CirclePostCard extends StatelessWidget {
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: const Color(0xFF0B081A),
+                color: const Color(0xFF000000),
                 fontSize: ui(14),
                 fontFamily: 'PingFang SC',
                 height: 19.6 / 14,
@@ -60,7 +61,7 @@ class CirclePostCard extends StatelessWidget {
               post.timeLabel,
               style: TextStyle(
                 color: const Color(0xFFB6B5BB),
-                fontSize: ui(14),
+                fontSize: ui(13),
                 fontFamily: 'PingFang SC',
               ),
             ),
@@ -109,7 +110,7 @@ class _CardAuthor extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: const Color(0xFF0B081A),
-                        fontSize: ui(18),
+                        fontSize: ui(16),
                         fontFamily: 'PingFang SC',
                         fontWeight: AppFont.w600,
                       ),
@@ -121,13 +122,15 @@ class _CardAuthor extends StatelessWidget {
                   ],
                 ],
               ),
-              SizedBox(height: ui(2)),
-              Text(
-                post.author.role,
-                style: TextStyle(
-                  color: const Color(0xFFB6B5BB),
-                  fontSize: ui(14),
-                  fontFamily: 'PingFang SC',
+              Transform.translate(
+                offset: Offset(0, -ui(2)),
+                child: Text(
+                  formatCircleAuthorRole(post.author.role),
+                  style: TextStyle(
+                    color: const Color(0xFFB6B5BB),
+                    fontSize: ui(13),
+                    fontFamily: 'PingFang SC',
+                  ),
                 ),
               ),
             ],
@@ -137,17 +140,11 @@ class _CardAuthor extends StatelessWidget {
           GestureDetector(
             onTap: onDeletePost,
             behavior: HitTestBehavior.opaque,
-            child: SizedBox(
+            child: Image.asset(
+              AppAssets.circleDel1,
               width: ui(32),
               height: ui(32),
-              child: Center(
-                child: Image.asset(
-                  AppAssets.coursewareActionDelete,
-                  width: ui(20),
-                  height: ui(20),
-                  fit: BoxFit.contain,
-                ),
-              ),
+              fit: BoxFit.contain,
             ),
           ),
       ],
@@ -217,30 +214,43 @@ class _ImageCover extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    if (url.isEmpty) {
-      return Container(
-        color: const Color(0xFFEFEFF4),
-        alignment: Alignment.center,
-        child: Icon(
-          Icons.image_not_supported_outlined,
-          size: ui(32),
-          color: const Color(0xFFB6B5BB),
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        if (url.isEmpty)
+          Container(
+            color: const Color(0xFFEFEFF4),
+            alignment: Alignment.center,
+            child: Icon(
+              Icons.image_not_supported_outlined,
+              size: ui(32),
+              color: const Color(0xFFB6B5BB),
+            ),
+          )
+        else
+          Image.network(
+            url,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stack) =>
+                Container(color: const Color(0xFFD9D9D9)),
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return Container(
+                color: const Color(0xFFEFEFF4),
+                alignment: Alignment.center,
+                child: const AppLoadingIndicator(),
+              );
+            },
+          ),
+        Positioned(
+          left: ui(8),
+          bottom: ui(8),
+          child: const _MediaTypeChip(
+            iconAsset: AppAssets.circleTp,
+            label: '图片',
+          ),
         ),
-      );
-    }
-    return Image.network(
-      url,
-      fit: BoxFit.cover,
-      errorBuilder: (context, error, stack) =>
-          Container(color: const Color(0xFFD9D9D9)),
-      loadingBuilder: (context, child, loadingProgress) {
-        if (loadingProgress == null) return child;
-        return Container(
-          color: const Color(0xFFEFEFF4),
-          alignment: Alignment.center,
-          child: const AppLoadingIndicator(),
-        );
-      },
+      ],
     );
   }
 }
@@ -283,26 +293,12 @@ class _VideoCover extends StatelessWidget {
             ),
           ),
         ),
-        Center(
-          child: Container(
-            width: ui(48),
-            height: ui(48),
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.55),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.play_arrow_rounded,
-              color: Colors.white,
-              size: ui(28),
-            ),
-          ),
-        ),
+        const Center(child: CircleVideoPlayButton()),
         Positioned(
           left: ui(8),
           bottom: ui(8),
-          child: _MediaTypeChip(
-            icon: Icons.videocam_rounded,
+          child: const _MediaTypeChip(
+            iconAsset: AppAssets.circleVideo,
             label: '视频',
           ),
         ),
@@ -358,8 +354,8 @@ class _AudioCover extends StatelessWidget {
         Positioned(
           left: ui(8),
           bottom: ui(8),
-          child: _MediaTypeChip(
-            icon: Icons.music_note_rounded,
+          child: const _MediaTypeChip(
+            iconAsset: AppAssets.circleMusic,
             label: '音频',
           ),
         ),
@@ -394,9 +390,9 @@ class _AudioGradient extends StatelessWidget {
 }
 
 class _MediaTypeChip extends StatelessWidget {
-  const _MediaTypeChip({required this.icon, required this.label});
+  const _MediaTypeChip({required this.iconAsset, required this.label});
 
-  final IconData icon;
+  final String iconAsset;
   final String label;
 
   @override
@@ -406,12 +402,17 @@ class _MediaTypeChip extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: ui(8), vertical: ui(3)),
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(ui(10)),
+        borderRadius: BorderRadius.circular(ui(7)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: Colors.white, size: ui(12)),
+          Image.asset(
+            iconAsset,
+            width: ui(12),
+            height: ui(12),
+            fit: BoxFit.contain,
+          ),
           SizedBox(width: ui(4)),
           Text(
             label,

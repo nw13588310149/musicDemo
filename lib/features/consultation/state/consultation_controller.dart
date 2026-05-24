@@ -27,41 +27,114 @@ class ConsultationController extends StateNotifier<ConsultationState> {
     unawaited(refresh());
   }
 
+  static const int _pageSize = 18;
+
   final ConsultationRepository _repository;
   final ConsultationPageArgs _args;
 
-  Future<void> refresh() async {
-    state = state.copyWith(loading: true, clearErrorMessage: true);
+  bool _loadInFlight = false;
+  bool _useSchoolList = false;
 
-    if (_args.schoolMode) {
-      final schoolResponse = await _repository.getSchoolList(
-        province: _kDefaultProvince,
-      );
-      if (!mounted) return;
+  Future<void> refresh() => _loadPage(reset: true);
 
-      if (schoolResponse.isSuccess) {
-        final schoolItems = _parseItems(schoolResponse.data);
-        if (schoolItems.isNotEmpty) {
-          state = state.copyWith(loading: false, items: schoolItems);
-          return;
-        }
-      }
-    }
-
-    final response = await _repository.getList(province: _kDefaultProvince);
-    if (!mounted) return;
-    if (!response.isSuccess) {
-      state = state.copyWith(
-        loading: false,
-        items: const <ConsultationItem>[],
-        errorMessage: response.msg.isEmpty ? '资讯加载失败' : response.msg,
-      );
+  Future<void> loadMore() async {
+    if (state.loading || state.loadingMore || !state.hasMore || _loadInFlight) {
       return;
+    }
+    await _loadPage(reset: false);
+  }
+
+  Future<void> _loadPage({required bool reset}) async {
+    if (_loadInFlight) {
+      return;
+    }
+    _loadInFlight = true;
+
+    final page = reset ? 1 : state.currentPage + 1;
+    if (reset) {
+      _useSchoolList = false;
     }
 
     state = state.copyWith(
+      loading: reset,
+      loadingMore: !reset,
+      clearErrorMessage: true,
+    );
+
+    try {
+      if (reset && _args.schoolMode) {
+        final schoolResponse = await _repository.getSchoolList(
+          province: _kDefaultProvince,
+          page: page,
+          size: _pageSize,
+        );
+        if (!mounted) return;
+
+        if (schoolResponse.isSuccess) {
+          final schoolItems = _parseItems(schoolResponse.data);
+          if (schoolItems.isNotEmpty) {
+            _useSchoolList = true;
+            _applyPageResult(
+              reset: true,
+              page: page,
+              pageItems: schoolItems,
+            );
+            return;
+          }
+        }
+      }
+
+      final response = _useSchoolList
+          ? await _repository.getSchoolList(
+              province: _kDefaultProvince,
+              page: page,
+              size: _pageSize,
+            )
+          : await _repository.getList(
+              province: _kDefaultProvince,
+              page: page,
+              size: _pageSize,
+            );
+      if (!mounted) return;
+
+      if (!response.isSuccess) {
+        state = state.copyWith(
+          loading: false,
+          loadingMore: false,
+          items: reset ? const <ConsultationItem>[] : state.items,
+          hasMore: reset ? true : state.hasMore,
+          errorMessage: reset
+              ? (response.msg.isEmpty ? '资讯加载失败' : response.msg)
+              : state.errorMessage,
+        );
+        return;
+      }
+
+      _applyPageResult(
+        reset: reset,
+        page: page,
+        pageItems: _parseItems(response.data),
+      );
+    } finally {
+      _loadInFlight = false;
+    }
+  }
+
+  void _applyPageResult({
+    required bool reset,
+    required int page,
+    required List<ConsultationItem> pageItems,
+  }) {
+    final baseItems = reset ? const <ConsultationItem>[] : state.items;
+    final merged = _mergeUnique(baseItems, pageItems);
+    final hasMore = pageItems.length >= _pageSize;
+
+    state = state.copyWith(
       loading: false,
-      items: _parseItems(response.data),
+      loadingMore: false,
+      items: merged,
+      currentPage: page,
+      hasMore: hasMore,
     );
   }
 
@@ -77,6 +150,21 @@ class ConsultationController extends StateNotifier<ConsultationState> {
       }
     }
     return items;
+  }
+
+  List<ConsultationItem> _mergeUnique(
+    List<ConsultationItem> base,
+    List<ConsultationItem> incoming,
+  ) {
+    final result = <ConsultationItem>[];
+    final seen = <int>{};
+    for (final item in <ConsultationItem>[...base, ...incoming]) {
+      if (item.id <= 0 || !seen.add(item.id)) {
+        continue;
+      }
+      result.add(item);
+    }
+    return result;
   }
 
   void clearError() {

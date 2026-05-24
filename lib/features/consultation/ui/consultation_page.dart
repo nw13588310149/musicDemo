@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -48,8 +50,9 @@ class ConsultationPage extends ConsumerWidget {
                   : state.items.isEmpty
                   ? const _ConsultationEmpty()
                   : _ConsultationBody(
-                      items: state.items,
+                      state: state,
                       sourceName: args.sourceName,
+                      onLoadMore: controller.loadMore,
                     ),
             ),
           ],
@@ -162,30 +165,96 @@ class ConsultationBackButton extends StatelessWidget {
 // 主体（banner 200 高度 + 3 列网格）
 // ─────────────────────────────────────────────────────────────────────
 
-class _ConsultationBody extends StatelessWidget {
-  const _ConsultationBody({required this.items, this.sourceName});
+class _ConsultationBody extends ConsumerStatefulWidget {
+  const _ConsultationBody({
+    required this.state,
+    this.sourceName,
+    required this.onLoadMore,
+  });
 
-  final List<ConsultationItem> items;
+  final ConsultationState state;
   final String? sourceName;
+  final Future<void> Function() onLoadMore;
+
+  @override
+  ConsumerState<_ConsultationBody> createState() => _ConsultationBodyState();
+}
+
+class _ConsultationBodyState extends ConsumerState<_ConsultationBody> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_handleScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_handleScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _handleScroll() {
+    if (!_scrollController.hasClients) return;
+    if (_scrollController.position.extentAfter < 320) {
+      unawaited(widget.onLoadMore());
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    // 外层 vertical 12 padding 让滚动条不顶到 header 分割线和白卡底部；
-    // 内层滚动 padding 上下各减 12，整体上下间距与原视觉一致。
+    final items = widget.state.items;
+    const columns = 3;
+    final gap = ui(16);
+
     return Padding(
       padding: EdgeInsets.symmetric(vertical: ui(12)),
-      child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(ui(20), ui(4), ui(20), ui(8)),
+      child: CustomScrollView(
+        controller: _scrollController,
         physics: const ClampingScrollPhysics(),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const _ConsultationBanner(),
-            SizedBox(height: ui(16)),
-            _ConsultationGrid(items: items, sourceName: sourceName),
-          ],
-        ),
+        slivers: [
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(ui(20), ui(4), ui(20), 0),
+            sliver: const SliverToBoxAdapter(child: _ConsultationBanner()),
+          ),
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(ui(20), ui(16), ui(20), ui(8)),
+            sliver: SliverGrid(
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: columns,
+                crossAxisSpacing: gap,
+                mainAxisSpacing: gap,
+                mainAxisExtent: ui(116),
+              ),
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  return _ConsultationCard(
+                    item: items[index],
+                    showLatestBadge: index < 3,
+                    sourceName: widget.sourceName,
+                  );
+                },
+                childCount: items.length,
+              ),
+            ),
+          ),
+          if (widget.state.loadingMore)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: ui(12)),
+                child: const Center(
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: AppLoadingIndicator(),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -255,41 +324,6 @@ class _ConsultationBanner extends StatelessWidget {
           },
         ),
       ),
-    );
-  }
-}
-
-class _ConsultationGrid extends StatelessWidget {
-  const _ConsultationGrid({required this.items, this.sourceName});
-
-  final List<ConsultationItem> items;
-  final String? sourceName;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    const columns = 3;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final gap = ui(16);
-        final itemWidth =
-            (constraints.maxWidth - gap * (columns - 1)) / columns;
-        return Wrap(
-          spacing: gap,
-          runSpacing: gap,
-          children: [
-            for (var i = 0; i < items.length; i++)
-              SizedBox(
-                width: itemWidth,
-                child: _ConsultationCard(
-                  item: items[i],
-                  showLatestBadge: i < 3,
-                  sourceName: sourceName,
-                ),
-              ),
-          ],
-        );
-      },
     );
   }
 }
@@ -393,6 +427,8 @@ class _CardThumbnail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final cacheWidth =
+        (ui(92) * MediaQuery.devicePixelRatioOf(context)).round();
     return ClipRRect(
       borderRadius: BorderRadius.circular(ui(6)),
       child: SizedBox(
@@ -403,6 +439,8 @@ class _CardThumbnail extends StatelessWidget {
             : Image.network(
                 url,
                 fit: BoxFit.cover,
+                cacheWidth: cacheWidth,
+                filterQuality: FilterQuality.medium,
                 errorBuilder: (context, error, stack) =>
                     const _ThumbnailPlaceholder(),
               ),

@@ -7,6 +7,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../../shell/ui/shell_layout.dart';
 import '../../state/circle_state.dart';
+import 'circle_video_play_button.dart';
 
 /// 沉浸模式下的统一媒体播放壳：
 /// - **图片**：盖一张大图 + 加载/失败兜底
@@ -135,7 +136,10 @@ class _CircleMediaPlayerState extends State<CircleMediaPlayer> {
 
 /// 视频层控件：全屏手势 + 底部进度条。
 Widget _douyinVideoControls(VideoState state) {
-  return _DouyinMediaControls(player: state.widget.controller.player);
+  return _DouyinMediaControls(
+    player: state.widget.controller.player,
+    listStylePlayPause: true,
+  );
 }
 
 /// 抖音式全屏媒体控件：
@@ -144,9 +148,13 @@ Widget _douyinVideoControls(VideoState state) {
 /// - **纵向滑动**：不拦截，交给外层 PageView 翻页
 /// - 底部细进度条随播放更新；拖动时变粗并显示时间
 class _DouyinMediaControls extends StatefulWidget {
-  const _DouyinMediaControls({required this.player});
+  const _DouyinMediaControls({
+    required this.player,
+    this.listStylePlayPause = false,
+  });
 
   final Player player;
+  final bool listStylePlayPause;
 
   @override
   State<_DouyinMediaControls> createState() => _DouyinMediaControlsState();
@@ -166,15 +174,18 @@ class _DouyinMediaControlsState extends State<_DouyinMediaControls>
   double _dragRatio = 0;
   bool _resumeAfterDrag = false;
 
-  late final AnimationController _iconAnimation = AnimationController(
-    vsync: this,
-    value: widget.player.state.playing ? 1 : 0,
-    duration: const Duration(milliseconds: 200),
-  );
+  AnimationController? _iconAnimation;
 
   @override
   void initState() {
     super.initState();
+    if (!widget.listStylePlayPause) {
+      _iconAnimation = AnimationController(
+        vsync: this,
+        value: widget.player.state.playing ? 1 : 0,
+        duration: const Duration(milliseconds: 200),
+      );
+    }
     _playing = widget.player.state.playing;
     _position = widget.player.state.position;
     _duration = widget.player.state.duration;
@@ -187,10 +198,12 @@ class _DouyinMediaControlsState extends State<_DouyinMediaControls>
     _playingSub = widget.player.stream.playing.listen((p) {
       if (!mounted) return;
       setState(() => _playing = p);
+      final iconAnimation = _iconAnimation;
+      if (iconAnimation == null) return;
       if (p) {
-        _iconAnimation.forward();
+        iconAnimation.forward();
       } else {
-        _iconAnimation.reverse();
+        iconAnimation.reverse();
       }
     });
   }
@@ -200,7 +213,7 @@ class _DouyinMediaControlsState extends State<_DouyinMediaControls>
     _posSub?.cancel();
     _durSub?.cancel();
     _playingSub?.cancel();
-    _iconAnimation.dispose();
+    _iconAnimation?.dispose();
     super.dispose();
   }
 
@@ -250,12 +263,14 @@ class _DouyinMediaControlsState extends State<_DouyinMediaControls>
                 ColoredBox(color: Colors.black.withValues(alpha: 0.12)),
               if (!_dragging && !_playing)
                 Center(
-                  child: AnimatedIcon(
-                    progress: _iconAnimation,
-                    icon: AnimatedIcons.play_pause,
-                    size: ui(56),
-                    color: Colors.white,
-                  ),
+                  child: widget.listStylePlayPause
+                      ? const CircleVideoPlayButton()
+                      : AnimatedIcon(
+                          progress: _iconAnimation!,
+                          icon: AnimatedIcons.play_pause,
+                          size: ui(56),
+                          color: Colors.white,
+                        ),
                 ),
               Positioned(
                 left: 0,

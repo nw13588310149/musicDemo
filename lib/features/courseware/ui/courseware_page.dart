@@ -22,6 +22,7 @@ import '../state/cloud_drive_state.dart';
 import 'courseware_file_picker.dart';
 import 'courseware_inline_preview.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_theme.dart';
 
 class MyCloudDrivePage extends ConsumerStatefulWidget {
   const MyCloudDrivePage({super.key});
@@ -3677,6 +3678,9 @@ const int _kMaxFileBytes = 1024 * 1024 * 1024;
 /// 解码到 200×200 已经足够清晰、内存足够低。
 const int _kThumbDecodeMaxPx = 200;
 
+/// 图片 / 谱例 / 课件在「未选文件」时上传区域的统一高度（设计稿逻辑 px）。
+const double _kUploadEmptyZoneHeight = 140;
+
 /// 把字节数转成「12.5MB」/「1.2GB」形式，给提示用。
 String _formatUploadSize(int bytes) {
   if (bytes <= 0) return '0B';
@@ -4186,7 +4190,7 @@ class _UploadDialogState extends State<_UploadDialog> {
                       ),
                       const Spacer(),
                       Text(
-                        '*支持 PDF/Word/图片/HTML，图片支持15M以内',
+                        _kind.uploadTip,
                         style: TextStyle(
                           fontSize: ui(12),
                           color: const Color(0xFFCECED1),
@@ -4253,7 +4257,7 @@ class _UploadDialogState extends State<_UploadDialog> {
               Text(
                 '添加',
                 style: TextStyle(
-                  fontSize: ui(11),
+                  fontSize: ui(13),
                   color: const Color(0xFF8741FF),
                   fontFamily: 'PingFang SC',
                 ),
@@ -4270,7 +4274,7 @@ class _UploadDialogState extends State<_UploadDialog> {
         onTap: _pick,
         child: Container(
           width: double.infinity,
-          height: ui(140),
+          height: ui(_kUploadEmptyZoneHeight),
           decoration: BoxDecoration(
             color: const Color(0xFFF4F4FF),
             borderRadius: BorderRadius.circular(ui(12)),
@@ -4411,7 +4415,7 @@ class _UploadDialogState extends State<_UploadDialog> {
               ),
             ),
 
-          // done badge (bottom-left)
+          // done badge (bottom-left) — 主色实心圆 + 白色勾
           if (slot.isDone)
             Positioned(
               left: ui(3),
@@ -4420,7 +4424,7 @@ class _UploadDialogState extends State<_UploadDialog> {
                 width: ui(16),
                 height: ui(16),
                 decoration: const BoxDecoration(
-                  color: Color(0xFF18C9A5),
+                  color: AppTheme.brandColor,
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
@@ -4530,7 +4534,7 @@ class _UploadDialogState extends State<_UploadDialog> {
               Text(
                 '添加',
                 style: TextStyle(
-                  fontSize: ui(11),
+                  fontSize: ui(13),
                   color: const Color(0xFF8741FF),
                   fontFamily: 'PingFang SC',
                 ),
@@ -4566,7 +4570,7 @@ class _UploadDialogState extends State<_UploadDialog> {
         onTap: _pick,
         child: Container(
           width: double.infinity,
-          height: ui(140),
+          height: ui(_kUploadEmptyZoneHeight),
           decoration: BoxDecoration(
             color: const Color(0xFFF4F4FF),
             borderRadius: BorderRadius.circular(ui(12)),
@@ -4657,13 +4661,25 @@ class _UploadDialogState extends State<_UploadDialog> {
                     ),
                   ),
                 ] else if (slot.isDone)
-                  Text(
-                    '上传完成 ✓',
-                    style: TextStyle(
-                      fontSize: ui(11),
-                      color: const Color(0xFF18C9A5),
-                      fontFamily: 'PingFang SC',
-                    ),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.check_circle_rounded,
+                        size: ui(14),
+                        color: const Color(0xFF8741FF),
+                      ),
+                      SizedBox(width: ui(4)),
+                      Text(
+                        '已上传${_humanFileSize(slot.size).isEmpty ? '' : ' · '}${_humanFileSize(slot.size)}',
+                        style: TextStyle(
+                          fontSize: ui(12),
+                          color: const Color(0xFFB6B5BB),
+                          fontFamily: 'PingFang SC',
+                          fontWeight: AppFont.w400,
+                          height: 1.2,
+                        ),
+                      ),
+                    ],
                   )
                 else if (slot.hasError)
                   Text(
@@ -4725,6 +4741,15 @@ class _UploadDialogState extends State<_UploadDialog> {
 
   // ── helpers ───────────────────────────────────────────────────────────────
 
+  static String _humanFileSize(int? bytes) {
+    if (bytes == null || bytes <= 0) return '';
+    if (bytes < 1024) return '${bytes}B';
+    if (bytes < 1024 * 1024) {
+      return '${(bytes / 1024).toStringAsFixed(1)}KB';
+    }
+    return '${(bytes / 1024 / 1024).toStringAsFixed(1)}MB';
+  }
+
   static Widget _uploadHintText(String label, double Function(double) ui) {
     return RichText(
       text: TextSpan(
@@ -4753,8 +4778,7 @@ class _UploadDialogState extends State<_UploadDialog> {
   }
 }
 
-/// 谱例上传对话框中的「点击将 X 在此处上传」单元格，固定 130 高度，#F4F4FF
-/// 背景 + 1px #F3F2F3 边框 + 12 圆角，提供顶部图标 + 富文本提示。
+/// 谱例上传对话框中的「点击将 X 在此处上传」单元格，高度与图片/课件空态上传区一致。
 class _ScoreUploadCell extends StatelessWidget {
   const _ScoreUploadCell({
     required this.ui,
@@ -4773,7 +4797,7 @@ class _ScoreUploadCell extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        height: ui(130),
+        height: ui(_kUploadEmptyZoneHeight),
         decoration: BoxDecoration(
           color: const Color(0xFFF4F4FF),
           borderRadius: BorderRadius.circular(ui(12)),

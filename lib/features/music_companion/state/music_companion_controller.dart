@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:pitch_detector_dart/pitch_detector.dart';
 import 'package:record/record.dart';
 
@@ -334,26 +335,28 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
     );
   }
 
-  Future<void> startTuner() async {
+  Future<void> startTuner({bool showErrorOnDeny = false}) async {
     if (state.tunerListening) {
       return;
     }
 
     try {
-      final hasPermission = await _recorder.hasPermission();
-      if (!mounted) return;
-      if (!hasPermission) {
-        state = state.copyWith(
-          tunerPermissionGranted: false,
-          tunerListening: false,
-          errorMessage: '调音器需要麦克风权限，请先授权。',
-        );
-        return;
-      }
-
       await _stopTuner();
       if (!mounted) return;
       _tunerPcmBytes.clear();
+
+      if (!kIsWeb) {
+        final granted = await _ensureMicrophonePermission();
+        if (!mounted) return;
+        if (!granted) {
+          state = state.copyWith(
+            tunerPermissionGranted: false,
+            tunerListening: false,
+            errorMessage: showErrorOnDeny ? _tunerPermissionErrorMessage : null,
+          );
+          return;
+        }
+      }
 
       final stream = await _recorder.startStream(
         const RecordConfig(
@@ -390,17 +393,48 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
         },
         cancelOnError: false,
       );
-    } catch (_) {
+    } catch (error, stack) {
+      debugPrint('MusicCompanion startTuner: $error\n$stack');
       if (!mounted) return;
       state = state.copyWith(
         tunerListening: false,
         tunerPermissionGranted: false,
-        errorMessage: '当前设备暂不支持实时调音检测。',
+        errorMessage: showErrorOnDeny ? _tunerPermissionErrorMessage : null,
       );
     }
   }
 
-  Future<void> retryTunerPermission() => startTuner();
+  Future<bool> _ensureMicrophonePermission() async {
+    if (await _recorder.hasPermission()) {
+      return true;
+    }
+    if (kIsWeb) {
+      // Web 需由 startStream / getUserMedia 在用户手势链路里触发授权弹窗。
+      return true;
+    }
+    final status = await Permission.microphone.request();
+    if (status.isGranted || status.isLimited) {
+      return _recorder.hasPermission();
+    }
+    return false;
+  }
+
+  String get _tunerPermissionErrorMessage => kIsWeb
+      ? '调音器需要麦克风权限，请在浏览器中允许访问。'
+      : '调音器需要麦克风权限，请先授权。';
+
+  Future<void> retryTunerPermission() async {
+    if (!await _ensureMicrophonePermission()) {
+      if (!mounted) return;
+      state = state.copyWith(
+        tunerPermissionGranted: false,
+        tunerListening: false,
+        errorMessage: _tunerPermissionErrorMessage,
+      );
+      return;
+    }
+    await startTuner(showErrorOnDeny: true);
+  }
 
   void setTunerReferenceFrequency(int value) {
     final next = value.clamp(430, 450);

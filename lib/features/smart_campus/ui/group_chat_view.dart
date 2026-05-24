@@ -2939,21 +2939,19 @@ class _GroupChatBackButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return InkWell(
+    return GestureDetector(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(ui(8)),
       child: Container(
         width: ui(32),
         height: ui(32),
-        alignment: Alignment.center,
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(ui(8)),
           border: Border.all(color: _kBorderSoft),
         ),
         child: Icon(
-          Icons.chevron_left_rounded,
-          size: ui(20),
+          Icons.arrow_back_ios_new_rounded,
+          size: ui(16),
           color: const Color(0xFF1C274C),
         ),
       ),
@@ -3015,9 +3013,9 @@ class _ConversationListPaneState extends State<_ConversationListPane> {
           SizedBox(
             height: ui(68),
             child: Align(
-              alignment: Alignment.centerLeft,
+              alignment: Alignment.topLeft,
               child: Padding(
-                padding: EdgeInsets.only(left: ui(4)),
+                padding: EdgeInsets.fromLTRB(ui(4), ui(12), 0, 0),
                 child: _GroupChatBackButton(onTap: widget.onBack),
               ),
             ),
@@ -3035,11 +3033,21 @@ class _ConversationListPaneState extends State<_ConversationListPane> {
                     : ListView.separated(
                         padding: EdgeInsets.zero,
                         itemCount: filtered.length,
-                        separatorBuilder: (a, b) => Divider(
-                          height: 1,
-                          thickness: 0.5,
-                          color: _kBorderSoft,
-                        ),
+                        separatorBuilder: (context, index) {
+                          final selectedIndex = filtered.indexWhere(
+                            (c) => c.id == widget.selectedConvId,
+                          );
+                          final hideDivider = selectedIndex != -1 &&
+                              (index == selectedIndex - 1 ||
+                                  index == selectedIndex);
+                          return Divider(
+                            height: 1,
+                            thickness: 0.5,
+                            color: hideDivider
+                                ? Colors.transparent
+                                : _kBorderSoft,
+                          );
+                        },
                         itemBuilder: (context, i) {
                           final c = filtered[i];
                           return _ConversationCell(
@@ -3221,36 +3229,38 @@ class _ConversationCell extends StatelessWidget {
             ),
             SizedBox(width: ui(10)),
             Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    conv.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: ui(13),
-                      color: _kTextDark,
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w500,
-                      height: 1.2,
+              child: SizedBox(
+                height: ui(36),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      conv.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: ui(13),
+                        color: _kTextDark,
+                        fontFamily: 'PingFang SC',
+                        fontWeight: AppFont.w500,
+                        height: 1.2,
+                      ),
                     ),
-                  ),
-                  SizedBox(height: ui(6)),
-                  Text(
-                    conv.lastMessage,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: ui(11),
-                      color: _kTextHint,
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w400,
-                      height: 1.2,
+                    Text(
+                      conv.lastMessage,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: ui(11),
+                        color: _kTextHint,
+                        fontFamily: 'PingFang SC',
+                        fontWeight: AppFont.w400,
+                        height: 1.2,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             SizedBox(width: ui(6)),
@@ -3305,14 +3315,12 @@ class _CompactConversationStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return SizedBox(
-      height: ui(64),
+    return Padding(
+      padding: EdgeInsets.fromLTRB(ui(12), ui(12), ui(8), 0),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: EdgeInsets.only(left: ui(8)),
-            child: _GroupChatBackButton(onTap: onBack),
-          ),
+          _GroupChatBackButton(onTap: onBack),
           Expanded(
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
@@ -3986,7 +3994,7 @@ class _ChatBodyBoard extends StatelessWidget {
                               onToggleVoice: onToggleVoice,
                               onRecallMessage: onRecallMessage,
                             ),
-                            SizedBox(height: ui(14)),
+                            SizedBox(height: ui(28)),
                           ],
                         );
                       },
@@ -4323,51 +4331,52 @@ class _UserMessageRow extends StatelessWidget {
         child: bubble,
       );
     }
-    final meta = Padding(
+    final nameMeta = Padding(
       padding: EdgeInsets.only(bottom: ui(4)),
-      child: Row(
-        mainAxisAlignment: isMine
-            ? MainAxisAlignment.end
-            : MainAxisAlignment.start,
-        children: [
-          if (!isMine) ...[
-            Text(
-              message.fromName,
-              style: TextStyle(
-                fontSize: ui(12),
-                color: _kTextSecondary,
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w400,
-                height: 1,
-              ),
-            ),
-            SizedBox(width: ui(8)),
-          ],
-          Text(
-            _formatTime(message.sentAt),
-            style: TextStyle(
-              fontSize: ui(12),
-              color: _kTextDivider,
-              fontFamily: 'PingFang SC',
-              fontWeight: AppFont.w400,
-              height: 1,
-            ),
+      child: Align(
+        alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
+        child: Text(
+          message.fromName,
+          style: TextStyle(
+            fontSize: ui(12),
+            color: _kTextSecondary,
+            fontFamily: 'PingFang SC',
+            fontWeight: AppFont.w400,
+            height: 1,
           ),
-          if (isMine) ...[
-            SizedBox(width: ui(8)),
-            Text(
-              message.fromName,
-              style: TextStyle(
-                fontSize: ui(12),
-                color: _kTextSecondary,
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w400,
-                height: 1,
-              ),
-            ),
-          ],
-        ],
+        ),
       ),
+    );
+    final timeLabel = Text(
+      _formatTime(message.sentAt),
+      style: TextStyle(
+        fontSize: ui(12),
+        color: _kTextDivider,
+        fontFamily: 'PingFang SC',
+        fontWeight: AppFont.w400,
+        height: 1,
+      ),
+    );
+    final bubbleWithTime = Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: isMine
+          ? [
+              timeLabel,
+              SizedBox(width: ui(6)),
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: ui(420)),
+                child: bubble,
+              ),
+            ]
+          : [
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: ui(420)),
+                child: bubble,
+              ),
+              SizedBox(width: ui(6)),
+              timeLabel,
+            ],
     );
 
     final textColumn = Column(
@@ -4375,11 +4384,8 @@ class _UserMessageRow extends StatelessWidget {
           ? CrossAxisAlignment.end
           : CrossAxisAlignment.start,
       children: [
-        meta,
-        ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: ui(420)),
-          child: bubble,
-        ),
+        nameMeta,
+        bubbleWithTime,
       ],
     );
 
@@ -4455,24 +4461,47 @@ class _TextBubbleView extends StatelessWidget {
 
   final String text;
 
+  static bool _isEmojiCluster(String cluster) {
+    for (final rune in cluster.runes) {
+      if ((rune >= 0x1F000 && rune <= 0x1FAFF) ||
+          (rune >= 0x2600 && rune <= 0x27BF) ||
+          (rune >= 0xFE00 && rune <= 0xFE0F) ||
+          rune == 0x200D) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final baseStyle = TextStyle(
+      fontSize: ui(13),
+      color: _kTextDark,
+      fontFamily: 'PingFang SC',
+      fontWeight: AppFont.w400,
+      height: 24 / 13,
+    );
     return Container(
       padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(8)),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(ui(8)),
       ),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: ui(13),
-          color: _kTextDark,
-          fontFamily: 'PingFang SC',
-          fontWeight: AppFont.w400,
-          height: 24 / 13,
+      child: Text.rich(
+        TextSpan(
+          children: [
+            for (final cluster in text.characters)
+              TextSpan(
+                text: cluster,
+                style: _isEmojiCluster(cluster)
+                    ? TextStyle(fontSize: ui(20), height: 1.1)
+                    : null,
+              ),
+          ],
         ),
+        style: baseStyle,
       ),
     );
   }
@@ -4865,11 +4894,27 @@ void _navigateSharedContent(BuildContext context, _SharedCardBubble b) {
         arguments: id == null ? 0 : (int.tryParse(id) ?? 0),
       );
     case 'video':
-      Navigator.pushNamed(
-        context,
-        RoutePaths.videoTutorial,
-        arguments: (id != null && id.isNotEmpty) ? {'openVideoId': id} : null,
-      );
+      if (b.schoolMode) {
+        final routeArgs = <String, dynamic>{};
+        if (id != null && id.isNotEmpty) {
+          routeArgs['openVideoId'] = id;
+        }
+        final schoolId = b.schoolId;
+        if (schoolId != null && schoolId > 0) {
+          routeArgs['school'] = schoolId;
+        }
+        Navigator.pushNamed(
+          context,
+          RoutePaths.schoolVideo,
+          arguments: routeArgs.isEmpty ? null : routeArgs,
+        );
+      } else {
+        Navigator.pushNamed(
+          context,
+          RoutePaths.videoTutorial,
+          arguments: (id != null && id.isNotEmpty) ? {'openVideoId': id} : null,
+        );
+      }
     case 'kj':
       // 直接打开云盘课件预览页，并通过 route arguments 传入 previewItem
       // MyCloudDrivePage.didChangeDependencies 会读取并调用 openPreview(item)
@@ -4931,6 +4976,37 @@ class _SharedCardBubbleView extends StatelessWidget {
 
   final _SharedCardBubble bubble;
 
+  bool get _usesKjIcon => bubble.subtype == 'kj' || bubble.subtype == 'book';
+
+  Widget _kjIcon(double Function(double) ui, {required double size}) {
+    return Image.asset(
+      AppAssets.groupChatKj,
+      width: ui(size),
+      height: ui(size),
+      fit: BoxFit.contain,
+    );
+  }
+
+  Widget _defaultIcon(double Function(double) ui, {required double size}) {
+    return Container(
+      width: ui(size),
+      height: ui(size),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: bubble.iconColor.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(ui(6)),
+      ),
+      child: Icon(bubble.icon, color: bubble.iconColor, size: ui(size * 0.5)),
+    );
+  }
+
+  Widget _leadingIcon(double Function(double) ui) {
+    if (_usesKjIcon) {
+      return _kjIcon(ui, size: 36);
+    }
+    return _defaultIcon(ui, size: 36);
+  }
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
@@ -4940,7 +5016,6 @@ class _SharedCardBubbleView extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(ui(8)),
-        border: Border.all(color: const Color(0xFFE8E8F0)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -4953,27 +5028,27 @@ class _SharedCardBubbleView extends StatelessWidget {
                 width: ui(44),
                 height: ui(44),
                 fit: BoxFit.cover,
-                errorBuilder: (ctx, err, st) => Container(
-                  width: ui(44),
-                  height: ui(44),
-                  color: const Color(0xFFF3F2F3),
-                  alignment: Alignment.center,
-                  child: Icon(bubble.icon, color: bubble.iconColor, size: ui(20)),
-                ),
+                errorBuilder: (ctx, err, st) {
+                  if (_usesKjIcon) {
+                    return _kjIcon(ui, size: 44);
+                  }
+                  return Container(
+                    width: ui(44),
+                    height: ui(44),
+                    color: const Color(0xFFF3F2F3),
+                    alignment: Alignment.center,
+                    child: Icon(
+                      bubble.icon,
+                      color: bubble.iconColor,
+                      size: ui(20),
+                    ),
+                  );
+                },
               ),
             ),
             SizedBox(width: ui(8)),
           ] else ...[
-            Container(
-              width: ui(36),
-              height: ui(36),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: bubble.iconColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(ui(6)),
-              ),
-              child: Icon(bubble.icon, color: bubble.iconColor, size: ui(18)),
-            ),
+            _leadingIcon(ui),
             SizedBox(width: ui(8)),
           ],
           Expanded(
@@ -4985,7 +5060,7 @@ class _SharedCardBubbleView extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: ui(12),
+                    fontSize: ui(13),
                     color: _kTextDark,
                     fontFamily: 'PingFang SC',
                     fontWeight: AppFont.w500,
@@ -4996,7 +5071,7 @@ class _SharedCardBubbleView extends StatelessWidget {
                 Text(
                   bubble.subtitle,
                   style: TextStyle(
-                    fontSize: ui(11),
+                    fontSize: ui(12),
                     color: _kTextHint,
                     fontFamily: 'PingFang SC',
                   ),
@@ -5300,7 +5375,7 @@ class _EmojiPanelState extends State<_EmojiPanel> {
                     child: Text(
                       e,
                       style: TextStyle(
-                        fontSize: ui(22),
+                        fontSize: ui(26),
                         // 关键：emoji 由系统字体渲染，不要带 PingFang SC
                         // 否则部分平台会回退到豆腐块。
                         height: 1,
@@ -5375,7 +5450,7 @@ class _EmojiCategoryTab extends StatelessWidget {
           ),
           child: Icon(
             icon,
-            size: ui(16),
+            size: ui(18),
             color: active ? _kPurple : const Color(0xFF6D6B75),
           ),
         ),
@@ -5917,6 +5992,8 @@ class _SharedCardBubble extends _ChatBubble {
     this.kjImageUrls = const [],
     this.kjTypeValue, // '1'=音频 '2'=谱例 '3'=课件
     this.bookType,
+    this.schoolMode = false,
+    this.schoolId,
   });
 
   final IconData icon;
@@ -5932,6 +6009,9 @@ class _SharedCardBubble extends _ChatBubble {
   final String? kjTypeValue;
   /// 课程教材 type（1 视唱 / 2 乐理 / 3 听写 / 4 声乐 / 5 器乐）。
   final int? bookType;
+  /// 校园课件视频（走 schoolVideoTutorialDetail），否则为公开视频中心。
+  final bool schoolMode;
+  final int? schoolId;
 }
 
 // =============================================================================
@@ -6084,6 +6164,9 @@ class GroupChatMessageParser {
             subtype: 'video',
             coverUrl: obj?['coverImg']?.toString(),
             contentId: obj?['id']?.toString(),
+            schoolMode:
+                _isTruthy(obj?['schoolMode']) || _isTruthy(obj?['school']),
+            schoolId: _asInt(obj?['schoolId'] ?? obj?['school']),
           );
           break;
         case 'news':
@@ -6621,6 +6704,14 @@ int? _asInt(Object? raw) {
   if (raw is num) return raw.toInt();
   if (raw is String) return int.tryParse(raw);
   return null;
+}
+
+bool _isTruthy(Object? raw) {
+  if (raw == null) return false;
+  if (raw is bool) return raw;
+  if (raw is num) return raw != 0;
+  final text = raw.toString().trim().toLowerCase();
+  return text == 'true' || text == '1' || text == 'yes';
 }
 
 DateTime? _parseDateTime(Object? raw) {

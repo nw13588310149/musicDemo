@@ -174,7 +174,7 @@ class _SessionHeader extends StatelessWidget {
             '自动刷题',
             style: TextStyle(
               color: const Color(0xFF0B081A),
-              fontSize: ui(16),
+              fontSize: ui(14),
               fontFamily: 'PingFang SC',
               height: 1.0,
             ),
@@ -196,9 +196,9 @@ class _AutoNextSwitch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final trackWidth = ui(44);
-    final trackHeight = ui(26);
-    final thumbSize = ui(20);
+    final trackWidth = ui(40);
+    final trackHeight = ui(24);
+    final thumbSize = ui(18);
     final inset = ui(3);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -392,7 +392,7 @@ class _QuestionContent extends StatelessWidget {
               '第$questionNumber题  ',
               style: TextStyle(
                 color: const Color(0xFF0B081A),
-                fontSize: ui(18),
+                fontSize: ui(16),
                 fontWeight: AppFont.w500,
                 fontFamily: 'PingFang SC',
                 height: 1.5,
@@ -406,7 +406,7 @@ class _QuestionContent extends StatelessWidget {
                 hasInlineRich: question.questionHasInlineRich,
                 textStyle: TextStyle(
                   color: const Color(0xFF0B081A),
-                  fontSize: ui(18),
+                  fontSize: ui(16),
                   fontWeight: AppFont.w500,
                   fontFamily: 'PingFang SC',
                   height: 1.5,
@@ -427,7 +427,7 @@ class _QuestionContent extends StatelessWidget {
             '题目解析',
             style: TextStyle(
               color: const Color(0xFF6D6B75),
-              fontSize: ui(18),
+              fontSize: ui(16),
               fontWeight: AppFont.w600,
               fontFamily: 'PingFang SC',
             ),
@@ -667,12 +667,12 @@ class _AnswerRow extends StatelessWidget {
 
     final labelStyle = TextStyle(
       color: const Color(0xFF0B081A),
-      fontSize: ui(18),
+      fontSize: ui(16),
       fontWeight: AppFont.w500,
       fontFamily: 'PingFang SC',
     );
     final valueStyle = TextStyle(
-      fontSize: ui(18),
+      fontSize: ui(16),
       fontWeight: AppFont.w600,
       fontFamily: 'PingFang SC',
     );
@@ -1096,16 +1096,19 @@ class _QuizHtml extends StatelessWidget {
   /// 普通文本样式（颜色 / 字号 / 字体）。
   final TextStyle textStyle;
 
+  TextStyle get _forcedFontStyle =>
+      textStyle.copyWith(fontFamily: 'PingFang SC');
+
   @override
   Widget build(BuildContext context) {
-    final trimmed = html.trim();
+    final trimmed = quizHtmlForcePingFangSc(html.trim());
     if (trimmed.isEmpty) {
-      return Text(fallbackText, style: textStyle);
+      return Text(fallbackText, style: _forcedFontStyle);
     }
 
     // ① 纯文本快路径。
     if (!hasMedia && !hasInlineRich) {
-      return Text(fallbackText, style: textStyle);
+      return Text(fallbackText, style: _forcedFontStyle);
     }
 
     // ② 含 inline rich 或非 img 的复杂 media（table/svg/...）→
@@ -1115,17 +1118,18 @@ class _QuizHtml extends StatelessWidget {
     }
 
     // ③ 只有 <img> + 文字 → 自定义 inline span 解析，让图文同行。
-    final spans = _parseInlineSpans(trimmed, textStyle);
+    final spans = _parseInlineSpans(trimmed, _forcedFontStyle);
     if (spans.isEmpty) {
-      return Text(fallbackText, style: textStyle);
+      return Text(fallbackText, style: _forcedFontStyle);
     }
-    return Text.rich(TextSpan(children: spans), style: textStyle);
+    return Text.rich(TextSpan(children: spans), style: _forcedFontStyle);
   }
 
   Widget _buildHtmlWidget(String trimmed) {
     return HtmlWidget(
       trimmed,
-      textStyle: textStyle,
+      textStyle: _forcedFontStyle,
+      customStylesBuilder: quizHtmlCustomStyles,
       // 关闭默认 ext renderer，自己接管 <img>，避免 _core 包对
       // img 的占位 / 默认行为。
       customWidgetBuilder: (element) {

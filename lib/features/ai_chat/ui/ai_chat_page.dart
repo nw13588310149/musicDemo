@@ -30,7 +30,6 @@ const _purpleSoft = Color(0x0D8741FF);
 const _historyPaneWidth = 200.0;
 const _historyItemHorizontalPadding = 12.0;
 const _historyPaneBottomPadding = 12.0;
-const _historyPaneTopChromeHeight = 24.0 + 36.0 + 16.0 + 20.0 + 16.0;
 const _conversationHeaderHeight = 56.0;
 const _mainHorizontalPadding = 64.0;
 const _mainBottomPadding = 12.0;
@@ -268,12 +267,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
           const SizedBox(height: 16),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                16,
-                0,
-                16,
-                _historyPaneBottomPadding,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               child: state.sessionsLoading && state.sessions.isEmpty
                   ? const Center(
                       child: AppLoadingIndicator(),
@@ -361,7 +355,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
                     ),
             ),
           ),
-          SizedBox(height: _historyPaneBottomSpacerHeight(state)),
+          const SizedBox(height: _historyPaneBottomPadding),
         ],
       ),
     );
@@ -436,38 +430,14 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
   double _composerHeight(AiChatState state) =>
       state.pendingAttachments.isEmpty ? 124.0 : 154.0;
 
-  /// 右侧底部固定区（composer + 免责声明 + 间距）占用高度。
-  double _rightBottomReservedHeight(AiChatState state) {
-    const disclaimerHeight = 16.0;
-    final composer = _composerHeight(state);
-    if (state.isNewConversation) {
-      return composer + 13 + disclaimerHeight + _landingBottomPadding;
-    }
-    return composer + _mainBottomPadding + disclaimerHeight + _conversationBottomInset;
-  }
-
-  /// 左侧历史列表下方占位，使左右主内容滚动视口高度一致。
-  ///
-  /// [_historyPaneBottomPadding] 在 Expanded 内部的 ListView 上，属于滚动区
-  /// 域而非 Expanded 下方的结构高度，因此不参与 spacer 计算。
-  double _historyPaneBottomSpacerHeight(AiChatState state) {
-    final rightTopChrome = state.isNewConversation
-        ? 0.0
-        : _conversationHeaderHeight;
-    final spacer =
-        _rightBottomReservedHeight(state) +
-        rightTopChrome -
-        _historyPaneTopChromeHeight;
-    return spacer > 0 ? spacer : 0;
-  }
-
   Widget _buildLanding({
     required AiChatState state,
     required AiChatController controller,
     required double composerWidth,
   }) {
     // Figma content 区高 730：welcome + cards 固定，composer 高度见 [_composerHeight]，
-    // cards → composer 之间的剩余空间用 Spacer 吸收，避免 composer 变高后 Column 溢出。
+    // 上半区放进 Expanded + SingleChildScrollView，让软键盘收缩页面时优先保留
+    // 底部 composer 可见，表现与群聊底部输入栏一致。
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         _mainHorizontalPadding,
@@ -479,19 +449,29 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
         mainAxisSize: MainAxisSize.max,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildWelcomeSection(),
-          const SizedBox(height: 11),
-          SizedBox(
-            height: 265,
-            child: Row(
-              children: [
-                Expanded(child: _buildTheoryCard()),
-                const SizedBox(width: 16),
-                Expanded(child: _buildToolCard()),
-              ],
+          Expanded(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.zero,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildWelcomeSection(),
+                  const SizedBox(height: 11),
+                  SizedBox(
+                    height: 265,
+                    child: Row(
+                      children: [
+                        Expanded(child: _buildTheoryCard()),
+                        const SizedBox(width: 16),
+                        Expanded(child: _buildToolCard()),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          const Spacer(),
           _buildComposer(state, controller, composerWidth),
           const SizedBox(height: 13),
           _buildDisclaimer(),
