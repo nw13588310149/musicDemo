@@ -332,7 +332,7 @@ class _SidebarTile extends StatelessWidget {
               height: ui(36),
               child: Image.asset(
                 active
-                    ? AppAssets.homeDictationNavIcon
+                    ? AppAssets.homeCategorySelectedIcon
                     : AppAssets.homeCategoryIdleIcon,
                 fit: BoxFit.contain,
                 gaplessPlayback: true,

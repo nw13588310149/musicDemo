@@ -2,7 +2,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 
 import '../../../core/network/api_response.dart';
 import '../../../core/widgets/app_toast.dart';
@@ -1642,7 +1641,6 @@ class _TeacherScheduleSection extends ConsumerStatefulWidget {
 }
 
 class _TeacherScheduleSectionState extends ConsumerState<_TeacherScheduleSection> {
-  bool _loading = true;
   _LessonScheduleData? _currentLesson;
   List<_LessonScheduleData> _todayLessons = const [];
 
@@ -1657,7 +1655,6 @@ class _TeacherScheduleSectionState extends ConsumerState<_TeacherScheduleSection
 
   Future<void> _loadSchedule() async {
     if (!mounted) return;
-    setState(() => _loading = true);
 
     final teacherRepo = ref.read(teacherRepositoryProvider);
     final schoolRepo = ref.read(schoolRepositoryProvider);
@@ -1697,7 +1694,6 @@ class _TeacherScheduleSectionState extends ConsumerState<_TeacherScheduleSection
           AppToast.show(context, courseResp.msg);
         }
         setState(() {
-          _loading = false;
           _currentLesson = null;
           _todayLessons = const [];
         });
@@ -1710,14 +1706,12 @@ class _TeacherScheduleSectionState extends ConsumerState<_TeacherScheduleSection
         now: today,
       );
       setState(() {
-        _loading = false;
         _currentLesson = built.current;
         _todayLessons = built.today;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
         _currentLesson = null;
         _todayLessons = const [];
       });
@@ -1740,12 +1734,10 @@ class _TeacherScheduleSectionState extends ConsumerState<_TeacherScheduleSection
 
     final currentPanel = _CurrentLessonPanel(
       lesson: _currentLesson,
-      loading: _loading,
       fillHeight: widget.fillRemaining,
     );
     final todayPanel = _TodaySchedulePanel(
       lessons: _todayLessons,
-      loading: _loading,
       fillHeight: widget.fillRemaining,
     );
 
@@ -2221,12 +2213,10 @@ Color? _parseDashboardHexColor(String hex) {
 class _CurrentLessonPanel extends StatelessWidget {
   const _CurrentLessonPanel({
     this.lesson,
-    this.loading = false,
     this.fillHeight = false,
   });
 
   final _LessonScheduleData? lesson;
-  final bool loading;
   final bool fillHeight;
 
   @override
@@ -2247,9 +2237,7 @@ class _CurrentLessonPanel extends StatelessWidget {
       ),
       child: _wrapScrollable(
         fillHeight: fillHeight,
-        child: loading
-            ? const _LessonLoadingHint()
-            : lesson == null
+        child: lesson == null
             ? const _LessonEmptyHint(text: '暂无当前课程')
             : _LessonScheduleCard(data: lesson!),
       ),
@@ -2261,12 +2249,10 @@ class _CurrentLessonPanel extends StatelessWidget {
 class _TodaySchedulePanel extends StatelessWidget {
   const _TodaySchedulePanel({
     required this.lessons,
-    this.loading = false,
     this.fillHeight = false,
   });
 
   final List<_LessonScheduleData> lessons;
-  final bool loading;
   final bool fillHeight;
 
   @override
@@ -2287,9 +2273,7 @@ class _TodaySchedulePanel extends StatelessWidget {
       ),
       child: _wrapScrollable(
         fillHeight: fillHeight,
-        child: loading
-            ? const _LessonLoadingHint()
-            : lessons.isEmpty
+        child: lessons.isEmpty
             ? const _LessonEmptyHint(text: '今日暂无课表')
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -2322,25 +2306,6 @@ Widget _wrapScrollable({required bool fillHeight, required Widget child}) {
       ),
     ],
   );
-}
-
-class _LessonLoadingHint extends StatelessWidget {
-  const _LessonLoadingHint();
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.symmetric(vertical: ui(36)),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF5F6FA),
-        borderRadius: BorderRadius.circular(ui(12)),
-      ),
-      alignment: Alignment.center,
-      child: const AppLoadingIndicator(),
-    );
-  }
 }
 
 class _LessonEmptyHint extends StatelessWidget {

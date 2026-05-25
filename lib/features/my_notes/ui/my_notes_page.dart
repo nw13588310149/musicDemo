@@ -475,11 +475,12 @@ class _NoteCategoryCardState extends State<_NoteCategoryCard> {
             // 选中走 note/4.png（彩色实心版本）。两张图都是 self-contained。
             Image.asset(
               selected
-                  ? 'assets/images/note/4.png'
-                  : 'assets/images/note/9.png',
+                  ? AppAssets.folderCategorySelectedIcon
+                  : AppAssets.folderCategoryIdleIcon,
               width: ui(36),
               height: ui(36),
               fit: BoxFit.contain,
+              gaplessPlayback: true,
             ),
             SizedBox(width: ui(10)),
             // Single-line "name（count）" label per spec.

@@ -7,7 +7,6 @@ import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../state/auth_controller.dart';
 import '../state/auth_state.dart';
-import 'widgets/auth_background_art.dart';
 import 'widgets/auth_design_canvas.dart';
 import 'widgets/auth_figma_components.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -42,7 +41,6 @@ class _ForgetPasswordPageState extends ConsumerState<ForgetPasswordPage> {
         builder: (scale) => Stack(
           clipBehavior: Clip.none,
           children: [
-            const AuthBackgroundArt(),
             Positioned(
               left: _s(scale, 691),
               top: _s(scale, 194),

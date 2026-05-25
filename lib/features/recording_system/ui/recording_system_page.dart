@@ -575,7 +575,9 @@ class _RecordingCategoryCardState extends State<_RecordingCategoryCard> {
               width: ui(36),
               height: ui(36),
               child: Image.asset(
-                AppAssets.recordingCategoryIdleIcon,
+                selected
+                    ? AppAssets.folderCategorySelectedIcon
+                    : AppAssets.folderCategoryIdleIcon,
                 fit: BoxFit.contain,
                 gaplessPlayback: true,
               ),

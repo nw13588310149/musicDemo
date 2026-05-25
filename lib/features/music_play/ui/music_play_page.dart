@@ -2789,10 +2789,11 @@ class _PlaylistDrawerItem extends StatelessWidget {
             ),
             if (selected) ...[
               SizedBox(width: ui(4)),
-              Icon(
-                Icons.equalizer_rounded,
-                size: ui(14),
-                color: const Color(0xFF8741FF),
+              Image.asset(
+                AppAssets.homeMusicPlaying,
+                width: ui(14),
+                height: ui(14),
+                fit: BoxFit.contain,
               ),
             ],
           ],

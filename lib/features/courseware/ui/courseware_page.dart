@@ -964,7 +964,9 @@ class _CategoryCardState extends State<_CategoryCard> {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Image.asset(
-              AppAssets.cloudFolderIcon,
+              selected
+                  ? AppAssets.folderCategorySelectedIcon
+                  : AppAssets.folderCategoryIdleIcon,
               width: ui(36),
               height: ui(36),
               fit: BoxFit.contain,

@@ -57,15 +57,20 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
       args,
       onPartial: (partial) {
         if (!mounted) return;
+        final cached = partial.store.cachedAt(partial.startIndex);
         state = state.copyWith(
           loading: false,
           store: partial.store,
           currentIndex: partial.startIndex,
-          currentQuestion: null,
-          currentQuestionLoading: true,
+          currentQuestion: cached,
+          currentQuestionLoading: cached == null,
           clearErrorMessage: true,
         );
-        unawaited(_resolveCurrentQuestion(partial.startIndex));
+        if (cached == null) {
+          unawaited(_resolveCurrentQuestion(partial.startIndex));
+        } else {
+          partial.store.prefetchAround(partial.startIndex);
+        }
       },
     );
     if (!mounted) return;

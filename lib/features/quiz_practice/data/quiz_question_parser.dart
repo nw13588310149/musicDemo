@@ -25,14 +25,16 @@ List<Map<String, dynamic>> parseQuizQuestionsPayload(dynamic data) {
     final id = _toInt(item['id']);
     if (id == null) continue;
 
-    final questionHtml = _asString(question['question']);
+    final questionHtml = quizHtmlForcePingFangSc(
+      _asString(question['question']),
+    );
     final options = <String>[
-      _asString(question['param1']),
-      _asString(question['param2']),
-      _asString(question['param3']),
-      _asString(question['param4']),
+      quizHtmlForcePingFangSc(_asString(question['param1'])),
+      quizHtmlForcePingFangSc(_asString(question['param2'])),
+      quizHtmlForcePingFangSc(_asString(question['param3'])),
+      quizHtmlForcePingFangSc(_asString(question['param4'])),
     ];
-    final parseHtml = _asString(question['parse']);
+    final parseHtml = quizHtmlForcePingFangSc(_asString(question['parse']));
 
     list.add(<String, dynamic>{
       'itemId': id,
@@ -50,8 +52,9 @@ List<Map<String, dynamic>> parseQuizQuestionsPayload(dynamic data) {
       'parseHasMedia': htmlHasMedia(parseHtml),
       'parseHasInlineRich': htmlHasInlineRich(parseHtml),
       'optionsHasMedia': options.map(htmlHasMedia).toList(growable: false),
-      'optionsHasInlineRich':
-          options.map(htmlHasInlineRich).toList(growable: false),
+      'optionsHasInlineRich': options
+          .map(htmlHasInlineRich)
+          .toList(growable: false),
     });
   }
   return list;

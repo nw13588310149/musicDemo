@@ -106,7 +106,7 @@ bool htmlHasInlineRich(String html) {
 }
 
 /// 去掉内联 `font-family` / `<font face>`，避免盖掉 [HtmlWidget] 的
-/// `textStyle`。
+/// `textStyle`。在 [parseQuizQuestionsPayload] 解析阶段调用一次即可。
 String quizHtmlForcePingFangSc(String html) {
   if (html.isEmpty) return html;
 
@@ -136,45 +136,6 @@ String quizHtmlForcePingFangSc(String html) {
   );
 
   return result;
-}
-
-const Set<String> _quizHtmlTextTags = <String>{
-  'p',
-  'span',
-  'div',
-  'li',
-  'td',
-  'th',
-  'h1',
-  'h2',
-  'h3',
-  'h4',
-  'h5',
-  'h6',
-  'strong',
-  'em',
-  'b',
-  'i',
-  'u',
-  'a',
-  'font',
-  'label',
-  'blockquote',
-  'sup',
-  'sub',
-  's',
-  'del',
-  'mark',
-  'code',
-};
-
-/// 为 [HtmlWidget] 文本节点强制指定 PingFang SC。
-Map<String, String>? quizHtmlCustomStyles(dynamic element) {
-  final tag = element.localName?.toLowerCase();
-  if (tag == null || !_quizHtmlTextTags.contains(tag)) {
-    return null;
-  }
-  return const <String, String>{'font-family': 'PingFang SC'};
 }
 
 /// 解码 HTML 实体（命名 + 数字），不会动任何标签结构。供 inline

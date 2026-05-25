@@ -2,10 +2,12 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../../../core/constants/app_assets.dart';
+
 class AuthDesignCanvas extends StatelessWidget {
   const AuthDesignCanvas({
     required this.builder,
-    this.backgroundColor = const Color(0xFFF2ECFF),
+    this.backgroundColor = Colors.transparent,
     super.key,
   });
 
@@ -37,13 +39,24 @@ class AuthDesignCanvas extends StatelessWidget {
             fullHeight / designSize.height,
           );
 
-          return Align(
-            alignment: Alignment.center,
-            child: SizedBox(
-              width: designSize.width * scale,
-              height: designSize.height * scale,
-              child: RepaintBoundary(child: builder(scale)),
-            ),
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.asset(
+                AppAssets.authBg,
+                width: constraints.maxWidth,
+                height: fullHeight,
+                fit: BoxFit.cover,
+              ),
+              Align(
+                alignment: Alignment.center,
+                child: SizedBox(
+                  width: designSize.width * scale,
+                  height: designSize.height * scale,
+                  child: RepaintBoundary(child: builder(scale)),
+                ),
+              ),
+            ],
           );
         },
       ),

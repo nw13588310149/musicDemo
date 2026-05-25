@@ -50,6 +50,7 @@ import '../../../core/widgets/scaled_dialog.dart';
 import '../../school/data/school_repository.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/admin_repository.dart';
+import 'widgets/schedule_idle_slot.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // ---- 通用配色 -----------------------------------------------------------
@@ -2377,14 +2378,14 @@ class _CellContent extends StatelessWidget {
     }
 
     if (cards.isEmpty) {
-      // 查看模式下所有空格都显示「空闲」占位；编辑模式下显示「申请小课」按钮。
+      // 查看模式下空格用斜线背景图占位；编辑模式下显示「申请小课」按钮。
       return wrapHover(
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(12)),
-          child: isEditing
-              ? _ApplySmallLessonButton(onTap: onApplySmallLesson)
-              : const _IdleSlotPlaceholder(),
-        ),
+        isEditing
+            ? Padding(
+                padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(12)),
+                child: _ApplySmallLessonButton(onTap: onApplySmallLesson),
+              )
+            : const ScheduleIdleSlot(),
       );
     }
     final shouldAppendApply =
@@ -2498,33 +2499,6 @@ class _DragFeedback extends StatelessWidget {
           ],
         ),
         child: _ClassCard(data: card, editable: true),
-      ),
-    );
-  }
-}
-
-class _IdleSlotPlaceholder extends StatelessWidget {
-  const _IdleSlotPlaceholder();
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(8)),
-        border: Border.all(color: _kTextDivider, width: 1),
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        '空闲',
-        style: TextStyle(
-          fontSize: ui(14),
-          color: _kTextHint,
-          fontFamily: 'PingFang SC',
-          fontWeight: AppFont.w400,
-          height: 16 / 14,
-        ),
       ),
     );
   }

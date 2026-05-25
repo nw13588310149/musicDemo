@@ -41,6 +41,7 @@ import 'package:flutter/material.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/constants/app_assets.dart';
 import '../../../core/network/api_response.dart';
 import '../../../core/widgets/app_date_time_pickers.dart';
 import '../../../core/widgets/app_toast.dart';
@@ -50,6 +51,7 @@ import '../../shell/state/shell_controller.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/admin_repository.dart';
 import '../data/teacher_repository.dart';
+import 'widgets/schedule_idle_slot.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // ---- 通用配色（与学生 / 管理员端 schedule 保持一致）----------------------
@@ -1226,71 +1228,72 @@ class _TeacherScheduleHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      width: double.infinity,
-      height: ui(68),
-      decoration: BoxDecoration(
+    return AspectRatio(
+      aspectRatio: AppAssets.smartCampusBgAspectRatio,
+      child: ClipRRect(
         borderRadius: BorderRadius.only(
           topLeft: Radius.circular(ui(16)),
           topRight: Radius.circular(ui(16)),
         ),
-        gradient: const LinearGradient(
-          begin: Alignment.bottomLeft,
-          end: Alignment.topRight,
-          colors: [Colors.white, Color(0xFFF9EDFF)],
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.asset(
+              AppAssets.smartCampusBg,
+              width: double.infinity,
+              fit: BoxFit.fitWidth,
+              alignment: Alignment.topCenter,
+            ),
+            Positioned(
+              left: ui(20),
+              top: ui(20),
+              child: InkWell(
+                onTap: onBack,
+                borderRadius: BorderRadius.circular(ui(8)),
+                child: Container(
+                  width: ui(32),
+                  height: ui(32),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(ui(8)),
+                    border: Border.all(color: _kBorderSoft),
+                  ),
+                  child: Icon(
+                    Icons.chevron_left_rounded,
+                    size: ui(20),
+                    color: const Color(0xFF1C274C),
+                  ),
+                ),
+              ),
+            ),
+            Positioned.fill(
+              child: Center(
+                child: Text(
+                  '授课课表',
+                  style: TextStyle(
+                    fontSize: ui(16),
+                    color: _kTextDark,
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w600,
+                    height: 1,
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              right: ui(20),
+              top: ui(18),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _ApplyRecordsButton(onTap: onOpenApplyRecords),
+                  SizedBox(width: ui(10)),
+                  _ViewEditSegment(mode: mode, onChanged: onModeChanged),
+                ],
+              ),
+            ),
+          ],
         ),
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            left: ui(20),
-            top: ui(20),
-            child: InkWell(
-              onTap: onBack,
-              borderRadius: BorderRadius.circular(ui(8)),
-              child: Container(
-                width: ui(32),
-                height: ui(32),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(ui(8)),
-                  border: Border.all(color: _kBorderSoft),
-                ),
-                child: Icon(
-                  Icons.chevron_left_rounded,
-                  size: ui(20),
-                  color: const Color(0xFF1C274C),
-                ),
-              ),
-            ),
-          ),
-          Positioned.fill(
-            child: Center(
-              child: Text(
-                '授课课表',
-                style: TextStyle(
-                  fontSize: ui(16),
-                  color: _kTextDark,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w600,
-                  height: 1,
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            right: ui(20),
-            top: ui(18),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _ApplyRecordsButton(onTap: onOpenApplyRecords),
-                SizedBox(width: ui(10)),
-                _ViewEditSegment(mode: mode, onChanged: onModeChanged),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -1511,10 +1514,9 @@ class _TeacherScheduleControlBar extends StatelessWidget {
                   ),
                 ),
                 SizedBox(width: ui(8)),
-                Icon(
-                  Icons.calendar_today_rounded,
-                  size: ui(14),
-                  color: const Color(0xFF1C274C),
+                AppPickerAssetIcon(
+                  AppAssets.homeRili,
+                  imageSize: ui(14),
                 ),
               ],
             ),
@@ -2073,16 +2075,17 @@ class _CellContent extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     final isEditing = mode == _ScheduleMode.edit;
     if (cards.isEmpty) {
-      // 查看模式所有空格画 "空闲" 占位；编辑模式画 "申请小课" pill。
-      return Padding(
-        padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(12)),
-        child: isEditing
-            ? Align(
-                alignment: Alignment.topCenter,
-                child: _ApplySmallLessonButton(onTap: onApplySmallLesson),
-              )
-            : const _IdleSlotPlaceholder(),
-      );
+      // 查看模式空格用斜线背景图占位；编辑模式画 "申请小课" pill。
+      if (isEditing) {
+        return Padding(
+          padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(12)),
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: _ApplySmallLessonButton(onTap: onApplySmallLesson),
+          ),
+        );
+      }
+      return const ScheduleIdleSlot();
     }
     // 编辑模式：无论本格当前是大课还是小课，都允许在卡片下方继续"申请小课"。
     return Padding(
@@ -2108,33 +2111,6 @@ class _CellContent extends StatelessWidget {
 
   bool _isSmall(_CardKind k) =>
       k == _CardKind.smallOrange || k == _CardKind.smallBlue;
-}
-
-class _IdleSlotPlaceholder extends StatelessWidget {
-  const _IdleSlotPlaceholder();
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(8)),
-        border: Border.all(color: _kTextDivider, width: 1),
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        '空闲',
-        style: TextStyle(
-          fontSize: ui(14),
-          color: _kTextHint,
-          fontFamily: 'PingFang SC',
-          fontWeight: AppFont.w400,
-          height: 16 / 14,
-        ),
-      ),
-    );
-  }
 }
 
 class _ApplySmallLessonButton extends StatelessWidget {

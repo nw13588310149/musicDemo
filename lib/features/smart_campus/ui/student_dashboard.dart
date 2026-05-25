@@ -266,7 +266,6 @@ class _StudentDashboardScheduleSection extends ConsumerStatefulWidget {
 
 class _StudentDashboardScheduleSectionState
     extends ConsumerState<_StudentDashboardScheduleSection> {
-  bool _loading = true;
   _LessonScheduleData? _currentLesson;
   List<_LessonScheduleData> _todayLessons = const [];
 
@@ -278,7 +277,6 @@ class _StudentDashboardScheduleSectionState
 
   Future<void> _loadSchedule() async {
     if (!mounted) return;
-    setState(() => _loading = true);
 
     final studentRepo = ref.read(studentRepositoryProvider);
     final schoolRepo = ref.read(schoolRepositoryProvider);
@@ -298,7 +296,6 @@ class _StudentDashboardScheduleSectionState
           AppToast.show(context, courseResp.msg);
         }
         setState(() {
-          _loading = false;
           _currentLesson = null;
           _todayLessons = const [];
         });
@@ -324,14 +321,12 @@ class _StudentDashboardScheduleSectionState
         now: today,
       );
       setState(() {
-        _loading = false;
         _currentLesson = built.current;
         _todayLessons = built.today;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
         _currentLesson = null;
         _todayLessons = const [];
       });
@@ -354,12 +349,10 @@ class _StudentDashboardScheduleSectionState
 
     final currentPanel = _CurrentLessonPanel(
       lesson: _currentLesson,
-      loading: _loading,
       fillHeight: widget.fillRemaining,
     );
     final todayPanel = _TodaySchedulePanel(
       lessons: _todayLessons,
-      loading: _loading,
       fillHeight: widget.fillRemaining,
     );
 

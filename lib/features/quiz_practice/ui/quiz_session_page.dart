@@ -353,10 +353,7 @@ class _SessionBodyState extends State<_SessionBody> {
             ),
           ),
           SizedBox(height: ui(20)),
-          _NavButtons(
-            onPrevious: widget.onPrevious,
-            onNext: widget.onNext,
-          ),
+          _NavButtons(onPrevious: widget.onPrevious, onNext: widget.onNext),
         ],
       ),
     );
@@ -517,9 +514,21 @@ class _OptionsGrid extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(child: _Option(question: question, index: 0, onSelect: onSelect)),
+              Expanded(
+                child: _Option(
+                  question: question,
+                  index: 0,
+                  onSelect: onSelect,
+                ),
+              ),
               SizedBox(width: ui(20)),
-              Expanded(child: _Option(question: question, index: 1, onSelect: onSelect)),
+              Expanded(
+                child: _Option(
+                  question: question,
+                  index: 1,
+                  onSelect: onSelect,
+                ),
+              ),
             ],
           ),
         ),
@@ -528,9 +537,21 @@ class _OptionsGrid extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(child: _Option(question: question, index: 2, onSelect: onSelect)),
+              Expanded(
+                child: _Option(
+                  question: question,
+                  index: 2,
+                  onSelect: onSelect,
+                ),
+              ),
               SizedBox(width: ui(20)),
-              Expanded(child: _Option(question: question, index: 3, onSelect: onSelect)),
+              Expanded(
+                child: _Option(
+                  question: question,
+                  index: 3,
+                  onSelect: onSelect,
+                ),
+              ),
             ],
           ),
         ),
@@ -545,15 +566,8 @@ class _OptionsGrid extends StatelessWidget {
 /// 选项内容变化时彻底走 unmount → mount，避免 Element 复用把上
 /// 一题选项里的 HtmlWidget DOM / 图片留给新题用。
 class _Option extends StatelessWidget {
-  _Option({
-    required this.question,
-    required this.index,
-    required this.onSelect,
-  }) : super(
-         key: ValueKey<String>(
-           'opt-${question.itemId}-$index',
-         ),
-       );
+  _Option({required this.question, required this.index, required this.onSelect})
+    : super(key: ValueKey<String>('opt-${question.itemId}-$index'));
 
   final QuizQuestion question;
   final int index;
@@ -606,10 +620,7 @@ class _Option extends StatelessWidget {
           // 最小 44，让纯图片选项可以撑大；IntrinsicHeight 在外面
           // 保证同一行两个选项卡片等高。
           constraints: BoxConstraints(minHeight: ui(44)),
-          padding: EdgeInsets.symmetric(
-            horizontal: ui(20),
-            vertical: ui(8),
-          ),
+          padding: EdgeInsets.symmetric(horizontal: ui(20), vertical: ui(8)),
           decoration: BoxDecoration(
             color: bg,
             borderRadius: BorderRadius.circular(ui(8)),
@@ -1011,10 +1022,7 @@ class _RecommendedSwitchCard extends StatelessWidget {
                 colors: [Color(0xFFF5F6FA), Colors.white],
               ),
               borderRadius: BorderRadius.circular(ui(12)),
-              border: Border.all(
-                color: const Color(0xFFF3F2F3),
-                width: 1,
-              ),
+              border: Border.all(color: const Color(0xFFF3F2F3), width: 1),
             ),
             alignment: Alignment.center,
             child: Text(
@@ -1102,19 +1110,16 @@ class _QuizHtml extends StatelessWidget {
   /// 普通文本样式（颜色 / 字号 / 字体）。
   final TextStyle textStyle;
 
-  TextStyle get _forcedFontStyle =>
-      textStyle.copyWith(fontFamily: 'PingFang SC');
-
   @override
   Widget build(BuildContext context) {
-    final trimmed = quizHtmlForcePingFangSc(html.trim());
+    final trimmed = html.trim();
     if (trimmed.isEmpty) {
-      return Text(fallbackText, style: _forcedFontStyle);
+      return Text(fallbackText, style: textStyle);
     }
 
     // ① 纯文本快路径。
     if (!hasMedia && !hasInlineRich) {
-      return Text(fallbackText, style: _forcedFontStyle);
+      return Text(fallbackText, style: textStyle);
     }
 
     // ② 含 inline rich 或非 img 的复杂 media（table/svg/...）→
@@ -1124,18 +1129,17 @@ class _QuizHtml extends StatelessWidget {
     }
 
     // ③ 只有 <img> + 文字 → 自定义 inline span 解析，让图文同行。
-    final spans = _parseInlineSpans(trimmed, _forcedFontStyle);
+    final spans = _parseInlineSpans(trimmed, textStyle);
     if (spans.isEmpty) {
-      return Text(fallbackText, style: _forcedFontStyle);
+      return Text(fallbackText, style: textStyle);
     }
-    return Text.rich(TextSpan(children: spans), style: _forcedFontStyle);
+    return Text.rich(TextSpan(children: spans), style: textStyle);
   }
 
   Widget _buildHtmlWidget(String trimmed) {
     return HtmlWidget(
       trimmed,
-      textStyle: _forcedFontStyle,
-      customStylesBuilder: quizHtmlCustomStyles,
+      textStyle: textStyle,
       // 关闭默认 ext renderer，自己接管 <img>，避免 _core 包对
       // img 的占位 / 默认行为。
       customWidgetBuilder: (element) {
@@ -1294,8 +1298,7 @@ List<InlineSpan> _parseInlineSpans(String html, TextStyle textStyle) {
   flushText();
 
   // 去掉首尾的纯空白 TextSpan（包括首尾 "\n"）。
-  bool isBlank(InlineSpan s) =>
-      s is TextSpan && (s.text ?? '').trim().isEmpty;
+  bool isBlank(InlineSpan s) => s is TextSpan && (s.text ?? '').trim().isEmpty;
   while (spans.isNotEmpty && isBlank(spans.first)) {
     spans.removeAt(0);
   }
@@ -1330,8 +1333,7 @@ class _InlineNetworkImage extends StatelessWidget {
       fit: BoxFit.contain,
       fadeInDuration: Duration.zero,
       fadeOutDuration: Duration.zero,
-      placeholder: (context, _) =>
-          SizedBox(width: w ?? 40, height: h ?? 40),
+      placeholder: (context, _) => SizedBox(width: w ?? 40, height: h ?? 40),
       errorWidget: (context, _, _) => Container(
         width: w ?? 60,
         height: h ?? 60,
@@ -1340,10 +1342,7 @@ class _InlineNetworkImage extends StatelessWidget {
           color: const Color(0xFFF5F6FA),
           borderRadius: BorderRadius.circular(4),
         ),
-        child: const Icon(
-          Icons.broken_image_rounded,
-          color: Color(0xFFC9C6D8),
-        ),
+        child: const Icon(Icons.broken_image_rounded, color: Color(0xFFC9C6D8)),
       ),
     );
   }
@@ -1388,10 +1387,7 @@ class _ResponsiveNetworkImage extends StatelessWidget {
       fit: BoxFit.contain,
       fadeInDuration: Duration.zero,
       fadeOutDuration: Duration.zero,
-      placeholder: (context, _) => SizedBox(
-        width: w ?? 40,
-        height: h ?? 40,
-      ),
+      placeholder: (context, _) => SizedBox(width: w ?? 40, height: h ?? 40),
       errorWidget: (context, _, _) => Container(
         width: w ?? 60,
         height: h ?? 60,
@@ -1400,10 +1396,7 @@ class _ResponsiveNetworkImage extends StatelessWidget {
           color: const Color(0xFFF5F6FA),
           borderRadius: BorderRadius.circular(4),
         ),
-        child: const Icon(
-          Icons.broken_image_rounded,
-          color: Color(0xFFC9C6D8),
-        ),
+        child: const Icon(Icons.broken_image_rounded, color: Color(0xFFC9C6D8)),
       ),
     );
 

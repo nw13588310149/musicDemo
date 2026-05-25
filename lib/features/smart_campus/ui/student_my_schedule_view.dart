@@ -29,11 +29,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 
+import '../../../core/constants/app_assets.dart';
 import '../../../core/network/api_response.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../school/data/school_repository.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/student_repository.dart';
+import 'widgets/schedule_idle_slot.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // ---- 通用配色 ---------------------------------------------------------------
@@ -570,94 +572,95 @@ class _ScheduleBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      width: double.infinity,
-      height: ui(68),
-      decoration: BoxDecoration(
+    return AspectRatio(
+      aspectRatio: AppAssets.smartCampusBgAspectRatio,
+      child: ClipRRect(
         borderRadius: BorderRadius.only(
           topLeft: Radius.circular(ui(16)),
           topRight: Radius.circular(ui(16)),
         ),
-        gradient: const LinearGradient(
-          begin: Alignment.bottomLeft,
-          end: Alignment.topRight,
-          colors: [Colors.white, Color(0xFFF9EDFF)],
-        ),
-      ),
-      child: Stack(
-        children: [
-          // 返回按钮
-          Positioned(
-            left: ui(20),
-            top: ui(20),
-            child: InkWell(
-              onTap: onBack,
-              borderRadius: BorderRadius.circular(ui(8)),
-              child: Container(
-                width: ui(32),
-                height: ui(32),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(ui(8)),
-                  border: Border.all(color: _kBorderSoft),
-                ),
-                child: Icon(
-                  Icons.chevron_left_rounded,
-                  size: ui(20),
-                  color: const Color(0xFF1C274C),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.asset(
+              AppAssets.smartCampusBg,
+              width: double.infinity,
+              fit: BoxFit.fitWidth,
+              alignment: Alignment.topCenter,
+            ),
+            // 返回按钮
+            Positioned(
+              left: ui(20),
+              top: ui(20),
+              child: InkWell(
+                onTap: onBack,
+                borderRadius: BorderRadius.circular(ui(8)),
+                child: Container(
+                  width: ui(32),
+                  height: ui(32),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(ui(8)),
+                    border: Border.all(color: _kBorderSoft),
+                  ),
+                  child: Icon(
+                    Icons.chevron_left_rounded,
+                    size: ui(20),
+                    color: const Color(0xFF1C274C),
+                  ),
                 ),
               ),
             ),
-          ),
-          // 居中标题：教学周第 12 周 / 03/12 - 03/17
-          Positioned.fill(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                RichText(
-                  text: TextSpan(
+            // 居中标题：教学周第 12 周 / 03/12 - 03/17
+            Positioned.fill(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  RichText(
+                    text: TextSpan(
+                      style: TextStyle(
+                        fontSize: ui(16),
+                        color: _kTextDark,
+                        fontFamily: 'PingFang SC',
+                        fontWeight: AppFont.w600,
+                        height: 1,
+                      ),
+                      children: [
+                        const TextSpan(text: '教学周第 '),
+                        TextSpan(
+                          text: '$week',
+                          style: const TextStyle(color: _kPurple),
+                        ),
+                        const TextSpan(text: ' 周'),
+                      ],
+                    ),
+                  ),
+                  SizedBox(height: ui(6)),
+                  Text(
+                    dateRange,
                     style: TextStyle(
-                      fontSize: ui(16),
-                      color: _kTextDark,
+                      fontSize: ui(12),
+                      color: _kTextHint,
                       fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w600,
+                      fontWeight: AppFont.w400,
                       height: 1,
                     ),
-                    children: [
-                      const TextSpan(text: '教学周第 '),
-                      TextSpan(
-                        text: '$week',
-                        style: const TextStyle(color: _kPurple),
-                      ),
-                      const TextSpan(text: ' 周'),
-                    ],
                   ),
-                ),
-                SizedBox(height: ui(6)),
-                Text(
-                  dateRange,
-                  style: TextStyle(
-                    fontSize: ui(12),
-                    color: _kTextHint,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w400,
-                    height: 1,
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          // 右侧周切换器
-          Positioned(
-            right: ui(20),
-            top: ui(14),
-            child: _WeekSwitcher(
-              onPrev: onPrevWeek,
-              onNext: onNextWeek,
-              onCurrent: onGotoCurrent,
+            // 右侧周切换器
+            Positioned(
+              right: ui(20),
+              top: ui(14),
+              child: _WeekSwitcher(
+                onPrev: onPrevWeek,
+                onNext: onNextWeek,
+                onCurrent: onGotoCurrent,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1093,7 +1096,7 @@ class _CellContent extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     if (cards.isEmpty) {
-      return const SizedBox.shrink();
+      return const ScheduleIdleSlot();
     }
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(12)),

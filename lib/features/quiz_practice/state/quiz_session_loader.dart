@@ -214,6 +214,12 @@ class QuizSessionLoader {
     }
     if (startIndex < 0) startIndex = 0;
 
+    try {
+      await store.resolveAt(startIndex);
+    } catch (_) {
+      // 首题解析失败时仍下发 stub 列表，由做题页重试。
+    }
+
     _emitPartial(
       key,
       QuizSessionBootstrapPartial(store: store, startIndex: startIndex),

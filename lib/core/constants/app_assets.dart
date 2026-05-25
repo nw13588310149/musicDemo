@@ -144,6 +144,9 @@ abstract final class AppAssets {
   /// 全局页面 loading / 下拉刷新动画。
   static const homeLoading = 'assets/images/home/loading.gif';
 
+  /// musicPlay 播放列表抽屉 · 当前播放项动效图标。
+  static const homeMusicPlaying = 'assets/images/home/music.gif';
+
   // 用户菜单弹层图标（地区 / 资料修改 / 退出登录）
   static const homeUserMenuRegion = 'assets/images/home/1.png';
   static const homeUserMenuProfile = 'assets/images/home/2.png';
@@ -215,9 +218,13 @@ abstract final class AppAssets {
   static const homeV2QuickMall = 'assets/images/home/v2/quick_mall.png';
   static const homeV2QuickCampus = 'assets/images/home/v2/quick_campus.png';
   static const homeDictationNavIcon = 'assets/images/home/dictation/1.png';
-  // 听写 / 视唱 / 乐理 / 答题入口 左侧分类列表 —— 非选中态 icon。
-  static const homeCategoryIdleIcon = 'assets/images/home/bg1.png';
-  // 录音作品（recording）页 左侧分类 —— 非选中态 icon。
+  // 听写 / 视唱 / 乐理 / 试题 左侧分类 —— 选中 / 未选中 icon。
+  static const homeCategorySelectedIcon = 'assets/images/home/nav2.png';
+  static const homeCategoryIdleIcon = 'assets/images/home/nav3.png';
+  // 我的云盘 / 我的笔记 / 录音系统 左侧分类 —— 选中 / 未选中 icon。
+  static const folderCategorySelectedIcon = 'assets/images/home/nav4.png';
+  static const folderCategoryIdleIcon = 'assets/images/home/nav5.png';
+  // 录音作品（recording）页 左侧分类 —— 非选中态 icon（历史资源，已由 nav5 替代）。
   static const recordingCategoryIdleIcon = 'assets/images/sound/ly.png';
   static const homeDictationBookCover = 'assets/images/home/dictation/2.png';
   static const homeV2VoiceCardBg = 'assets/images/home/v2/voice_card_bg.png';
@@ -509,6 +516,13 @@ abstract final class AppAssets {
   static const infoGenderMaleSelected = 'assets/images/info/man1.png';
   static const infoGenderFemale = 'assets/images/info/women.png';
   static const infoGenderFemaleSelected = 'assets/images/info/women1.png';
+
+  /// 智慧校园二级页顶部 banner 背景（授课课表 / 我的课表等）。
+  static const smartCampusBg = 'assets/images/smartCampus/bg.png';
+  static const smartCampusBgAspectRatio = 3880 / 272;
+
+  /// 课表空闲格子背景（斜线占位，替代「空闲」文案与描边）。
+  static const smartCampusIdleSlot = 'assets/images/smartCampus/nok.png';
 
   // 智慧校园群聊
   static const groupChatBg = 'assets/images/groupChat/bg.png';
