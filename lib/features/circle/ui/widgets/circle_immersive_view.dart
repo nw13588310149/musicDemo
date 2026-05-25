@@ -9,6 +9,7 @@ import '../../../shell/ui/shell_layout.dart';
 import '../../state/circle_controller.dart';
 import '../../state/circle_state.dart';
 import 'circle_action_buttons.dart';
+import 'circle_like_button.dart';
 import 'circle_badges.dart';
 import 'circle_comment_panel.dart';
 import 'circle_media_player.dart';
@@ -494,11 +495,9 @@ class _ImmersiveActions extends StatelessWidget {
       children: [
         _ImmersiveAvatar(url: post.author.avatarUrl, size: avatarSize),
         SizedBox(height: gapAfterAvatar),
-        CircleActionButton(
-          iconAsset: post.liked ? AppAssets.circleFav1 : AppAssets.circleFav,
-          count: post.likeCount,
+        CircleImmersiveLikeButton(
+          post: post,
           onTap: onLike,
-          dark: true,
           iconSize: compact ? ui(28) : null,
         ),
         SizedBox(height: gapBetween),
@@ -510,11 +509,9 @@ class _ImmersiveActions extends StatelessWidget {
           iconSize: compact ? ui(28) : null,
         ),
         SizedBox(height: gapBetween),
-        CircleActionButton(
-          iconAsset: post.favorited ? AppAssets.circleSc1 : AppAssets.circleSc,
-          count: post.favoriteCount,
+        CircleImmersiveFavoriteButton(
+          post: post,
           onTap: onFavorite,
-          dark: true,
           iconSize: compact ? ui(28) : null,
         ),
       ],

@@ -3,7 +3,6 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart' show clampDouble;
 import 'package:flutter/material.dart';
 
-import '../theme/app_theme.dart';
 import 'app_refresh_progress_indicator.dart';
 
 // 与 package:flutter material/refresh_indicator.dart 保持一致。
@@ -14,32 +13,27 @@ const Duration _kIndicatorScaleDuration = Duration(milliseconds: 200);
 
 /// 项目内统一的下拉刷新组件。
 ///
-/// 视觉：无白底圆盘，品牌紫 (`AppTheme.brandColor`) 旋转环铺满 41×41 区域
-/// （与 Material 默认白底圆等大），无阴影。
+/// 视觉：居中展示 [AppAssets.homeLoading] GIF（41×41），无白底圆盘。
 class AppRefreshIndicator extends StatefulWidget {
   const AppRefreshIndicator({
     super.key,
     required this.onRefresh,
     required this.child,
-    this.color,
     this.displacement = 40.0,
     this.edgeOffset = 0.0,
     this.notificationPredicate = defaultScrollNotificationPredicate,
     this.semanticsLabel,
     this.semanticsValue,
-    this.strokeWidth = RefreshProgressIndicator.defaultStrokeWidth,
     this.triggerMode = RefreshIndicatorTriggerMode.onEdge,
   });
 
   final RefreshCallback onRefresh;
   final Widget child;
-  final Color? color;
   final double displacement;
   final double edgeOffset;
   final ScrollNotificationPredicate notificationPredicate;
   final String? semanticsLabel;
   final String? semanticsValue;
-  final double strokeWidth;
   final RefreshIndicatorTriggerMode triggerMode;
 
   @override
@@ -52,18 +46,12 @@ class _AppRefreshIndicatorState extends State<AppRefreshIndicator>
   late AnimationController _scaleController;
   late Animation<double> _positionFactor;
   late Animation<double> _scaleFactor;
-  late Animation<double> _value;
-  late Animation<Color?> _valueColor;
+  late Animation<double> _opacity;
 
   RefreshIndicatorStatus? _status;
   bool? _isIndicatorAtTop;
   double? _dragOffset;
-  late Color _effectiveValueColor = widget.color ?? AppTheme.brandColor;
 
-  static final Animatable<double> _threeQuarterTween = Tween<double>(
-    begin: 0.0,
-    end: 0.75,
-  );
   static final Animatable<double> _kDragSizeFactorLimitTween = Tween<double>(
     begin: 0.0,
     end: _kDragSizeFactorLimit,
@@ -78,23 +66,14 @@ class _AppRefreshIndicatorState extends State<AppRefreshIndicator>
     super.initState();
     _positionController = AnimationController(vsync: this);
     _positionFactor = _positionController.drive(_kDragSizeFactorLimitTween);
-    _value = _positionController.drive(_threeQuarterTween);
     _scaleController = AnimationController(vsync: this);
     _scaleFactor = _scaleController.drive(_oneToZeroTween);
   }
 
   @override
   void didChangeDependencies() {
-    _setupColorTween();
+    _setupOpacityTween();
     super.didChangeDependencies();
-  }
-
-  @override
-  void didUpdateWidget(covariant AppRefreshIndicator oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.color != widget.color) {
-      _setupColorTween();
-    }
   }
 
   @override
@@ -104,19 +83,12 @@ class _AppRefreshIndicatorState extends State<AppRefreshIndicator>
     super.dispose();
   }
 
-  void _setupColorTween() {
-    _effectiveValueColor = widget.color ?? AppTheme.brandColor;
-    final Color color = _effectiveValueColor;
-    if (color.a == 0) {
-      _valueColor = AlwaysStoppedAnimation<Color>(color);
-    } else {
-      _valueColor = _positionController.drive(
-        ColorTween(
-          begin: color.withValues(alpha: 0),
-          end: color.withValues(alpha: color.a),
-        ).chain(CurveTween(curve: const Interval(0.0, 1.0 / _kDragSizeFactorLimit))),
-      );
-    }
+  void _setupOpacityTween() {
+    _opacity = _positionController.drive(
+      Tween<double>(begin: 0, end: 1).chain(
+        CurveTween(curve: const Interval(0.0, 1.0 / _kDragSizeFactorLimit)),
+      ),
+    );
   }
 
   bool _shouldStart(ScrollNotification notification) {
@@ -228,8 +200,7 @@ class _AppRefreshIndicatorState extends State<AppRefreshIndicator>
       newValue = math.max(newValue, 1.0 / _kDragSizeFactorLimit);
     }
     _positionController.value = clampDouble(newValue, 0.0, 1.0);
-    if (_status == RefreshIndicatorStatus.drag &&
-        _valueColor.value!.a == _effectiveValueColor.a) {
+    if (_status == RefreshIndicatorStatus.drag && _opacity.value >= 1) {
       setState(() => _status = RefreshIndicatorStatus.armed);
     }
   }
@@ -326,9 +297,7 @@ class _AppRefreshIndicatorState extends State<AppRefreshIndicator>
                                 context,
                               ).refreshIndicatorSemanticLabel,
                           semanticsValue: widget.semanticsValue,
-                          value: showIndeterminateIndicator ? null : _value.value,
-                          color: _effectiveValueColor,
-                          strokeWidth: widget.strokeWidth,
+                          opacity: showIndeterminateIndicator ? 1 : _opacity.value,
                         );
                       },
                     ),

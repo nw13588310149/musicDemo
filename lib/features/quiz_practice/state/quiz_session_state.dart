@@ -13,6 +13,7 @@ class QuizSessionPageArgs {
     this.allCount = 0,
     this.schoolId = kPublicQuizSchoolId,
     this.openCompletionDialog = false,
+    this.needsInitialize = false,
   });
 
   final QuizPracticeType practiceType;
@@ -25,6 +26,24 @@ class QuizSessionPageArgs {
 
   /// 进入页面后立刻弹出完成弹窗（对应 1.0 的 camp_over 路由）。
   final bool openCompletionDialog;
+
+  /// 1.0：`summary.status == null` 时需先 questionPracticeCreate。
+  final bool needsInitialize;
+
+  factory QuizSessionPageArgs.fromSummary(
+    QuizPracticeSummary summary, {
+    required int schoolId,
+  }) {
+    return QuizSessionPageArgs(
+      practiceType: summary.type,
+      practiceId: summary.practiceId,
+      startIndex: summary.doneCount,
+      allCount: summary.allCount,
+      schoolId: schoolId,
+      needsInitialize:
+          summary.type != QuizPracticeType.error && !summary.statusInitialized,
+    );
+  }
 
   factory QuizSessionPageArgs.fromRaw(dynamic raw) {
     if (raw is QuizSessionPageArgs) return raw;
@@ -39,6 +58,7 @@ class QuizSessionPageArgs {
         allCount: _toInt(raw['allCount']) ?? 0,
         schoolId: _toInt(raw['schoolId']) ?? kPublicQuizSchoolId,
         openCompletionDialog: raw['openCompletionDialog'] == true,
+        needsInitialize: raw['needsInitialize'] == true,
       );
     }
     return const QuizSessionPageArgs(practiceType: QuizPracticeType.sequence);
@@ -52,7 +72,8 @@ class QuizSessionPageArgs {
         other.startIndex == startIndex &&
         other.allCount == allCount &&
         other.schoolId == schoolId &&
-        other.openCompletionDialog == openCompletionDialog;
+        other.openCompletionDialog == openCompletionDialog &&
+        other.needsInitialize == needsInitialize;
   }
 
   @override
@@ -63,6 +84,7 @@ class QuizSessionPageArgs {
     allCount,
     schoolId,
     openCompletionDialog,
+    needsInitialize,
   );
 
   static int? _toInt(dynamic value) {
@@ -235,12 +257,16 @@ class QuizSessionState {
     required this.errorMessage,
     required this.summaryAfter,
     required this.completionDialogVisible,
+    required this.questionsLoading,
   });
 
   final QuizSessionPageArgs args;
   final bool loading;
   final List<QuizQuestion> questions;
   final int currentIndex;
+
+  /// 首题已展示、全量题目仍在后台解析时为 true。
+  final bool questionsLoading;
 
   /// 自动刷题：答完自动跳下一题。
   final bool autoNext;
@@ -280,6 +306,7 @@ class QuizSessionState {
     bool clearErrorMessage = false,
     List<QuizPracticeSummary>? summaryAfter,
     bool? completionDialogVisible,
+    bool? questionsLoading,
   }) {
     return QuizSessionState(
       args: args ?? this.args,
@@ -293,6 +320,7 @@ class QuizSessionState {
       summaryAfter: summaryAfter ?? this.summaryAfter,
       completionDialogVisible:
           completionDialogVisible ?? this.completionDialogVisible,
+      questionsLoading: questionsLoading ?? this.questionsLoading,
     );
   }
 
@@ -306,5 +334,6 @@ class QuizSessionState {
         errorMessage: '',
         summaryAfter: const <QuizPracticeSummary>[],
         completionDialogVisible: false,
+        questionsLoading: false,
       );
 }

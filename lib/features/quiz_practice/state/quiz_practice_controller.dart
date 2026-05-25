@@ -1,30 +1,47 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/quiz_practice_repository.dart';
+import '../data/quiz_question_parser.dart';
 import 'quiz_practice_state.dart';
+import 'quiz_session_loader.dart';
+import 'quiz_session_state.dart';
 
 final quizPracticeControllerProvider = StateNotifierProvider.autoDispose
     .family<QuizPracticeController, QuizPracticeState, int>((ref, schoolId) {
       final repo = ref.watch(quizPracticeRepositoryProvider);
-      return QuizPracticeController(repository: repo, schoolId: schoolId);
+      final loader = ref.watch(quizSessionLoaderProvider);
+      return QuizPracticeController(
+        repository: repo,
+        loader: loader,
+        schoolId: schoolId,
+      );
     });
 
 class QuizPracticeController extends StateNotifier<QuizPracticeState> {
   QuizPracticeController({
     required QuizPracticeRepository repository,
+    required QuizSessionLoader loader,
     required int schoolId,
   }) : _repository = repository,
+       _loader = loader,
        _schoolId = schoolId,
        super(QuizPracticeState.initial) {
     unawaited(refresh());
   }
 
   final QuizPracticeRepository _repository;
+  final QuizSessionLoader _loader;
   final int _schoolId;
 
   int get schoolId => _schoolId;
+
+  /// 点击练习入口时立即开始加载，与路由 push 并行。
+  void prefetchSession(QuizPracticeSummary summary) {
+    _loader.warmUp(QuizSessionPageArgs.fromSummary(summary, schoolId: _schoolId));
+  }
 
   Future<void> refresh({bool showLoading = true}) async {
     if (showLoading || state.summaries.isEmpty) {
@@ -43,6 +60,26 @@ class QuizPracticeController extends StateNotifier<QuizPracticeState> {
 
     final summaries = _parseSummaries(response.data);
     state = state.copyWith(loading: false, summaries: summaries);
+    _scheduleIdleWarmUp(summaries);
+  }
+
+  void _scheduleIdleWarmUp(List<QuizPracticeSummary> summaries) {
+    unawaited(compute(warmupQuizQuestionParser, null));
+    Future<void>.delayed(const Duration(milliseconds: 800), () {
+      if (!mounted) return;
+      QuizPracticeSummary? sequence;
+      for (final summary in summaries) {
+        if (summary.type == QuizPracticeType.sequence) {
+          sequence = summary;
+          break;
+        }
+      }
+      if (sequence == null) return;
+      if (sequence.statusInitialized && sequence.allCount <= 0) return;
+      _loader.warmUp(
+        QuizSessionPageArgs.fromSummary(sequence, schoolId: _schoolId),
+      );
+    });
   }
 
   List<QuizPracticeSummary> _parseSummaries(dynamic data) {

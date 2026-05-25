@@ -45,6 +45,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_refresh_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -335,8 +336,7 @@ class _StudentMyHomeworkViewState extends ConsumerState<StudentMyHomeworkView> {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
       color: _kPageBg,
-      child: RefreshIndicator(
-        elevation: 0,
+      child: AppRefreshIndicator(
         onRefresh: _loadList,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),

@@ -140,6 +140,16 @@ abstract final class AppAssets {
   static const homeIcon8 = 'assets/images/home/homeIcon8.png';
   static const homeIcon9 = 'assets/images/home/homeIcon9.png';
   static const homeIcon10 = 'assets/images/home/homeIcon10.png';
+
+  /// 全局页面 loading / 下拉刷新动画。
+  static const homeLoading = 'assets/images/home/loading.gif';
+
+  /// 校圈点赞过渡动画。
+  static const homeLikeAnim = 'assets/images/home/dz.gif';
+
+  /// 校圈收藏过渡动画。
+  static const homeFavoriteAnim = 'assets/images/home/fav.gif';
+
   // 用户菜单弹层图标（地区 / 资料修改 / 退出登录）
   static const homeUserMenuRegion = 'assets/images/home/1.png';
   static const homeUserMenuProfile = 'assets/images/home/2.png';

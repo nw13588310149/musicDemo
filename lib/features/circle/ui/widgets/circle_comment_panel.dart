@@ -2,8 +2,7 @@
 import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 
-import '../../../../core/constants/app_assets.dart';
-import '../../../../core/widgets/app_asset_graphic.dart';
+import 'circle_like_button.dart';
 import '../../../shell/ui/shell_layout.dart';
 import '../../state/circle_state.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -293,7 +292,7 @@ class _CommentTile extends StatelessWidget {
           ),
         ),
         SizedBox(width: ui(8)),
-        _CommentLike(comment: comment, onTap: onLike),
+        CircleCommentLikeButton(comment: comment, onTap: onLike),
       ],
     );
   }
@@ -338,58 +337,6 @@ class _CommentAvatar extends StatelessWidget {
                   return Container(color: const Color(0xFFF3F4F8));
                 },
               ),
-      ),
-    );
-  }
-}
-
-class _CommentLike extends StatelessWidget {
-  const _CommentLike({required this.comment, required this.onTap});
-
-  final CircleComment comment;
-  final VoidCallback onTap;
-
-  static const _activeCanvasExtent = 94.0;
-  static const _inactiveCanvasExtent = 80.0;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    final iconAsset =
-        comment.liked ? AppAssets.circleFav1 : AppAssets.circleFav2;
-    final baseSize = ui(20);
-    final iconBoxSize = baseSize * _activeCanvasExtent / _inactiveCanvasExtent;
-    final visualSize =
-        iconAsset == AppAssets.circleFav2 ? iconBoxSize : baseSize;
-
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: iconBoxSize,
-            height: iconBoxSize,
-            child: Center(
-              child: AppAssetGraphic(
-                iconAsset,
-                width: visualSize,
-                height: visualSize,
-              ),
-            ),
-          ),
-          SizedBox(height: ui(2)),
-          Text(
-            formatCircleCount(comment.likeCount),
-            style: TextStyle(
-              color: const Color(0xFF0B081A),
-              fontSize: ui(12),
-              fontFamily: 'PingFang SC',
-              height: 1,
-            ),
-          ),
-        ],
       ),
     );
   }

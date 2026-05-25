@@ -1,29 +1,32 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_theme.dart';
+import 'app_loading_indicator.dart';
 
-/// Material 下拉刷新指示器默认外框尺寸（原白底圆盘直径）。
+/// Material 下拉刷新指示器默认外框尺寸。
 const double kAppRefreshIndicatorSize = 41.0;
 
-/// 无白底圆盘、进度环铺满 [kAppRefreshIndicatorSize] 的刷新指示器。
-///
-/// 相对 [RefreshProgressIndicator] 默认样式：去掉 [Material] 底色与内外边距，
-/// 让紫色旋转环占满原先白底圆的 41×41 区域。
-class AppRefreshProgressIndicator extends RefreshProgressIndicator {
+/// 下拉刷新区域使用的 GIF 指示器（与全局页面 loading 同源）。
+class AppRefreshProgressIndicator extends StatelessWidget {
   const AppRefreshProgressIndicator({
     super.key,
-    super.value,
-    Color? color,
-    super.valueColor,
-    double? strokeWidth,
-    super.semanticsLabel,
-    super.semanticsValue,
-  }) : super(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          indicatorMargin: EdgeInsets.zero,
-          indicatorPadding: EdgeInsets.zero,
-          color: color ?? AppTheme.brandColor,
-          strokeWidth: strokeWidth ?? RefreshProgressIndicator.defaultStrokeWidth,
-        );
+    this.opacity = 1,
+    this.semanticsLabel,
+    this.semanticsValue,
+  });
+
+  final double opacity;
+  final String? semanticsLabel;
+  final String? semanticsValue;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: semanticsLabel,
+      value: semanticsValue,
+      child: AppLoadingGif(
+        size: kAppRefreshIndicatorSize,
+        opacity: opacity,
+      ),
+    );
+  }
 }

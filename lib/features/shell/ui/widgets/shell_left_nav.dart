@@ -439,92 +439,87 @@ class _NavTile extends StatelessWidget {
     const inactiveTextColor = Color(0xFF0B081A);
     final collapsed = progress > 0.5;
 
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(ui(12)),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(ui(12)),
-        // 命中区固定 48 高（与展开态一致），icon 在里面始终垂直居中。
-        child: Container(
-          constraints: BoxConstraints(minHeight: ui(48)),
-          alignment: collapsed ? Alignment.center : Alignment.centerLeft,
-          child: collapsed
-              // 折叠态：40×40 命中区包住 icon；背景由滑动指示器承担。
-              ? SizedBox(
-                  width: ui(40),
-                  height: ui(40),
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    alignment: Alignment.center,
-                    children: [
-                      _buildIcon(context),
-                      if (item.badge > 0)
-                        Positioned(
-                          right: ui(-2),
-                          top: ui(1),
-                          child: const _BadgeDot(),
-                        ),
-                    ],
-                  ),
-                )
-              // 展开态：左 16 / 右 10 / 上下 12 内边距。
-              : Padding(
-                  padding: EdgeInsets.only(
-                    left: tilePadLeft,
-                    right: tilePadRight,
-                    top: ui(12),
-                    bottom: ui(12),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      _buildIcon(context),
-                      Expanded(
-                        child: ClipRect(
-                          child: Align(
-                            widthFactor: labelWidthFactor,
-                            alignment: Alignment.centerLeft,
-                            child: Opacity(
-                              opacity: labelOpacity,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  SizedBox(width: ui(8)),
-                                  Flexible(
-                                    child: Text(
-                                      item.label,
-                                      maxLines: 1,
-                                      softWrap: false,
-                                      overflow: TextOverflow.clip,
-                                      style: TextStyle(
-                                        fontSize: ui(15),
-                                        height: 1,
-                                        fontFamily: 'PingFang SC',
-                                        fontWeight: AppFont.w500,
-                                        color: active
-                                            ? Colors.white
-                                            : inactiveTextColor.withValues(
-                                                alpha: 0.7,
-                                              ),
-                                      ),
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        constraints: BoxConstraints(minHeight: ui(48)),
+        alignment: collapsed ? Alignment.center : Alignment.centerLeft,
+        child: collapsed
+            // 折叠态：40×40 命中区包住 icon；背景由滑动指示器承担。
+            ? SizedBox(
+                width: ui(40),
+                height: ui(40),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  alignment: Alignment.center,
+                  children: [
+                    _buildIcon(context),
+                    if (item.badge > 0)
+                      Positioned(
+                        right: ui(-2),
+                        top: ui(1),
+                        child: const _BadgeDot(),
+                      ),
+                  ],
+                ),
+              )
+            // 展开态：左 16 / 右 10 / 上下 12 内边距。
+            : Padding(
+                padding: EdgeInsets.only(
+                  left: tilePadLeft,
+                  right: tilePadRight,
+                  top: ui(12),
+                  bottom: ui(12),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    _buildIcon(context),
+                    Expanded(
+                      child: ClipRect(
+                        child: Align(
+                          widthFactor: labelWidthFactor,
+                          alignment: Alignment.centerLeft,
+                          child: Opacity(
+                            opacity: labelOpacity,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                SizedBox(width: ui(8)),
+                                Flexible(
+                                  child: Text(
+                                    item.label,
+                                    maxLines: 1,
+                                    softWrap: false,
+                                    overflow: TextOverflow.clip,
+                                    style: TextStyle(
+                                      fontSize: ui(15),
+                                      height: 1,
+                                      fontFamily: 'PingFang SC',
+                                      fontWeight: AppFont.w500,
+                                      color: active
+                                          ? Colors.white
+                                          : inactiveTextColor.withValues(
+                                              alpha: 0.7,
+                                            ),
                                     ),
                                   ),
-                                  if (item.badge > 0) ...[
-                                    SizedBox(width: ui(4)),
-                                    _NavUnreadCapsule(count: item.badge),
-                                  ],
+                                ),
+                                if (item.badge > 0) ...[
+                                  SizedBox(width: ui(4)),
+                                  _NavUnreadCapsule(count: item.badge),
                                 ],
-                              ),
+                              ],
                             ),
                           ),
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-        ),
+              ),
       ),
     );
   }

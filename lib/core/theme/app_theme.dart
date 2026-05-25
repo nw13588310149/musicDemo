@@ -50,20 +50,16 @@ class AppTheme {
           color: const Color(0xFF171A20),
         ),
       ),
-      // 全局 loading 着色：所有未显式指定 color 的 CircularProgressIndicator /
-      // LinearProgressIndicator 均使用品牌紫 brandColor。
-      // 注：依然允许业务方在调用点用 `valueColor: AlwaysStoppedAnimation(...)`
-      // 或 `color: ...` 单独覆盖（例如夜色背景下的白色 loading）。
+      // 全局页面 loading / 下拉刷新统一为 assets/images/home/loading.gif
+      // （见 AppLoadingIndicator / AppRefreshIndicator）。此处主题仍作用于
+      // 未迁移的 CircularProgressIndicator / LinearProgressIndicator（如上传进度）。
       progressIndicatorTheme: const ProgressIndicatorThemeData(
         color: brandColor,
         strokeWidth: kAppLoadingIndicatorStrokeWidth,
         circularTrackColor: Color(0x1A8741FF),
         linearTrackColor: Color(0x1A8741FF),
       ),
-      // RefreshIndicator 在当前 Flutter SDK 上没有 RefreshIndicatorThemeData
-      // 这一通道（直接读 ColorScheme.primary / canvasColor），因此「下拉刷新
-      // 统一品牌紫」改用 `AppRefreshIndicator` 包装组件实现，业务页面直接用
-      // 它即可，不再依赖 ThemeData。详见 lib/core/widgets/app_refresh_indicator.dart。
+      // 下拉刷新请使用 AppRefreshIndicator（GIF），勿直接用 Material RefreshIndicator。
       // 全局输入框光标 / 文本选区配色：所有未显式指定 cursorColor 的
       // TextField / TextFormField 都会走品牌紫；选区色与选区把手保持同色系。
       // 备注：cursorHeight 不在 ThemeData 暴露，需要在调用点单独设置。

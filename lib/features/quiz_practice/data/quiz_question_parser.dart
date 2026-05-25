@@ -1,5 +1,9 @@
 import 'quiz_html.dart';
 
+/// 供 [compute] 预热 isolate，避免首次进入做题页时才冷启动 worker。
+List<Map<String, dynamic>> warmupQuizQuestionParser(void _) =>
+    const <Map<String, dynamic>>[];
+
 /// 供 [compute] 在后台 isolate 解析题目列表，避免 HTML strip 阻塞 UI 线程。
 List<Map<String, dynamic>> parseQuizQuestionsPayload(dynamic data) {
   if (data is! List) return const <Map<String, dynamic>>[];

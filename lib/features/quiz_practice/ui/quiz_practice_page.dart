@@ -67,11 +67,9 @@ class QuizPracticePage extends ConsumerWidget {
       AppToast.show(context, '暂无可练习题目');
       return;
     }
-    final args = QuizSessionPageArgs(
-      practiceType: summary.type,
-      practiceId: summary.practiceId,
-      startIndex: summary.doneCount,
-      allCount: summary.allCount,
+    controller.prefetchSession(summary);
+    final args = QuizSessionPageArgs.fromSummary(
+      summary,
       schoolId: kPublicQuizSchoolId,
     );
     await Navigator.pushNamed(context, RoutePaths.campAnswer, arguments: args);

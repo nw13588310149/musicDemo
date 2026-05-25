@@ -4,6 +4,7 @@ import '../../../../core/constants/app_assets.dart';
 import '../../../../core/widgets/app_asset_graphic.dart';
 import '../../../shell/ui/shell_layout.dart';
 import '../../state/circle_state.dart';
+import 'circle_like_button.dart';
 
 /// 列表态「已点赞 / 已收藏」资源画布边长；未激活资源为 80px，需等比放大对齐。
 const _kListActiveCanvasExtent = 94.0;
@@ -124,11 +125,7 @@ class CircleActionRow extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     return Row(
       children: [
-        CircleActionButton(
-          iconAsset: post.liked ? AppAssets.circleFav1 : AppAssets.circleFav2,
-          count: post.likeCount,
-          onTap: onLike,
-        ),
+        CircleListLikeButton(post: post, onTap: onLike),
         SizedBox(width: ui(16)),
         CircleActionButton(
           iconAsset: AppAssets.circleMsg1,
@@ -136,12 +133,7 @@ class CircleActionRow extends StatelessWidget {
           onTap: onComment,
         ),
         SizedBox(width: ui(16)),
-        CircleActionButton(
-          iconAsset:
-              post.favorited ? AppAssets.circleSc1 : AppAssets.circleSc2,
-          count: post.favoriteCount,
-          onTap: onFavorite,
-        ),
+        CircleListFavoriteButton(post: post, onTap: onFavorite),
       ],
     );
   }
