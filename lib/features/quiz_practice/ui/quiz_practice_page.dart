@@ -365,8 +365,10 @@ class _PracticeRingCard extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     final ringSize = ui(140);
     final innerSize = ui(98);
-    final pillWidth = ui(72);
-    final pillHeight = ui(24);
+    final pillWidth = ui(80);
+    final pillHeight = ui(28);
+    // 内圆与外环几何中心对齐。
+    final innerTop = (ringSize - innerSize) / 2;
 
     return Material(
       color: Colors.transparent,
@@ -403,7 +405,7 @@ class _PracticeRingCard extends StatelessWidget {
                       ),
                     ),
                     Positioned(
-                      top: (ringSize - innerSize) / 2,
+                      top: innerTop,
                       child: Container(
                         width: innerSize,
                         height: innerSize,
@@ -462,7 +464,7 @@ class _PracticeRingCard extends StatelessWidget {
                                 text: '${summary.doneCount}',
                                 style: TextStyle(
                                   color: _kStatTextDefault,
-                                  fontSize: ui(11),
+                                  fontSize: ui(13),
                                   fontFamily: 'Barlow',
                                   fontWeight: AppFont.w600,
                                 ),
@@ -471,7 +473,7 @@ class _PracticeRingCard extends StatelessWidget {
                                 text: '/${summary.allCount}',
                                 style: TextStyle(
                                   color: _kStatLabelDefault,
-                                  fontSize: ui(11),
+                                  fontSize: ui(13),
                                   fontFamily: 'Barlow',
                                 ),
                               ),
@@ -503,7 +505,7 @@ class _PracticeRingCard extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// 圆环 painter（从底部 90° 起，顺时针推进）
+// 表盘式圆环 painter（底部开口，类似速度表盘）
 // ─────────────────────────────────────────────────────────────────────
 
 class _RingPainter extends CustomPainter {
@@ -519,6 +521,12 @@ class _RingPainter extends CustomPainter {
   final Color trackColor;
   final double strokeWidth;
 
+  /// 表盘起点 7:30 方向（左下），顺时针经过左侧 → 顶部 → 右侧，到 4:30 方向结束（右下）。
+  /// 底部 90° 开口让数据标签胶囊位于两端之间，60% 进度末端正好停在约 1 点钟方向，
+  /// 与设计稿截图一致（270° 总弧 + 90° 缺口）。
+  static const double _startAngle = 3 * math.pi / 4;
+  static const double _sweepAngle = 3 * math.pi / 2;
+
   @override
   void paint(Canvas canvas, Size size) {
     final rect =
@@ -530,7 +538,7 @@ class _RingPainter extends CustomPainter {
       ..strokeWidth = strokeWidth
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
-    canvas.drawArc(rect, 0, math.pi * 2, false, track);
+    canvas.drawArc(rect, _startAngle, _sweepAngle, false, track);
 
     if (progress <= 0) return;
     final fg = Paint()
@@ -538,7 +546,13 @@ class _RingPainter extends CustomPainter {
       ..strokeWidth = strokeWidth
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
-    canvas.drawArc(rect, math.pi / 2, math.pi * 2 * progress, false, fg);
+    canvas.drawArc(
+      rect,
+      _startAngle,
+      _sweepAngle * progress.clamp(0.0, 1.0),
+      false,
+      fg,
+    );
   }
 
   @override

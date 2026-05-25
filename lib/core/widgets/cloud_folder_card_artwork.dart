@@ -38,8 +38,8 @@ class CloudFolderCardArtwork extends StatelessWidget {
   static const double gridChildAspectRatio =
       160 / (130 + titleGap + titleAreaHeight + gridLayoutSlack);
 
-  /// 左下角日期/大小相对底图左缘的内边距（原 10，右移 16 → 26）。
-  static const double metaLeftInset = 26;
+  /// 左下角日期/大小相对底图左缘的内边距。
+  static const double metaLeftInset = 20;
 
   /// 左下角第一行（日期），与左侧目录副标题「已存储 X 个」一致。
   static const Color metaDateColor = Color(0xFF7F7F7F);
