@@ -963,21 +963,12 @@ class _CategoryCardState extends State<_CategoryCard> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Container(
+            Image.asset(
+              AppAssets.cloudFolderIcon,
               width: ui(36),
               height: ui(36),
-              decoration: BoxDecoration(
-                color: selected ? Colors.white : const Color(0xFFF5F6FA),
-                borderRadius: BorderRadius.circular(ui(999)),
-              ),
-              child: Center(
-                child: Image.asset(
-                  AppAssets.cloudFolderIcon,
-                  width: ui(18),
-                  height: ui(16),
-                  fit: BoxFit.contain,
-                ),
-              ),
+              fit: BoxFit.contain,
+              gaplessPlayback: true,
             ),
             SizedBox(width: ui(10)),
             Expanded(
@@ -1566,7 +1557,7 @@ class _FolderCardState extends State<_FolderCard> {
                   ),
                   Positioned(
                     left: ui(CloudFolderCardArtwork.metaLeftInset),
-                    bottom: ui(8),
+                    bottom: ui(CloudFolderCardArtwork.metaSizeBottomInset),
                     child: Text(
                       isCreate ? '点击创建新的资料目录' : item.sizeLabel,
                       style: TextStyle(

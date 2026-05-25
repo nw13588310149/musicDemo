@@ -571,18 +571,14 @@ class _RecordingCategoryCardState extends State<_RecordingCategoryCard> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // 选中：保留 CSS 还原的黄色文件夹手绘 glyph；
-            // 未选中：使用设计稿提供的灰色文件夹素材 ly.png。
             SizedBox(
               width: ui(36),
               height: ui(36),
-              child: selected
-                  ? const _RecordingFolderGlyph()
-                  : Image.asset(
-                      AppAssets.recordingCategoryIdleIcon,
-                      fit: BoxFit.contain,
-                      gaplessPlayback: true,
-                    ),
+              child: Image.asset(
+                AppAssets.recordingCategoryIdleIcon,
+                fit: BoxFit.contain,
+                gaplessPlayback: true,
+              ),
             ),
             SizedBox(width: ui(5)),
             Expanded(
@@ -626,81 +622,6 @@ class _RecordingCategoryCardState extends State<_RecordingCategoryCard> {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// Yellow folder glyph drawn from the Figma CSS spec
-/// (white round bg + yellow folder body, with a tab peeking above).
-class _RecordingFolderGlyph extends StatelessWidget {
-  const _RecordingFolderGlyph();
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return SizedBox(
-      width: ui(36),
-      height: ui(36),
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Positioned(
-            left: 0,
-            top: 0,
-            width: ui(36),
-            height: ui(36),
-            child: DecoratedBox(
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-          // Folder tab (gradient yellow) sticking up behind the body.
-          Positioned(
-            left: ui(9),
-            top: ui(10),
-            width: ui(14),
-            height: ui(13),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Color(0xFFFFB02C), Color(0xFFFFA000)],
-                ),
-                borderRadius: BorderRadius.circular(ui(1)),
-              ),
-            ),
-          ),
-          // Folder body (#FFCA28) covering most of the icon.
-          Positioned(
-            left: ui(9),
-            top: ui(13),
-            width: ui(18),
-            height: ui(13),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFCA28),
-                borderRadius: BorderRadius.circular(ui(1)),
-              ),
-            ),
-          ),
-          // Subtle white label strip near the top edge of the body.
-          Positioned(
-            left: ui(10),
-            top: ui(14),
-            width: ui(11),
-            height: ui(1.4),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(ui(0.5)),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -1255,7 +1176,7 @@ class _RecordingFolderCardState extends State<_RecordingFolderCard> {
                     ),
                   Positioned(
                     left: ui(CloudFolderCardArtwork.metaLeftInset),
-                    bottom: ui(8),
+                    bottom: ui(CloudFolderCardArtwork.metaSizeBottomInset),
                     child: Text(
                       item.sizeLabel.isEmpty
                           ? '${item.count} 个录音'
@@ -2406,10 +2327,10 @@ const double _kRecordingWaveSectionHeight = 110;
 const double _kRecordingWaveTopInset = 20;
 
 /// 波形柱中心间距（设计稿 px）；播放态保持留白，避免柱线粘连。
-const double _kRecordingWaveBarSpacing = 3;
+const double _kRecordingWaveBarSpacing = 4;
 
 /// 录制中实时波形柱间距（比试听略宽，避免柱线挤在一起）。
-const double _kRecordingLiveWaveBarSpacing = 3;
+const double _kRecordingLiveWaveBarSpacing = 4;
 const double _kRecordingScaleTopGap = 15;
 const double _kRecordingScaleSectionHeight = 58;
 const double _kRecordingMajorTickHeight = 12;
@@ -2576,8 +2497,10 @@ class _IosLiveRecordingWavePainter extends CustomPainter {
 
   static const _waveBg = Color(0xFF141414);
   static const _scaleBg = Color(0xFF1E1E1E);
-  static const _waveBarColor = Color(0xFFFFFFFF);
-  static const _mutedBarColor = Color(0x66FFFFFF);
+  // 录制态柱子全部位于 cursor 左侧（即"已走过"区域），改用品牌主色。
+  // 远端柱子用半透明主色，靠近 cursor 的柱子用实色，营造尾迹渐变。
+  static const _waveBarColor = Color(0xFFA885FF);
+  static const _mutedBarColor = Color(0x66A885FF);
   static const _guideLineColor = Color.fromRGBO(255, 255, 255, 0.10);
   static const _tickColor = Color(0xFF888888);
   // 录制游标改用品牌主色（紫），与试听态保持一致。
@@ -3037,7 +2960,10 @@ class _WaveWithScalePainter extends CustomPainter {
 
   static const _waveBg = Color(0xFF141414);
   static const _scaleBg = Color(0xFF1E1E1E);
+  // 播放游标右侧（未播放区）柱子保持白色；左侧（已播放/已走过）柱子改为
+  // 主色，与录制态一致地强调"经过的轨迹"。
   static const _waveBarColor = Color(0xFFFFFFFF);
+  static const _playedBarColor = Color(0xFFA885FF);
   static const _guideLineColor = Color.fromRGBO(63, 63, 63, 0.53);
   static const _tickColor = Color(0xFF888888);
   static const _playheadColor = Color(0xFFA885FF);
@@ -3129,7 +3055,9 @@ class _WaveWithScalePainter extends CustomPainter {
       if (count <= 0) return;
       // 最新样本锚定在游标，固定水平间距；避免 count 增加时
       // (i/(count-1))*cursorX 重算导致 iPad 上整段波形左右跳动。
+      // 这条路径下所有柱子都在 cursor 左侧（"已走过"区域），统一用主色。
       final pitch = spacing;
+      wavePaint.color = _playedBarColor;
       for (var i = count - 1; i >= 0; i--) {
         final x = cursorX - (count - 1 - i) * pitch;
         if (x + barWidth / 2 < 0) break;
@@ -3145,6 +3073,7 @@ class _WaveWithScalePainter extends CustomPainter {
     }
 
     // 试听/播放：按固定栅格铺满全宽，样本只决定柱高，不改变柱位。
+    // 已经被 cursor 划过的柱子改用主色，未走过的保持白色。
     final barCount = math.max(1, (width / spacing).floor());
     final stride = width / barCount;
     final maxAmp = samples.fold<double>(
@@ -3158,6 +3087,7 @@ class _WaveWithScalePainter extends CustomPainter {
       final amp = (sample.abs() / normalizer).clamp(0.05, 1.0);
       final halfH = maxHalfH * amp;
       final x = i * stride + stride / 2;
+      wavePaint.color = x <= cursorX ? _playedBarColor : _waveBarColor;
       canvas.drawLine(
         Offset(x, centerY - halfH),
         Offset(x, centerY + halfH),

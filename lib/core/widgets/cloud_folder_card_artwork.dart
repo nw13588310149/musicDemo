@@ -47,6 +47,9 @@ class CloudFolderCardArtwork extends StatelessWidget {
   /// 左下角第二行（大小），应用主色。
   static const Color metaSizeColor = Color(0xFF8741FF);
 
+  /// 左下角第二行（大小）距底图底缘的内边距（原 8，上移 4 → 12）。
+  static const double metaSizeBottomInset = 12;
+
   /// ⋯ 相对文件夹底图的位置（对齐 yp8/yp9 上印刷的三点）。
   static const double menuTopFactor = 0.43;
   static const double menuRightFactor = 0.07;
