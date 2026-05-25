@@ -51,6 +51,7 @@ class QuizPracticeRepository {
         'schoolId': schoolId,
         'practiceId': practiceId,
       },
+      lightweightJson: true,
     );
   }
 

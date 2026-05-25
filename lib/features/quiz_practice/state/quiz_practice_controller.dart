@@ -1,8 +1,10 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/quiz_practice_repository.dart';
+import '../data/quiz_question_parser.dart';
 import 'quiz_practice_state.dart';
 
 final quizPracticeControllerProvider = StateNotifierProvider.autoDispose
@@ -41,6 +43,8 @@ class QuizPracticeController extends StateNotifier<QuizPracticeState> {
 
     final summaries = _parseSummaries(response.data);
     state = state.copyWith(loading: false, summaries: summaries);
+
+    unawaited(compute(warmupQuizQuestionParser, null));
 
     // 1.0 行为：status==null 的练习立刻调用 create 初始化（只针对 sequence/random/exam）。
     final missing = summaries

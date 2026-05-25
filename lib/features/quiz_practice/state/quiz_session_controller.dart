@@ -1,8 +1,10 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/quiz_practice_repository.dart';
+import '../data/quiz_question_parser.dart';
 import 'quiz_practice_state.dart';
 import 'quiz_session_state.dart';
 
@@ -76,7 +78,9 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
       return;
     }
 
-    final questions = _parseQuestions(response.data);
+    final questions = await _parseQuestionsInBackground(response.data);
+    if (!mounted) return;
+
     final total = questions.isEmpty ? args.allCount : questions.length;
 
     // 起始题号取传入 num，但若已超过题量则从最后一题开始（与 1.0 一致）。
@@ -253,38 +257,12 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
     );
   }
 
-  List<QuizQuestion> _parseQuestions(dynamic data) {
-    if (data is! List) return const <QuizQuestion>[];
-    final list = <QuizQuestion>[];
-    for (final item in data) {
-      if (item is! Map) continue;
-      final question = item['question'];
-      if (question is! Map) continue;
-      final id = _toInt(item['id']);
-      if (id == null) continue;
-      list.add(
-        QuizQuestion(
-          itemId: id,
-          questionHtml: _asString(question['question']),
-          options: <String>[
-            _asString(question['param1']),
-            _asString(question['param2']),
-            _asString(question['param3']),
-            _asString(question['param4']),
-          ],
-          correctAnswer: _toInt(question['answer']) ?? 0,
-          parseHtml: _asString(question['parse']),
-          userAnswer: _toInt(item['answer']),
-          status: _toInt(item['status']) ?? 0,
-        ),
-      );
+  Future<List<QuizQuestion>> _parseQuestionsInBackground(dynamic data) async {
+    if (data is! List || data.isEmpty) {
+      return const <QuizQuestion>[];
     }
-    return list;
-  }
-
-  String _asString(dynamic value) {
-    if (value == null) return '';
-    return value.toString();
+    final payloads = await compute(parseQuizQuestionsPayload, data);
+    return payloads.map(QuizQuestion.fromPayload).toList(growable: false);
   }
 
   int? _toInt(dynamic value) {

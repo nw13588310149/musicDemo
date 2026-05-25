@@ -34,14 +34,32 @@ class BigIntSafeTransformer implements Transformer {
   /// 响应体解码：大整数引号兜底后再 `jsonDecode`。
   static dynamic decodeBigIntSafeJson(String raw) => _safeDecode(raw);
 
+  /// 轻量解码：仅修补已知 id 字段上的大整数，适合 HTML 体量大的刷题列表。
+  static dynamic decodeLightweightJson(String raw) {
+    if (raw.isEmpty) return null;
+    if (!_knownIdFieldRe.hasMatch(raw)) {
+      return jsonDecode(raw);
+    }
+    final patched = raw.replaceAllMapped(
+      _knownIdFieldRe,
+      (m) => '"${m.group(1)}":"${m.group(2)}"',
+    );
+    try {
+      return jsonDecode(patched);
+    } catch (_) {
+      return jsonDecode(raw);
+    }
+  }
+
   /// 请求体序列化：雪花 id 字段保持 String + 大整数引号兜底。
   static String encodeBigIntSafeJson(Object? data) => _safeEncode(data);
 
+  /// 刷题等接口常见 id 字段；只匹配 JSON 键值，不会误改 HTML 字符串内容。
+  static final RegExp _knownIdFieldRe = RegExp(
+    r'"((?:id|practiceId|questionPracticeItemId|schoolId))"\s*:\s*(-?\d{16,})',
+  );
+
   /// 仅在 JSON 字符串 **外部** 把裸大整数包上引号。
-  ///
-  /// 旧实现用全文件 `replaceAllMapped`，会把
-  /// `"teacherIds":"1788...,1800137392287985665,..."` 字符串内部的 id 也改掉，
-  /// 导致 JSON 非法、`classList` / `studentList` 整页解析失败。
   static String _patchBigIntLiteralsOutsideStrings(String raw) {
     final out = StringBuffer();
     var i = 0;
@@ -71,11 +89,10 @@ class BigIntSafeTransformer implements Transformer {
         continue;
       }
 
-      final rest = raw.substring(i);
-      final match = _bigIntRe.matchAsPrefix(rest);
+      final match = _bigIntRe.matchAsPrefix(raw, i);
       if (match != null) {
         out.write('${match.group(1)}"${match.group(2)}"');
-        i += match.end;
+        i = match.end;
         continue;
       }
 
@@ -84,6 +101,38 @@ class BigIntSafeTransformer implements Transformer {
     }
 
     return out.toString();
+  }
+
+  /// 快速探测：JSON 字符串外部是否存在需要修补的大整数。
+  static bool _containsBigIntLiteralOutsideStrings(String raw) {
+    var inString = false;
+    var escape = false;
+
+    for (var i = 0; i < raw.length; i++) {
+      final ch = raw[i];
+
+      if (inString) {
+        if (escape) {
+          escape = false;
+        } else if (ch == r'\') {
+          escape = true;
+        } else if (ch == '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (ch == '"') {
+        inString = true;
+        continue;
+      }
+
+      if (_bigIntRe.matchAsPrefix(raw, i) != null) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   /// 请求体序列化：雪花 id 字段保持 String + 大整数引号兜底。
@@ -96,6 +145,9 @@ class BigIntSafeTransformer implements Transformer {
   /// 将 JSON 文本中的大整数包裹为字符串，再走标准 `jsonDecode`。
   static dynamic _safeDecode(String raw) {
     if (raw.isEmpty) return null;
+    if (!_containsBigIntLiteralOutsideStrings(raw)) {
+      return jsonDecode(raw);
+    }
     final patched = _patchBigIntLiteralsOutsideStrings(raw);
     try {
       return jsonDecode(patched);
@@ -146,9 +198,12 @@ class BigIntSafeTransformer implements Transformer {
       return rawStr;
     }
 
-    // JSON（默认）：替换大整数后再 decode。
+    // JSON（默认）：刷题大 payload 走轻量解码，其余走通用安全解码。
     if (rawStr.trim().isEmpty) return null;
     try {
+      if (options.extra['lightweightJson'] == true) {
+        return decodeLightweightJson(rawStr);
+      }
       return _safeDecode(rawStr);
     } catch (_) {
       // 解析失败时原样返回字符串，让上层 _toApiResponse 兜底。
@@ -164,3 +219,7 @@ dynamic decodeBigIntSafeJson(String raw) =>
 /// 请求 JSON 安全编码（雪花 id 字段 → 带引号字符串）。
 String encodeBigIntSafeJson(Object? data) =>
     BigIntSafeTransformer.encodeBigIntSafeJson(data);
+
+/// 轻量 JSON 解码（仅修补已知 id 字段大整数）。
+dynamic decodeLightweightJson(String raw) =>
+    BigIntSafeTransformer.decodeLightweightJson(raw);

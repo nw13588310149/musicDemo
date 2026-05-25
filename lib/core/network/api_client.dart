@@ -12,6 +12,8 @@ import 'big_int_safe_transformer.dart';
 import 'media_url.dart';
 
 class ApiClient {
+  static const String extraLightweightJson = 'lightweightJson';
+
   static const Set<String> _unauthorizedIgnoredPaths = <String>{
     '/app/user/mobileLogin',
     '/app/user/register',
@@ -59,12 +61,17 @@ class ApiClient {
     Object? data,
     Map<String, dynamic>? headers,
     Duration? timeout,
+    bool lightweightJson = false,
   }) async {
     try {
       final response = await _dio.post<dynamic>(
         path,
         data: data,
-        options: _buildOptions(headers: headers, timeout: timeout),
+        options: _buildOptions(
+          headers: headers,
+          timeout: timeout,
+          lightweightJson: lightweightJson,
+        ),
       );
       return _finalizeResponse(
         path,
@@ -136,7 +143,11 @@ class ApiClient {
     await _storage.saveToken(token);
   }
 
-  Options _buildOptions({Map<String, dynamic>? headers, Duration? timeout}) {
+  Options _buildOptions({
+    Map<String, dynamic>? headers,
+    Duration? timeout,
+    bool lightweightJson = false,
+  }) {
     final mergedHeaders = <String, dynamic>{
       'app-token': _storage.token,
       'schoolId': _storage.schoolId,
@@ -153,6 +164,9 @@ class ApiClient {
       headers: mergedHeaders,
       sendTimeout: timeout,
       receiveTimeout: timeout,
+      extra: lightweightJson
+          ? <String, dynamic>{extraLightweightJson: true}
+          : null,
     );
   }
 

@@ -354,10 +354,11 @@ class _TrackCard extends StatelessWidget {
                 ),
                 alignment: Alignment.center,
                 child: Image.asset(
-                  AppAssets.smartDictationFigmaIcon,
+                  AppAssets.homeCategorySelectedIcon,
                   width: ui(36),
                   height: ui(36),
                   fit: BoxFit.contain,
+                  gaplessPlayback: true,
                 ),
               ),
               SizedBox(width: ui(8)),
