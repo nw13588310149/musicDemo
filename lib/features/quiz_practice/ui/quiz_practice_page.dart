@@ -44,7 +44,7 @@ class QuizPracticePage extends ConsumerWidget {
                 : _PracticeRingRow(
                     summaries: state.summaries,
                     onSelect: (summary) =>
-                        _openSession(context, controller, summary),
+                        _openSession(context, ref, controller, summary),
                     onRefresh: controller.refresh,
                   ),
           ),
@@ -55,25 +55,24 @@ class QuizPracticePage extends ConsumerWidget {
 
   Future<void> _openSession(
     BuildContext context,
+    WidgetRef ref,
     QuizPracticeController controller,
     QuizPracticeSummary summary,
   ) async {
-    final canInitializeInSession =
-        summary.type != QuizPracticeType.error && !summary.statusInitialized;
-    if (summary.allCount <= 0 && !canInitializeInSession) {
+    final ready =
+        ref
+            .read(quizPracticeControllerProvider(kPublicQuizSchoolId))
+            .summaryOf(summary.type) ??
+        summary;
+    if (ready.allCount <= 0) {
       AppToast.show(context, '暂无可练习题目');
       return;
     }
     final args = QuizSessionPageArgs.fromSummary(
-      summary,
+      ready,
       schoolId: kPublicQuizSchoolId,
     );
-    final routeFuture = Navigator.pushNamed(
-      context,
-      RoutePaths.campAnswer,
-      arguments: args,
-    );
-    await routeFuture;
+    await Navigator.pushNamed(context, RoutePaths.campAnswer, arguments: args);
     if (!context.mounted) {
       return;
     }

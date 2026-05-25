@@ -154,8 +154,8 @@ class QuizSessionLoader {
     var practiceId = args.practiceId;
     ApiResponse? createdResponse;
 
-    final needsCreate =
-        args.needsInitialize || practiceId == null || practiceId <= 0;
+    // create 已在 camp 页完成；这里仅 deep link / 异常兜底。
+    final needsCreate = practiceId == null || practiceId <= 0;
     if (needsCreate && args.practiceType != QuizPracticeType.error) {
       createdResponse = await _repository.createPractice(
         schoolId: args.schoolId,

@@ -38,7 +38,7 @@ class QuizPracticeController extends StateNotifier<QuizPracticeState> {
 
   int get schoolId => _schoolId;
 
-  /// 点击练习入口时立即开始加载，与路由 push 并行。
+  /// camp 页汇总加载完成后，后台预热已初始化练习的题目列表。
   void prefetchSession(QuizPracticeSummary summary) {
     _loader.warmUp(
       QuizSessionPageArgs.fromSummary(summary, schoolId: _schoolId),
@@ -62,29 +62,55 @@ class QuizPracticeController extends StateNotifier<QuizPracticeState> {
 
     final summaries = _parseSummaries(response.data);
     state = state.copyWith(loading: false, summaries: summaries);
-    _scheduleIdleWarmUp(summaries);
-  }
 
-  void _scheduleIdleWarmUp(List<QuizPracticeSummary> summaries) {
     unawaited(compute(warmupQuizQuestionParser, null));
-
-    final sequence = _sequenceWarmUpCandidate(summaries);
-    if (sequence == null) return;
-    prefetchSession(sequence);
+    // 1.0：status==null 时在 camp 页并行 create，点击时 practiceId 已就绪。
+    unawaited(_initializeMissingPractices(summaries));
   }
 
-  QuizPracticeSummary? _sequenceWarmUpCandidate(
+  Future<void> _initializeMissingPractices(
     List<QuizPracticeSummary> summaries,
-  ) {
-    for (final summary in summaries) {
-      if (summary.type != QuizPracticeType.sequence) continue;
-      if (!summary.statusInitialized) return summary;
-      if (summary.allCount <= 0) return null;
-      final practiceId = summary.practiceId;
-      if (practiceId == null || practiceId <= 0) return null;
-      return summary;
+  ) async {
+    final missing = summaries
+        .where((s) => !s.statusInitialized && s.type != QuizPracticeType.error)
+        .toList(growable: false);
+
+    if (missing.isNotEmpty) {
+      await Future.wait(
+        missing.map((s) => _initializePractice(s.type)),
+        eagerError: false,
+      );
     }
-    return null;
+
+    if (!mounted) return;
+    _prefetchReadySessions(state.summaries);
+  }
+
+  Future<void> _initializePractice(QuizPracticeType type) async {
+    final response = await _repository.createPractice(
+      schoolId: _schoolId,
+      practiceType: type.apiKey,
+    );
+    if (!mounted || !response.isSuccess) return;
+
+    final updated = _parseSinglePractice(type, response.data);
+    if (updated == null) return;
+
+    final next = state.summaries
+        .map((s) => s.type == type ? updated : s)
+        .toList(growable: false);
+    state = state.copyWith(summaries: next);
+  }
+
+  void _prefetchReadySessions(List<QuizPracticeSummary> summaries) {
+    for (final summary in summaries) {
+      if (summary.type == QuizPracticeType.error) continue;
+      if (!summary.statusInitialized) continue;
+      if (summary.allCount <= 0) continue;
+      final practiceId = summary.practiceId;
+      if (practiceId == null || practiceId <= 0) continue;
+      prefetchSession(summary);
+    }
   }
 
   List<QuizPracticeSummary> _parseSummaries(dynamic data) {
@@ -110,6 +136,22 @@ class QuizPracticeController extends StateNotifier<QuizPracticeState> {
       parse(QuizPracticeType.exam),
       parse(QuizPracticeType.error),
     ];
+  }
+
+  QuizPracticeSummary? _parseSinglePractice(
+    QuizPracticeType type,
+    dynamic data,
+  ) {
+    if (data is! Map) return null;
+    return QuizPracticeSummary(
+      type: type,
+      practiceId: _toInt(data['practiceId']),
+      allCount: _toInt(data['allCount']) ?? 0,
+      doneCount: _toInt(data['doneCount']) ?? 0,
+      errorCount: _toInt(data['errorCount']) ?? 0,
+      notDoneCount: _toInt(data['notDoneCount']) ?? 0,
+      statusInitialized: true,
+    );
   }
 
   List<QuizPracticeSummary> _fallbackSummaries() => <QuizPracticeSummary>[
