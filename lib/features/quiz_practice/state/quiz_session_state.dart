@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 
 import '../data/quiz_html.dart';
 import 'quiz_practice_state.dart';
-import 'quiz_session_question_store.dart';
 
 /// 三级页路由参数：从二级页携带的 practice 信息。
 @immutable
@@ -252,10 +251,9 @@ class QuizSessionState {
   const QuizSessionState({
     required this.args,
     required this.loading,
-    required this.store,
+    required this.questions,
     required this.currentQuestion,
     required this.currentIndex,
-    required this.currentQuestionLoading,
     required this.autoNext,
     required this.errorMessage,
     required this.summaryAfter,
@@ -265,10 +263,11 @@ class QuizSessionState {
 
   final QuizSessionPageArgs args;
   final bool loading;
-  final QuizSessionQuestionStore? store;
+
+  /// 完整题目列表；null 表示尚未加载完成或加载失败。
+  final List<QuizQuestion>? questions;
   final QuizQuestion? currentQuestion;
   final int currentIndex;
-  final bool currentQuestionLoading;
   final int revision;
 
   /// 自动刷题：答完自动跳下一题。
@@ -281,22 +280,31 @@ class QuizSessionState {
 
   final bool completionDialogVisible;
 
-  int get answeredCount => store?.answeredCount ?? 0;
+  int get totalCount => questions?.length ?? 0;
 
-  int get errorCount => store?.errorCount ?? 0;
+  int get answeredCount =>
+      questions?.where((q) => q.status != 0).length ?? 0;
 
-  int get notDoneCount => store?.notDoneCount ?? 0;
+  int get errorCount =>
+      questions?.where((q) => q.status == 2).length ?? 0;
 
-  int get accuracyPercent => store?.accuracyPercent ?? 0;
+  int get notDoneCount =>
+      questions?.where((q) => q.status == 0).length ?? 0;
+
+  int get accuracyPercent {
+    final done = answeredCount;
+    if (done <= 0) return 0;
+    return (((done - errorCount) / done) * 100).round();
+  }
 
   QuizSessionState copyWith({
     QuizSessionPageArgs? args,
     bool? loading,
-    QuizSessionQuestionStore? store,
+    List<QuizQuestion>? questions,
+    bool clearQuestions = false,
     QuizQuestion? currentQuestion,
     bool clearCurrentQuestion = false,
     int? currentIndex,
-    bool? currentQuestionLoading,
     bool? autoNext,
     String? errorMessage,
     bool clearErrorMessage = false,
@@ -307,13 +315,12 @@ class QuizSessionState {
     return QuizSessionState(
       args: args ?? this.args,
       loading: loading ?? this.loading,
-      store: store ?? this.store,
+      questions:
+          clearQuestions ? null : (questions ?? this.questions),
       currentQuestion: clearCurrentQuestion
           ? null
           : (currentQuestion ?? this.currentQuestion),
       currentIndex: currentIndex ?? this.currentIndex,
-      currentQuestionLoading:
-          currentQuestionLoading ?? this.currentQuestionLoading,
       autoNext: autoNext ?? this.autoNext,
       errorMessage: clearErrorMessage
           ? ''
@@ -329,10 +336,9 @@ class QuizSessionState {
       QuizSessionState(
         args: args,
         loading: true,
-        store: null,
+        questions: null,
         currentQuestion: null,
         currentIndex: args.startIndex,
-        currentQuestionLoading: false,
         autoNext: false,
         errorMessage: '',
         summaryAfter: const <QuizPracticeSummary>[],

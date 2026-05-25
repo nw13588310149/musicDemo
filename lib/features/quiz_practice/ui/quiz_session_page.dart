@@ -11,7 +11,6 @@ import '../../shell/ui/shell_layout.dart';
 import '../data/quiz_html.dart';
 import '../state/quiz_practice_state.dart';
 import '../state/quiz_session_controller.dart';
-import '../state/quiz_session_loader.dart';
 import '../state/quiz_session_state.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
@@ -87,7 +86,7 @@ class _QuizSessionPageState extends ConsumerState<QuizSessionPage> {
                   onAutoNextChanged: controller.setAutoNext,
                 ),
                 Expanded(
-                  child: state.store == null || state.store!.totalCount <= 0
+                  child: state.questions == null || state.questions!.isEmpty
                       ? const Center(child: Text('暂无题目'))
                       : _SessionBody(
                           state: state,
@@ -321,10 +320,6 @@ class _SessionBodyState extends State<_SessionBody> {
     final ui = DashboardScaleScope.of(context).ui;
     final question = widget.state.currentQuestion;
     _maybeResetScrollOnQuestionChange(question?.itemId);
-
-    if (widget.state.currentQuestionLoading && question == null) {
-      return const Center(child: AppLoadingIndicator());
-    }
 
     if (question == null) {
       return const Center(child: Text('暂无题目'));
@@ -873,7 +868,6 @@ class _CompletionDialog extends ConsumerWidget {
                   return;
                 }
                 if (!context.mounted) return;
-                ref.read(quizSessionLoaderProvider).warmUp(next);
                 Navigator.of(context).pop();
                 Navigator.pushReplacementNamed(
                   context,

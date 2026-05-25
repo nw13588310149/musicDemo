@@ -35,7 +35,6 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
   final QuizPracticeRepository _repository;
   final QuizSessionLoader _loader;
   Timer? _autoAdvanceTimer;
-  int _resolveToken = 0;
 
   @override
   void dispose() {
@@ -53,125 +52,46 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
       return;
     }
 
-    final result = await _loader.load(
-      args,
-      onPartial: (partial) {
-        if (!mounted) return;
-        final cached = partial.store.cachedAt(partial.startIndex);
-        state = state.copyWith(
-          loading: false,
-          store: partial.store,
-          currentIndex: partial.startIndex,
-          currentQuestion: cached,
-          currentQuestionLoading: cached == null,
-          clearErrorMessage: true,
-        );
-        if (cached == null) {
-          unawaited(_resolveCurrentQuestion(partial.startIndex));
-        } else {
-          partial.store.prefetchAround(partial.startIndex);
-        }
-      },
-    );
+    final result = await _loader.load(args);
     if (!mounted) return;
 
     if (!result.isSuccess) {
       state = state.copyWith(
         loading: false,
-        currentQuestionLoading: false,
         errorMessage: result.errorMessage,
       );
       return;
     }
 
-    final store = result.store;
-    if (store == null || store.totalCount <= 0) {
+    final questions = result.questions;
+    if (questions == null || questions.isEmpty) {
       state = state.copyWith(
         loading: false,
-        store: store,
-        currentQuestionLoading: false,
-        clearErrorMessage: true,
+        clearQuestions: true,
       );
       return;
     }
 
+    final startIndex = args.startIndex.clamp(0, questions.length - 1);
     state = state.copyWith(
       loading: false,
-      store: store,
-      currentIndex: result.startIndex,
-      currentQuestion: state.currentIndex == result.startIndex
-          ? state.currentQuestion
-          : null,
-      currentQuestionLoading: state.currentQuestion == null,
+      questions: questions,
+      currentIndex: startIndex,
+      currentQuestion: questions[startIndex],
       clearErrorMessage: true,
     );
-    if (state.currentQuestion == null) {
-      unawaited(_resolveCurrentQuestion(result.startIndex));
-    } else {
-      store.prefetchAround(result.startIndex);
-    }
-  }
-
-  Future<void> _resolveCurrentQuestion(int index) async {
-    final store = state.store;
-    if (store == null || index < 0 || index >= store.totalCount) {
-      if (!mounted) return;
-      state = state.copyWith(currentQuestionLoading: false);
-      return;
-    }
-
-    final cached = store.cachedAt(index);
-    if (cached != null) {
-      if (!mounted || state.currentIndex != index) return;
-      state = state.copyWith(
-        currentQuestion: cached,
-        currentQuestionLoading: false,
-        clearErrorMessage: true,
-      );
-      store.prefetchAround(index);
-      return;
-    }
-
-    final token = ++_resolveToken;
-    if (!mounted || state.currentIndex != index) return;
-    state = state.copyWith(
-      currentQuestion: null,
-      currentQuestionLoading: true,
-      clearErrorMessage: true,
-    );
-
-    try {
-      final question = await store.resolveAt(index);
-      if (!mounted || token != _resolveToken || state.currentIndex != index) {
-        return;
-      }
-      state = state.copyWith(
-        currentQuestion: question,
-        currentQuestionLoading: false,
-      );
-      store.prefetchAround(index);
-    } catch (_) {
-      if (!mounted || token != _resolveToken || state.currentIndex != index) {
-        return;
-      }
-      state = state.copyWith(
-        currentQuestionLoading: false,
-        errorMessage: '题目加载失败，请稍后重试',
-      );
-    }
   }
 
   Future<void> selectAnswer(int answer) async {
-    final store = state.store;
+    final questions = state.questions;
     final question = state.currentQuestion;
-    if (store == null || question == null || question.answered) return;
+    if (questions == null || question == null || question.answered) return;
 
     final index = state.currentIndex;
-    final itemId = question.itemId;
     final status = answer == question.correctAnswer ? 1 : 2;
     final response = await _repository.reportAnswer(
       schoolId: state.args.schoolId,
-      questionPracticeItemId: itemId,
+      questionPracticeItemId: question.itemId,
       answer: answer,
       status: status,
     );
@@ -182,12 +102,12 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
       return;
     }
 
-    store.updateAnswer(index: index, userAnswer: answer, status: status);
-    final updated = store.cachedAt(index) ?? question.copyWith(
-      userAnswer: answer,
-      status: status,
-    );
+    final updated = question.copyWith(userAnswer: answer, status: status);
+    final newList = List<QuizQuestion>.of(questions);
+    newList[index] = updated;
+
     state = state.copyWith(
+      questions: List<QuizQuestion>.unmodifiable(newList),
       currentQuestion: updated,
       revision: state.revision + 1,
       clearErrorMessage: true,
@@ -203,10 +123,6 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
   }
 
   void previousQuestion() {
-    if (state.currentQuestionLoading) {
-      state = state.copyWith(errorMessage: '题目加载中，请稍候');
-      return;
-    }
     final i = state.currentIndex - 1;
     if (i < 0) {
       state = state.copyWith(errorMessage: '已经是第一题了！');
@@ -216,15 +132,11 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
   }
 
   void nextQuestion() {
-    if (state.currentQuestionLoading) {
-      state = state.copyWith(errorMessage: '题目加载中，请稍候');
-      return;
-    }
-    final store = state.store;
-    if (store == null || store.totalCount <= 0) return;
+    final questions = state.questions;
+    if (questions == null || questions.isEmpty) return;
 
     final i = state.currentIndex + 1;
-    if (i >= store.totalCount) {
+    if (i >= questions.length) {
       unawaited(_refreshSummariesForCompletion());
       state = state.copyWith(completionDialogVisible: true);
       return;
@@ -233,21 +145,14 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
   }
 
   void _goToIndex(int index) {
-    final store = state.store;
-    if (store == null) return;
+    final questions = state.questions;
+    if (questions == null || index < 0 || index >= questions.length) return;
 
-    final cached = store.cachedAt(index);
     state = state.copyWith(
       currentIndex: index,
-      currentQuestion: cached,
-      currentQuestionLoading: cached == null,
+      currentQuestion: questions[index],
       clearErrorMessage: true,
     );
-    if (cached == null) {
-      unawaited(_resolveCurrentQuestion(index));
-    } else {
-      store.prefetchAround(index);
-    }
   }
 
   void setAutoNext(bool value) {
