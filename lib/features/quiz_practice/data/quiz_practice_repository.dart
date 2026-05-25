@@ -44,19 +44,13 @@ class QuizPracticeRepository {
   Future<ApiResponse> getItemList({
     required int schoolId,
     required int practiceId,
-    required String practiceType,
   }) {
-    final data = <String, dynamic>{
-      'schoolId': schoolId,
-      'practiceId': practiceId,
-      'practiceType': practiceType,
-    };
-    if (practiceType == 'random') {
-      data['size'] = 25;
-    }
     return client.post(
       '/app/user/questionPracticeItemList',
-      data: data,
+      data: <String, dynamic>{
+        'schoolId': schoolId,
+        'practiceId': practiceId,
+      },
     );
   }
 

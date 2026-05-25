@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/quiz_practice_repository.dart';
 import 'quiz_practice_state.dart';
-import 'quiz_session_loader.dart';
 import 'quiz_session_state.dart';
 
 final quizSessionControllerProvider = StateNotifierProvider.autoDispose
@@ -13,27 +12,19 @@ final quizSessionControllerProvider = StateNotifierProvider.autoDispose
       args,
     ) {
       final repo = ref.watch(quizPracticeRepositoryProvider);
-      final loader = ref.watch(quizSessionLoaderProvider);
-      return QuizSessionController(
-        repository: repo,
-        loader: loader,
-        args: args,
-      );
+      return QuizSessionController(repository: repo, args: args);
     });
 
 class QuizSessionController extends StateNotifier<QuizSessionState> {
   QuizSessionController({
     required QuizPracticeRepository repository,
-    required QuizSessionLoader loader,
     required QuizSessionPageArgs args,
   }) : _repository = repository,
-       _loader = loader,
        super(QuizSessionState.fromArgs(args)) {
     unawaited(_bootstrap());
   }
 
   final QuizPracticeRepository _repository;
-  final QuizSessionLoader _loader;
   Timer? _autoAdvanceTimer;
 
   @override
@@ -44,7 +35,9 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
 
   Future<void> _bootstrap() async {
     final args = state.args;
+    int? practiceId = args.practiceId;
 
+    // 1.0 行为：camp_over 进入直接拉 summary 弹窗，不需要题目列表。
     if (args.openCompletionDialog) {
       await _refreshSummariesForCompletion();
       if (!mounted) return;
@@ -52,68 +45,90 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
       return;
     }
 
-    final result = await _loader.load(args);
+    // practiceId 缺失时（直接通过 deep link 进入），先调用 create 兜底。
+    if (practiceId == null || practiceId <= 0) {
+      final created = await _repository.createPractice(
+        schoolId: args.schoolId,
+        practiceType: args.practiceType.apiKey,
+      );
+      if (!mounted) return;
+      if (created.isSuccess && created.data is Map) {
+        practiceId = _toInt((created.data as Map)['practiceId']);
+      }
+    }
+
+    if (practiceId == null || practiceId <= 0) {
+      state = state.copyWith(loading: false, errorMessage: '初始化练习失败，请稍后重试');
+      return;
+    }
+
+    final response = await _repository.getItemList(
+      schoolId: args.schoolId,
+      practiceId: practiceId,
+    );
     if (!mounted) return;
 
-    if (!result.isSuccess) {
+    if (!response.isSuccess) {
       state = state.copyWith(
         loading: false,
-        errorMessage: result.errorMessage,
+        errorMessage: response.msg.isEmpty ? '题目加载失败' : response.msg,
       );
       return;
     }
 
-    final questions = result.questions;
-    if (questions == null || questions.isEmpty) {
-      state = state.copyWith(
-        loading: false,
-        clearQuestions: true,
-      );
-      return;
-    }
+    final questions = _parseQuestions(response.data);
+    final total = questions.isEmpty ? args.allCount : questions.length;
 
-    final startIndex = args.startIndex.clamp(0, questions.length - 1);
+    // 起始题号取传入 num，但若已超过题量则从最后一题开始（与 1.0 一致）。
+    var startIndex = args.startIndex;
+    if (total > 0 && startIndex >= total) {
+      startIndex = total - 1;
+    }
+    if (startIndex < 0) startIndex = 0;
+
     state = state.copyWith(
       loading: false,
       questions: questions,
       currentIndex: startIndex,
-      currentQuestion: questions[startIndex],
-      clearErrorMessage: true,
+      args: state.args,
     );
   }
 
+  /// 选择 A/B/C/D。answer = 0/1/2/3。
   Future<void> selectAnswer(int answer) async {
-    final questions = state.questions;
     final question = state.currentQuestion;
-    if (questions == null || question == null || question.answered) return;
+    if (question == null || question.answered) return;
 
-    final index = state.currentIndex;
+    // 关键：捕获题目 itemId，await 之后用 itemId 定位回写——
+    // 用户在网络请求期间可能已经"下一题"，此时 state.currentIndex
+    // 早就指到别的题，按 index 写就把答案盖到错的题上去了。
+    final itemId = question.itemId;
     final status = answer == question.correctAnswer ? 1 : 2;
     final response = await _repository.reportAnswer(
       schoolId: state.args.schoolId,
-      questionPracticeItemId: question.itemId,
+      questionPracticeItemId: itemId,
       answer: answer,
       status: status,
     );
     if (!mounted) return;
 
     if (!response.isSuccess) {
-      state = state.copyWith(errorMessage: response.displayMsg);
+      state = state.copyWith(
+        errorMessage: response.msg.isEmpty ? '提交失败' : response.msg,
+      );
       return;
     }
 
-    final updated = question.copyWith(userAnswer: answer, status: status);
-    final newList = List<QuizQuestion>.of(questions);
-    newList[index] = updated;
+    final list = List<QuizQuestion>.from(state.questions);
+    final idx = list.indexWhere((q) => q.itemId == itemId);
+    if (idx < 0) return; // 题目已不在当前列表
+    if (list[idx].answered) return; // 已被其它路径回写过
+    list[idx] = list[idx].copyWith(userAnswer: answer, status: status);
+    state = state.copyWith(questions: list, clearErrorMessage: true);
 
-    state = state.copyWith(
-      questions: List<QuizQuestion>.unmodifiable(newList),
-      currentQuestion: updated,
-      revision: state.revision + 1,
-      clearErrorMessage: true,
-    );
-
-    if (state.autoNext) {
+    // 自动刷题：仅当用户停留在刚刚作答的这道题时才跳——若用户
+    // 已经手动切到下一题，就别再"自动跳"覆盖他的操作。
+    if (state.autoNext && state.currentIndex == idx) {
       _autoAdvanceTimer?.cancel();
       _autoAdvanceTimer = Timer(const Duration(seconds: 2), () {
         if (!mounted) return;
@@ -128,31 +143,19 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
       state = state.copyWith(errorMessage: '已经是第一题了！');
       return;
     }
-    _goToIndex(i);
+    state = state.copyWith(currentIndex: i, clearErrorMessage: true);
   }
 
+  /// 下一题。若已是最后一题则触发完成流程（拉 summary 并弹窗）。
   void nextQuestion() {
-    final questions = state.questions;
-    if (questions == null || questions.isEmpty) return;
-
     final i = state.currentIndex + 1;
-    if (i >= questions.length) {
+    if (state.questions.isEmpty) return;
+    if (i >= state.questions.length) {
       unawaited(_refreshSummariesForCompletion());
       state = state.copyWith(completionDialogVisible: true);
       return;
     }
-    _goToIndex(i);
-  }
-
-  void _goToIndex(int index) {
-    final questions = state.questions;
-    if (questions == null || index < 0 || index >= questions.length) return;
-
-    state = state.copyWith(
-      currentIndex: index,
-      currentQuestion: questions[index],
-      clearErrorMessage: true,
-    );
+    state = state.copyWith(currentIndex: i, clearErrorMessage: true);
   }
 
   void setAutoNext(bool value) {
@@ -162,6 +165,7 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
     state = state.copyWith(autoNext: value);
   }
 
+  /// 顶部返回时打开退出弹窗（同时刷新一次 summary）。
   Future<void> openExitDialog() async {
     await _refreshSummariesForCompletion();
     if (!mounted) return;
@@ -206,6 +210,7 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
     state = state.copyWith(summaryAfter: list);
   }
 
+  /// 1.0 中弹窗的"考前密卷/随机练习"切换：当前是 exam 切到 random，否则切到 exam。
   Future<QuizSessionPageArgs?> switchToRecommended() async {
     final summaries = state.summaryAfter;
     if (summaries.isEmpty) return null;
@@ -220,10 +225,66 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
     }
     if (target == null) return null;
 
-    return QuizSessionPageArgs.fromSummary(
-      target,
+    var practiceId = target.practiceId;
+    var startIndex = target.doneCount;
+    var allCount = target.allCount;
+
+    if (practiceId == null || practiceId <= 0) {
+      final created = await _repository.createPractice(
+        schoolId: state.args.schoolId,
+        practiceType: targetType.apiKey,
+      );
+      if (!mounted) return null;
+      if (created.isSuccess && created.data is Map) {
+        final data = created.data as Map;
+        practiceId = _toInt(data['practiceId']);
+        startIndex = _toInt(data['doneCount']) ?? 0;
+        allCount = _toInt(data['allCount']) ?? 0;
+      }
+    }
+
+    if (practiceId == null || practiceId <= 0) return null;
+    return QuizSessionPageArgs(
+      practiceType: targetType,
+      practiceId: practiceId,
+      startIndex: startIndex,
+      allCount: allCount,
       schoolId: state.args.schoolId,
     );
+  }
+
+  List<QuizQuestion> _parseQuestions(dynamic data) {
+    if (data is! List) return const <QuizQuestion>[];
+    final list = <QuizQuestion>[];
+    for (final item in data) {
+      if (item is! Map) continue;
+      final question = item['question'];
+      if (question is! Map) continue;
+      final id = _toInt(item['id']);
+      if (id == null) continue;
+      list.add(
+        QuizQuestion(
+          itemId: id,
+          questionHtml: _asString(question['question']),
+          options: <String>[
+            _asString(question['param1']),
+            _asString(question['param2']),
+            _asString(question['param3']),
+            _asString(question['param4']),
+          ],
+          correctAnswer: _toInt(question['answer']) ?? 0,
+          parseHtml: _asString(question['parse']),
+          userAnswer: _toInt(item['answer']),
+          status: _toInt(item['status']) ?? 0,
+        ),
+      );
+    }
+    return list;
+  }
+
+  String _asString(dynamic value) {
+    if (value == null) return '';
+    return value.toString();
   }
 
   int? _toInt(dynamic value) {

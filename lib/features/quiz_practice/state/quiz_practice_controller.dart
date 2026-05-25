@@ -1,61 +1,40 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/quiz_practice_repository.dart';
-import '../data/quiz_question_parser.dart';
 import 'quiz_practice_state.dart';
-import 'quiz_session_loader.dart';
-import 'quiz_session_state.dart';
 
 final quizPracticeControllerProvider = StateNotifierProvider.autoDispose
     .family<QuizPracticeController, QuizPracticeState, int>((ref, schoolId) {
       final repo = ref.watch(quizPracticeRepositoryProvider);
-      final loader = ref.watch(quizSessionLoaderProvider);
-      return QuizPracticeController(
-        repository: repo,
-        loader: loader,
-        schoolId: schoolId,
-      );
+      return QuizPracticeController(repository: repo, schoolId: schoolId);
     });
 
 class QuizPracticeController extends StateNotifier<QuizPracticeState> {
   QuizPracticeController({
     required QuizPracticeRepository repository,
-    required QuizSessionLoader loader,
     required int schoolId,
   }) : _repository = repository,
-       _loader = loader,
        _schoolId = schoolId,
        super(QuizPracticeState.initial) {
     unawaited(refresh());
   }
 
   final QuizPracticeRepository _repository;
-  final QuizSessionLoader _loader;
   final int _schoolId;
 
   int get schoolId => _schoolId;
 
-  /// camp 页汇总加载完成后，后台预热已初始化练习的题目列表。
-  void prefetchSession(QuizPracticeSummary summary) {
-    _loader.warmUp(
-      QuizSessionPageArgs.fromSummary(summary, schoolId: _schoolId),
-    );
-  }
-
-  Future<void> refresh({bool showLoading = true}) async {
-    if (showLoading || state.summaries.isEmpty) {
-      state = state.copyWith(loading: true, clearErrorMessage: true);
-    }
+  Future<void> refresh() async {
+    state = state.copyWith(loading: true, clearErrorMessage: true);
     final response = await _repository.getSummary(schoolId: _schoolId);
     if (!mounted) return;
     if (!response.isSuccess) {
       state = state.copyWith(
         loading: false,
         summaries: _fallbackSummaries(),
-        errorMessage: response.displayMsg,
+        errorMessage: response.msg.isEmpty ? '加载刷题数据失败' : response.msg,
       );
       return;
     }
@@ -63,27 +42,15 @@ class QuizPracticeController extends StateNotifier<QuizPracticeState> {
     final summaries = _parseSummaries(response.data);
     state = state.copyWith(loading: false, summaries: summaries);
 
-    unawaited(compute(warmupQuizQuestionParser, null));
-    // 1.0：status==null 时在 camp 页并行 create，点击时 practiceId 已就绪。
-    unawaited(_initializeMissingPractices(summaries));
-  }
-
-  Future<void> _initializeMissingPractices(
-    List<QuizPracticeSummary> summaries,
-  ) async {
+    // 1.0 行为：status==null 的练习立刻调用 create 初始化（只针对 sequence/random/exam）。
     final missing = summaries
         .where((s) => !s.statusInitialized && s.type != QuizPracticeType.error)
         .toList(growable: false);
-
-    if (missing.isNotEmpty) {
-      await Future.wait(
-        missing.map((s) => _initializePractice(s.type)),
-        eagerError: false,
-      );
-    }
-
-    if (!mounted) return;
-    _prefetchReadySessions(state.summaries);
+    if (missing.isEmpty) return;
+    await Future.wait(
+      missing.map((s) => _initializePractice(s.type)),
+      eagerError: false,
+    );
   }
 
   Future<void> _initializePractice(QuizPracticeType type) async {
@@ -92,7 +59,6 @@ class QuizPracticeController extends StateNotifier<QuizPracticeState> {
       practiceType: type.apiKey,
     );
     if (!mounted || !response.isSuccess) return;
-
     final updated = _parseSinglePractice(type, response.data);
     if (updated == null) return;
 
@@ -100,17 +66,6 @@ class QuizPracticeController extends StateNotifier<QuizPracticeState> {
         .map((s) => s.type == type ? updated : s)
         .toList(growable: false);
     state = state.copyWith(summaries: next);
-  }
-
-  void _prefetchReadySessions(List<QuizPracticeSummary> summaries) {
-    for (final summary in summaries) {
-      if (summary.type == QuizPracticeType.error) continue;
-      if (!summary.statusInitialized) continue;
-      if (summary.allCount <= 0) continue;
-      final practiceId = summary.practiceId;
-      if (practiceId == null || practiceId <= 0) continue;
-      prefetchSession(summary);
-    }
   }
 
   List<QuizPracticeSummary> _parseSummaries(dynamic data) {

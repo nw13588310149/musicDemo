@@ -1,6 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 
@@ -75,7 +74,7 @@ class _QuizSessionPageState extends ConsumerState<QuizSessionPage> {
     return ShellPageSurface(
       padding: EdgeInsets.zero,
       child: state.loading
-          ? const Center(child: AppLoadingIndicator())
+          ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
           : Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -86,7 +85,7 @@ class _QuizSessionPageState extends ConsumerState<QuizSessionPage> {
                   onAutoNextChanged: controller.setAutoNext,
                 ),
                 Expanded(
-                  child: state.questions == null || state.questions!.isEmpty
+                  child: state.questions.isEmpty
                       ? const Center(child: Text('暂无题目'))
                       : _SessionBody(
                           state: state,
@@ -174,7 +173,7 @@ class _SessionHeader extends StatelessWidget {
             '自动刷题',
             style: TextStyle(
               color: const Color(0xFF0B081A),
-              fontSize: ui(14),
+              fontSize: ui(16),
               fontFamily: 'PingFang SC',
               height: 1.0,
             ),
@@ -196,9 +195,9 @@ class _AutoNextSwitch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final trackWidth = ui(40);
-    final trackHeight = ui(24);
-    final thumbSize = ui(18);
+    final trackWidth = ui(44);
+    final trackHeight = ui(26);
+    final thumbSize = ui(20);
     final inset = ui(3);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -348,7 +347,10 @@ class _SessionBodyState extends State<_SessionBody> {
             ),
           ),
           SizedBox(height: ui(20)),
-          _NavButtons(onPrevious: widget.onPrevious, onNext: widget.onNext),
+          _NavButtons(
+            onPrevious: widget.onPrevious,
+            onNext: widget.onNext,
+          ),
         ],
       ),
     );
@@ -389,7 +391,7 @@ class _QuestionContent extends StatelessWidget {
               '第$questionNumber题  ',
               style: TextStyle(
                 color: const Color(0xFF0B081A),
-                fontSize: ui(16),
+                fontSize: ui(18),
                 fontWeight: AppFont.w500,
                 fontFamily: 'PingFang SC',
                 height: 1.5,
@@ -403,7 +405,7 @@ class _QuestionContent extends StatelessWidget {
                 hasInlineRich: question.questionHasInlineRich,
                 textStyle: TextStyle(
                   color: const Color(0xFF0B081A),
-                  fontSize: ui(16),
+                  fontSize: ui(18),
                   fontWeight: AppFont.w500,
                   fontFamily: 'PingFang SC',
                   height: 1.5,
@@ -424,7 +426,7 @@ class _QuestionContent extends StatelessWidget {
             '题目解析',
             style: TextStyle(
               color: const Color(0xFF6D6B75),
-              fontSize: ui(16),
+              fontSize: ui(18),
               fontWeight: AppFont.w600,
               fontFamily: 'PingFang SC',
             ),
@@ -509,21 +511,9 @@ class _OptionsGrid extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
-                child: _Option(
-                  question: question,
-                  index: 0,
-                  onSelect: onSelect,
-                ),
-              ),
+              Expanded(child: _Option(question: question, index: 0, onSelect: onSelect)),
               SizedBox(width: ui(20)),
-              Expanded(
-                child: _Option(
-                  question: question,
-                  index: 1,
-                  onSelect: onSelect,
-                ),
-              ),
+              Expanded(child: _Option(question: question, index: 1, onSelect: onSelect)),
             ],
           ),
         ),
@@ -532,21 +522,9 @@ class _OptionsGrid extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
-                child: _Option(
-                  question: question,
-                  index: 2,
-                  onSelect: onSelect,
-                ),
-              ),
+              Expanded(child: _Option(question: question, index: 2, onSelect: onSelect)),
               SizedBox(width: ui(20)),
-              Expanded(
-                child: _Option(
-                  question: question,
-                  index: 3,
-                  onSelect: onSelect,
-                ),
-              ),
+              Expanded(child: _Option(question: question, index: 3, onSelect: onSelect)),
             ],
           ),
         ),
@@ -561,8 +539,15 @@ class _OptionsGrid extends StatelessWidget {
 /// 选项内容变化时彻底走 unmount → mount，避免 Element 复用把上
 /// 一题选项里的 HtmlWidget DOM / 图片留给新题用。
 class _Option extends StatelessWidget {
-  _Option({required this.question, required this.index, required this.onSelect})
-    : super(key: ValueKey<String>('opt-${question.itemId}-$index'));
+  _Option({
+    required this.question,
+    required this.index,
+    required this.onSelect,
+  }) : super(
+         key: ValueKey<String>(
+           'opt-${question.itemId}-$index',
+         ),
+       );
 
   final QuizQuestion question;
   final int index;
@@ -615,7 +600,10 @@ class _Option extends StatelessWidget {
           // 最小 44，让纯图片选项可以撑大；IntrinsicHeight 在外面
           // 保证同一行两个选项卡片等高。
           constraints: BoxConstraints(minHeight: ui(44)),
-          padding: EdgeInsets.symmetric(horizontal: ui(20), vertical: ui(8)),
+          padding: EdgeInsets.symmetric(
+            horizontal: ui(20),
+            vertical: ui(8),
+          ),
           decoration: BoxDecoration(
             color: bg,
             borderRadius: BorderRadius.circular(ui(8)),
@@ -678,12 +666,12 @@ class _AnswerRow extends StatelessWidget {
 
     final labelStyle = TextStyle(
       color: const Color(0xFF0B081A),
-      fontSize: ui(16),
+      fontSize: ui(18),
       fontWeight: AppFont.w500,
       fontFamily: 'PingFang SC',
     );
     final valueStyle = TextStyle(
-      fontSize: ui(16),
+      fontSize: ui(18),
       fontWeight: AppFont.w600,
       fontFamily: 'PingFang SC',
     );
@@ -1016,7 +1004,10 @@ class _RecommendedSwitchCard extends StatelessWidget {
                 colors: [Color(0xFFF5F6FA), Colors.white],
               ),
               borderRadius: BorderRadius.circular(ui(12)),
-              border: Border.all(color: const Color(0xFFF3F2F3), width: 1),
+              border: Border.all(
+                color: const Color(0xFFF3F2F3),
+                width: 1,
+              ),
             ),
             alignment: Alignment.center,
             child: Text(
@@ -1292,7 +1283,8 @@ List<InlineSpan> _parseInlineSpans(String html, TextStyle textStyle) {
   flushText();
 
   // 去掉首尾的纯空白 TextSpan（包括首尾 "\n"）。
-  bool isBlank(InlineSpan s) => s is TextSpan && (s.text ?? '').trim().isEmpty;
+  bool isBlank(InlineSpan s) =>
+      s is TextSpan && (s.text ?? '').trim().isEmpty;
   while (spans.isNotEmpty && isBlank(spans.first)) {
     spans.removeAt(0);
   }
@@ -1327,7 +1319,8 @@ class _InlineNetworkImage extends StatelessWidget {
       fit: BoxFit.contain,
       fadeInDuration: Duration.zero,
       fadeOutDuration: Duration.zero,
-      placeholder: (context, _) => SizedBox(width: w ?? 40, height: h ?? 40),
+      placeholder: (context, _) =>
+          SizedBox(width: w ?? 40, height: h ?? 40),
       errorWidget: (context, _, _) => Container(
         width: w ?? 60,
         height: h ?? 60,
@@ -1336,7 +1329,10 @@ class _InlineNetworkImage extends StatelessWidget {
           color: const Color(0xFFF5F6FA),
           borderRadius: BorderRadius.circular(4),
         ),
-        child: const Icon(Icons.broken_image_rounded, color: Color(0xFFC9C6D8)),
+        child: const Icon(
+          Icons.broken_image_rounded,
+          color: Color(0xFFC9C6D8),
+        ),
       ),
     );
   }
@@ -1381,7 +1377,10 @@ class _ResponsiveNetworkImage extends StatelessWidget {
       fit: BoxFit.contain,
       fadeInDuration: Duration.zero,
       fadeOutDuration: Duration.zero,
-      placeholder: (context, _) => SizedBox(width: w ?? 40, height: h ?? 40),
+      placeholder: (context, _) => SizedBox(
+        width: w ?? 40,
+        height: h ?? 40,
+      ),
       errorWidget: (context, _, _) => Container(
         width: w ?? 60,
         height: h ?? 60,
@@ -1390,7 +1389,10 @@ class _ResponsiveNetworkImage extends StatelessWidget {
           color: const Color(0xFFF5F6FA),
           borderRadius: BorderRadius.circular(4),
         ),
-        child: const Icon(Icons.broken_image_rounded, color: Color(0xFFC9C6D8)),
+        child: const Icon(
+          Icons.broken_image_rounded,
+          color: Color(0xFFC9C6D8),
+        ),
       ),
     );
 

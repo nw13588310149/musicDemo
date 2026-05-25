@@ -6,7 +6,6 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/route_paths.dart';
@@ -46,16 +45,11 @@ class SchoolQuizPracticePage extends ConsumerWidget {
           child: ShellPageSurface(
             padding: EdgeInsets.symmetric(horizontal: ui(25)),
             child: state.loading && state.summaries.isEmpty
-                ? const Center(child: AppLoadingIndicator())
+                ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
                 : _PracticeRingRow(
                     summaries: state.summaries,
-                    onSelect: (summary) => _openSession(
-                      context,
-                      ref,
-                      controller,
-                      schoolId,
-                      summary,
-                    ),
+                    onSelect: (summary) =>
+                        _openSession(context, controller, schoolId, summary),
                     onRefresh: controller.refresh,
                   ),
           ),
@@ -66,24 +60,24 @@ class SchoolQuizPracticePage extends ConsumerWidget {
 
   Future<void> _openSession(
     BuildContext context,
-    WidgetRef ref,
     QuizPracticeController controller,
     int schoolId,
     QuizPracticeSummary summary,
   ) async {
-    final ready =
-        ref
-            .read(quizPracticeControllerProvider(schoolId))
-            .summaryOf(summary.type) ??
-        summary;
-    if (ready.allCount <= 0) {
+    if (summary.allCount <= 0) {
       AppToast.show(context, '暂无可练习题目');
       return;
     }
-    final args = QuizSessionPageArgs.fromSummary(ready, schoolId: schoolId);
+    final args = QuizSessionPageArgs(
+      practiceType: summary.type,
+      practiceId: summary.practiceId,
+      startIndex: summary.doneCount,
+      allCount: summary.allCount,
+      schoolId: schoolId,
+    );
     await Navigator.pushNamed(context, RoutePaths.campAnswer, arguments: args);
     if (!context.mounted) return;
-    await controller.refresh(showLoading: false);
+    await controller.refresh();
   }
 }
 
@@ -268,7 +262,7 @@ class _PracticeRingCard extends StatelessWidget {
                       Text(
                         summary.type.label,
                         style: TextStyle(
-                          color: Colors.black,
+                          color: const Color(0xFF000000),
                           fontSize: ui(14),
                           fontWeight: AppFont.w400,
                           fontFamily: 'PingFang SC',

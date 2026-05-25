@@ -105,39 +105,6 @@ bool htmlHasInlineRich(String html) {
   return _inlineRichRegExp.hasMatch(html);
 }
 
-/// 去掉内联 `font-family` / `<font face>`，避免盖掉 [HtmlWidget] 的
-/// `textStyle`。在 [parseQuizQuestionsPayload] 解析阶段调用一次即可。
-String quizHtmlForcePingFangSc(String html) {
-  if (html.isEmpty) return html;
-
-  var result = html.replaceAll(
-    RegExp(
-      r'font-family\s*:\s*[^;}>]+(?:\s*!important)?\s*;?',
-      caseSensitive: false,
-    ),
-    '',
-  );
-
-  result = result.replaceAllMapped(
-    RegExp(
-      r'(\s)face\s*=\s*(?:"[^"]*"|[^\s>]+)',
-      caseSensitive: false,
-    ),
-    (match) => match.group(1)!,
-  );
-
-  result = result.replaceAllMapped(
-    RegExp(r'\sstyle\s*=\s*"\s*"\s*', caseSensitive: false),
-    (_) => ' ',
-  );
-  result = result.replaceAllMapped(
-    RegExp(r"\sstyle\s*=\s*'\s*'\s*", caseSensitive: false),
-    (_) => ' ',
-  );
-
-  return result;
-}
-
 /// 解码 HTML 实体（命名 + 数字），不会动任何标签结构。供 inline
 /// span 解析等需要"保留 tag、只解码实体"的场景使用。
 String decodeHtmlEntities(String input) {

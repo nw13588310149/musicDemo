@@ -13,7 +13,6 @@ class QuizSessionPageArgs {
     this.allCount = 0,
     this.schoolId = kPublicQuizSchoolId,
     this.openCompletionDialog = false,
-    this.needsInitialize = false,
   });
 
   final QuizPracticeType practiceType;
@@ -26,24 +25,6 @@ class QuizSessionPageArgs {
 
   /// 进入页面后立刻弹出完成弹窗（对应 1.0 的 camp_over 路由）。
   final bool openCompletionDialog;
-
-  /// 1.0：`summary.status == null` 时需先 questionPracticeCreate。
-  final bool needsInitialize;
-
-  factory QuizSessionPageArgs.fromSummary(
-    QuizPracticeSummary summary, {
-    required int schoolId,
-  }) {
-    return QuizSessionPageArgs(
-      practiceType: summary.type,
-      practiceId: summary.practiceId,
-      startIndex: summary.doneCount,
-      allCount: summary.allCount,
-      schoolId: schoolId,
-      needsInitialize:
-          summary.type != QuizPracticeType.error && !summary.statusInitialized,
-    );
-  }
 
   factory QuizSessionPageArgs.fromRaw(dynamic raw) {
     if (raw is QuizSessionPageArgs) return raw;
@@ -58,7 +39,6 @@ class QuizSessionPageArgs {
         allCount: _toInt(raw['allCount']) ?? 0,
         schoolId: _toInt(raw['schoolId']) ?? kPublicQuizSchoolId,
         openCompletionDialog: raw['openCompletionDialog'] == true,
-        needsInitialize: raw['needsInitialize'] == true,
       );
     }
     return const QuizSessionPageArgs(practiceType: QuizPracticeType.sequence);
@@ -72,8 +52,7 @@ class QuizSessionPageArgs {
         other.startIndex == startIndex &&
         other.allCount == allCount &&
         other.schoolId == schoolId &&
-        other.openCompletionDialog == openCompletionDialog &&
-        other.needsInitialize == needsInitialize;
+        other.openCompletionDialog == openCompletionDialog;
   }
 
   @override
@@ -84,7 +63,6 @@ class QuizSessionPageArgs {
     allCount,
     schoolId,
     openCompletionDialog,
-    needsInitialize,
   );
 
   static int? _toInt(dynamic value) {
@@ -128,71 +106,6 @@ class QuizQuestion {
          options.map(htmlHasInlineRich),
        );
 
-  /// 由后台 isolate 预计算字段后构造，避免主线程重复 strip HTML。
-  factory QuizQuestion.fromPayload(Map<String, dynamic> payload) {
-    final rawOptions = payload['options'];
-    final options = rawOptions is List
-        ? rawOptions.map((e) => e?.toString() ?? '').toList(growable: false)
-        : const <String>[];
-    final rawOptionsStripped = payload['optionsStripped'];
-    final optionsStripped = rawOptionsStripped is List
-        ? rawOptionsStripped
-              .map((e) => e?.toString() ?? '')
-              .toList(growable: false)
-        : const <String>[];
-    final rawOptionsHasMedia = payload['optionsHasMedia'];
-    final optionsHasMedia = rawOptionsHasMedia is List
-        ? rawOptionsHasMedia.map((e) => e == true).toList(growable: false)
-        : List<bool>.filled(options.length, false, growable: false);
-    final rawOptionsHasInlineRich = payload['optionsHasInlineRich'];
-    final optionsHasInlineRich = rawOptionsHasInlineRich is List
-        ? rawOptionsHasInlineRich
-              .map((e) => e == true)
-              .toList(growable: false)
-        : List<bool>.filled(options.length, false, growable: false);
-
-    return QuizQuestion._precomputed(
-      itemId: payload['itemId'] as int,
-      questionHtml: payload['questionHtml']?.toString() ?? '',
-      options: options,
-      correctAnswer: payload['correctAnswer'] as int? ?? 0,
-      parseHtml: payload['parseHtml']?.toString() ?? '',
-      userAnswer: payload['userAnswer'] as int?,
-      status: payload['status'] as int? ?? 0,
-      questionStripped: payload['questionStripped']?.toString() ?? '',
-      parseStripped: payload['parseStripped']?.toString() ?? '',
-      optionsStripped: optionsStripped,
-      questionHasMedia: payload['questionHasMedia'] == true,
-      questionHasInlineRich: payload['questionHasInlineRich'] == true,
-      parseHasMedia: payload['parseHasMedia'] == true,
-      parseHasInlineRich: payload['parseHasInlineRich'] == true,
-      optionsHasMedia: optionsHasMedia,
-      optionsHasInlineRich: optionsHasInlineRich,
-    );
-  }
-
-  QuizQuestion._precomputed({
-    required this.itemId,
-    required this.questionHtml,
-    required List<String> options,
-    required this.correctAnswer,
-    required this.parseHtml,
-    required this.userAnswer,
-    required this.status,
-    required this.questionStripped,
-    required this.parseStripped,
-    required List<String> optionsStripped,
-    required this.questionHasMedia,
-    required this.questionHasInlineRich,
-    required this.parseHasMedia,
-    required this.parseHasInlineRich,
-    required List<bool> optionsHasMedia,
-    required List<bool> optionsHasInlineRich,
-  }) : options = List<String>.unmodifiable(options),
-       optionsStripped = List<String>.unmodifiable(optionsStripped),
-       optionsHasMedia = List<bool>.unmodifiable(optionsHasMedia),
-       optionsHasInlineRich = List<bool>.unmodifiable(optionsHasInlineRich);
-
   final int itemId;
 
   /// 题干 HTML。
@@ -225,7 +138,7 @@ class QuizQuestion {
   bool get answered => status != 0;
 
   QuizQuestion copyWith({int? userAnswer, int? status}) {
-    return QuizQuestion._precomputed(
+    return QuizQuestion(
       itemId: itemId,
       questionHtml: questionHtml,
       options: options,
@@ -233,15 +146,6 @@ class QuizQuestion {
       parseHtml: parseHtml,
       userAnswer: userAnswer ?? this.userAnswer,
       status: status ?? this.status,
-      questionStripped: questionStripped,
-      parseStripped: parseStripped,
-      optionsStripped: optionsStripped,
-      questionHasMedia: questionHasMedia,
-      questionHasInlineRich: questionHasInlineRich,
-      parseHasMedia: parseHasMedia,
-      parseHasInlineRich: parseHasInlineRich,
-      optionsHasMedia: optionsHasMedia,
-      optionsHasInlineRich: optionsHasInlineRich,
     );
   }
 }
@@ -252,23 +156,17 @@ class QuizSessionState {
     required this.args,
     required this.loading,
     required this.questions,
-    required this.currentQuestion,
     required this.currentIndex,
     required this.autoNext,
     required this.errorMessage,
     required this.summaryAfter,
     required this.completionDialogVisible,
-    required this.revision,
   });
 
   final QuizSessionPageArgs args;
   final bool loading;
-
-  /// 完整题目列表；null 表示尚未加载完成或加载失败。
-  final List<QuizQuestion>? questions;
-  final QuizQuestion? currentQuestion;
+  final List<QuizQuestion> questions;
   final int currentIndex;
-  final int revision;
 
   /// 自动刷题：答完自动跳下一题。
   final bool autoNext;
@@ -280,16 +178,17 @@ class QuizSessionState {
 
   final bool completionDialogVisible;
 
-  int get totalCount => questions?.length ?? 0;
+  QuizQuestion? get currentQuestion {
+    if (questions.isEmpty) return null;
+    final i = currentIndex.clamp(0, questions.length - 1);
+    return questions[i];
+  }
 
-  int get answeredCount =>
-      questions?.where((q) => q.status != 0).length ?? 0;
+  int get answeredCount => questions.where((q) => q.status != 0).length;
 
-  int get errorCount =>
-      questions?.where((q) => q.status == 2).length ?? 0;
+  int get errorCount => questions.where((q) => q.status == 2).length;
 
-  int get notDoneCount =>
-      questions?.where((q) => q.status == 0).length ?? 0;
+  int get notDoneCount => questions.where((q) => q.status == 0).length;
 
   int get accuracyPercent {
     final done = answeredCount;
@@ -301,25 +200,17 @@ class QuizSessionState {
     QuizSessionPageArgs? args,
     bool? loading,
     List<QuizQuestion>? questions,
-    bool clearQuestions = false,
-    QuizQuestion? currentQuestion,
-    bool clearCurrentQuestion = false,
     int? currentIndex,
     bool? autoNext,
     String? errorMessage,
     bool clearErrorMessage = false,
     List<QuizPracticeSummary>? summaryAfter,
     bool? completionDialogVisible,
-    int? revision,
   }) {
     return QuizSessionState(
       args: args ?? this.args,
       loading: loading ?? this.loading,
-      questions:
-          clearQuestions ? null : (questions ?? this.questions),
-      currentQuestion: clearCurrentQuestion
-          ? null
-          : (currentQuestion ?? this.currentQuestion),
+      questions: questions ?? this.questions,
       currentIndex: currentIndex ?? this.currentIndex,
       autoNext: autoNext ?? this.autoNext,
       errorMessage: clearErrorMessage
@@ -328,7 +219,6 @@ class QuizSessionState {
       summaryAfter: summaryAfter ?? this.summaryAfter,
       completionDialogVisible:
           completionDialogVisible ?? this.completionDialogVisible,
-      revision: revision ?? this.revision,
     );
   }
 
@@ -336,13 +226,11 @@ class QuizSessionState {
       QuizSessionState(
         args: args,
         loading: true,
-        questions: null,
-        currentQuestion: null,
+        questions: const <QuizQuestion>[],
         currentIndex: args.startIndex,
         autoNext: false,
         errorMessage: '',
         summaryAfter: const <QuizPracticeSummary>[],
         completionDialogVisible: false,
-        revision: 0,
       );
 }
