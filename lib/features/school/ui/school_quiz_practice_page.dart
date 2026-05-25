@@ -7,6 +7,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 
 import '../../../app/router/route_paths.dart';
 import '../../../core/widgets/app_toast.dart';
@@ -45,7 +46,7 @@ class SchoolQuizPracticePage extends ConsumerWidget {
           child: ShellPageSurface(
             padding: EdgeInsets.symmetric(horizontal: ui(25)),
             child: state.loading && state.summaries.isEmpty
-                ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                ? const Center(child: AppLoadingIndicator())
                 : _PracticeRingRow(
                     summaries: state.summaries,
                     onSelect: (summary) =>
@@ -254,7 +255,8 @@ class _PracticeRingCard extends StatelessWidget {
                         style: TextStyle(
                           color: const Color(0xFF000000),
                           fontSize: ui(30),
-                          fontFamily: 'PingFang SC',
+                          fontFamily: 'Barlow',
+                          fontWeight: AppFont.w600,
                           height: 1.0,
                         ),
                       ),
@@ -262,7 +264,7 @@ class _PracticeRingCard extends StatelessWidget {
                       Text(
                         summary.type.label,
                         style: TextStyle(
-                          color: const Color(0xFF000000),
+                          color: Colors.black,
                           fontSize: ui(14),
                           fontWeight: AppFont.w400,
                           fontFamily: 'PingFang SC',

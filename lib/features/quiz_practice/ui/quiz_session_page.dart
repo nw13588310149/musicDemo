@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 
 import '../../../app/router/route_paths.dart';
 import '../../../core/constants/app_assets.dart';
@@ -74,7 +75,7 @@ class _QuizSessionPageState extends ConsumerState<QuizSessionPage> {
     return ShellPageSurface(
       padding: EdgeInsets.zero,
       child: state.loading
-          ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+          ? const Center(child: AppLoadingIndicator())
           : Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -173,7 +174,7 @@ class _SessionHeader extends StatelessWidget {
             '自动刷题',
             style: TextStyle(
               color: const Color(0xFF0B081A),
-              fontSize: ui(16),
+              fontSize: ui(14),
               fontFamily: 'PingFang SC',
               height: 1.0,
             ),
@@ -195,9 +196,9 @@ class _AutoNextSwitch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final trackWidth = ui(44);
-    final trackHeight = ui(26);
-    final thumbSize = ui(20);
+    final trackWidth = ui(40);
+    final trackHeight = ui(24);
+    final thumbSize = ui(18);
     final inset = ui(3);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -391,7 +392,7 @@ class _QuestionContent extends StatelessWidget {
               '第$questionNumber题  ',
               style: TextStyle(
                 color: const Color(0xFF0B081A),
-                fontSize: ui(18),
+                fontSize: ui(16),
                 fontWeight: AppFont.w500,
                 fontFamily: 'PingFang SC',
                 height: 1.5,
@@ -405,7 +406,7 @@ class _QuestionContent extends StatelessWidget {
                 hasInlineRich: question.questionHasInlineRich,
                 textStyle: TextStyle(
                   color: const Color(0xFF0B081A),
-                  fontSize: ui(18),
+                  fontSize: ui(16),
                   fontWeight: AppFont.w500,
                   fontFamily: 'PingFang SC',
                   height: 1.5,
@@ -426,7 +427,7 @@ class _QuestionContent extends StatelessWidget {
             '题目解析',
             style: TextStyle(
               color: const Color(0xFF6D6B75),
-              fontSize: ui(18),
+              fontSize: ui(16),
               fontWeight: AppFont.w600,
               fontFamily: 'PingFang SC',
             ),
@@ -666,12 +667,12 @@ class _AnswerRow extends StatelessWidget {
 
     final labelStyle = TextStyle(
       color: const Color(0xFF0B081A),
-      fontSize: ui(18),
+      fontSize: ui(16),
       fontWeight: AppFont.w500,
       fontFamily: 'PingFang SC',
     );
     final valueStyle = TextStyle(
-      fontSize: ui(18),
+      fontSize: ui(16),
       fontWeight: AppFont.w600,
       fontFamily: 'PingFang SC',
     );

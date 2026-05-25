@@ -2,14 +2,62 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 
 import '../../../app/router/route_paths.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../state/quiz_practice_controller.dart';
 import '../state/quiz_practice_state.dart';
 import '../state/quiz_session_state.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
+
+// ─────────────────────────────────────────────────────────────────────
+// 视觉常量
+//
+// 乐理刷题：紫色为主，错题集红色。
+// 听写刷题：绿色为主，错题集红色（暂未开放，所有数据 0）。
+// ─────────────────────────────────────────────────────────────────────
+
+/// 正确率过低时统计卡片整列变红高亮使用的颜色。
+const Color _kAccuracyLowColor = Color(0xFFFF8486);
+const Color _kStatCardBg = Color(0xFFF5F6FA);
+const Color _kStatTextDefault = Color(0xFF0B081A);
+const Color _kStatLabelDefault = Color(0xFF8B8B97);
+
+const LinearGradient _kPurpleCardGradient = LinearGradient(
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+  colors: [Color(0xFFF5F6FA), Color(0xFFF1EFFF)],
+);
+const LinearGradient _kGreenCardGradient = LinearGradient(
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+  colors: [Color(0xFFF5F6FA), Color(0xFFE4FAF5)],
+);
+const LinearGradient _kRedCardGradient = LinearGradient(
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+  colors: [Color(0xFFFAF5F5), Color(0xFFFFE2E2)],
+);
+
+/// 圆环渐变（自下而上：深 → 浅，与 SVG 设计稿一致）。
+const LinearGradient _kPurpleRingGradient = LinearGradient(
+  begin: Alignment.bottomCenter,
+  end: Alignment.topCenter,
+  colors: [Color(0xFF8640FF), Color(0xFFB68EFF)],
+);
+const LinearGradient _kGreenRingGradient = LinearGradient(
+  begin: Alignment.bottomCenter,
+  end: Alignment.topCenter,
+  colors: [Color(0xFF10D0B6), Color(0xFF15EFC9)],
+);
+const LinearGradient _kRedRingGradient = LinearGradient(
+  begin: Alignment.bottomCenter,
+  end: Alignment.topCenter,
+  colors: [Color(0xFFFF8486), Color(0xFFFFC2C3)],
+);
 
 class QuizPracticePage extends ConsumerWidget {
   const QuizPracticePage({super.key});
@@ -22,36 +70,23 @@ class QuizPracticePage extends ConsumerWidget {
     final controller = ref.read(provider.notifier);
     final ui = DashboardScaleScope.of(context).ui;
 
-    ref.listen<QuizPracticeState>(provider, (
-      previous,
-      next,
-    ) {
+    ref.listen<QuizPracticeState>(provider, (previous, next) {
       final msg = next.errorMessage;
       if (msg.isEmpty || msg == previous?.errorMessage) return;
       AppToast.show(context, msg);
     });
 
-    // 1.0 布局：banner（240 高度）+ 12px 间距 + 白色卡片（剩余高度），
-    // 卡片内 4 个 25% 宽度的圆环。
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SizedBox(height: ui(240), child: const _CampBanner()),
-        SizedBox(height: ui(12)),
-        Expanded(
-          child: ShellPageSurface(
-            padding: EdgeInsets.symmetric(horizontal: ui(25)),
-            child: state.loading && state.summaries.isEmpty
-                ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
-                : _PracticeRingRow(
-                    summaries: state.summaries,
-                    onSelect: (summary) =>
-                        _openSession(context, controller, summary),
-                    onRefresh: controller.refresh,
-                  ),
-          ),
-        ),
-      ],
+    return ShellPageSurface(
+      padding: EdgeInsets.fromLTRB(ui(24), ui(20), ui(24), ui(8)),
+      child: state.loading && state.summaries.isEmpty
+          ? const Center(child: AppLoadingIndicator())
+          : _QuizContent(
+              summaries: state.summaries,
+              onSelect: (summary) =>
+                  _openSession(context, controller, summary),
+              onDictationTap: () =>
+                  showInfoDialog(context: context, title: '功能暂未开放'),
+            ),
     );
   }
 
@@ -80,76 +115,184 @@ class QuizPracticePage extends ConsumerWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Banner：复用 1.0 的封面图（assets/images/home/camp_banner.jpg），
-// 加载失败时回落到紫色渐变占位，避免空白。
+// 整页可滚动主体：乐理刷题区 + 听写刷题区
 // ─────────────────────────────────────────────────────────────────────
 
-class _CampBanner extends StatelessWidget {
-  const _CampBanner();
+class _QuizContent extends StatelessWidget {
+  const _QuizContent({
+    required this.summaries,
+    required this.onSelect,
+    required this.onDictationTap,
+  });
+
+  final List<QuizPracticeSummary> summaries;
+  final ValueChanged<QuizPracticeSummary> onSelect;
+  final VoidCallback onDictationTap;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(ui(16)),
-      child: Image.asset(
-        'assets/images/home/camp_banner.jpg',
-        fit: BoxFit.cover,
-        width: double.infinity,
-        errorBuilder: (context, error, stack) => const _CampBannerFallback(),
+    final theorySequence = _summaryOf(QuizPracticeType.sequence);
+    final dictationSummaries = QuizPracticeType.values
+        .map(QuizPracticeSummary.empty)
+        .toList(growable: false);
+
+    return SingleChildScrollView(
+      physics: const ClampingScrollPhysics(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const _SectionTitle('乐理刷题'),
+          SizedBox(height: ui(12)),
+          _StatsRow(
+            notDone: theorySequence.notDoneCount,
+            done: theorySequence.doneCount,
+            wrong: theorySequence.errorCount,
+            accuracyPercent: theorySequence.accuracyPercent,
+          ),
+          SizedBox(height: ui(20)),
+          _PracticeRingRow(
+            summaries: summaries.isEmpty
+                ? QuizPracticeType.values
+                    .map(QuizPracticeSummary.empty)
+                    .toList(growable: false)
+                : summaries,
+            groupRingGradient: _kPurpleRingGradient,
+            groupCardGradient: _kPurpleCardGradient,
+            onSelect: onSelect,
+          ),
+          SizedBox(height: ui(28)),
+          const _SectionTitle('听写刷题'),
+          SizedBox(height: ui(12)),
+          const _StatsRow(notDone: 0, done: 0, wrong: 0, accuracyPercent: 0),
+          SizedBox(height: ui(20)),
+          _PracticeRingRow(
+            summaries: dictationSummaries,
+            groupRingGradient: _kGreenRingGradient,
+            groupCardGradient: _kGreenCardGradient,
+            onSelect: (_) => onDictationTap(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  QuizPracticeSummary _summaryOf(QuizPracticeType type) {
+    for (final s in summaries) {
+      if (s.type == type) return s;
+    }
+    return QuizPracticeSummary.empty(type);
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Text(
+      text,
+      style: TextStyle(
+        color: _kStatTextDefault,
+        fontSize: ui(18),
+        fontWeight: AppFont.w600,
+        fontFamily: 'PingFang SC',
+        height: 1.2,
       ),
     );
   }
 }
 
-class _CampBannerFallback extends StatelessWidget {
-  const _CampBannerFallback();
+// ─────────────────────────────────────────────────────────────────────
+// 4 个统计卡片：未做题 / 已做题 / 错题 / 正确率
+// 正确率 < 60% 时整组红字高亮。
+// ─────────────────────────────────────────────────────────────────────
+
+class _StatsRow extends StatelessWidget {
+  const _StatsRow({
+    required this.notDone,
+    required this.done,
+    required this.wrong,
+    required this.accuracyPercent,
+  });
+
+  final int notDone;
+  final int done;
+  final int wrong;
+  final int accuracyPercent;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      width: double.infinity,
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-          colors: [Color(0xFFB68EFF), Color(0xFF8640FF)],
+    final accuracyLow = accuracyPercent < 60;
+    return Row(
+      children: [
+        Expanded(child: _StatCard(value: '$notDone', label: '未做题')),
+        SizedBox(width: ui(16)),
+        Expanded(child: _StatCard(value: '$done', label: '已做题')),
+        SizedBox(width: ui(16)),
+        Expanded(child: _StatCard(value: '$wrong', label: '错题')),
+        SizedBox(width: ui(16)),
+        Expanded(
+          child: _StatCard(
+            value: '$accuracyPercent%',
+            label: '正确率',
+            highlight: accuracyLow,
+          ),
         ),
+      ],
+    );
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  const _StatCard({
+    required this.value,
+    required this.label,
+    this.highlight = false,
+  });
+
+  final String value;
+  final String label;
+  final bool highlight;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final highlightColor = _kAccuracyLowColor;
+    return Container(
+      height: ui(86),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: _kStatCardBg,
+        borderRadius: BorderRadius.circular(ui(10)),
       ),
-      padding: EdgeInsets.symmetric(horizontal: ui(36)),
-      child: Row(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '刷题练习',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: ui(26),
-                    fontWeight: AppFont.w600,
-                    fontFamily: 'PingFang SC',
-                  ),
-                ),
-                SizedBox(height: ui(8)),
-                Text(
-                  '夯实基础 · 知识点专项突破',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.85),
-                    fontSize: ui(14),
-                    fontFamily: 'PingFang SC',
-                  ),
-                ),
-              ],
+          Text(
+            value,
+            style: TextStyle(
+              color: highlight ? highlightColor : _kStatTextDefault,
+              fontSize: ui(26),
+              fontFamily: 'Barlow',
+              fontWeight: AppFont.w600,
+              height: 1.1,
             ),
           ),
-          Icon(
-            Icons.menu_book_rounded,
-            color: Colors.white.withValues(alpha: 0.9),
-            size: ui(64),
+          SizedBox(height: ui(4)),
+          Text(
+            label,
+            style: TextStyle(
+              color: highlight ? highlightColor : _kStatLabelDefault,
+              fontSize: ui(12),
+              fontFamily: 'PingFang SC',
+              height: 1.0,
+            ),
           ),
         ],
       ),
@@ -158,152 +301,197 @@ class _CampBannerFallback extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// 4 个圆环卡片（25% 宽度水平排列）
+// 4 个圆环卡片：顺序 / 随机 / 考前 / 错题
+// 整行按"分组"统一主色（紫 / 绿），错题集独立用红色。
 // ─────────────────────────────────────────────────────────────────────
 
 class _PracticeRingRow extends StatelessWidget {
   const _PracticeRingRow({
     required this.summaries,
+    required this.groupRingGradient,
+    required this.groupCardGradient,
     required this.onSelect,
-    required this.onRefresh,
   });
 
   final List<QuizPracticeSummary> summaries;
+  final LinearGradient groupRingGradient;
+  final LinearGradient groupCardGradient;
   final ValueChanged<QuizPracticeSummary> onSelect;
-  final Future<void> Function() onRefresh;
 
   @override
   Widget build(BuildContext context) {
-    if (summaries.isEmpty) {
-      return Center(
-        child: TextButton(onPressed: onRefresh, child: const Text('点击重试')),
-      );
-    }
-    // 1.0：btn_box 高度 188px，内部 4 列居中，每列 25%。
-    return Center(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          for (final s in summaries)
-            Expanded(
-              child: _PracticeRingCard(summary: s, onTap: () => onSelect(s)),
+    final ui = DashboardScaleScope.of(context).ui;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < summaries.length; i++) ...[
+          if (i > 0) SizedBox(width: ui(16)),
+          Expanded(
+            child: _PracticeRingCard(
+              summary: summaries[i],
+              ringGradient: summaries[i].type == QuizPracticeType.error
+                  ? _kRedRingGradient
+                  : groupRingGradient,
+              cardGradient: summaries[i].type == QuizPracticeType.error
+                  ? _kRedCardGradient
+                  : groupCardGradient,
+              onTap: () => onSelect(summaries[i]),
             ),
+          ),
         ],
-      ),
+      ],
     );
   }
 }
 
 class _PracticeRingCard extends StatelessWidget {
-  const _PracticeRingCard({required this.summary, required this.onTap});
+  const _PracticeRingCard({
+    required this.summary,
+    required this.ringGradient,
+    required this.cardGradient,
+    required this.onTap,
+  });
 
   final QuizPracticeSummary summary;
+  final LinearGradient ringGradient;
+  final LinearGradient cardGradient;
   final VoidCallback onTap;
+
+  /// 内圆阴影色：取环渐变深色端，确保和环主色一致。
+  Color get _shadowColor => ringGradient.colors.first;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final accent = summary.type.accentColor;
-    // 1.0 关键尺寸
-    final ringSize = ui(187);
-    final innerSize = ui(134);
-    final pillWidth = ui(84);
-    final pillHeight = ui(42);
-    final pillInnerWidth = ui(66);
-    final pillInnerHeight = ui(22);
+    final ringSize = ui(140);
+    final innerSize = ui(98);
+    final pillWidth = ui(72);
+    final pillHeight = ui(24);
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(ringSize / 2),
-        child: SizedBox(
-          height: ringSize + pillHeight / 2,
-          child: Stack(
-            alignment: Alignment.topCenter,
-            clipBehavior: Clip.none,
+        borderRadius: BorderRadius.circular(ui(12)),
+        child: Container(
+          height: ui(260),
+          decoration: BoxDecoration(
+            gradient: cardGradient,
+            borderRadius: BorderRadius.circular(ui(12)),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
               SizedBox(
                 width: ringSize,
-                height: ringSize,
-                child: CustomPaint(
-                  painter: _RingPainter(
-                    progress: summary.progress,
-                    color: accent,
-                    trackColor: const Color(0xFFF8F8F8),
-                    strokeWidth: ui(8),
-                  ),
-                ),
-              ),
-              Positioned(
-                top: (ringSize - innerSize) / 2,
-                child: Container(
-                  width: innerSize,
-                  height: innerSize,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.white,
-                    boxShadow: [
-                      BoxShadow(
-                        color: accent.withValues(alpha: 0.30),
-                        blurRadius: ui(20),
-                      ),
-                    ],
-                  ),
-                  alignment: Alignment.center,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '${summary.progressPercent}%',
-                        style: TextStyle(
-                          color: const Color(0xFF000000),
-                          fontSize: ui(30),
-                          fontFamily: 'PingFang SC',
-                          height: 1.0,
+                height: ringSize + pillHeight / 2,
+                child: Stack(
+                  alignment: Alignment.topCenter,
+                  clipBehavior: Clip.none,
+                  children: [
+                    SizedBox(
+                      width: ringSize,
+                      height: ringSize,
+                      child: CustomPaint(
+                        painter: _RingPainter(
+                          progress: summary.progress,
+                          gradient: ringGradient,
+                          trackColor: Colors.white,
+                          strokeWidth: ui(8),
                         ),
                       ),
-                      SizedBox(height: ui(8)),
-                      Text(
-                        summary.type.label,
-                        style: TextStyle(
-                          color: const Color(0xFF000000),
-                          fontSize: ui(14),
-                          fontWeight: AppFont.w400,
-                          fontFamily: 'PingFang SC',
+                    ),
+                    Positioned(
+                      top: (ringSize - innerSize) / 2,
+                      child: Container(
+                        width: innerSize,
+                        height: innerSize,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white,
+                          boxShadow: [
+                            BoxShadow(
+                              color: _shadowColor.withValues(alpha: 0.18),
+                              blurRadius: ui(16),
+                            ),
+                          ],
+                        ),
+                        alignment: Alignment.center,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '${summary.progressPercent}%',
+                              style: TextStyle(
+                                color: _kStatTextDefault,
+                                fontSize: ui(24),
+                                fontFamily: 'Barlow',
+                                fontWeight: FontWeight.w700,
+                                height: 1.0,
+                              ),
+                            ),
+                            SizedBox(height: ui(4)),
+                            Text(
+                              '学习进度',
+                              style: TextStyle(
+                                color: _kStatLabelDefault,
+                                fontSize: ui(12),
+                                fontFamily: 'PingFang SC',
+                                height: 1.0,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ),
-              Positioned(
-                bottom: 0,
-                child: Container(
-                  width: pillWidth,
-                  height: pillHeight,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(pillHeight / 2),
-                  ),
-                  child: Container(
-                    width: pillInnerWidth,
-                    height: pillInnerHeight,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF8F8F8),
-                      borderRadius: BorderRadius.circular(pillInnerHeight / 2),
                     ),
-                    child: Text(
-                      '${summary.doneCount}/${summary.allCount}',
-                      style: TextStyle(
-                        color: const Color(0xFF000000),
-                        fontSize: ui(11),
-                        fontFamily: 'PingFang SC',
+                    Positioned(
+                      bottom: 0,
+                      child: Container(
+                        width: pillWidth,
+                        height: pillHeight,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(pillHeight / 2),
+                        ),
+                        child: Text.rich(
+                          TextSpan(
+                            children: [
+                              TextSpan(
+                                text: '${summary.doneCount}',
+                                style: TextStyle(
+                                  color: _kStatTextDefault,
+                                  fontSize: ui(11),
+                                  fontFamily: 'Barlow',
+                                  fontWeight: AppFont.w600,
+                                ),
+                              ),
+                              TextSpan(
+                                text: '/${summary.allCount}',
+                                style: TextStyle(
+                                  color: _kStatLabelDefault,
+                                  fontSize: ui(11),
+                                  fontFamily: 'Barlow',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                  ],
+                ),
+              ),
+              SizedBox(height: ui(12)),
+              Text(
+                summary.type.label,
+                style: TextStyle(
+                  color: _kStatTextDefault,
+                  fontSize: ui(16),
+                  fontWeight: AppFont.w600,
+                  fontFamily: 'PingFang SC',
+                  height: 1.0,
                 ),
               ),
             ],
@@ -315,19 +503,19 @@ class _PracticeRingCard extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// 圆环 painter（1.0：从底部 90° 起，顺时针推进；layer-color #F8F8F8）
+// 圆环 painter（从底部 90° 起，顺时针推进）
 // ─────────────────────────────────────────────────────────────────────
 
 class _RingPainter extends CustomPainter {
   _RingPainter({
     required this.progress,
-    required this.color,
+    required this.gradient,
     required this.trackColor,
     required this.strokeWidth,
   });
 
   final double progress;
-  final Color color;
+  final Gradient gradient;
   final Color trackColor;
   final double strokeWidth;
 
@@ -346,7 +534,7 @@ class _RingPainter extends CustomPainter {
 
     if (progress <= 0) return;
     final fg = Paint()
-      ..color = color
+      ..shader = gradient.createShader(rect)
       ..strokeWidth = strokeWidth
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
@@ -356,7 +544,7 @@ class _RingPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _RingPainter oldDelegate) {
     return oldDelegate.progress != progress ||
-        oldDelegate.color != color ||
+        oldDelegate.gradient != gradient ||
         oldDelegate.trackColor != trackColor ||
         oldDelegate.strokeWidth != strokeWidth;
   }

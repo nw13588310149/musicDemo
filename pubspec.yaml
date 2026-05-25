@@ -232,12 +232,16 @@ flutter:
     # • 通知卡时间 09:00-09:45 = w600（SemiBold）
     # • 周卡日期数字 9/10/11... = w500（设计稿 Medium，但 Medium 字重缺失，
     #   暂以 SemiBold 兼任 w500 槽位，避免落到系统默认字体；待补 Barlow-Medium.ttf）
+    # • 刷题首页环形百分比 = w700（设计稿 Bold，Bold 字重缺失，暂以 SemiBold
+    #   兼任 w700 槽位，待补 Barlow-Bold.ttf）
     - family: Barlow
       fonts:
         - asset: assets/fonts/Barlow-SemiBold.ttf
           weight: 500
         - asset: assets/fonts/Barlow-SemiBold.ttf
           weight: 600
+        - asset: assets/fonts/Barlow-SemiBold.ttf
+          weight: 700
     # 空白列表等提示文案（设计稿 Inter 16 / 400）
     - family: Inter
       fonts:
