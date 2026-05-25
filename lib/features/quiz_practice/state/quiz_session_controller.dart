@@ -35,6 +35,7 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
   final QuizPracticeRepository _repository;
   final QuizSessionLoader _loader;
   Timer? _autoAdvanceTimer;
+  int _resolveToken = 0;
 
   @override
   void dispose() {
@@ -45,7 +46,6 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
   Future<void> _bootstrap() async {
     final args = state.args;
 
-    // 1.0 行为：camp_over 进入直接拉 summary 弹窗，不需要题目列表。
     if (args.openCompletionDialog) {
       await _refreshSummariesForCompletion();
       if (!mounted) return;
@@ -59,11 +59,13 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
         if (!mounted) return;
         state = state.copyWith(
           loading: false,
-          questions: partial.questions,
-          currentIndex: partial.currentIndex,
-          questionsLoading: true,
+          store: partial.store,
+          currentIndex: partial.startIndex,
+          currentQuestion: null,
+          currentQuestionLoading: true,
           clearErrorMessage: true,
         );
+        unawaited(_resolveCurrentQuestion(partial.startIndex));
       },
     );
     if (!mounted) return;
@@ -71,29 +73,95 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
     if (!result.isSuccess) {
       state = state.copyWith(
         loading: false,
-        questionsLoading: false,
+        currentQuestionLoading: false,
         errorMessage: result.errorMessage,
+      );
+      return;
+    }
+
+    final store = result.store;
+    if (store == null || store.totalCount <= 0) {
+      state = state.copyWith(
+        loading: false,
+        store: store,
+        currentQuestionLoading: false,
+        clearErrorMessage: true,
       );
       return;
     }
 
     state = state.copyWith(
       loading: false,
-      questionsLoading: false,
-      questions: result.questions,
+      store: store,
       currentIndex: result.startIndex,
+      currentQuestion: state.currentIndex == result.startIndex
+          ? state.currentQuestion
+          : null,
+      currentQuestionLoading: state.currentQuestion == null,
       clearErrorMessage: true,
     );
+    if (state.currentQuestion == null) {
+      unawaited(_resolveCurrentQuestion(result.startIndex));
+    } else {
+      store.prefetchAround(result.startIndex);
+    }
   }
 
-  /// 选择 A/B/C/D。answer = 0/1/2/3。
-  Future<void> selectAnswer(int answer) async {
-    final question = state.currentQuestion;
-    if (question == null || question.answered) return;
+  Future<void> _resolveCurrentQuestion(int index) async {
+    final store = state.store;
+    if (store == null || index < 0 || index >= store.totalCount) {
+      if (!mounted) return;
+      state = state.copyWith(currentQuestionLoading: false);
+      return;
+    }
 
-    // 关键：捕获题目 itemId，await 之后用 itemId 定位回写——
-    // 用户在网络请求期间可能已经"下一题"，此时 state.currentIndex
-    // 早就指到别的题，按 index 写就把答案盖到错的题上去了。
+    final cached = store.cachedAt(index);
+    if (cached != null) {
+      if (!mounted || state.currentIndex != index) return;
+      state = state.copyWith(
+        currentQuestion: cached,
+        currentQuestionLoading: false,
+        clearErrorMessage: true,
+      );
+      store.prefetchAround(index);
+      return;
+    }
+
+    final token = ++_resolveToken;
+    if (!mounted || state.currentIndex != index) return;
+    state = state.copyWith(
+      currentQuestion: null,
+      currentQuestionLoading: true,
+      clearErrorMessage: true,
+    );
+
+    try {
+      final question = await store.resolveAt(index);
+      if (!mounted || token != _resolveToken || state.currentIndex != index) {
+        return;
+      }
+      state = state.copyWith(
+        currentQuestion: question,
+        currentQuestionLoading: false,
+      );
+      store.prefetchAround(index);
+    } catch (_) {
+      if (!mounted || token != _resolveToken || state.currentIndex != index) {
+        return;
+      }
+      state = state.copyWith(
+        currentQuestionLoading: false,
+        errorMessage: '题目加载失败，请稍后重试',
+      );
+    }
+  }
+
+  Future<void> selectAnswer(int answer) async {
+    final store = state.store;
+    final question = state.currentQuestion;
+    if (store == null || question == null || question.answered) return;
+
+    final index = state.currentIndex;
     final itemId = question.itemId;
     final status = answer == question.correctAnswer ? 1 : 2;
     final response = await _repository.reportAnswer(
@@ -105,22 +173,22 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
     if (!mounted) return;
 
     if (!response.isSuccess) {
-      state = state.copyWith(
-        errorMessage: response.displayMsg,
-      );
+      state = state.copyWith(errorMessage: response.displayMsg);
       return;
     }
 
-    final list = List<QuizQuestion>.from(state.questions);
-    final idx = list.indexWhere((q) => q.itemId == itemId);
-    if (idx < 0) return; // 题目已不在当前列表
-    if (list[idx].answered) return; // 已被其它路径回写过
-    list[idx] = list[idx].copyWith(userAnswer: answer, status: status);
-    state = state.copyWith(questions: list, clearErrorMessage: true);
+    store.updateAnswer(index: index, userAnswer: answer, status: status);
+    final updated = store.cachedAt(index) ?? question.copyWith(
+      userAnswer: answer,
+      status: status,
+    );
+    state = state.copyWith(
+      currentQuestion: updated,
+      revision: state.revision + 1,
+      clearErrorMessage: true,
+    );
 
-    // 自动刷题：仅当用户停留在刚刚作答的这道题时才跳——若用户
-    // 已经手动切到下一题，就别再"自动跳"覆盖他的操作。
-    if (state.autoNext && state.currentIndex == idx) {
+    if (state.autoNext) {
       _autoAdvanceTimer?.cancel();
       _autoAdvanceTimer = Timer(const Duration(seconds: 2), () {
         if (!mounted) return;
@@ -130,7 +198,7 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
   }
 
   void previousQuestion() {
-    if (state.questionsLoading) {
+    if (state.currentQuestionLoading) {
       state = state.copyWith(errorMessage: '题目加载中，请稍候');
       return;
     }
@@ -139,23 +207,42 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
       state = state.copyWith(errorMessage: '已经是第一题了！');
       return;
     }
-    state = state.copyWith(currentIndex: i, clearErrorMessage: true);
+    _goToIndex(i);
   }
 
-  /// 下一题。若已是最后一题则触发完成流程（拉 summary 并弹窗）。
   void nextQuestion() {
-    if (state.questionsLoading) {
+    if (state.currentQuestionLoading) {
       state = state.copyWith(errorMessage: '题目加载中，请稍候');
       return;
     }
+    final store = state.store;
+    if (store == null || store.totalCount <= 0) return;
+
     final i = state.currentIndex + 1;
-    if (state.questions.isEmpty) return;
-    if (i >= state.questions.length) {
+    if (i >= store.totalCount) {
       unawaited(_refreshSummariesForCompletion());
       state = state.copyWith(completionDialogVisible: true);
       return;
     }
-    state = state.copyWith(currentIndex: i, clearErrorMessage: true);
+    _goToIndex(i);
+  }
+
+  void _goToIndex(int index) {
+    final store = state.store;
+    if (store == null) return;
+
+    final cached = store.cachedAt(index);
+    state = state.copyWith(
+      currentIndex: index,
+      currentQuestion: cached,
+      currentQuestionLoading: cached == null,
+      clearErrorMessage: true,
+    );
+    if (cached == null) {
+      unawaited(_resolveCurrentQuestion(index));
+    } else {
+      store.prefetchAround(index);
+    }
   }
 
   void setAutoNext(bool value) {
@@ -165,7 +252,6 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
     state = state.copyWith(autoNext: value);
   }
 
-  /// 顶部返回时打开退出弹窗（同时刷新一次 summary）。
   Future<void> openExitDialog() async {
     await _refreshSummariesForCompletion();
     if (!mounted) return;
@@ -210,7 +296,6 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
     state = state.copyWith(summaryAfter: list);
   }
 
-  /// 1.0 中弹窗的"考前密卷/随机练习"切换：当前是 exam 切到 random，否则切到 exam。
   Future<QuizSessionPageArgs?> switchToRecommended() async {
     final summaries = state.summaryAfter;
     if (summaries.isEmpty) return null;

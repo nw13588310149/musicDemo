@@ -804,114 +804,118 @@ class _RecordingContentArea extends StatelessWidget {
       _filterFiles(state.items, keyword),
       sortAscending,
     );
+    final String? emptyMessage = state.loading
+        ? null
+        : state.categories.isEmpty
+        ? '暂无分类'
+        : isInsideFolder
+        ? (visibleFiles.isEmpty ? '当前文件夹下还没有录音' : null)
+        : (visibleFolders.isEmpty ? '当前分类下还没有文件夹' : null);
+    final showPageEmpty = emptyMessage != null;
 
     return Padding(
       padding: EdgeInsets.fromLTRB(ui(30), ui(28), ui(20), ui(16)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
         children: [
-          // 顶部：进入文件夹后展示面包屑（录音系统 > 分类 > 文件夹），
-          // 否则只显示当前选中的分类名（无分类时空占位避免布局抖动）。
-          if (isInsideFolder)
-            _FolderBreadcrumb(
-              items: <String>[
-                '录音系统',
-                selectedCategoryName,
-                state.currentFolderName,
-              ],
-              onItemTap: (_) => onBackToOverview(),
-            )
-          else if (selectedCategoryName.isNotEmpty)
-            Text(
-              selectedCategoryName,
-              style: TextStyle(
-                fontSize: ui(15),
-                color: const Color(0xFF0B081A),
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w500,
-                height: 12 / 15,
-              ),
-            )
-          else
-            SizedBox(height: ui(15)),
-          SizedBox(height: ui(16)),
-          Row(
+          // 空状态按整个右侧内容区（含标题/搜索栏）居中，而不是仅列表 Expanded 区域。
+          if (showPageEmpty)
+            Positioned.fill(
+              child: CourseEmptyPlaceholder(message: emptyMessage),
+            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(
-                width: ui(324),
-                child: _RecordingSearchField(controller: searchController),
+              // 顶部：进入文件夹后展示面包屑（录音系统 > 分类 > 文件夹），
+              // 否则只显示当前选中的分类名（无分类时空占位避免布局抖动）。
+              if (isInsideFolder)
+                _FolderBreadcrumb(
+                  items: <String>[
+                    '录音系统',
+                    selectedCategoryName,
+                    state.currentFolderName,
+                  ],
+                  onItemTap: (_) => onBackToOverview(),
+                )
+              else if (selectedCategoryName.isNotEmpty)
+                Text(
+                  selectedCategoryName,
+                  style: TextStyle(
+                    fontSize: ui(15),
+                    color: const Color(0xFF0B081A),
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w500,
+                    height: 12 / 15,
+                  ),
+                )
+              else
+                SizedBox(height: ui(15)),
+              SizedBox(height: ui(16)),
+              Row(
+                children: [
+                  SizedBox(
+                    width: ui(324),
+                    child: _RecordingSearchField(controller: searchController),
+                  ),
+                  const Spacer(),
+                  _ToolbarChip(
+                    imageAsset: AppAssets.coursewareSort,
+                    label: sortAscending ? '正序' : '排序',
+                    onTap: onToggleSort,
+                  ),
+                  SizedBox(width: ui(12)),
+                  _ToolbarChip(
+                    imageAsset: AppAssets.coursewareRefresh,
+                    label: '刷新',
+                    onTap: () => onRefresh(),
+                  ),
+                ],
               ),
-              const Spacer(),
-              _ToolbarChip(
-                imageAsset: AppAssets.coursewareSort,
-                label: sortAscending ? '正序' : '排序',
-                onTap: onToggleSort,
+              SizedBox(height: ui(16)),
+              Expanded(
+                child: showPageEmpty
+                    ? const SizedBox.shrink()
+                    : state.loading
+                    ? const Center(child: AppLoadingIndicator())
+                    : isInsideFolder
+                    ? _RecordingFilesGrid(
+                        items: visibleFiles,
+                        onOpen: onOpenItem,
+                        onAction: onItemAction,
+                      )
+                    : _RecordingFoldersGrid(
+                        items: visibleFolders,
+                        onOpen: onOpenFolder,
+                        onAction: onFolderAction,
+                      ),
               ),
-              SizedBox(width: ui(12)),
-              _ToolbarChip(
-                imageAsset: AppAssets.coursewareRefresh,
-                label: '刷新',
-                onTap: () => onRefresh(),
-              ),
-            ],
-          ),
-          SizedBox(height: ui(16)),
-          Expanded(
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: state.loading
-                      ? const Center(child: AppLoadingIndicator())
-                      : state.categories.isEmpty
-                      ? const CourseEmptyPlaceholder(message: '暂无分类')
-                      : isInsideFolder
-                      ? (visibleFiles.isEmpty
-                            ? const CourseEmptyPlaceholder(
-                                message: '当前文件夹下还没有录音',
-                              )
-                            : _RecordingFilesGrid(
-                                items: visibleFiles,
-                                onOpen: onOpenItem,
-                                onAction: onItemAction,
-                              ))
-                      : (visibleFolders.isEmpty
-                            ? const CourseEmptyPlaceholder(
-                                message: '当前分类下还没有文件夹',
-                              )
-                            : _RecordingFoldersGrid(
-                                items: visibleFolders,
-                                onOpen: onOpenFolder,
-                                onAction: onFolderAction,
-                              )),
-                ),
-                Positioned(
-                  right: 0,
-                  bottom: ui(8),
-                  child: _RecordingFab(
-                    // 文件夹概览：新建文件夹（与「我的云盘」一致的图标）；
-                    // 进入文件夹后：新建录音（保留麦克风图标以示区别）。
-                    label: isInsideFolder ? '新建录音' : '新建文件夹',
-                    iconAsset: isInsideFolder
-                        ? AppAssets.soundFabIcon
-                        : AppAssets.coursewareNewFolder,
-                    onTap: isInsideFolder ? onCreateRecording : onCreateFolder,
+              if (state.errorMessage != null &&
+                  state.errorMessage!.isNotEmpty) ...[
+                SizedBox(height: ui(10)),
+                Text(
+                  state.errorMessage!,
+                  style: TextStyle(
+                    fontSize: ui(12),
+                    color: const Color(0xFFFF5681),
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w400,
                   ),
                 ),
               ],
+            ],
+          ),
+          Positioned(
+            right: 0,
+            bottom: ui(8),
+            child: _RecordingFab(
+              // 文件夹概览：新建文件夹（与「我的云盘」一致的图标）；
+              // 进入文件夹后：新建录音（保留麦克风图标以示区别）。
+              label: isInsideFolder ? '新建录音' : '新建文件夹',
+              iconAsset: isInsideFolder
+                  ? AppAssets.soundFabIcon
+                  : AppAssets.coursewareNewFolder,
+              onTap: isInsideFolder ? onCreateRecording : onCreateFolder,
             ),
           ),
-          if (state.errorMessage != null && state.errorMessage!.isNotEmpty) ...[
-            SizedBox(height: ui(10)),
-            Text(
-              state.errorMessage!,
-              style: TextStyle(
-                fontSize: ui(12),
-                color: const Color(0xFFFF5681),
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w400,
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -1170,7 +1174,7 @@ class _RecordingFoldersGrid extends StatelessWidget {
         crossAxisCount: 4,
         mainAxisSpacing: ui(16),
         crossAxisSpacing: ui(16),
-        childAspectRatio: 0.95,
+        childAspectRatio: CloudFolderCardArtwork.gridChildAspectRatio,
       ),
       itemBuilder: (context, index) {
         final item = items[index];
@@ -1223,34 +1227,34 @@ class _RecordingFolderCardState extends State<_RecordingFolderCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
+          AspectRatio(
+            aspectRatio: CloudFolderCardArtwork.artworkAspectRatio,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(ui(14)),
               child: Stack(
+                fit: StackFit.expand,
                 children: [
-                  Positioned.fill(
-                    child: CloudFolderCardArtwork(
-                      hasContent: item.count > 0,
-                      menuTriggerKey: _menuTriggerKey,
-                      onMenuTap: _openActionMenu,
-                    ),
+                  CloudFolderCardArtwork(
+                    hasContent: item.count > 0,
+                    menuTriggerKey: _menuTriggerKey,
+                    onMenuTap: _openActionMenu,
                   ),
                   if (item.dateLabel.isNotEmpty)
                     Positioned(
-                      left: ui(10),
+                      left: ui(CloudFolderCardArtwork.metaLeftInset),
                       bottom: ui(28),
                       child: Text(
                         item.dateLabel,
                         style: TextStyle(
                           fontSize: ui(11),
-                          color: const Color(0xFF9C91BE),
+                          color: CloudFolderCardArtwork.metaDateColor,
                           fontFamily: 'Barlow',
                           fontWeight: FontWeight.w400,
                         ),
                       ),
                     ),
                   Positioned(
-                    left: ui(10),
+                    left: ui(CloudFolderCardArtwork.metaLeftInset),
                     bottom: ui(8),
                     child: Text(
                       item.sizeLabel.isEmpty
@@ -1258,7 +1262,7 @@ class _RecordingFolderCardState extends State<_RecordingFolderCard> {
                           : item.sizeLabel,
                       style: TextStyle(
                         fontSize: ui(11),
-                        color: const Color(0xFF7F70A8),
+                        color: CloudFolderCardArtwork.metaSizeColor,
                         fontFamily: 'Barlow',
                         fontWeight: FontWeight.w500,
                       ),
@@ -1268,26 +1272,29 @@ class _RecordingFolderCardState extends State<_RecordingFolderCard> {
               ),
             ),
           ),
-          SizedBox(height: ui(10)),
-          Center(
-            child: Text(
-              item.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              // fontWeight 故意写 FontWeight.w400 而不是 AppFont.w400：
-              // AppFont.w400 在 iOS 会被上浮一档（→ w500，命中
-              // PingFangSC-Medium.otf）做 CJK 视觉补偿；这里设计稿明确
-              // 要求字面用 PingFangSC-Regular.otf，不接受补偿，因此绕开
-              // [AppFont] 直接用原生 [FontWeight] 锁住 w400 槽位。
-              // 与「我的云盘」文件夹卡片（courseware_page.dart 中的
-              // [_FolderCard]）的标题样式严格保持一致。
-              style: TextStyle(
-                fontSize: ui(13),
-                color: const Color(0xFF0B081A),
-                fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w400,
-                height: 15 / 13,
+          SizedBox(height: ui(CloudFolderCardArtwork.titleGap)),
+          SizedBox(
+            height: ui(CloudFolderCardArtwork.titleAreaHeight),
+            child: Center(
+              child: Text(
+                item.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                // fontWeight 故意写 FontWeight.w400 而不是 AppFont.w400：
+                // AppFont.w400 在 iOS 会被上浮一档（→ w500，命中
+                // PingFangSC-Medium.otf）做 CJK 视觉补偿；这里设计稿明确
+                // 要求字面用 PingFangSC-Regular.otf，不接受补偿，因此绕开
+                // [AppFont] 直接用原生 [FontWeight] 锁住 w400 槽位。
+                // 与「我的云盘」文件夹卡片（courseware_page.dart 中的
+                // [_FolderCard]）的标题样式严格保持一致。
+                style: TextStyle(
+                  fontSize: ui(13),
+                  color: const Color(0xFF0B081A),
+                  fontFamily: 'PingFang SC',
+                  fontWeight: FontWeight.w400,
+                  height: 15 / 13,
+                ),
               ),
             ),
           ),
@@ -2546,7 +2553,8 @@ class _IosLiveRecordingWavePainter extends CustomPainter {
   static const _mutedBarColor = Color(0x66FFFFFF);
   static const _guideLineColor = Color.fromRGBO(255, 255, 255, 0.10);
   static const _tickColor = Color(0xFF888888);
-  static const _playheadColor = Color(0xFFFF453A);
+  // 录制游标改用品牌主色（紫），与试听态保持一致。
+  static const _playheadColor = Color(0xFFA885FF);
   static const _samplePeriodMs = 80.0;
 
   @override
@@ -2615,12 +2623,29 @@ class _IosLiveRecordingWavePainter extends CustomPainter {
       return;
     }
 
+    // 稳定绘制：每个 sample 关联一个"出生时间戳"，柱子位置完全由
+    // (elapsedMs - birthMs) 决定。这样 cursor 与柱子用同一时间轴推进，
+    // 帧间匀速移动，新 sample 抵达时刚好填到当前 cursor 位置；不再出现
+    // "柱子跟 cursor 一起右滑、再每 80ms 整体左跳一格"的抖动。
     final pitch = math.max(spacing, barWidth + 1);
+    final pixelsPerMs = pitch / _samplePeriodMs;
     final newestIndex = samples.length - 1;
+    // 最新 sample 的标称出生时间。同时考虑录音超过 sampleCap 后 samples
+    // 被截断的情况——用 elapsedMs 反推全局采样数取较大者，保证柱子在 34s
+    // 之后仍能正确锚定。`min(elapsedMs, nominal)` 又能让 cursor 在新 sample
+    // 抵达前留住正确间距，避免提前空出位置。
+    const periodInt = 80; // _samplePeriodMs 的整数形式，避免浮点漂移。
+    final globalCountFromTime = elapsedMs ~/ periodInt;
+    final newestNominalMs =
+        math.max(samples.length, globalCountFromTime) * periodInt;
+    final newestBirthMs = math
+        .min(elapsedMs, newestNominalMs)
+        .toDouble();
     for (var i = newestIndex; i >= 0; i--) {
-      final age = newestIndex - i;
-      final x = cursorX - age * pitch;
+      final birthMs = newestBirthMs - (newestIndex - i) * _samplePeriodMs;
+      final x = cursorX - (elapsedMs - birthMs) * pixelsPerMs;
       if (x + barWidth / 2 < 0) break;
+      if (x - barWidth / 2 > cursorX + 0.5) continue;
 
       final visual = _visualAmplitudeAt(i);
       final barHeight = minBarHeight + visual * (maxBarHeight - minBarHeight);
@@ -2637,11 +2662,12 @@ class _IosLiveRecordingWavePainter extends CustomPainter {
 
   double _liveCursorX(double width) {
     final pitch = math.max(spacing, barWidth + 1);
+    final pixelsPerMs = pitch / _samplePeriodMs;
     final minX = barWidth / 2;
     final maxX = math.max(minX, width - barWidth / 2);
-    if (samples.isEmpty || elapsedMs <= 0) return minX;
-    final elapsedSpan = (elapsedMs / _samplePeriodMs) * pitch;
-    return (minX + elapsedSpan).clamp(minX, maxX).toDouble();
+    if (elapsedMs <= 0) return minX;
+    // cursor 与柱子使用同一像素/毫秒映射，保证波形在屏幕上匀速推进。
+    return (minX + elapsedMs * pixelsPerMs).clamp(minX, maxX).toDouble();
   }
 
   void _paintIdleLine(

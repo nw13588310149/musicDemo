@@ -1621,7 +1621,7 @@ class _SegmentSwitch extends StatelessWidget {
         height: ui(28),
         padding: EdgeInsets.all(ui(2)),
         decoration: BoxDecoration(
-          color: const Color(0xFFE1E2E5),
+          color: const Color(0xFFEFEFEF),
           borderRadius: BorderRadius.circular(ui(8)),
         ),
         child: LayoutBuilder(

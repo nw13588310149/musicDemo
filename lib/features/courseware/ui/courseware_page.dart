@@ -14,6 +14,7 @@ import '../../../core/widgets/action_menu.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/cloud_folder_card_artwork.dart';
 import '../../../core/widgets/class_share_drawer.dart';
+import '../../../core/widgets/course_empty_placeholder.dart';
 import '../../../core/widgets/image_gallery_viewer.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
@@ -785,119 +786,128 @@ class _CloudContentArea extends StatelessWidget {
     final visibleFiles = state.files
         .where((item) => keyword.isEmpty || item.title.contains(keyword))
         .toList();
+    final String? emptyMessage = state.loading
+        ? null
+        : state.categories.isEmpty
+        ? '暂无分类'
+        : state.isFolderView
+        ? (visibleFiles.isEmpty ? '当前文件夹下还没有资料' : null)
+        : (visibleFolders.isEmpty ? '当前分类下还没有文件夹' : null);
+    final showPageEmpty = emptyMessage != null;
 
     return Padding(
       padding: EdgeInsets.fromLTRB(ui(30), ui(28), ui(20), ui(16)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
         children: [
-          if (state.isFolderView)
-            _FolderBreadcrumb(
-              items: <String>[
-                '我的云盘',
-                selectedCategoryName,
-                state.currentFolderName,
-              ],
-              // 第 0 / 1 级（"我的云盘" 与 当前分类名）都回到该分类的
-              // 文件夹列表（退出文件夹详情视图）。第 2 级是当前所在文件夹，
-              // _FolderBreadcrumb 内部已自动屏蔽末位条目的点击。
-              onItemTap: (_) => onBackToOverview(),
-            )
-          else if (selectedCategoryName.isNotEmpty)
-            Text(
-              selectedCategoryName,
-              style: TextStyle(
-                fontSize: ui(15),
-                color: const Color(0xFF0B081A),
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w500,
-                height: 12 / 15,
-              ),
-            )
-          else
-            // 无分类时占位，保持顶部高度与有标题时基本一致，避免布局抖动。
-            SizedBox(height: ui(15)),
-          SizedBox(height: ui(16)),
-          Row(
+          // 与录音系统一致：空状态按整个右侧内容区（含标题/搜索栏）居中。
+          if (showPageEmpty)
+            Positioned.fill(
+              child: CourseEmptyPlaceholder(message: emptyMessage),
+            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(
-                width: ui(324),
-                child: _CloudSearchField(controller: searchController),
+              if (state.isFolderView)
+                _FolderBreadcrumb(
+                  items: <String>[
+                    '我的云盘',
+                    selectedCategoryName,
+                    state.currentFolderName,
+                  ],
+                  // 第 0 / 1 级（"我的云盘" 与 当前分类名）都回到该分类的
+                  // 文件夹列表（退出文件夹详情视图）。第 2 级是当前所在文件夹，
+                  // _FolderBreadcrumb 内部已自动屏蔽末位条目的点击。
+                  onItemTap: (_) => onBackToOverview(),
+                )
+              else if (selectedCategoryName.isNotEmpty)
+                Text(
+                  selectedCategoryName,
+                  style: TextStyle(
+                    fontSize: ui(15),
+                    color: const Color(0xFF0B081A),
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w500,
+                    height: 12 / 15,
+                  ),
+                )
+              else
+                // 无分类时占位，保持顶部高度与有标题时基本一致，避免布局抖动。
+                SizedBox(height: ui(15)),
+              SizedBox(height: ui(16)),
+              Row(
+                children: [
+                  SizedBox(
+                    width: ui(324),
+                    child: _CloudSearchField(controller: searchController),
+                  ),
+                  const Spacer(),
+                  _ToolbarActionButton(
+                    icon: Icons.swap_vert_rounded,
+                    imageAsset: AppAssets.coursewareSort,
+                    label: '排序',
+                    onTap: () => onSortChanged(state.sortType),
+                  ),
+                  SizedBox(width: ui(12)),
+                  _ToolbarActionButton(
+                    icon: Icons.refresh_rounded,
+                    imageAsset: AppAssets.coursewareRefresh,
+                    label: '刷新',
+                    onTap: () => onRefresh(),
+                  ),
+                ],
               ),
-              const Spacer(),
-              _ToolbarActionButton(
-                icon: Icons.swap_vert_rounded,
-                imageAsset: AppAssets.coursewareSort,
-                label: '排序',
-                onTap: () => onSortChanged(state.sortType),
+              SizedBox(height: ui(14)),
+              if (state.isFolderView) ...[
+                _SelectionInfoBar(totalCount: visibleFiles.length),
+              ],
+              SizedBox(height: ui(16)),
+              Expanded(
+                child: showPageEmpty
+                    ? const SizedBox.shrink()
+                    : state.loading
+                    ? const Center(child: AppLoadingIndicator())
+                    : state.isFolderView
+                    ? _CloudFilesGrid(
+                        items: visibleFiles,
+                        onAction: onFileAction,
+                      )
+                    : _CloudFoldersGrid(
+                        items: visibleFolders,
+                        onOpenFolder: (folder) {
+                          if (folder.isCreateShortcut) {
+                            onCreateFolder();
+                            return;
+                          }
+                          onOpenFolder(folder);
+                        },
+                        onAction: onFolderAction,
+                      ),
               ),
-              SizedBox(width: ui(12)),
-              _ToolbarActionButton(
-                icon: Icons.refresh_rounded,
-                imageAsset: AppAssets.coursewareRefresh,
-                label: '刷新',
-                onTap: () => onRefresh(),
-              ),
-            ],
-          ),
-          SizedBox(height: ui(14)),
-          if (state.isFolderView) ...[
-            _SelectionInfoBar(totalCount: visibleFiles.length),
-          ],
-          SizedBox(height: ui(16)),
-          Expanded(
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: state.loading
-                      ? const Center(child: AppLoadingIndicator())
-                      : state.categories.isEmpty
-                      ? const _CloudEmptyState(message: '暂无文件')
-                      : state.isFolderView
-                      ? _CloudFilesGrid(
-                          items: visibleFiles,
-                          onAction: onFileAction,
-                        )
-                      : (visibleFolders.isEmpty
-                            ? const _CloudEmptyState(message: '当前分类下还没有文件夹')
-                            : _CloudFoldersGrid(
-                                items: visibleFolders,
-                                onOpenFolder: (folder) {
-                                  if (folder.isCreateShortcut) {
-                                    onCreateFolder();
-                                    return;
-                                  }
-                                  onOpenFolder(folder);
-                                },
-                                onAction: onFolderAction,
-                              )),
-                ),
-                Positioned(
-                  right: 0,
-                  bottom: ui(8),
-                  child: _FloatingCreateButton(
-                    label: state.isFolderView ? '上传资料' : '新建文件夹',
-                    iconAsset: state.isFolderView
-                        ? AppAssets.coursewareUploadFab
-                        : AppAssets.coursewareNewFolder,
-                    onTap: state.isFolderView ? onUpload : onCreateFolder,
+              if (state.errorMessage.isNotEmpty) ...[
+                SizedBox(height: ui(10)),
+                Text(
+                  state.errorMessage,
+                  style: TextStyle(
+                    fontSize: ui(12),
+                    color: const Color(0xFFFF5681),
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w400,
                   ),
                 ),
               ],
+            ],
+          ),
+          Positioned(
+            right: 0,
+            bottom: ui(8),
+            child: _FloatingCreateButton(
+              label: state.isFolderView ? '上传资料' : '新建文件夹',
+              iconAsset: state.isFolderView
+                  ? AppAssets.coursewareUploadFab
+                  : AppAssets.coursewareNewFolder,
+              onTap: state.isFolderView ? onUpload : onCreateFolder,
             ),
           ),
-          if (state.errorMessage.isNotEmpty) ...[
-            SizedBox(height: ui(10)),
-            Text(
-              state.errorMessage,
-              style: TextStyle(
-                fontSize: ui(12),
-                color: const Color(0xFFFF5681),
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w400,
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -1234,42 +1244,6 @@ class _FolderBreadcrumb extends StatelessWidget {
   }
 }
 
-// ── 右侧内容区缺省页（分类为空时显示）────────────────────────────────────────
-
-class _CloudEmptyState extends StatelessWidget {
-  const _CloudEmptyState({this.message = '暂无文件'});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Image.asset(
-            'assets/images/404/kj.png',
-            width: ui(165),
-            height: ui(165),
-            fit: BoxFit.contain,
-          ),
-          SizedBox(height: ui(12)),
-          Text(
-            message,
-            style: TextStyle(
-              fontSize: ui(14),
-              color: const Color(0xFFB6B5BB),
-              fontFamily: 'PingFang SC',
-              fontWeight: AppFont.w400,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _CloudSearchField extends StatelessWidget {
   const _CloudSearchField({required this.controller});
 
@@ -1464,7 +1438,7 @@ class _CloudFoldersGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     if (items.isEmpty) {
-      return const _EmptyCloudState(message: '当前分类下还没有文件夹');
+      return const SizedBox.shrink();
     }
     return GridView.builder(
       padding: EdgeInsets.only(bottom: ui(78)),
@@ -1472,7 +1446,7 @@ class _CloudFoldersGrid extends StatelessWidget {
         crossAxisCount: 4,
         mainAxisSpacing: ui(16),
         crossAxisSpacing: ui(16),
-        childAspectRatio: 0.95,
+        childAspectRatio: CloudFolderCardArtwork.gridChildAspectRatio,
       ),
       itemCount: items.length,
       itemBuilder: (context, index) {
@@ -1500,7 +1474,7 @@ class _CloudFilesGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     if (items.isEmpty) {
-      return const _EmptyCloudState(message: '当前文件夹下还没有资料');
+      return const SizedBox.shrink();
     }
     return GridView.builder(
       padding: EdgeInsets.only(bottom: ui(78)),
@@ -1564,40 +1538,40 @@ class _FolderCardState extends State<_FolderCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
+          AspectRatio(
+            aspectRatio: CloudFolderCardArtwork.artworkAspectRatio,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(ui(14)),
               child: Stack(
+                fit: StackFit.expand,
                 children: [
-                  Positioned.fill(
-                    child: CloudFolderCardArtwork(
-                      hasContent: item.hasContent,
-                      isCreateShortcut: isCreate,
-                      menuTriggerKey: isCreate ? null : _menuTriggerKey,
-                      onMenuTap: isCreate ? null : _openActionMenu,
-                    ),
+                  CloudFolderCardArtwork(
+                    hasContent: item.hasContent,
+                    isCreateShortcut: isCreate,
+                    menuTriggerKey: isCreate ? null : _menuTriggerKey,
+                    onMenuTap: isCreate ? null : _openActionMenu,
                   ),
                   Positioned(
-                    left: ui(10),
+                    left: ui(CloudFolderCardArtwork.metaLeftInset),
                     bottom: ui(28),
                     child: Text(
                       isCreate ? '' : item.dateLabel,
                       style: TextStyle(
                         fontSize: ui(11),
-                        color: const Color(0xFF9C91BE),
+                        color: CloudFolderCardArtwork.metaDateColor,
                         fontFamily: 'Barlow',
                         fontWeight: FontWeight.w400,
                       ),
                     ),
                   ),
                   Positioned(
-                    left: ui(10),
+                    left: ui(CloudFolderCardArtwork.metaLeftInset),
                     bottom: ui(8),
                     child: Text(
                       isCreate ? '点击创建新的资料目录' : item.sizeLabel,
                       style: TextStyle(
                         fontSize: ui(11),
-                        color: const Color(0xFF7F70A8),
+                        color: CloudFolderCardArtwork.metaSizeColor,
                         fontFamily: 'Barlow',
                         fontWeight: FontWeight.w500,
                       ),
@@ -1607,24 +1581,27 @@ class _FolderCardState extends State<_FolderCard> {
               ),
             ),
           ),
-          SizedBox(height: ui(10)),
-          Center(
-            child: Text(
-              item.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              // fontWeight 故意写 FontWeight.w400 而不是 AppFont.w400：
-              // AppFont.w400 在 iOS 会被上浮一档（→ w500，命中
-              // PingFangSC-Medium.otf）做 CJK 视觉补偿；这里设计稿明确
-              // 要求字面用 PingFangSC-Regular.otf，不接受补偿，因此绕开
-              // [AppFont] 直接用原生 [FontWeight] 锁住 w400 槽位。
-              style: TextStyle(
-                fontSize: ui(13),
-                color: const Color(0xFF0B081A),
-                fontFamily: 'PingFang SC',
-                fontWeight: FontWeight.w400,
-                height: 15 / 13,
+          SizedBox(height: ui(CloudFolderCardArtwork.titleGap)),
+          SizedBox(
+            height: ui(CloudFolderCardArtwork.titleAreaHeight),
+            child: Center(
+              child: Text(
+                item.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                // fontWeight 故意写 FontWeight.w400 而不是 AppFont.w400：
+                // AppFont.w400 在 iOS 会被上浮一档（→ w500，命中
+                // PingFangSC-Medium.otf）做 CJK 视觉补偿；这里设计稿明确
+                // 要求字面用 PingFangSC-Regular.otf，不接受补偿，因此绕开
+                // [AppFont] 直接用原生 [FontWeight] 锁住 w400 槽位。
+                style: TextStyle(
+                  fontSize: ui(13),
+                  color: const Color(0xFF0B081A),
+                  fontFamily: 'PingFang SC',
+                  fontWeight: FontWeight.w400,
+                  height: 15 / 13,
+                ),
               ),
             ),
           ),
@@ -1908,18 +1885,6 @@ class _FloatingCreateButton extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-class _EmptyCloudState extends StatelessWidget {
-  const _EmptyCloudState({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    // 与右侧内容区缺省页保持一致：使用 kj.png
-    return _CloudEmptyState(message: message);
   }
 }
 

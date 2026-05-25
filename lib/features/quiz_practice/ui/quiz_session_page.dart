@@ -87,7 +87,7 @@ class _QuizSessionPageState extends ConsumerState<QuizSessionPage> {
                   onAutoNextChanged: controller.setAutoNext,
                 ),
                 Expanded(
-                  child: state.questions.isEmpty
+                  child: state.store == null || state.store!.totalCount <= 0
                       ? const Center(child: Text('暂无题目'))
                       : _SessionBody(
                           state: state,
@@ -321,6 +321,10 @@ class _SessionBodyState extends State<_SessionBody> {
     final ui = DashboardScaleScope.of(context).ui;
     final question = widget.state.currentQuestion;
     _maybeResetScrollOnQuestionChange(question?.itemId);
+
+    if (widget.state.currentQuestionLoading && question == null) {
+      return const Center(child: AppLoadingIndicator());
+    }
 
     if (question == null) {
       return const Center(child: Text('暂无题目'));

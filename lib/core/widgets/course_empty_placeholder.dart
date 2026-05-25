@@ -14,8 +14,9 @@ class CourseEmptyPlaceholder extends StatelessWidget {
     this.schoolMode = false,
   });
 
-  static const double _imageSize = 163;
+  static const double _imageSize = 200;
   static const double _schoolImageSize = 183;
+  static const double _textVisualPullUp = 22;
 
   final String message;
   final bool schoolMode;
@@ -24,29 +25,38 @@ class CourseEmptyPlaceholder extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final imageSize = schoolMode ? _schoolImageSize : _imageSize;
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Image.asset(
-            AppAssets.emptyCoursePlaceholder,
-            width: ui(imageSize),
-            height: ui(imageSize),
-            fit: BoxFit.contain,
+    return SizedBox.expand(
+      child: Center(
+        child: Transform.translate(
+          // 文案上移后布局高度未变，整体视觉重心会偏下；上移一半以在容器内居中。
+          offset: Offset(0, -ui(_textVisualPullUp / 2)),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.asset(
+                AppAssets.emptyCoursePlaceholder,
+                width: ui(imageSize),
+                height: ui(imageSize),
+                fit: BoxFit.contain,
+              ),
+              SizedBox(height: ui(4)),
+              Transform.translate(
+                offset: Offset(0, -ui(_textVisualPullUp)),
+                child: Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: 'PingFang SC',
+                    fontSize: ui(14),
+                    fontWeight: AppFont.w400,
+                    color: const Color(0xFF0B081A),
+                    height: 1.25,
+                  ),
+                ),
+              ),
+            ],
           ),
-          SizedBox(height: ui(4)),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontFamily: 'PingFang SC',
-              fontSize: ui(16),
-              fontWeight: AppFont.w400,
-              color: const Color(0xFF0B081A),
-              height: 1.25,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

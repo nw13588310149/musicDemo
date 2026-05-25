@@ -9,7 +9,9 @@ import '../../../app/router/route_paths.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/network/media_url.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/anchored_popup_menu.dart';
 import '../../../core/widgets/class_share_drawer.dart';
+import '../../../core/widgets/course_empty_placeholder.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../../video_tutorial/data/video_publisher_data.dart';
@@ -32,6 +34,7 @@ class MyCollectionPage extends ConsumerWidget {
     final state = ref.watch(myCollectionControllerProvider);
     final controller = ref.read(myCollectionControllerProvider.notifier);
     final ui = DashboardScaleScope.of(context).ui;
+    final showPageEmpty = !state.loading && state.items.isEmpty;
 
     return Stack(
       children: [
@@ -42,7 +45,11 @@ class MyCollectionPage extends ConsumerWidget {
           ),
           child: Stack(
             children: [
-              // 顶部 Tab 与下方网格区分别绝对定位，与设计稿 left:20 / top:20 / 84 对齐。
+              // 与录音/云盘一致：空状态按整个页面容器（含顶部 Tab）居中。
+              if (showPageEmpty)
+                const Positioned.fill(
+                  child: CourseEmptyPlaceholder(message: '暂无收藏'),
+                ),
               Positioned(
                 left: ui(20),
                 top: ui(20),
@@ -55,10 +62,10 @@ class MyCollectionPage extends ConsumerWidget {
               Positioned.fill(
                 child: Padding(
                   padding: EdgeInsets.fromLTRB(ui(20), ui(82), ui(20), ui(20)),
-                  child: state.loading && state.items.isEmpty
+                  child: showPageEmpty
+                      ? const SizedBox.shrink()
+                      : state.loading && state.items.isEmpty
                       ? const Center(child: AppLoadingIndicator())
-                      : state.items.isEmpty
-                      ? const _CollectionEmpty()
                       : _CollectionGrid(
                           state: state,
                           onOpenItem: (item) => _openItem(context, item),
@@ -1195,40 +1202,6 @@ String? _resolveRemoteUrl(String? rawUrl) {
   return resolved.isEmpty ? null : resolved;
 }
 
-class _CollectionEmpty extends StatelessWidget {
-  const _CollectionEmpty();
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Image.asset(
-            AppAssets.emptyCoursePlaceholder,
-            width: ui(163),
-            height: ui(163),
-            fit: BoxFit.contain,
-          ),
-          SizedBox(height: ui(4)),
-          Text(
-            '暂无收藏',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontFamily: 'PingFang SC',
-              fontSize: ui(16),
-              fontWeight: AppFont.w400,
-              color: const Color(0xFF0B081A),
-              height: 1.25,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 // ──────────────────────────────────────────────────────────────────────────────
 // 声乐 / 器乐 卡片右下角图标的弹出菜单：分享 + 取消收藏
 // 视觉与 my_notes_page 左侧分类的省略号菜单一致：
@@ -1243,70 +1216,19 @@ Future<_SongMenuAction?> _showSongCollectionMenu({
   required BuildContext context,
   required GlobalKey triggerKey,
 }) {
-  final triggerCtx = triggerKey.currentContext;
-  if (triggerCtx == null) {
-    return Future<_SongMenuAction?>.value(null);
-  }
-  final renderBox = triggerCtx.findRenderObject() as RenderBox;
-  final overlayBox =
-      Overlay.of(context, rootOverlay: true).context.findRenderObject()
-          as RenderBox;
-
-  final origin = renderBox.localToGlobal(Offset.zero, ancestor: overlayBox);
-  final size = renderBox.size;
   final scale = DashboardScaleScope.of(context);
   final menuWidth = scale.ui(142);
   // 估算高度：top padding(8) + 36 + 6(divider) + 36 + bottom padding(8) ≈ 94
   final approxMenuHeight = scale.ui(96);
 
-  // 与 my_notes_page._showNoteActionMenu 的定位逻辑保持一致：
-  // 默认从触发点中心向右下展开；越过右边界则左对齐到按钮中心；
-  // 越过下边界则贴底；上 / 左两个方向再做一次 8px 安全边距兜底。
-  var left = origin.dx + size.width / 2;
-  var top = origin.dy + size.height / 2;
-
-  if (left + menuWidth > overlayBox.size.width - scale.ui(8)) {
-    left = origin.dx + size.width / 2 - menuWidth;
-  }
-  if (left < scale.ui(8)) {
-    left = scale.ui(8);
-  }
-  if (top + approxMenuHeight > overlayBox.size.height - scale.ui(8)) {
-    top = overlayBox.size.height - approxMenuHeight - scale.ui(8);
-  }
-  if (top < scale.ui(8)) {
-    top = scale.ui(8);
-  }
-
-  return showMenu<_SongMenuAction>(
+  return showAnchoredPopupMenu<_SongMenuAction>(
     context: context,
-    elevation: 0,
-    color: Colors.transparent,
-    shadowColor: Colors.transparent,
-    surfaceTintColor: Colors.transparent,
-    constraints: BoxConstraints.tightFor(width: menuWidth),
-    position: RelativeRect.fromLTRB(
-      left,
-      top,
-      overlayBox.size.width - left - menuWidth,
-      overlayBox.size.height - top,
+    triggerKey: triggerKey,
+    menuWidth: menuWidth,
+    approxMenuHeight: approxMenuHeight,
+    builder: (dialogContext, _) => _SongMenuPanel(
+      onSelected: (action) => Navigator.of(dialogContext).pop(action),
     ),
-    items: <PopupMenuEntry<_SongMenuAction>>[
-      PopupMenuItem<_SongMenuAction>(
-        enabled: false,
-        padding: EdgeInsets.zero,
-        // PopupMenu 走独立 Overlay，捕获不到外层 DashboardScaleScope，
-        // 这里重新注入一份，保证内部 ui() 计算与卡片一致。
-        child: DashboardScaleScope(
-          data: scale,
-          child: Builder(
-            builder: (panelCtx) => _SongMenuPanel(
-              onSelected: (action) => Navigator.of(panelCtx).pop(action),
-            ),
-          ),
-        ),
-      ),
-    ],
   );
 }
 

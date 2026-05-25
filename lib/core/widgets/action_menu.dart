@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../constants/app_assets.dart';
 import '../../features/shell/ui/shell_layout.dart';
+import 'anchored_popup_menu.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 /// Available actions for the shared item action menu (the popup used by
@@ -71,17 +72,6 @@ Future<ItemMenuAction?> showItemActionMenu({
   if (actions.isEmpty) {
     return Future<ItemMenuAction?>.value(null);
   }
-  final triggerCtx = triggerKey.currentContext;
-  if (triggerCtx == null) {
-    return Future<ItemMenuAction?>.value(null);
-  }
-  final renderBox = triggerCtx.findRenderObject() as RenderBox;
-  final overlayBox =
-      Overlay.of(context, rootOverlay: true).context.findRenderObject()
-          as RenderBox;
-
-  final origin = renderBox.localToGlobal(Offset.zero, ancestor: overlayBox);
-  final size = renderBox.size;
   final scale = DashboardScaleScope.of(context);
   final menuWidth = scale.ui(142);
   // Approximate height: 8 top pad + 36*N rows + (1 divider + 5 gap) if delete
@@ -95,53 +85,15 @@ Future<ItemMenuAction?> showItemActionMenu({
     16 + nonDeleteCount * 36 + (hasDelete ? (nonDeleteCount > 0 ? 42 : 36) : 0),
   );
 
-  // Anchor so the trigger center maps roughly to the menu's top-left corner;
-  // flip horizontally / vertically when out of bounds.
-  var left = origin.dx + size.width / 2;
-  var top = origin.dy + size.height / 2;
-  if (left + menuWidth > overlayBox.size.width - scale.ui(8)) {
-    left = origin.dx + size.width / 2 - menuWidth;
-  }
-  if (left < scale.ui(8)) {
-    left = scale.ui(8);
-  }
-  if (top + approxMenuHeight > overlayBox.size.height - scale.ui(8)) {
-    top = overlayBox.size.height - approxMenuHeight - scale.ui(8);
-  }
-  if (top < scale.ui(8)) {
-    top = scale.ui(8);
-  }
-
-  return showMenu<ItemMenuAction>(
+  return showAnchoredPopupMenu<ItemMenuAction>(
     context: context,
-    elevation: 0,
-    color: Colors.transparent,
-    shadowColor: Colors.transparent,
-    surfaceTintColor: Colors.transparent,
-    constraints: BoxConstraints.tightFor(width: menuWidth),
-    position: RelativeRect.fromLTRB(
-      left,
-      top,
-      overlayBox.size.width - left - menuWidth,
-      overlayBox.size.height - top,
+    triggerKey: triggerKey,
+    menuWidth: menuWidth,
+    approxMenuHeight: approxMenuHeight,
+    builder: (dialogContext, _) => _ItemActionMenuPanel(
+      actions: actions,
+      onSelected: (action) => Navigator.of(dialogContext).pop(action),
     ),
-    items: <PopupMenuEntry<ItemMenuAction>>[
-      PopupMenuItem<ItemMenuAction>(
-        enabled: false,
-        padding: EdgeInsets.zero,
-        // Re-inject DashboardScaleScope: the popup is hosted in a separate
-        // overlay and ancestors aren't reachable inside `child`.
-        child: DashboardScaleScope(
-          data: scale,
-          child: Builder(
-            builder: (panelCtx) => _ItemActionMenuPanel(
-              actions: actions,
-              onSelected: (action) => Navigator.of(panelCtx).pop(action),
-            ),
-          ),
-        ),
-      ),
-    ],
   );
 }
 

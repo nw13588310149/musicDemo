@@ -4,6 +4,14 @@ import 'quiz_html.dart';
 List<Map<String, dynamic>> warmupQuizQuestionParser(void _) =>
     const <Map<String, dynamic>>[];
 
+/// 单题解析入口，供懒加载 store 在 isolate 中按需调用。
+Map<String, dynamic> parseQuizQuestionItem(dynamic item) {
+  if (item is! Map) return const <String, dynamic>{};
+  final list = parseQuizQuestionsPayload(<dynamic>[item]);
+  if (list.isEmpty) return const <String, dynamic>{};
+  return list.first;
+}
+
 /// 供 [compute] 在后台 isolate 解析题目列表，避免 HTML strip 阻塞 UI 线程。
 List<Map<String, dynamic>> parseQuizQuestionsPayload(dynamic data) {
   if (data is! List) return const <Map<String, dynamic>>[];

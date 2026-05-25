@@ -22,9 +22,34 @@ class CloudFolderCardArtwork extends StatelessWidget {
   final GlobalKey? menuTriggerKey;
   final VoidCallback? onMenuTap;
 
+  /// 文件夹底图设计宽高比（160 × 130）。
+  static const double artworkAspectRatio = 160 / 130;
+
+  /// 底图与标题之间的间距。
+  static const double titleGap = 10;
+
+  /// 标题单行区域高度（fontSize 13，line height 15/13）。
+  static const double titleAreaHeight = 15;
+
+  /// 子像素取整余量，避免 Grid 单元高度与 Column 子项合计差 ~1px 溢出。
+  static const double gridLayoutSlack = 1;
+
+  /// 网格单元宽高比：底图 + 间距 + 标题 + 取整余量。
+  static const double gridChildAspectRatio =
+      160 / (130 + titleGap + titleAreaHeight + gridLayoutSlack);
+
+  /// 左下角日期/大小相对底图左缘的内边距（原 10，右移 16 → 26）。
+  static const double metaLeftInset = 26;
+
+  /// 左下角第一行（日期），与左侧目录副标题「已存储 X 个」一致。
+  static const Color metaDateColor = Color(0xFF7F7F7F);
+
+  /// 左下角第二行（大小），应用主色。
+  static const Color metaSizeColor = Color(0xFF8741FF);
+
   /// ⋯ 相对文件夹底图的位置（对齐 yp8/yp9 上印刷的三点）。
-  static const double menuTopFactor = 0.30;
-  static const double menuRightFactor = 0.065;
+  static const double menuTopFactor = 0.43;
+  static const double menuRightFactor = 0.07;
 
   static String backgroundAsset({
     required bool hasContent,
@@ -57,9 +82,7 @@ class CloudFolderCardArtwork extends StatelessWidget {
           children: [
             Image.asset(
               asset,
-              width: constraints.maxWidth,
-              height: constraints.maxHeight,
-              fit: BoxFit.fill,
+              fit: BoxFit.contain,
               gaplessPlayback: true,
             ),
             if (showMenu)

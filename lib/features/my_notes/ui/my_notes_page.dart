@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/network/media_url.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/anchored_popup_menu.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../state/my_notes_controller.dart';
@@ -1499,71 +1500,20 @@ Future<_NoteMenuAction?> _showNoteActionMenu({
   required GlobalKey triggerKey,
   required bool includeRename,
 }) {
-  final triggerCtx = triggerKey.currentContext;
-  if (triggerCtx == null) {
-    return Future<_NoteMenuAction?>.value(null);
-  }
-  final renderBox = triggerCtx.findRenderObject() as RenderBox;
-  final overlayBox =
-      Overlay.of(context, rootOverlay: true).context.findRenderObject()
-          as RenderBox;
-
-  final origin = renderBox.localToGlobal(Offset.zero, ancestor: overlayBox);
-  final size = renderBox.size;
   final scale = DashboardScaleScope.of(context);
   final menuWidth = scale.ui(142);
   // Approximate height: 8 + 36*(1 or 2) + (2+1+3) divider + 8.
   final approxMenuHeight = scale.ui(includeRename ? 100 : 56);
 
-  var left = origin.dx + size.width / 2;
-  var top = origin.dy + size.height / 2;
-
-  if (left + menuWidth > overlayBox.size.width - scale.ui(8)) {
-    left = origin.dx + size.width / 2 - menuWidth;
-  }
-  if (left < scale.ui(8)) {
-    left = scale.ui(8);
-  }
-  if (top + approxMenuHeight > overlayBox.size.height - scale.ui(8)) {
-    top = overlayBox.size.height - approxMenuHeight - scale.ui(8);
-  }
-  if (top < scale.ui(8)) {
-    top = scale.ui(8);
-  }
-
-  return showMenu<_NoteMenuAction>(
+  return showAnchoredPopupMenu<_NoteMenuAction>(
     context: context,
-    elevation: 0,
-    color: Colors.transparent,
-    shadowColor: Colors.transparent,
-    surfaceTintColor: Colors.transparent,
-    constraints: BoxConstraints.tightFor(width: menuWidth),
-    position: RelativeRect.fromLTRB(
-      left,
-      top,
-      overlayBox.size.width - left - menuWidth,
-      overlayBox.size.height - top,
+    triggerKey: triggerKey,
+    menuWidth: menuWidth,
+    approxMenuHeight: approxMenuHeight,
+    builder: (dialogContext, _) => _NoteActionMenuPanel(
+      includeRename: includeRename,
+      onSelected: (action) => Navigator.of(dialogContext).pop(action),
     ),
-    items: <PopupMenuEntry<_NoteMenuAction>>[
-      PopupMenuItem<_NoteMenuAction>(
-        enabled: false,
-        padding: EdgeInsets.zero,
-        // The popup is hosted in a separate Overlay, so the trigger's
-        // ancestors (including DashboardScaleScope) are NOT available
-        // inside `child`. Re-provide the captured `scale` here so the
-        // menu panel and its rows can resolve `ui()` values, then use a
-        // Builder so `panelCtx` actually depends on the new scope.
-        child: DashboardScaleScope(
-          data: scale,
-          child: Builder(
-            builder: (panelCtx) => _NoteActionMenuPanel(
-              includeRename: includeRename,
-              onSelected: (action) => Navigator.of(panelCtx).pop(action),
-            ),
-          ),
-        ),
-      ),
-    ],
   );
 }
 

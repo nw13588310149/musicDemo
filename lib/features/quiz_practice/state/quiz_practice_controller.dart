@@ -60,26 +60,11 @@ class QuizPracticeController extends StateNotifier<QuizPracticeState> {
 
     final summaries = _parseSummaries(response.data);
     state = state.copyWith(loading: false, summaries: summaries);
-    _scheduleIdleWarmUp(summaries);
+    _scheduleIdleWarmUp();
   }
 
-  void _scheduleIdleWarmUp(List<QuizPracticeSummary> summaries) {
+  void _scheduleIdleWarmUp() {
     unawaited(compute(warmupQuizQuestionParser, null));
-    Future<void>.delayed(const Duration(milliseconds: 800), () {
-      if (!mounted) return;
-      QuizPracticeSummary? sequence;
-      for (final summary in summaries) {
-        if (summary.type == QuizPracticeType.sequence) {
-          sequence = summary;
-          break;
-        }
-      }
-      if (sequence == null) return;
-      if (sequence.statusInitialized && sequence.allCount <= 0) return;
-      _loader.warmUp(
-        QuizSessionPageArgs.fromSummary(sequence, schoolId: _schoolId),
-      );
-    });
   }
 
   List<QuizPracticeSummary> _parseSummaries(dynamic data) {

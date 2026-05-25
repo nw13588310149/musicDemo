@@ -1,12 +1,11 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_response.dart';
 import '../data/quiz_practice_repository.dart';
-import '../data/quiz_question_parser.dart';
 import 'quiz_practice_state.dart';
+import 'quiz_session_question_store.dart';
 import 'quiz_session_state.dart';
 
 final quizSessionLoaderProvider = Provider<QuizSessionLoader>((ref) {
@@ -16,12 +15,12 @@ final quizSessionLoaderProvider = Provider<QuizSessionLoader>((ref) {
 
 class QuizSessionBootstrapResult {
   const QuizSessionBootstrapResult({
-    required this.questions,
+    required this.store,
     required this.startIndex,
     required this.errorMessage,
   });
 
-  final List<QuizQuestion> questions;
+  final QuizSessionQuestionStore? store;
   final int startIndex;
   final String errorMessage;
 
@@ -30,12 +29,12 @@ class QuizSessionBootstrapResult {
 
 class QuizSessionBootstrapPartial {
   const QuizSessionBootstrapPartial({
-    required this.questions,
-    required this.currentIndex,
+    required this.store,
+    required this.startIndex,
   });
 
-  final List<QuizQuestion> questions;
-  final int currentIndex;
+  final QuizSessionQuestionStore store;
+  final int startIndex;
 }
 
 typedef QuizSessionBootstrapPartialCallback =
@@ -50,7 +49,7 @@ class _BootstrapJob {
       <QuizSessionBootstrapPartialCallback>[];
 }
 
-/// 做题页 bootstrap 共享加载器：camp 页点击时即可开始请求，session 页复用同一 Future。
+/// 做题页 bootstrap 共享加载器：只拉取原始列表 + 轻量 stub，HTML 按需解析。
 class QuizSessionLoader {
   QuizSessionLoader({required QuizPracticeRepository repository})
     : _repository = repository;
@@ -63,7 +62,6 @@ class QuizSessionLoader {
         '${args.practiceId ?? 0}:${args.startIndex}:${args.needsInitialize}';
   }
 
-  /// 立即开始 bootstrap（可重复调用，同一 [args] 只会发起一次网络流程）。
   Future<QuizSessionBootstrapResult> load(
     QuizSessionPageArgs args, {
     QuizSessionBootstrapPartialCallback? onPartial,
@@ -79,7 +77,6 @@ class QuizSessionLoader {
     return job.future.whenComplete(() => _jobs.remove(key));
   }
 
-  /// camp 页空闲预热：不阻塞 UI，也不重复占用进行中的同一请求。
   void warmUp(QuizSessionPageArgs args) {
     unawaited(load(args));
   }
@@ -125,7 +122,7 @@ class QuizSessionLoader {
 
     if (practiceId == null || practiceId <= 0) {
       return QuizSessionBootstrapResult(
-        questions: const <QuizQuestion>[],
+        store: null,
         startIndex: 0,
         errorMessage: createdResponse?.displayMsg ?? '',
       );
@@ -138,7 +135,7 @@ class QuizSessionLoader {
     );
     if (!response.isSuccess) {
       return QuizSessionBootstrapResult(
-        questions: const <QuizQuestion>[],
+        store: null,
         startIndex: 0,
         errorMessage: response.displayMsg,
       );
@@ -146,48 +143,38 @@ class QuizSessionLoader {
 
     final raw = response.data;
     if (raw is! List || raw.isEmpty) {
-      return QuizSessionBootstrapResult(
-        questions: const <QuizQuestion>[],
+      return const QuizSessionBootstrapResult(
+        store: null,
         startIndex: 0,
         errorMessage: '',
       );
     }
 
-    var startIndex = args.startIndex;
-    if (startIndex >= raw.length) {
-      startIndex = raw.length - 1;
-    }
-    if (startIndex < 0) startIndex = 0;
-
-    // 首题优先：主线程解析单题，尽快结束 loading；全量解析仍在 isolate 中完成。
-    final firstPayloads = parseQuizQuestionsPayload(<dynamic>[raw[startIndex]]);
-    if (firstPayloads.isNotEmpty) {
-      _emitPartial(
-        key,
-        QuizSessionBootstrapPartial(
-          questions: <QuizQuestion>[
-            QuizQuestion.fromPayload(firstPayloads.first),
-          ],
-          currentIndex: 0,
-        ),
+    final stubs = parseQuizQuestionStubs(raw);
+    if (stubs.isEmpty) {
+      return const QuizSessionBootstrapResult(
+        store: null,
+        startIndex: 0,
+        errorMessage: '',
       );
     }
 
-    final payloads = await compute(parseQuizQuestionsPayload, raw);
-    final questions = payloads
-        .map(QuizQuestion.fromPayload)
-        .toList(growable: false);
+    final store = QuizSessionQuestionStore(rawItems: raw, stubs: stubs);
 
-    final total = questions.isEmpty ? args.allCount : questions.length;
-    var resolvedStartIndex = startIndex;
-    if (total > 0 && resolvedStartIndex >= total) {
-      resolvedStartIndex = total - 1;
+    var startIndex = args.startIndex;
+    if (startIndex >= store.totalCount) {
+      startIndex = store.totalCount - 1;
     }
-    if (resolvedStartIndex < 0) resolvedStartIndex = 0;
+    if (startIndex < 0) startIndex = 0;
+
+    _emitPartial(
+      key,
+      QuizSessionBootstrapPartial(store: store, startIndex: startIndex),
+    );
 
     return QuizSessionBootstrapResult(
-      questions: questions,
-      startIndex: resolvedStartIndex,
+      store: store,
+      startIndex: startIndex,
       errorMessage: '',
     );
   }

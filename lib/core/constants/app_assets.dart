@@ -144,12 +144,6 @@ abstract final class AppAssets {
   /// 全局页面 loading / 下拉刷新动画。
   static const homeLoading = 'assets/images/home/loading.gif';
 
-  /// 校圈点赞过渡动画。
-  static const homeLikeAnim = 'assets/images/home/dz.gif';
-
-  /// 校圈收藏过渡动画。
-  static const homeFavoriteAnim = 'assets/images/home/fav.gif';
-
   // 用户菜单弹层图标（地区 / 资料修改 / 退出登录）
   static const homeUserMenuRegion = 'assets/images/home/1.png';
   static const homeUserMenuProfile = 'assets/images/home/2.png';
@@ -260,7 +254,7 @@ abstract final class AppAssets {
   static const theoryAssignmentIcon = 'assets/images/home/the1.png';
   static const theoryAnswerIcon = 'assets/images/home/the2.png';
   static const theoryShareIcon = 'assets/images/home/the3.png';
-  static const emptyCoursePlaceholder = 'assets/images/404/kc.png';
+  static const emptyCoursePlaceholder = 'assets/images/404/sc.png';
   static const homeV2InstrumentCardBg =
       'assets/images/home/v2/instrument_card_bg.png';
   static const schoolV2QuickVideo = 'assets/images/home/schoolVideo.png';
