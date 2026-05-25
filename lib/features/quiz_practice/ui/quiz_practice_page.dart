@@ -68,7 +68,6 @@ class QuizPracticePage extends ConsumerWidget {
       summary,
       schoolId: kPublicQuizSchoolId,
     );
-    controller.prefetchSession(summary);
     final routeFuture = Navigator.pushNamed(
       context,
       RoutePaths.campAnswer,
