@@ -23,7 +23,7 @@ class CloudFolderCardArtwork extends StatelessWidget {
   final VoidCallback? onMenuTap;
 
   /// 文件夹底图设计宽高比（160 × 130）。
-  static const double artworkAspectRatio = 160 / 130;
+  static const double artworkAspectRatio = 162 / 132;
 
   /// 底图与标题之间的间距。
   static const double titleGap = 10;

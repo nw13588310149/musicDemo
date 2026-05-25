@@ -1686,6 +1686,7 @@ class _RecordingEditorView extends ConsumerWidget {
             wavePanel: _LiveDarkWavePanel(
               samples: controller.liveAmplitudes,
               elapsedMs: controller.elapsedMs,
+              sampleAnchorMs: controller.liveSampleAnchorMs,
             ),
             scrubberPanel: ValueListenableBuilder<int>(
               valueListenable: controller.elapsedMs,
@@ -2461,10 +2462,18 @@ class _DarkWaveFrame extends StatelessWidget {
 /// 由 `record` 包的 onAmplitudeChanged 灌进去），用 iPad Voice Memos 风格
 /// 的固定中线 + 左滚波形展示实时输入。
 class _LiveDarkWavePanel extends StatelessWidget {
-  const _LiveDarkWavePanel({required this.samples, required this.elapsedMs});
+  const _LiveDarkWavePanel({
+    required this.samples,
+    required this.elapsedMs,
+    required this.sampleAnchorMs,
+  });
 
   final ValueListenable<List<double>> samples;
   final ValueListenable<int> elapsedMs;
+  // 最新 sample 到达时的 elapsedMs。painter 用它作为最新柱子的出生时间，
+  // 使两次 sample 之间柱子稳定不动、cursor 平滑右移；新 sample 到达时柱子
+  // 自然衔接，避免每 80ms 整体跳一格。
+  final ValueListenable<int> sampleAnchorMs;
 
   @override
   Widget build(BuildContext context) {
@@ -2476,28 +2485,41 @@ class _LiveDarkWavePanel extends StatelessWidget {
             child: ValueListenableBuilder<int>(
               valueListenable: elapsedMs,
               builder: (context, elapsedValue, _) {
-                return ValueListenableBuilder<List<double>>(
-                  valueListenable: samples,
-                  builder: (context, snapshot, _) {
-                    return CustomPaint(
-                      size: Size(constraints.maxWidth, constraints.maxHeight),
-                      painter: _IosLiveRecordingWavePainter(
-                        samples: snapshot,
-                        elapsedMs: elapsedValue,
-                        waveSectionHeight: ui(_kRecordingWaveSectionHeight),
-                        waveTopInset: ui(_kRecordingWaveTopInset),
-                        scaleTopGap: ui(_kRecordingScaleTopGap),
-                        scaleSectionHeight: ui(_kRecordingScaleSectionHeight),
-                        bottomInset: ui(_kRecordingWaveBottomPad),
-                        barWidth: ui(2.2),
-                        spacing: ui(_kRecordingLiveWaveBarSpacing),
-                        cursorThickness: ui(2),
-                        playheadDotRadius: ui(3),
-                        labelFontSize: ui(10),
-                        majorTickHeight: ui(_kRecordingMajorTickHeight),
-                        minorTickHeight: ui(_kRecordingMinorTickHeight),
-                        scaleContentOffset: ui(_kRecordingScaleContentOffset),
-                      ),
+                return ValueListenableBuilder<int>(
+                  valueListenable: sampleAnchorMs,
+                  builder: (context, anchorValue, _) {
+                    return ValueListenableBuilder<List<double>>(
+                      valueListenable: samples,
+                      builder: (context, snapshot, _) {
+                        return CustomPaint(
+                          size: Size(
+                            constraints.maxWidth,
+                            constraints.maxHeight,
+                          ),
+                          painter: _IosLiveRecordingWavePainter(
+                            samples: snapshot,
+                            elapsedMs: elapsedValue,
+                            sampleAnchorMs: anchorValue,
+                            waveSectionHeight: ui(_kRecordingWaveSectionHeight),
+                            waveTopInset: ui(_kRecordingWaveTopInset),
+                            scaleTopGap: ui(_kRecordingScaleTopGap),
+                            scaleSectionHeight: ui(
+                              _kRecordingScaleSectionHeight,
+                            ),
+                            bottomInset: ui(_kRecordingWaveBottomPad),
+                            barWidth: ui(2.2),
+                            spacing: ui(_kRecordingLiveWaveBarSpacing),
+                            cursorThickness: ui(2),
+                            playheadDotRadius: ui(3),
+                            labelFontSize: ui(10),
+                            majorTickHeight: ui(_kRecordingMajorTickHeight),
+                            minorTickHeight: ui(_kRecordingMinorTickHeight),
+                            scaleContentOffset: ui(
+                              _kRecordingScaleContentOffset,
+                            ),
+                          ),
+                        );
+                      },
                     );
                   },
                 );
@@ -2516,6 +2538,7 @@ class _IosLiveRecordingWavePainter extends CustomPainter {
   _IosLiveRecordingWavePainter({
     required this.samples,
     required this.elapsedMs,
+    required this.sampleAnchorMs,
     required this.waveSectionHeight,
     required this.waveTopInset,
     required this.scaleTopGap,
@@ -2533,6 +2556,10 @@ class _IosLiveRecordingWavePainter extends CustomPainter {
 
   final List<double> samples;
   final int elapsedMs;
+  /// elapsedMs at the moment the newest sample arrived. Used as the birth
+  /// time of the rightmost bar so the waveform stays stable between sample
+  /// arrivals while the cursor keeps moving with elapsedMs.
+  final int sampleAnchorMs;
   final double waveSectionHeight;
   final double waveTopInset;
   final double scaleTopGap;
@@ -2623,24 +2650,17 @@ class _IosLiveRecordingWavePainter extends CustomPainter {
       return;
     }
 
-    // 稳定绘制：每个 sample 关联一个"出生时间戳"，柱子位置完全由
-    // (elapsedMs - birthMs) 决定。这样 cursor 与柱子用同一时间轴推进，
-    // 帧间匀速移动，新 sample 抵达时刚好填到当前 cursor 位置；不再出现
-    // "柱子跟 cursor 一起右滑、再每 80ms 整体左跳一格"的抖动。
+    // 稳定绘制：以最新 sample 的真实到达时间（sampleAnchorMs）作为
+    // 最新柱子的出生时间，老柱子按 80ms 一格均匀向前推断。
+    // 关键点：sampleAnchorMs 只在 sample 真的到达时才更新，两次 sample 之
+    // 间它保持不变 —— 此时 elapsedMs 持续增大，cursor 也匀速右移，但
+    // (newestBirthMs) 不变 → 柱子相对屏幕坐标稳定不动；当新 sample 到达，
+    // anchor 跳到当前 elapsedMs（≈ 上一次 + 80ms），新柱子刚好出现在
+    // cursor 处，旧柱子的 birthMs 整体平移 80ms，相对位置不变。
     final pitch = math.max(spacing, barWidth + 1);
     final pixelsPerMs = pitch / _samplePeriodMs;
     final newestIndex = samples.length - 1;
-    // 最新 sample 的标称出生时间。同时考虑录音超过 sampleCap 后 samples
-    // 被截断的情况——用 elapsedMs 反推全局采样数取较大者，保证柱子在 34s
-    // 之后仍能正确锚定。`min(elapsedMs, nominal)` 又能让 cursor 在新 sample
-    // 抵达前留住正确间距，避免提前空出位置。
-    const periodInt = 80; // _samplePeriodMs 的整数形式，避免浮点漂移。
-    final globalCountFromTime = elapsedMs ~/ periodInt;
-    final newestNominalMs =
-        math.max(samples.length, globalCountFromTime) * periodInt;
-    final newestBirthMs = math
-        .min(elapsedMs, newestNominalMs)
-        .toDouble();
+    final newestBirthMs = sampleAnchorMs.toDouble();
     for (var i = newestIndex; i >= 0; i--) {
       final birthMs = newestBirthMs - (newestIndex - i) * _samplePeriodMs;
       final x = cursorX - (elapsedMs - birthMs) * pixelsPerMs;
@@ -2793,6 +2813,7 @@ class _IosLiveRecordingWavePainter extends CustomPainter {
   bool shouldRepaint(covariant _IosLiveRecordingWavePainter oldDelegate) {
     return !identical(oldDelegate.samples, samples) ||
         oldDelegate.elapsedMs != elapsedMs ||
+        oldDelegate.sampleAnchorMs != sampleAnchorMs ||
         oldDelegate.waveSectionHeight != waveSectionHeight ||
         oldDelegate.waveTopInset != waveTopInset ||
         oldDelegate.scaleTopGap != scaleTopGap ||

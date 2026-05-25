@@ -35,12 +35,21 @@ class QuizPracticeController extends StateNotifier<QuizPracticeState> {
   final QuizPracticeRepository _repository;
   final QuizSessionLoader _loader;
   final int _schoolId;
+  Timer? _idleWarmUpTimer;
 
   int get schoolId => _schoolId;
 
+  @override
+  void dispose() {
+    _idleWarmUpTimer?.cancel();
+    super.dispose();
+  }
+
   /// 点击练习入口时立即开始加载，与路由 push 并行。
   void prefetchSession(QuizPracticeSummary summary) {
-    _loader.warmUp(QuizSessionPageArgs.fromSummary(summary, schoolId: _schoolId));
+    _loader.warmUp(
+      QuizSessionPageArgs.fromSummary(summary, schoolId: _schoolId),
+    );
   }
 
   Future<void> refresh({bool showLoading = true}) async {
@@ -60,11 +69,34 @@ class QuizPracticeController extends StateNotifier<QuizPracticeState> {
 
     final summaries = _parseSummaries(response.data);
     state = state.copyWith(loading: false, summaries: summaries);
-    _scheduleIdleWarmUp();
+    _scheduleIdleWarmUp(summaries);
   }
 
-  void _scheduleIdleWarmUp() {
+  void _scheduleIdleWarmUp(List<QuizPracticeSummary> summaries) {
     unawaited(compute(warmupQuizQuestionParser, null));
+
+    _idleWarmUpTimer?.cancel();
+    final sequence = _sequenceWarmUpCandidate(summaries);
+    if (sequence == null) return;
+
+    _idleWarmUpTimer = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      prefetchSession(sequence);
+    });
+  }
+
+  QuizPracticeSummary? _sequenceWarmUpCandidate(
+    List<QuizPracticeSummary> summaries,
+  ) {
+    for (final summary in summaries) {
+      if (summary.type != QuizPracticeType.sequence) continue;
+      if (!summary.statusInitialized) return null;
+      if (summary.allCount <= 0) return null;
+      final practiceId = summary.practiceId;
+      if (practiceId == null || practiceId <= 0) return null;
+      return summary;
+    }
+    return null;
   }
 
   List<QuizPracticeSummary> _parseSummaries(dynamic data) {

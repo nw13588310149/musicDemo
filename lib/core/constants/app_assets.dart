@@ -254,7 +254,9 @@ abstract final class AppAssets {
   static const theoryAssignmentIcon = 'assets/images/home/the1.png';
   static const theoryAnswerIcon = 'assets/images/home/the2.png';
   static const theoryShareIcon = 'assets/images/home/the3.png';
-  static const emptyCoursePlaceholder = 'assets/images/404/sc.png';
+  static const emptyCoursePlaceholder = 'assets/images/404/kc.png';
+  /// 我的收藏页空状态插图。
+  static const emptyCollectionPlaceholder = 'assets/images/404/sc.png';
   static const homeV2InstrumentCardBg =
       'assets/images/home/v2/instrument_card_bg.png';
   static const schoolV2QuickVideo = 'assets/images/home/schoolVideo.png';

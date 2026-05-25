@@ -97,6 +97,18 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
   final ValueNotifier<List<double>> liveAmplitudes =
       ValueNotifier<List<double>>(const <double>[]);
 
+  /// Wallclock timestamp (`elapsedMs`) of the most recently received amplitude
+  /// sample. The live waveform painter uses this as the "birth time" of the
+  /// newest bar so the bars stay anchored in screen space between samples
+  /// while the cursor slides smoothly with [elapsedMs].
+  ///
+  /// Without this anchor, deriving the newest sample time from either
+  /// `samples.length * 80` (breaks after the cap truncates history) or
+  /// `elapsedMs ~/ 80 * 80` (jumps a whole bar when elapsedMs crosses an
+  /// 80ms boundary slightly before the sample arrives) introduces visible
+  /// per-frame jitter.
+  final ValueNotifier<int> liveSampleAnchorMs = ValueNotifier<int>(0);
+
   /// Preview playback position. Driven by [RecordingPlayback.positionMs] and
   /// pushed only when the int value changes.
   final ValueNotifier<int> previewPositionMs = ValueNotifier<int>(0);
@@ -1123,6 +1135,11 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
         .toDouble();
     _amplitudeHistory.add(stabilized);
 
+    // Mark the moment this sample arrived. The live painter uses this as the
+    // anchor for the newest bar so it stays stable between sample arrivals.
+    // Updated *before* `liveAmplitudes` so any listener that wakes up
+    // observes the pair (newest bar, newest anchor) consistently.
+    liveSampleAnchorMs.value = elapsedMs.value;
     // Update the live notifier with the most recent N samples. We allocate
     // a fresh List so equality comparison fires the listener.
     final history = _amplitudeHistory;
@@ -1163,6 +1180,9 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     _amplitudeHistory.clear();
     if (liveAmplitudes.value.isNotEmpty) {
       liveAmplitudes.value = const <double>[];
+    }
+    if (liveSampleAnchorMs.value != 0) {
+      liveSampleAnchorMs.value = 0;
     }
   }
 
@@ -2201,6 +2221,9 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
     } catch (_) {}
     try {
       liveAmplitudes.dispose();
+    } catch (_) {}
+    try {
+      liveSampleAnchorMs.dispose();
     } catch (_) {}
     try {
       previewPositionMs.dispose();

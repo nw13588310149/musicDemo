@@ -48,7 +48,10 @@ class MyCollectionPage extends ConsumerWidget {
               // 与录音/云盘一致：空状态按整个页面容器（含顶部 Tab）居中。
               if (showPageEmpty)
                 const Positioned.fill(
-                  child: CourseEmptyPlaceholder(message: '暂无收藏'),
+                  child: CourseEmptyPlaceholder(
+                    message: '暂无收藏',
+                    imageAsset: AppAssets.emptyCollectionPlaceholder,
+                  ),
                 ),
               Positioned(
                 left: ui(20),

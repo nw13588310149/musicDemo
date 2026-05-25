@@ -23,10 +23,7 @@ class QuizPracticePage extends ConsumerWidget {
     final controller = ref.read(provider.notifier);
     final ui = DashboardScaleScope.of(context).ui;
 
-    ref.listen<QuizPracticeState>(provider, (
-      previous,
-      next,
-    ) {
+    ref.listen<QuizPracticeState>(provider, (previous, next) {
       final msg = next.errorMessage;
       if (msg.isEmpty || msg == previous?.errorMessage) return;
       AppToast.show(context, msg);
@@ -71,12 +68,12 @@ class QuizPracticePage extends ConsumerWidget {
       summary,
       schoolId: kPublicQuizSchoolId,
     );
+    controller.prefetchSession(summary);
     final routeFuture = Navigator.pushNamed(
       context,
       RoutePaths.campAnswer,
       arguments: args,
     );
-    controller.prefetchSession(summary);
     await routeFuture;
     if (!context.mounted) {
       return;

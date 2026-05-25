@@ -371,6 +371,40 @@ class _ImmersiveAuthorLine extends StatelessWidget {
   }
 }
 
+/// 沉浸左下正文：默认最多露出两行高度，超出可在该区域内纵向滚动查看。
+class _ImmersiveScrollableBodyText extends StatelessWidget {
+  const _ImmersiveScrollableBodyText({
+    required this.text,
+    required this.style,
+  });
+
+  final String text;
+  final TextStyle style;
+
+  static const _maxLines = 2;
+
+  @override
+  Widget build(BuildContext context) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return const SizedBox.shrink();
+
+    final fontSize = style.fontSize ?? 14;
+    final heightFactor = style.height ?? 1.0;
+    final maxHeight = fontSize * heightFactor * _maxLines;
+
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: maxHeight),
+      child: ScrollConfiguration(
+        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+        child: SingleChildScrollView(
+          physics: const ClampingScrollPhysics(),
+          child: Text(text, style: style),
+        ),
+      ),
+    );
+  }
+}
+
 /// 抖音风左下信息区：@昵称 + 身份 → 正文 → 时间，纵向排列。
 class _DouyinVideoTextBlock extends StatelessWidget {
   const _DouyinVideoTextBlock({required this.post});
@@ -392,10 +426,8 @@ class _DouyinVideoTextBlock extends StatelessWidget {
         ),
         if (post.text.trim().isNotEmpty) ...[
           SizedBox(height: ui(8)),
-          Text(
-            post.text,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
+          _ImmersiveScrollableBodyText(
+            text: post.text,
             style: TextStyle(
               color: Colors.white,
               fontSize: ui(14),
@@ -443,10 +475,8 @@ class _ImmersiveTextBlock extends StatelessWidget {
           CircleBadgeRow(badges: post.badges),
         ],
         SizedBox(height: ui(12)),
-        Text(
-          post.text,
-          maxLines: 3,
-          overflow: TextOverflow.ellipsis,
+        _ImmersiveScrollableBodyText(
+          text: post.text,
           style: TextStyle(
             color: Colors.white,
             fontSize: ui(14),
@@ -530,27 +560,40 @@ class _ImmersiveAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    // 与 shell 顶栏头像一致：外圈白底，内圈图片缩小 ui(4) 形成白边。
+    final innerSize = size - ui(4);
+    final fallback = Container(
+      width: innerSize,
+      height: innerSize,
+      color: const Color(0xFF252035),
+      alignment: Alignment.center,
+      child: Icon(
+        Icons.person,
+        color: Colors.white.withValues(alpha: 0.6),
+        size: innerSize * 0.55,
+      ),
+    );
+    final avatarWidget = url.isNotEmpty
+        ? Image.network(
+            url,
+            width: innerSize,
+            height: innerSize,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stack) => fallback,
+          )
+        : fallback;
+
     return Container(
       width: size,
       height: size,
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
+        color: Colors.white,
         shape: BoxShape.circle,
-        border: Border.all(color: const Color(0xFF6D6B75), width: 1),
       ),
+      alignment: Alignment.center,
       child: ClipOval(
-        child: Image.network(
-          url,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stack) => Container(
-            color: const Color(0xFF252035),
-            alignment: Alignment.center,
-            child: Icon(
-              Icons.person,
-              color: Colors.white.withValues(alpha: 0.6),
-              size: size * 0.55,
-            ),
-          ),
-        ),
+        child: SizedBox(width: innerSize, height: innerSize, child: avatarWidget),
       ),
     );
   }

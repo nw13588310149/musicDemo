@@ -95,13 +95,15 @@ class _ShellLeftNavState extends State<ShellLeftNav>
     return current.startsWith('$navRoute/');
   }
 
+  /// 当前路由对应的侧栏索引；不在侧栏内的二级页（听写、试题等）返回 -1，
+  /// 避免误把「首页」标为选中。
   int _activeNavIndex() {
     for (var i = 0; i < widget.state.navItems.length; i++) {
       if (_isActive(widget.state.navItems[i].route)) {
         return i;
       }
     }
-    return 0;
+    return -1;
   }
 
   @override
@@ -290,7 +292,7 @@ class _NavListWithSlider extends StatelessWidget {
             child: Stack(
               clipBehavior: Clip.none,
               children: [
-                if (navItems.isNotEmpty)
+                if (navItems.isNotEmpty && activeIndex >= 0)
                   Positioned(
                     left: indicatorLeft,
                     top: activeIndex * stride + indicatorTopInset,

@@ -49,6 +49,15 @@ class _BootstrapJob {
       <QuizSessionBootstrapPartialCallback>[];
 }
 
+class _CachedBootstrapResult {
+  _CachedBootstrapResult(this.result) : createdAt = DateTime.now();
+
+  final QuizSessionBootstrapResult result;
+  final DateTime createdAt;
+
+  bool isExpired(Duration ttl) => DateTime.now().difference(createdAt) > ttl;
+}
+
 /// 做题页 bootstrap 共享加载器：只拉取原始列表 + 轻量 stub，HTML 按需解析。
 class QuizSessionLoader {
   QuizSessionLoader({required QuizPracticeRepository repository})
@@ -56,6 +65,10 @@ class QuizSessionLoader {
 
   final QuizPracticeRepository _repository;
   final Map<String, _BootstrapJob> _jobs = <String, _BootstrapJob>{};
+  final Map<String, _CachedBootstrapResult> _cache =
+      <String, _CachedBootstrapResult>{};
+
+  static const Duration _cacheTtl = Duration(minutes: 2);
 
   static String cacheKey(QuizSessionPageArgs args) {
     return '${args.schoolId}:${args.practiceType.apiKey}:'
@@ -67,9 +80,30 @@ class QuizSessionLoader {
     QuizSessionBootstrapPartialCallback? onPartial,
   }) {
     final key = cacheKey(args);
+    final cached = _validCachedResult(key);
+    if (cached != null) {
+      final store = cached.store;
+      if (onPartial != null && store != null) {
+        onPartial(
+          QuizSessionBootstrapPartial(
+            store: store,
+            startIndex: cached.startIndex,
+          ),
+        );
+      }
+      return Future<QuizSessionBootstrapResult>.value(cached);
+    }
+
     final job = _jobs.putIfAbsent(
       key,
-      () => _BootstrapJob(_bootstrap(args, key)),
+      () => _BootstrapJob(
+        _bootstrap(args, key).then((result) {
+          if (result.isSuccess && result.store != null) {
+            _cache[key] = _CachedBootstrapResult(result);
+          }
+          return result;
+        }),
+      ),
     );
     if (onPartial != null) {
       _listen(job, onPartial);
@@ -81,7 +115,20 @@ class QuizSessionLoader {
     unawaited(load(args));
   }
 
-  void _listen(_BootstrapJob job, QuizSessionBootstrapPartialCallback listener) {
+  QuizSessionBootstrapResult? _validCachedResult(String key) {
+    final cached = _cache[key];
+    if (cached == null) return null;
+    if (cached.isExpired(_cacheTtl)) {
+      _cache.remove(key);
+      return null;
+    }
+    return cached.result;
+  }
+
+  void _listen(
+    _BootstrapJob job,
+    QuizSessionBootstrapPartialCallback listener,
+  ) {
     final cached = job.latestPartial;
     if (cached != null) {
       listener(cached);

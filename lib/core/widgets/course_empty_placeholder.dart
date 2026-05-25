@@ -12,6 +12,7 @@ class CourseEmptyPlaceholder extends StatelessWidget {
     super.key,
     this.message = '暂无课程',
     this.schoolMode = false,
+    this.imageAsset = AppAssets.emptyCoursePlaceholder,
   });
 
   static const double _imageSize = 200;
@@ -20,6 +21,7 @@ class CourseEmptyPlaceholder extends StatelessWidget {
 
   final String message;
   final bool schoolMode;
+  final String imageAsset;
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +36,7 @@ class CourseEmptyPlaceholder extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Image.asset(
-                AppAssets.emptyCoursePlaceholder,
+                imageAsset,
                 width: ui(imageSize),
                 height: ui(imageSize),
                 fit: BoxFit.contain,
