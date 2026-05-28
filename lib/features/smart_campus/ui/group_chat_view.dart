@@ -1,4 +1,4 @@
-﻿// =============================================================================
+// =============================================================================
 // 智慧校园「群聊」独立页面（学生 / 教师 / 班主任 共用）
 //
 // 入口：所有角色 dashboard 快捷区「群聊」按钮 → controller.openGroupChat()
@@ -367,9 +367,12 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
       _detailHeadTeacher = detail.headTeacher;
       _detailTeachers = detail.teachers;
       _detailStudents = detail.students;
-      _detailClassName =
-          detail.className.isNotEmpty ? detail.className : conv.name;
-      _detailLogo = detail.logo.isNotEmpty ? detail.logo : (conv.avatarUrl ?? '');
+      _detailClassName = detail.className.isNotEmpty
+          ? detail.className
+          : conv.name;
+      _detailLogo = detail.logo.isNotEmpty
+          ? detail.logo
+          : (conv.avatarUrl ?? '');
       _conversations = _conversations
           ?.map(
             (c) => c.id == conv.id
@@ -500,10 +503,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
     if (_syncing) return;
     _syncing = true;
     try {
-      final res = await _repo.syncMsg(
-        offsetMsgId: _syncOffsetMsgId,
-        size: 100,
-      );
+      final res = await _repo.syncMsg(offsetMsgId: _syncOffsetMsgId, size: 100);
       if (!mounted || res.code != 0) return;
       final raw = res.data;
       final list = raw is List
@@ -611,8 +611,8 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
     final l = raw is List
         ? raw
         : (raw is Map
-            ? _asList(raw['msgList'] ?? raw['records'] ?? raw['list'])
-            : const []);
+              ? _asList(raw['msgList'] ?? raw['records'] ?? raw['list'])
+              : const []);
     return l.length;
   }
 
@@ -660,7 +660,9 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
     // 找到对应气泡
     _VoiceBubble? bubble;
     for (final m in _messages) {
-      if (m.id == voiceMsgId && m is _UserChatMessage && m.bubble is _VoiceBubble) {
+      if (m.id == voiceMsgId &&
+          m is _UserChatMessage &&
+          m.bubble is _VoiceBubble) {
         bubble = m.bubble as _VoiceBubble;
         break;
       }
@@ -695,7 +697,11 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
     unawaited(_startVoicePlayback(voiceMsgId, url, bubble?.durationSec ?? 0));
   }
 
-  Future<void> _startVoicePlayback(String msgId, String url, int totalSec) async {
+  Future<void> _startVoicePlayback(
+    String msgId,
+    String url,
+    int totalSec,
+  ) async {
     try {
       final player = _audioPlayer ?? (_audioPlayer = createRecordingPlayback());
       final isUrl = url.startsWith('http') || url.startsWith('blob:');
@@ -755,11 +761,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
       _inputController.clear();
     });
     _scheduleScrollToBottom(animated: true);
-    final res = await _repo.sendMsg(
-      classId: classId,
-      type: 1,
-      content: text,
-    );
+    final res = await _repo.sendMsg(classId: classId, type: 1, content: text);
     if (!mounted) return;
     if (res.code == 0) {
       final newId = _extractMsgId(res.data);
@@ -861,9 +863,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
         _pinSaving = false;
         _conversations = _sortConversations(
           _conversations
-                  ?.map(
-                    (c) => c.id == classId ? c.copyWith(pinned: next) : c,
-                  )
+                  ?.map((c) => c.id == classId ? c.copyWith(pinned: next) : c)
                   .toList() ??
               const [],
         );
@@ -912,11 +912,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
       avatarUrl: widget.currentUserAvatarUrl,
       avatarColor: const Color(0xFF8741FF),
       sentAt: DateTime.now(),
-      bubble: _ImageBubble(
-        url: '',
-        localBytes: bytes,
-        uploading: true,
-      ),
+      bubble: _ImageBubble(url: '', localBytes: bytes, uploading: true),
     );
     setState(() {
       _sending = true;
@@ -934,10 +930,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
       );
       if (!mounted) return;
       if (!uploadRes.isSuccess) {
-        _removeAndWarn(
-          tempId,
-          uploadRes.displayMsg,
-        );
+        _removeAndWarn(tempId, uploadRes.displayMsg);
         setState(() => _sending = false);
         return;
       }
@@ -999,8 +992,8 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
     if (res.code == 0) {
       setState(() {
         _announcement = draft;
-        _announcementUpdatedAt = '更新于 ${_formatLastTime(DateTime.now(),
-            withDateForOldDays: false)}';
+        _announcementUpdatedAt =
+            '更新于 ${_formatLastTime(DateTime.now(), withDateForOldDays: false)}';
       });
       AppToast.show(context, '群公告已更新');
     } else {
@@ -1021,8 +1014,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
             cancelLabel: '取消',
             confirmLabel: '保存',
             onCancel: () => Navigator.of(dialogContext).pop(),
-            onConfirm: () =>
-                Navigator.of(dialogContext).pop(ctrl.text),
+            onConfirm: () => Navigator.of(dialogContext).pop(ctrl.text),
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 4),
@@ -1071,8 +1063,12 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
 
   Future<void> _editGroupProfile(_Conversation conv) async {
     if (!_canEditAnnouncement || _groupProfileSaving) return;
-    final initialName = _detailClassName.isNotEmpty ? _detailClassName : conv.name;
-    final initialLogo = _detailLogo.isNotEmpty ? _detailLogo : (conv.avatarUrl ?? '');
+    final initialName = _detailClassName.isNotEmpty
+        ? _detailClassName
+        : conv.name;
+    final initialLogo = _detailLogo.isNotEmpty
+        ? _detailLogo
+        : (conv.avatarUrl ?? '');
     final result = await _showGroupProfileEditor(
       initialName: initialName,
       initialLogo: initialLogo,
@@ -1155,10 +1151,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
               if (!context.mounted) return;
               setDialogState(() => uploading = false);
               if (!uploadRes.isSuccess) {
-                AppToast.show(
-                  context,
-                  uploadRes.displayMsg,
-                );
+                AppToast.show(context, uploadRes.displayMsg);
                 return;
               }
               final uploaded = _extractUploadUrl(uploadRes.data);
@@ -1178,10 +1171,9 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
                 confirmEnabled: !uploading && !_groupProfileSaving,
                 onCancel: () => Navigator.of(dialogContext).pop(),
                 onConfirm: () {
-                  Navigator.of(dialogContext).pop((
-                    groupName: nameCtrl.text,
-                    logo: logo,
-                  ));
+                  Navigator.of(
+                    dialogContext,
+                  ).pop((groupName: nameCtrl.text, logo: logo));
                 },
               ),
               child: Padding(
@@ -1219,22 +1211,27 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
                                   right: -4,
                                   bottom: -4,
                                   child: Container(
-                                  width: 24,
-                                  height: 24,
-                                  alignment: Alignment.center,
-                                  decoration: BoxDecoration(
-                                    color: _kPurple,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border:
-                                        Border.all(color: Colors.white, width: 2),
-                                  ),
-                                  child: uploading
-                                      ? const AppLoadingIndicator(size: 16, color: Colors.white)
-                                      : const Icon(
-                                          Icons.camera_alt_rounded,
-                                          size: 13,
-                                          color: Colors.white,
-                                        ),
+                                    width: 24,
+                                    height: 24,
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      color: _kPurple,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: Colors.white,
+                                        width: 2,
+                                      ),
+                                    ),
+                                    child: uploading
+                                        ? const AppLoadingIndicator(
+                                            size: 16,
+                                            color: Colors.white,
+                                          )
+                                        : const Icon(
+                                            Icons.camera_alt_rounded,
+                                            size: 13,
+                                            color: Colors.white,
+                                          ),
                                   ),
                                 ),
                               ],
@@ -1272,7 +1269,10 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: _kPurple, width: 1),
+                          borderSide: const BorderSide(
+                            color: _kPurple,
+                            width: 1,
+                          ),
                         ),
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 12,
@@ -1311,15 +1311,14 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
       transitionDuration: const Duration(milliseconds: 280),
       pageBuilder: (ctx, anim, secAnim) {
         Widget drawer = _GroupDetailDrawer(
-          className: _detailClassName.isNotEmpty
-              ? _detailClassName
-              : conv.name,
+          className: _detailClassName.isNotEmpty ? _detailClassName : conv.name,
           logoUrl: _detailLogo.isNotEmpty ? _detailLogo : conv.avatarUrl,
           announcement: _announcement,
           headTeacher: _detailHeadTeacher,
           teachers: _detailTeachers,
           students: _detailStudents,
-          memberCount: _detailMemberCount ??
+          memberCount:
+              _detailMemberCount ??
               (_detailTeachers.length + _detailStudents.length),
           muted: _muted,
           onToggleMute: () {
@@ -1353,10 +1352,10 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
         return Align(
           alignment: Alignment.centerRight,
           child: SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(1, 0),
-              end: Offset.zero,
-            ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
+            position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
+                .animate(
+                  CurvedAnimation(parent: anim, curve: Curves.easeOutCubic),
+                ),
             child: drawer,
           ),
         );
@@ -1540,9 +1539,13 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
 
       final isWebm = path.contains('.webm') || path.startsWith('blob:');
       final ext = isWebm ? 'webm' : 'm4a';
-      final filename = 'voice_chat_${DateTime.now().millisecondsSinceEpoch}.$ext';
+      final filename =
+          'voice_chat_${DateTime.now().millisecondsSinceEpoch}.$ext';
 
-      final uploadRes = await _repo.uploadVoice(bytes: bytes, filename: filename);
+      final uploadRes = await _repo.uploadVoice(
+        bytes: bytes,
+        filename: filename,
+      );
       if (!mounted) return;
       if (!uploadRes.isSuccess) {
         _removeAndWarn(tempId, uploadRes.displayMsg);
@@ -1647,8 +1650,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
     // 空列表时不再「整页占位」，仍按双栏布局渲染：左栏给 _ConversationListPane
     // 内置的「暂无群聊」占位，右栏给一个无群可聊的友好状态（无 header /
     // 输入栏禁用），方便用户看清楚整体页面结构。
-    final selectedId =
-        convs.isEmpty ? '' : (_selectedConvId ?? convs.first.id);
+    final selectedId = convs.isEmpty ? '' : (_selectedConvId ?? convs.first.id);
     final currentConv = convs.isEmpty
         ? const _Conversation(
             id: '',
@@ -1725,11 +1727,7 @@ class _NoSelectionHint extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            Icons.forum_outlined,
-            size: ui(40),
-            color: _kTextHint,
-          ),
+          Icon(Icons.forum_outlined, size: ui(40), color: _kTextHint),
           SizedBox(height: ui(10)),
           Text(
             '暂无可聊的群聊',
@@ -2089,10 +2087,7 @@ class _GroupDetailDrawer extends StatelessWidget {
                         _DetailSectionCard(
                           title: '班主任',
                           children: [
-                            _MemberTile(
-                              member: headTeacher!,
-                              badge: '班主任',
-                            ),
+                            _MemberTile(member: headTeacher!, badge: '班主任'),
                           ],
                         ),
                       ],
@@ -2102,9 +2097,7 @@ class _GroupDetailDrawer extends StatelessWidget {
                         _DetailSectionCard(
                           title: '任课老师',
                           count: teacherListExHead.length,
-                          children: [
-                            _MemberGrid(members: teacherListExHead),
-                          ],
+                          children: [_MemberGrid(members: teacherListExHead)],
                         ),
                       ],
 
@@ -2113,9 +2106,7 @@ class _GroupDetailDrawer extends StatelessWidget {
                         _DetailSectionCard(
                           title: '学生',
                           count: students.length,
-                          children: [
-                            _MemberGrid(members: students),
-                          ],
+                          children: [_MemberGrid(members: students)],
                         ),
                       ],
                     ],
@@ -2133,10 +2124,7 @@ class _GroupDetailDrawer extends StatelessWidget {
 /// 抽屉顶栏：左侧紫色窄竖条 + 标题 + 成员数小徽章 + 右侧关闭，与
 /// `_CheckInHistoryDrawer` / `_MakeupAuditDrawer` 一致。
 class _DetailDrawerHeader extends StatelessWidget {
-  const _DetailDrawerHeader({
-    required this.memberCount,
-    required this.onClose,
-  });
+  const _DetailDrawerHeader({required this.memberCount, required this.onClose});
 
   final int memberCount;
   final VoidCallback onClose;
@@ -2175,10 +2163,7 @@ class _DetailDrawerHeader extends StatelessWidget {
           if (memberCount > 0) ...[
             SizedBox(width: ui(8)),
             Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: ui(6),
-                vertical: ui(2),
-              ),
+              padding: EdgeInsets.symmetric(horizontal: ui(6), vertical: ui(2)),
               decoration: BoxDecoration(
                 color: _kPurple.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(ui(8)),
@@ -2521,11 +2506,7 @@ class _DetailAnnouncementCard extends StatelessWidget {
               color: Colors.white.withValues(alpha: 0.6),
               borderRadius: BorderRadius.circular(ui(8)),
             ),
-            child: Icon(
-              Icons.campaign_outlined,
-              size: ui(16),
-              color: _kPurple,
-            ),
+            child: Icon(Icons.campaign_outlined, size: ui(16), color: _kPurple),
           ),
           SizedBox(width: ui(10)),
           // 标题 + 正文（或空状态提示）
@@ -2583,11 +2564,7 @@ class _DetailAnnouncementCard extends StatelessWidget {
                   color: _kPurple.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(ui(8)),
                 ),
-                child: Icon(
-                  Icons.edit_outlined,
-                  size: ui(15),
-                  color: _kPurple,
-                ),
+                child: Icon(Icons.edit_outlined, size: ui(15), color: _kPurple),
               ),
             ),
           ],
@@ -2720,8 +2697,8 @@ class _MemberGrid extends StatelessWidget {
                     final label = m.displayName.length > 4
                         ? '${m.displayName.substring(0, 4)}…'
                         : m.displayName.isNotEmpty
-                            ? m.displayName
-                            : '未命名';
+                        ? m.displayName
+                        : '未命名';
                     return Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -2790,7 +2767,8 @@ class _MemberTile extends StatelessWidget {
     final fullUrl = headUrl.startsWith('http')
         ? headUrl
         : 'https://img.yyzl0931.com/$headUrl';
-    final hasNick = member.nickname.trim().isNotEmpty &&
+    final hasNick =
+        member.nickname.trim().isNotEmpty &&
         member.nickname.trim() != member.displayName;
     return Row(
       children: [
@@ -2988,9 +2966,7 @@ class _ConversationListPaneState extends State<_ConversationListPane> {
   List<_Conversation> get _filteredConversations {
     final keyword = _searchCtrl.text.trim();
     if (keyword.isEmpty) return widget.conversations;
-    return widget.conversations
-        .where((c) => c.name.contains(keyword))
-        .toList();
+    return widget.conversations.where((c) => c.name.contains(keyword)).toList();
   }
 
   @override
@@ -3029,34 +3005,33 @@ class _ConversationListPaneState extends State<_ConversationListPane> {
             child: widget.conversations.isEmpty
                 ? const _EmptyConversationsHint()
                 : filtered.isEmpty
-                    ? const _ConversationSearchEmptyHint()
-                    : ListView.separated(
-                        padding: EdgeInsets.zero,
-                        itemCount: filtered.length,
-                        separatorBuilder: (context, index) {
-                          final selectedIndex = filtered.indexWhere(
-                            (c) => c.id == widget.selectedConvId,
-                          );
-                          final hideDivider = selectedIndex != -1 &&
-                              (index == selectedIndex - 1 ||
-                                  index == selectedIndex);
-                          return Divider(
-                            height: 1,
-                            thickness: 0.5,
-                            color: hideDivider
-                                ? Colors.transparent
-                                : _kBorderSoft,
-                          );
-                        },
-                        itemBuilder: (context, i) {
-                          final c = filtered[i];
-                          return _ConversationCell(
-                            conv: c,
-                            active: c.id == widget.selectedConvId,
-                            onTap: () => widget.onSelect(c.id),
-                          );
-                        },
-                      ),
+                ? const _ConversationSearchEmptyHint()
+                : ListView.separated(
+                    padding: EdgeInsets.zero,
+                    itemCount: filtered.length,
+                    separatorBuilder: (context, index) {
+                      final selectedIndex = filtered.indexWhere(
+                        (c) => c.id == widget.selectedConvId,
+                      );
+                      final hideDivider =
+                          selectedIndex != -1 &&
+                          (index == selectedIndex - 1 ||
+                              index == selectedIndex);
+                      return Divider(
+                        height: 1,
+                        thickness: 0.5,
+                        color: hideDivider ? Colors.transparent : _kBorderSoft,
+                      );
+                    },
+                    itemBuilder: (context, i) {
+                      final c = filtered[i];
+                      return _ConversationCell(
+                        conv: c,
+                        active: c.id == widget.selectedConvId,
+                        onTap: () => widget.onSelect(c.id),
+                      );
+                    },
+                  ),
           ),
         ],
       ),
@@ -3065,10 +3040,7 @@ class _ConversationListPaneState extends State<_ConversationListPane> {
 }
 
 class _ConvSearchField extends StatelessWidget {
-  const _ConvSearchField({
-    required this.controller,
-    required this.onChanged,
-  });
+  const _ConvSearchField({required this.controller, required this.onChanged});
 
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
@@ -3684,10 +3656,7 @@ class _ChatHeaderBar extends StatelessWidget {
                 topLeft: Radius.circular(ui(16)),
                 topRight: Radius.circular(ui(16)),
               ),
-              child: Image.asset(
-                AppAssets.groupChatBg,
-                fit: BoxFit.cover,
-              ),
+              child: Image.asset(AppAssets.groupChatBg, fit: BoxFit.cover),
             ),
           ),
           Positioned(
@@ -3929,9 +3898,7 @@ class _ChatBodyBoard extends StatelessWidget {
               child: !hasSelection
                   ? const _NoSelectionHint()
                   : loading
-                  ? const Center(
-                      child: AppLoadingIndicator(),
-                    )
+                  ? const Center(child: AppLoadingIndicator())
                   : messages.isEmpty
                   ? Center(
                       child: Text(
@@ -3981,9 +3948,7 @@ class _ChatBodyBoard extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             if (showDate)
-                              _DateDivider(
-                                label: _formatDateDivider(m.sentAt),
-                              ),
+                              _DateDivider(label: _formatDateDivider(m.sentAt)),
                             _MessageRowDispatcher(
                               message: m,
                               isMine:
@@ -4383,10 +4348,7 @@ class _UserMessageRow extends StatelessWidget {
       crossAxisAlignment: isMine
           ? CrossAxisAlignment.end
           : CrossAxisAlignment.start,
-      children: [
-        nameMeta,
-        bubbleWithTime,
-      ],
+      children: [nameMeta, bubbleWithTime],
     );
 
     return Row(
@@ -4691,11 +4653,11 @@ class _VoiceBubbleView extends StatelessWidget {
             SizedBox(width: ui(8)),
             // 语音播放进度条的容器
             Container(
-              constraints: BoxConstraints(
-                minWidth: ui(44),
-                maxWidth: ui(192),
+              constraints: BoxConstraints(minWidth: ui(44), maxWidth: ui(192)),
+              padding: EdgeInsets.symmetric(
+                horizontal: ui(12),
+                vertical: ui(8),
               ),
-              padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(8)),
               decoration: BoxDecoration(
                 color: _kBoardBg,
                 borderRadius: BorderRadius.circular(ui(12)),
@@ -4800,21 +4762,16 @@ class _ImageBubbleView extends StatelessWidget {
       return Container(
         width: size,
         height: size,
-        decoration: BoxDecoration(
-          color: _kBoardBg,
-          borderRadius: radius,
-        ),
+        decoration: BoxDecoration(color: _kBoardBg, borderRadius: radius),
         clipBehavior: Clip.antiAlias,
         child: Stack(
           fit: StackFit.expand,
           children: [
-            if (child != null) child,
+            ?child,
             ColoredBox(
               color: Colors.black.withValues(alpha: child == null ? 0 : 0.18),
             ),
-            Center(
-              child: AppLoadingIndicator(value: progress),
-            ),
+            Center(child: AppLoadingIndicator(value: progress)),
           ],
         ),
       );
@@ -4837,7 +4794,8 @@ class _ImageBubbleView extends StatelessWidget {
     const prefix = 'chat_img';
     final heroTag = '${prefix}_${url}_0';
     return GestureDetector(
-      onTap: () => showImageGallery(context, images: [url], heroTagPrefix: prefix),
+      onTap: () =>
+          showImageGallery(context, images: [url], heroTagPrefix: prefix),
       child: Hero(
         tag: heroTag,
         child: ClipRRect(
@@ -4850,10 +4808,7 @@ class _ImageBubbleView extends StatelessWidget {
             errorBuilder: (ctx, err, st) => Container(
               width: size,
               height: size,
-              decoration: BoxDecoration(
-                color: _kBoardBg,
-                borderRadius: radius,
-              ),
+              decoration: BoxDecoration(color: _kBoardBg, borderRadius: radius),
               child: Icon(
                 Icons.broken_image_outlined,
                 color: _kTextSecondary,
@@ -4865,7 +4820,7 @@ class _ImageBubbleView extends StatelessWidget {
               return loadingBox(
                 progress: progress.expectedTotalBytes != null
                     ? progress.cumulativeBytesLoaded /
-                        progress.expectedTotalBytes!
+                          progress.expectedTotalBytes!
                     : null,
               );
             },
@@ -5212,20 +5167,14 @@ class _ChatInputBarState extends State<_ChatInputBar> {
 }
 
 class _GroupChatBarIconButton extends StatelessWidget {
-  const _GroupChatBarIconButton({
-    required this.asset,
-    required this.onTap,
-  });
+  const _GroupChatBarIconButton({required this.asset, required this.onTap});
 
   final String asset;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return _GroupChatFullAssetButton(
-      asset: asset,
-      onTap: onTap,
-    );
+    return _GroupChatFullAssetButton(asset: asset, onTap: onTap);
   }
 }
 
@@ -5302,10 +5251,7 @@ class _SendButton extends StatelessWidget {
 // Android / iOS 上都用系统默认 emoji 字体渲染，呈现效果与系统输入法一致。
 
 class _EmojiPanel extends StatefulWidget {
-  const _EmojiPanel({
-    required this.onPick,
-    required this.onBackspace,
-  });
+  const _EmojiPanel({required this.onPick, required this.onBackspace});
 
   final ValueChanged<String> onPick;
   final VoidCallback onBackspace;
@@ -5355,10 +5301,7 @@ class _EmojiPanelState extends State<_EmojiPanel> {
             child: GridView.builder(
               key: ValueKey<int>(_categoryIndex),
               controller: _scrollControllers[_categoryIndex],
-              padding: EdgeInsets.symmetric(
-                horizontal: ui(8),
-                vertical: ui(8),
-              ),
+              padding: EdgeInsets.symmetric(horizontal: ui(8), vertical: ui(8)),
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 9,
                 mainAxisSpacing: ui(2),
@@ -5476,95 +5419,600 @@ const List<_EmojiCategory> _kEmojiCategories = [
     label: '表情',
     icon: Icons.emoji_emotions_outlined,
     emojis: [
-      '😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '🥲', '🥹',
-      '😊', '😇', '🙂', '🙃', '😉', '😌', '😍', '🥰', '😘', '😗',
-      '😙', '😚', '😋', '😛', '😝', '😜', '🤪', '🤨', '🧐', '🤓',
-      '😎', '🥸', '🤩', '🥳', '😏', '😒', '😞', '😔', '😟', '😕',
-      '🙁', '☹️', '😣', '😖', '😫', '😩', '🥺', '😢', '😭', '😤',
-      '😠', '😡', '🤬', '🤯', '😳', '🥵', '🥶', '😱', '😨', '😰',
-      '😥', '😓', '🤗', '🤔', '🤭', '🤫', '🤥', '😶', '😐', '😑',
-      '😬', '🙄', '😯', '😦', '😧', '😮', '😲', '🥱', '😴', '🤤',
-      '😪', '😵', '🤐', '🥴', '🤢', '🤮', '🤧', '😷', '🤒', '🤕',
-      '🤑', '🤠', '😈', '👿', '👹', '👺', '🤡', '💩', '👻', '💀',
-      '☠️', '👽', '👾', '🤖', '🎃', '😺', '😸', '😹', '😻', '😼',
-      '😽', '🙀', '😿', '😾',
+      '😀',
+      '😃',
+      '😄',
+      '😁',
+      '😆',
+      '😅',
+      '😂',
+      '🤣',
+      '🥲',
+      '🥹',
+      '😊',
+      '😇',
+      '🙂',
+      '🙃',
+      '😉',
+      '😌',
+      '😍',
+      '🥰',
+      '😘',
+      '😗',
+      '😙',
+      '😚',
+      '😋',
+      '😛',
+      '😝',
+      '😜',
+      '🤪',
+      '🤨',
+      '🧐',
+      '🤓',
+      '😎',
+      '🥸',
+      '🤩',
+      '🥳',
+      '😏',
+      '😒',
+      '😞',
+      '😔',
+      '😟',
+      '😕',
+      '🙁',
+      '☹️',
+      '😣',
+      '😖',
+      '😫',
+      '😩',
+      '🥺',
+      '😢',
+      '😭',
+      '😤',
+      '😠',
+      '😡',
+      '🤬',
+      '🤯',
+      '😳',
+      '🥵',
+      '🥶',
+      '😱',
+      '😨',
+      '😰',
+      '😥',
+      '😓',
+      '🤗',
+      '🤔',
+      '🤭',
+      '🤫',
+      '🤥',
+      '😶',
+      '😐',
+      '😑',
+      '😬',
+      '🙄',
+      '😯',
+      '😦',
+      '😧',
+      '😮',
+      '😲',
+      '🥱',
+      '😴',
+      '🤤',
+      '😪',
+      '😵',
+      '🤐',
+      '🥴',
+      '🤢',
+      '🤮',
+      '🤧',
+      '😷',
+      '🤒',
+      '🤕',
+      '🤑',
+      '🤠',
+      '😈',
+      '👿',
+      '👹',
+      '👺',
+      '🤡',
+      '💩',
+      '👻',
+      '💀',
+      '☠️',
+      '👽',
+      '👾',
+      '🤖',
+      '🎃',
+      '😺',
+      '😸',
+      '😹',
+      '😻',
+      '😼',
+      '😽',
+      '🙀',
+      '😿',
+      '😾',
     ],
   ),
   _EmojiCategory(
     label: '手势',
     icon: Icons.thumb_up_alt_outlined,
     emojis: [
-      '👋', '🤚', '🖐', '✋', '🖖', '👌', '🤌', '🤏', '✌️', '🤞',
-      '🤟', '🤘', '🤙', '👈', '👉', '👆', '🖕', '👇', '☝️', '👍',
-      '👎', '✊', '👊', '🤛', '🤜', '👏', '🙌', '👐', '🤲', '🤝',
-      '🙏', '✍️', '💅', '🤳', '💪', '🦾', '🦿', '🦵', '🦶', '👂',
-      '🦻', '👃', '🧠', '🫀', '🫁', '🦷', '🦴', '👀', '👁', '👅',
-      '👄', '💋',
+      '👋',
+      '🤚',
+      '🖐',
+      '✋',
+      '🖖',
+      '👌',
+      '🤌',
+      '🤏',
+      '✌️',
+      '🤞',
+      '🤟',
+      '🤘',
+      '🤙',
+      '👈',
+      '👉',
+      '👆',
+      '🖕',
+      '👇',
+      '☝️',
+      '👍',
+      '👎',
+      '✊',
+      '👊',
+      '🤛',
+      '🤜',
+      '👏',
+      '🙌',
+      '👐',
+      '🤲',
+      '🤝',
+      '🙏',
+      '✍️',
+      '💅',
+      '🤳',
+      '💪',
+      '🦾',
+      '🦿',
+      '🦵',
+      '🦶',
+      '👂',
+      '🦻',
+      '👃',
+      '🧠',
+      '🫀',
+      '🫁',
+      '🦷',
+      '🦴',
+      '👀',
+      '👁',
+      '👅',
+      '👄',
+      '💋',
     ],
   ),
   _EmojiCategory(
     label: '心心',
     icon: Icons.favorite_border_rounded,
     emojis: [
-      '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔',
-      '❣️', '💕', '💞', '💓', '💗', '💖', '💘', '💝', '💟', '♥️',
-      '💌', '💯', '🔥', '⭐', '🌟', '✨', '💫', '🎉', '🎊', '🎁',
-      '🎂', '💐', '🌹', '🌷', '🌸', '🌺', '🌻', '🌼', '🌈', '☀️',
-      '🌙', '⛅', '☁️', '⚡', '❄️', '☔', '💧', '🌊',
+      '❤️',
+      '🧡',
+      '💛',
+      '💚',
+      '💙',
+      '💜',
+      '🖤',
+      '🤍',
+      '🤎',
+      '💔',
+      '❣️',
+      '💕',
+      '💞',
+      '💓',
+      '💗',
+      '💖',
+      '💘',
+      '💝',
+      '💟',
+      '♥️',
+      '💌',
+      '💯',
+      '🔥',
+      '⭐',
+      '🌟',
+      '✨',
+      '💫',
+      '🎉',
+      '🎊',
+      '🎁',
+      '🎂',
+      '💐',
+      '🌹',
+      '🌷',
+      '🌸',
+      '🌺',
+      '🌻',
+      '🌼',
+      '🌈',
+      '☀️',
+      '🌙',
+      '⛅',
+      '☁️',
+      '⚡',
+      '❄️',
+      '☔',
+      '💧',
+      '🌊',
     ],
   ),
   _EmojiCategory(
     label: '动物',
     icon: Icons.pets_outlined,
     emojis: [
-      '🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯',
-      '🦁', '🐮', '🐷', '🐽', '🐸', '🐵', '🙈', '🙉', '🙊', '🐒',
-      '🐔', '🐧', '🐦', '🐤', '🐣', '🐥', '🦆', '🦅', '🦉', '🦇',
-      '🐺', '🐗', '🐴', '🦄', '🐝', '🐛', '🦋', '🐌', '🐞', '🐜',
-      '🦟', '🦗', '🕷', '🕸', '🦂', '🐢', '🐍', '🦎', '🐙', '🦑',
-      '🦐', '🦀', '🐡', '🐠', '🐟', '🐬', '🐳', '🐋', '🦈', '🐊',
-      '🐅', '🐆', '🦓', '🦍', '🐘', '🦏', '🐪', '🐫', '🦒', '🐃',
-      '🐂', '🐄', '🐎', '🐖', '🐏', '🐑', '🐐', '🦌', '🐕', '🐩',
-      '🐈', '🐓', '🦃', '🦚', '🦜', '🦢', '🐇', '🐿', '🦔',
+      '🐶',
+      '🐱',
+      '🐭',
+      '🐹',
+      '🐰',
+      '🦊',
+      '🐻',
+      '🐼',
+      '🐨',
+      '🐯',
+      '🦁',
+      '🐮',
+      '🐷',
+      '🐽',
+      '🐸',
+      '🐵',
+      '🙈',
+      '🙉',
+      '🙊',
+      '🐒',
+      '🐔',
+      '🐧',
+      '🐦',
+      '🐤',
+      '🐣',
+      '🐥',
+      '🦆',
+      '🦅',
+      '🦉',
+      '🦇',
+      '🐺',
+      '🐗',
+      '🐴',
+      '🦄',
+      '🐝',
+      '🐛',
+      '🦋',
+      '🐌',
+      '🐞',
+      '🐜',
+      '🦟',
+      '🦗',
+      '🕷',
+      '🕸',
+      '🦂',
+      '🐢',
+      '🐍',
+      '🦎',
+      '🐙',
+      '🦑',
+      '🦐',
+      '🦀',
+      '🐡',
+      '🐠',
+      '🐟',
+      '🐬',
+      '🐳',
+      '🐋',
+      '🦈',
+      '🐊',
+      '🐅',
+      '🐆',
+      '🦓',
+      '🦍',
+      '🐘',
+      '🦏',
+      '🐪',
+      '🐫',
+      '🦒',
+      '🐃',
+      '🐂',
+      '🐄',
+      '🐎',
+      '🐖',
+      '🐏',
+      '🐑',
+      '🐐',
+      '🦌',
+      '🐕',
+      '🐩',
+      '🐈',
+      '🐓',
+      '🦃',
+      '🦚',
+      '🦜',
+      '🦢',
+      '🐇',
+      '🐿',
+      '🦔',
     ],
   ),
   _EmojiCategory(
     label: '食物',
     icon: Icons.fastfood_outlined,
     emojis: [
-      '🍎', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🍈', '🍒',
-      '🍑', '🥭', '🍍', '🥥', '🥝', '🍅', '🍆', '🥑', '🥦', '🥬',
-      '🥒', '🌶', '🌽', '🥕', '🧄', '🧅', '🥔', '🍠', '🥐', '🥯',
-      '🍞', '🥖', '🥨', '🧀', '🥚', '🍳', '🧈', '🥞', '🧇', '🥓',
-      '🥩', '🍗', '🍖', '🌭', '🍔', '🍟', '🍕', '🥪', '🥙', '🌮',
-      '🌯', '🥗', '🥘', '🥫', '🍝', '🍜', '🍲', '🍛', '🍣', '🍱',
-      '🥟', '🦪', '🍤', '🍙', '🍚', '🍘', '🍥', '🥠', '🥮', '🍢',
-      '🍡', '🍧', '🍨', '🍦', '🥧', '🧁', '🍰', '🎂', '🍮', '🍭',
-      '🍬', '🍫', '🍿', '🍩', '🍪', '🌰', '🥜', '🍯', '☕', '🍵',
-      '🍶', '🍺', '🍻', '🥂', '🍷', '🥃', '🍸', '🍹', '🍾', '🥤',
-      '🧃', '🧉', '🧊',
+      '🍎',
+      '🍐',
+      '🍊',
+      '🍋',
+      '🍌',
+      '🍉',
+      '🍇',
+      '🍓',
+      '🍈',
+      '🍒',
+      '🍑',
+      '🥭',
+      '🍍',
+      '🥥',
+      '🥝',
+      '🍅',
+      '🍆',
+      '🥑',
+      '🥦',
+      '🥬',
+      '🥒',
+      '🌶',
+      '🌽',
+      '🥕',
+      '🧄',
+      '🧅',
+      '🥔',
+      '🍠',
+      '🥐',
+      '🥯',
+      '🍞',
+      '🥖',
+      '🥨',
+      '🧀',
+      '🥚',
+      '🍳',
+      '🧈',
+      '🥞',
+      '🧇',
+      '🥓',
+      '🥩',
+      '🍗',
+      '🍖',
+      '🌭',
+      '🍔',
+      '🍟',
+      '🍕',
+      '🥪',
+      '🥙',
+      '🌮',
+      '🌯',
+      '🥗',
+      '🥘',
+      '🥫',
+      '🍝',
+      '🍜',
+      '🍲',
+      '🍛',
+      '🍣',
+      '🍱',
+      '🥟',
+      '🦪',
+      '🍤',
+      '🍙',
+      '🍚',
+      '🍘',
+      '🍥',
+      '🥠',
+      '🥮',
+      '🍢',
+      '🍡',
+      '🍧',
+      '🍨',
+      '🍦',
+      '🥧',
+      '🧁',
+      '🍰',
+      '🎂',
+      '🍮',
+      '🍭',
+      '🍬',
+      '🍫',
+      '🍿',
+      '🍩',
+      '🍪',
+      '🌰',
+      '🥜',
+      '🍯',
+      '☕',
+      '🍵',
+      '🍶',
+      '🍺',
+      '🍻',
+      '🥂',
+      '🍷',
+      '🥃',
+      '🍸',
+      '🍹',
+      '🍾',
+      '🥤',
+      '🧃',
+      '🧉',
+      '🧊',
     ],
   ),
   _EmojiCategory(
     label: '物品',
     icon: Icons.lightbulb_outline,
     emojis: [
-      '⚽', '🏀', '🏈', '⚾', '🎾', '🏐', '🏉', '🎱', '🏓', '🏸',
-      '🥅', '🥊', '🥋', '⛳', '🎯', '🎮', '🎲', '🎵', '🎶', '🎤',
-      '🎧', '🎷', '🎸', '🎹', '🎺', '🎻', '🥁', '📱', '💻', '⌨️',
-      '🖥', '🖨', '💽', '💾', '💿', '📀', '📷', '📹', '🎥', '📞',
-      '☎️', '📟', '📠', '📺', '📻', '⏰', '⌛', '⏳', '🔋', '🔌',
-      '💡', '🔦', '🕯', '🛢', '💸', '💵', '💴', '💶', '💷', '💰',
-      '💳', '💎', '⚖️', '🔧', '🔨', '⚒', '🛠', '⛏', '🔩', '⚙️',
-      '🧱', '⛓', '🧲', '🔫', '💣', '🏹', '🛡', '💉', '💊', '🩹',
-      '🚪', '🛏', '🛋', '🚽', '🚿', '🛁', '🧼', '🧴', '🛎', '🔑',
-      '🗝', '📦', '✉️', '📩', '📨', '📧', '📥', '📤', '📜', '📄',
-      '📃', '📑', '📊', '📈', '📉', '📅', '📆', '📇', '📋', '📁',
-      '📂', '📰', '📓', '📔', '📒', '📕', '📗', '📘', '📙', '📚',
-      '🔖', '📎', '📐', '📏', '📌', '📍', '✂️', '🖊', '🖋', '✒️',
-      '📝', '✏️', '🔍', '🔎', '🔒', '🔓', '🚀', '✈️', '🚗', '🚕',
-      '🚙', '🚌', '🚓', '🚑', '🚒', '🚚', '🚛', '🚜', '🏍', '🚲',
-      '⛵', '🚤', '🛳', '🚢', '🚉', '🚆', '🚄', '🚅',
+      '⚽',
+      '🏀',
+      '🏈',
+      '⚾',
+      '🎾',
+      '🏐',
+      '🏉',
+      '🎱',
+      '🏓',
+      '🏸',
+      '🥅',
+      '🥊',
+      '🥋',
+      '⛳',
+      '🎯',
+      '🎮',
+      '🎲',
+      '🎵',
+      '🎶',
+      '🎤',
+      '🎧',
+      '🎷',
+      '🎸',
+      '🎹',
+      '🎺',
+      '🎻',
+      '🥁',
+      '📱',
+      '💻',
+      '⌨️',
+      '🖥',
+      '🖨',
+      '💽',
+      '💾',
+      '💿',
+      '📀',
+      '📷',
+      '📹',
+      '🎥',
+      '📞',
+      '☎️',
+      '📟',
+      '📠',
+      '📺',
+      '📻',
+      '⏰',
+      '⌛',
+      '⏳',
+      '🔋',
+      '🔌',
+      '💡',
+      '🔦',
+      '🕯',
+      '🛢',
+      '💸',
+      '💵',
+      '💴',
+      '💶',
+      '💷',
+      '💰',
+      '💳',
+      '💎',
+      '⚖️',
+      '🔧',
+      '🔨',
+      '⚒',
+      '🛠',
+      '⛏',
+      '🔩',
+      '⚙️',
+      '🧱',
+      '⛓',
+      '🧲',
+      '🔫',
+      '💣',
+      '🏹',
+      '🛡',
+      '💉',
+      '💊',
+      '🩹',
+      '🚪',
+      '🛏',
+      '🛋',
+      '🚽',
+      '🚿',
+      '🛁',
+      '🧼',
+      '🧴',
+      '🛎',
+      '🔑',
+      '🗝',
+      '📦',
+      '✉️',
+      '📩',
+      '📨',
+      '📧',
+      '📥',
+      '📤',
+      '📜',
+      '📄',
+      '📃',
+      '📑',
+      '📊',
+      '📈',
+      '📉',
+      '📅',
+      '📆',
+      '📇',
+      '📋',
+      '📁',
+      '📂',
+      '📰',
+      '📓',
+      '📔',
+      '📒',
+      '📕',
+      '📗',
+      '📘',
+      '📙',
+      '📚',
+      '🔖',
+      '📎',
+      '📐',
+      '📏',
+      '📌',
+      '📍',
+      '✂️',
+      '🖊',
+      '🖋',
+      '✒️',
+      '📝',
+      '✏️',
+      '🔍',
+      '🔎',
+      '🔒',
+      '🔓',
+      '🚀',
+      '✈️',
+      '🚗',
+      '🚕',
+      '🚙',
+      '🚌',
+      '🚓',
+      '🚑',
+      '🚒',
+      '🚚',
+      '🚛',
+      '🚜',
+      '🏍',
+      '🚲',
+      '⛵',
+      '🚤',
+      '🛳',
+      '🚢',
+      '🚉',
+      '🚆',
+      '🚄',
+      '🚅',
     ],
   ),
 ];
@@ -5957,10 +6405,15 @@ class _ImageBubble extends _ChatBubble {
 }
 
 class _VoiceBubble extends _ChatBubble {
-  const _VoiceBubble({required this.durationSec, required this.waveform, this.url});
+  const _VoiceBubble({
+    required this.durationSec,
+    required this.waveform,
+    this.url,
+  });
 
   final int durationSec;
   final List<double> waveform;
+
   /// 远端 URL 或本地文件路径（发送后填充）；null 表示尚未上传。
   final String? url;
 }
@@ -6007,8 +6460,10 @@ class _SharedCardBubble extends _ChatBubble {
   final String? kjAudioUrl;
   final List<String> kjImageUrls;
   final String? kjTypeValue;
+
   /// 课程教材 type（1 视唱 / 2 乐理 / 3 听写 / 4 声乐 / 5 器乐）。
   final int? bookType;
+
   /// 校园课件视频（走 schoolVideoTutorialDetail），否则为公开视频中心。
   final bool schoolMode;
   final int? schoolId;
@@ -6050,7 +6505,9 @@ class GroupChatMessageParser {
       raw['createTime'] ?? raw['sendTime'] ?? raw['msgTime'],
     );
     final typeRaw = raw['type'];
-    final type = typeRaw is int ? typeRaw : int.tryParse(typeRaw?.toString() ?? '');
+    final type = typeRaw is int
+        ? typeRaw
+        : int.tryParse(typeRaw?.toString() ?? '');
 
     // ── type=0 系统消息 / type=100 撤回消息 ──────────────────────
     if (type == 0) {
@@ -6068,7 +6525,8 @@ class GroupChatMessageParser {
       // 从 userMap 查找撤回人信息；同时兼容消息体内直接有 userName 的旧格式
       final recallerId = raw['param2']?.toString() ?? '';
       final recallerInfo = userMap[recallerId];
-      final recallerName = recallerInfo?.displayName.trim() ??
+      final recallerName =
+          recallerInfo?.displayName.trim() ??
           (raw['userName'] ?? raw['nickname'])?.toString().trim() ??
           '';
       return _RecallChatMessage(
@@ -6084,15 +6542,16 @@ class GroupChatMessageParser {
     final fromName = userInfo?.displayName.trim().isNotEmpty == true
         ? userInfo!.displayName.trim()
         : (raw['userName']?.toString().trim() ??
-                raw['nickname']?.toString().trim() ??
-                raw['realname']?.toString().trim() ??
-                (fromId.isNotEmpty ? '用户$fromId' : ''))
-            .trim();
+                  raw['nickname']?.toString().trim() ??
+                  raw['realname']?.toString().trim() ??
+                  (fromId.isNotEmpty ? '用户$fromId' : ''))
+              .trim();
     // 头像：userMap 内已归一化；回退路径额外做 URL 补全
     final avatar = userInfo?.headUrl?.isNotEmpty == true
         ? userInfo!.headUrl
         : _resolveMediaUrl(
-            raw['userHead']?.toString() ?? raw['headUrl']?.toString());
+            raw['userHead']?.toString() ?? raw['headUrl']?.toString(),
+          );
     final color = _avatarColorFor(fromId);
     _ChatBubble? bubble;
 
@@ -6176,7 +6635,8 @@ class GroupChatMessageParser {
             title: (obj?['title'] ?? '资讯').toString(),
             subtitle: '资讯',
             subtype: 'news',
-            coverUrl: obj?['coverImg']?.toString() ?? obj?['imgUrl']?.toString(),
+            coverUrl:
+                obj?['coverImg']?.toString() ?? obj?['imgUrl']?.toString(),
             contentId: obj?['id']?.toString(),
           );
           break;
@@ -6190,14 +6650,16 @@ class GroupChatMessageParser {
             title: (obj?['title'] ?? '课程分享').toString(),
             subtitle: subtitle.isEmpty ? '课程分享' : subtitle,
             subtype: 'book',
-            coverUrl: obj?['coverImg']?.toString() ?? obj?['imgUrl']?.toString(),
+            coverUrl:
+                obj?['coverImg']?.toString() ?? obj?['imgUrl']?.toString(),
             contentId: obj?['id']?.toString(),
             bookType: _asInt(obj?['type']),
           );
           break;
         default:
           bubble = _TextBubble(
-            text: '[${p1.isEmpty ? '消息' : p1}] ${(obj?['title'] ?? obj?['name'] ?? '').toString()}',
+            text:
+                '[${p1.isEmpty ? '消息' : p1}] ${(obj?['title'] ?? obj?['name'] ?? '').toString()}',
           );
       }
     }
@@ -6359,9 +6821,7 @@ String _previewTextForRawMessage(Map<String, dynamic> m) {
         (m['text'] ?? m['content'] ?? '系统通知').toString(),
       );
     case 1:
-      return GroupChatMessageParser._stripHtml(
-        (m['content'] ?? '').toString(),
-      );
+      return GroupChatMessageParser._stripHtml((m['content'] ?? '').toString());
     case 2:
       return '[图片]';
     case 3:
@@ -6397,9 +6857,7 @@ String _previewTextForRawMessage(Map<String, dynamic> m) {
     case 100:
       return '撤回了一条消息';
     default:
-      return GroupChatMessageParser._stripHtml(
-        (m['content'] ?? '').toString(),
-      );
+      return GroupChatMessageParser._stripHtml((m['content'] ?? '').toString());
   }
 }
 
@@ -6434,7 +6892,8 @@ List<_Conversation> _parseConversations(Object? raw) {
     final m = item.map((k, v) => MapEntry(k.toString(), v));
     final id = (m['id'] ?? m['classId'])?.toString();
     if (id == null || id.isEmpty) continue;
-    final name = (m['groupName'] ?? m['name'] ?? m['className'] ?? '').toString();
+    final name = (m['groupName'] ?? m['name'] ?? m['className'] ?? '')
+        .toString();
     final latestMsgRaw =
         m['latestMsg'] ?? m['lastMsg'] ?? m['lastMessage'] ?? m['lastContent'];
     var lastMessage = '';
@@ -6451,10 +6910,8 @@ List<_Conversation> _parseConversations(Object? raw) {
       final text = latestMsgRaw.toString().trim();
       if (text.isNotEmpty) lastMessage = text;
     }
-    final lastTimeMs = m['lastTime'] ??
-        m['lastMsgTime'] ??
-        m['updateTime'] ??
-        latestMsgTime;
+    final lastTimeMs =
+        m['lastTime'] ?? m['lastMsgTime'] ?? m['updateTime'] ?? latestMsgTime;
     final unreadRaw = m['unread'] ?? m['unreadCount'] ?? m['badge'] ?? 0;
     final muted =
         m['doNotDisturb'] == true ||
@@ -6465,7 +6922,8 @@ List<_Conversation> _parseConversations(Object? raw) {
     final pinned = _isConversationPinned(m);
     final memberRaw = m['memberCount'] ?? m['userCount'] ?? m['memberNum'] ?? 0;
     final logo = _resolveMediaUrl(
-      (m['logo'] ?? m['groupLogo'] ?? m['avatarUrl'] ?? m['avatar'])?.toString(),
+      (m['logo'] ?? m['groupLogo'] ?? m['avatarUrl'] ?? m['avatar'])
+          ?.toString(),
     );
     out.add(
       _Conversation(
@@ -6516,9 +6974,7 @@ List<_ChatMessage> _parseMessages(Object? raw) {
   // msgList 接口真实结构: {offsetMsgId, msgList:[...], userList:[...], classList:[...]}.
   // 兼容 records / list / 裸数组 多种后端结构。
   final list = _asList(
-    raw is Map
-        ? (raw['msgList'] ?? raw['records'] ?? raw['list'])
-        : raw,
+    raw is Map ? (raw['msgList'] ?? raw['records'] ?? raw['list']) : raw,
   );
   if (list.isEmpty) return const [];
   // 构建用户查找表供 parser 使用
@@ -6576,22 +7032,24 @@ _GroupDetail _parseGroupDetail(
       : const <String, dynamic>{};
 
   // 班级公告 / 名称 / 群头像
-  final className = (classMap['groupName'] ??
-          m['groupName'] ??
-          classMap['name'] ??
-          m['name'] ??
-          fallback.name)
-      .toString();
-  final logoRaw = (classMap['logo'] ??
-          m['logo'] ??
-          classMap['groupLogo'] ??
-          m['groupLogo'] ??
-          fallback.avatarUrl ??
-          '')
-      .toString();
+  final className =
+      (classMap['groupName'] ??
+              m['groupName'] ??
+              classMap['name'] ??
+              m['name'] ??
+              fallback.name)
+          .toString();
+  final logoRaw =
+      (classMap['logo'] ??
+              m['logo'] ??
+              classMap['groupLogo'] ??
+              m['groupLogo'] ??
+              fallback.avatarUrl ??
+              '')
+          .toString();
   final logo = logoRaw.isEmpty ? '' : _resolveMediaUrl(logoRaw);
-  final announcement =
-      (classMap['announcement'] ?? m['announcement'] ?? '').toString();
+  final announcement = (classMap['announcement'] ?? m['announcement'] ?? '')
+      .toString();
 
   // 公告更新信息（该接口暂无 announcementTime，只展示存在性）
   final announcementBy =
@@ -6631,8 +7089,9 @@ _GroupDetail _parseGroupDetail(
   // 1. 后端直接返回权限标志位；
   // 2. 当前用户 ID 与班级的 headTeacherId 或 headTeacher.id 匹配；
   // 3. 当前用户 ID 与解析得到的 headTeacher 成员 ID 匹配。
-  final headTeacherId =
-      (classMap['headTeacherId'] ?? m['headTeacherId'] ?? '').toString().trim();
+  final headTeacherId = (classMap['headTeacherId'] ?? m['headTeacherId'] ?? '')
+      .toString()
+      .trim();
   final isHeadTeacher =
       (currentUserId.isNotEmpty &&
           (headTeacherId == currentUserId ||
@@ -6819,4 +7278,3 @@ const _kDemoWaveformIdle = <double>[
   0.25,
   0.6,
 ];
-

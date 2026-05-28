@@ -1,4 +1,4 @@
-﻿// =============================================================================
+// =============================================================================
 // 管理员端「排课与课表」独立页面
 //
 // 入口：admin dashboard 快捷区「排课与课表」按钮 →
@@ -337,7 +337,7 @@ class _AdminScheduleManagementViewState
         if (raw['type'] != null) 'type': raw['type'],
         if ((raw['color'] ?? '').toString().isNotEmpty) 'color': raw['color'],
         // courseBatchSave 期望 swagger 里的 ISO+TZ 格式（与 _onApplySmallLesson 一致）。
-        'date': '${newDate}',
+        'date': newDate,
         'lineNum': newLineNum,
       };
       final save = await repo.courseBatchSave([newRow]);
@@ -546,14 +546,8 @@ class _AdminScheduleManagementViewState
     if (classroomResp.isSuccess) {
       for (final m in _extractList(classroomResp)) {
         final rawId = m['id'] ?? m['classroomId'] ?? m['roomId'];
-        final id = rawId is int
-            ? rawId
-            : int.tryParse(rawId?.toString() ?? '');
-        final name = _pickString(m, [
-          'name',
-          'classroomName',
-          'roomName',
-        ], '');
+        final id = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '');
+        final name = _pickString(m, ['name', 'classroomName', 'roomName'], '');
         if (id != null && name.isNotEmpty) classroomMap[id] = name;
       }
     }
@@ -579,13 +573,8 @@ class _AdminScheduleManagementViewState
       if (!resp.isSuccess) continue;
       for (final m in _extractList(resp)) {
         final rawId = m['id'] ?? m['subjectId'];
-        final id = rawId is int
-            ? rawId
-            : int.tryParse(rawId?.toString() ?? '');
-        final name = _pickString(m, [
-          'name',
-          'subjectName',
-        ], '');
+        final id = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '');
+        final name = _pickString(m, ['name', 'subjectName'], '');
         if (id != null && name.isNotEmpty) subjectMap[id] = name;
       }
     }
@@ -870,14 +859,16 @@ class _AdminScheduleManagementViewState
     setState(() => _applyLoading = true);
     final repo = ref.read(adminRepositoryProvider);
 
-    final listResp = await repo.schoolSmallCourseApplyList(current: 1, size: 100);
+    final listResp = await repo.schoolSmallCourseApplyList(
+      current: 1,
+      size: 100,
+    );
 
     if (!mounted) return;
 
     if (!listResp.isSuccess) {
       setState(() {
-        _applyError =
-            listResp.displayMsg;
+        _applyError = listResp.displayMsg;
         _applies = const [];
         _applyLoading = false;
       });
@@ -915,10 +906,7 @@ class _AdminScheduleManagementViewState
     final resp = await repo.schoolSmallCourseApplyDetail(preview.id);
     if (!mounted) return;
     if (!resp.isSuccess) {
-      AppToast.show(
-        context,
-        resp.displayMsg,
-      );
+      AppToast.show(context, resp.displayMsg);
       return;
     }
     final raw = resp.data;
@@ -1001,11 +989,7 @@ class _AdminScheduleManagementViewState
                       ui: ui,
                     ),
                     SizedBox(height: ui(12)),
-                    _ApplyDetailRow(
-                      label: '备注',
-                      value: record.note,
-                      ui: ui,
-                    ),
+                    _ApplyDetailRow(label: '备注', value: record.note, ui: ui),
                     SizedBox(height: ui(24)),
                     InkWell(
                       onTap: () => Navigator.of(ctx).pop(),
@@ -1226,9 +1210,7 @@ class _AdminScheduleManagementViewState
           if (_applyLoading && list.isEmpty)
             Padding(
               padding: EdgeInsets.symmetric(vertical: ui(40)),
-              child: const Center(
-                child: AppLoadingIndicator(),
-              ),
+              child: const Center(child: AppLoadingIndicator()),
             )
           else if (list.isEmpty)
             _ApplyEmptyState(message: _applyError ?? '暂无小课排班申请')
@@ -2382,7 +2364,10 @@ class _CellContent extends StatelessWidget {
       return wrapHover(
         isEditing
             ? Padding(
-                padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(12)),
+                padding: EdgeInsets.symmetric(
+                  horizontal: ui(12),
+                  vertical: ui(12),
+                ),
                 child: _ApplySmallLessonButton(onTap: onApplySmallLesson),
               )
             : const ScheduleIdleSlot(),
@@ -3709,11 +3694,7 @@ class _ApplyRecord {
 
     final classroom = classroomId != null
         ? (classroomNameById?[classroomId] ??
-              _pickString(json, [
-                'classroomName',
-                'roomName',
-                'classroom',
-              ], ''))
+              _pickString(json, ['classroomName', 'roomName', 'classroom'], ''))
         : '';
 
     // —— 备注：reason 是后端约定字段，待审核时通常为 null，已驳回 / 通过
@@ -4032,7 +4013,9 @@ class _ApplyCard extends StatelessWidget {
                                 ),
                               ),
                               Text(
-                                record.lineLabel.isEmpty ? '—' : record.lineLabel,
+                                record.lineLabel.isEmpty
+                                    ? '—'
+                                    : record.lineLabel,
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                   fontSize: ui(12),

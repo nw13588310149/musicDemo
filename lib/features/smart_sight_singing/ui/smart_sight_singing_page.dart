@@ -578,13 +578,29 @@ class _NoteScoresPanel extends StatelessWidget {
                 ),
               ),
               SizedBox(width: ui(10)),
-              _NoteBadge(label: 'Perfect', count: perfectCount, color: const Color(0xFF2E7D5B)),
+              _NoteBadge(
+                label: 'Perfect',
+                count: perfectCount,
+                color: const Color(0xFF2E7D5B),
+              ),
               SizedBox(width: ui(6)),
-              _NoteBadge(label: 'Good', count: goodCount, color: const Color(0xFF4A5568)),
+              _NoteBadge(
+                label: 'Good',
+                count: goodCount,
+                color: const Color(0xFF4A5568),
+              ),
               SizedBox(width: ui(6)),
-              _NoteBadge(label: 'OK', count: okCount, color: const Color(0xFFB7791F)),
+              _NoteBadge(
+                label: 'OK',
+                count: okCount,
+                color: const Color(0xFFB7791F),
+              ),
               SizedBox(width: ui(6)),
-              _NoteBadge(label: 'Miss', count: missCount, color: const Color(0xFFC05621)),
+              _NoteBadge(
+                label: 'Miss',
+                count: missCount,
+                color: const Color(0xFFC05621),
+              ),
             ],
           ),
           SizedBox(height: ui(6)),
@@ -727,26 +743,27 @@ class _PracticeTrackView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Widget scoreFallback() => ScoreSightReadingTrack(
+      track: track,
+      playbackMs: playbackMs,
+      userPoints: userPoints,
+      currentUserMidi: currentUserMidi,
+      currentUserAmplitude: currentUserAmplitude,
+      scoringStandardCents: scoringStandardCents,
+    );
+
     final xml = musicXmlContent?.trim() ?? '';
     if (scoreSightReadingMode && xml.isNotEmpty) {
-      final onsetMs = <int>[
-        for (final note in track.notes) note.startMs,
-      ];
+      final onsetMs = <int>[for (final note in track.notes) note.startMs];
       return OsmdScoreViewer(
         musicXml: xml,
         playbackMs: playbackMs,
         onsetMs: onsetMs,
+        fallback: scoreFallback(),
       );
     }
     if (scoreSightReadingMode) {
-      return ScoreSightReadingTrack(
-        track: track,
-        playbackMs: playbackMs,
-        userPoints: userPoints,
-        currentUserMidi: currentUserMidi,
-        currentUserAmplitude: currentUserAmplitude,
-        scoringStandardCents: scoringStandardCents,
-      );
+      return scoreFallback();
     }
     return KaraokePitchTrack(
       track: track,
@@ -848,7 +865,11 @@ class _EmptyHint extends StatelessWidget {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.info_outline, size: ui(14), color: _DemoUi.textSecondary),
+              Icon(
+                Icons.info_outline,
+                size: ui(14),
+                color: _DemoUi.textSecondary,
+              ),
               SizedBox(width: ui(6)),
               Text(
                 '伴奏音量由设备实体键调节；跟唱时麦克风识别音高并评分',

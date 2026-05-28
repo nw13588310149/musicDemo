@@ -1,4 +1,4 @@
-﻿// =============================================================================
+// =============================================================================
 // 学生端「我的班级」独立页面
 //
 // 入口：学生 dashboard 快捷区「我的班级」按钮 → controller.openMyClass()
@@ -155,10 +155,7 @@ class _StudentMyClassViewState extends ConsumerState<StudentMyClassView> {
           else
             _EmptyHintCard(message: '暂无班级信息'),
           SizedBox(height: ui(16)),
-          _AnnouncementSection(
-            notices: _notices,
-            onViewAll: _openNoticeDrawer,
-          ),
+          _AnnouncementSection(notices: _notices, onViewAll: _openNoticeDrawer),
           if (_facultySections.isNotEmpty) ...[
             SizedBox(height: ui(16)),
             _FacultySection(sections: _facultySections),
@@ -287,7 +284,11 @@ List<Map<String, dynamic>> _asMapList(dynamic value) {
   ];
 }
 
-String _pickString(Map<String, dynamic> json, List<String> keys, [String fallback = '']) {
+String _pickString(
+  Map<String, dynamic> json,
+  List<String> keys, [
+  String fallback = '',
+]) {
   for (final key in keys) {
     final raw = json[key];
     if (raw == null) continue;
@@ -299,7 +300,12 @@ String _pickString(Map<String, dynamic> json, List<String> keys, [String fallbac
 
 String _userDisplayName(Map<String, dynamic>? user) {
   if (user == null) return '—';
-  return _pickString(user, ['nickname', 'nickName', 'realname', 'realName'], '—');
+  return _pickString(user, [
+    'nickname',
+    'nickName',
+    'realname',
+    'realName',
+  ], '—');
 }
 
 String _resolveAvatarUrl(Map<String, dynamic>? user) {
@@ -340,7 +346,10 @@ _ParsedMySchoolClass _parseMySchoolClass(dynamic raw, String currentUserId) {
       ? students.length
       : (boyCount + girlCount > 0 ? boyCount + girlCount : 0);
 
-  final className = _pickString(schoolClass ?? {}, ['name', 'groupName'], '我的班级');
+  final className = _pickString(schoolClass ?? {}, [
+    'name',
+    'groupName',
+  ], '我的班级');
   final typeRaw = schoolClass?['type'];
   final type = typeRaw is int
       ? typeRaw
@@ -381,22 +390,24 @@ _ParsedMySchoolClass _parseMySchoolClass(dynamic raw, String currentUserId) {
       _FacultySectionData(
         title: '任课老师',
         members: [
-          for (final teacher in teachers) _facultyFromUser(teacher, role: '任课老师'),
+          for (final teacher in teachers)
+            _facultyFromUser(teacher, role: '任课老师'),
         ],
       ),
     );
   }
 
-  final classmates = <_ClassmateData>[
-    for (final student in students)
-      _classmateFromUser(
-        student,
-        isSelf: _pickString(student, ['id'], '') == currentUserId,
-      ),
-  ]..sort((a, b) {
-      if (a.isSelf == b.isSelf) return 0;
-      return a.isSelf ? -1 : 1;
-    });
+  final classmates =
+      <_ClassmateData>[
+        for (final student in students)
+          _classmateFromUser(
+            student,
+            isSelf: _pickString(student, ['id'], '') == currentUserId,
+          ),
+      ]..sort((a, b) {
+        if (a.isSelf == b.isSelf) return 0;
+        return a.isSelf ? -1 : 1;
+      });
 
   return _ParsedMySchoolClass(
     classInfo: classInfo,
@@ -411,6 +422,12 @@ _FacultyMember _facultyFromUser(
 }) {
   final introduce = _pickString(user, ['introduce'], '');
   final targetSchool = _pickString(user, ['targetSchool'], '');
+  final courseTag = _pickString(user, [
+    'courseTag',
+    'subjectName',
+    'courseName',
+    'subject',
+  ], '');
   return _FacultyMember(
     name: _userDisplayName(user),
     role: role,
@@ -418,6 +435,7 @@ _FacultyMember _facultyFromUser(
     description: introduce.isNotEmpty ? introduce : '—',
     phone: _pickString(user, ['mobile'], '—'),
     email: '—',
+    courseTag: courseTag.isEmpty ? null : courseTag,
     avatarUrl: _resolveAvatarUrl(user),
   );
 }
@@ -434,6 +452,7 @@ _ClassmateData _classmateFromUser(
   return _ClassmateData(
     name: _userDisplayName(user),
     major: major,
+    role: _pickString(user, ['role', 'studentRole', 'identity'], ''),
     avatarUrl: _resolveAvatarUrl(user),
     isSelf: isSelf,
   );
@@ -774,10 +793,7 @@ class _StatBox extends StatelessWidget {
 // =============================================================================
 
 class _AnnouncementSection extends StatelessWidget {
-  const _AnnouncementSection({
-    required this.notices,
-    required this.onViewAll,
-  });
+  const _AnnouncementSection({required this.notices, required this.onViewAll});
 
   final List<_ClassNoticeItem> notices;
   final VoidCallback onViewAll;
@@ -789,11 +805,7 @@ class _AnnouncementSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _SectionHeader(
-          title: '班级通知',
-          actionLabel: '查看全部',
-          onAction: onViewAll,
-        ),
+        _SectionHeader(title: '班级通知', actionLabel: '查看全部', onAction: onViewAll),
         SizedBox(height: ui(12)),
         Container(
           width: double.infinity,
@@ -918,7 +930,8 @@ class _ClassNoticeListDrawer extends ConsumerStatefulWidget {
       _ClassNoticeListDrawerState();
 }
 
-class _ClassNoticeListDrawerState extends ConsumerState<_ClassNoticeListDrawer> {
+class _ClassNoticeListDrawerState
+    extends ConsumerState<_ClassNoticeListDrawer> {
   bool _loading = true;
   List<_ClassNoticeItem> _notices = const [];
 
@@ -980,7 +993,12 @@ class _ClassNoticeListDrawerState extends ConsumerState<_ClassNoticeListDrawer> 
                     ),
                   )
                 : ListView.separated(
-                    padding: EdgeInsets.fromLTRB(ui(16), ui(16), ui(16), ui(24)),
+                    padding: EdgeInsets.fromLTRB(
+                      ui(16),
+                      ui(16),
+                      ui(16),
+                      ui(24),
+                    ),
                     itemCount: _notices.length,
                     separatorBuilder: (_, _) => SizedBox(height: ui(12)),
                     itemBuilder: (context, index) {
@@ -995,10 +1013,7 @@ class _ClassNoticeListDrawerState extends ConsumerState<_ClassNoticeListDrawer> 
 }
 
 class _ClassNoticeDrawerHeader extends StatelessWidget {
-  const _ClassNoticeDrawerHeader({
-    required this.title,
-    required this.onClose,
-  });
+  const _ClassNoticeDrawerHeader({required this.title, required this.onClose});
 
   final String title;
   final VoidCallback onClose;

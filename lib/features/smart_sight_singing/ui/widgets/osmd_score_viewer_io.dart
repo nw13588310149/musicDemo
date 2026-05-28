@@ -13,19 +13,23 @@ import 'osmd_score_shell.dart';
 
 const _readyChannel = 'OsmdHostReady';
 const _loadedChannel = 'OsmdScoreLoaded';
+const _base64ChunkLength = 48 * 1024;
 
-/// iPad / 原生 WebView：本地 OSMD + 文件加载 MusicXML，避免 WKWebView 大字符串 eval 崩溃。
+/// iPad / 原生 WebView：本地 OSMD + 分片注入 MusicXML，规避 WKWebView
+/// 对 file:// fetch 和大字符串执行的限制。
 class OsmdScoreViewer extends StatefulWidget {
   const OsmdScoreViewer({
     required this.musicXml,
     required this.playbackMs,
     this.onsetMs = const <int>[],
+    this.fallback,
     super.key,
   });
 
   final String musicXml;
   final int playbackMs;
   final List<int> onsetMs;
+  final Widget? fallback;
 
   @override
   State<OsmdScoreViewer> createState() => _OsmdScoreViewerState();
@@ -48,6 +52,7 @@ class _OsmdScoreViewerState extends State<OsmdScoreViewer> {
   String _lastLoadedXml = '';
   List<int> _lastOnsets = const <int>[];
   int _lastSeekIndex = -1;
+  int _loadGeneration = 0;
 
   @override
   void initState() {
@@ -95,9 +100,12 @@ class _OsmdScoreViewerState extends State<OsmdScoreViewer> {
             setState(() => _scoreLoaded = true);
             _applySeek(force: true);
           } else if (msg.message.startsWith('error:')) {
+            final message = _decodeLoadError(msg.message);
             setState(() {
               _failed = true;
-              _failureMessage = 'MusicXML 渲染失败';
+              _failureMessage = message == null || message.isEmpty
+                  ? 'MusicXML 渲染失败'
+                  : 'MusicXML 渲染失败：$message';
             });
           }
         },
@@ -118,7 +126,9 @@ class _OsmdScoreViewerState extends State<OsmdScoreViewer> {
       final osmdAsset = await rootBundle.load(
         'assets/smart_sight_singing/${OsmdScoreShell.osmdScriptFileName}',
       );
-      await File('${dir.path}/${OsmdScoreShell.osmdScriptFileName}').writeAsBytes(
+      await File(
+        '${dir.path}/${OsmdScoreShell.osmdScriptFileName}',
+      ).writeAsBytes(
         osmdAsset.buffer.asUint8List(
           osmdAsset.offsetInBytes,
           osmdAsset.lengthInBytes,
@@ -133,7 +143,8 @@ class _OsmdScoreViewerState extends State<OsmdScoreViewer> {
   Future<void> _bootstrapHost() async {
     try {
       _hostDir = await _ensureHostDir();
-      final htmlPath = '${_hostDir.path}/${OsmdScoreShell.hostHtmlFileName}';
+      final htmlPath =
+          '${_hostDir.path}/${_containerId}_${OsmdScoreShell.hostHtmlFileName}';
       await File(htmlPath).writeAsString(
         OsmdScoreShell.hostHtml(containerId: _containerId),
         flush: true,
@@ -179,24 +190,47 @@ class _OsmdScoreViewerState extends State<OsmdScoreViewer> {
     if (xml.isEmpty || !_hostReady) return;
     if (!force && xml == _lastLoadedXml) return;
 
+    final generation = ++_loadGeneration;
     _lastLoadedXml = xml;
     _lastSeekIndex = -1;
     _scoreLoaded = false;
+    if (_failed && mounted) {
+      setState(() {
+        _failed = false;
+        _failureMessage = null;
+      });
+    }
 
     try {
-      final xmlPath = '${_hostDir.path}/${OsmdScoreShell.scoreXmlFileName}';
-      await File(xmlPath).writeAsString(xml, flush: true);
-
       final divId = jsonEncode(_containerId);
-      final fileName = jsonEncode(OsmdScoreShell.scoreXmlFileName);
-      await _runJs(
-        'window.__SightSingingOsmd && window.__SightSingingOsmd.loadFromFile($divId, $fileName);',
+      await _runJsRequired(
+        'window.__SightSingingOsmd && window.__SightSingingOsmd.beginBase64Load($divId);',
+      );
+
+      final encoded = base64Encode(utf8.encode(xml));
+      for (
+        var offset = 0;
+        offset < encoded.length;
+        offset += _base64ChunkLength
+      ) {
+        if (!mounted || generation != _loadGeneration) return;
+        final next = offset + _base64ChunkLength;
+        final end = next < encoded.length ? next : encoded.length;
+        final chunk = jsonEncode(encoded.substring(offset, end));
+        await _runJsRequired(
+          'window.__SightSingingOsmd && window.__SightSingingOsmd.appendBase64Chunk($divId, $chunk);',
+        );
+      }
+
+      if (!mounted || generation != _loadGeneration) return;
+      await _runJsRequired(
+        'window.__SightSingingOsmd && window.__SightSingingOsmd.finishBase64Load($divId);',
       );
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _failed = true;
-        _failureMessage = '乐谱文件写入失败';
+        _failureMessage = 'MusicXML 送入渲染器失败';
       });
     }
   }
@@ -256,6 +290,20 @@ class _OsmdScoreViewerState extends State<OsmdScoreViewer> {
     }
   }
 
+  Future<void> _runJsRequired(String js) => _controller.runJavaScript(js);
+
+  String? _decodeLoadError(String message) {
+    final prefix = 'error:$_containerId';
+    if (!message.startsWith(prefix)) return null;
+    if (message.length <= prefix.length + 1) return null;
+    final encoded = message.substring(prefix.length + 1);
+    try {
+      return Uri.decodeComponent(encoded);
+    } catch (_) {
+      return encoded;
+    }
+  }
+
   @override
   void dispose() {
     final divId = jsonEncode(_containerId);
@@ -269,6 +317,10 @@ class _OsmdScoreViewerState extends State<OsmdScoreViewer> {
 
   @override
   Widget build(BuildContext context) {
+    if (_failed && widget.fallback != null) {
+      return widget.fallback!;
+    }
+
     final child = _failed
         ? _OsmdErrorPlaceholder(message: _failureMessage)
         : WebViewWidget(
@@ -284,10 +336,7 @@ class _OsmdScoreViewerState extends State<OsmdScoreViewer> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFE5E7EF)),
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: child,
-      ),
+      child: ClipRRect(borderRadius: BorderRadius.circular(16), child: child),
     );
   }
 }

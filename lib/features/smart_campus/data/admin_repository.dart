@@ -328,7 +328,7 @@ class AdminRepository {
       'size': size,
       'classId': (classId == null || classId.isEmpty) ? '' : classId,
       'teacherId': (teacherId == null || teacherId.isEmpty) ? '' : teacherId,
-      'status': status == null ? '' : status,
+      'status': status ?? '',
     };
     return client.post('$_base/schoolSmallCourseApplyList', data: body);
   }
@@ -426,11 +426,7 @@ class AdminRepository {
   }) {
     return client.post(
       '$_base/courseSignManager',
-      data: <String, dynamic>{
-        'classId': classId,
-        'date': date,
-        'type': type,
-      },
+      data: <String, dynamic>{'classId': classId, 'date': date, 'type': type},
     );
   }
 
@@ -441,11 +437,7 @@ class AdminRepository {
   }) {
     return client.post(
       '$_base/courseSignSum0',
-      data: <String, dynamic>{
-        'classId': classId,
-        'date': date,
-        'type': 0,
-      },
+      data: <String, dynamic>{'classId': classId, 'date': date, 'type': 0},
     );
   }
 
@@ -456,11 +448,7 @@ class AdminRepository {
   }) {
     return client.post(
       '$_base/courseSignSum1',
-      data: <String, dynamic>{
-        'classId': classId,
-        'date': date,
-        'type': 1,
-      },
+      data: <String, dynamic>{'classId': classId, 'date': date, 'type': 1},
     );
   }
 
@@ -492,10 +480,7 @@ class AdminRepository {
     int size = 200,
     int? status,
   }) {
-    final body = <String, dynamic>{
-      'current': current,
-      'size': size,
-    };
+    final body = <String, dynamic>{'current': current, 'size': size};
     if (status != null) body['status'] = status;
     return client.post('$_base/teacherLeaveList', data: body);
   }

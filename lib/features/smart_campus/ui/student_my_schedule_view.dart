@@ -142,7 +142,9 @@ class _StudentMyScheduleViewState extends ConsumerState<StudentMyScheduleView> {
   Future<void> _loadTimeConfigs({String? classId}) async {
     var resolvedClassId = classId;
     if (resolvedClassId == null || resolvedClassId.isEmpty) {
-      final classResp = await ref.read(studentRepositoryProvider).mySchoolClass();
+      final classResp = await ref
+          .read(studentRepositoryProvider)
+          .mySchoolClass();
       if (classResp.isSuccess) {
         final map = _asMap(classResp.data);
         final schoolClass = _asMap(map?['schoolClass']);
@@ -183,10 +185,9 @@ class _StudentMyScheduleViewState extends ConsumerState<StudentMyScheduleView> {
 
     final start = _weekStart;
     final end = start.add(const Duration(days: 6));
-    final resp = await ref.read(studentRepositoryProvider).courseList(
-      beginDate: _isoDate(start),
-      endDate: _isoDate(end),
-    );
+    final resp = await ref
+        .read(studentRepositoryProvider)
+        .courseList(beginDate: _isoDate(start), endDate: _isoDate(end));
     if (!mounted) return;
 
     if (!resp.isSuccess) {
@@ -495,7 +496,34 @@ List<({String dateKey, Map<String, dynamic> row})> _extractCourseRows(
   return list;
 }
 
-_ScheduleCardData _parseCourseCard(Map<String, dynamic> json, int smallIdxInCell) {
+String? _pickCapacityLabel(Map<String, dynamic> json) {
+  final current = _pickString(json, [
+    'studentCount',
+    'currentCount',
+    'selectedCount',
+    'usedCapacity',
+    'actualCount',
+  ]);
+  final total = _pickString(json, [
+    'capacity',
+    'maxCapacity',
+    'totalCount',
+    'studentTotal',
+    'limitCount',
+    'peopleNum',
+  ]);
+  if (current.isNotEmpty && total.isNotEmpty) {
+    return '$current/$total人';
+  }
+  if (total.isNotEmpty) return '$total人';
+  if (current.isNotEmpty) return '$current人';
+  return null;
+}
+
+_ScheduleCardData _parseCourseCard(
+  Map<String, dynamic> json,
+  int smallIdxInCell,
+) {
   final typeRaw = json['type'];
   final type = typeRaw is int
       ? typeRaw
@@ -534,6 +562,7 @@ _ScheduleCardData _parseCourseCard(Map<String, dynamic> json, int smallIdxInCell
       subline: teacher.isNotEmpty
           ? teacher
           : (className.isNotEmpty ? className : '—'),
+      capacity: _pickCapacityLabel(json),
     );
   }
 

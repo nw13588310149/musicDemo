@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -261,9 +261,7 @@ class _ProfileHero extends StatelessWidget {
                       title: pkg0?.name ?? '年卡365天',
                       subtitle: pkg0?.description ?? '每月仅需116.5元',
                       price: pkg0?.price ?? '1,398',
-                      trailingLabel: days != null && days > 3
-                          ? '已开通'
-                          : null,
+                      trailingLabel: days != null && days > 3 ? '已开通' : null,
                       showPrice: days == null || days <= 3,
                     ),
                   ),
@@ -274,9 +272,7 @@ class _ProfileHero extends StatelessWidget {
                       title: pkg1?.name ?? '3天体验卡',
                       subtitle: pkg1?.description ?? '每天仅需6.6元',
                       price: pkg1?.price ?? '198',
-                      trailingLabel: days != null && days >= 1
-                          ? '已开通'
-                          : null,
+                      trailingLabel: days != null && days >= 1 ? '已开通' : null,
                       showPrice: days == null || days < 1,
                     ),
                   ),
@@ -355,7 +351,7 @@ class _Avatar extends StatelessWidget {
                   trimmed,
                   fit: BoxFit.cover,
                   filterQuality: FilterQuality.medium,
-                  errorBuilder: (_, __, ___) => fallback,
+                  errorBuilder: (context, error, stackTrace) => fallback,
                 )
               : fallback,
         ),
@@ -729,13 +725,17 @@ class _WalletPointsCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Expanded(child: _WalletColumn(value: wallet, label: '我的钱包')),
+          Expanded(
+            child: _WalletColumn(value: wallet, label: '我的钱包'),
+          ),
           const SizedBox(
             width: 1,
             height: 58,
             child: ColoredBox(color: Color(0x4DE6E9F1)),
           ),
-          Expanded(child: _WalletColumn(value: points, label: '我的积分')),
+          Expanded(
+            child: _WalletColumn(value: points, label: '我的积分'),
+          ),
         ],
       ),
     );
@@ -1294,10 +1294,7 @@ class _RedeemVipDialogState extends State<_RedeemVipDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _DialogTextField(
-            controller: _ctrl,
-            hint: '请输入兑换码',
-          ),
+          _DialogTextField(controller: _ctrl, hint: '请输入兑换码'),
           const SizedBox(height: 24),
           AppDialogActionBar(
             cancelLabel: '取消',
@@ -1421,9 +1418,7 @@ class _RecommendDialog extends StatelessWidget {
           _ReadonlyValueRow(
             value: _kAppPromoUrl,
             onCopy: () async {
-              await Clipboard.setData(
-                const ClipboardData(text: _kAppPromoUrl),
-              );
+              await Clipboard.setData(const ClipboardData(text: _kAppPromoUrl));
               if (!context.mounted) return;
               AppToast.showSuccess(context, '链接已复制，快去发给好友吧');
             },
@@ -1434,9 +1429,7 @@ class _RecommendDialog extends StatelessWidget {
             confirmLabel: '复制链接',
             onCancel: () => Navigator.of(context).pop(),
             onConfirm: () async {
-              await Clipboard.setData(
-                const ClipboardData(text: _kAppPromoUrl),
-              );
+              await Clipboard.setData(const ClipboardData(text: _kAppPromoUrl));
               if (!context.mounted) return;
               Navigator.of(context).pop();
               AppToast.showSuccess(context, '链接已复制，快去发给好友吧');
@@ -1450,10 +1443,7 @@ class _RecommendDialog extends StatelessWidget {
 
 // 通用：单行文本输入框（兑换码 / 其他短输入）。
 class _DialogTextField extends StatelessWidget {
-  const _DialogTextField({
-    required this.controller,
-    required this.hint,
-  });
+  const _DialogTextField({required this.controller, required this.hint});
 
   final TextEditingController controller;
   final String hint;

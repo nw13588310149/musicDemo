@@ -44,10 +44,9 @@ Future<void> _loadOsmdLibrary() async {
     return;
   }
   final completer = Completer<void>();
-  final script =
-      web.document.createElement('script') as web.HTMLScriptElement
-        ..src = OsmdScoreShell.osmdCdn
-        ..async = true;
+  final script = web.document.createElement('script') as web.HTMLScriptElement
+    ..src = OsmdScoreShell.osmdCdn
+    ..async = true;
 
   void onLoadOk(web.Event _) {
     if (!completer.isCompleted) completer.complete();
@@ -90,12 +89,14 @@ class OsmdScoreViewer extends StatefulWidget {
     required this.musicXml,
     required this.playbackMs,
     this.onsetMs = const <int>[],
+    this.fallback,
     super.key,
   });
 
   final String musicXml;
   final int playbackMs;
   final List<int> onsetMs;
+  final Widget? fallback;
 
   @override
   State<OsmdScoreViewer> createState() => _OsmdScoreViewerWebState();
@@ -219,14 +220,8 @@ class _OsmdScoreViewerWebState extends State<OsmdScoreViewer> {
   void _applyOnsets({bool force = false}) {
     if (!force && listEquals(_lastOnsets, widget.onsetMs)) return;
     _lastOnsets = List<int>.unmodifiable(widget.onsetMs);
-    final arr = <JSAny?>[
-      for (final v in widget.onsetMs) v.toJS,
-    ].toJS;
-    _bridge()?.callMethod<JSAny?>(
-      'setOnsets'.toJS,
-      _containerId.toJS,
-      arr,
-    );
+    final arr = <JSAny?>[for (final v in widget.onsetMs) v.toJS].toJS;
+    _bridge()?.callMethod<JSAny?>('setOnsets'.toJS, _containerId.toJS, arr);
   }
 
   void _applySeek({bool force = false}) {
@@ -248,6 +243,10 @@ class _OsmdScoreViewerWebState extends State<OsmdScoreViewer> {
 
   @override
   Widget build(BuildContext context) {
+    if (_failed && widget.fallback != null) {
+      return widget.fallback!;
+    }
+
     final child = _failed
         ? _OsmdErrorPlaceholder(message: _failureMessage)
         : HtmlElementView(viewType: _containerId);
@@ -257,10 +256,7 @@ class _OsmdScoreViewerWebState extends State<OsmdScoreViewer> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFE5E7EF)),
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: child,
-      ),
+      child: ClipRRect(borderRadius: BorderRadius.circular(16), child: child),
     );
   }
 }
@@ -275,9 +271,7 @@ class _OsmdErrorPlaceholder extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Text(
-          message?.isNotEmpty == true
-              ? '乐谱加载失败：$message'
-              : '乐谱加载失败',
+          message?.isNotEmpty == true ? '乐谱加载失败：$message' : '乐谱加载失败',
           textAlign: TextAlign.center,
           style: const TextStyle(
             fontSize: 14,

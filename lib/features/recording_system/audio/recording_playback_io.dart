@@ -83,9 +83,7 @@ class _JustAudioPlayback implements RecordingPlayback {
               : AudioSource.file(source),
         )
         .toList();
-    final duration = await _player.setAudioSource(
-      ConcatenatingAudioSource(children: children),
-    );
+    final duration = await _player.setAudioSources(children);
     return totalDurationMs ?? duration?.inMilliseconds;
   }
 

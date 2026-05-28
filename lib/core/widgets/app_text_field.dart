@@ -23,7 +23,6 @@ class AppTextField extends TextField {
     super.textAlignVertical,
     super.textDirection,
     super.readOnly,
-    super.toolbarOptions,
     super.showCursor,
     super.autofocus,
     super.statesController,
@@ -71,7 +70,6 @@ class AppTextField extends TextField {
     super.contentInsertionConfiguration,
     super.clipBehavior,
     super.restorationId,
-    super.scribbleEnabled,
     super.stylusHandwritingEnabled,
     super.enableIMEPersonalizedLearning,
     EditableTextContextMenuBuilder? contextMenuBuilder,
@@ -79,5 +77,8 @@ class AppTextField extends TextField {
     super.spellCheckConfiguration,
     super.magnifierConfiguration,
     super.hintLocales,
-  }) : super(contextMenuBuilder: contextMenuBuilder ?? AppEditableContextMenu.builder);
+  }) : super(
+         contextMenuBuilder:
+             contextMenuBuilder ?? AppEditableContextMenu.builder,
+       );
 }

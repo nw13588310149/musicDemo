@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -33,7 +33,7 @@ class ShellTopBar extends StatelessWidget {
   final Future<void> Function() onLogout;
   final Future<void> Function() onMarkAllRead;
   final Future<({List<String> provinces, String? error})> Function()
-      onLoadProvinces;
+  onLoadProvinces;
   final Future<String?> Function(String province) onUpdateProvince;
 
   /// 用户菜单触发按钮的位置 anchor，供自定义 popover 定位使用。
@@ -406,12 +406,10 @@ class ShellTopBar extends StatelessWidget {
         return panel;
       },
       transitionBuilder: (context, animation, secondary, child) {
-        final offset = Tween<Offset>(
-          begin: const Offset(1, 0),
-          end: Offset.zero,
-        ).animate(
-          CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
-        );
+        final offset =
+            Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero).animate(
+              CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+            );
         return SlideTransition(position: offset, child: child);
       },
     );
@@ -671,10 +669,7 @@ class _NoticeDrawerHeader extends StatelessWidget {
             onTap: onMarkAllRead,
             borderRadius: BorderRadius.circular(ui(6)),
             child: Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: ui(8),
-                vertical: ui(6),
-              ),
+              padding: EdgeInsets.symmetric(horizontal: ui(8), vertical: ui(6)),
               child: Text(
                 '批量已读',
                 style: TextStyle(
@@ -717,10 +712,7 @@ class _NoticeRow extends StatelessWidget {
     // 未入库），先隐藏前导图标，仅保留文本 + 时间。素材到位后恢复 _NoticeRow 的
     // leading Image.asset 即可。
     return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: ui(12),
-        vertical: ui(12),
-      ),
+      padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(12)),
       decoration: BoxDecoration(
         color: const Color(0xFFF4F4FF),
         borderRadius: BorderRadius.circular(ui(12)),
@@ -996,8 +988,7 @@ class _TopSearchBoxState extends ConsumerState<_TopSearchBox> {
       final map = entry.map((key, value) => MapEntry(key.toString(), value));
       final id = map['id']?.toString() ?? '';
       if (id.isEmpty) continue;
-      final title =
-          (map['title']?.toString().trim().isNotEmpty ?? false)
+      final title = (map['title']?.toString().trim().isNotEmpty ?? false)
           ? map['title'].toString()
           : (map['name']?.toString() ?? '');
       final type = forcedType ?? map['type'];
@@ -1091,8 +1082,9 @@ class _TopSearchBoxState extends ConsumerState<_TopSearchBox> {
     final scale = DashboardScaleScope.of(context);
     return CompositedTransformTarget(
       link: _layerLink,
-      child: OverlayPortal.targetsRootOverlay(
+      child: OverlayPortal(
         controller: _overlayController,
+        overlayLocation: OverlayChildLocation.rootOverlay,
         overlayChildBuilder: (overlayContext) =>
             _buildOverlay(overlayContext, scale),
         child: _buildField(context),
@@ -1183,8 +1175,7 @@ class _TopSearchBoxState extends ConsumerState<_TopSearchBox> {
 
   Widget _buildOverlay(BuildContext overlayContext, DashboardScaleData scale) {
     final ui = scale.ui;
-    final fieldBox =
-        _fieldKey.currentContext?.findRenderObject() as RenderBox?;
+    final fieldBox = _fieldKey.currentContext?.findRenderObject() as RenderBox?;
     final fieldWidth = fieldBox?.size.width ?? ui(324);
     // 浮层最小宽度：保证 4 个 tab 文字不挤；最多撑到 420 让结果更易读。
     final panelWidth = fieldWidth.clamp(ui(320), ui(420));
@@ -1281,10 +1272,7 @@ class _SearchDropdownPanel extends StatelessWidget {
           ),
           Padding(
             padding: EdgeInsets.fromLTRB(ui(12), ui(10), ui(12), ui(12)),
-            child: SizedBox(
-              height: ui(360),
-              child: _buildBody(context, list),
-            ),
+            child: SizedBox(height: ui(360), child: _buildBody(context, list)),
           ),
         ],
       ),
@@ -1294,9 +1282,7 @@ class _SearchDropdownPanel extends StatelessWidget {
   Widget _buildBody(BuildContext context, List<_SearchItem> list) {
     final ui = DashboardScaleScope.of(context).ui;
     if (loading) {
-      return Center(
-        child: const AppLoadingIndicator(),
-      );
+      return Center(child: const AppLoadingIndicator());
     }
     if (list.isEmpty) {
       return Center(
@@ -1333,10 +1319,8 @@ class _SearchDropdownPanel extends StatelessWidget {
       child: ListView.separated(
         padding: EdgeInsets.symmetric(horizontal: ui(10), vertical: ui(4)),
         itemCount: list.length,
-        separatorBuilder: (_, _) => Container(
-          height: ui(1),
-          color: const Color(0xFFF3F3F3),
-        ),
+        separatorBuilder: (_, _) =>
+            Container(height: ui(1), color: const Color(0xFFF3F3F3)),
         itemBuilder: (context, index) {
           final item = list[index];
           return _SearchResultRow(
@@ -1368,9 +1352,7 @@ class _SearchTabBar extends StatelessWidget {
       height: ui(44),
       decoration: const BoxDecoration(
         color: Colors.white,
-        border: Border(
-          bottom: BorderSide(color: Color(0xFFF3F2F3), width: 1),
-        ),
+        border: Border(bottom: BorderSide(color: Color(0xFFF3F2F3), width: 1)),
       ),
       child: Row(
         children: _SearchTab.values.map((tab) {
@@ -1388,9 +1370,7 @@ class _SearchTabBar extends StatelessWidget {
                         style: TextStyle(
                           fontSize: ui(13),
                           fontFamily: 'PingFang SC',
-                          fontWeight: selected
-                              ? AppFont.w500
-                              : AppFont.w400,
+                          fontWeight: selected ? AppFont.w500 : AppFont.w400,
                           color: selected
                               ? const Color(0xFF8741FF)
                               : const Color(0xFF6D6B75),

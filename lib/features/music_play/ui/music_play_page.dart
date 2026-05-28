@@ -2444,7 +2444,7 @@ class _LoopModeChip extends StatelessWidget {
 ///            抽屉里的 builder 抛断言（"setState/markNeedsBuild called when
 ///            widget tree was locked"），iPad 上肉眼会闪一帧 ErrorWidget；
 ///            紧接着布局重算时播放条重叠成两条。
-///   新版 v3：改用 [OverlayPortal.targetsRootOverlay]——抽屉的生命周期由
+///   新版 v3：改用根 Overlay 上的 [OverlayPortal]——抽屉的生命周期由
 ///            Flutter 自己接管：父级 rebuild 自动同步、dispose 时自动清理，
 ///            不再需要手动 OverlayEntry / markNeedsBuild。这条链路 Flutter
 ///            内部已经处理了所有"在 build 锁期间触发重建"的边界情况。
@@ -2494,8 +2494,9 @@ class _PlaylistChipState extends State<_PlaylistChip> {
     // 与本 chip 的 build 在同一棵元素树里关联——父级 rebuild 时它会"自动"
     // 跟着 rebuild 拿到最新的 widget.tracks/activeIndex，不需要手动
     // markNeedsBuild。点击抽屉外部不会触发它收起（无 barrier）。
-    return OverlayPortal.targetsRootOverlay(
+    return OverlayPortal(
       controller: _portal,
+      overlayLocation: OverlayChildLocation.rootOverlay,
       overlayChildBuilder: (overlayContext) {
         return _PlaylistDrawer(
           tracks: widget.tracks,

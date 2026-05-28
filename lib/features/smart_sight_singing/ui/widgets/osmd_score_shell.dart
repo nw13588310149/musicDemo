@@ -2,7 +2,7 @@
 ///
 /// 设计要点（iPad WKWebView）：
 /// - OSMD 库走本地 `opensheetmusicdisplay.min.js`，不依赖 CDN
-/// - MusicXML 写入同目录 `score.xml`，WebView 内 fetch 加载，避免大字符串 eval 崩溃
+/// - MusicXML 由 Dart 端 base64 分片注入，避开 WKWebView 对 file:// fetch 的限制
 /// - 光标定位用 Dart 传入的 onset 毫秒数组 + 增量 next()
 /// - 滚动由 `#scroll-wrap` 容器负责（WKWebView 内 scrollIntoView 不可靠）
 abstract final class OsmdScoreShell {
@@ -44,10 +44,17 @@ abstract final class OsmdScoreShell {
     } catch (e) {}
   }
 
-  function notifyLoaded(divId, ok) {
+  function errorText(error, fallback) {
+    if (!error) return fallback || '';
+    if (error.message) return error.message;
+    try { return String(error); } catch (e) { return fallback || ''; }
+  }
+
+  function notifyLoaded(divId, ok, message) {
     try {
       if (window.OsmdScoreLoaded && window.OsmdScoreLoaded.postMessage) {
-        window.OsmdScoreLoaded.postMessage(ok ? 'loaded:' + divId : 'error:' + divId);
+        var detail = message ? ':' + encodeURIComponent(message) : '';
+        window.OsmdScoreLoaded.postMessage(ok ? 'loaded:' + divId : 'error:' + divId + detail);
       }
     } catch (e) {}
   }
@@ -63,7 +70,12 @@ abstract final class OsmdScoreShell {
   function renderXml(host, divId, xml) {
     host.loaded = false;
     host.currentIndex = -1;
+    if (!xml || !String(xml).trim()) {
+      notifyLoaded(divId, false, 'empty MusicXML');
+      return;
+    }
     try {
+      try { host.osmd.clear(); } catch (e) {}
       host.osmd.load(xml).then(function(){
         try {
           host.osmd.render();
@@ -74,16 +86,33 @@ abstract final class OsmdScoreShell {
           notifyLoaded(divId, true);
         } catch (e) {
           console.error('[OSMD] render failed', e);
-          notifyLoaded(divId, false);
+          notifyLoaded(divId, false, errorText(e, 'render failed'));
         }
       }).catch(function(e){
         console.error('[OSMD] load failed', e);
-        notifyLoaded(divId, false);
+        notifyLoaded(divId, false, errorText(e, 'load failed'));
       });
     } catch (e) {
       console.error('[OSMD] load sync failed', e);
-      notifyLoaded(divId, false);
+      notifyLoaded(divId, false, errorText(e, 'load sync failed'));
     }
+  }
+
+  function base64ToUtf8(base64) {
+    var binary = window.atob(base64);
+    if (window.TextDecoder && window.Uint8Array) {
+      var bytes = new Uint8Array(binary.length);
+      for (var i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      return new TextDecoder('utf-8').decode(bytes);
+    }
+
+    var encoded = [];
+    for (var j = 0; j < binary.length; j++) {
+      encoded.push('%' + ('00' + binary.charCodeAt(j).toString(16)).slice(-2));
+    }
+    return decodeURIComponent(encoded.join(''));
   }
 
   window.__SightSingingOsmd = {
@@ -102,7 +131,13 @@ abstract final class OsmdScoreShell {
           drawPartNames: false,
           drawingParameters: 'compacttight',
         });
-        hosts[divId] = { osmd: osmd, onsets: [], currentIndex: -1, loaded: false };
+        hosts[divId] = {
+          osmd: osmd,
+          onsets: [],
+          currentIndex: -1,
+          loaded: false,
+          pendingBase64: [],
+        };
         return true;
       } catch (e) {
         console.error('[OSMD] create failed', e);
@@ -124,8 +159,38 @@ abstract final class OsmdScoreShell {
         .then(function(xml){ renderXml(host, divId, xml); })
         .catch(function(e){
           console.error('[OSMD] fetch xml failed', e);
-          notifyLoaded(divId, false);
+          notifyLoaded(divId, false, errorText(e, 'fetch xml failed'));
         });
+    },
+
+    beginBase64Load: function(divId) {
+      var host = hosts[divId];
+      if (!host) return false;
+      host.pendingBase64 = [];
+      return true;
+    },
+
+    appendBase64Chunk: function(divId, chunk) {
+      var host = hosts[divId];
+      if (!host || !host.pendingBase64) return false;
+      host.pendingBase64.push(chunk || '');
+      return true;
+    },
+
+    finishBase64Load: function(divId) {
+      var host = hosts[divId];
+      if (!host || !host.pendingBase64) return false;
+      try {
+        var xml = base64ToUtf8(host.pendingBase64.join(''));
+        host.pendingBase64 = [];
+        renderXml(host, divId, xml);
+        return true;
+      } catch (e) {
+        host.pendingBase64 = [];
+        console.error('[OSMD] decode xml failed', e);
+        notifyLoaded(divId, false, errorText(e, 'decode xml failed'));
+        return false;
+      }
     },
 
     setOnsets: function(divId, onsetsRaw) {

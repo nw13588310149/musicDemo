@@ -69,59 +69,54 @@ class _MusicCompanionV2PageState extends ConsumerState<MusicCompanionV2Page> {
                   // iOS/iPad 上 Image/Stack 图层容易留下节拍器残影。
                   layoutBuilder:
                       (Widget? currentChild, List<Widget> previousChildren) {
-                    return Stack(
-                      fit: StackFit.expand,
-                      clipBehavior: Clip.hardEdge,
-                      children: <Widget>[
-                        if (currentChild != null) currentChild,
-                      ],
-                    );
-                  },
+                        return Stack(
+                          fit: StackFit.expand,
+                          clipBehavior: Clip.hardEdge,
+                          children: <Widget>[?currentChild],
+                        );
+                      },
                   transitionBuilder:
                       (Widget child, Animation<double> animation) {
-                    return FadeTransition(
-                      opacity: animation,
-                      child: ColoredBox(
-                        color: Colors.white,
-                        child: child,
-                      ),
-                    );
-                  },
+                        return FadeTransition(
+                          opacity: animation,
+                          child: ColoredBox(color: Colors.white, child: child),
+                        );
+                      },
                   child: switch (state.activeTab) {
-                  MusicCompanionTab.piano => _VirtualPianoPane(
-                    key: const ValueKey<String>('music_piano'),
-                    activeNotes: state.activePianoNotes,
-                    onPressKey: controller.pressPianoKey,
-                    onReleaseKey: controller.releasePianoKey,
-                  ),
-                  MusicCompanionTab.metronome => Padding(
-                    key: const ValueKey<String>('music_metronome'),
-                    padding: EdgeInsets.fromLTRB(ui(18), 0, ui(18), ui(16)),
-                    child: _MetronomePane(
-                      state: state,
-                      onToneSelected: controller.setMetronomeTone,
-                      onSignatureSelected: controller.setMetronomeSignature,
-                      onToggle: controller.toggleMetronome,
-                      onBpmChanged: controller.setMetronomeBpm,
-                      onDecreaseBpm: () => controller.nudgeMetronomeBpm(-1),
-                      onIncreaseBpm: () => controller.nudgeMetronomeBpm(1),
+                    MusicCompanionTab.piano => _VirtualPianoPane(
+                      key: const ValueKey<String>('music_piano'),
+                      activeNotes: state.activePianoNotes,
+                      onPressKey: controller.pressPianoKey,
+                      onReleaseKey: controller.releasePianoKey,
                     ),
-                  ),
-                  MusicCompanionTab.tuner => Padding(
-                    key: const ValueKey<String>('music_tuner'),
-                    padding: EdgeInsets.fromLTRB(ui(18), 0, ui(18), ui(16)),
-                    child: _TunerPane(
-                      state: state,
-                      onDecreaseFrequency: () =>
-                          controller.nudgeTunerReferenceFrequency(-1),
-                      onIncreaseFrequency: () =>
-                          controller.nudgeTunerReferenceFrequency(1),
-                      onUse442Hz: () =>
-                          controller.setTunerReferenceFrequency(442),
-                      onRetryPermission: controller.retryTunerPermission,
+                    MusicCompanionTab.metronome => Padding(
+                      key: const ValueKey<String>('music_metronome'),
+                      padding: EdgeInsets.fromLTRB(ui(18), 0, ui(18), ui(16)),
+                      child: _MetronomePane(
+                        state: state,
+                        onToneSelected: controller.setMetronomeTone,
+                        onSignatureSelected: controller.setMetronomeSignature,
+                        onToggle: controller.toggleMetronome,
+                        onBpmChanged: controller.setMetronomeBpm,
+                        onDecreaseBpm: () => controller.nudgeMetronomeBpm(-1),
+                        onIncreaseBpm: () => controller.nudgeMetronomeBpm(1),
+                      ),
                     ),
-                  ),
-                },
+                    MusicCompanionTab.tuner => Padding(
+                      key: const ValueKey<String>('music_tuner'),
+                      padding: EdgeInsets.fromLTRB(ui(18), 0, ui(18), ui(16)),
+                      child: _TunerPane(
+                        state: state,
+                        onDecreaseFrequency: () =>
+                            controller.nudgeTunerReferenceFrequency(-1),
+                        onIncreaseFrequency: () =>
+                            controller.nudgeTunerReferenceFrequency(1),
+                        onUse442Hz: () =>
+                            controller.setTunerReferenceFrequency(442),
+                        onRetryPermission: controller.retryTunerPermission,
+                      ),
+                    ),
+                  },
                 ),
               ),
             ),
