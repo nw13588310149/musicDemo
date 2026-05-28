@@ -136,6 +136,7 @@ class StudyCatalogController extends StateNotifier<StudyCatalogState> {
             ? (state.selectedChildId ?? '')
             : '',
         schoolMode: state.schoolMode,
+        province: state.province,
         size: state.config.key == StudyCatalogConfig.voice.key ? 1000 : 1000,
       );
       if (!mounted) {

@@ -5,6 +5,8 @@ import '../audio/ktv_scoring.dart';
 import '../audio/midi_sight_singing_service.dart';
 import '../audio/pitch_track.dart';
 
+enum SightSingingImportFormat { midi, musicXml }
+
 enum SightSingingStage {
   /// 初始：尚未导入音频。
   idle,
@@ -55,6 +57,8 @@ class UserPitchPoint {
 @immutable
 class SightSingingState {
   const SightSingingState({
+    this.importFormat = SightSingingImportFormat.midi,
+    this.musicXmlContent,
     this.stage = SightSingingStage.idle,
     this.audioPath,
     this.audioName,
@@ -89,6 +93,12 @@ class SightSingingState {
   });
 
   final SightSingingStage stage;
+
+  /// 当前导入格式：MIDI 或 MusicXML。
+  final SightSingingImportFormat importFormat;
+
+  /// MusicXML 原文（仅 [importFormat] 为 musicXml 时有值，供 OSMD 渲染）。
+  final String? musicXmlContent;
 
   /// 当前导入的音频路径（本地/缓存）。
   final String? audioPath;
@@ -177,8 +187,14 @@ class SightSingingState {
 
   bool get isSelectingTrack => stage == SightSingingStage.selectTrack;
 
+  bool get usesOsmdScore =>
+      importFormat == SightSingingImportFormat.musicXml &&
+      (musicXmlContent?.trim().isNotEmpty ?? false);
+
   SightSingingState copyWith({
     SightSingingStage? stage,
+    SightSingingImportFormat? importFormat,
+    Object? musicXmlContent = _sentinel,
     Object? audioPath = _sentinel,
     Object? audioName = _sentinel,
     double? analyzingProgress,
@@ -211,6 +227,10 @@ class SightSingingState {
   }) {
     return SightSingingState(
       stage: stage ?? this.stage,
+      importFormat: importFormat ?? this.importFormat,
+      musicXmlContent: identical(musicXmlContent, _sentinel)
+          ? this.musicXmlContent
+          : musicXmlContent as String?,
       audioPath: identical(audioPath, _sentinel)
           ? this.audioPath
           : audioPath as String?,

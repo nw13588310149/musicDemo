@@ -17,6 +17,7 @@ import '../state/smart_sight_singing_controller.dart';
 import '../state/smart_sight_singing_state.dart';
 import 'widgets/debug_calibration_panel.dart';
 import 'widgets/karaoke_pitch_track.dart';
+import 'widgets/osmd_score_viewer.dart';
 import 'widgets/score_sight_reading_track.dart';
 
 /// demo 页中性色，不使用产品主色。
@@ -447,6 +448,7 @@ class _Body extends StatelessWidget {
         return _EmptyHint(
           onImport: controller.importAudio,
           onImportLocal: controller.importLocalMidi,
+          onImportMusicXml: controller.importLocalMusicXml,
           onlineUrlController: onlineUrlController,
           onAnalyzeUrl: controller.analyzeOnlineAudio,
         );
@@ -460,6 +462,7 @@ class _Body extends StatelessWidget {
           return _EmptyHint(
             onImport: controller.importAudio,
             onImportLocal: controller.importLocalMidi,
+            onImportMusicXml: controller.importLocalMusicXml,
             onlineUrlController: onlineUrlController,
             onAnalyzeUrl: controller.analyzeOnlineAudio,
           );
@@ -480,6 +483,7 @@ class _Body extends StatelessWidget {
                     currentUserMidi: state.currentUserMidi,
                     currentUserAmplitude: state.currentUserAmplitude,
                     scoreSightReadingMode: state.scoreSightReadingMode,
+                    musicXmlContent: state.musicXmlContent,
                     scoringStandardCents: state.scoringStandardCents,
                   ),
                 ),
@@ -498,6 +502,7 @@ class _Body extends StatelessWidget {
           return _EmptyHint(
             onImport: controller.importAudio,
             onImportLocal: controller.importLocalMidi,
+            onImportMusicXml: controller.importLocalMusicXml,
             onlineUrlController: onlineUrlController,
             onAnalyzeUrl: controller.analyzeOnlineAudio,
           );
@@ -519,6 +524,7 @@ class _Body extends StatelessWidget {
                 currentUserMidi: state.currentUserMidi,
                 currentUserAmplitude: state.currentUserAmplitude,
                 scoreSightReadingMode: state.scoreSightReadingMode,
+                musicXmlContent: state.musicXmlContent,
                 scoringStandardCents: state.scoringStandardCents,
               ),
             ),
@@ -707,6 +713,7 @@ class _PracticeTrackView extends StatelessWidget {
     required this.currentUserAmplitude,
     required this.scoreSightReadingMode,
     required this.scoringStandardCents,
+    this.musicXmlContent,
   });
 
   final PitchTrack track;
@@ -716,9 +723,14 @@ class _PracticeTrackView extends StatelessWidget {
   final double currentUserAmplitude;
   final bool scoreSightReadingMode;
   final double scoringStandardCents;
+  final String? musicXmlContent;
 
   @override
   Widget build(BuildContext context) {
+    final xml = musicXmlContent?.trim() ?? '';
+    if (scoreSightReadingMode && xml.isNotEmpty) {
+      return OsmdScoreViewer(musicXml: xml, playbackMs: playbackMs);
+    }
     if (scoreSightReadingMode) {
       return ScoreSightReadingTrack(
         track: track,
@@ -743,11 +755,13 @@ class _EmptyHint extends StatelessWidget {
   const _EmptyHint({
     required this.onImport,
     required this.onImportLocal,
+    required this.onImportMusicXml,
     required this.onlineUrlController,
     required this.onAnalyzeUrl,
   });
   final VoidCallback onImport;
   final VoidCallback onImportLocal;
+  final VoidCallback onImportMusicXml;
   final TextEditingController onlineUrlController;
   final ValueChanged<String> onAnalyzeUrl;
 
@@ -774,7 +788,7 @@ class _EmptyHint extends StatelessWidget {
           ),
           SizedBox(height: ui(20)),
           Text(
-            '导入 MIDI，开启智能视唱',
+            '导入乐谱，开启智能视唱',
             style: TextStyle(
               fontSize: ui(18),
               color: const Color(0xFF1A1A1A),
@@ -786,8 +800,8 @@ class _EmptyHint extends StatelessWidget {
           SizedBox(
             width: ui(420),
             child: Text(
-              '支持内置 demo、本地 .mid/.midi 文件或在线链接。'
-              '伴奏音量由设备实体键调节；跟唱时麦克风会识别你的音高并绘制轨迹。',
+              '支持内置 demo、本地 MIDI（.mid/.midi）、本地 MusicXML（.xml/.musicxml/.mxl）'
+              '或在线 MIDI 链接。MusicXML 将按标准五线谱排版显示。',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: ui(13),
@@ -813,6 +827,29 @@ class _EmptyHint extends StatelessWidget {
                 icon: Icons.upload_file_rounded,
                 primary: false,
                 onTap: onImportLocal,
+              ),
+              SizedBox(width: ui(12)),
+              _ActionButton(
+                label: '上传 MusicXML',
+                icon: Icons.description_outlined,
+                primary: false,
+                onTap: onImportMusicXml,
+              ),
+            ],
+          ),
+          SizedBox(height: ui(12)),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.info_outline, size: ui(14), color: _DemoUi.textSecondary),
+              SizedBox(width: ui(6)),
+              Text(
+                '伴奏音量由设备实体键调节；跟唱时麦克风识别音高并评分',
+                style: TextStyle(
+                  fontSize: ui(12),
+                  color: _DemoUi.textSecondary,
+                  fontFamily: 'PingFang SC',
+                ),
               ),
             ],
           ),
@@ -1156,11 +1193,14 @@ class _TrackSelectionPanel extends StatelessWidget {
     final summary = selected == null ? null : findSummary(selected);
     final canConfirm = summary?.hasNotes ?? false;
 
+    final isMusicXml = state.importFormat == SightSingingImportFormat.musicXml;
+    final unitLabel = isMusicXml ? '声部' : '轨道';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          '选择主旋律轨',
+          isMusicXml ? '选择主旋律声部' : '选择主旋律轨',
           style: TextStyle(
             fontSize: ui(18),
             fontWeight: FontWeight.w600,
@@ -1170,8 +1210,8 @@ class _TrackSelectionPanel extends StatelessWidget {
         ),
         SizedBox(height: ui(6)),
         Text(
-          '「${state.audioName ?? 'MIDI'}」共 ${state.trackSummaries.length} 条轨道。'
-          '系统已预选推荐轨，请确认或改选后再开始跟唱。',
+          '「${state.audioName ?? (isMusicXml ? 'MusicXML' : 'MIDI')}」共 ${state.trackSummaries.length} 个$unitLabel。'
+          '系统已预选推荐$unitLabel，请确认或改选后再开始跟唱。',
           style: TextStyle(
             fontSize: ui(13),
             color: const Color(0xFF788698),
@@ -1202,10 +1242,10 @@ class _TrackSelectionPanel extends StatelessWidget {
           children: [
             Text(
               summary == null
-                  ? '请选择一条含音符的轨道'
+                  ? '请选择一个含音符的$unitLabel'
                   : summary.hasNotes
-                  ? '已选轨 ${summary.trackIndex} · ${summary.noteCount} 个音符 · ${summary.pitchRangeLabel}'
-                  : '轨 ${summary.trackIndex} 无音符，请换选',
+                  ? '已选$unitLabel ${summary.trackIndex} · ${summary.noteCount} 个音符 · ${summary.pitchRangeLabel}'
+                  : '$unitLabel ${summary.trackIndex} 无音符，请换选',
               style: TextStyle(
                 fontSize: ui(13),
                 color: const Color(0xFF1A1A1A),
@@ -1221,7 +1261,7 @@ class _TrackSelectionPanel extends StatelessWidget {
             ),
             SizedBox(width: ui(10)),
             _ActionButton(
-              label: '确认轨道',
+              label: isMusicXml ? '确认声部' : '确认轨道',
               icon: Icons.check_rounded,
               primary: true,
               onTap: canConfirm ? controller.confirmSelectedTrack : null,

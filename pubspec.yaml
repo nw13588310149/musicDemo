@@ -87,6 +87,8 @@ dependencies:
   permission_handler: ^12.0.1
   camera: ^0.11.1
   image: ^4.5.4
+  music_xml: ^2.7.0
+  webview_flutter: ^4.13.1
   # 截屏防护改由原生层实现（iOS SceneDelegate / Android MainActivity）。
   # screen_protector 与显式 FlutterEngine + SceneDelegate 不兼容，会导致 iOS 启动黑屏。
   # ───────────────────────────────────────────────────────────────────────

@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
+import 'package:music_xml/music_xml.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../../core/audio/native_playback_audio_session.dart';
@@ -11,11 +12,13 @@ import '../audio/ktv_scoring.dart';
 import '../audio/midi_file_parser.dart';
 import '../audio/midi_playback_scheduler.dart';
 import '../audio/midi_sight_singing_service.dart';
+import '../audio/music_xml_sight_singing_service.dart';
 import '../audio/pitch_voice_gate.dart';
 import '../audio/realtime_pitch_capture.dart';
 import '../config/smart_sight_singing_config.dart';
 import '../config/smart_sight_singing_tuning.dart';
 import '../data/midi_file_picker.dart';
+import '../data/music_xml_file_picker.dart';
 import 'sight_singing_platform.dart';
 import 'smart_sight_singing_state.dart';
 
@@ -71,6 +74,8 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
   KtvScoringSession? _scoringSession;
   MidiSightSingingBundle? _midiBundle;
   ParsedMidiFile? _parsedMidi;
+  MusicXmlDocument? _parsedMusicXml;
+  String? _musicXmlRawContent;
   Timer? _countdownTimer;
   Timer? _previewTimer;
   var _isPreviewSession = false;
@@ -95,6 +100,38 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
   void reportError(String message) {
     if (!mounted) return;
     state = state.copyWith(errorMessage: message);
+  }
+
+  /// 从本地文件系统选择 MusicXML 并解析。
+  Future<void> importLocalMusicXml() async {
+    if (_blocksImport()) return;
+
+    try {
+      final picked = await pickLocalMusicXmlFile();
+      if (picked == null) return;
+      await _prepareFromMusicXmlBytes(
+        bytes: picked.bytes,
+        displayName: picked.name,
+        sourceLabel: picked.path ?? picked.name,
+      );
+    } on StateError catch (e) {
+      if (!mounted) return;
+      state = state.copyWith(errorMessage: e.message);
+    } on MusicXmlSightSingingException catch (e, stack) {
+      if (!mounted) return;
+      state = state.copyWith(
+        stage: SightSingingStage.idle,
+        errorMessage: _formatDebugError('本地 MusicXML 解析失败', e.message, stack),
+        analyzingProgress: 0,
+      );
+    } catch (e, stack) {
+      if (!mounted) return;
+      state = state.copyWith(
+        stage: SightSingingStage.idle,
+        errorMessage: _formatDebugError('本地 MusicXML 读取失败', e, stack),
+        analyzingProgress: 0,
+      );
+    }
   }
 
   /// 从本地文件系统选择 MIDI 并解析。
@@ -240,17 +277,72 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     }
   }
 
+  Future<void> _prepareFromMusicXmlBytes({
+    required Uint8List bytes,
+    required String displayName,
+    required String sourceLabel,
+  }) async {
+    _parsedMidi = null;
+    _parsedMusicXml = null;
+    _musicXmlRawContent = null;
+    _midiBundle = null;
+    await _playback.stop();
+
+    state = state.copyWith(
+      stage: SightSingingStage.analyzing,
+      importFormat: SightSingingImportFormat.musicXml,
+      musicXmlContent: null,
+      audioPath: sourceLabel,
+      audioName: displayName,
+      analyzingProgress: 0.2,
+      track: null,
+      trackSummaries: const <MidiTrackSummary>[],
+      selectedTrackIndex: null,
+      melodyTrackIndex: null,
+      userPoints: const <UserPitchPoint>[],
+      playbackMs: 0,
+      currentScore: 0,
+      hitCount: 0,
+      scoredCount: 0,
+      combo: 0,
+      currentUserMidi: -1,
+      currentUserAmplitude: 0,
+      errorMessage: null,
+      scoreSightReadingMode: true,
+    );
+
+    final preview = MusicXmlSightSingingService.parseBytes(
+      bytes,
+      fileName: displayName,
+    );
+    if (!mounted) return;
+
+    _parsedMusicXml = preview.document;
+    _musicXmlRawContent = preview.rawXml;
+    state = state.copyWith(
+      stage: SightSingingStage.selectTrack,
+      analyzingProgress: 1,
+      musicXmlContent: preview.rawXml,
+      trackSummaries: preview.summaries,
+      selectedTrackIndex: preview.suggestedPartIndex,
+    );
+  }
+
   Future<void> _prepareFromMidiBytes({
     required Uint8List bytes,
     required String displayName,
     required String sourceLabel,
   }) async {
     _parsedMidi = null;
+    _parsedMusicXml = null;
+    _musicXmlRawContent = null;
     _midiBundle = null;
     await _playback.stop();
 
     state = state.copyWith(
       stage: SightSingingStage.analyzing,
+      importFormat: SightSingingImportFormat.midi,
+      musicXmlContent: null,
       audioPath: sourceLabel,
       audioName: displayName,
       analyzingProgress: 0.2,
@@ -290,9 +382,16 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
   /// 用户确认主旋律轨，生成参考轨并进入就绪状态。
   Future<void> confirmSelectedTrack() async {
     if (state.stage != SightSingingStage.selectTrack) return;
-    final parsed = _parsedMidi;
     final trackIndex = state.selectedTrackIndex;
-    if (parsed == null || trackIndex == null) return;
+    if (trackIndex == null) return;
+
+    if (state.importFormat == SightSingingImportFormat.musicXml) {
+      await _confirmSelectedMusicXmlPart(trackIndex);
+      return;
+    }
+
+    final parsed = _parsedMidi;
+    if (parsed == null) return;
 
     MidiTrackSummary? summary;
     for (final s in state.trackSummaries) {
@@ -336,14 +435,71 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     }
   }
 
+  Future<void> _confirmSelectedMusicXmlPart(int partIndex) async {
+    final parsed = _parsedMusicXml;
+    if (parsed == null) return;
+
+    MidiTrackSummary? summary;
+    for (final s in state.trackSummaries) {
+      if (s.trackIndex == partIndex) {
+        summary = s;
+        break;
+      }
+    }
+    if (summary == null || !summary.hasNotes) {
+      state = state.copyWith(errorMessage: '请选择包含音符的声部。');
+      return;
+    }
+
+    try {
+      final bundle = MusicXmlSightSingingService.buildBundle(parsed, partIndex);
+      _midiBundle = MidiSightSingingBundle(
+        track: bundle.track,
+        playbackEvents: bundle.playbackEvents,
+        melodyTrackIndex: bundle.melodyPartIndex,
+        totalMs: bundle.totalMs,
+      );
+      await _playback.prepare(bundle.playbackEvents, totalMs: bundle.totalMs);
+
+      if (!mounted) return;
+      state = state.copyWith(
+        stage: SightSingingStage.ready,
+        track: bundle.track,
+        melodyTrackIndex: partIndex,
+        trackSummaries: const <MidiTrackSummary>[],
+        selectedTrackIndex: null,
+        playbackMs: 0,
+        userPoints: const <UserPitchPoint>[],
+        currentScore: 0,
+        hitCount: 0,
+        scoredCount: 0,
+        combo: 0,
+        currentUserMidi: -1,
+        currentUserAmplitude: 0,
+        errorMessage: null,
+        scoreSightReadingMode: true,
+        musicXmlContent: _musicXmlRawContent,
+      );
+    } on MusicXmlSightSingingException catch (e, stack) {
+      if (!mounted) return;
+      state = state.copyWith(
+        errorMessage: _formatDebugError('构建 MusicXML 参考轨失败', e.message, stack),
+      );
+    }
+  }
+
   void cancelTrackSelection() {
     if (state.stage != SightSingingStage.selectTrack) return;
     _parsedMidi = null;
+    _parsedMusicXml = null;
+    _musicXmlRawContent = null;
     state = state.copyWith(
       stage: SightSingingStage.idle,
       trackSummaries: const <MidiTrackSummary>[],
       selectedTrackIndex: null,
       analyzingProgress: 0,
+      musicXmlContent: null,
+      importFormat: SightSingingImportFormat.midi,
     );
   }
 

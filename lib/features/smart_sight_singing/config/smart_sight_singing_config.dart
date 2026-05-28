@@ -32,6 +32,16 @@ abstract final class SmartSightSingingImportConfig {
   /// 建议范围：15s ~ 90s；大文件或弱网时可适当调大。
   /// 调整内容：在线链接下载数据的等待时间。
   static const Duration onlineReceiveTimeout = Duration(seconds: 45);
+
+  /// 本地 MusicXML 最大文件体积。
+  static const int maxLocalMusicXmlBytes = 8 * 1024 * 1024;
+
+  /// 本地 MusicXML 允许的扩展名（含压缩 .mxl）。
+  static const List<String> musicXmlExtensions = <String>[
+    'xml',
+    'musicxml',
+    'mxl',
+  ];
 }
 
 abstract final class SmartSightSingingSessionConfig {

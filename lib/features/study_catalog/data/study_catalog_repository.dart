@@ -26,6 +26,7 @@ class StudyCatalogRepository {
     required String firstMenu,
     required String secondMenu,
     required bool schoolMode,
+    required String province,
     int size = 1000,
   }) {
     return client.post(
@@ -33,7 +34,7 @@ class StudyCatalogRepository {
       data: <String, dynamic>{
         'current': 1,
         'firstMenu': firstMenu,
-        'province': '甘肃',
+        'province': province.isEmpty ? '甘肃' : province,
         'secondMenu': secondMenu,
         'size': size,
         'type': type,

@@ -74,7 +74,6 @@ class AppTextField extends TextField {
     super.scribbleEnabled,
     super.stylusHandwritingEnabled,
     super.enableIMEPersonalizedLearning,
-    super.enableInlinePrediction,
     EditableTextContextMenuBuilder? contextMenuBuilder,
     super.canRequestFocus,
     super.spellCheckConfiguration,
