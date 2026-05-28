@@ -729,7 +729,14 @@ class _PracticeTrackView extends StatelessWidget {
   Widget build(BuildContext context) {
     final xml = musicXmlContent?.trim() ?? '';
     if (scoreSightReadingMode && xml.isNotEmpty) {
-      return OsmdScoreViewer(musicXml: xml, playbackMs: playbackMs);
+      final onsetMs = <int>[
+        for (final note in track.notes) note.startMs,
+      ];
+      return OsmdScoreViewer(
+        musicXml: xml,
+        playbackMs: playbackMs,
+        onsetMs: onsetMs,
+      );
     }
     if (scoreSightReadingMode) {
       return ScoreSightReadingTrack(

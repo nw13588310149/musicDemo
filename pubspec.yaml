@@ -89,6 +89,7 @@ dependencies:
   image: ^4.5.4
   music_xml: ^2.7.0
   webview_flutter: ^4.13.1
+  webview_flutter_wkwebview: ^3.25.1
   # 截屏防护改由原生层实现（iOS SceneDelegate / Android MainActivity）。
   # screen_protector 与显式 FlutterEngine + SceneDelegate 不兼容，会导致 iOS 启动黑屏。
   # ───────────────────────────────────────────────────────────────────────
@@ -189,6 +190,7 @@ flutter:
     - assets/audio/music_companion/metronome/beat2/
     - assets/audio/music_companion/metronome/beat3/
     - assets/audio/smart_dictation/piano/
+    - assets/smart_sight_singing/opensheetmusicdisplay.min.js
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
