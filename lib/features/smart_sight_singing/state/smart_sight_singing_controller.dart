@@ -1094,6 +1094,21 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       return;
     }
 
+    // 无谱视唱预备拍：节拍器外放可能被麦克风录入，不写入 KTV 音高轨。
+    if (!state.scoreSightReadingMode &&
+        state.playbackLeadInMs > 0 &&
+        timeMs < state.playbackLeadInMs) {
+      _heldUserMidi = -1;
+      _heldUserMidiUntilMs = 0;
+      if (state.currentUserMidi >= 0 || state.currentUserAmplitude > 0) {
+        state = state.copyWith(
+          currentUserMidi: -1,
+          currentUserAmplitude: 0,
+        );
+      }
+      return;
+    }
+
     final tick = session.onPitch(playbackMs: timeMs, event: filtered);
     final cents = tick.cents;
 

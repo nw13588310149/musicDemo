@@ -175,15 +175,27 @@ final class LowLatencyNoteAudio {
         borrowedNode = node
         node.volume = max(0, min(volume, 1))
 
-        try self.attachAndStartIfNeeded(node: node)
+        try self.attachAndStartIfNeeded(node: node, format: playbackBuffer.format)
         self.activeNodes.append(node)
 
-        node.scheduleBuffer(playbackBuffer, at: nil, options: []) { [weak self, weak node] in
-          guard let self = self, let node = node else { return }
-          self.queue.async {
-            self.activeNodes.removeAll { $0 === node }
-            self.returnPlayerNode(node)
-          }
+        do {
+          try LowLatencyNoteAudioSafePlay.scheduleBuffer(
+            playbackBuffer,
+            onNode: node,
+            completionHandler: { [weak self, weak node] in
+              guard let self = self, let node = node else { return }
+              self.queue.async {
+                self.activeNodes.removeAll { $0 === node }
+                self.returnPlayerNode(node)
+              }
+            }
+          )
+        } catch {
+          self.activeNodes.removeAll { $0 === node }
+          self.returnPlayerNode(node)
+          throw LowLatencyNoteAudioError.playRejected(
+            (error as NSError).localizedDescription
+          )
         }
 
         do {
@@ -289,7 +301,7 @@ final class LowLatencyNoteAudio {
     }
   }
 
-  private func attachAndStartIfNeeded(node: AVAudioPlayerNode) throws {
+  private func attachAndStartIfNeeded(node: AVAudioPlayerNode, format: AVAudioFormat) throws {
     if engine.isRunning {
       engine.pause()
     }
@@ -297,7 +309,10 @@ final class LowLatencyNoteAudio {
     if !engine.attachedNodes.contains(node) {
       engine.attach(node)
     }
-    engine.connect(node, to: engine.mainMixerNode, format: nil)
+    // Connect with the buffer's own format so scheduleBuffer cannot raise an
+    // NSException on format mismatch (different asset sample rates / channels,
+    // or a stale output format after an engine reset / route change).
+    engine.connect(node, to: engine.mainMixerNode, format: format)
 
     engine.prepare()
     try engine.start()

@@ -26,4 +26,31 @@
   }
 }
 
++ (BOOL)scheduleBuffer:(AVAudioPCMBuffer *)buffer
+                onNode:(AVAudioPlayerNode *)node
+     completionHandler:(void (^)(void))completionHandler
+                 error:(NSError **)error {
+  if (node == nil || buffer == nil) {
+    if (error != NULL) {
+      *error = [NSError errorWithDomain:@"LowLatencyNoteAudio"
+                                   code:3
+                               userInfo:@{NSLocalizedDescriptionKey : @"node or buffer is nil"}];
+    }
+    return NO;
+  }
+
+  @try {
+    [node scheduleBuffer:buffer atTime:nil options:0 completionHandler:completionHandler];
+    return YES;
+  } @catch (NSException *exception) {
+    if (error != NULL) {
+      NSString *reason = exception.reason ?: exception.name;
+      *error = [NSError errorWithDomain:@"LowLatencyNoteAudio"
+                                   code:4
+                               userInfo:@{NSLocalizedDescriptionKey : reason}];
+    }
+    return NO;
+  }
+}
+
 @end
