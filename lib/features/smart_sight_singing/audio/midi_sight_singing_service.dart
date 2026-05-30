@@ -140,7 +140,9 @@ abstract final class MidiSightSingingService {
     }
 
     final range = KtvPitchGuideBuilder.rangeForNotes(notes);
-    final totalMs = parsed.totalMs.ceil();
+    final totalMs =
+        notes.map((n) => n.endMs).reduce(math.max) +
+        SmartSightSingingMidiConfig.playbackTailMs;
 
     final track = PitchTrack(
       frames: const <PitchFrame>[],

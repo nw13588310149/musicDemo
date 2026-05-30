@@ -303,14 +303,14 @@ class _KaraokePainter extends CustomPainter {
 
   /// 紫色竖线上的扩散圆：随实时检测音高在纵轴移动。
   void _drawNowGlow(Canvas canvas, double cx, double cy, double height) {
-    const maxRadius = 17.0;
+    const maxRadius = 15.0;
     final clampedY = cy.clamp(maxRadius + 6, height - maxRadius - 6);
     const layers = <(double, double)>[
-      (17.0, 0.20),
-      (14.045, 0.30),
-      (11.085, 0.50),
-      (8.13, 0.70),
-      (5.175, 1.0),
+      (15.0, 0.20),
+      (12.045, 0.30),
+      (9.085, 0.50),
+      (6.13, 0.70),
+      (3.175, 1.0),
     ];
     for (final (radius, alpha) in layers) {
       canvas.drawCircle(

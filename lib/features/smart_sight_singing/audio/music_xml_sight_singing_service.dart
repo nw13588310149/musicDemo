@@ -111,10 +111,9 @@ abstract final class MusicXmlSightSingingService {
     final shiftedNotes = leadInMs > 0 ? _shiftNotes(notes, leadInMs) : notes;
 
     final range = KtvPitchGuideBuilder.rangeForNotes(shiftedNotes);
-    final baseTotalMs = math.max(
-      (document.totalTimeSecs * 1000).ceil(),
-      notes.map((n) => n.endMs).reduce(math.max),
-    );
+    final baseTotalMs =
+        notes.map((n) => n.endMs).reduce(math.max) +
+        SmartSightSingingMidiConfig.playbackTailMs;
     // 播放时间轴含预备拍；进度条总时长仅反映旋律部分。
     final playbackTotalMs = baseTotalMs + leadInMs;
 
@@ -434,18 +433,19 @@ class _MusicXmlLeadIn {
     if (!beatMs.isFinite || beatMs <= 0) return null;
 
     final beatCount = beats.clamp(1, 12);
-    final referenceBeats =
-        SmartSightSingingMidiConfig.musicXmlReferencePitchBeats.clamp(1, 4);
-    final referenceOffsetMs = (referenceBeats * beatMs).round();
+    final referenceStartMs =
+        SmartSightSingingMidiConfig.musicXmlReferencePitchStartMs;
+    final metronomeStartMs =
+        SmartSightSingingMidiConfig.musicXmlMetronomeStartMs;
     final events = <MidiPlaybackEvent>[
       MidiPlaybackEvent(
-        timeMs: 0,
+        timeMs: referenceStartMs,
         pitch: SmartSightSingingMidiConfig.musicXmlReferencePitchMidi,
         velocity: 96,
       ),
       for (var i = 0; i < beatCount; i++)
         MidiPlaybackEvent(
-          timeMs: referenceOffsetMs + (i * beatMs).round(),
+          timeMs: metronomeStartMs + (i * beatMs).round(),
           pitch: -1,
           velocity: i == 0 ? 127 : 117,
           metronomeCue: i == 0
@@ -455,7 +455,7 @@ class _MusicXmlLeadIn {
     ];
 
     return _MusicXmlLeadIn(
-      durationMs: referenceOffsetMs + (beatCount * beatMs).round(),
+      durationMs: metronomeStartMs + (beatCount * beatMs).round(),
       playbackEvents: events,
     );
   }

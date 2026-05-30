@@ -1282,9 +1282,9 @@ class _GradientSliderState extends State<_GradientSlider> {
   Timer? _trailingTimer;
   Timer? _graceTimer;
 
-  /// 节流间隔：拖动期间最多每 60ms 真正下发一次 seek。配合 controller
-  /// 的 seek 合并，60ms 已经足够丝滑（>16fps），不会让 native 队列堆积。
-  static const Duration _kThrottle = Duration(milliseconds: 60);
+  /// 节流间隔：拖动期间最多每 100ms 真正下发一次 seek。配合 controller
+  /// 的 seek 合并，降低 mpv / Web Audio 边解码边跳的毛刺与电流声。
+  static const Duration _kThrottle = Duration(milliseconds: 100);
 
   /// 松手后保留 `_dragRatio` 的 grace 时间。给 native player.seek 收敛、
   /// position stream 追上目标位置留时间，避免"thumb 闪一下旧位置"。

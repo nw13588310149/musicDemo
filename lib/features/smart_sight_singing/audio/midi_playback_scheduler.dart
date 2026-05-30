@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
 import '../../music_companion/audio/music_companion_audio_catalog.dart';
 import '../../music_companion/audio/music_companion_audio_engine.dart';
+import '../config/smart_sight_singing_config.dart';
 import 'midi_sight_singing_service.dart';
 
 /// 基于现有钢琴短音资源，按 MIDI 事件时间轴播放。
@@ -25,6 +27,8 @@ class MidiPlaybackScheduler {
   var _eventIndex = 0;
   var _lastMs = -1;
   var _running = false;
+  var _finishing = false;
+  Future<void>? _audioChain;
 
   /// 为 true 时不播放旋律伴奏；若 [prepare] 传入 [leadInDurationMs] > 0，
   /// 预备段内的标准音与节拍器仍会出声（考试模式）。
@@ -61,11 +65,25 @@ class MidiPlaybackScheduler {
     await stop();
     _events = List<MidiPlaybackEvent>.from(events)
       ..sort((a, b) => a.timeMs.compareTo(b.timeMs));
-    _totalMs = totalMs;
-    _leadInDurationMs = leadInDurationMs.clamp(0, totalMs);
+    _totalMs = _resolvePlaybackTotalMs(_events, totalMs);
+    _leadInDurationMs = leadInDurationMs.clamp(0, _totalMs);
     _eventIndex = 0;
     _lastMs = -1;
     _activePlaybackPitch = null;
+    _audioChain = null;
+    _finishing = false;
+  }
+
+  static int _resolvePlaybackTotalMs(
+    List<MidiPlaybackEvent> events,
+    int totalMs,
+  ) {
+    if (events.isEmpty) return math.max(0, totalMs);
+    final lastEventMs = events.last.timeMs;
+    return math.max(
+      totalMs,
+      lastEventMs + SmartSightSingingMidiConfig.playbackTailMs,
+    );
   }
 
   bool _shouldPlayEvent(MidiPlaybackEvent event) {
@@ -104,6 +122,8 @@ class MidiPlaybackScheduler {
     _eventIndex = 0;
     _lastMs = -1;
     _activePlaybackPitch = null;
+    _audioChain = null;
+    _finishing = false;
     _stopwatch = Stopwatch()..start();
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(milliseconds: 16), _onTick);
@@ -137,7 +157,7 @@ class MidiPlaybackScheduler {
     while (_eventIndex < _events.length && _events[_eventIndex].timeMs <= ms) {
       final event = _events[_eventIndex];
       _eventIndex += 1;
-      unawaited(_playEvent(event));
+      _enqueuePlayEvent(event);
     }
 
     if (!_positionController.isClosed) {
@@ -145,8 +165,28 @@ class MidiPlaybackScheduler {
     }
 
     if (ms >= _totalMs && _eventIndex >= _events.length) {
-      unawaited(_finish());
+      unawaited(_finishWhenReady());
     }
+  }
+
+  Future<void> _finishWhenReady() async {
+    if (_finishing || !_running) return;
+    _finishing = true;
+    try {
+      final chain = _audioChain;
+      if (chain != null) {
+        await chain;
+      }
+      await _finish();
+    } finally {
+      _finishing = false;
+    }
+  }
+
+  void _enqueuePlayEvent(MidiPlaybackEvent event) {
+    _audioChain = (_audioChain ?? Future<void>.value()).then(
+      (_) => _playEvent(event),
+    );
   }
 
   Future<void> _playEvent(MidiPlaybackEvent event) async {
@@ -170,6 +210,9 @@ class MidiPlaybackScheduler {
     if (token == null) return;
     final volume = (event.velocity / 127.0).clamp(0.0, 1.0);
     try {
+      if (SmartSightSingingMidiConfig.monophonicPianoPlayback) {
+        _audio.stopAllImmediately();
+      }
       await _audio.playNote(token, volume: volume);
     } catch (error, stack) {
       debugPrint(

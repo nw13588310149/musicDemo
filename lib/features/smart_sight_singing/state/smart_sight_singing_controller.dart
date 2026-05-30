@@ -82,7 +82,6 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
   MusicXmlDocument? _parsedMusicXml;
   String? _musicXmlRawContent;
   Timer? _countdownTimer;
-  Timer? _previewTimer;
   var _isPreviewSession = false;
   bool _shuttingDown = false;
   final MusicPlayRepository? _musicPlayRepository;
@@ -648,6 +647,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     }
 
     final bundle = _midiBundle!;
+    final leadInMs = state.playbackLeadInMs;
     await _playback.stop();
     _isPreviewSession = true;
     _playback.muteAudioOutput = false;
@@ -657,7 +657,11 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       await _playback.reclaimNativeEngine();
     }
 
-    await _playback.prepare(bundle.playbackEvents, totalMs: bundle.totalMs);
+    await _playback.prepare(
+      bundle.playbackEvents,
+      totalMs: bundle.totalMs,
+      leadInDurationMs: leadInMs,
+    );
 
     try {
       await _playback.start(muteAudio: false);
@@ -671,15 +675,6 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
 
     if (!mounted) return;
     state = state.copyWith(isPreviewPlaying: true, playbackMs: 0);
-
-    _previewTimer?.cancel();
-    final previewMs =
-        bundle.totalMs < SmartSightSingingSessionConfig.melodyPreviewMaxMs
-        ? bundle.totalMs
-        : SmartSightSingingSessionConfig.melodyPreviewMaxMs;
-    _previewTimer = Timer(Duration(milliseconds: previewMs), () {
-      unawaited(_stopPreview());
-    });
   }
 
   Future<void> stopPreview() async {
@@ -688,8 +683,6 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
   }
 
   Future<void> _stopPreview() async {
-    _previewTimer?.cancel();
-    _previewTimer = null;
     _isPreviewSession = false;
     await _playback.stop();
     _playback.muteAudioOutput = state.visualOnlyMode;
@@ -984,8 +977,6 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     SightSingingTuning.instance.removeListener(_onTuningChanged);
     _countdownTimer?.cancel();
     _countdownTimer = null;
-    _previewTimer?.cancel();
-    _previewTimer = null;
     _isPreviewSession = false;
     await _stopCaptureSilently();
     await _positionSub?.cancel();

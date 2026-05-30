@@ -22,12 +22,6 @@ import 'widgets/karaoke_pitch_track.dart';
 import 'widgets/osmd_score_viewer.dart';
 import 'widgets/score_sight_reading_track.dart';
 
-/// demo 页中性色，不使用产品主色。
-abstract final class _DemoUi {
-  static const accent = Color(0xFF1A1A1A);
-  static const borderStrong = Color(0xFFD0D5DD);
-}
-
 /// 智能视唱主页：内置 demo.mid → MIDI 参考轨 → 跟唱实时打分。
 class SmartSightSingingPage extends ConsumerStatefulWidget {
   const SmartSightSingingPage({super.key});
@@ -1093,7 +1087,7 @@ class _ScoreCell extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontSize: ui(14),
+              fontSize: ui(20),
               color: valueColor,
               fontFamily: 'PingFang SC',
               fontWeight: AppFont.w600,
@@ -1326,16 +1320,14 @@ class _ControlButtons extends StatelessWidget {
     final countdown = state.stage == SightSingingStage.countdown;
 
     if (countdown) {
-      return _ActionButton(
-        label: '取消',
-        icon: Icons.close_rounded,
+      return _ImageActionButton(
+        asset: AppAssets.smartSightSingingCancelBtn,
         onTap: () => controller.cancelCountdown(),
       );
     }
     if (singing) {
-      return _ActionButton(
-        label: '停止',
-        icon: Icons.stop_rounded,
+      return _ImageActionButton(
+        asset: AppAssets.smartSightSingingStopBtn,
         onTap: () => controller.stopSinging(),
       );
     }
@@ -1484,7 +1476,7 @@ class _SightProgressTrack extends StatelessWidget {
   }
 }
 
-/// 底部操作条整图按钮（试听 / 暂停 / 开始跟唱），设计稿 96×36。
+/// 底部操作条整图按钮（试听 / 开始跟唱 / 停止 / 取消），设计稿 96×36。
 class _ImageActionButton extends StatelessWidget {
   const _ImageActionButton({
     required this.asset,
@@ -1699,62 +1691,6 @@ class _ScoreModeSegmentSwitchItem extends StatelessWidget {
             ),
             child: Text(label),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ActionButton extends StatelessWidget {
-  const _ActionButton({
-    required this.label,
-    required this.icon,
-    required this.onTap,
-  });
-  final String label;
-  final IconData icon;
-  final VoidCallback? onTap;
-
-  static const _width = _ImageActionButton._width;
-  static const _height = _ImageActionButton._height;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    final disabled = onTap == null;
-    final bg = disabled ? const Color(0xFFE5E5EF) : Colors.white;
-    final fg = disabled ? const Color(0xFFB0B6C2) : _DemoUi.accent;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(ui(18)),
-      child: Container(
-        width: ui(_width),
-        height: ui(_height),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(ui(18)),
-          border: disabled
-              ? null
-              : Border.all(color: _DemoUi.borderStrong, width: 1),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: fg, size: ui(14)),
-            SizedBox(width: ui(4)),
-            Text(
-              label,
-              style: TextStyle(
-                color: fg,
-                fontSize: ui(12),
-                fontWeight: AppFont.w500,
-                fontFamily: 'PingFang SC',
-                height: 1,
-              ),
-            ),
-          ],
         ),
       ),
     );

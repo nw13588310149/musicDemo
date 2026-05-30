@@ -60,11 +60,6 @@ abstract final class SmartSightSingingSessionConfig {
   /// 调整内容：点击“开始跟唱”后的准备倒计时。
   static const int countdownStartSeconds = 3;
 
-  /// 旋律试听最长时长。
-  /// 建议范围：5000ms ~ 60000ms；越大可试听越完整，但课堂节奏更慢。
-  /// 调整内容：就绪态“试听旋律”的自动停止时间。
-  static const int melodyPreviewMaxMs = 20000;
-
   /// 用户音高轨迹保留点数。
   /// 建议范围：240 ~ 2000；越大拖尾越长但重绘成本越高。
   /// 调整内容：KTV 音高轨上保留的实时演唱轨迹长度。
@@ -179,13 +174,22 @@ abstract final class SmartSightSingingMidiConfig {
   /// 调整内容：MIDI 音符转参考音符条时的最小时长兜底。
   static const int minMidiNoteMs = 40;
 
-  /// MusicXML 跟唱前标准音 MIDI 音高（C4 = 60）。
+  /// MusicXML 跟唱前标准音 MIDI 音高（A4 = 69）。
   /// 调整内容：预备拍开始前播放的参考音高。
-  static const int musicXmlReferencePitchMidi = 60;
+  static const int musicXmlReferencePitchMidi = 69;
 
-  /// MusicXML 标准音占用拍数（按曲速换算为毫秒）。
-  /// 建议范围：1 ~ 2；标准音结束后才开始节拍器预备拍。
-  static const int musicXmlReferencePitchBeats = 1;
+  /// MusicXML 标准音开始时间（毫秒，相对跟唱起点）。
+  static const int musicXmlReferencePitchStartMs = 500;
+
+  /// MusicXML 节拍器开始时间（毫秒，相对跟唱起点；与标准音开始时间独立）。
+  static const int musicXmlMetronomeStartMs = 3000;
+
+  /// 伴奏钢琴单音模式：触发新音符前先停止上一音，避免短采样叠加成
+  /// 过长延音（与听写「一次一音」的听感对齐）。
+  static const bool monophonicPianoPlayback = true;
+
+  /// 最后一个播放事件之后的尾音留白（毫秒），避免调度器提前结束。
+  static const int playbackTailMs = 400;
 }
 
 abstract final class SmartSightSingingPitchRangeConfig {
@@ -417,7 +421,7 @@ abstract final class SmartSightSingingViewConfig {
   static const double karaokeIdleGlowCenterY = 48;
 
   /// 无谱视唱拖尾点半径范围（随响度在区间内变化）。
-  static const double karaokeTrailMinRadius = 1.5;
+  static const double karaokeTrailMinRadius = 3.0;
   static const double karaokeTrailMaxRadius = 6.0;
 
   /// 拖尾点透明度下限（对应原版 alpha 40/255）。

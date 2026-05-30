@@ -240,6 +240,10 @@ abstract final class AppAssets {
   static const smartSightSingingPreviewPauseBtn = 'assets/images/sightsing/2.png';
   /// 「开始跟唱」按钮（整图，紫色渐变）。
   static const smartSightSingingStartBtn = 'assets/images/sightsing/3.png';
+  /// 跟唱中「停止」按钮（整图）。
+  static const smartSightSingingStopBtn = 'assets/images/sightsing/4.png';
+  /// 倒计时「取消」按钮（整图）。
+  static const smartSightSingingCancelBtn = 'assets/images/sightsing/5.png';
   /// 调试面板右上角关闭按钮（紫色圆形 X）。
   static const smartSightSingingClose = 'assets/images/sightsing/close.png';
   /// 器乐二级页（[InstrumentalPage] 内部复用 [VoicePage]）卡片封面：
