@@ -295,7 +295,7 @@ final class LowLatencyNoteAudio {
     if !engine.isRunning {
       // prepare()/start() 在图/会话非法时会抛 NSException，必须经 ObjC 捕获，
       // 否则 Swift 捕不到会直接 abort 整个进程。
-      try LowLatencyNoteAudioSafePlay.prepareAndStart(engine)
+      try LowLatencyNoteAudioSafePlay.prepareAndStartEngine(engine)
     }
     engineNeedsReset = false
   }
