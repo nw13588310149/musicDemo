@@ -218,11 +218,11 @@ flutter:
           weight: 200
         - asset: assets/fonts/ttf/PingFangSC-Light.otf
           weight: 300
-        - asset: assets/fonts/ttf/PingFangSC-Regular.ttf
+        - asset: assets/fonts/ttf/PingFangSC-Regular.otf
           weight: 400
         - asset: assets/fonts/ttf/PingFangSC-Medium.otf
           weight: 500
-        - asset: assets/fonts/ttf/PingFangSC-Semibold.ttf
+        - asset: assets/fonts/ttf/PingFangSC-Semibold.otf
           weight: 600
     # Manrope：
     # • w500（Medium）—— 首页右侧周课表的日期数字（9 / 10 / 11…）

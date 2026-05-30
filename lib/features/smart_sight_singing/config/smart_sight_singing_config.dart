@@ -178,6 +178,14 @@ abstract final class SmartSightSingingMidiConfig {
   /// 建议范围：20ms ~ 120ms；越大越能过滤极短装饰/误触。
   /// 调整内容：MIDI 音符转参考音符条时的最小时长兜底。
   static const int minMidiNoteMs = 40;
+
+  /// MusicXML 跟唱前标准音 MIDI 音高（C4 = 60）。
+  /// 调整内容：预备拍开始前播放的参考音高。
+  static const int musicXmlReferencePitchMidi = 60;
+
+  /// MusicXML 标准音占用拍数（按曲速换算为毫秒）。
+  /// 建议范围：1 ~ 2；标准音结束后才开始节拍器预备拍。
+  static const int musicXmlReferencePitchBeats = 1;
 }
 
 abstract final class SmartSightSingingPitchRangeConfig {
@@ -400,6 +408,20 @@ abstract final class SmartSightSingingViewConfig {
   /// 建议范围：4000ms ~ 10000ms；越大看得更远，局部精度更低。
   /// 调整内容：KTV 音高轨横向显示的时间范围。
   static const int karaokeWindowMs = 6000;
+
+  /// Now 竖线附近不重复绘制历史拖尾点的时间半径（毫秒）。
+  /// 避免与实时检测光晕叠成两个圆点。
+  static const int karaokeNowLineSkipTrailMs = 50;
+
+  /// 未识别音高时 Now 线光晕的默认纵向位置（距画布顶部的逻辑像素）。
+  static const double karaokeIdleGlowCenterY = 48;
+
+  /// 无谱视唱拖尾点半径范围（随响度在区间内变化）。
+  static const double karaokeTrailMinRadius = 1.5;
+  static const double karaokeTrailMaxRadius = 6.0;
+
+  /// 拖尾点透明度下限（对应原版 alpha 40/255）。
+  static const double karaokeTrailMinAlpha = 0.16;
 
   /// 谱例视唱 Now 线横向位置。
   /// 建议范围：0.25 ~ 0.5；越小右侧可预读谱例越多。

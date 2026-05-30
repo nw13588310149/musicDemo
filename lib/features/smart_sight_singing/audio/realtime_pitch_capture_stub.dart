@@ -31,7 +31,8 @@ class _WebRealtimePitchCapture implements RealtimePitchCapture {
   StreamController<RealtimePitchEvent>? _controller;
   int _filledBytes = 0;
   bool _running = false;
-  Future<void> _detectChain = Future<void>.value();
+  bool _detectInFlight = false;
+  Uint8List? _pendingFrame;
 
   @override
   bool get isRunning => _running;
@@ -73,7 +74,8 @@ class _WebRealtimePitchCapture implements RealtimePitchCapture {
     );
     _controller = controller;
     _filledBytes = 0;
-    _detectChain = Future<void>.value();
+    _detectInFlight = false;
+    _pendingFrame = null;
     _running = true;
 
     _streamSub = pcmStream.listen(
@@ -114,9 +116,34 @@ class _WebRealtimePitchCapture implements RealtimePitchCapture {
     Uint8List frame,
     StreamController<RealtimePitchEvent> out,
   ) {
-    _detectChain = _detectChain
-        .then((_) => _emitFrame(frame, out))
-        .catchError((_) {});
+    if (_detectInFlight) {
+      _pendingFrame = frame;
+      return;
+    }
+    _runDetect(frame, out);
+  }
+
+  void _runDetect(
+    Uint8List frame,
+    StreamController<RealtimePitchEvent> out,
+  ) {
+    _detectInFlight = true;
+    unawaited(
+      _emitFrame(frame, out).whenComplete(() {
+        if (!_running) {
+          _detectInFlight = false;
+          _pendingFrame = null;
+          return;
+        }
+        final pending = _pendingFrame;
+        _pendingFrame = null;
+        if (pending != null) {
+          _runDetect(pending, out);
+        } else {
+          _detectInFlight = false;
+        }
+      }),
+    );
   }
 
   Future<void> _emitFrame(
@@ -213,7 +240,8 @@ class _WebRealtimePitchCapture implements RealtimePitchCapture {
       await controller.close();
     }
     _filledBytes = 0;
-    _detectChain = Future<void>.value();
+    _detectInFlight = false;
+    _pendingFrame = null;
   }
 }
 

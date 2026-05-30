@@ -511,7 +511,11 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     try {
       final bundle = MidiSightSingingService.buildBundle(parsed, trackIndex);
       _midiBundle = bundle;
-      await _playback.prepare(bundle.playbackEvents, totalMs: bundle.totalMs);
+      await _playback.prepare(
+        bundle.playbackEvents,
+        totalMs: bundle.totalMs,
+        leadInDurationMs: bundle.totalMs - bundle.track.totalMs,
+      );
 
       if (!mounted) return;
       state = state.copyWith(
@@ -567,7 +571,11 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
         melodyTrackIndex: bundle.melodyPartIndex,
         totalMs: bundle.totalMs,
       );
-      await _playback.prepare(bundle.playbackEvents, totalMs: bundle.totalMs);
+      await _playback.prepare(
+        bundle.playbackEvents,
+        totalMs: bundle.totalMs,
+        leadInDurationMs: bundle.totalMs - bundle.track.totalMs,
+      );
 
       if (!mounted) return;
       state = state.copyWith(
@@ -747,7 +755,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
         },
       );
 
-      if (!state.visualOnlyMode) {
+      if (!state.visualOnlyMode || state.playbackLeadInMs > 0) {
         unawaited(_warmupAccompanimentPlayback());
       }
     } catch (e) {
@@ -772,6 +780,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     );
     _heldUserMidi = -1;
     _heldUserMidiUntilMs = 0;
+    _latestPlaybackMs = 0;
 
     state = state.copyWith(
       stage: SightSingingStage.countdown,
@@ -807,11 +816,13 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
   }
 
   Future<void> _warmupAccompanimentPlayback() async {
-    if (state.visualOnlyMode || _midiBundle == null || kIsWeb) return;
+    if (_midiBundle == null || kIsWeb) return;
+    if (state.visualOnlyMode && state.playbackLeadInMs <= 0) return;
     try {
       await _playback.prepare(
         _midiBundle!.playbackEvents,
         totalMs: _midiBundle!.totalMs,
+        leadInDurationMs: state.playbackLeadInMs,
       );
       await NativePlaybackAudioSession.ensureSightSingingCaptureActiveSoft();
       await _playback.reclaimNativeEngine();
@@ -834,11 +845,12 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     await _playback.prepare(
       _midiBundle!.playbackEvents,
       totalMs: _midiBundle!.totalMs,
+      leadInDurationMs: state.playbackLeadInMs,
     );
     try {
-      if (!kIsWeb && !state.visualOnlyMode) {
+      if (!kIsWeb &&
+          (!state.visualOnlyMode || state.playbackLeadInMs > 0)) {
         await NativePlaybackAudioSession.ensureSightSingingCaptureActiveSoft();
-        await _playback.reclaimNativeEngine();
       }
       await _playback.start(muteAudio: state.visualOnlyMode);
     } catch (e) {
@@ -1003,6 +1015,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
 
   void _onPlaybackPosition(int positionMs) {
     if (_shuttingDown || !mounted) return;
+    _latestPlaybackMs = positionMs;
     if (_isPreviewSession) {
       state = state.copyWith(playbackMs: positionMs);
       return;
@@ -1035,11 +1048,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
 
   double _heldUserMidi = -1;
   int _heldUserMidiUntilMs = 0;
-  int _lastWebPitchUiMs = 0;
-  int _lastWebTrailPointMs = 0;
-
-  static const _webCountdownUiIntervalMs = 100;
-  static const _webTrailPointIntervalMs = 50;
+  int _latestPlaybackMs = 0;
 
   void _onUserPitch(RealtimePitchEvent event) {
     if (_shuttingDown || !mounted) return;
@@ -1048,12 +1057,12 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       return;
     }
 
-    final timeMs = state.playbackMs;
+    final playbackMs = _latestPlaybackMs;
     final session = _scoringSession;
     if (session == null) return;
 
     final tuning = SightSingingTuning.instance;
-    final refFrame = state.track?.sampleAt(state.playbackMs - tuning.micLatencyMs);
+    final refFrame = state.track?.sampleAt(playbackMs - tuning.micLatencyMs);
     final refMidi = refFrame?.pitched == true ? refFrame!.midi : null;
     final playbackMidi = _playback.activePlaybackPitch?.toDouble();
     final filtered = PitchVoiceGate.filterForScoring(
@@ -1067,20 +1076,13 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     var displayMidi = event.pitched && event.midi >= 0 ? event.midi : -1.0;
     if (displayMidi >= 0) {
       _heldUserMidi = displayMidi;
-      _heldUserMidiUntilMs = timeMs + 220;
-    } else if (_heldUserMidi >= 0 && timeMs <= _heldUserMidiUntilMs) {
+      _heldUserMidiUntilMs = playbackMs + 220;
+    } else if (_heldUserMidi >= 0 && playbackMs <= _heldUserMidiUntilMs) {
       displayMidi = _heldUserMidi;
     }
 
     // 倒计时阶段只预热麦克风，不计分。
     if (state.stage == SightSingingStage.countdown) {
-      if (kIsWeb) {
-        final now = DateTime.now().millisecondsSinceEpoch;
-        if (now - _lastWebPitchUiMs < _webCountdownUiIntervalMs) {
-          return;
-        }
-        _lastWebPitchUiMs = now;
-      }
       state = state.copyWith(
         currentUserMidi: displayMidi >= 0 ? displayMidi : -1,
         currentUserAmplitude: event.amplitude,
@@ -1094,10 +1096,10 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       return;
     }
 
-    // 无谱视唱预备拍：节拍器外放可能被麦克风录入，不写入 KTV 音高轨。
+    // 无谱视唱预备段：标准音/节拍器外放可能被麦克风录入，不写入 KTV 音高轨。
     if (!state.scoreSightReadingMode &&
         state.playbackLeadInMs > 0 &&
-        timeMs < state.playbackLeadInMs) {
+        playbackMs < state.playbackLeadInMs) {
       _heldUserMidi = -1;
       _heldUserMidiUntilMs = 0;
       if (state.currentUserMidi >= 0 || state.currentUserAmplitude > 0) {
@@ -1109,27 +1111,18 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       return;
     }
 
-    final tick = session.onPitch(playbackMs: timeMs, event: filtered);
+    final tick = session.onPitch(playbackMs: playbackMs, event: filtered);
     final cents = tick.cents;
 
     final newPoint = UserPitchPoint(
-      timeMs: timeMs,
+      timeMs: playbackMs,
       midi: displayMidi >= 0 ? displayMidi : -1,
       amplitude: event.amplitude,
       cents: cents,
     );
 
-    final appendTrail = !kIsWeb ||
-        timeMs - _lastWebTrailPointMs >= _webTrailPointIntervalMs;
-    if (appendTrail) {
-      _lastWebTrailPointMs = timeMs;
-    }
-
-    final next = appendTrail
-        ? (List<UserPitchPoint>.from(state.userPoints)..add(newPoint))
-        : state.userPoints;
-    if (appendTrail &&
-        next.length > SmartSightSingingSessionConfig.userPitchPointCap) {
+    final next = List<UserPitchPoint>.from(state.userPoints)..add(newPoint);
+    if (next.length > SmartSightSingingSessionConfig.userPitchPointCap) {
       next.removeRange(
         0,
         next.length - SmartSightSingingSessionConfig.userPitchPointCap,

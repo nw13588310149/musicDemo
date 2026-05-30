@@ -434,10 +434,18 @@ class _MusicXmlLeadIn {
     if (!beatMs.isFinite || beatMs <= 0) return null;
 
     final beatCount = beats.clamp(1, 12);
+    final referenceBeats =
+        SmartSightSingingMidiConfig.musicXmlReferencePitchBeats.clamp(1, 4);
+    final referenceOffsetMs = (referenceBeats * beatMs).round();
     final events = <MidiPlaybackEvent>[
+      MidiPlaybackEvent(
+        timeMs: 0,
+        pitch: SmartSightSingingMidiConfig.musicXmlReferencePitchMidi,
+        velocity: 96,
+      ),
       for (var i = 0; i < beatCount; i++)
         MidiPlaybackEvent(
-          timeMs: (i * beatMs).round(),
+          timeMs: referenceOffsetMs + (i * beatMs).round(),
           pitch: -1,
           velocity: i == 0 ? 127 : 117,
           metronomeCue: i == 0
@@ -447,7 +455,7 @@ class _MusicXmlLeadIn {
     ];
 
     return _MusicXmlLeadIn(
-      durationMs: (beatCount * beatMs).round(),
+      durationMs: referenceOffsetMs + (beatCount * beatMs).round(),
       playbackEvents: events,
     );
   }

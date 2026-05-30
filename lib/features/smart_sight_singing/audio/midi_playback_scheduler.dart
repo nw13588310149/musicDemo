@@ -19,18 +19,31 @@ class MidiPlaybackScheduler {
 
   List<MidiPlaybackEvent> _events = const [];
   int _totalMs = 0;
+  int _leadInDurationMs = 0;
   Stopwatch? _stopwatch;
   Timer? _timer;
   var _eventIndex = 0;
   var _lastMs = -1;
   var _running = false;
 
-  /// 为 true 时只推进时间轴，不触发钢琴短音（iPad 无声跟唱）。
+  /// 为 true 时不播放旋律伴奏；若 [prepare] 传入 [leadInDurationMs] > 0，
+  /// 预备段内的标准音与节拍器仍会出声（考试模式）。
   bool muteAudioOutput = false;
 
-  /// 当前时刻正在播放的 MIDI 音高（供串音过滤）；无声模式下恒为 null。
+  /// 当前时刻正在播放的 MIDI 音高（供串音过滤）。
   int? _activePlaybackPitch;
-  int? get activePlaybackPitch => muteAudioOutput ? null : _activePlaybackPitch;
+  int? get activePlaybackPitch {
+    if (muteAudioOutput && _elapsedMs >= _leadInDurationMs) {
+      return null;
+    }
+    return _activePlaybackPitch;
+  }
+
+  int get _elapsedMs => _stopwatch?.elapsedMilliseconds ?? 0;
+
+  bool get _hasLeadInAudio => _leadInDurationMs > 0;
+
+  bool get _allowsAnyAudioOutput => !muteAudioOutput || _hasLeadInAudio;
 
   bool get _hasMetronomeEvents =>
       _events.any((event) => event.metronomeCue != null);
@@ -43,24 +56,33 @@ class MidiPlaybackScheduler {
   Future<void> prepare(
     List<MidiPlaybackEvent> events, {
     required int totalMs,
+    int leadInDurationMs = 0,
   }) async {
     await stop();
     _events = List<MidiPlaybackEvent>.from(events)
       ..sort((a, b) => a.timeMs.compareTo(b.timeMs));
     _totalMs = totalMs;
+    _leadInDurationMs = leadInDurationMs.clamp(0, totalMs);
     _eventIndex = 0;
     _lastMs = -1;
     _activePlaybackPitch = null;
   }
 
-  /// 倒计时阶段预加载钢琴采样，避免跟唱开始时 native 会话与录音争抢。
-  Future<void> warmupAudioEngine() async {
-    if (muteAudioOutput) return;
-    await _audio.reclaimNativeEngineAfterSessionChange();
-    await _audio.ensurePianoInitialized();
+  bool _shouldPlayEvent(MidiPlaybackEvent event) {
+    if (!muteAudioOutput) return true;
+    return event.timeMs < _leadInDurationMs;
   }
 
-  /// AVAudioSession 变更后（试听结束、开始跟唱等）重建 iOS 钢琴引擎。
+  /// 倒计时阶段预加载钢琴采样，避免跟唱开始时 native 会话与录音争抢。
+  Future<void> warmupAudioEngine() async {
+    if (!_allowsAnyAudioOutput) return;
+    await _audio.ensurePianoInitialized();
+    if (_hasMetronomeEvents) {
+      await _audio.ensureMetronomeInitialized();
+    }
+  }
+
+  /// AVAudioSession 变更后（试听结束、开始跟唱等）按需重建 iOS 钢琴引擎。
   Future<void> reclaimNativeEngine() async {
     await _audio.reclaimNativeEngineAfterSessionChange();
   }
@@ -70,8 +92,7 @@ class MidiPlaybackScheduler {
       muteAudioOutput = muteAudio;
     }
     if (_running || (_events.isEmpty && _totalMs <= 0)) return;
-    if (!muteAudioOutput) {
-      await _audio.reclaimNativeEngineAfterSessionChange();
+    if (_allowsAnyAudioOutput) {
       if (_hasMetronomeEvents) {
         await _audio.ensureMetronomeInitialized();
       }
@@ -129,7 +150,7 @@ class MidiPlaybackScheduler {
   }
 
   Future<void> _playEvent(MidiPlaybackEvent event) async {
-    if (muteAudioOutput) return;
+    if (!_shouldPlayEvent(event)) return;
     final cue = event.metronomeCue;
     if (cue != null) {
       _activePlaybackPitch = null;

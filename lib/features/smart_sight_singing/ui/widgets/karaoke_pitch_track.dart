@@ -14,6 +14,7 @@ class KaraokePitchTrack extends StatelessWidget {
     required this.playbackMs,
     required this.userPoints,
     required this.currentUserMidi,
+    required this.scoringStandardCents,
     this.currentUserAmplitude = 0,
     this.windowMs = SmartSightSingingViewConfig.karaokeWindowMs,
     super.key,
@@ -23,6 +24,7 @@ class KaraokePitchTrack extends StatelessWidget {
   final int playbackMs;
   final List<UserPitchPoint> userPoints;
   final double currentUserMidi;
+  final double scoringStandardCents;
   final double currentUserAmplitude;
   final int windowMs;
 
@@ -44,6 +46,7 @@ class KaraokePitchTrack extends StatelessWidget {
               userPoints: userPoints,
               currentUserMidi: currentUserMidi,
               currentUserAmplitude: currentUserAmplitude,
+              scoringStandardCents: scoringStandardCents,
               windowMs: windowMs,
             ),
             child: const SizedBox.expand(),
@@ -61,6 +64,7 @@ class _KaraokePainter extends CustomPainter {
     required this.userPoints,
     required this.currentUserMidi,
     required this.currentUserAmplitude,
+    required this.scoringStandardCents,
     required this.windowMs,
   });
 
@@ -69,6 +73,7 @@ class _KaraokePainter extends CustomPainter {
   final List<UserPitchPoint> userPoints;
   final double currentUserMidi;
   final double currentUserAmplitude;
+  final double scoringStandardCents;
   final int windowMs;
 
   static const _bg = Color(0xFFF5F6F8);
@@ -79,10 +84,10 @@ class _KaraokePainter extends CustomPainter {
   static const _refStroke = _accent;
   static const _nowLine = _accent;
   static const _userNear = Color(0xFF9CA3AF);
-
-  /// 用户实时音高圆点：14×14，rgba(135, 65, 255, 0.8)。
-  static const _userDotRadius = 7.0;
-  static const _userDotAlpha = 0.8;
+  /// 拖尾：命中 / 接近 / 偏离（紫色系 + 灰，对齐当前视觉规范）。
+  static const _trailGood = _accent;
+  static const _trailOk = Color(0xFFA773FF);
+  static const _trailMiss = Color(0xFFC4C9D1);
 
   /// 参考音符条高度（设计稿 20px）。
   static const _noteBarHeight = 20.0;
@@ -205,29 +210,62 @@ class _KaraokePainter extends CustomPainter {
     }
 
     if (userPoints.isNotEmpty) {
-      final userDotPaint = Paint()
-        ..color = _accent.withValues(alpha: _userDotAlpha);
       for (var i = 0; i < userPoints.length; i++) {
         final p = userPoints[i];
         if (!p.pitched) continue;
+        // 「Now」竖线上的实时检测由光晕承担，避免与历史拖尾重复绘制。
+        if (currentUserMidi >= 0 &&
+            (p.timeMs - playbackMs).abs() <=
+                SmartSightSingingViewConfig.karaokeNowLineSkipTrailMs) {
+          continue;
+        }
         final x = xFromTime(p.timeMs);
         if (x < -8 || x > size.width + 8) continue;
         final y = yFromMidi(displayMidiAt(p.midi, p.timeMs));
-        canvas.drawCircle(Offset(x, y), _userDotRadius, userDotPaint);
+        final age = (playbackMs - p.timeMs).clamp(0, windowMs);
+        final fade = 1 - age / windowMs;
+        final alpha = (SmartSightSingingViewConfig.karaokeTrailMinAlpha +
+                fade * (1 - SmartSightSingingViewConfig.karaokeTrailMinAlpha))
+            .clamp(
+              SmartSightSingingViewConfig.karaokeTrailMinAlpha,
+              1.0,
+            );
+        final radius =
+            (SmartSightSingingViewConfig.karaokeTrailMinRadius +
+                    p.amplitude *
+                        (SmartSightSingingViewConfig.karaokeTrailMaxRadius -
+                            SmartSightSingingViewConfig.karaokeTrailMinRadius))
+                .clamp(
+                  SmartSightSingingViewConfig.karaokeTrailMinRadius,
+                  SmartSightSingingViewConfig.karaokeTrailMaxRadius,
+                );
+        final baseColor = _trailColor(p.cents);
+        canvas.drawCircle(
+          Offset(x, y),
+          radius,
+          Paint()..color = baseColor.withValues(alpha: alpha),
+        );
       }
     }
 
-    if (currentUserMidi >= 0) {
-      // 唱得标准时（与参考音同八度且零偏差），displayMidiAt 会把用户音高
-      // 折叠到参考音本身，y 即等于参考矩形中线 → 气泡上下居中。
-      final y = yFromMidi(displayMidiAt(currentUserMidi, playbackMs));
-      canvas.drawCircle(
-        Offset(centerX, y),
-        _userDotRadius,
-        Paint()..color = _accent.withValues(alpha: _userDotAlpha),
-      );
-    } else if (currentUserAmplitude >
-        SmartSightSingingViewConfig.micActivityIndicatorMinAmplitude) {
+    final nowPaint = Paint()
+      ..color = _nowLine.withValues(alpha: 0.8)
+      ..strokeWidth = 4
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(
+      Offset(centerX, 6),
+      Offset(centerX, size.height - 6),
+      nowPaint,
+    );
+
+    final glowY = currentUserMidi >= 0
+        ? yFromMidi(displayMidiAt(currentUserMidi, playbackMs))
+        : SmartSightSingingViewConfig.karaokeIdleGlowCenterY;
+    _drawNowGlow(canvas, centerX, glowY, size.height);
+
+    if (currentUserMidi < 0 &&
+        currentUserAmplitude >
+            SmartSightSingingViewConfig.micActivityIndicatorMinAmplitude) {
       // 有响度但未识别音高：在 Now 线底部显示麦克风活动指示。
       final barW = (8 + currentUserAmplitude * 40).clamp(8.0, 36.0);
       final barRect = RRect.fromRectAndRadius(
@@ -246,25 +284,27 @@ class _KaraokePainter extends CustomPainter {
           ),
       );
     }
-
-    final nowPaint = Paint()
-      ..color = _nowLine.withValues(alpha: 0.8)
-      ..strokeWidth = 4
-      ..strokeCap = StrokeCap.round;
-    canvas.drawLine(
-      Offset(centerX, 6),
-      Offset(centerX, size.height - 6),
-      nowPaint,
-    );
-
-    _drawNowGlow(canvas, centerX, _glowCenterY);
   }
 
-  /// 紫色竖线顶部的扩散圆：由外到内 5 层同心圆，半径与透明度对齐设计稿
-  /// （34/28.09/22.17/16.26/10.35 直径，alpha 0.2/0.3/0.5/0.7/1.0）。
-  static const _glowCenterY = 48.0;
+  Color _trailColor(double cents) {
+    final absCents = cents.abs();
+    if (!absCents.isFinite) return _trailMiss;
+    final goodCents = SmartSightSingingScoringConfig.normalizeStandardCents(
+      scoringStandardCents,
+    );
+    final okCents =
+        goodCents *
+        SmartSightSingingScoringConfig.okCentsAtDefault /
+        SmartSightSingingScoringConfig.defaultStandardCents;
+    if (absCents <= goodCents) return _trailGood;
+    if (absCents <= okCents) return _trailOk;
+    return _trailMiss;
+  }
 
-  void _drawNowGlow(Canvas canvas, double cx, double cy) {
+  /// 紫色竖线上的扩散圆：随实时检测音高在纵轴移动。
+  void _drawNowGlow(Canvas canvas, double cx, double cy, double height) {
+    const maxRadius = 17.0;
+    final clampedY = cy.clamp(maxRadius + 6, height - maxRadius - 6);
     const layers = <(double, double)>[
       (17.0, 0.20),
       (14.045, 0.30),
@@ -274,7 +314,7 @@ class _KaraokePainter extends CustomPainter {
     ];
     for (final (radius, alpha) in layers) {
       canvas.drawCircle(
-        Offset(cx, cy),
+        Offset(cx, clampedY),
         radius,
         Paint()..color = _accent.withValues(alpha: alpha),
       );
@@ -288,6 +328,7 @@ class _KaraokePainter extends CustomPainter {
         !identical(old.userPoints, userPoints) ||
         old.currentUserMidi != currentUserMidi ||
         old.currentUserAmplitude != currentUserAmplitude ||
+        old.scoringStandardCents != scoringStandardCents ||
         old.windowMs != windowMs;
   }
 }

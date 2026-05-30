@@ -114,7 +114,9 @@ final class LowLatencyNoteAudio {
   private func reclaimEngine(result: @escaping FlutterResult) {
     queue.async { [weak self] in
       guard let self = self else { return }
-      self.hardResetEngine()
+      if self.engineNeedsReset {
+        self.hardResetEngine()
+      }
       DispatchQueue.main.async {
         result(nil)
       }
@@ -302,20 +304,15 @@ final class LowLatencyNoteAudio {
   }
 
   private func attachAndStartIfNeeded(node: AVAudioPlayerNode, format: AVAudioFormat) throws {
-    if engine.isRunning {
-      engine.pause()
-    }
-
     if !engine.attachedNodes.contains(node) {
       engine.attach(node)
     }
-    // Connect with the buffer's own format so scheduleBuffer cannot raise an
-    // NSException on format mismatch (different asset sample rates / channels,
-    // or a stale output format after an engine reset / route change).
     engine.connect(node, to: engine.mainMixerNode, format: format)
 
-    engine.prepare()
-    try engine.start()
+    if !engine.isRunning {
+      engine.prepare()
+      try engine.start()
+    }
     engineNeedsReset = false
   }
 

@@ -134,7 +134,8 @@ class SightSingingState {
   /// 当前播放进度（毫秒）。
   final int playbackMs;
 
-  /// MusicXML 预备拍占用时长（毫秒）；进度条展示时需从 [playbackMs] 中扣除。
+  /// MusicXML 预备段占用时长（标准音 + 节拍器，毫秒）；进度条展示时需从
+  /// [playbackMs] 中扣除。
   final int playbackLeadInMs;
 
   /// 已记录的用户音高点（按时间升序，最多保留最近 600 个 ≈ 14s）。

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 import '../../../../core/constants/app_assets.dart';
+import '../../../../core/widgets/app_toast.dart';
 import '../../../shell/ui/shell_layout.dart';
 import '../../audio/pitch_track.dart';
 import '../../config/smart_sight_singing_tuning.dart';
@@ -293,7 +294,7 @@ class _DebugCalibrationPanelState
                   ? () async {
                       await tuning.resetAll();
                       if (!context.mounted) return;
-                      _showSnack(context, '已恢复默认参数');
+                      AppToast.showSuccess(context, '已恢复默认参数');
                     }
                   : null,
             ),
@@ -302,16 +303,6 @@ class _DebugCalibrationPanelState
       ),
     );
   }
-}
-
-void _showSnack(BuildContext context, String message) {
-  ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-    SnackBar(
-      content: Text(message),
-      duration: const Duration(seconds: 2),
-      behavior: SnackBarBehavior.floating,
-    ),
-  );
 }
 
 class _Header extends StatelessWidget {
@@ -359,8 +350,8 @@ class _Header extends StatelessWidget {
               borderRadius: BorderRadius.circular(ui(9)),
               child: Image.asset(
                 AppAssets.smartSightSingingClose,
-                width: ui(18),
-                height: ui(18),
+                width: ui(24),
+                height: ui(24),
                 fit: BoxFit.contain,
               ),
             ),
@@ -706,7 +697,7 @@ class _SliderRow extends StatelessWidget {
             child: Text(
               hint!,
               style: TextStyle(
-                fontSize: ui(8),
+                fontSize: ui(10),
                 color: const Color(0xFFCECED1),
                 fontFamily: 'PingFang SC',
                 fontWeight: AppFont.w400,
@@ -796,11 +787,9 @@ class _BoolRow extends StatelessWidget {
                 ),
               ),
             ),
-            Switch.adaptive(
+            _SightSingingToggleSwitch(
               value: value,
               onChanged: onChanged,
-              activeThumbColor: Colors.white,
-              activeTrackColor: const Color(0xFFA773FF),
             ),
           ],
         ),
@@ -808,7 +797,7 @@ class _BoolRow extends StatelessWidget {
           Text(
             hint!,
             style: TextStyle(
-              fontSize: ui(8),
+              fontSize: ui(10),
               color: const Color(0xFFCECED1),
               fontFamily: 'PingFang SC',
               fontWeight: AppFont.w400,
@@ -816,6 +805,49 @@ class _BoolRow extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// 与记分板「考试模式」开关一致：44×24 轨道，开启 #A773FF，关闭 #D7D7DE。
+class _SightSingingToggleSwitch extends StatelessWidget {
+  const _SightSingingToggleSwitch({
+    required this.value,
+    required this.onChanged,
+  });
+
+  final bool value;
+  final ValueChanged<bool>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final disabled = onChanged == null;
+    return Opacity(
+      opacity: disabled ? 0.5 : 1,
+      child: GestureDetector(
+        onTap: disabled ? null : () => onChanged!(!value),
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          width: ui(44),
+          height: ui(24),
+          padding: EdgeInsets.all(ui(2)),
+          alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+          decoration: BoxDecoration(
+            color: value ? const Color(0xFFA773FF) : const Color(0xFFD7D7DE),
+            borderRadius: BorderRadius.circular(ui(12)),
+          ),
+          child: Container(
+            width: ui(20),
+            height: ui(20),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
