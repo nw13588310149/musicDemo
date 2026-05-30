@@ -25,6 +25,23 @@ NS_ASSUME_NONNULL_BEGIN
      playedBackHandler:(void (^_Nullable)(void))completionHandler
                  error:(NSError *_Nullable *_Nullable)error;
 
+/// AVAudioEngine graph mutations (attach / connect / prepare+start) raise
+/// Objective-C NSExceptions on an invalid graph or session state. Swift's
+/// do/catch cannot catch those, so wrap them here and surface NSError instead
+/// of aborting the process.
++ (BOOL)attachNode:(AVAudioNode *)node
+          toEngine:(AVAudioEngine *)engine
+             error:(NSError *_Nullable *_Nullable)error;
+
++ (BOOL)connectNode:(AVAudioNode *)node
+             toNode:(AVAudioNode *)destination
+             format:(AVAudioFormat *_Nullable)format
+           inEngine:(AVAudioEngine *)engine
+              error:(NSError *_Nullable *_Nullable)error;
+
++ (BOOL)prepareAndStartEngine:(AVAudioEngine *)engine
+                        error:(NSError *_Nullable *_Nullable)error;
+
 @end
 
 NS_ASSUME_NONNULL_END

@@ -182,9 +182,9 @@ final class LowLatencyNoteAudio {
         if self.engineNeedsReset {
           self.hardResetEngine()
         }
-        try self.startEngineIfNeeded()
 
-        guard let voice = self.borrowVoice(format: playbackBuffer.format) else {
+        // 先建好图（attach + connect）再启动引擎，避免在空图上 prepare/start。
+        guard let voice = try self.borrowVoice(format: playbackBuffer.format) else {
           // 没有空闲发声节点：宁可这一下不发声，也不抢占正在响的音符，
           // 避免对仍在发声的节点 stop() 造成截断爆音。
           DispatchQueue.main.async { result(nil) }
@@ -192,6 +192,8 @@ final class LowLatencyNoteAudio {
         }
         acquiredVoice = voice
         voice.player.volume = max(0, min(volume, 1))
+
+        try self.startEngineIfNeeded()
 
         do {
           try LowLatencyNoteAudioSafePlay.scheduleBuffer(
@@ -291,35 +293,50 @@ final class LowLatencyNoteAudio {
 
   private func startEngineIfNeeded() throws {
     if !engine.isRunning {
-      engine.prepare()
-      try engine.start()
+      // prepare()/start() 在图/会话非法时会抛 NSException，必须经 ObjC 捕获，
+      // 否则 Swift 捕不到会直接 abort 整个进程。
+      try LowLatencyNoteAudioSafePlay.prepareAndStartEngine(engine)
     }
     engineNeedsReset = false
   }
 
   /// 取一个空闲发声节点：优先复用已连接、未在发声的节点（无图变更）；
   /// 没有则在上限内新建并 attach + connect。达到上限时返回 nil（不抢占）。
-  private func borrowVoice(format: AVAudioFormat) -> VoiceNode? {
+  private func borrowVoice(format: AVAudioFormat) throws -> VoiceNode? {
     for voice in voices where !voice.busy && !voice.player.isPlaying {
-      ensureConnected(voice, format: format)
+      try ensureConnected(voice, format: format)
       voice.busy = true
       return voice
     }
     guard voices.count < maxPoolSize else { return nil }
     let voice = VoiceNode()
-    engine.attach(voice.player)
+    try LowLatencyNoteAudioSafePlay.attachNode(voice.player, to: engine)
     voices.append(voice)
-    ensureConnected(voice, format: format)
+    do {
+      try ensureConnected(voice, format: format)
+    } catch {
+      // 连接失败：撤回这个尚未可用的节点，避免污染节点池。
+      voices.removeAll { $0 === voice }
+      if engine.attachedNodes.contains(voice.player) {
+        engine.detach(voice.player)
+      }
+      throw error
+    }
     voice.busy = true
     return voice
   }
 
   /// 仅在节点尚未连接或格式变化时才 connect，避免对运行中的图做无谓重连。
-  private func ensureConnected(_ voice: VoiceNode, format: AVAudioFormat) {
+  private func ensureConnected(_ voice: VoiceNode, format: AVAudioFormat) throws {
     if let current = voice.connectedFormat, current.isEqual(format) {
       return
     }
-    engine.connect(voice.player, to: engine.mainMixerNode, format: format)
+    try LowLatencyNoteAudioSafePlay.connectNode(
+      voice.player,
+      to: engine.mainMixerNode,
+      format: format,
+      in: engine
+    )
     voice.connectedFormat = format
   }
 
