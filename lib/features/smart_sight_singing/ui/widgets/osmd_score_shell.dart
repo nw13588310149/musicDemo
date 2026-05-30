@@ -21,12 +21,13 @@ abstract final class OsmdScoreShell {
 
   function findTarget(onsets, ms) {
     if (!onsets || !onsets.length) return -1;
+    if (ms < onsets[0]) return -1;
     var lo = 0, hi = onsets.length;
     while (lo < hi) {
       var mid = (lo + hi) >>> 1;
       if (onsets[mid] <= ms) lo = mid + 1; else hi = mid;
     }
-    return Math.max(0, lo - 1);
+    return lo - 1;
   }
 
   function scrollWrapToCursor(host) {
@@ -80,9 +81,9 @@ abstract final class OsmdScoreShell {
         try {
           host.osmd.render();
           applyCursorStyle(host.osmd);
-          host.osmd.cursor.show();
           host.osmd.cursor.reset();
-          host.currentIndex = 0;
+          host.osmd.cursor.hide();
+          host.currentIndex = -1;
           host.loaded = true;
           notifyLoaded(divId, true);
         } catch (e) {
@@ -226,6 +227,12 @@ abstract final class OsmdScoreShell {
       }
       host.onsets = onsets;
       host.currentIndex = -1;
+      try {
+        if (host.loaded && host.osmd && host.osmd.cursor) {
+          host.osmd.cursor.reset();
+          host.osmd.cursor.hide();
+        }
+      } catch (e) {}
     },
 
     seek: function(divId, ms) {
@@ -234,7 +241,14 @@ abstract final class OsmdScoreShell {
       var cursor = host.osmd.cursor;
       if (!cursor) return;
       var target = findTarget(host.onsets, ms);
-      if (target < 0) return;
+      if (target < 0) {
+        try {
+          cursor.reset();
+          cursor.hide();
+        } catch (e) {}
+        host.currentIndex = -1;
+        return;
+      }
       if (target === host.currentIndex) return;
       try {
         if (target < host.currentIndex || host.currentIndex < 0) {

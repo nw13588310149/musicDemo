@@ -267,7 +267,7 @@ class _OsmdScoreViewerState extends State<OsmdScoreViewer> {
 
   int _noteIndexAt(int ms) {
     final onsets = widget.onsetMs;
-    if (onsets.isEmpty) return 0;
+    if (onsets.isEmpty || ms < onsets.first) return -1;
 
     var lo = 0;
     var hi = onsets.length;

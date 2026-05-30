@@ -78,9 +78,11 @@ class _KaraokePainter extends CustomPainter {
   static const _refFill = Color(0x268741FF);
   static const _refStroke = _accent;
   static const _nowLine = _accent;
-  static const _userOn = Color(0xFF4A5568);
   static const _userNear = Color(0xFF9CA3AF);
-  static const _userOff = Color(0xFFC4C9D1);
+
+  /// 用户实时音高圆点：14×14，rgba(135, 65, 255, 0.8)。
+  static const _userDotRadius = 7.0;
+  static const _userDotAlpha = 0.8;
 
   /// 参考音符条高度（设计稿 20px）。
   static const _noteBarHeight = 20.0;
@@ -203,24 +205,15 @@ class _KaraokePainter extends CustomPainter {
     }
 
     if (userPoints.isNotEmpty) {
+      final userDotPaint = Paint()
+        ..color = _accent.withValues(alpha: _userDotAlpha);
       for (var i = 0; i < userPoints.length; i++) {
         final p = userPoints[i];
         if (!p.pitched) continue;
         final x = xFromTime(p.timeMs);
         if (x < -8 || x > size.width + 8) continue;
         final y = yFromMidi(displayMidiAt(p.midi, p.timeMs));
-        final age = (playbackMs - p.timeMs).clamp(0, windowMs);
-        final alpha = (255 * (1 - age / windowMs)).clamp(40, 255).toInt();
-        final hit = !p.cents.isNaN && p.cents.abs() <= 45;
-        final near = !p.cents.isNaN && p.cents.abs() <= 90;
-        final base = hit
-            ? _userOn
-            : near
-            ? _userNear
-            : _userOff;
-        final color = base.withValues(alpha: alpha / 255);
-        final radius = (1.5 + p.amplitude * 4).clamp(1.5, 6).toDouble();
-        canvas.drawCircle(Offset(x, y), radius, Paint()..color = color);
+        canvas.drawCircle(Offset(x, y), _userDotRadius, userDotPaint);
       }
     }
 
@@ -230,8 +223,8 @@ class _KaraokePainter extends CustomPainter {
       final y = yFromMidi(displayMidiAt(currentUserMidi, playbackMs));
       canvas.drawCircle(
         Offset(centerX, y),
-        7,
-        Paint()..color = _accent.withValues(alpha: 0.8),
+        _userDotRadius,
+        Paint()..color = _accent.withValues(alpha: _userDotAlpha),
       );
     } else if (currentUserAmplitude >
         SmartSightSingingViewConfig.micActivityIndicatorMinAmplitude) {

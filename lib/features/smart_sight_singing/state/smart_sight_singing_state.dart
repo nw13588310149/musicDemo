@@ -70,6 +70,7 @@ class SightSingingState {
     this.melodyTrackIndex,
     this.countdownSeconds = 0,
     this.playbackMs = 0,
+    this.playbackLeadInMs = 0,
     this.userPoints = const <UserPitchPoint>[],
     this.currentUserMidi = -1,
     this.currentUserAmplitude = 0,
@@ -132,6 +133,9 @@ class SightSingingState {
 
   /// 当前播放进度（毫秒）。
   final int playbackMs;
+
+  /// MusicXML 预备拍占用时长（毫秒）；进度条展示时需从 [playbackMs] 中扣除。
+  final int playbackLeadInMs;
 
   /// 已记录的用户音高点（按时间升序，最多保留最近 600 个 ≈ 14s）。
   final List<UserPitchPoint> userPoints;
@@ -217,6 +221,7 @@ class SightSingingState {
     Object? melodyTrackIndex = _sentinel,
     int? countdownSeconds,
     int? playbackMs,
+    int? playbackLeadInMs,
     List<UserPitchPoint>? userPoints,
     double? currentUserMidi,
     double? currentUserAmplitude,
@@ -266,6 +271,7 @@ class SightSingingState {
           : melodyTrackIndex as int?,
       countdownSeconds: countdownSeconds ?? this.countdownSeconds,
       playbackMs: playbackMs ?? this.playbackMs,
+      playbackLeadInMs: playbackLeadInMs ?? this.playbackLeadInMs,
       userPoints: userPoints ?? this.userPoints,
       currentUserMidi: currentUserMidi ?? this.currentUserMidi,
       currentUserAmplitude: currentUserAmplitude ?? this.currentUserAmplitude,

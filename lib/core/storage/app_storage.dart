@@ -49,21 +49,32 @@ class AppStorage {
   bool get nativePermissionsPrimed =>
       _prefs.getBool(_nativePermissionsPrimedKey) ?? false;
 
-  bool get hasCheckStatus {
-    if (_prefs.containsKey(_checkStatusKey)) {
-      final value = _prefs.get(_checkStatusKey);
-      if (value is bool) {
-        return value;
-      }
-      if (value is num) {
-        return value != 0;
-      }
-      if (value is String) {
-        return value.isNotEmpty && value != 'false' && value != '0';
-      }
+  /// `/app/common/dict/check` 返回的 `data` 原值；未拉取过时为 `null`。
+  bool? get checkStatusData {
+    if (!_prefs.containsKey(_checkStatusKey)) {
+      return null;
     }
-    return false;
+    final value = _prefs.get(_checkStatusKey);
+    if (value is bool) {
+      return value;
+    }
+    if (value is num) {
+      return value != 0;
+    }
+    if (value is String) {
+      if (value.isEmpty || value == 'false' || value == '0') {
+        return false;
+      }
+      return true;
+    }
+    return null;
   }
+
+  /// `data: true` 表示 App 正在审核中（需隐藏会员 / 兑换等商业化入口）。
+  bool get isAppUnderReview => checkStatusData ?? false;
+
+  /// 非审核中时可展示会员相关内容。
+  bool get showMemberContent => !isAppUnderReview;
 
   Future<void> saveToken(String token) async {
     await _prefs.setString(_tokenKey, token);

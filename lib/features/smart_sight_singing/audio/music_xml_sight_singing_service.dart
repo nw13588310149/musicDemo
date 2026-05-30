@@ -3,7 +3,9 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:music_xml/music_xml.dart';
+import 'package:xml/xml.dart';
 
+import '../../music_companion/audio/music_companion_audio_catalog.dart';
 import '../config/smart_sight_singing_config.dart';
 import 'ktv_pitch_guide.dart';
 import 'midi_sight_singing_service.dart';
@@ -91,8 +93,9 @@ abstract final class MusicXmlSightSingingService {
 
   static MusicXmlSightSingingBundle buildBundle(
     MusicXmlDocument document,
-    int partIndex,
-  ) {
+    int partIndex, {
+    String? rawXml,
+  }) {
     if (partIndex < 1 || partIndex > document.score.parts.length) {
       throw MusicXmlSightSingingException('声部编号无效：$partIndex');
     }
@@ -103,37 +106,44 @@ abstract final class MusicXmlSightSingingService {
       throw MusicXmlSightSingingException('声部 $partIndex 没有可跟唱音符。');
     }
 
-    final range = KtvPitchGuideBuilder.rangeForNotes(notes);
-    final totalMs = math.max(
+    final leadIn = _resolveLeadIn(document, partIndex, rawXml: rawXml);
+    final leadInMs = leadIn?.durationMs ?? 0;
+    final shiftedNotes = leadInMs > 0 ? _shiftNotes(notes, leadInMs) : notes;
+
+    final range = KtvPitchGuideBuilder.rangeForNotes(shiftedNotes);
+    final baseTotalMs = math.max(
       (document.totalTimeSecs * 1000).ceil(),
       notes.map((n) => n.endMs).reduce(math.max),
     );
+    // 播放时间轴含预备拍；进度条总时长仅反映旋律部分。
+    final playbackTotalMs = baseTotalMs + leadInMs;
 
     final track = PitchTrack(
       frames: const <PitchFrame>[],
-      notes: notes,
-      totalMs: totalMs,
+      notes: shiftedNotes,
+      totalMs: baseTotalMs,
       frameStepMs: SmartSightSingingMidiConfig.referenceFrameStepMs,
       minMidi: range.minMidi,
       maxMidi: range.maxMidi,
     );
 
-    final playbackEvents = notes
-        .map(
-          (n) => MidiPlaybackEvent(
-            timeMs: n.startMs,
-            pitch: n.midi.round(),
-            velocity: 96,
-          ),
-        )
-        .toList(growable: false)
+    final playbackEvents = <MidiPlaybackEvent>[
+      if (leadIn != null) ...leadIn.playbackEvents,
+      ...notes.map(
+        (n) => MidiPlaybackEvent(
+          timeMs: n.startMs + leadInMs,
+          pitch: n.midi.round(),
+          velocity: 96,
+        ),
+      ),
+    ]
       ..sort((a, b) => a.timeMs.compareTo(b.timeMs));
 
     return MusicXmlSightSingingBundle(
       track: track,
       playbackEvents: playbackEvents,
       melodyPartIndex: partIndex,
-      totalMs: totalMs,
+      totalMs: playbackTotalMs,
     );
   }
 
@@ -199,6 +209,130 @@ abstract final class MusicXmlSightSingingService {
     }
     notes.sort((a, b) => a.startMs.compareTo(b.startMs));
     return notes;
+  }
+
+  static List<KtvNoteSegment> _shiftNotes(
+    List<KtvNoteSegment> notes,
+    int offsetMs,
+  ) {
+    return notes
+        .map(
+          (note) => KtvNoteSegment(
+            startMs: note.startMs + offsetMs,
+            endMs: note.endMs + offsetMs,
+            midi: note.midi,
+            startBeat: note.startBeat,
+            durationBeats: note.durationBeats,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  static _MusicXmlLeadIn? _resolveLeadIn(
+    MusicXmlDocument document,
+    int partIndex, {
+    String? rawXml,
+  }) {
+    final raw = _resolveLeadInFromRawXml(rawXml, partIndex);
+    if (raw != null) return raw;
+
+    // Fallback for MusicXML files that use <sound tempo="...">, which the
+    // music_xml package parses into Measure.tempos.
+    final part = document.score.parts[partIndex - 1];
+    double? qpm;
+    for (final measure in part.measures) {
+      if (measure.tempos.isNotEmpty) {
+        qpm = measure.tempos.first.qpm;
+        break;
+      }
+    }
+    if (qpm == null || qpm <= 0) return null;
+
+    final signature = _firstParsedTimeSignature(part);
+    return _MusicXmlLeadIn.fromTempoAndSignature(
+      qpm: qpm,
+      beats: signature.beats,
+      beatType: signature.beatType,
+    );
+  }
+
+  static _MusicXmlLeadIn? _resolveLeadInFromRawXml(
+    String? rawXml,
+    int partIndex,
+  ) {
+    final raw = rawXml?.trim();
+    if (raw == null || raw.isEmpty) return null;
+
+    try {
+      final xml = XmlDocument.parse(raw);
+      final parts = xml.rootElement
+          .findElements('part')
+          .where((part) => part.name.local == 'part')
+          .toList(growable: false);
+      if (partIndex < 1 || partIndex > parts.length) return null;
+
+      final selectedPart = parts[partIndex - 1];
+      final firstMeasure = selectedPart.findElements('measure').firstOrNull;
+      if (firstMeasure == null) return null;
+
+      final qpm = _tempoFromRawMeasure(firstMeasure);
+      if (qpm == null || qpm <= 0) return null;
+
+      final signature = _timeSignatureFromRawMeasure(firstMeasure);
+      return _MusicXmlLeadIn.fromTempoAndSignature(
+        qpm: qpm,
+        beats: signature.beats,
+        beatType: signature.beatType,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static double? _tempoFromRawMeasure(XmlElement measure) {
+    for (final sound in measure.findAllElements('sound')) {
+      final tempo = double.tryParse(sound.getAttribute('tempo') ?? '');
+      if (tempo != null && tempo > 0) return tempo;
+    }
+
+    for (final metronome in measure.findAllElements('metronome')) {
+      final perMinute = metronome.getElement('per-minute')?.innerText.trim();
+      final tempo = double.tryParse(perMinute ?? '');
+      if (tempo != null && tempo > 0) return tempo;
+    }
+    return null;
+  }
+
+  static _MusicXmlTimeSignature _timeSignatureFromRawMeasure(
+    XmlElement measure,
+  ) {
+    final time = measure.findAllElements('time').firstOrNull;
+    if (time == null) return const _MusicXmlTimeSignature(beats: 4, beatType: 4);
+
+    final beats = int.tryParse(time.getElement('beats')?.innerText.trim() ?? '');
+    final beatType = int.tryParse(
+      time.getElement('beat-type')?.innerText.trim() ?? '',
+    );
+    return _MusicXmlTimeSignature(
+      beats: beats != null && beats > 0 ? beats : 4,
+      beatType: beatType != null && beatType > 0 ? beatType : 4,
+    );
+  }
+
+  static _MusicXmlTimeSignature _firstParsedTimeSignature(Part part) {
+    for (final measure in part.measures) {
+      for (final attributes in measure.attributesList) {
+        if (attributes.times.isEmpty) continue;
+        final time = attributes.times.first;
+        if (time.numerator > 0 && time.denominator > 0) {
+          return _MusicXmlTimeSignature(
+            beats: time.numerator,
+            beatType: time.denominator,
+          );
+        }
+      }
+    }
+    return const _MusicXmlTimeSignature(beats: 4, beatType: 4);
   }
 
   static MidiTrackSummary _summaryForPart(
@@ -268,5 +402,53 @@ abstract final class MusicXmlSightSingingService {
     }
 
     return bestPart;
+  }
+}
+
+class _MusicXmlTimeSignature {
+  const _MusicXmlTimeSignature({required this.beats, required this.beatType});
+
+  final int beats;
+  final int beatType;
+}
+
+class _MusicXmlLeadIn {
+  const _MusicXmlLeadIn({
+    required this.durationMs,
+    required this.playbackEvents,
+  });
+
+  final int durationMs;
+  final List<MidiPlaybackEvent> playbackEvents;
+
+  static _MusicXmlLeadIn? fromTempoAndSignature({
+    required double qpm,
+    required int beats,
+    required int beatType,
+  }) {
+    if (!qpm.isFinite || qpm <= 0 || beats <= 0 || beatType <= 0) {
+      return null;
+    }
+
+    final beatMs = (60000 / qpm) * (4 / beatType);
+    if (!beatMs.isFinite || beatMs <= 0) return null;
+
+    final beatCount = beats.clamp(1, 12);
+    final events = <MidiPlaybackEvent>[
+      for (var i = 0; i < beatCount; i++)
+        MidiPlaybackEvent(
+          timeMs: (i * beatMs).round(),
+          pitch: -1,
+          velocity: i == 0 ? 127 : 117,
+          metronomeCue: i == 0
+              ? MusicCompanionMetronomeCue.tone1Accent
+              : MusicCompanionMetronomeCue.tone1Regular,
+        ),
+    ];
+
+    return _MusicXmlLeadIn(
+      durationMs: (beatCount * beatMs).round(),
+      playbackEvents: events,
+    );
   }
 }

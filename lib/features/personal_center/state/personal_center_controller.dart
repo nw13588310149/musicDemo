@@ -31,7 +31,7 @@ class PersonalCenterController extends StateNotifier<PersonalCenterState> {
   }) : _repository = repository,
        _storage = storage,
        _ref = ref,
-       super(PersonalCenterState(checkStatusEnabled: storage.hasCheckStatus)) {
+       super(PersonalCenterState(checkStatusEnabled: storage.showMemberContent)) {
     refresh();
   }
 
@@ -43,7 +43,7 @@ class PersonalCenterController extends StateNotifier<PersonalCenterState> {
     state = state.copyWith(
       loading: true,
       clearError: true,
-      checkStatusEnabled: _storage.hasCheckStatus,
+      checkStatusEnabled: _storage.showMemberContent,
     );
 
     final info = await _repository.getMyInfo();
@@ -53,15 +53,16 @@ class PersonalCenterController extends StateNotifier<PersonalCenterState> {
     }
 
     final userMap = _parseUserMap(info.data);
-    final vipRes = await _repository.vipList();
-    final packages = _parseVipList(vipRes.data);
+    final packages = _storage.isAppUnderReview
+        ? const <VipPackageRow>[]
+        : _parseVipList((await _repository.vipList()).data);
 
     state = state.copyWith(
       loading: false,
       clearError: true,
       user: userMap,
       vipPackages: packages,
-      checkStatusEnabled: _storage.hasCheckStatus,
+      checkStatusEnabled: _storage.showMemberContent,
       walletText: _walletFromUser(userMap),
       pointsText: _pointsFromUser(userMap),
     );

@@ -32,7 +32,7 @@ class StudyCatalogController extends StateNotifier<StudyCatalogState> {
        super(
          StudyCatalogState.initial(args.config).copyWith(
            schoolMode: args.schoolMode,
-           showVipBadge: storage.hasCheckStatus,
+           showVipBadge: storage.showMemberContent,
          ),
        ) {
     unawaited(bootstrap());
@@ -48,7 +48,7 @@ class StudyCatalogController extends StateNotifier<StudyCatalogState> {
       loading: true,
       clearErrorMessage: true,
       schoolMode: _args.schoolMode,
-      showVipBadge: _storage.hasCheckStatus,
+      showVipBadge: _storage.showMemberContent,
     );
 
     try {

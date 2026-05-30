@@ -248,9 +248,8 @@ List<ShellNavItem> buildDefaultNavItems({
     const ShellNavItem(
       label: '\u667a\u80fd\u89c6\u5531',
       route: RoutePaths.smartSinging,
-      icon: AppAssets.navV2MusicMain,
-      activeIcon: AppAssets.navV2MusicMain,
-      iconSize: 24,
+      icon: AppAssets.leftNavSing,
+      activeIcon: AppAssets.leftNavSing,
     ),
     const ShellNavItem(
       label: '\u97f3\u4e50\u4f34\u4fa3',

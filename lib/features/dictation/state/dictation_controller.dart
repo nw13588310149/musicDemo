@@ -32,7 +32,7 @@ class DictationController extends StateNotifier<DictationState> {
        super(
          DictationState.initial.copyWith(
            schoolMode: args.schoolMode,
-           showVipBadge: storage.hasCheckStatus,
+           showVipBadge: storage.showMemberContent,
          ),
        ) {
     unawaited(bootstrap());
@@ -47,7 +47,7 @@ class DictationController extends StateNotifier<DictationState> {
       bootstrapping: true,
       loading: true,
       clearErrorMessage: true,
-      showVipBadge: _storage.hasCheckStatus,
+      showVipBadge: _storage.showMemberContent,
       schoolMode: _args.schoolMode,
     );
 

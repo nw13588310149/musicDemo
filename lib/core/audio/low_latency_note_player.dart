@@ -18,6 +18,9 @@ abstract interface class LowLatencyNotePlayer {
 
   Future<void> play(String key, {double volume = 1});
 
+  /// iOS：AVAudioSession 切换后重建 AVAudioEngine，避免 play() 闪退。
+  Future<void> reclaimEngine();
+
   Future<void> stopAll();
 
   Future<void> dispose();

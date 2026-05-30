@@ -30,6 +30,9 @@ class _StubLowLatencyNotePlayer implements LowLatencyNotePlayer {
   Future<void> play(String key, {double volume = 1}) async {}
 
   @override
+  Future<void> reclaimEngine() async {}
+
+  @override
   Future<void> stopAll() async {}
 
   @override

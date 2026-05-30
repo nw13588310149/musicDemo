@@ -26,7 +26,7 @@ class HomeDashboardController extends StateNotifier<HomeDashboardState> {
        _storage = storage,
        super(
          HomeDashboardState(
-           quickActions: buildQuickActions(storage.hasCheckStatus),
+           quickActions: buildQuickActions(storage.showMemberContent),
          ),
        ) {
     unawaited(refresh());
@@ -45,7 +45,7 @@ class HomeDashboardController extends StateNotifier<HomeDashboardState> {
       if (!mounted) return;
       state = state.copyWith(
         loading: true,
-        quickActions: buildQuickActions(_storage.hasCheckStatus),
+        quickActions: buildQuickActions(_storage.showMemberContent),
         errorMessage: '',
       );
 

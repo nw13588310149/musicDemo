@@ -30,6 +30,8 @@ class PersonalCenterState {
   final String? errorMessage;
   final Map<String, dynamic> user;
   final List<VipPackageRow> vipPackages;
+
+  /// 非 App 审核中时为 true，控制个人中心会员卡片 / 兑换入口等展示。
   final bool checkStatusEnabled;
   final String walletText;
   final String pointsText;

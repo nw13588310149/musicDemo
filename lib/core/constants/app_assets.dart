@@ -86,6 +86,7 @@ abstract final class AppAssets {
   static const leftNavYunpan = 'assets/images/shell/leftNav/yunpan.png';
   static const leftNavVideo = 'assets/images/shell/leftNav/video.png';
   static const leftNavTingxie = 'assets/images/shell/leftNav/tingxie.png';
+  static const leftNavSing = 'assets/images/shell/leftNav/sing.png';
   static const leftNavBanlv = 'assets/images/shell/leftNav/banlv.png';
   static const leftNavXiaoyuan = 'assets/images/shell/leftNav/xiaoyuan.png';
   static const leftNavBiji = 'assets/images/shell/leftNav/biji.png';

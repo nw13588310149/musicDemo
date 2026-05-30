@@ -29,7 +29,7 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
   }) : _repository = repository,
        _storage = storage,
        _args = args,
-       super(VideoTutorialState(checkStatusEnabled: storage.hasCheckStatus)) {
+       super(VideoTutorialState(checkStatusEnabled: storage.showMemberContent)) {
     unawaited(refresh());
   }
 
@@ -58,7 +58,7 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
     state = state.copyWith(
       loading: true,
       errorMessage: '',
-      checkStatusEnabled: _storage.hasCheckStatus,
+      checkStatusEnabled: _storage.showMemberContent,
     );
 
     final responses = await Future.wait<dynamic>([

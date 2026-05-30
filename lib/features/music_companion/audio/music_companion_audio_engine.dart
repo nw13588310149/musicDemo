@@ -37,6 +37,12 @@ class MusicCompanionAudioEngine {
     return _pianoInitTask ??= _runEnsurePianoInitialized();
   }
 
+  /// iOS 智能视唱：playAndRecord ↔ playback 切换后重建原生钢琴引擎。
+  Future<void> reclaimNativeEngineAfterSessionChange() async {
+    if (_disposed || kIsWeb) return;
+    await _nativePlayer.reclaimEngine();
+  }
+
   Future<void> _runEnsurePianoInitialized() async {
     try {
       if (kIsWeb) {

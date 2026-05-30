@@ -11,6 +11,8 @@ import 'osmd_score_shell.dart';
 
 const String _kBridgeKey = '__SightSingingOsmd';
 const String _kBridgeReadyKey = '__SightSingingOsmdReady';
+const String _kBridgeVersionKey = '__SightSingingOsmdBridgeVersion';
+const int _kBridgeVersion = 2;
 const String _kOsmdLibKey = 'opensheetmusicdisplay';
 
 /// 全局只需注入一次：CDN OSMD 库 + 桥脚本。
@@ -70,13 +72,18 @@ Future<void> _loadOsmdLibrary() async {
 }
 
 void _injectBridgeScript() {
-  if (web.window.getProperty<JSAny?>(_kBridgeKey.toJS) != null) {
+  final existingVersion =
+      web.window.getProperty<JSNumber?>(_kBridgeVersionKey.toJS)?.toDartInt;
+  if (web.window.getProperty<JSAny?>(_kBridgeKey.toJS) != null &&
+      existingVersion == _kBridgeVersion) {
     return;
   }
+  web.window.delete(_kBridgeKey.toJS);
   final bridgeScript =
       web.document.createElement('script') as web.HTMLScriptElement
         ..text = OsmdScoreShell.bridgeJs;
   web.document.head!.appendChild(bridgeScript);
+  web.window.setProperty(_kBridgeVersionKey.toJS, _kBridgeVersion.toJS);
 }
 
 JSObject? _bridge() {

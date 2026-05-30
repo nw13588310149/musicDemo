@@ -79,6 +79,23 @@ class _IoLowLatencyNotePlayer implements LowLatencyNotePlayer {
   }
 
   @override
+  Future<void> reclaimEngine() async {
+    if (_disposed ||
+        kIsWeb ||
+        defaultTargetPlatform != TargetPlatform.iOS) {
+      return;
+    }
+    if (!_nativeReady) return;
+    try {
+      await _channel.invokeMethod<void>('reclaimEngine');
+    } on PlatformException catch (error, stack) {
+      debugPrint('LowLatencyNotePlayer reclaimEngine failed: $error\n$stack');
+    } on MissingPluginException catch (error, stack) {
+      debugPrint('LowLatencyNotePlayer reclaimEngine missing: $error\n$stack');
+    }
+  }
+
+  @override
   Future<void> play(String key, {double volume = 1}) async {
     if (_disposed || !_assetByKey.containsKey(key)) return;
     final safeVolume = volume.clamp(0.0, 1.0).toDouble();

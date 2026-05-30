@@ -32,6 +32,9 @@ class MidiPlaybackScheduler {
   int? _activePlaybackPitch;
   int? get activePlaybackPitch => muteAudioOutput ? null : _activePlaybackPitch;
 
+  bool get _hasMetronomeEvents =>
+      _events.any((event) => event.metronomeCue != null);
+
   Stream<int> get positionMs => _positionController.stream;
   Stream<void> get completed => _completedController.stream;
 
@@ -53,7 +56,13 @@ class MidiPlaybackScheduler {
   /// 倒计时阶段预加载钢琴采样，避免跟唱开始时 native 会话与录音争抢。
   Future<void> warmupAudioEngine() async {
     if (muteAudioOutput) return;
+    await _audio.reclaimNativeEngineAfterSessionChange();
     await _audio.ensurePianoInitialized();
+  }
+
+  /// AVAudioSession 变更后（试听结束、开始跟唱等）重建 iOS 钢琴引擎。
+  Future<void> reclaimNativeEngine() async {
+    await _audio.reclaimNativeEngineAfterSessionChange();
   }
 
   Future<void> start({bool? muteAudio}) async {
@@ -61,8 +70,14 @@ class MidiPlaybackScheduler {
       muteAudioOutput = muteAudio;
     }
     if (_running || (_events.isEmpty && _totalMs <= 0)) return;
-    if (!muteAudioOutput && !_audio.isPianoReady) {
-      await _audio.ensurePianoInitialized();
+    if (!muteAudioOutput) {
+      await _audio.reclaimNativeEngineAfterSessionChange();
+      if (_hasMetronomeEvents) {
+        await _audio.ensureMetronomeInitialized();
+      }
+      if (!_audio.isPianoReady) {
+        await _audio.ensurePianoInitialized();
+      }
     }
     _running = true;
     _eventIndex = 0;
@@ -115,6 +130,20 @@ class MidiPlaybackScheduler {
 
   Future<void> _playEvent(MidiPlaybackEvent event) async {
     if (muteAudioOutput) return;
+    final cue = event.metronomeCue;
+    if (cue != null) {
+      _activePlaybackPitch = null;
+      try {
+        await _audio.playMetronomeCue(cue, volume: event.velocity / 127.0);
+      } catch (error, stack) {
+        debugPrint(
+          'MidiPlaybackScheduler.playMetronomeCue($cue) failed: '
+          '$error\n$stack',
+        );
+      }
+      return;
+    }
+
     _activePlaybackPitch = event.pitch;
     final token = _pitchToToken(event.pitch);
     if (token == null) return;

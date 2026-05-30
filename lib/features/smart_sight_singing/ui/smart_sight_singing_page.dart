@@ -45,9 +45,6 @@ class _SmartSightSingingPageState extends ConsumerState<SmartSightSingingPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final controller = ref.read(smartSightSingingControllerProvider.notifier);
-      if (kIsWeb) {
-        controller.reportError('Web 端暂不支持智能视唱实时录音，请在 iPad 上使用。');
-      }
       final id = _parseTextbookId(ModalRoute.of(context)?.settings.arguments);
       if (id == null) {
         controller.reportError('缺少教材信息，请从列表进入');
@@ -1120,35 +1117,44 @@ class _CountdownOverlay extends StatelessWidget {
         child: Container(
           width: ui(128),
           height: ui(128),
+          clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
             color: const Color(0xE6FFFFFF),
             borderRadius: BorderRadius.circular(ui(16)),
             border: Border.all(color: Colors.white, width: ui(2)),
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                '$seconds',
-                style: TextStyle(
-                  fontSize: ui(80),
-                  fontWeight: AppFont.w600,
-                  color: const Color(0xFF8741FF),
-                  fontFamily: 'Barlow',
-                  height: 50 / 80,
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(
+                  '$seconds',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: ui(80),
+                    fontWeight: AppFont.w600,
+                    color: const Color(0xFF8741FF),
+                    fontFamily: 'Barlow',
+                    height: 50 / 80,
+                  ),
                 ),
-              ),
-              SizedBox(height: ui(14)),
-              Text(
-                '准备跟唱...',
-                style: TextStyle(
-                  fontSize: ui(12),
-                  color: const Color(0xFFB6B5BB),
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w400,
+                Transform.translate(
+                  offset: Offset(0, -ui(8)),
+                  child: Text(
+                    '准备跟唱...',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: ui(12),
+                      color: const Color(0xFFB6B5BB),
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w400,
+                      height: 1,
+                    ),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -1158,10 +1164,9 @@ class _CountdownOverlay extends StatelessWidget {
 
 /// 底部播放条：封面 + 标题/副标题 + 试听/跟唱按钮 + 进度条 + 时间。
 ///
-/// 进度数据来源：MusicXML/MIDI 本身不含音频时长，而是解析成参考音高轨
-/// （[PitchTrack]）后由内部播放调度器驱动。因此「总时长 = track.totalMs」、
-/// 「当前进度 = state.playbackMs」，跟唱 / 试听过程中实时更新。进度条为
-/// 只读展示（视唱打分依赖严格的播放时间轴，不支持任意拖拽 seek）。
+/// 进度数据来源：MusicXML/MIDI 解析成参考音高轨（[PitchTrack]）后由播放调度器
+/// 驱动。「总时长 = track.totalMs（旋律）」；MusicXML 预备拍不计入进度条，
+/// 当前进度 = max(0, playbackMs - playbackLeadInMs)。
 class _Controls extends StatelessWidget {
   const _Controls({required this.state, required this.controller});
   final SightSingingState state;
@@ -1172,7 +1177,10 @@ class _Controls extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     final track = state.track;
     final totalMs = track?.totalMs ?? 0;
-    final currentMs = state.playbackMs.clamp(0, totalMs == 0 ? 0 : totalMs);
+    final currentMs = (state.playbackMs - state.playbackLeadInMs).clamp(
+      0,
+      totalMs == 0 ? 0 : totalMs,
+    );
     final ratio = totalMs > 0 ? (currentMs / totalMs).clamp(0.0, 1.0) : 0.0;
 
     final title = (state.audioName?.trim().isNotEmpty ?? false)

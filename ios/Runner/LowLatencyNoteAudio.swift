@@ -2,17 +2,24 @@ import AVFoundation
 import Flutter
 import UIKit
 
-/// Low-latency short-note playback for iPad piano / dictation.
+/// Low-latency short-note playback for iPad piano / dictation / smart sight singing.
 ///
-/// Long audio stays in media_kit / just_audio. This class caches Flutter assets
-/// as AVAudioPCMBuffer and starts AVAudioEngine lazily on the first real note.
+/// Long audio stays in media_kit. Session category is owned by Dart
+/// [NativePlaybackAudioSession]; this class resets the engine when the session
+/// changes (playAndRecord ↔ playback) so AVAudioPlayerNode.play() does not abort.
 final class LowLatencyNoteAudio {
   private let channel: FlutterMethodChannel
   private let engine = AVAudioEngine()
   private let queue = DispatchQueue(label: "com.yyzl.music.lowLatencyNotes")
   private var buffersByKey: [String: AVAudioPCMBuffer] = [:]
   private var activeNodes: [AVAudioPlayerNode] = []
+  private var playerNodePool: [AVAudioPlayerNode] = []
   private var prepared = false
+  private var engineNeedsReset = true
+  private var fadeGeneration = 0
+  private var sessionObservers: [NSObjectProtocol] = []
+
+  private let maxPoolSize = 8
 
   init(messenger: FlutterBinaryMessenger) {
     channel = FlutterMethodChannel(
@@ -22,6 +29,11 @@ final class LowLatencyNoteAudio {
     channel.setMethodCallHandler { [weak self] call, result in
       self?.handle(call: call, result: result)
     }
+    registerSessionObservers()
+  }
+
+  deinit {
+    unregisterSessionObservers()
   }
 
   private func handle(call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -45,6 +57,8 @@ final class LowLatencyNoteAudio {
       }
       let volume = (args["volume"] as? NSNumber)?.floatValue ?? 1.0
       play(key: key, volume: volume, result: result)
+    case "reclaimEngine":
+      reclaimEngine(result: result)
     case "stopAll":
       stopAll()
       result(nil)
@@ -56,14 +70,61 @@ final class LowLatencyNoteAudio {
     }
   }
 
+  private func registerSessionObservers() {
+    let center = NotificationCenter.default
+    let handler: (Notification) -> Void = { [weak self] _ in
+      self?.markEngineNeedsReset()
+    }
+    sessionObservers = [
+      center.addObserver(
+        forName: AVAudioSession.interruptionNotification,
+        object: nil,
+        queue: nil,
+        using: handler
+      ),
+      center.addObserver(
+        forName: AVAudioSession.routeChangeNotification,
+        object: nil,
+        queue: nil,
+        using: handler
+      ),
+      center.addObserver(
+        forName: AVAudioSession.mediaServicesWereResetNotification,
+        object: nil,
+        queue: nil,
+        using: handler
+      ),
+    ]
+  }
+
+  private func unregisterSessionObservers() {
+    let center = NotificationCenter.default
+    for token in sessionObservers {
+      center.removeObserver(token)
+    }
+    sessionObservers.removeAll()
+  }
+
+  private func markEngineNeedsReset() {
+    queue.async { [weak self] in
+      self?.engineNeedsReset = true
+    }
+  }
+
+  private func reclaimEngine(result: @escaping FlutterResult) {
+    queue.async { [weak self] in
+      guard let self = self else { return }
+      self.hardResetEngine()
+      DispatchQueue.main.async {
+        result(nil)
+      }
+    }
+  }
+
   private func prepare(assets: [String: String], result: @escaping FlutterResult) {
     queue.async { [weak self] in
       guard let self = self else { return }
       do {
-        // AVAudioSession 由 Dart [NativePlaybackAudioSession] 统一管理。
-        // 此处若在 prepare 里强制 playAndRecord/measurement，音乐伴侣 / musicPlay
-        // 纯播放场景在 iPad 上会出现音量偏低，且与节拍器启动时的 playback 配置冲突。
-
         var loaded = 0
         for (key, asset) in assets {
           if self.buffersByKey[key] != nil {
@@ -97,6 +158,7 @@ final class LowLatencyNoteAudio {
   private func play(key: String, volume: Float, result: @escaping FlutterResult) {
     queue.async { [weak self] in
       guard let self = self else { return }
+      var borrowedNode: AVAudioPlayerNode?
       do {
         guard let buffer = self.buffersByKey[key] else {
           throw LowLatencyNoteAudioError.bufferNotPrepared(key)
@@ -105,27 +167,44 @@ final class LowLatencyNoteAudio {
           throw LowLatencyNoteAudioError.decodeFailed(key)
         }
 
-        let node = AVAudioPlayerNode()
+        if self.engineNeedsReset {
+          self.hardResetEngine()
+        }
+
+        let node = self.borrowPlayerNode()
+        borrowedNode = node
         node.volume = max(0, min(volume, 1))
-        self.engine.attach(node)
-        self.engine.connect(node, to: self.engine.mainMixerNode, format: playbackBuffer.format)
+
+        try self.attachAndStartIfNeeded(node: node)
         self.activeNodes.append(node)
 
-        try self.ensureEngineRunning()
         node.scheduleBuffer(playbackBuffer, at: nil, options: []) { [weak self, weak node] in
           guard let self = self, let node = node else { return }
           self.queue.async {
-            node.stop()
-            self.engine.detach(node)
             self.activeNodes.removeAll { $0 === node }
+            self.returnPlayerNode(node)
           }
         }
-        node.play()
+
+        var playError: NSError?
+        let played = LowLatencyNoteAudioSafePlay.play(node, error: &playError)
+        if !played {
+          self.activeNodes.removeAll { $0 === node }
+          self.returnPlayerNode(node)
+          throw LowLatencyNoteAudioError.playRejected(
+            playError?.localizedDescription ?? "AVAudioPlayerNode.play failed"
+          )
+        }
 
         DispatchQueue.main.async {
           result(nil)
         }
       } catch {
+        if let node = borrowedNode {
+          self.activeNodes.removeAll { $0 === node }
+          self.returnPlayerNode(node)
+        }
+        self.markEngineNeedsResetOnFailure()
         DispatchQueue.main.async {
           result(
             FlutterError(
@@ -151,21 +230,88 @@ final class LowLatencyNoteAudio {
   private func dispose() {
     queue.async { [weak self] in
       guard let self = self else { return }
-      let nodes = self.activeNodes
-      self.activeNodes.removeAll()
-      self.fadeOutAndDetach(nodes: nodes)
+      self.hardResetEngine()
       self.buffersByKey.removeAll()
       self.prepared = false
     }
   }
 
+  private func hardResetEngine() {
+    fadeGeneration += 1
+    let nodes = activeNodes
+    activeNodes.removeAll()
+    for node in nodes {
+      node.stop()
+      detachIfAttached(node)
+    }
+    for node in playerNodePool {
+      node.stop()
+      detachIfAttached(node)
+    }
+    playerNodePool.removeAll()
+
+    if engine.isRunning {
+      engine.stop()
+    }
+    engine.reset()
+    engineNeedsReset = true
+  }
+
+  private func markEngineNeedsResetOnFailure() {
+    engineNeedsReset = true
+    if engine.isRunning {
+      engine.stop()
+    }
+  }
+
+  private func borrowPlayerNode() -> AVAudioPlayerNode {
+    while let node = playerNodePool.popLast() {
+      if !node.isPlaying {
+        return node
+      }
+      node.stop()
+      detachIfAttached(node)
+    }
+    return AVAudioPlayerNode()
+  }
+
+  private func returnPlayerNode(_ node: AVAudioPlayerNode) {
+    node.stop()
+    detachIfAttached(node)
+    guard playerNodePool.count < maxPoolSize else { return }
+    playerNodePool.append(node)
+  }
+
+  private func detachIfAttached(_ node: AVAudioPlayerNode) {
+    if engine.attachedNodes.contains(node) {
+      engine.disconnectNodeOutput(node)
+      engine.detach(node)
+    }
+  }
+
+  private func attachAndStartIfNeeded(node: AVAudioPlayerNode) throws {
+    if engine.isRunning {
+      engine.pause()
+    }
+
+    if !engine.attachedNodes.contains(node) {
+      engine.attach(node)
+    }
+    engine.connect(node, to: engine.mainMixerNode, format: nil)
+
+    engine.prepare()
+    try engine.start()
+    engineNeedsReset = false
+  }
+
   private func fadeOutAndDetach(nodes: [AVAudioPlayerNode]) {
     guard !nodes.isEmpty else { return }
+    let generation = fadeGeneration
     let steps = 6
     let intervalMs = 8
     for step in 1...steps {
       queue.asyncAfter(deadline: .now() + .milliseconds(step * intervalMs)) { [weak self] in
-        guard let self = self else { return }
+        guard let self = self, generation == self.fadeGeneration else { return }
         let scale = max(0, Float(steps - step) / Float(steps))
         for node in nodes {
           node.volume = node.volume * scale
@@ -173,16 +319,13 @@ final class LowLatencyNoteAudio {
         if step == steps {
           for node in nodes {
             node.stop()
-            self.engine.detach(node)
+            self.detachIfAttached(node)
+            if self.playerNodePool.count < self.maxPoolSize {
+              self.playerNodePool.append(node)
+            }
           }
         }
       }
-    }
-  }
-
-  private func ensureEngineRunning() throws {
-    if !engine.isRunning {
-      try engine.start()
     }
   }
 
@@ -262,6 +405,7 @@ private enum LowLatencyNoteAudioError: Error, CustomStringConvertible {
   case assetNotFound(String)
   case decodeFailed(String)
   case bufferNotPrepared(String)
+  case playRejected(String)
 
   var description: String {
     switch self {
@@ -271,6 +415,8 @@ private enum LowLatencyNoteAudioError: Error, CustomStringConvertible {
       return "Failed to decode asset: \(asset)"
     case .bufferNotPrepared(let key):
       return "Buffer not prepared for key: \(key)"
+    case .playRejected(let reason):
+      return "Play rejected: \(reason)"
     }
   }
 }

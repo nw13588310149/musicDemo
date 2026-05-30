@@ -96,8 +96,6 @@ class AuthController extends StateNotifier<AuthState> {
 
     state = state.copyWith(isSubmitting: true);
     try {
-      final checkFuture = _syncCheckStatus().catchError((_) {});
-
       final response = await _repository.login(
         mobile: state.mobile,
         password: state.password,
@@ -117,7 +115,8 @@ class AuthController extends StateNotifier<AuthState> {
       // 判定白名单管理员（如 13588310149）是否覆盖 user.role 为 admin。
       await _repository.persistMobile(state.mobile);
 
-      await checkFuture;
+      // 登录成功后再拉一次字典/审核开关，结果写入本地供各业务页读取。
+      await _syncCheckStatus().catchError((_) {});
       unawaited(_reportCidIfNeeded());
       unawaited(_appConfigRepository.refreshFileBaseUrl());
       // 登录成功后用新 token 重新建立 WS 长连接，承担 AI / 系统 / 群聊消息推送。
@@ -174,6 +173,7 @@ class AuthController extends StateNotifier<AuthState> {
       // 注册成功也走自动登录流程，记下手机号供白名单管理员判定。
       await _repository.persistMobile(state.mobile);
 
+      await _syncCheckStatus().catchError((_) {});
       unawaited(_appConfigRepository.refreshFileBaseUrl());
       unawaited(_reportCidIfNeeded());
       _chatSocket.reconnect();
@@ -259,6 +259,7 @@ class AuthController extends StateNotifier<AuthState> {
   Future<void> _syncCheckStatus() async {
     final checkResponse = await _repository.getCheck();
     if (checkResponse.code == 0) {
+      // data: true → 审核中，隐藏会员入口；data: false → 正常展示。
       await _repository.saveCheckStatus(checkResponse.data);
     }
   }

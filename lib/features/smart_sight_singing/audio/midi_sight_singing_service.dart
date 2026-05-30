@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import '../../music_companion/audio/music_companion_audio_catalog.dart';
 import '../config/smart_sight_singing_config.dart';
 import 'ktv_pitch_guide.dart';
 import 'midi_file_parser.dart';
@@ -12,11 +13,13 @@ class MidiPlaybackEvent {
     required this.timeMs,
     required this.pitch,
     required this.velocity,
+    this.metronomeCue,
   });
 
   final int timeMs;
   final int pitch;
   final int velocity;
+  final MusicCompanionMetronomeCue? metronomeCue;
 }
 
 /// 单轨摘要，供用户选择主旋律轨。

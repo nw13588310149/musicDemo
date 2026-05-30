@@ -90,6 +90,7 @@ dependencies:
   music_xml: ^2.7.0
   webview_flutter: ^4.13.1
   webview_flutter_wkwebview: ^3.25.1
+  xml: ^6.6.1
   # 截屏防护改由原生层实现（iOS SceneDelegate / Android MainActivity）。
   # screen_protector 与显式 FlutterEngine + SceneDelegate 不兼容，会导致 iOS 启动黑屏。
   # ───────────────────────────────────────────────────────────────────────
