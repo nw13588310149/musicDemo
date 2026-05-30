@@ -28,8 +28,28 @@ class StudyCatalogConfig {
     required this.artworkLabel,
     required this.targetRoute,
     this.allowSecondMenu = false,
+    this.contentTopPadding = 12,
+    this.listScrollTopPadding = 4,
+    this.listHorizontalPadding = 20,
+    this.sidebarContentGap = 0,
+    this.contentPanelRightPadding = 0,
     this.targetArgsBuilder,
   });
+
+  /// 右侧列表区外框顶部留白（设计稿 px，与听写二级页默认 12 一致）。
+  final double contentTopPadding;
+
+  /// 列表 [ListView] 自身顶部留白（设计稿 px，与听写二级页默认 4 一致）。
+  final double listScrollTopPadding;
+
+  /// 列表 [ListView] 左右留白（设计稿 px，听写二级页默认 20）。
+  final double listHorizontalPadding;
+
+  /// 左侧菜单与右侧内容区间距（设计稿 px，智能听写为 12）。
+  final double sidebarContentGap;
+
+  /// 右侧内容区外框右内边距（设计稿 px，智能听写为 12）。
+  final double contentPanelRightPadding;
 
   final String key;
   final String title;
@@ -70,11 +90,17 @@ class StudyCatalogConfig {
     targetArgsBuilder: _buildSightSingingArgs,
   );
 
+  /// 列表留白与 [SmartDictationV2Page] 闯关网格一致（顶 14、左右 0、侧栏间距 12、右侧 12）。
   static const smartSightSinging = StudyCatalogConfig(
     key: 'smartSightSinging',
     title: '智能视唱',
     type: 11,
     defaultFirstMenuId: '1',
+    contentTopPadding: 14,
+    listScrollTopPadding: 0,
+    listHorizontalPadding: 0,
+    sidebarContentGap: 12,
+    contentPanelRightPadding: 12,
     groupField: StudyCatalogGroupField.shortText2,
     subtitleField: StudyCatalogSubtitleField.shortText1,
     artworkLabel: StudyCatalogArtworkLabel.smartSightSinging,

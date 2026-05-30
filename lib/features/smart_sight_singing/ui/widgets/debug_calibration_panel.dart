@@ -60,7 +60,7 @@ class _DebugCalibrationPanelState
       child: Container(
         width: ui(400),
         margin: EdgeInsets.only(left: ui(8)),
-        padding: EdgeInsets.fromLTRB(ui(20), ui(20), ui(20), ui(20)),
+        padding: EdgeInsets.fromLTRB(ui(20), ui(10), ui(20), ui(20)),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(ui(16)),
@@ -413,12 +413,12 @@ class _LiveMetricsCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _Metric(
                 label: '你的音',
-                value: _midiName(userMidi),
-                subValue: userMidi >= 0
-                    ? '${state.lastFrequencyHz.toStringAsFixed(1)} Hz'
+                value: userMidi >= 0
+                    ? '${_midiName(userMidi)} · ${state.lastFrequencyHz.toStringAsFixed(1)} Hz'
                     : '- -',
               ),
               _Metric(label: '参考', value: _midiName(refMidi)),
@@ -427,6 +427,7 @@ class _LiveMetricsCard extends StatelessWidget {
           ),
           SizedBox(height: ui(18)),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _Metric(
                 label: '偏差',
@@ -455,11 +456,10 @@ class _LiveMetricsCard extends StatelessWidget {
 }
 
 class _Metric extends StatelessWidget {
-  const _Metric({required this.label, required this.value, this.subValue});
+  const _Metric({required this.label, required this.value});
 
   final String label;
   final String value;
-  final String? subValue;
 
   @override
   Widget build(BuildContext context) {
@@ -482,6 +482,8 @@ class _Metric extends StatelessWidget {
           SizedBox(height: ui(10)),
           Text(
             value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: ui(18),
               fontWeight: AppFont.w600,
@@ -490,19 +492,6 @@ class _Metric extends StatelessWidget {
               height: 1,
             ),
           ),
-          if (subValue != null) ...[
-            SizedBox(height: ui(6)),
-            Text(
-              subValue!,
-              style: TextStyle(
-                fontSize: ui(14),
-                color: const Color(0xFFB6B5BB),
-                fontFamily: 'Manrope',
-                fontWeight: AppFont.w600,
-                height: 1,
-              ),
-            ),
-          ],
         ],
       ),
     );

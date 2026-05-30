@@ -5,7 +5,7 @@ import '../../audio/pitch_track.dart';
 import '../../state/smart_sight_singing_state.dart';
 
 /// KTV 风格音高滚动轨道（demo 中性浅色）：
-/// - 横轴时间（当前 ± [windowMs] / 2），中央有一根「Now」竖线。
+/// - 横轴时间：Now 线左侧半窗历史，参考条向右预绘至曲末并随播放连续左移。
 /// - 纵轴 MIDI，按 [PitchTrack.minMidi] / [PitchTrack.maxMidi] 自适应。
 /// - 参考音高用横向胶囊段绘制；用户演唱音高沿时间轴留下拖尾。
 class KaraokePitchTrack extends StatelessWidget {
@@ -162,12 +162,14 @@ class _KaraokePainter extends CustomPainter {
       ..style = PaintingStyle.stroke;
 
     final visibleStartMs = playbackMs - windowMs ~/ 2;
-    final visibleEndMs = playbackMs + windowMs ~/ 2;
+    // 参考条预绘至曲末：x 由绝对时间映射，随 playback 左移；若只画半窗 lookahead，
+    // 音符会在右缘逐个「弹出」。用户拖尾等仍可按半窗裁剪以省绘制。
+    final refDrawEndMs = track.totalMs;
 
     final notes = track.notes;
     if (notes.isNotEmpty) {
       for (final note in notes) {
-        if (note.endMs < visibleStartMs || note.startMs > visibleEndMs) {
+        if (note.endMs < visibleStartMs || note.startMs > refDrawEndMs) {
           continue;
         }
         final x0 = xFromTime(note.startMs);
@@ -189,7 +191,7 @@ class _KaraokePainter extends CustomPainter {
         0,
         frames.length - 1,
       );
-      final endIdx = ((visibleEndMs + 2 * stepMs) / stepMs).ceil().clamp(
+      final endIdx = ((refDrawEndMs + 2 * stepMs) / stepMs).ceil().clamp(
         0,
         frames.length - 1,
       );

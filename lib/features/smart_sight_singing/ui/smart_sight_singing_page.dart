@@ -104,28 +104,31 @@ class _SmartSightSingingPageState extends ConsumerState<SmartSightSingingPage> {
             onConfirm: () =>
                 Navigator.of(dialogContext, rootNavigator: true).pop('exit'),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _ResultStatCell(label: '准神', value: '$perfect'),
-              SizedBox(width: dialogUi(8)),
-              _ResultStatCell(label: '优秀', value: '$good'),
-              SizedBox(width: dialogUi(8)),
-              _ResultStatCell(label: '及格', value: '$ok'),
-              SizedBox(width: dialogUi(8)),
-              _ResultStatCell(
-                label: '不及格',
-                value: '$miss',
-                valueColor: const Color(0xFFFF323C),
-              ),
-              SizedBox(width: dialogUi(8)),
-              _ResultStatCell(
-                label: '综合得分',
-                value: '${state.currentScore}',
-                valueColor: const Color(0xFF8741FF),
-              ),
-            ],
+          child: Transform.translate(
+            offset: Offset(0, -dialogUi(10)),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _ResultStatCell(label: '准神', value: '$perfect'),
+                SizedBox(width: dialogUi(8)),
+                _ResultStatCell(label: '优秀', value: '$good'),
+                SizedBox(width: dialogUi(8)),
+                _ResultStatCell(label: '及格', value: '$ok'),
+                SizedBox(width: dialogUi(8)),
+                _ResultStatCell(
+                  label: '不及格',
+                  value: '$miss',
+                  valueColor: const Color(0xFFFF323C),
+                ),
+                SizedBox(width: dialogUi(8)),
+                _ResultStatCell(
+                  label: '综合得分',
+                  value: '${state.currentScore}',
+                  valueColor: const Color(0xFF8741FF),
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -163,7 +166,6 @@ class _SmartSightSingingPageState extends ConsumerState<SmartSightSingingPage> {
                   Padding(
                     padding: EdgeInsets.fromLTRB(ui(20), 0, ui(20), 0),
                     child: _Header(
-                      state: state,
                       onBack: () => unawaited(_handleBack(context)),
                       onToggleDebug: controller.toggleDebugPanel,
                       onScoreModeChanged: controller.setScoreSightReadingMode,
@@ -411,15 +413,13 @@ class _DebugErrorPanel extends StatelessWidget {
   }
 }
 
-class _Header extends StatelessWidget {
+class _Header extends ConsumerWidget {
   const _Header({
-    required this.state,
     required this.onBack,
     required this.onToggleDebug,
     required this.onScoreModeChanged,
   });
 
-  final SightSingingState state;
   final VoidCallback onBack;
   final VoidCallback onToggleDebug;
   final ValueChanged<bool> onScoreModeChanged;
@@ -431,12 +431,23 @@ class _Header extends StatelessWidget {
   static const _examSubtitle = '考试模式：不播放旋律伴奏，仍会播放标准音与节拍器';
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final ui = DashboardScaleScope.of(context).ui;
+    final examMode = ref.watch(
+      smartSightSingingControllerProvider.select((s) => s.visualOnlyMode),
+    );
+    final debugPanelVisible = ref.watch(
+      smartSightSingingControllerProvider.select((s) => s.debugPanelVisible),
+    );
+    final scoreSightReadingMode = ref.watch(
+      smartSightSingingControllerProvider.select((s) => s.scoreSightReadingMode),
+    );
+    final stage = ref.watch(
+      smartSightSingingControllerProvider.select((s) => s.stage),
+    );
     final scoreModeLocked =
-        state.stage == SightSingingStage.singing ||
-        state.stage == SightSingingStage.countdown;
-    final examMode = state.visualOnlyMode;
+        stage == SightSingingStage.singing ||
+        stage == SightSingingStage.countdown;
     final title = examMode ? _examTitle : _practiceTitle;
     final subtitle = examMode ? _examSubtitle : _practiceSubtitle;
 
@@ -496,13 +507,13 @@ class _Header extends StatelessWidget {
             top: 0,
             bottom: 0,
             child: Center(
-              child: state.debugPanelVisible
+              child: debugPanelVisible
                   ? const SizedBox.shrink()
                   : Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         _ScoreModeSegmentSwitch(
-                          selectedIndex: state.scoreSightReadingMode ? 0 : 1,
+                          selectedIndex: scoreSightReadingMode ? 0 : 1,
                           onLeftTap: scoreModeLocked
                               ? null
                               : () => onScoreModeChanged(true),
@@ -895,7 +906,16 @@ class _PracticeTrackView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget scoreFallback() => ScoreSightReadingTrack(
+    final scoreTrack = ScoreSightReadingTrack(
+      track: track,
+      playbackMs: playbackMs,
+      userPoints: userPoints,
+      currentUserMidi: currentUserMidi,
+      currentUserAmplitude: currentUserAmplitude,
+      scoringStandardCents: scoringStandardCents,
+    );
+
+    final karaokeTrack = KaraokePitchTrack(
       track: track,
       playbackMs: playbackMs,
       userPoints: userPoints,
@@ -905,25 +925,32 @@ class _PracticeTrackView extends StatelessWidget {
     );
 
     final xml = musicXmlContent?.trim() ?? '';
-    if (scoreSightReadingMode && xml.isNotEmpty) {
+    final Widget scorePane;
+    if (xml.isNotEmpty) {
       final onsetMs = <int>[for (final note in track.notes) note.startMs];
-      return OsmdScoreViewer(
+      scorePane = OsmdScoreViewer(
         musicXml: xml,
         playbackMs: playbackMs,
         onsetMs: onsetMs,
-        fallback: scoreFallback(),
+        fallback: scoreTrack,
       );
+    } else {
+      scorePane = scoreTrack;
     }
-    if (scoreSightReadingMode) {
-      return scoreFallback();
-    }
-    return KaraokePitchTrack(
-      track: track,
-      playbackMs: playbackMs,
-      userPoints: userPoints,
-      currentUserMidi: currentUserMidi,
-      currentUserAmplitude: currentUserAmplitude,
-      scoringStandardCents: scoringStandardCents,
+
+    // 双视图常驻 Offstage：切换时不销毁子树；隐藏侧不参与绘制，避免 iOS 白闪。
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Offstage(
+          offstage: !scoreSightReadingMode,
+          child: TickerMode(enabled: scoreSightReadingMode, child: scorePane),
+        ),
+        Offstage(
+          offstage: scoreSightReadingMode,
+          child: TickerMode(enabled: !scoreSightReadingMode, child: karaokeTrack),
+        ),
+      ],
     );
   }
 }
@@ -973,6 +1000,10 @@ class _ScoreBoard extends StatelessWidget {
   final SightSingingState state;
   final SmartSightSingingController controller;
 
+  /// 相邻标题文字之间的固定间距（设计稿 px）。
+  static const _titleGap = 36.0;
+  static const _valueBoxWidth = 62.0;
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
@@ -999,6 +1030,19 @@ class _ScoreBoard extends StatelessWidget {
         state.stage == SightSingingStage.singing ||
         state.stage == SightSingingStage.countdown;
 
+    final metrics = <_ScoreMetricEntry>[
+      _ScoreMetricEntry(
+        label: '得分',
+        value: '${state.currentScore}',
+        valueColor: const Color(0xFF8741FF),
+      ),
+      _ScoreMetricEntry(label: '连击', value: '${state.combo}'),
+      _ScoreMetricEntry(label: '命中率', value: hitRate),
+      _ScoreMetricEntry(label: '标准音', value: refName),
+      _ScoreMetricEntry(label: '你的音', value: userName),
+      _ScoreMetricEntry(label: '偏差值', value: centsLabel),
+    ];
+
     return Container(
       height: ui(88),
       padding: EdgeInsets.symmetric(horizontal: ui(24)),
@@ -1007,25 +1051,11 @@ class _ScoreBoard extends StatelessWidget {
         borderRadius: BorderRadius.circular(ui(16)),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          _ScoreCell(
-            width: ui(40),
-            label: '得分',
-            value: '${state.currentScore}',
-            valueColor: const Color(0xFF8741FF),
-          ),
-          SizedBox(width: ui(36)),
-          _ScoreCell(width: ui(40), label: '连击', value: '${state.combo}'),
-          SizedBox(width: ui(36)),
-          _ScoreCell(width: ui(48), label: '命中率', value: hitRate),
-          SizedBox(width: ui(36)),
-          _ScoreCell(width: ui(44), label: '标准音', value: refName),
-          SizedBox(width: ui(36)),
-          _ScoreCell(width: ui(72), label: '你的音', value: userName),
-          SizedBox(width: ui(36)),
-          _ScoreCell(width: ui(48), label: '偏差', value: centsLabel),
+          Expanded(child: _ScoreMetricsStrip(ui: ui, metrics: metrics)),
           if (!state.debugPanelVisible) ...[
-            const Spacer(),
+            SizedBox(width: ui(16)),
             Text(
               '考试模式',
               style: TextStyle(
@@ -1048,54 +1078,210 @@ class _ScoreBoard extends StatelessWidget {
   }
 }
 
-class _ScoreCell extends StatelessWidget {
-  const _ScoreCell({
-    required this.width,
+class _ScoreMetricEntry {
+  const _ScoreMetricEntry({
     required this.label,
     required this.value,
     this.valueColor = const Color(0xFF0B081A),
   });
-  final double width;
+
   final String label;
   final String value;
   final Color valueColor;
+}
+
+/// 标题行：文字 + 36px + 文字；数值行在布局后按真实标题左缘对齐。
+class _ScoreMetricsStrip extends StatefulWidget {
+  const _ScoreMetricsStrip({required this.ui, required this.metrics});
+
+  final double Function(double) ui;
+  final List<_ScoreMetricEntry> metrics;
+
+  @override
+  State<_ScoreMetricsStrip> createState() => _ScoreMetricsStripState();
+}
+
+class _ScoreMetricsStripState extends State<_ScoreMetricsStrip> {
+  final _valueRowKey = GlobalKey();
+  late List<GlobalKey> _labelKeys;
+  List<double> _valueLefts = const [];
+  double _contentWidth = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _labelKeys = _newLabelKeys();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ScoreMetricsStrip oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.metrics.length != widget.metrics.length) {
+      _labelKeys = _newLabelKeys();
+      _valueLefts = const [];
+      _contentWidth = 0;
+    }
+    _scheduleSync();
+  }
+
+  List<GlobalKey> _newLabelKeys() {
+    return List<GlobalKey>.generate(widget.metrics.length, (_) => GlobalKey());
+  }
+
+  TextStyle _labelStyle() {
+    return TextStyle(
+      fontSize: widget.ui(14),
+      color: const Color(0xFFB6B5BB),
+      fontFamily: 'PingFang SC',
+      fontWeight: AppFont.w400,
+      height: 1,
+    );
+  }
+
+  void _scheduleSync() {
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncValuePositions());
+  }
+
+  void _syncValuePositions() {
+    if (!mounted) return;
+    final valueRowBox =
+        _valueRowKey.currentContext?.findRenderObject() as RenderBox?;
+    if (valueRowBox == null) {
+      _scheduleSync();
+      return;
+    }
+
+    final valueBoxW = widget.ui(_ScoreBoard._valueBoxWidth);
+    final rowOrigin = valueRowBox.localToGlobal(Offset.zero);
+    final lefts = <double>[];
+    var maxRight = 0.0;
+
+    for (final key in _labelKeys) {
+      final labelBox = key.currentContext?.findRenderObject() as RenderBox?;
+      if (labelBox == null) {
+        _scheduleSync();
+        return;
+      }
+      final left = labelBox.localToGlobal(Offset.zero).dx - rowOrigin.dx;
+      lefts.add(left);
+      final right = left + valueBoxW;
+      if (right > maxRight) maxRight = right;
+    }
+
+    final changed = lefts.length != _valueLefts.length ||
+        _contentWidth != maxRight ||
+        !_offsetsEqual(lefts, _valueLefts);
+    if (changed) {
+      setState(() {
+        _valueLefts = lefts;
+        _contentWidth = maxRight;
+      });
+    }
+  }
+
+  bool _offsetsEqual(List<double> a, List<double> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if ((a[i] - b[i]).abs() > 0.5) return false;
+    }
+    return true;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return SizedBox(
-      width: width,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label,
-            textAlign: TextAlign.start,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: ui(14),
-              color: const Color(0xFFB6B5BB),
-              fontFamily: 'PingFang SC',
-              fontWeight: AppFont.w400,
-              height: 1,
-            ),
+    _scheduleSync();
+
+    final gap = widget.ui(_ScoreBoard._titleGap);
+    final valueBoxH = widget.ui(32);
+    final valueBoxW = widget.ui(_ScoreBoard._valueBoxWidth);
+    final fallbackWidth = widget.metrics.isEmpty
+        ? 0.0
+        : widget.metrics.length * valueBoxW +
+            (widget.metrics.length - 1) * gap;
+    final contentWidth = _contentWidth > 0 ? _contentWidth : fallbackWidth;
+    final ready = _valueLefts.length == widget.metrics.length;
+
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < widget.metrics.length; i++) ...[
+              if (i > 0) SizedBox(width: gap),
+              Text(
+                key: _labelKeys[i],
+                widget.metrics[i].label,
+                maxLines: 1,
+                style: _labelStyle(),
+              ),
+            ],
+          ],
+        ),
+        SizedBox(height: widget.ui(8)),
+        SizedBox(
+          key: _valueRowKey,
+          width: contentWidth,
+          height: valueBoxH,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              for (var i = 0; i < widget.metrics.length; i++)
+                Positioned(
+                  left: ready ? _valueLefts[i] : 0,
+                  top: 0,
+                  child: Opacity(
+                    opacity: ready ? 1 : 0,
+                    child: _ScoreValueBox(
+                      ui: widget.ui,
+                      value: widget.metrics[i].value,
+                      valueColor: widget.metrics[i].valueColor,
+                    ),
+                  ),
+                ),
+            ],
           ),
-          SizedBox(height: ui(8)),
-          Text(
-            value,
-            textAlign: TextAlign.start,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: ui(20),
-              color: valueColor,
-              fontFamily: 'PingFang SC',
-              fontWeight: AppFont.w600,
-              height: 1,
-            ),
-          ),
-        ],
+        ),
+      ],
+    );
+  }
+}
+
+class _ScoreValueBox extends StatelessWidget {
+  const _ScoreValueBox({
+    required this.ui,
+    required this.value,
+    this.valueColor = const Color(0xFF0B081A),
+  });
+
+  final double Function(double) ui;
+  final String value;
+  final Color valueColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: ui(_ScoreBoard._valueBoxWidth),
+      height: ui(32),
+      alignment: Alignment.centerLeft,
+      padding: EdgeInsets.only(right: ui(6)),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F6FA),
+        borderRadius: BorderRadius.circular(ui(6)),
+      ),
+      child: Text(
+        value,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: ui(18),
+          color: valueColor,
+          fontFamily: 'Manrope',
+          fontWeight: AppFont.w500,
+          height: 1,
+        ),
       ),
     );
   }
@@ -1336,20 +1522,45 @@ class _ControlButtons extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _ImageActionButton(
-          asset: state.isPreviewPlaying
-              ? AppAssets.smartSightSingingPreviewPauseBtn
-              : AppAssets.smartSightSingingPreviewBtn,
-          onTap: () => controller.previewMelody(),
-        ),
+        _PreviewMelodyButton(controller: controller),
         SizedBox(width: ui(12)),
-        _ImageActionButton(
-          asset: AppAssets.smartSightSingingStartBtn,
-          onTap: state.isPreviewPlaying
-              ? null
-              : () => controller.startSinging(),
-        ),
+        _StartSingingButton(controller: controller),
       ],
+    );
+  }
+}
+
+/// 仅试听按钮随播放态切换切图；与「开始跟唱」解耦。
+class _PreviewMelodyButton extends ConsumerWidget {
+  const _PreviewMelodyButton({required this.controller});
+
+  final SmartSightSingingController controller;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isPlaying = ref.watch(
+      smartSightSingingControllerProvider.select((s) => s.isPreviewPlaying),
+    );
+    return _ImageActionButton(
+      asset: isPlaying
+          ? AppAssets.smartSightSingingPreviewPauseBtn
+          : AppAssets.smartSightSingingPreviewBtn,
+      onTap: () => controller.previewMelody(),
+    );
+  }
+}
+
+/// 就绪态「开始跟唱」：外观与可点状态不随试听开关变化。
+class _StartSingingButton extends StatelessWidget {
+  const _StartSingingButton({required this.controller});
+
+  final SmartSightSingingController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return _ImageActionButton(
+      asset: AppAssets.smartSightSingingStartBtn,
+      onTap: () => controller.startSinging(),
     );
   }
 }
@@ -1600,64 +1811,62 @@ class _ScoreModeSegmentSwitch extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final disabled = onLeftTap == null && onRightTap == null;
+    final outerW = ui(_switchWidth);
+    final outerH = ui(_switchHeight);
+    final pad = ui(2);
+    final segmentW = (outerW - pad * 2) / 2;
 
-    return Opacity(
-      opacity: disabled ? 0.55 : 1,
-      child: SizedBox(
-        width: ui(_switchWidth),
-        height: ui(_switchHeight),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: const Color(0xFFF4F4FF),
-            borderRadius: BorderRadius.circular(ui(8)),
-          ),
-          child: Padding(
-            padding: EdgeInsets.all(ui(2)),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final segmentWidth = constraints.maxWidth / 2;
-                return SizedBox(
-                  height: constraints.maxHeight,
-                  child: Stack(
-                    clipBehavior: Clip.none,
+    return RepaintBoundary(
+      child: Opacity(
+        opacity: disabled ? 0.55 : 1,
+        child: SizedBox(
+          width: outerW,
+          height: outerH,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: const Color(0xFFF4F4FF),
+              borderRadius: BorderRadius.circular(ui(8)),
+            ),
+            child: Padding(
+              padding: EdgeInsets.all(pad),
+              child: Stack(
+                clipBehavior: Clip.hardEdge,
+                children: [
+                  AnimatedPositioned(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOut,
+                    left: selectedIndex * segmentW,
+                    top: 0,
+                    bottom: 0,
+                    width: segmentW,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF8741FF),
+                        borderRadius: BorderRadius.circular(ui(6)),
+                      ),
+                    ),
+                  ),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      AnimatedPositioned(
-                        duration: const Duration(milliseconds: 180),
-                        curve: Curves.easeOut,
-                        left: selectedIndex * segmentWidth,
-                        top: 0,
-                        bottom: 0,
-                        width: segmentWidth,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF8741FF),
-                            borderRadius: BorderRadius.circular(ui(6)),
-                          ),
+                      Expanded(
+                        child: _ScoreModeSegmentSwitchItem(
+                          label: '谱例视唱',
+                          selected: selectedIndex == 0,
+                          onTap: onLeftTap,
                         ),
                       ),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Expanded(
-                            child: _ScoreModeSegmentSwitchItem(
-                              label: '谱例视唱',
-                              selected: selectedIndex == 0,
-                              onTap: onLeftTap,
-                            ),
-                          ),
-                          Expanded(
-                            child: _ScoreModeSegmentSwitchItem(
-                              label: '无谱视唱',
-                              selected: selectedIndex == 1,
-                              onTap: onRightTap,
-                            ),
-                          ),
-                        ],
+                      Expanded(
+                        child: _ScoreModeSegmentSwitchItem(
+                          label: '无谱视唱',
+                          selected: selectedIndex == 1,
+                          onTap: onRightTap,
+                        ),
                       ),
                     ],
                   ),
-                );
-              },
+                ],
+              ),
             ),
           ),
         ),
@@ -1685,9 +1894,8 @@ class _ScoreModeSegmentSwitchItem extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       child: SizedBox.expand(
         child: Center(
-          child: AnimatedDefaultTextStyle(
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOut,
+          child: Text(
+            label,
             style: TextStyle(
               color: selected ? Colors.white : Colors.black,
               fontSize: ui(13),
@@ -1695,7 +1903,6 @@ class _ScoreModeSegmentSwitchItem extends StatelessWidget {
               fontWeight: selected ? AppFont.w500 : AppFont.w400,
               height: 1,
             ),
-            child: Text(label),
           ),
         ),
       ),

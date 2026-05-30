@@ -39,11 +39,18 @@ class StudyCatalogPage extends ConsumerWidget {
                 onSelectMenu: controller.selectMenu,
               ),
             ),
+            if (state.config.sidebarContentGap > 0)
+              SizedBox(width: ui(state.config.sidebarContentGap)),
             Expanded(
-              child: _ContentPanel(
-                state: state,
-                onSelectChild: controller.selectChild,
-                onRefresh: controller.refreshLessons,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  right: ui(state.config.contentPanelRightPadding),
+                ),
+                child: _ContentPanel(
+                  state: state,
+                  onSelectChild: controller.selectChild,
+                  onRefresh: controller.refreshLessons,
+                ),
               ),
             ),
           ],
@@ -206,14 +213,19 @@ class _ContentPanel extends StatelessWidget {
                 : state.lessonGroups.isEmpty
                 ? CourseEmptyPlaceholder(schoolMode: state.schoolMode)
                 : Padding(
-                    padding: EdgeInsets.fromLTRB(0, ui(12), 0, ui(12)),
+                    padding: EdgeInsets.fromLTRB(
+                      0,
+                      ui(state.config.contentTopPadding),
+                      0,
+                      ui(12),
+                    ),
                     child: AppRefreshIndicator(
                       onRefresh: onRefresh,
                       child: ListView.separated(
                         padding: EdgeInsets.fromLTRB(
-                          ui(20),
-                          ui(4),
-                          ui(20),
+                          ui(state.config.listHorizontalPadding),
+                          ui(state.config.listScrollTopPadding),
+                          ui(state.config.listHorizontalPadding),
                           ui(16),
                         ),
                         physics: const AlwaysScrollableScrollPhysics(),

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../study_catalog/state/study_catalog_state.dart';
 import '../../study_catalog/ui/study_catalog_page.dart';
 
-/// 智能视唱二级列表：布局与 [SightSingingPage] 一致，接口 `type=11`。
+/// 智能视唱二级列表：布局与听写二级页一致；顶部留白对齐智能听写闯关列表（14px）。
 class SmartSightSingingCatalogPage extends StatelessWidget {
   const SmartSightSingingCatalogPage({super.key});
 

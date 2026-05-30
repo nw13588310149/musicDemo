@@ -744,6 +744,9 @@ class _CloudSidebar extends StatelessWidget {
 }
 
 class _CloudContentArea extends StatelessWidget {
+  /// 定位栏固定高度（与面包屑箭头 20 一致），避免文案加载/换行时挤动搜索栏。
+  static const locationBarHeight = 20.0;
+
   const _CloudContentArea({
     required this.state,
     required this.keyword,
@@ -807,32 +810,43 @@ class _CloudContentArea extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (state.isFolderView)
-                _FolderBreadcrumb(
-                  items: <String>[
-                    '我的云盘',
-                    selectedCategoryName,
-                    state.currentFolderName,
-                  ],
-                  // 第 0 / 1 级（"我的云盘" 与 当前分类名）都回到该分类的
-                  // 文件夹列表（退出文件夹详情视图）。第 2 级是当前所在文件夹，
-                  // _FolderBreadcrumb 内部已自动屏蔽末位条目的点击。
-                  onItemTap: (_) => onBackToOverview(),
-                )
-              else if (selectedCategoryName.isNotEmpty)
-                Text(
-                  selectedCategoryName,
-                  style: TextStyle(
-                    fontSize: ui(15),
-                    color: const Color(0xFF0B081A),
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w500,
-                    height: 12 / 15,
-                  ),
-                )
-              else
-                // 无分类时占位，保持顶部高度与有标题时基本一致，避免布局抖动。
-                SizedBox(height: ui(15)),
+              SizedBox(
+                height: ui(_CloudContentArea.locationBarHeight),
+                width: double.infinity,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: state.isFolderView
+                      ? SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          physics: const ClampingScrollPhysics(),
+                          child: _FolderBreadcrumb(
+                            items: <String>[
+                              '我的云盘',
+                              selectedCategoryName,
+                              state.currentFolderName,
+                            ],
+                            // 第 0 / 1 级（"我的云盘" 与 当前分类名）都回到该分类的
+                            // 文件夹列表（退出文件夹详情视图）。第 2 级是当前所在文件夹，
+                            // _FolderBreadcrumb 内部已自动屏蔽末位条目的点击。
+                            onItemTap: (_) => onBackToOverview(),
+                          ),
+                        )
+                      : selectedCategoryName.isNotEmpty
+                      ? Text(
+                          selectedCategoryName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: ui(15),
+                            color: const Color(0xFF0B081A),
+                            fontFamily: 'PingFang SC',
+                            fontWeight: AppFont.w500,
+                            height: 12 / 15,
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              ),
               SizedBox(height: ui(16)),
               Row(
                 children: [
@@ -1189,50 +1203,61 @@ class _FolderBreadcrumb extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Wrap(
-      crossAxisAlignment: WrapCrossAlignment.center,
-      spacing: ui(6),
-      runSpacing: ui(6),
-      children: List<Widget>.generate(items.length * 2 - 1, (index) {
-        if (index.isOdd) {
-          final separatorIndex = index ~/ 2;
-          final isBeforeLastItem = separatorIndex + 1 == items.length - 1;
-          return Image.asset(
+    final rowChildren = <Widget>[];
+    for (var i = 0; i < items.length; i++) {
+      if (i > 0) {
+        final isBeforeLastItem = i == items.length - 1;
+        rowChildren.add(SizedBox(width: ui(6)));
+        rowChildren.add(
+          Image.asset(
             isBeforeLastItem
                 ? AppAssets.cloudBreadcrumbArrowLast
                 : AppAssets.cloudBreadcrumbArrow,
             width: ui(20),
             height: ui(20),
             fit: BoxFit.contain,
-          );
-        }
-        final itemIndex = index ~/ 2;
-        final label = items[itemIndex];
-        final isLast = itemIndex == items.length - 1;
-        final text = Text(
-          label,
-          style: TextStyle(
-            fontSize: ui(15),
-            color: isLast
-                ? const Color(0xFF0B081A)
-                : const Color(0xFF0B081A).withValues(alpha: 0.2),
-            fontFamily: 'PingFang SC',
-            fontWeight: AppFont.w500,
-            height: 12 / 15,
           ),
         );
-        if (isLast) {
-          return text;
-        }
-        return MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => onItemTap(itemIndex),
-            child: text,
+        rowChildren.add(SizedBox(width: ui(6)));
+      }
+      final label = items[i];
+      final isLast = i == items.length - 1;
+      final textStyle = TextStyle(
+        fontSize: ui(15),
+        color: isLast
+            ? const Color(0xFF0B081A)
+            : const Color(0xFF0B081A).withValues(alpha: 0.2),
+        fontFamily: 'PingFang SC',
+        fontWeight: AppFont.w500,
+        height: 12 / 15,
+      );
+      final text = Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        softWrap: false,
+        style: textStyle,
+      );
+      if (isLast) {
+        rowChildren.add(text);
+      } else {
+        rowChildren.add(
+          MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => onItemTap(i),
+              child: text,
+            ),
           ),
         );
-      }),
+      }
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: rowChildren,
     );
   }
 }
