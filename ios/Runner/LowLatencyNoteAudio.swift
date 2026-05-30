@@ -295,7 +295,7 @@ final class LowLatencyNoteAudio {
     if !engine.isRunning {
       // prepare()/start() 在图/会话非法时会抛 NSException，必须经 ObjC 捕获，
       // 否则 Swift 捕不到会直接 abort 整个进程。
-      try LowLatencyNoteAudioSafePlay.prepareAndStartEngine(engine)
+      try LowLatencyNoteAudioSafePlay.prepareAndStart(engine)
     }
     engineNeedsReset = false
   }
@@ -310,7 +310,7 @@ final class LowLatencyNoteAudio {
     }
     guard voices.count < maxPoolSize else { return nil }
     let voice = VoiceNode()
-    try LowLatencyNoteAudioSafePlay.attachNode(voice.player, to: engine)
+    try LowLatencyNoteAudioSafePlay.attachNode(voice.player, toEngine: engine)
     voices.append(voice)
     do {
       try ensureConnected(voice, format: format)
@@ -333,9 +333,9 @@ final class LowLatencyNoteAudio {
     }
     try LowLatencyNoteAudioSafePlay.connectNode(
       voice.player,
-      to: engine.mainMixerNode,
+      toNode: engine.mainMixerNode,
       format: format,
-      in: engine
+      inEngine: engine
     )
     voice.connectedFormat = format
   }
