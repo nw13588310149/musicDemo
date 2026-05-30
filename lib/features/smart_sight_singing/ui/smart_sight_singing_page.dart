@@ -1020,7 +1020,7 @@ class _ScoreBoard extends StatelessWidget {
           SizedBox(width: ui(36)),
           _ScoreCell(width: ui(44), label: '标准音', value: refName),
           SizedBox(width: ui(36)),
-          _ScoreCell(width: ui(52), label: '你的音', value: userName),
+          _ScoreCell(width: ui(72), label: '你的音', value: userName),
           SizedBox(width: ui(36)),
           _ScoreCell(width: ui(48), label: '偏差', value: centsLabel),
           if (!state.debugPanelVisible) ...[

@@ -84,11 +84,11 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   static const Duration _kSeekStaleWindow = Duration(milliseconds: 350);
   static const int _kSeekStaleDiffMs = 500;
 
-  /// 拖动进度条时先暂停再 seek，避免边播边跳导致的解码毛刺 / 电流声。
-  /// 松手后 [_kScrubResumeDelay] 内无新 seek 且此前在播，则自动续播。
-  bool _scrubShouldResume = false;
-  Timer? _scrubResumeTimer;
-  static const Duration _kScrubResumeDelay = Duration(milliseconds: 180);
+  /// 拖动进度条期间保持 UI「播放中」状态；底层 seek 可能短暂上报 paused。
+  bool _scrubbing = false;
+  Timer? _scrubUiHoldTimer;
+  int _scrubUiHoldGen = 0;
+  static const Duration _kScrubUiHoldClear = Duration(milliseconds: 200);
 
   /// 把半音数转为 [Player.setPitch] 接受的频率倍率（2^(n/12)）。
   static double _pitchRatio(int semitones) =>
@@ -217,10 +217,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       await _openActiveTrack(play: true);
       return;
     }
-    // 高频 setVolume 阶梯渐变在 Web / mpv 上会产生 zipper noise（电流声）。
-    // 播放 / 暂停直接交给底层；进度条拖动走 [seek] 里的「先暂停再跳」。
-    _cancelScrubResumeTimer();
-    _scrubShouldResume = false;
+    _endScrubUiHold(immediate: true);
     try {
       if (state.isPlaying) {
         await player.pause();
@@ -365,37 +362,37 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     await _openActiveTrack(play: true);
   }
 
-  void _cancelScrubResumeTimer() {
-    _scrubResumeTimer?.cancel();
-    _scrubResumeTimer = null;
-  }
-
-  void _scheduleScrubResume() {
-    _cancelScrubResumeTimer();
-    if (!_scrubShouldResume || _disposed) {
+  void _beginScrubUiHold() {
+    if (!state.isPlaying) {
       return;
     }
-    _scrubResumeTimer = Timer(_kScrubResumeDelay, () {
-      _scrubResumeTimer = null;
-      unawaited(_completeScrubResume());
+    _scrubbing = true;
+    _scrubUiHoldTimer?.cancel();
+    _scrubUiHoldTimer = null;
+  }
+
+  void _endScrubUiHold({bool immediate = false}) {
+    _scrubUiHoldTimer?.cancel();
+    _scrubUiHoldTimer = null;
+    if (immediate || _disposed) {
+      _scrubbing = false;
+      return;
+    }
+    final gen = ++_scrubUiHoldGen;
+    _scrubUiHoldTimer = Timer(_kScrubUiHoldClear, () {
+      _scrubUiHoldTimer = null;
+      if (_disposed || gen != _scrubUiHoldGen) {
+        return;
+      }
+      if (_seekInFlight || _pendingSeek != null) {
+        return;
+      }
+      _scrubbing = false;
+      final player = _player;
+      if (player != null && mounted) {
+        state = state.copyWith(isPlaying: player.state.playing);
+      }
     });
-  }
-
-  Future<void> _completeScrubResume() async {
-    if (_disposed || !_scrubShouldResume) {
-      return;
-    }
-    if (_seekInFlight || _pendingSeek != null) {
-      return;
-    }
-    final player = _player;
-    if (player == null) {
-      return;
-    }
-    _scrubShouldResume = false;
-    try {
-      await player.play();
-    } catch (_) {}
   }
 
   Future<void> seek(Duration position) async {
@@ -405,9 +402,6 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
         : Duration(
             milliseconds: position.inMilliseconds.clamp(0, max.inMilliseconds),
           );
-
-    // 拖动中会高频 seek：取消已排队的续播，新一轮结束后再调度。
-    _cancelScrubResumeTimer();
 
     // 1) 已有 seek 在飞 → 只更新 pending 目标 + 乐观刷 UI 后立刻返回，
     //    让正在跑的 seek 循环跑完当前帧后接到最新目标。这样无论拖多快，
@@ -432,13 +426,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       state = state.copyWith(position: target);
     }
 
-    final player = _player;
-    _scrubShouldResume = state.isPlaying;
-    if (player != null && _scrubShouldResume) {
-      try {
-        await player.pause();
-      } catch (_) {}
-    }
+    _beginScrubUiHold();
 
     try {
       while (true) {
@@ -469,7 +457,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       }
     } finally {
       _seekInFlight = false;
-      _scheduleScrubResume();
+      _endScrubUiHold();
     }
   }
 
@@ -702,8 +690,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       if (isStale()) return;
       final player = _ensurePlayer();
       debugPrint('MusicPlay audio open: ${track.url}');
-      _cancelScrubResumeTimer();
-      _scrubShouldResume = false;
+      _endScrubUiHold(immediate: true);
       await player.open(Media(track.url), play: play);
       if (isStale()) return;
       try {
@@ -776,9 +763,14 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       }
     });
     _playingSub = player.stream.playing.listen((playing) {
-      if (mounted) {
-        state = state.copyWith(isPlaying: playing);
+      if (!mounted) {
+        return;
       }
+      // seek 过程中 mpv / Web 可能短暂上报 paused，不抢 UI 的播放态。
+      if (_scrubbing && !playing && state.isPlaying) {
+        return;
+      }
+      state = state.copyWith(isPlaying: playing);
     });
     _completedSub = player.stream.completed.listen((completed) async {
       if (completed && mounted) {
@@ -1158,8 +1150,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     // 并先把 _disposed 置位，让任何还在 await 的异步链（[togglePlay]、
     // [pressPianoKey]、[_openActiveTrack] 等）都能 short-circuit。
     _disposed = true;
-    _cancelScrubResumeTimer();
-    _scrubShouldResume = false;
+    _endScrubUiHold(immediate: true);
 
     _positionSub?.cancel();
     _durationSub?.cancel();
