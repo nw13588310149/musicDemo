@@ -187,7 +187,7 @@ final class LowLatencyNoteAudio {
         }
 
         do {
-          try LowLatencyNoteAudioSafePlay.playNode(node)
+          try LowLatencyNoteAudioSafePlay.play(node)
         } catch {
           self.activeNodes.removeAll { $0 === node }
           self.returnPlayerNode(node)
