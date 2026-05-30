@@ -1012,11 +1012,11 @@ class _ScoreBoard extends StatelessWidget {
     final currentCents = state.currentUserMidi >= 0 && ref != null
         ? PitchUtils.octaveNormalizedCents(state.currentUserMidi, ref.midi)
         : double.nan;
+    final isUserPickingUp = state.currentUserMidi < 0 &&
+        state.currentUserAmplitude >
+            SmartSightSingingViewConfig.pickupLabelMinAmplitude;
     final userName = state.currentUserMidi >= 0
         ? PitchUtils.midiToNoteName(state.currentUserMidi)
-        : state.currentUserAmplitude >
-              SmartSightSingingViewConfig.pickupLabelMinAmplitude
-        ? '识别中'
         : '- -';
     final centsLabel = currentCents.isFinite
         ? '${currentCents > 0 ? '+' : ''}${currentCents.round()}c'
@@ -1039,7 +1039,13 @@ class _ScoreBoard extends StatelessWidget {
       _ScoreMetricEntry(label: '连击', value: '${state.combo}'),
       _ScoreMetricEntry(label: '命中率', value: hitRate),
       _ScoreMetricEntry(label: '标准音', value: refName),
-      _ScoreMetricEntry(label: '你的音', value: userName),
+      _ScoreMetricEntry(
+        label: '你的音',
+        value: userName,
+        valueColor: isUserPickingUp
+            ? const Color(0xFF8741FF)
+            : const Color(0xFF0B081A),
+      ),
       _ScoreMetricEntry(label: '偏差值', value: centsLabel),
     ];
 
@@ -1260,8 +1266,14 @@ class _ScoreValueBox extends StatelessWidget {
   final String value;
   final Color valueColor;
 
+  /// 数值行默认 Manrope；含中文（如「识别中」）时改 PingFang，避免回退字体显得偏大。
+  static bool _usesPingFang(String value) {
+    return value.runes.any((code) => code > 0x7F);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final pingFang = _usesPingFang(value);
     return Container(
       width: ui(_ScoreBoard._valueBoxWidth),
       height: ui(32),
@@ -1278,7 +1290,7 @@ class _ScoreValueBox extends StatelessWidget {
         style: TextStyle(
           fontSize: ui(18),
           color: valueColor,
-          fontFamily: 'Manrope',
+          fontFamily: pingFang ? 'PingFang SC' : 'Manrope',
           fontWeight: AppFont.w500,
           height: 1,
         ),
@@ -1385,7 +1397,7 @@ class _CountdownOverlay extends StatelessWidget {
   }
 }
 
-/// 底部播放条：封面 + 标题/副标题 + 试听/跟唱按钮 + 进度条 + 时间。
+/// 底部播放条：封面 + 标题/副标题 + 进度条 + 时间 + 试听/跟唱按钮（右侧）。
 ///
 /// 进度数据来源：MusicXML/MIDI 解析成参考音高轨（[PitchTrack]）后由播放调度器
 /// 驱动。「总时长 = track.totalMs（旋律）」；MusicXML 预备段（标准音 + 节拍器）
@@ -1478,22 +1490,26 @@ class _Controls extends StatelessWidget {
               ],
             ),
           ),
-          _ControlButtons(state: state, controller: controller),
           SizedBox(width: ui(16)),
           Expanded(
-            child: _SightProgressTrack(
-              ratio: ratio,
-              currentMs: currentMs,
-              totalMs: totalMs,
+            child: Transform.translate(
+              offset: Offset(-ui(20), 0),
+              child: _SightProgressTrack(
+                ratio: ratio,
+                currentMs: currentMs,
+                totalMs: totalMs,
+              ),
             ),
           ),
+          SizedBox(width: ui(16)),
+          _ControlButtons(state: state, controller: controller),
         ],
       ),
     );
   }
 }
 
-/// 播放条中段的按钮组：倒计时显示「取消」、跟唱中显示「停止」，
+/// 播放条右侧按钮组：倒计时显示「取消」、跟唱中显示「停止」，
 /// 其余状态显示「试听旋律 + 开始跟唱」图片按钮。
 class _ControlButtons extends StatelessWidget {
   const _ControlButtons({required this.state, required this.controller});

@@ -1198,12 +1198,18 @@ class _RecordingFolderCardState extends State<_RecordingFolderCard> {
           SizedBox(height: ui(CloudFolderCardArtwork.titleGap)),
           SizedBox(
             height: ui(CloudFolderCardArtwork.titleAreaHeight),
-            child: Center(
+            width: double.infinity,
+            child: Align(
+              alignment: Alignment.center,
               child: Text(
                 item.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
+                textHeightBehavior: const TextHeightBehavior(
+                  applyHeightToFirstAscent: true,
+                  applyHeightToLastDescent: true,
+                ),
                 // fontWeight 故意写 FontWeight.w400 而不是 AppFont.w400：
                 // AppFont.w400 在 iOS 会被上浮一档（→ w500，命中
                 // PingFangSC-Medium.otf）做 CJK 视觉补偿；这里设计稿明确
@@ -1216,7 +1222,7 @@ class _RecordingFolderCardState extends State<_RecordingFolderCard> {
                   color: const Color(0xFF0B081A),
                   fontFamily: 'PingFang SC',
                   fontWeight: FontWeight.w400,
-                  height: 15 / 13,
+                  height: 16 / 13,
                 ),
               ),
             ),
@@ -1358,12 +1364,16 @@ class _RecordingFileCardState extends State<_RecordingFileCard> {
                             item.name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
+                            textHeightBehavior: const TextHeightBehavior(
+                              applyHeightToFirstAscent: true,
+                              applyHeightToLastDescent: true,
+                            ),
                             style: TextStyle(
                               fontSize: ui(13),
                               color: const Color(0xFF0B081A),
                               fontFamily: 'PingFang SC',
                               fontWeight: AppFont.w500,
-                              height: 12 / 13,
+                              height: 16 / 13,
                             ),
                           ),
                         ),

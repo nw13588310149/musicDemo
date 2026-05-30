@@ -394,6 +394,18 @@ class _LiveMetricsCard extends StatelessWidget {
     return PitchUtils.midiToNoteName(midi);
   }
 
+  Widget _metricsRow(List<({String label, String value})> cells) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final cell in cells)
+          Expanded(
+            child: _Metric(label: cell.label, value: cell.value),
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
@@ -403,7 +415,12 @@ class _LiveMetricsCard extends StatelessWidget {
     final userMidi = state.currentUserMidi;
     final amplitude = state.currentUserAmplitude;
 
+    final userValue = userMidi >= 0
+        ? '${_midiName(userMidi)} · ${state.lastFrequencyHz.toStringAsFixed(1)} Hz'
+        : '- -';
+
     return Container(
+      width: double.infinity,
       padding: EdgeInsets.symmetric(horizontal: ui(20), vertical: ui(18)),
       decoration: BoxDecoration(
         color: const Color(0xFFF5F6FA),
@@ -412,43 +429,32 @@ class _LiveMetricsCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _Metric(
-                label: '你的音',
-                value: userMidi >= 0
-                    ? '${_midiName(userMidi)} · ${state.lastFrequencyHz.toStringAsFixed(1)} Hz'
-                    : '- -',
-              ),
-              _Metric(label: '参考', value: _midiName(refMidi)),
-              _Metric(label: '伴奏', value: _midiName(playbackMidi)),
-            ],
-          ),
+          _metricsRow([
+            (label: '你的音', value: userValue),
+            (label: '参考', value: _midiName(refMidi)),
+            (label: '伴奏', value: _midiName(playbackMidi)),
+          ]),
           SizedBox(height: ui(18)),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _Metric(
-                label: '偏差',
-                value: cents.isFinite
-                    ? '${cents > 0 ? '+' : ''}${cents.round()}c'
-                    : '- -',
-              ),
-              _Metric(
-                label: '置信',
-                value: state.lastFrameConfidence > 0
-                    ? state.lastFrameConfidence.toStringAsFixed(2)
-                    : '- -',
-              ),
-              _Metric(
-                label: '振幅',
-                value: amplitude > 0
-                    ? amplitude.toStringAsFixed(3)
-                    : '- -',
-              ),
-            ],
-          ),
+          _metricsRow([
+            (
+              label: '偏差',
+              value: cents.isFinite
+                  ? '${cents > 0 ? '+' : ''}${cents.round()}c'
+                  : '- -',
+            ),
+            (
+              label: '置信',
+              value: state.lastFrameConfidence > 0
+                  ? state.lastFrameConfidence.toStringAsFixed(2)
+                  : '- -',
+            ),
+            (
+              label: '振幅',
+              value: amplitude > 0
+                  ? amplitude.toStringAsFixed(3)
+                  : '- -',
+            ),
+          ]),
         ],
       ),
     );
@@ -464,36 +470,36 @@ class _Metric extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: ui(14),
-              color: const Color(0xFFB6B5BB),
-              fontFamily: 'PingFang SC',
-              fontWeight: AppFont.w400,
-              height: 1,
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: ui(14),
+            color: const Color(0xFFB6B5BB),
+            fontFamily: 'PingFang SC',
+            fontWeight: AppFont.w400,
+            height: 1,
           ),
-          SizedBox(height: ui(10)),
-          Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: ui(18),
-              fontWeight: AppFont.w600,
-              color: const Color(0xFF0B081A),
-              fontFamily: 'Manrope',
-              height: 1,
-            ),
+        ),
+        SizedBox(height: ui(10)),
+        Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: ui(18),
+            fontWeight: AppFont.w600,
+            color: const Color(0xFF0B081A),
+            fontFamily: 'Manrope',
+            height: 1,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

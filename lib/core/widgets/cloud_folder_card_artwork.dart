@@ -28,8 +28,8 @@ class CloudFolderCardArtwork extends StatelessWidget {
   /// 底图与标题之间的间距。
   static const double titleGap = 10;
 
-  /// 标题单行区域高度（fontSize 13，line height 15/13）。
-  static const double titleAreaHeight = 15;
+  /// 标题单行区域高度（fontSize 13，line height 16/13，留足英文降部）。
+  static const double titleAreaHeight = 18;
 
   /// 子像素取整余量，避免 Grid 单元高度与 Column 子项合计差 ~1px 溢出。
   static const double gridLayoutSlack = 1;
