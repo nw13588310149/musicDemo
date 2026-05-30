@@ -181,7 +181,7 @@ final class LowLatencyNoteAudio {
         do {
           try LowLatencyNoteAudioSafePlay.scheduleBuffer(
             playbackBuffer,
-            onNode: node,
+            on: node,
             completionHandler: { [weak self, weak node] in
               guard let self = self, let node = node else { return }
               self.queue.async {
