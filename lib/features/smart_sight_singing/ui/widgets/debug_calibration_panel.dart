@@ -80,7 +80,7 @@ class _DebugCalibrationPanelState
               overrideCount: tuning.overrideCount,
               onClose: () => controller.setDebugPanelVisible(false),
             ),
-            SizedBox(height: ui(14)),
+            SizedBox(height: ui(4)),
             _LiveMetricsCard(state: state),
             SizedBox(height: ui(16)),
             Expanded(
@@ -345,19 +345,28 @@ class _Header extends StatelessWidget {
                 ),
               ),
             ),
-            InkWell(
+            GestureDetector(
               onTap: onClose,
-              borderRadius: BorderRadius.circular(ui(9)),
-              child: Image.asset(
-                AppAssets.smartSightSingingClose,
-                width: ui(24),
-                height: ui(24),
-                fit: BoxFit.contain,
+              child: Container(
+                width: ui(32),
+                height: ui(32),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(ui(8)),
+                  border: Border.all(color: const Color(0xFFF3F2F3)),
+                ),
+                alignment: Alignment.center,
+                clipBehavior: Clip.antiAlias,
+                child: Image.asset(
+                  AppAssets.smartSightSingingClose,
+                  width: ui(32),
+                  height: ui(32),
+                  fit: BoxFit.contain,
+                ),
               ),
             ),
           ],
         ),
-        SizedBox(height: ui(8)),
         Text(
           hasOverride
               ? '已自定义 $overrideCount 项参数（已本地持久化）'

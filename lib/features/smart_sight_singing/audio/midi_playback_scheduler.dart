@@ -210,9 +210,6 @@ class MidiPlaybackScheduler {
     if (token == null) return;
     final volume = (event.velocity / 127.0).clamp(0.0, 1.0);
     try {
-      if (SmartSightSingingMidiConfig.monophonicPianoPlayback) {
-        _audio.stopAllImmediately();
-      }
       await _audio.playNote(token, volume: volume);
     } catch (error, stack) {
       debugPrint(

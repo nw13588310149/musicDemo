@@ -250,7 +250,7 @@ class _KaraokePainter extends CustomPainter {
 
     final nowPaint = Paint()
       ..color = _nowLine.withValues(alpha: 0.8)
-      ..strokeWidth = 4
+      ..strokeWidth = 3
       ..strokeCap = StrokeCap.round;
     canvas.drawLine(
       Offset(centerX, 6),
@@ -303,14 +303,14 @@ class _KaraokePainter extends CustomPainter {
 
   /// 紫色竖线上的扩散圆：随实时检测音高在纵轴移动。
   void _drawNowGlow(Canvas canvas, double cx, double cy, double height) {
-    const maxRadius = 15.0;
+    const maxRadius = 11.0;
     final clampedY = cy.clamp(maxRadius + 6, height - maxRadius - 6);
     const layers = <(double, double)>[
-      (15.0, 0.20),
-      (12.045, 0.30),
-      (9.085, 0.50),
-      (6.13, 0.70),
-      (3.175, 1.0),
+      (11.0, 0.20),
+      (8.045, 0.30),
+      (5.085, 0.50),
+      (2.13, 0.70),
+      (1.175, 1.0),
     ];
     for (final (radius, alpha) in layers) {
       canvas.drawCircle(

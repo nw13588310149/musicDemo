@@ -184,10 +184,6 @@ abstract final class SmartSightSingingMidiConfig {
   /// MusicXML 节拍器开始时间（毫秒，相对跟唱起点；与标准音开始时间独立）。
   static const int musicXmlMetronomeStartMs = 3000;
 
-  /// 伴奏钢琴单音模式：触发新音符前先停止上一音，避免短采样叠加成
-  /// 过长延音（与听写「一次一音」的听感对齐）。
-  static const bool monophonicPianoPlayback = true;
-
   /// 最后一个播放事件之后的尾音留白（毫秒），避免调度器提前结束。
   static const int playbackTailMs = 400;
 }

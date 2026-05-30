@@ -425,7 +425,8 @@ class _Header extends StatelessWidget {
   final ValueChanged<bool> onScoreModeChanged;
 
   static const _practiceTitle = 'AI智能视唱';
-  static const _practiceSubtitle = '准备就绪:点击下方开始跟唱后看谱视唱';
+  static const _practiceSubtitle =
+      '准备就绪:点击下方开始跟唱后看谱视唱（未佩戴耳机会影响评分）';
   static const _examTitle = '视唱考试';
   static const _examSubtitle = '考试模式：不播放旋律伴奏，仍会播放标准音与节拍器';
 
@@ -1064,12 +1065,12 @@ class _ScoreCell extends StatelessWidget {
     return SizedBox(
       width: width,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
             label,
-            textAlign: TextAlign.center,
+            textAlign: TextAlign.start,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
@@ -1083,7 +1084,7 @@ class _ScoreCell extends StatelessWidget {
           SizedBox(height: ui(8)),
           Text(
             value,
-            textAlign: TextAlign.center,
+            textAlign: TextAlign.start,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
@@ -1476,7 +1477,9 @@ class _SightProgressTrack extends StatelessWidget {
   }
 }
 
-/// 底部操作条整图按钮（试听 / 开始跟唱 / 停止 / 取消），设计稿 96×36。
+/// 底部操作条整图按钮（试听 / 开始跟唱 / 停止 / 取消）。
+///
+/// 高度固定 36（随 [DashboardScaleScope] 缩放），宽度按切图宽高比自适应。
 class _ImageActionButton extends StatelessWidget {
   const _ImageActionButton({
     required this.asset,
@@ -1486,23 +1489,26 @@ class _ImageActionButton extends StatelessWidget {
   final String asset;
   final VoidCallback? onTap;
 
-  static const _width = 96.0;
   static const _height = 36.0;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final disabled = onTap == null;
+    final height = ui(_height);
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Opacity(
         opacity: disabled ? 0.45 : 1,
-        child: Image.asset(
-          asset,
-          width: ui(_width),
-          height: ui(_height),
-          fit: BoxFit.fill,
+        child: SizedBox(
+          height: height,
+          child: Image.asset(
+            asset,
+            height: height,
+            fit: BoxFit.fitHeight,
+            filterQuality: FilterQuality.medium,
+          ),
         ),
       ),
     );

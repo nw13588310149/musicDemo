@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../../core/audio/low_latency_note_player.dart';
+import '../../../core/audio/piano_note_assets.dart';
 import 'web_note_audio_player_base.dart';
 import 'web_note_audio_player_stub.dart'
     if (dart.library.html) 'web_note_audio_player_web.dart';
@@ -222,37 +223,41 @@ class SmartDictationAudioEngine {
         .toLowerCase();
   }
 
-  static const Map<String, String> _assetByCanonical = <String, String>{
-    'F3': 'assets/audio/smart_dictation/piano/a81.wav',
-    'F#3': 'assets/audio/smart_dictation/piano/b81.wav',
-    'G3': 'assets/audio/smart_dictation/piano/a87.wav',
-    'G#3': 'assets/audio/smart_dictation/piano/b87.wav',
-    'A3': 'assets/audio/smart_dictation/piano/a69.wav',
-    'A#3': 'assets/audio/smart_dictation/piano/b69.wav',
-    'B3': 'assets/audio/smart_dictation/piano/a82.wav',
-    'C4': 'assets/audio/smart_dictation/piano/a84.wav',
-    'C#4': 'assets/audio/smart_dictation/piano/b84.wav',
-    'D4': 'assets/audio/smart_dictation/piano/a89.wav',
-    'D#4': 'assets/audio/smart_dictation/piano/b89.wav',
-    'E4': 'assets/audio/smart_dictation/piano/a85.wav',
-    'F4': 'assets/audio/smart_dictation/piano/a73.wav',
-    'F#4': 'assets/audio/smart_dictation/piano/b73.wav',
-    'G4': 'assets/audio/smart_dictation/piano/a79.wav',
-    'G#4': 'assets/audio/smart_dictation/piano/b79.wav',
-    'A4': 'assets/audio/smart_dictation/piano/a80.wav',
-    'A#4': 'assets/audio/smart_dictation/piano/b80.wav',
-    'B4': 'assets/audio/smart_dictation/piano/a65.wav',
-    'C5': 'assets/audio/smart_dictation/piano/a83.wav',
-    'C#5': 'assets/audio/smart_dictation/piano/b83.wav',
-    'D5': 'assets/audio/smart_dictation/piano/a68.wav',
-    'D#5': 'assets/audio/smart_dictation/piano/b68.wav',
-    'E5': 'assets/audio/smart_dictation/piano/a70.wav',
-    'F5': 'assets/audio/smart_dictation/piano/a71.wav',
-    'F#5': 'assets/audio/smart_dictation/piano/b71.wav',
-    'G5': 'assets/audio/smart_dictation/piano/a72.wav',
-    'G#5': 'assets/audio/smart_dictation/piano/b72.wav',
-    'A5': 'assets/audio/smart_dictation/piano/a74.wav',
-    'A#5': 'assets/audio/smart_dictation/piano/b74.wav',
+  static const List<String> _dictationNotes = <String>[
+    'F3',
+    'F#3',
+    'G3',
+    'G#3',
+    'A3',
+    'A#3',
+    'B3',
+    'C4',
+    'C#4',
+    'D4',
+    'D#4',
+    'E4',
+    'F4',
+    'F#4',
+    'G4',
+    'G#4',
+    'A4',
+    'A#4',
+    'B4',
+    'C5',
+    'C#5',
+    'D5',
+    'D#5',
+    'E5',
+    'F5',
+    'F#5',
+    'G5',
+    'G#5',
+    'A5',
+    'A#5',
+  ];
+
+  static final Map<String, String> _assetByCanonical = <String, String>{
+    for (final note in _dictationNotes) note: kPianoNoteAssetByNote[note]!,
   };
 
   static const Map<String, String> _tokenToCanonical = <String, String>{
