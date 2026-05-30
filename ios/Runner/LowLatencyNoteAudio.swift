@@ -186,13 +186,13 @@ final class LowLatencyNoteAudio {
           }
         }
 
-        var playError: NSError?
-        let played = LowLatencyNoteAudioSafePlay.play(node, error: &playError)
-        if !played {
+        do {
+          try LowLatencyNoteAudioSafePlay.playNode(node)
+        } catch {
           self.activeNodes.removeAll { $0 === node }
           self.returnPlayerNode(node)
           throw LowLatencyNoteAudioError.playRejected(
-            playError?.localizedDescription ?? "AVAudioPlayerNode.play failed"
+            (error as NSError).localizedDescription
           )
         }
 
