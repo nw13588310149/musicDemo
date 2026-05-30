@@ -84,16 +84,24 @@ def download_mp3(stem: str, cache_dir: Path) -> Path:
 
 def convert_to_wav(mp3: Path, wav: Path, ffmpeg: str) -> None:
     wav.parent.mkdir(parents=True, exist_ok=True)
-    # Mono 44.1kHz 16-bit: trim silence, keep natural tail, gentle fade at end.
+    # Mono 44.1kHz 16-bit.
+    #
+    # 不做 silenceremove：它会删除钢琴衰减里低于阈值的小段，把波形在非零点
+    # 拼接，造成爆音。改为保留自然延音，并只在两端做处理：
+    #   - 起音 4ms 线性淡入：消除样本开头的瞬态咔哒声；
+    #   - 结尾 0.6s 淡出，并让淡出正好结束在文件末尾 → EOF 处振幅为 0，
+    #     自然播放结束不会有关闭爆音。
+    total = 3.6
+    fade_out_start = total - 0.6
     cmd = [
         ffmpeg,
         "-y",
         "-i",
         str(mp3),
-        "-af",
-        "silenceremove=stop_periods=-1:stop_duration=0.12:stop_threshold=-42dB,afade=t=out:st=2.4:d=0.4",
         "-t",
-        "3.2",
+        str(total),
+        "-af",
+        f"afade=t=in:st=0:d=0.004,afade=t=out:st={fade_out_start}:d=0.6",
         "-ac",
         "1",
         "-ar",

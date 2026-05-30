@@ -12,16 +12,24 @@ final class LowLatencyNoteAudio {
   private let engine = AVAudioEngine()
   private let queue = DispatchQueue(label: "com.yyzl.music.lowLatencyNotes")
   private var buffersByKey: [String: AVAudioPCMBuffer] = [:]
-  private var activeNodes: [AVAudioPlayerNode] = []
-  private var playerNodePool: [AVAudioPlayerNode] = []
+  private var voices: [VoiceNode] = []
   private var prepared = false
   private var engineNeedsReset = true
   private var fadeGeneration = 0
   private var sessionObservers: [NSObjectProtocol] = []
 
-  private let maxPoolSize = 16
-  private let fadeOutSteps = 10
-  private let fadeOutStepMs = 10
+  private let maxPoolSize = 24
+  private let fadeOutSteps = 12
+  private let fadeOutStepMs = 8
+
+  /// 常驻发声节点：一旦 attach + connect 到 mixer 就保持连接，
+  /// 播放结束只 stop + 标记空闲，不再 detach/重连，避免修改运行中的引擎图
+  /// 造成的「关闭爆音」。
+  private final class VoiceNode {
+    let player = AVAudioPlayerNode()
+    var connectedFormat: AVAudioFormat?
+    var busy = false
+  }
 
   init(messenger: FlutterBinaryMessenger) {
     channel = FlutterMethodChannel(
@@ -162,7 +170,7 @@ final class LowLatencyNoteAudio {
   private func play(key: String, volume: Float, result: @escaping FlutterResult) {
     queue.async { [weak self] in
       guard let self = self else { return }
-      var borrowedNode: AVAudioPlayerNode?
+      var acquiredVoice: VoiceNode?
       do {
         guard let buffer = self.buffersByKey[key] else {
           throw LowLatencyNoteAudioError.bufferNotPrepared(key)
@@ -174,39 +182,45 @@ final class LowLatencyNoteAudio {
         if self.engineNeedsReset {
           self.hardResetEngine()
         }
+        try self.startEngineIfNeeded()
 
-        let node = self.borrowPlayerNode()
-        borrowedNode = node
-        node.volume = max(0, min(volume, 1))
-
-        try self.attachAndStartIfNeeded(node: node, format: playbackBuffer.format)
-        self.activeNodes.append(node)
+        guard let voice = self.borrowVoice(format: playbackBuffer.format) else {
+          // 没有空闲发声节点：宁可这一下不发声，也不抢占正在响的音符，
+          // 避免对仍在发声的节点 stop() 造成截断爆音。
+          DispatchQueue.main.async { result(nil) }
+          return
+        }
+        acquiredVoice = voice
+        voice.player.volume = max(0, min(volume, 1))
 
         do {
           try LowLatencyNoteAudioSafePlay.scheduleBuffer(
             playbackBuffer,
-            on: node,
-            completionHandler: { [weak self, weak node] in
-              guard let self = self, let node = node else { return }
+            on: voice.player,
+            playedBackHandler: { [weak self, weak voice] in
+              guard let self = self, let voice = voice else { return }
+              // dataPlayedBack：音频已真正播放完毕，此时 stop 不会截断尾音，
+              // 也不 detach（保持连接），下次直接复用，无图变更爆音。
               self.queue.async {
-                self.activeNodes.removeAll { $0 === node }
-                self.returnPlayerNode(node)
+                voice.player.stop()
+                voice.player.volume = 1
+                voice.busy = false
               }
             }
           )
         } catch {
-          self.activeNodes.removeAll { $0 === node }
-          self.returnPlayerNode(node)
+          voice.player.stop()
+          voice.busy = false
           throw LowLatencyNoteAudioError.playRejected(
             (error as NSError).localizedDescription
           )
         }
 
         do {
-          try LowLatencyNoteAudioSafePlay.play(node)
+          try LowLatencyNoteAudioSafePlay.play(voice.player)
         } catch {
-          self.activeNodes.removeAll { $0 === node }
-          self.returnPlayerNode(node)
+          voice.player.stop()
+          voice.busy = false
           throw LowLatencyNoteAudioError.playRejected(
             (error as NSError).localizedDescription
           )
@@ -216,9 +230,8 @@ final class LowLatencyNoteAudio {
           result(nil)
         }
       } catch {
-        if let node = borrowedNode {
-          self.activeNodes.removeAll { $0 === node }
-          self.returnPlayerNode(node)
+        if let voice = acquiredVoice {
+          voice.busy = false
         }
         self.markEngineNeedsResetOnFailure()
         DispatchQueue.main.async {
@@ -237,9 +250,8 @@ final class LowLatencyNoteAudio {
   private func stopAll() {
     queue.async { [weak self] in
       guard let self = self else { return }
-      let nodes = self.activeNodes
-      self.activeNodes.removeAll()
-      self.fadeOutAndDetach(nodes: nodes)
+      let targets = self.voices.filter { $0.busy || $0.player.isPlaying }
+      self.fadeOutVoices(targets)
     }
   }
 
@@ -254,17 +266,14 @@ final class LowLatencyNoteAudio {
 
   private func hardResetEngine() {
     fadeGeneration += 1
-    let nodes = activeNodes
-    activeNodes.removeAll()
-    for node in nodes {
-      node.stop()
-      detachIfAttached(node)
+    for voice in voices {
+      voice.player.stop()
+      if engine.attachedNodes.contains(voice.player) {
+        engine.disconnectNodeOutput(voice.player)
+        engine.detach(voice.player)
+      }
     }
-    for node in playerNodePool {
-      node.stop()
-      detachIfAttached(node)
-    }
-    playerNodePool.removeAll()
+    voices.removeAll()
 
     if engine.isRunning {
       engine.stop()
@@ -280,35 +289,7 @@ final class LowLatencyNoteAudio {
     }
   }
 
-  private func borrowPlayerNode() -> AVAudioPlayerNode {
-    // 不复用仍在发声的节点，避免 stop() 造成截断杂音。
-    while let node = playerNodePool.popLast() {
-      if !node.isPlaying {
-        return node
-      }
-    }
-    return AVAudioPlayerNode()
-  }
-
-  private func returnPlayerNode(_ node: AVAudioPlayerNode) {
-    detachIfAttached(node)
-    guard playerNodePool.count < maxPoolSize else { return }
-    playerNodePool.append(node)
-  }
-
-  private func detachIfAttached(_ node: AVAudioPlayerNode) {
-    if engine.attachedNodes.contains(node) {
-      engine.disconnectNodeOutput(node)
-      engine.detach(node)
-    }
-  }
-
-  private func attachAndStartIfNeeded(node: AVAudioPlayerNode, format: AVAudioFormat) throws {
-    if !engine.attachedNodes.contains(node) {
-      engine.attach(node)
-    }
-    engine.connect(node, to: engine.mainMixerNode, format: format)
-
+  private func startEngineIfNeeded() throws {
     if !engine.isRunning {
       engine.prepare()
       try engine.start()
@@ -316,26 +297,51 @@ final class LowLatencyNoteAudio {
     engineNeedsReset = false
   }
 
-  private func fadeOutAndDetach(nodes: [AVAudioPlayerNode]) {
-    guard !nodes.isEmpty else { return }
+  /// 取一个空闲发声节点：优先复用已连接、未在发声的节点（无图变更）；
+  /// 没有则在上限内新建并 attach + connect。达到上限时返回 nil（不抢占）。
+  private func borrowVoice(format: AVAudioFormat) -> VoiceNode? {
+    for voice in voices where !voice.busy && !voice.player.isPlaying {
+      ensureConnected(voice, format: format)
+      voice.busy = true
+      return voice
+    }
+    guard voices.count < maxPoolSize else { return nil }
+    let voice = VoiceNode()
+    engine.attach(voice.player)
+    voices.append(voice)
+    ensureConnected(voice, format: format)
+    voice.busy = true
+    return voice
+  }
+
+  /// 仅在节点尚未连接或格式变化时才 connect，避免对运行中的图做无谓重连。
+  private func ensureConnected(_ voice: VoiceNode, format: AVAudioFormat) {
+    if let current = voice.connectedFormat, current.isEqual(format) {
+      return
+    }
+    engine.connect(voice.player, to: engine.mainMixerNode, format: format)
+    voice.connectedFormat = format
+  }
+
+  /// 平滑淡出并 stop（保持 attach/connect 以便复用），避免硬停爆音。
+  private func fadeOutVoices(_ targets: [VoiceNode]) {
+    guard !targets.isEmpty else { return }
     let generation = fadeGeneration
     let steps = fadeOutSteps
     let intervalMs = fadeOutStepMs
-    let baseVolumes = nodes.map { max(0, min($0.volume, 1)) }
+    let baseVolumes = targets.map { max(0, min($0.player.volume, 1)) }
     for step in 1...steps {
       queue.asyncAfter(deadline: .now() + .milliseconds(step * intervalMs)) { [weak self] in
         guard let self = self, generation == self.fadeGeneration else { return }
         let scale = max(0, Float(steps - step) / Float(steps))
-        for (index, node) in nodes.enumerated() {
-          node.volume = baseVolumes[index] * scale
+        for (index, voice) in targets.enumerated() {
+          voice.player.volume = baseVolumes[index] * scale
         }
         if step == steps {
-          for node in nodes {
-            node.stop()
-            self.detachIfAttached(node)
-            if self.playerNodePool.count < self.maxPoolSize {
-              self.playerNodePool.append(node)
-            }
+          for voice in targets {
+            voice.player.stop()
+            voice.player.volume = 1
+            voice.busy = false
           }
         }
       }

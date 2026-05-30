@@ -121,6 +121,8 @@ class _MusicCompanionWebAudioPlayer implements MusicCompanionWebAudioPlayer {
     }
   }
 
+  /// 用 WebAudio 的参数自动化做淡出（音频级插值，无 zipper 杂音），
+  /// 并让 source 在淡出结束的精确采样点停止，避免「关闭爆音」。
   Future<void> _fadeOutAndCleanup(_ActivePlayback playback) async {
     if (!_activePlaybacks.contains(playback)) {
       return;
@@ -128,18 +130,21 @@ class _MusicCompanionWebAudioPlayer implements MusicCompanionWebAudioPlayer {
     playback.cleanupTimer?.cancel();
     playback.cleanupTimer = null;
 
-    const steps = 10;
-    const stepMs = 10;
-    final startGain = playback.gain.gain.value;
-    for (var step = 1; step <= steps; step++) {
-      if (!_activePlaybacks.contains(playback)) {
-        return;
-      }
-      final scale = (steps - step) / steps;
-      playback.gain.gain.value = startGain * scale;
-      await Future<void>.delayed(const Duration(milliseconds: stepMs));
-    }
-    _cleanupPlayback(playback, stopSource: true);
+    const fadeSec = 0.12;
+    final context = _ensureContext();
+    final now = context.currentTime;
+    final gainParam = playback.gain.gain;
+    try {
+      gainParam.cancelScheduledValues(now);
+      gainParam.setValueAtTime(gainParam.value, now);
+      gainParam.linearRampToValueAtTime(0.0001, now + fadeSec);
+    } catch (_) {}
+    try {
+      playback.source.stop(now + fadeSec);
+    } catch (_) {}
+
+    await Future<void>.delayed(const Duration(milliseconds: 140));
+    _cleanupPlayback(playback);
   }
 
   void _cleanupPlayback(_ActivePlayback playback, {bool stopSource = false}) {

@@ -17,6 +17,14 @@ NS_ASSUME_NONNULL_BEGIN
      completionHandler:(void (^_Nullable)(void))completionHandler
                  error:(NSError *_Nullable *_Nullable)error;
 
+/// Same as above but fires the handler only after the audio has actually been
+/// played back (AVAudioPlayerNodeCompletionDataPlayedBack), so the caller can
+/// recycle the node without truncating the note's tail.
++ (BOOL)scheduleBuffer:(AVAudioPCMBuffer *)buffer
+                onNode:(AVAudioPlayerNode *)node
+     playedBackHandler:(void (^_Nullable)(void))completionHandler
+                 error:(NSError *_Nullable *_Nullable)error;
+
 @end
 
 NS_ASSUME_NONNULL_END
