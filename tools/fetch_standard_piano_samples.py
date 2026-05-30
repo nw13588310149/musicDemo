@@ -84,16 +84,16 @@ def download_mp3(stem: str, cache_dir: Path) -> Path:
 
 def convert_to_wav(mp3: Path, wav: Path, ffmpeg: str) -> None:
     wav.parent.mkdir(parents=True, exist_ok=True)
-    # Mono 44.1kHz 16-bit, trim trailing silence, cap length for low-latency playback.
+    # Mono 44.1kHz 16-bit: trim silence, keep natural tail, gentle fade at end.
     cmd = [
         ffmpeg,
         "-y",
         "-i",
         str(mp3),
         "-af",
-        "silenceremove=stop_periods=-1:stop_duration=0.12:stop_threshold=-42dB,afade=t=out:st=1.6:d=0.35",
+        "silenceremove=stop_periods=-1:stop_duration=0.12:stop_threshold=-42dB,afade=t=out:st=2.4:d=0.4",
         "-t",
-        "2.2",
+        "3.2",
         "-ac",
         "1",
         "-ar",

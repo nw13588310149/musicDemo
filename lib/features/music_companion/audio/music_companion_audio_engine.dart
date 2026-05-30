@@ -190,12 +190,9 @@ class MusicCompanionAudioEngine {
     await _nativePlayer.stopAll();
   }
 
+  /// 与 [stopAll] 相同：短音停止走淡出，避免截断杂音。
   void stopAllImmediately() {
-    if (kIsWeb) {
-      unawaited(_webPlayer.stopAll());
-      return;
-    }
-    unawaited(_nativePlayer.stopAll());
+    unawaited(stopAll());
   }
 
   Future<void> dispose() async {

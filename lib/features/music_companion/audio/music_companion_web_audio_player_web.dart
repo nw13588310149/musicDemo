@@ -103,9 +103,8 @@ class _MusicCompanionWebAudioPlayer implements MusicCompanionWebAudioPlayer {
 
   @override
   Future<void> stopAll() async {
-    for (final playback in List<_ActivePlayback>.from(_activePlaybacks)) {
-      _cleanupPlayback(playback, stopSource: true);
-    }
+    final playbacks = List<_ActivePlayback>.from(_activePlaybacks);
+    await Future.wait(playbacks.map(_fadeOutAndCleanup));
   }
 
   @override
@@ -120,6 +119,27 @@ class _MusicCompanionWebAudioPlayer implements MusicCompanionWebAudioPlayer {
     if (context != null && context.state != 'closed') {
       await context.close().toDart;
     }
+  }
+
+  Future<void> _fadeOutAndCleanup(_ActivePlayback playback) async {
+    if (!_activePlaybacks.contains(playback)) {
+      return;
+    }
+    playback.cleanupTimer?.cancel();
+    playback.cleanupTimer = null;
+
+    const steps = 10;
+    const stepMs = 10;
+    final startGain = playback.gain.gain.value;
+    for (var step = 1; step <= steps; step++) {
+      if (!_activePlaybacks.contains(playback)) {
+        return;
+      }
+      final scale = (steps - step) / steps;
+      playback.gain.gain.value = startGain * scale;
+      await Future<void>.delayed(const Duration(milliseconds: stepMs));
+    }
+    _cleanupPlayback(playback, stopSource: true);
   }
 
   void _cleanupPlayback(_ActivePlayback playback, {bool stopSource = false}) {

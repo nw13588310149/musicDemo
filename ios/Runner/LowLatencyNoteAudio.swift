@@ -19,7 +19,9 @@ final class LowLatencyNoteAudio {
   private var fadeGeneration = 0
   private var sessionObservers: [NSObjectProtocol] = []
 
-  private let maxPoolSize = 8
+  private let maxPoolSize = 16
+  private let fadeOutSteps = 10
+  private let fadeOutStepMs = 10
 
   init(messenger: FlutterBinaryMessenger) {
     channel = FlutterMethodChannel(
@@ -279,18 +281,16 @@ final class LowLatencyNoteAudio {
   }
 
   private func borrowPlayerNode() -> AVAudioPlayerNode {
+    // 不复用仍在发声的节点，避免 stop() 造成截断杂音。
     while let node = playerNodePool.popLast() {
       if !node.isPlaying {
         return node
       }
-      node.stop()
-      detachIfAttached(node)
     }
     return AVAudioPlayerNode()
   }
 
   private func returnPlayerNode(_ node: AVAudioPlayerNode) {
-    node.stop()
     detachIfAttached(node)
     guard playerNodePool.count < maxPoolSize else { return }
     playerNodePool.append(node)
@@ -319,14 +319,15 @@ final class LowLatencyNoteAudio {
   private func fadeOutAndDetach(nodes: [AVAudioPlayerNode]) {
     guard !nodes.isEmpty else { return }
     let generation = fadeGeneration
-    let steps = 6
-    let intervalMs = 8
+    let steps = fadeOutSteps
+    let intervalMs = fadeOutStepMs
+    let baseVolumes = nodes.map { max(0, min($0.volume, 1)) }
     for step in 1...steps {
       queue.asyncAfter(deadline: .now() + .milliseconds(step * intervalMs)) { [weak self] in
         guard let self = self, generation == self.fadeGeneration else { return }
         let scale = max(0, Float(steps - step) / Float(steps))
-        for node in nodes {
-          node.volume = node.volume * scale
+        for (index, node) in nodes.enumerated() {
+          node.volume = baseVolumes[index] * scale
         }
         if step == steps {
           for node in nodes {
