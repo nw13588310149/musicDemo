@@ -42,6 +42,16 @@ abstract final class SmartSightSingingImportConfig {
     'musicxml',
     'mxl',
   ];
+
+  /// 根据文件名判断是否为支持的 MusicXML 扩展名。
+  static bool isMusicXmlFileName(String name) {
+    final dot = name.lastIndexOf('.');
+    if (dot < 0 || dot >= name.length - 1) {
+      return false;
+    }
+    final ext = name.substring(dot + 1).trim().toLowerCase();
+    return musicXmlExtensions.contains(ext);
+  }
 }
 
 abstract final class SmartSightSingingSessionConfig {

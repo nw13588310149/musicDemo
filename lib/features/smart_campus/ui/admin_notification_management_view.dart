@@ -1,4 +1,4 @@
-﻿// =============================================================================
+// =============================================================================
 // 管理员端「通知管理」独立页面
 //
 // 入口：admin 首页快捷区「通知管理」按钮 →
@@ -10,14 +10,13 @@
 //   1. banner（62 高，4deg 白→#F9EDFF 渐变，圆角 16）：
 //      - 左 12 返回按钮 32×32 白底 outline #F3F2F3。
 //      - 居中标题 "通知管理" 16/600 + 副标题 12/#B6B5BB
-//        「按类型维护校级通知，支持草稿、定时与即时发布，并配置推送范围
+//        「按类型维护校级通知，支持定时与即时发布，并配置推送范围
 //        （学生 / 教师 / 宿管等）」。
 //      - 右 12 「新建通知」按钮（白底 outline #F3F2F3，4 点九宫格 icon
 //        + 12/600 黑字）→ 打开右侧 600 抽屉表单。
-//   2. 5 张统计卡（100 高，flex 1 1 0，间距 12，196deg 渐变白底，圆角 12）：
+//   2. 4 张统计卡（100 高，flex 1 1 0，间距 12，196deg 渐变白底，圆角 12）：
 //      - 已发布   紫渐变 #E7DCFF→white  显示 published 数量。
 //      - 定时中   橙渐变 #FFF0DC→white  显示 scheduled 数量。
-//      - 草稿     绿渐变 #DCFFE7→white  显示 draft 数量。
 //      - 已撤回   红渐变 #FFE2DC→white  显示 withdrawn 数量。
 //      - 全部     红渐变 #FFE2DC→white  显示总数。
 //   3. 顶部一行筛选 / 搜索（44 高）：
@@ -30,29 +29,38 @@
 //      标题（200，title 13/500 + author 11/#6D6B75）/ 类型（flex）/
 //      优先级（flex，3 根 2px 竖条信号 + 文字：普通=黑，重要=#325BFF，
 //      紧急=#FF323C）/ 范围（120）/ 状态（flex，状态徽标
-//      已通过=#E4FFED/#12CE51；草稿=#E6E9F1/#6D6B75；定时中=
+//      已通过=#E4FFED/#12CE51；定时中=
 //      #FFEDD3/#FF6A00；已撤回=#FFE5E5/#E83A3A）/ 时间（120）/
-//      操作（120，已发布=蓝色「查看」；其它=紫色「编辑」+ 红色「删除」）。
+//      操作（120，已发布=「查看」+「删除」；定时中=「编辑」+「删除」；已撤回=「查看」）。
 //   5. 「新建通知 / 编辑通知」抽屉（右侧 600 宽，全高白底）：
 //      - 头部 62 高（紫色竖条 + 16/600 标题 + 关闭按钮）。
 //      - 表单（滚动）：标题（输入）/ 内容（多行）/
 //        通知类型（PopupSelector：督导/通知/活动/会议/其他）/
 //        优先级（信号条 segment：普通/重要/紧急）/
-//        推送范围（多选 chip：学生/教师/班主任/宿管/家长/访客）/
-//        发布方式（segment：立即发布 / 定时发布 / 保存为草稿；
+//        推送范围（多选 chip：学生/教师/班主任/宿管/家长/全校师生）/
+//        发布方式（segment：立即发布 / 定时发布；
 //        定时发布展开「定时时间」TextField + 日历 picker）。
 //      - 底部 48 高紫渐变「提交保存」按钮，按选择的发布方式落库。
 //   6. 「查看通知」详情弹窗：用 GradientHeaderDialog，列出全部字段。
 // =============================================================================
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 
+import '../../../core/constants/app_assets.dart';
+import '../../../core/widgets/app_asset_graphic.dart';
 import '../../../core/widgets/app_date_time_pickers.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/popup_selector_field.dart';
 import '../../../core/widgets/scaled_dialog.dart';
+import '../../shell/state/shell_controller.dart';
 import '../../shell/ui/shell_layout.dart';
+import '../data/admin_notice_data.dart';
+import '../data/admin_repository.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // —— 颜色 ————————————————————————————————————————————————————————
@@ -74,8 +82,6 @@ const Color _kOrange = Color(0xFFFF6A00);
 // 状态徽标颜色
 const Color _kPassedBg = Color(0xFFE4FFED);
 const Color _kPassedFg = Color(0xFF12CE51);
-const Color _kDraftBg = Color(0xFFE6E9F1);
-const Color _kDraftFg = Color(0xFF6D6B75);
 const Color _kPendingBg = Color(0xFFFFEDD3);
 const Color _kPendingFg = _kOrange;
 const Color _kRejectedBg = Color(0xFFFFE5E5);
@@ -110,27 +116,24 @@ extension _NPriorityX on _NPriority {
   };
 }
 
-enum _NStatus { published, scheduled, draft, withdrawn }
+enum _NStatus { published, scheduled, withdrawn }
 
 extension _NStatusX on _NStatus {
   String get label => switch (this) {
     _NStatus.published => '已通过',
     _NStatus.scheduled => '定时中',
-    _NStatus.draft => '草稿',
     _NStatus.withdrawn => '已撤回',
   };
 
   Color get bg => switch (this) {
     _NStatus.published => _kPassedBg,
     _NStatus.scheduled => _kPendingBg,
-    _NStatus.draft => _kDraftBg,
     _NStatus.withdrawn => _kRejectedBg,
   };
 
   Color get fg => switch (this) {
     _NStatus.published => _kPassedFg,
     _NStatus.scheduled => _kPendingFg,
-    _NStatus.draft => _kDraftFg,
     _NStatus.withdrawn => _kRejectedFg,
   };
 }
@@ -152,7 +155,6 @@ const List<String> _kScopeOptions = <String>[
   '班主任',
   '宿管',
   '家长',
-  '访客端',
 ];
 
 /// 类型筛选下拉项 / 状态筛选下拉项的 "全部" 标识。
@@ -184,50 +186,54 @@ class _NotificationRecord {
 
   /// 用于显示的时间字符串 `2026-03-24 10:05`。
   ///
-  /// 已发布：发布时间；定时中：定时时间；草稿：最后编辑；已撤回：撤回时间。
+  /// 已发布：发布时间；定时中：定时时间；已撤回：撤回时间。
   String time;
 
   /// 仅 [_NStatus.scheduled] 时使用：定时发布的时间。
   DateTime? scheduledAt;
 
   String get scopeLabel =>
-      scopes.isEmpty ? '全校师生与访客端' : scopes.join('、');
+      scopes.isEmpty ? '全校师生' : scopes.join('、');
 }
 
 // =============================================================================
 // 主视图
 // =============================================================================
 
-class AdminNotificationManagementView extends StatefulWidget {
+class AdminNotificationManagementView extends ConsumerStatefulWidget {
   const AdminNotificationManagementView({super.key, required this.onBack});
 
   final VoidCallback onBack;
 
   @override
-  State<AdminNotificationManagementView> createState() =>
+  ConsumerState<AdminNotificationManagementView> createState() =>
       _AdminNotificationManagementViewState();
 }
 
 class _AdminNotificationManagementViewState
-    extends State<AdminNotificationManagementView> {
-  late final List<_NotificationRecord> _records = _seedRecords();
+    extends ConsumerState<AdminNotificationManagementView> {
+  List<_NotificationRecord> _records = const [];
+  bool _loading = false;
+  int _loadToken = 0;
 
   String _typeFilter = _kAllType;
   String _statusFilter = _kAllStatus;
   String _query = '';
-  late final TextEditingController _searchCtrl = TextEditingController()
-    ..addListener(_onSearchChanged);
+  late final TextEditingController _searchCtrl = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadRecords());
+  }
 
   @override
   void dispose() {
-    _searchCtrl
-      ..removeListener(_onSearchChanged)
-      ..dispose();
+    _searchCtrl.dispose();
     super.dispose();
   }
 
-  void _onSearchChanged() {
-    final v = _searchCtrl.text;
+  void _onSearchChanged(String v) {
     if (v == _query) return;
     setState(() => _query = v);
   }
@@ -251,11 +257,140 @@ class _AdminNotificationManagementViewState
 
   int _countOf(_NStatus s) => _records.where((r) => r.status == s).length;
 
+  _NotificationRecord _mapRecord(AdminNoticeRecord r) {
+    return _NotificationRecord(
+      id: r.id,
+      title: r.title,
+      content: r.content,
+      author: r.deptName.isNotEmpty ? '${r.deptName} · ${r.author}' : r.author,
+      type: r.type,
+      priority: _mapPriority(r.priority),
+      scopes: r.scopes,
+      status: _mapStatus(r.status),
+      time: r.time,
+      scheduledAt: r.scheduledAt,
+    );
+  }
+
+  _NPriority _mapPriority(AdminNoticePriority p) => switch (p) {
+    AdminNoticePriority.normal => _NPriority.normal,
+    AdminNoticePriority.important => _NPriority.important,
+    AdminNoticePriority.urgent => _NPriority.urgent,
+  };
+
+  AdminNoticePriority _mapPriorityBack(_NPriority p) => switch (p) {
+    _NPriority.normal => AdminNoticePriority.normal,
+    _NPriority.important => AdminNoticePriority.important,
+    _NPriority.urgent => AdminNoticePriority.urgent,
+  };
+
+  _NStatus _mapStatus(AdminNoticeStatus s) => switch (s) {
+    AdminNoticeStatus.published => _NStatus.published,
+    AdminNoticeStatus.scheduled => _NStatus.scheduled,
+    AdminNoticeStatus.withdrawn => _NStatus.withdrawn,
+    AdminNoticeStatus.draft => _NStatus.published,
+  };
+
+  Future<void> _loadRecords() async {
+    final token = ++_loadToken;
+    setState(() => _loading = true);
+    final repo = ref.read(adminRepositoryProvider);
+    try {
+      final typeParam = _typeFilter == _kAllType ? null : _typeFilter;
+      final resp = await repo.noticeManageList(size: 500, type: typeParam);
+      if (!mounted || token != _loadToken) return;
+      if (!resp.isSuccess) {
+        setState(() {
+          _records = const [];
+          _loading = false;
+        });
+        AppToast.show(context, '通知列表加载失败：${resp.msg}');
+        return;
+      }
+      final parsed = parseAdminNoticeList(resp.data)
+          .where((r) => r.status != AdminNoticeStatus.draft)
+          .map(_mapRecord)
+          .toList(growable: false);
+      setState(() {
+        _records = parsed;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted || token != _loadToken) return;
+      setState(() {
+        _records = const [];
+        _loading = false;
+      });
+      AppToast.show(context, '通知列表加载失败：$e');
+    }
+  }
+
+  Future<bool> _submitNotice({
+    String? editId,
+    required String title,
+    required String content,
+    required String type,
+    required _NPriority priority,
+    required Set<String> scopes,
+    required _PublishMode mode,
+    DateTime? scheduledAt,
+  }) async {
+    final user = ref.read(shellControllerProvider).user;
+    final publishMode = switch (mode) {
+      _PublishMode.now => 1,
+      _PublishMode.scheduled => 2,
+    };
+    final request = AdminNoticeSaveRequest(
+      id: editId,
+      title: title,
+      content: content,
+      type: type,
+      priority: _mapPriorityBack(priority),
+      scopes: scopes,
+      publishMode: publishMode,
+      scheduledAt: scheduledAt,
+      creator: user.displayName,
+      deptName: user.school.isNotEmpty ? user.school : '校办',
+    );
+    final repo = ref.read(adminRepositoryProvider);
+    final resp = await repo.noticeSave(request.toJson());
+    if (!mounted) return false;
+    if (!resp.isSuccess) {
+      AppToast.show(context, '保存失败：${resp.msg}');
+      return false;
+    }
+    await _loadRecords();
+    if (!mounted) return true;
+    AppToast.show(
+      context,
+      _toastForStatus(
+        switch (mode) {
+          _PublishMode.now => _NStatus.published,
+          _PublishMode.scheduled => _NStatus.scheduled,
+        },
+        isCreate: editId == null,
+      ),
+    );
+    return true;
+  }
+
+  Future<_NotificationRecord?> _fetchNoticeDetail(String id) async {
+    final repo = ref.read(adminRepositoryProvider);
+    try {
+      final resp = await repo.noticeDetail(id: id);
+      if (!resp.isSuccess) return null;
+      final detail = parseAdminNoticeDetail(resp.data);
+      return detail == null ? null : _mapRecord(detail);
+    } catch (_) {
+      return null;
+    }
+  }
+
   // —— 行操作：查看 / 编辑 / 删除 / 新建 —————————————————————————————
 
   Future<void> _openCreateDrawer() async {
     final scale = DashboardScaleScope.of(context);
-    final result = await showGeneralDialog<_NotificationRecord>(
+    await showGeneralDialog<void>(
       context: context,
       barrierDismissible: true,
       barrierLabel: '关闭新建通知',
@@ -268,7 +403,19 @@ class _AdminNotificationManagementViewState
           child: _NotificationFormDrawer(
             initial: null,
             onCancel: () => Navigator.of(ctx).pop(),
-            onSubmit: (rec) => Navigator.of(ctx).pop(rec),
+            onSubmit: (params) => _submitNotice(
+              editId: null,
+              title: params.title,
+              content: params.content,
+              type: params.type,
+              priority: params.priority,
+              scopes: params.scopes,
+              mode: params.mode,
+              scheduledAt: params.scheduledAt,
+            ).then((ok) {
+              if (ok && ctx.mounted) Navigator.of(ctx).pop();
+              return ok;
+            }),
           ),
         ),
       ),
@@ -280,14 +427,13 @@ class _AdminNotificationManagementViewState
         child: child,
       ),
     );
-    if (result == null || !mounted) return;
-    setState(() => _records.insert(0, result));
-    AppToast.show(context, _toastForStatus(result.status, isCreate: true));
   }
 
   Future<void> _openEditDrawer(_NotificationRecord origin) async {
+    final detail = await _fetchNoticeDetail(origin.id) ?? origin;
+    if (!mounted) return;
     final scale = DashboardScaleScope.of(context);
-    final result = await showGeneralDialog<_NotificationRecord>(
+    await showGeneralDialog<void>(
       context: context,
       barrierDismissible: true,
       barrierLabel: '关闭编辑通知',
@@ -298,9 +444,21 @@ class _AdminNotificationManagementViewState
         child: DashboardScaleScope(
           data: scale,
           child: _NotificationFormDrawer(
-            initial: origin,
+            initial: detail,
             onCancel: () => Navigator.of(ctx).pop(),
-            onSubmit: (rec) => Navigator.of(ctx).pop(rec),
+            onSubmit: (params) => _submitNotice(
+              editId: detail.id,
+              title: params.title,
+              content: params.content,
+              type: params.type,
+              priority: params.priority,
+              scopes: params.scopes,
+              mode: params.mode,
+              scheduledAt: params.scheduledAt,
+            ).then((ok) {
+              if (ok && ctx.mounted) Navigator.of(ctx).pop();
+              return ok;
+            }),
           ),
         ),
       ),
@@ -312,12 +470,6 @@ class _AdminNotificationManagementViewState
         child: child,
       ),
     );
-    if (result == null || !mounted) return;
-    setState(() {
-      final i = _records.indexWhere((r) => r.id == origin.id);
-      if (i >= 0) _records[i] = result;
-    });
-    AppToast.show(context, _toastForStatus(result.status, isCreate: false));
   }
 
   Future<void> _onDeleteRecord(_NotificationRecord r) async {
@@ -328,18 +480,27 @@ class _AdminNotificationManagementViewState
       confirmLabel: '删除',
     );
     if (!ok || !mounted) return;
-    setState(() => _records.removeWhere((x) => x.id == r.id));
+    final repo = ref.read(adminRepositoryProvider);
+    final resp = await repo.noticeDelete(id: r.id);
+    if (!mounted) return;
+    if (!resp.isSuccess) {
+      AppToast.show(context, '删除失败：${resp.msg}');
+      return;
+    }
     AppToast.show(context, '已删除「${r.title}」');
+    await _loadRecords();
   }
 
-  Future<void> _onViewRecord(_NotificationRecord r) {
+  Future<void> _onViewRecord(_NotificationRecord r) async {
+    final detail = await _fetchNoticeDetail(r.id) ?? r;
+    if (!mounted) return;
     return showScaledDialog<void>(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.18),
       builder: (ctx) => GradientHeaderDialog(
         title: '通知详情',
         width: 460,
-        child: _NotificationDetailBody(record: r),
+        child: _NotificationDetailBody(record: detail),
       ),
     );
   }
@@ -351,8 +512,6 @@ class _AdminNotificationManagementViewState
         return '$verb通知并发布';
       case _NStatus.scheduled:
         return '$verb通知，将按定时时间发送';
-      case _NStatus.draft:
-        return '$verb通知（草稿）';
       case _NStatus.withdrawn:
         return '$verb通知（已撤回）';
     }
@@ -379,7 +538,6 @@ class _AdminNotificationManagementViewState
             _StatsRow(
               published: _countOf(_NStatus.published),
               scheduled: _countOf(_NStatus.scheduled),
-              draft: _countOf(_NStatus.draft),
               withdrawn: _countOf(_NStatus.withdrawn),
               total: _records.length,
             ),
@@ -387,17 +545,27 @@ class _AdminNotificationManagementViewState
             _ControlBar(
               typeValue: _typeFilter,
               statusValue: _statusFilter,
-              onTypeChanged: (v) => setState(() => _typeFilter = v),
+              onTypeChanged: (v) {
+                setState(() => _typeFilter = v);
+                unawaited(_loadRecords());
+              },
               onStatusChanged: (v) => setState(() => _statusFilter = v),
               searchCtrl: _searchCtrl,
+              onSearchChanged: _onSearchChanged,
             ),
             SizedBox(height: ui(12)),
-            _NotificationTable(
-              records: list,
-              onView: _onViewRecord,
-              onEdit: _openEditDrawer,
-              onDelete: _onDeleteRecord,
-            ),
+            if (_loading)
+              Padding(
+                padding: EdgeInsets.symmetric(vertical: ui(48)),
+                child: const Center(child: AppLoadingIndicator()),
+              )
+            else
+              _NotificationTable(
+                records: list,
+                onView: _onViewRecord,
+                onEdit: _openEditDrawer,
+                onDelete: _onDeleteRecord,
+              ),
           ],
         ),
       ),
@@ -423,12 +591,12 @@ class _Banner extends StatelessWidget {
       height: ui(62),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.bottomCenter,
-          end: Alignment.topCenter,
-          colors: [Colors.white, Color(0xFFF9EDFF)],
-        ),
         borderRadius: BorderRadius.circular(ui(16)),
+        image: const DecorationImage(
+          image: AssetImage(AppAssets.xiaoquanHeaderBg),
+          fit: BoxFit.cover,
+          alignment: Alignment.centerRight,
+        ),
       ),
       child: Stack(
         children: [
@@ -473,7 +641,7 @@ class _Banner extends StatelessWidget {
                   ),
                   SizedBox(height: ui(2)),
                   Text(
-                    '按类型维护校级通知，支持草稿、定时与即时发布，并配置推送范围（学生 / 教师 / 宿管等）',
+                    '按类型维护校级通知，支持定时与即时发布，并配置推送范围（学生 / 教师 / 宿管等）',
                     style: TextStyle(
                       fontSize: ui(12),
                       color: _kTextHint,
@@ -545,21 +713,19 @@ class _CreateButton extends StatelessWidget {
 }
 
 // =============================================================================
-// 5 张统计卡 ——已发布 / 定时中 / 草稿 / 已撤回 / 全部
+// 4 张统计卡 —— 已发布 / 定时中 / 已撤回 / 全部
 // =============================================================================
 
 class _StatsRow extends StatelessWidget {
   const _StatsRow({
     required this.published,
     required this.scheduled,
-    required this.draft,
     required this.withdrawn,
     required this.total,
   });
 
   final int published;
   final int scheduled;
-  final int draft;
   final int withdrawn;
   final int total;
 
@@ -595,21 +761,6 @@ class _StatsRow extends StatelessWidget {
             ),
             icon: Icons.schedule_rounded,
             iconColor: _kOrange,
-          ),
-        ),
-        SizedBox(width: ui(12)),
-        Expanded(
-          child: _StatCard(
-            label: '草稿',
-            value: draft,
-            gradient: const LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [Color(0xFFDCFFE7), Colors.white],
-              stops: [0.0, 0.73],
-            ),
-            icon: Icons.edit_note_rounded,
-            iconColor: _kPassedFg,
           ),
         ),
         SizedBox(width: ui(12)),
@@ -736,6 +887,7 @@ class _ControlBar extends StatelessWidget {
     required this.onTypeChanged,
     required this.onStatusChanged,
     required this.searchCtrl,
+    required this.onSearchChanged,
   });
 
   final String typeValue;
@@ -743,108 +895,171 @@ class _ControlBar extends StatelessWidget {
   final ValueChanged<String> onTypeChanged;
   final ValueChanged<String> onStatusChanged;
   final TextEditingController searchCtrl;
+  final ValueChanged<String> onSearchChanged;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        SizedBox(
-          width: ui(140),
-          child: PopupSelectorField<String>(
-            value: typeValue,
-            items: <String>[_kAllType, ..._kNotificationTypes],
-            itemLabel: (s) => s,
-            onChanged: onTypeChanged,
-          ),
+        _NotificationFilterField(
+          width: ui(160),
+          icon: Icons.category_outlined,
+          value: typeValue,
+          items: <String>[_kAllType, ..._kNotificationTypes],
+          onChanged: onTypeChanged,
         ),
         SizedBox(width: ui(12)),
-        SizedBox(
-          width: ui(140),
-          child: PopupSelectorField<String>(
-            value: statusValue,
-            items: <String>[
-              _kAllStatus,
-              for (final s in _NStatus.values) s.label,
-            ],
-            itemLabel: (s) => s,
-            onChanged: onStatusChanged,
-          ),
+        _NotificationFilterField(
+          width: ui(160),
+          icon: Icons.flag_outlined,
+          value: statusValue,
+          items: <String>[
+            _kAllStatus,
+            for (final s in _NStatus.values) s.label,
+          ],
+          onChanged: onStatusChanged,
         ),
         const Spacer(),
-        SizedBox(
+        Container(
           width: ui(324),
-          child: _SearchInput(controller: searchCtrl),
+          height: ui(44),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(ui(12)),
+          ),
+          padding: EdgeInsets.symmetric(horizontal: ui(16)),
+          child: Row(
+            children: [
+              AppAssetGraphic(
+                AppAssets.shellV2Search,
+                width: ui(16),
+                height: ui(16),
+                fit: BoxFit.contain,
+              ),
+              SizedBox(width: ui(10)),
+              Expanded(
+                child: AppTextField(
+                  controller: searchCtrl,
+                  onChanged: onSearchChanged,
+                  cursorColor: _kPurple,
+                  cursorWidth: 1.5,
+                  cursorHeight: ui(16),
+                  style: TextStyle(
+                    fontSize: ui(14),
+                    height: 1.2,
+                    color: _kTextDark,
+                    fontFamily: 'PingFang SC',
+                  ),
+                  decoration: InputDecoration(
+                    isCollapsed: true,
+                    border: InputBorder.none,
+                    hintText: '搜索标题、内容、作者',
+                    hintStyle: TextStyle(
+                      fontSize: ui(14),
+                      color: const Color(0xFFD1D1D1),
+                      fontFamily: 'PingFang SC',
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
   }
 }
 
-class _SearchInput extends StatelessWidget {
-  const _SearchInput({required this.controller});
+class _NotificationFilterField extends StatefulWidget {
+  const _NotificationFilterField({
+    required this.width,
+    required this.icon,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+  });
 
-  final TextEditingController controller;
+  final double width;
+  final IconData icon;
+  final String value;
+  final List<String> items;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_NotificationFilterField> createState() =>
+      _NotificationFilterFieldState();
+}
+
+class _NotificationFilterFieldState extends State<_NotificationFilterField> {
+  final _fieldKey = GlobalKey();
+  bool _open = false;
+
+  Future<void> _openMenu() async {
+    final fieldCtx = _fieldKey.currentContext;
+    if (fieldCtx == null) return;
+    setState(() => _open = true);
+    final selected = await showAppPopupSelector<String>(
+      anchorContext: fieldCtx,
+      items: widget.items,
+      value: widget.value,
+      itemLabel: (s) => s,
+      width: DashboardScaleScope.of(fieldCtx).ui(280),
+    );
+    if (!mounted) return;
+    setState(() => _open = false);
+    if (selected != null) widget.onChanged(selected);
+  }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      height: ui(44),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(12)),
-      ),
-      padding: EdgeInsets.symmetric(horizontal: ui(16)),
-      child: Row(
-        children: [
-          Icon(
-            Icons.search_rounded,
-            size: ui(16),
-            color: const Color(0xFFC6C6C6),
-          ),
-          SizedBox(width: ui(8)),
-          Expanded(
-            child: AppTextField(
-              controller: controller,
-              cursorColor: _kPurple,
-              cursorWidth: 1.5,
-              cursorHeight: ui(16),
-              style: TextStyle(
-                fontSize: ui(14),
-                color: _kTextDark,
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w400,
-                height: 1,
-              ),
-              decoration: InputDecoration(
-                isCollapsed: true,
-                contentPadding: EdgeInsets.symmetric(vertical: ui(12)),
-                border: InputBorder.none,
-                hintText: '搜索标题、内容、作者',
-                hintStyle: TextStyle(
+    return InkWell(
+      key: _fieldKey,
+      onTap: _openMenu,
+      borderRadius: BorderRadius.circular(ui(12)),
+      child: Container(
+        width: widget.width,
+        height: ui(44),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(ui(12)),
+          border: Border.all(color: _kBorderSoft, width: 1),
+        ),
+        padding: EdgeInsets.symmetric(horizontal: ui(16)),
+        child: Row(
+          children: [
+            Icon(
+              widget.icon,
+              size: ui(16),
+              color: const Color(0xFFC6C6C6),
+            ),
+            SizedBox(width: ui(10)),
+            Expanded(
+              child: Text(
+                widget.value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
                   fontSize: ui(14),
-                  color: const Color(0xFFD1D1D1),
+                  height: 1.2,
+                  color: _kTextDark,
                   fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w400,
                 ),
               ),
             ),
-          ),
-          if (controller.text.isNotEmpty)
-            InkWell(
-              onTap: () => controller.clear(),
-              customBorder: const CircleBorder(),
-              child: Padding(
-                padding: EdgeInsets.all(ui(2)),
-                child: Icon(
-                  Icons.close_rounded,
-                  size: ui(14),
-                  color: _kTextHint,
-                ),
+            AnimatedRotation(
+              turns: _open ? 0.5 : 0,
+              duration: const Duration(milliseconds: 160),
+              child: Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: ui(18),
+                color: const Color(0xFFC6C6C6),
               ),
             ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1199,16 +1414,33 @@ class _ActionCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    // 已发布 / 已撤回：仅展示「查看」；其余（草稿、定时中）允许「编辑/删除」。
-    final isReadonly =
-        status == _NStatus.published || status == _NStatus.withdrawn;
-    if (isReadonly) {
+    // 已撤回：仅「查看」；已发布：「查看 + 删除」；定时中：「编辑 + 删除」。
+    if (status == _NStatus.withdrawn) {
       return Row(
         children: [
           _actionText(
             text: '查看',
             color: _kBlue,
             onTap: onView,
+            ui: ui,
+          ),
+        ],
+      );
+    }
+    if (status == _NStatus.published) {
+      return Row(
+        children: [
+          _actionText(
+            text: '查看',
+            color: _kBlue,
+            onTap: onView,
+            ui: ui,
+          ),
+          SizedBox(width: ui(12)),
+          _actionText(
+            text: '删除',
+            color: _kRed,
+            onTap: onDelete,
             ui: ui,
           ),
         ],
@@ -1424,6 +1656,26 @@ class _DetailRow extends StatelessWidget {
 // 新建 / 编辑通知 抽屉
 // =============================================================================
 
+class _NoticeFormSubmitParams {
+  const _NoticeFormSubmitParams({
+    required this.title,
+    required this.content,
+    required this.type,
+    required this.priority,
+    required this.scopes,
+    required this.mode,
+    this.scheduledAt,
+  });
+
+  final String title;
+  final String content;
+  final String type;
+  final _NPriority priority;
+  final Set<String> scopes;
+  final _PublishMode mode;
+  final DateTime? scheduledAt;
+}
+
 /// 当 [initial] 不为 null 时为「编辑」模式；否则为「新建」。
 class _NotificationFormDrawer extends StatefulWidget {
   const _NotificationFormDrawer({
@@ -1434,20 +1686,19 @@ class _NotificationFormDrawer extends StatefulWidget {
 
   final _NotificationRecord? initial;
   final VoidCallback onCancel;
-  final ValueChanged<_NotificationRecord> onSubmit;
+  final Future<bool> Function(_NoticeFormSubmitParams params) onSubmit;
 
   @override
   State<_NotificationFormDrawer> createState() =>
       _NotificationFormDrawerState();
 }
 
-enum _PublishMode { now, scheduled, draft }
+enum _PublishMode { now, scheduled }
 
 extension _PublishModeX on _PublishMode {
   String get label => switch (this) {
     _PublishMode.now => '立即发布',
     _PublishMode.scheduled => '定时发布',
-    _PublishMode.draft => '保存为草稿',
   };
 }
 
@@ -1475,9 +1726,8 @@ class _NotificationFormDrawerState extends State<_NotificationFormDrawer> {
     _scheduledAt = init?.scheduledAt;
     _mode = switch (init?.status) {
       _NStatus.scheduled => _PublishMode.scheduled,
-      _NStatus.draft => _PublishMode.draft,
       _NStatus.published => _PublishMode.now,
-      _NStatus.withdrawn => _PublishMode.draft,
+      _NStatus.withdrawn => _PublishMode.now,
       null => _PublishMode.now,
     };
   }
@@ -1541,6 +1791,10 @@ class _NotificationFormDrawerState extends State<_NotificationFormDrawer> {
       AppToast.show(context, '请至少勾选一个推送范围');
       return;
     }
+    if (encodeAdminNoticeScopes(_scopes).isEmpty) {
+      AppToast.show(context, '请选择有效的推送范围（学生/教师/班主任/宿管/家长）');
+      return;
+    }
     if (_mode == _PublishMode.scheduled) {
       if (_scheduledAt == null) {
         AppToast.show(context, '请选择定时发布时间');
@@ -1553,37 +1807,20 @@ class _NotificationFormDrawerState extends State<_NotificationFormDrawer> {
     }
 
     setState(() => _submitting = true);
-    // 当前后端「通知保存」接口尚未提供，先在本地组装记录返回给上层 setState。
-    // 接入时改为调用 repo.notificationSave({...}) 并以返回的 id 替换。
-    await Future<void>.delayed(const Duration(milliseconds: 200));
-
-    final origin = widget.initial;
-    final status = switch (_mode) {
-      _PublishMode.now => _NStatus.published,
-      _PublishMode.scheduled => _NStatus.scheduled,
-      _PublishMode.draft => _NStatus.draft,
-    };
-    final time = switch (_mode) {
-      _PublishMode.now => _formatNow(),
-      _PublishMode.scheduled => _formatDateTime(_scheduledAt!),
-      _PublishMode.draft => _formatNow(),
-    };
-    final rec = _NotificationRecord(
-      id: origin?.id ??
-          'n${DateTime.now().millisecondsSinceEpoch.toString().substring(6)}',
-      title: title,
-      content: content,
-      author: origin?.author ?? '校办 · 我',
-      type: _type,
-      priority: _priority,
-      scopes: _scopes.toList(),
-      status: status,
-      time: time,
-      scheduledAt: _mode == _PublishMode.scheduled ? _scheduledAt : null,
+    final ok = await widget.onSubmit(
+      _NoticeFormSubmitParams(
+        title: title,
+        content: content,
+        type: _type,
+        priority: _priority,
+        scopes: _scopes,
+        mode: _mode,
+        scheduledAt: _scheduledAt,
+      ),
     );
     if (!mounted) return;
     setState(() => _submitting = false);
-    widget.onSubmit(rec);
+    if (!ok) return;
   }
 
   String _submitLabel() {
@@ -1591,7 +1828,6 @@ class _NotificationFormDrawerState extends State<_NotificationFormDrawer> {
     return switch (_mode) {
       _PublishMode.now => '立即发布',
       _PublishMode.scheduled => '保存并定时',
-      _PublishMode.draft => '保存为草稿',
     };
   }
 
@@ -2188,101 +2424,11 @@ class _SecondaryButton extends StatelessWidget {
 }
 
 // =============================================================================
-// 时间格式化工具 + 演示种子数据
+// 时间格式化工具
 // =============================================================================
-
-String _formatNow() => _formatDateTime(DateTime.now());
 
 String _formatDateTime(DateTime d) {
   String pad(int n) => n.toString().padLeft(2, '0');
   return '${d.year}-${pad(d.month)}-${pad(d.day)} '
       '${pad(d.hour)}:${pad(d.minute)}';
-}
-
-List<_NotificationRecord> _seedRecords() {
-  return <_NotificationRecord>[
-    _NotificationRecord(
-      id: 'n001',
-      title: '区教育局：艺考季校园安全与心理健康专项督导，材料请于周四前上传。',
-      content:
-          '请各班主任收集本班住宿生晨检记录、心理动态评估表，于周四 18:00 前上传到 OA 系统对应专项目录。'
-          '督导组将于下周一开始抽查访谈。',
-      author: '校办 · 王婧',
-      type: '督导',
-      priority: _NPriority.important,
-      scopes: const ['全校师生', '访客端'],
-      status: _NStatus.published,
-      time: '2026-03-24 10:05',
-    ),
-    _NotificationRecord(
-      id: 'n002',
-      title: '4 月美育月闭幕展演彩排排练计划',
-      content:
-          '4/26 16:00 在大礼堂集中彩排，请各社团节目组提前 30 分钟进场对光对音；'
-          '具体顺序见附件。',
-      author: '艺术中心 · 刘老师',
-      type: '通知',
-      priority: _NPriority.normal,
-      scopes: const ['学生', '教师'],
-      status: _NStatus.draft,
-      time: '2026-03-24 09:48',
-    ),
-    _NotificationRecord(
-      id: 'n003',
-      title: '高三模拟考考务培训会',
-      content: '4/2 19:00 在三楼会议室召开，所有监考与巡考教师必须到场。',
-      author: '教务处 · 张主任',
-      type: '会议',
-      priority: _NPriority.urgent,
-      scopes: const ['教师', '班主任'],
-      status: _NStatus.draft,
-      time: '2026-03-23 17:30',
-    ),
-    _NotificationRecord(
-      id: 'n004',
-      title: '清明假期校园安全提示',
-      content: '4/4 - 4/6 放假。住宿生须按时返校，请家长配合做好行程报备与体温监测。',
-      author: '安保处 · 李主任',
-      type: '通知',
-      priority: _NPriority.urgent,
-      scopes: const ['全校师生', '家长'],
-      status: _NStatus.scheduled,
-      time: '2026-04-03 18:00',
-      scheduledAt: DateTime(2026, 4, 3, 18, 0),
-    ),
-    _NotificationRecord(
-      id: 'n005',
-      title: '春季运动会赛前注意事项',
-      content: '请各班体育委员组织参赛同学在 4/15 前完成体检表上传。',
-      author: '体育组 · 钱老师',
-      type: '活动',
-      priority: _NPriority.normal,
-      scopes: const ['学生', '班主任'],
-      status: _NStatus.scheduled,
-      time: '2026-04-12 09:00',
-      scheduledAt: DateTime(2026, 4, 12, 9, 0),
-    ),
-    _NotificationRecord(
-      id: 'n006',
-      title: '原定的家校开放日因天气原因撤回',
-      content: '由于雷雨黄色预警，原定于 4/2 的家校开放日撤回，后续另行通知。',
-      author: '校办 · 王婧',
-      type: '通知',
-      priority: _NPriority.normal,
-      scopes: const ['全校师生', '家长'],
-      status: _NStatus.withdrawn,
-      time: '2026-03-31 16:20',
-    ),
-    _NotificationRecord(
-      id: 'n007',
-      title: '学生宿舍 3 号楼供水管道维护',
-      content: '4/8 上午 9:00-12:00 暂停供水，请提前接好饮用水。',
-      author: '后勤处 · 周师傅',
-      type: '其他',
-      priority: _NPriority.urgent,
-      scopes: const ['学生', '宿管'],
-      status: _NStatus.draft,
-      time: '2026-03-30 11:12',
-    ),
-  ];
 }

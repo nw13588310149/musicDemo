@@ -1271,14 +1271,14 @@ class _ProfileHeader extends StatelessWidget {
             ),
           ],
         ),
-        // 黄色「管理员」徽章：贴在头像底部中间
+        // 「管理员」身份徽章：贴在头像底部中间
         Positioned(
           left: ui(18),
           top: ui(60),
           child: Container(
             padding: EdgeInsets.symmetric(horizontal: ui(7), vertical: ui(2)),
             decoration: BoxDecoration(
-              color: const Color(0xFFFFC13C),
+              color: const Color(0xFFE4FAF5),
               borderRadius: BorderRadius.circular(ui(10)),
               border: Border.all(color: Colors.white, width: 1),
             ),

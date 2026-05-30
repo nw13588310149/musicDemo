@@ -28,9 +28,17 @@
 // 替换为 `dormRepository.history({date})` 即可，UI 形状无需变动。
 // =============================================================================
 
-import 'package:flutter/material.dart';
+import 'dart:async';
 
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
+
+import '../../../core/constants/app_assets.dart';
+import '../../../core/widgets/popup_selector_field.dart';
 import '../../shell/ui/shell_layout.dart';
+import '../data/dormitory_check_data.dart';
+import '../data/dormitory_repository.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // —— 颜色 ————————————————————————————————————————————————————————
@@ -53,38 +61,26 @@ const Color _kGreen = Color(0xFF1CD097);
 enum _HistoryStatus {
   normal('正常', _kPurpleSolid),
   absent('未打卡', _kRed),
-  late_('迟到', _kBlue),
-  leave('请假免检', _kGreen);
+  late_('晚归', _kBlue);
 
   const _HistoryStatus(this.label, this.bg);
   final String label;
   final Color bg;
 
-  bool get isException =>
-      this != _HistoryStatus.normal && this != _HistoryStatus.leave;
+  static _HistoryStatus fromCheckStatus(DormitoryStudentCheckStatus status) {
+    return switch (status) {
+      DormitoryStudentCheckStatus.normal => _HistoryStatus.normal,
+      DormitoryStudentCheckStatus.lateReturn => _HistoryStatus.late_,
+      DormitoryStudentCheckStatus.unchecked => _HistoryStatus.absent,
+    };
+  }
 }
-
-// —— 数据模型 ——————————————————————————————————————————————————
-//
-// 一行 = 一个寝室在某一天的查寝记录。每个寝室包含若干学生及其当日状态。
 
 class _HistoryStudent {
   const _HistoryStudent({required this.name, required this.status});
 
   final String name;
   final _HistoryStatus status;
-}
-
-class _HistoryRoom {
-  const _HistoryRoom({
-    required this.dormName,
-    required this.date,
-    required this.students,
-  });
-
-  final String dormName;
-  final String date; // YYYY-MM-DD
-  final List<_HistoryStudent> students;
 }
 
 class _CalendarDay {
@@ -108,78 +104,173 @@ class _CalendarDay {
 // 顶级视图
 // =============================================================================
 
-class DormManagerCheckHistoryView extends StatefulWidget {
+class DormManagerCheckHistoryView extends ConsumerStatefulWidget {
   const DormManagerCheckHistoryView({super.key, required this.onBack});
 
   final VoidCallback onBack;
 
   @override
-  State<DormManagerCheckHistoryView> createState() =>
+  ConsumerState<DormManagerCheckHistoryView> createState() =>
       _DormManagerCheckHistoryViewState();
 }
 
 class _DormManagerCheckHistoryViewState
-    extends State<DormManagerCheckHistoryView> {
-  late List<_CalendarDay> _days; // 14 天滚动条：前 6 天 + 今 + 后 7 天
-  late int _selectedDayIndex; // 默认指向"今日"，即 index 6
-  late List<_HistoryRoom> _rooms;
+    extends ConsumerState<DormManagerCheckHistoryView> {
+  late List<_CalendarDay> _days;
+  late int _selectedDayIndex;
+
+  DormitoryCheckStat _stat = DormitoryCheckStat.zero;
+  List<DormitoryRoomCheck> _rooms = const [];
+  List<DormitoryBuildingOption> _buildingOptions = const [
+    DormitoryBuildingOption.all,
+  ];
+  List<DormitoryFloorOption> _floorOptions = const [
+    DormitoryFloorOption.all,
+  ];
+  DormitoryBuildingOption _selectedBuilding = DormitoryBuildingOption.all;
+  DormitoryFloorOption _selectedFloor = DormitoryFloorOption.all;
+
+  bool _loading = false;
+  bool _loadingFloors = false;
+  String? _loadError;
+  int _loadToken = 0;
 
   @override
   void initState() {
     super.initState();
     _days = _buildDays(DateTime.now());
-    _selectedDayIndex = 6; // _buildDays 把"今日"放在 index 6
-    _rooms = _demoRooms();
+    _selectedDayIndex = 6;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_bootstrap());
+    });
   }
 
   String get _selectedDateText => _days[_selectedDayIndex].isoDate;
 
-  /// 选中日期下的所有寝室，按宿舍号升序，方便宿管按楼层从上往下核对。
-  List<_HistoryRoom> get _filtered {
-    final iso = _selectedDateText;
-    final list = _rooms.where((r) => r.date == iso).toList();
-    list.sort((a, b) => a.dormName.compareTo(b.dormName));
-    return list;
+  Future<void> _bootstrap() async {
+    await _loadBuildings();
+    await _reloadAll();
   }
 
-  /// 4 张统计卡：基于"当前选中日"全部寝室 × 学生的合并统计。
-  ///
-  /// - 当日寝室：被查寝的寝室数
-  /// - 正常打卡：状态 normal 的学生数
-  /// - 异常待跟进：状态 absent + late 的学生数
-  /// - 请假免检：状态 leave 的学生数
-  ({int total, int normal, int exception, int leave}) _statsForDay() {
-    final iso = _selectedDateText;
-    final rooms = _rooms.where((r) => r.date == iso).toList();
-    int normal = 0;
-    int exception = 0;
-    int leave = 0;
-    for (final r in rooms) {
-      for (final s in r.students) {
-        switch (s.status) {
-          case _HistoryStatus.normal:
-            normal++;
-          case _HistoryStatus.leave:
-            leave++;
-          case _HistoryStatus.absent:
-          case _HistoryStatus.late_:
-            exception++;
-        }
-      }
+  Future<void> _loadBuildings() async {
+    final resp =
+        await ref.read(dormitoryRepositoryProvider).dormitoryManagedBuildingList();
+    if (!mounted) return;
+    setState(() {
+      _buildingOptions = resp.isSuccess
+          ? parseDormitoryManagedBuildingList(resp.data)
+          : const [DormitoryBuildingOption.all];
+    });
+  }
+
+  Future<void> _loadFloors(String buildingId) async {
+    if (buildingId.isEmpty) {
+      setState(() {
+        _floorOptions = const [DormitoryFloorOption.all];
+        _selectedFloor = DormitoryFloorOption.all;
+        _loadingFloors = false;
+      });
+      return;
     }
-    return (
-      total: rooms.length,
-      normal: normal,
-      exception: exception,
-      leave: leave,
-    );
+    setState(() => _loadingFloors = true);
+    final resp = await ref
+        .read(dormitoryRepositoryProvider)
+        .dormitoryFloorList(buildingId: buildingId);
+    if (!mounted) return;
+    setState(() {
+      _floorOptions = resp.isSuccess
+          ? parseDormitoryFloorList(resp.data)
+          : const [DormitoryFloorOption.all];
+      _selectedFloor = DormitoryFloorOption.all;
+      _loadingFloors = false;
+    });
+  }
+
+  Future<void> _reloadAll() async {
+    final token = ++_loadToken;
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
+    final repo = ref.read(dormitoryRepositoryProvider);
+    final buildingId =
+        _selectedBuilding.id.isEmpty ? null : _selectedBuilding.id;
+    final floorId = _selectedFloor.id.isEmpty ? null : _selectedFloor.id;
+    final results = await Future.wait([
+      repo.dormitoryCheckStat(
+        buildingId: buildingId,
+        floorId: floorId,
+        date: _selectedDateText,
+      ),
+      repo.dormitoryCheckRoomList(
+        buildingId: buildingId,
+        floorId: floorId,
+        date: _selectedDateText,
+      ),
+    ]);
+    if (!mounted || token != _loadToken) return;
+
+    final statResp = results[0];
+    final roomResp = results[1];
+    if (!statResp.isSuccess || !roomResp.isSuccess) {
+      setState(() {
+        _stat = DormitoryCheckStat.zero;
+        _rooms = const [];
+        _loading = false;
+        _loadError = !statResp.isSuccess
+            ? statResp.displayMsg
+            : roomResp.displayMsg;
+      });
+      return;
+    }
+
+    setState(() {
+      _stat = parseDormitoryCheckStat(statResp.data);
+      _rooms = parseDormitoryCheckRoomList(roomResp.data);
+      _loading = false;
+      _loadError = null;
+    });
+  }
+
+  Future<void> _onBuildingChanged(DormitoryBuildingOption option) async {
+    setState(() {
+      _selectedBuilding = option;
+      _selectedFloor = DormitoryFloorOption.all;
+    });
+    await _loadFloors(option.id);
+    await _reloadAll();
+  }
+
+  Future<void> _onFloorChanged(DormitoryFloorOption option) async {
+    setState(() => _selectedFloor = option);
+    await _reloadAll();
+  }
+
+  void _onTapDay(int index) {
+    setState(() => _selectedDayIndex = index);
+    unawaited(_reloadAll());
+  }
+
+  List<_HistoryStudent> _studentsOf(DormitoryRoomCheck room) {
+    return [
+      for (final s in room.students)
+        _HistoryStudent(
+          name: s.name,
+          status: _HistoryStatus.fromCheckStatus(s.status),
+        ),
+    ];
+  }
+
+  String _roomTitle(DormitoryRoomCheck room) {
+    if (room.buildingDesc.isEmpty || room.buildingDesc == '—') {
+      return room.roomName;
+    }
+    return '${room.buildingDesc} ${room.roomName}';
   }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final stats = _statsForDay();
-    final filtered = _filtered;
     return Container(
       color: _kPageBg,
       child: SingleChildScrollView(
@@ -189,25 +280,49 @@ class _DormManagerCheckHistoryViewState
           children: [
             _Banner(onBack: widget.onBack),
             SizedBox(height: ui(16)),
+            _FilterRow(
+              buildingOptions: _buildingOptions,
+              floorOptions: _floorOptions,
+              selectedBuilding: _selectedBuilding,
+              selectedFloor: _selectedFloor,
+              floorEnabled: _selectedBuilding.id.isNotEmpty && !_loadingFloors,
+              onBuildingChanged: (v) => unawaited(_onBuildingChanged(v)),
+              onFloorChanged: (v) => unawaited(_onFloorChanged(v)),
+            ),
+            SizedBox(height: ui(16)),
             _DateStripCard(
               days: _days,
               selectedIndex: _selectedDayIndex,
               dateText: _selectedDateText,
-              statText: '共 ${stats.total} 个寝室',
-              onTapDay: (i) => setState(() => _selectedDayIndex = i),
+              statText: '共 ${_rooms.length} 个寝室',
+              onTapDay: _onTapDay,
             ),
             SizedBox(height: ui(16)),
             _StatsRow(
-              total: stats.total,
-              normal: stats.normal,
-              exception: stats.exception,
-              leave: stats.leave,
+              beds: _stat.bedCount,
+              normal: _stat.normalCount,
+              lateReturn: _stat.lateCount,
+              absent: _stat.notCheckedCount,
             ),
             SizedBox(height: ui(16)),
-            if (filtered.isEmpty)
+            if (_loading)
+              Padding(
+                padding: EdgeInsets.symmetric(vertical: ui(40)),
+                child: const Center(child: AppLoadingIndicator()),
+              )
+            else if (_loadError != null)
+              _LoadErrorHint(
+                message: _loadError!,
+                onRetry: _reloadAll,
+              )
+            else if (_rooms.isEmpty)
               const _EmptyState()
             else
-              _HistoryList(rooms: filtered),
+              _HistoryList(
+                rooms: _rooms,
+                roomTitle: _roomTitle,
+                studentsOf: _studentsOf,
+              ),
           ],
         ),
       ),
@@ -232,12 +347,12 @@ class _Banner extends StatelessWidget {
       height: ui(62),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.bottomCenter,
-          end: Alignment.topCenter,
-          colors: [Colors.white, Color(0xFFF9EDFF)],
-        ),
         borderRadius: BorderRadius.circular(ui(16)),
+        image: DecorationImage(
+          image: AssetImage(AppAssets.xiaoquanHeaderBg),
+          fit: BoxFit.cover,
+          alignment: Alignment.centerRight,
+        ),
       ),
       child: Stack(
         children: [
@@ -280,20 +395,202 @@ class _Banner extends StatelessWidget {
                       height: 1.2,
                     ),
                   ),
-                  SizedBox(height: ui(2)),
-                  Text(
-                    '按日期回溯本人巡寝记录与每位学生当日状态；与年级闸机数据对接后，未打卡 / 晚归 / 请假免检的状态会自动同步到此页备查。',
-                    style: TextStyle(
-                      fontSize: ui(12),
-                      color: _kTextHint,
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w400,
-                      height: 1.4,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
                 ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FilterRow extends StatelessWidget {
+  const _FilterRow({
+    required this.buildingOptions,
+    required this.floorOptions,
+    required this.selectedBuilding,
+    required this.selectedFloor,
+    required this.floorEnabled,
+    required this.onBuildingChanged,
+    required this.onFloorChanged,
+  });
+
+  final List<DormitoryBuildingOption> buildingOptions;
+  final List<DormitoryFloorOption> floorOptions;
+  final DormitoryBuildingOption selectedBuilding;
+  final DormitoryFloorOption selectedFloor;
+  final bool floorEnabled;
+  final ValueChanged<DormitoryBuildingOption> onBuildingChanged;
+  final ValueChanged<DormitoryFloorOption> onFloorChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Row(
+      children: [
+        _DormitorySelectField<DormitoryBuildingOption>(
+          value: selectedBuilding,
+          items: buildingOptions,
+          itemLabel: (o) => o.label,
+          icon: Icons.apartment_outlined,
+          width: ui(220),
+          menuWidth: ui(280),
+          onChanged: onBuildingChanged,
+        ),
+        SizedBox(width: ui(12)),
+        _DormitorySelectField<DormitoryFloorOption>(
+          value: selectedFloor,
+          items: floorOptions,
+          itemLabel: (o) => o.label,
+          icon: Icons.layers_outlined,
+          width: ui(220),
+          menuWidth: ui(280),
+          enabled: floorEnabled,
+          onChanged: onFloorChanged,
+        ),
+      ],
+    );
+  }
+}
+
+class _DormitorySelectField<T> extends StatefulWidget {
+  const _DormitorySelectField({
+    required this.value,
+    required this.items,
+    required this.itemLabel,
+    required this.icon,
+    required this.width,
+    required this.menuWidth,
+    required this.onChanged,
+    this.enabled = true,
+  });
+
+  final T value;
+  final List<T> items;
+  final String Function(T) itemLabel;
+  final IconData icon;
+  final double width;
+  final double menuWidth;
+  final ValueChanged<T> onChanged;
+  final bool enabled;
+
+  @override
+  State<_DormitorySelectField<T>> createState() =>
+      _DormitorySelectFieldState<T>();
+}
+
+class _DormitorySelectFieldState<T> extends State<_DormitorySelectField<T>> {
+  final _fieldKey = GlobalKey();
+  bool _open = false;
+
+  Future<void> _openMenu() async {
+    if (!widget.enabled) return;
+    final fieldCtx = _fieldKey.currentContext;
+    if (fieldCtx == null) return;
+    setState(() => _open = true);
+    final selected = await showAppPopupSelector<T>(
+      anchorContext: fieldCtx,
+      items: widget.items,
+      value: widget.value,
+      itemLabel: widget.itemLabel,
+      width: widget.menuWidth,
+    );
+    if (!mounted) return;
+    setState(() => _open = false);
+    if (selected != null) widget.onChanged(selected);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return InkWell(
+      key: _fieldKey,
+      onTap: _openMenu,
+      borderRadius: BorderRadius.circular(ui(12)),
+      child: Container(
+        width: widget.width,
+        height: ui(44),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(ui(12)),
+          border: Border.all(color: _kBorderSoft, width: 1),
+        ),
+        padding: EdgeInsets.symmetric(horizontal: ui(16)),
+        child: Row(
+          children: [
+            Icon(
+              widget.icon,
+              size: ui(16),
+              color: const Color(0xFFC6C6C6),
+            ),
+            SizedBox(width: ui(10)),
+            Expanded(
+              child: Text(
+                widget.itemLabel(widget.value),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: ui(14),
+                  height: 1.2,
+                  color: _kTextDark,
+                  fontFamily: 'PingFang SC',
+                ),
+              ),
+            ),
+            AnimatedRotation(
+              turns: _open ? 0.5 : 0,
+              duration: const Duration(milliseconds: 160),
+              child: Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: ui(18),
+                color: const Color(0xFFC6C6C6),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LoadErrorHint extends StatelessWidget {
+  const _LoadErrorHint({required this.message, required this.onRetry});
+
+  final String message;
+  final Future<void> Function() onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(vertical: ui(32), horizontal: ui(16)),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(ui(16)),
+      ),
+      child: Column(
+        children: [
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: ui(13),
+              color: _kTextHint,
+              fontFamily: 'PingFang SC',
+            ),
+          ),
+          SizedBox(height: ui(12)),
+          InkWell(
+            onTap: () => unawaited(onRetry()),
+            child: Text(
+              '重试',
+              style: TextStyle(
+                fontSize: ui(13),
+                color: _kPurple,
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w500,
               ),
             ),
           ),
@@ -462,16 +759,16 @@ class _CalendarCell extends StatelessWidget {
 
 class _StatsRow extends StatelessWidget {
   const _StatsRow({
-    required this.total,
+    required this.beds,
     required this.normal,
-    required this.exception,
-    required this.leave,
+    required this.lateReturn,
+    required this.absent,
   });
 
-  final int total;
+  final int beds;
   final int normal;
-  final int exception;
-  final int leave;
+  final int lateReturn;
+  final int absent;
 
   @override
   Widget build(BuildContext context) {
@@ -480,8 +777,8 @@ class _StatsRow extends StatelessWidget {
       children: [
         Expanded(
           child: _StatCard(
-            label: '当日寝室',
-            value: total,
+            label: '在册床位',
+            value: beds,
             gradient: const LinearGradient(
               begin: Alignment.topRight,
               end: Alignment.bottomLeft,
@@ -494,7 +791,7 @@ class _StatsRow extends StatelessWidget {
         SizedBox(width: ui(12)),
         Expanded(
           child: _StatCard(
-            label: '正常打卡',
+            label: '正常口径',
             value: normal,
             gradient: const LinearGradient(
               begin: Alignment.topRight,
@@ -508,8 +805,8 @@ class _StatsRow extends StatelessWidget {
         SizedBox(width: ui(12)),
         Expanded(
           child: _StatCard(
-            label: '异常待跟进',
-            value: exception,
+            label: '晚归',
+            value: lateReturn,
             gradient: const LinearGradient(
               begin: Alignment.topRight,
               end: Alignment.bottomLeft,
@@ -522,12 +819,12 @@ class _StatsRow extends StatelessWidget {
         SizedBox(width: ui(12)),
         Expanded(
           child: _StatCard(
-            label: '请假免检',
-            value: leave,
+            label: '未打卡',
+            value: absent,
             gradient: const LinearGradient(
               begin: Alignment.topRight,
               end: Alignment.bottomLeft,
-              colors: [Color(0x249346FF), Color(0x00FFFFFF)],
+              colors: [Color(0x1CFF4646), Color(0x00FFFFFF)],
             ),
             iconColor: _kPurple,
             iconKind: _StatIconKind.alert,
@@ -637,9 +934,15 @@ class _StatCard extends StatelessWidget {
 // =============================================================================
 
 class _HistoryList extends StatelessWidget {
-  const _HistoryList({required this.rooms});
+  const _HistoryList({
+    required this.rooms,
+    required this.roomTitle,
+    required this.studentsOf,
+  });
 
-  final List<_HistoryRoom> rooms;
+  final List<DormitoryRoomCheck> rooms;
+  final String Function(DormitoryRoomCheck room) roomTitle;
+  final List<_HistoryStudent> Function(DormitoryRoomCheck room) studentsOf;
 
   @override
   Widget build(BuildContext context) {
@@ -658,7 +961,13 @@ class _HistoryList extends StatelessWidget {
           for (var i = 0; i < rooms.length; i++) ...[
             if (i != 0)
               const Divider(height: 1, thickness: 1, color: _kBorderSoft),
-            _HistoryListRow(room: rooms[i], zebra: i.isOdd),
+            _HistoryListRow(
+              title: roomTitle(rooms[i]),
+              session: rooms[i].session,
+              deadline: rooms[i].deadline,
+              students: studentsOf(rooms[i]),
+              zebra: i.isOdd,
+            ),
           ],
         ],
       ),
@@ -711,9 +1020,18 @@ class _HeaderText extends StatelessWidget {
 }
 
 class _HistoryListRow extends StatelessWidget {
-  const _HistoryListRow({required this.room, required this.zebra});
+  const _HistoryListRow({
+    required this.title,
+    required this.session,
+    required this.deadline,
+    required this.students,
+    required this.zebra,
+  });
 
-  final _HistoryRoom room;
+  final String title;
+  final String session;
+  final String deadline;
+  final List<_HistoryStudent> students;
   final bool zebra;
 
   @override
@@ -725,7 +1043,6 @@ class _HistoryListRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // 宿舍 + 床位提示
           SizedBox(
             width: ui(240),
             child: Column(
@@ -733,8 +1050,8 @@ class _HistoryListRow extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  room.dormName,
-                  maxLines: 1,
+                  title,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: ui(13),
@@ -746,7 +1063,7 @@ class _HistoryListRow extends StatelessWidget {
                 ),
                 SizedBox(height: ui(2)),
                 Text(
-                  '${room.students.length} 名在校学生',
+                  '${students.length} 名在校学生 · $session · $deadline',
                   style: TextStyle(
                     fontSize: ui(12),
                     color: _kTextHint,
@@ -758,13 +1075,12 @@ class _HistoryListRow extends StatelessWidget {
               ],
             ),
           ),
-          // 学生 chip Wrap
           Expanded(
             child: Wrap(
               spacing: ui(8),
               runSpacing: ui(8),
               children: [
-                for (final s in room.students) _StudentChip(student: s),
+                for (final s in students) _StudentChip(student: s),
               ],
             ),
           ),
@@ -893,123 +1209,4 @@ List<_CalendarDay> _buildDays(DateTime today) {
       dayLabel: d.day.toString().padLeft(2, '0'),
     );
   });
-}
-
-// =============================================================================
-// 演示数据：当日 50 个寝室（每室 4–6 名学生），过往几天少量记录便于翻看
-//
-// 状态分布大体接近真实情况：
-//   - 70% 正常打卡
-//   - 14% 迟到
-//   - 10% 未打卡
-//   - 6%  请假免检
-// 楼栋按男生 1–3 号楼、女生 1–3 号楼轮流分配，男生 5xx / 女生 6xx。
-// 学生姓名使用常见姓 + 名表生成，确定性可复现。
-// =============================================================================
-
-const List<String> _kSurnames = [
-  '王', '李', '张', '刘', '陈', '杨', '黄', '赵', '周', '吴',
-  '徐', '孙', '朱', '马', '胡', '郭', '林', '何', '高', '罗',
-  '沈', '韩', '唐', '冯', '邓', '曹', '彭', '曾', '萧', '蒋',
-];
-
-const List<String> _kGivenNamesMale = [
-  '俊杰', '浩然', '子轩', '一鸣', '泽宇', '昊然', '晨光', '梓豪', '梓睿', '宇航',
-  '思源', '志远', '哲瀚', '弘文', '伟祺', '建宏', '俊熙', '梓晨', '若飞', '景行',
-];
-
-const List<String> _kGivenNamesFemale = [
-  '雨萱', '思琪', '梓涵', '欣怡', '一诺', '可馨', '诗涵', '婉清', '若曦', '清歌',
-  '雅琪', '婷婷', '依依', '语彤', '念慈', '梦琪', '蕊汐', '雪萌', '昕悦', '佳琪',
-];
-
-List<_HistoryRoom> _demoRooms() {
-  String iso(DateTime d) {
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${d.year}-${two(d.month)}-${two(d.day)}';
-  }
-
-  final today = DateTime.now();
-  final t0 = iso(today);
-  final t1 = iso(today.subtract(const Duration(days: 1)));
-  final t2 = iso(today.subtract(const Duration(days: 2)));
-  final t3 = iso(today.subtract(const Duration(days: 3)));
-
-  const buildings = <String>[
-    '男生宿舍1号楼',
-    '男生宿舍2号楼',
-    '男生宿舍3号楼',
-    '女生宿舍1号楼',
-    '女生宿舍2号楼',
-    '女生宿舍3号楼',
-  ];
-
-  ({String name, bool isMale}) roomAt(int i) {
-    final building = buildings[i % buildings.length];
-    final isMale = i % buildings.length < 3;
-    final floor = isMale ? 5 : 6;
-    final no = (i ~/ buildings.length) + 1;
-    return (name: '$building ${floor * 100 + no + 9}', isMale: isMale);
-  }
-
-  _HistoryStatus statusAt(int seed) {
-    final m = seed % 100;
-    if (m < 70) return _HistoryStatus.normal;
-    if (m < 84) return _HistoryStatus.late_;
-    if (m < 94) return _HistoryStatus.absent;
-    return _HistoryStatus.leave;
-  }
-
-  String studentName(int seed, bool isMale) {
-    final s = _kSurnames[seed % _kSurnames.length];
-    final pool = isMale ? _kGivenNamesMale : _kGivenNamesFemale;
-    final g = pool[(seed * 7 + 3) % pool.length];
-    return '$s$g';
-  }
-
-  List<_HistoryStudent> studentsFor(int roomIdx, int seedOffset, bool isMale) {
-    // 每间 4–6 人，按 roomIdx 决定。
-    final count = 4 + (roomIdx % 3); // 4,5,6 循环
-    final used = <String>{};
-    final list = <_HistoryStudent>[];
-    var k = 0;
-    while (list.length < count) {
-      final seed = seedOffset + roomIdx * 23 + k * 7;
-      var name = studentName(seed, isMale);
-      // 同寝室避免同名重复
-      while (used.contains(name)) {
-        k++;
-        name = studentName(seedOffset + roomIdx * 23 + k * 7, isMale);
-      }
-      used.add(name);
-      list.add(_HistoryStudent(
-        name: name,
-        status: statusAt(seed + 13),
-      ));
-      k++;
-    }
-    return list;
-  }
-
-  List<_HistoryRoom> roomsForDate(
-    String date,
-    int count, {
-    int seedOffset = 0,
-  }) {
-    return List<_HistoryRoom>.generate(count, (i) {
-      final r = roomAt(i);
-      return _HistoryRoom(
-        dormName: r.name,
-        date: date,
-        students: studentsFor(i, seedOffset, r.isMale),
-      );
-    });
-  }
-
-  return [
-    ...roomsForDate(t0, 50, seedOffset: 0),
-    ...roomsForDate(t1, 30, seedOffset: 101),
-    ...roomsForDate(t2, 18, seedOffset: 211),
-    ...roomsForDate(t3, 12, seedOffset: 307),
-  ];
 }

@@ -79,6 +79,7 @@ abstract final class OsmdScoreShell {
       host.osmd.load(xml).then(function(){
         try {
           host.osmd.render();
+          applyCursorStyle(host.osmd);
           host.osmd.cursor.show();
           host.osmd.cursor.reset();
           host.currentIndex = 0;
@@ -115,6 +116,24 @@ abstract final class OsmdScoreShell {
     return decodeURIComponent(encoded.join(''));
   }
 
+  function applyCursorStyle(osmd) {
+    if (!osmd) return;
+    var cursorHighlight = 'rgba(135, 65, 255, 0.2)';
+    try {
+      osmd.EngravingRules.DefaultColorCursor = cursorHighlight;
+    } catch (e) {}
+    try {
+      osmd.setOptions({
+        cursorsOptions: [{
+          type: 0,
+          color: cursorHighlight,
+          alpha: 1,
+          follow: true,
+        }],
+      });
+    } catch (e) {}
+  }
+
   window.__SightSingingOsmd = {
     create: function(divId) {
       if (hosts[divId]) return true;
@@ -131,6 +150,7 @@ abstract final class OsmdScoreShell {
           drawPartNames: false,
           drawingParameters: 'compacttight',
         });
+        applyCursorStyle(osmd);
         hosts[divId] = {
           osmd: osmd,
           onsets: [],

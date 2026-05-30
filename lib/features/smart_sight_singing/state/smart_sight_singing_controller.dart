@@ -17,8 +17,10 @@ import '../audio/pitch_voice_gate.dart';
 import '../audio/realtime_pitch_capture.dart';
 import '../config/smart_sight_singing_config.dart';
 import '../config/smart_sight_singing_tuning.dart';
+import '../../music_play/data/music_play_repository.dart';
 import '../data/midi_file_picker.dart';
 import '../data/music_xml_file_picker.dart';
+import '../data/textbook_resource.dart';
 import 'sight_singing_platform.dart';
 import 'smart_sight_singing_state.dart';
 
@@ -27,14 +29,17 @@ final smartSightSingingControllerProvider =
       SmartSightSingingController,
       SightSingingState
     >((ref) {
-      final ctrl = SmartSightSingingController();
+      final ctrl = SmartSightSingingController(
+        musicPlayRepository: ref.watch(musicPlayRepositoryProvider),
+      );
       ref.onDispose(ctrl.shutdown);
       return ctrl;
     });
 
 class SmartSightSingingController extends StateNotifier<SightSingingState> {
-  SmartSightSingingController()
-    : super(
+  SmartSightSingingController({MusicPlayRepository? musicPlayRepository})
+    : _musicPlayRepository = musicPlayRepository,
+      super(
         SightSingingState(
           visualOnlyMode: SightSingingPlatform.defaultsToVisualOnlyMode,
         ),
@@ -80,6 +85,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
   Timer? _previewTimer;
   var _isPreviewSession = false;
   bool _shuttingDown = false;
+  final MusicPlayRepository? _musicPlayRepository;
 
   static String _formatDebugError(
     String headline,
@@ -196,6 +202,73 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     }
   }
 
+  /// 从教材详情加载 MIDI / MusicXML 资源（列表页点选后进入）。
+  Future<void> loadFromTextbook(int id) async {
+    if (_blocksImport()) return;
+    final repo = _musicPlayRepository;
+    if (repo == null) {
+      state = state.copyWith(errorMessage: '教材服务未就绪，请稍后重试。');
+      return;
+    }
+
+    state = state.copyWith(
+      stage: SightSingingStage.analyzing,
+      analyzingProgress: 0.02,
+      errorMessage: null,
+      textbookId: id,
+    );
+
+    try {
+      final resp = await repo.getDetail(id);
+      if (!mounted) return;
+      if (!resp.isSuccess || resp.data is! Map) {
+        state = state.copyWith(
+          stage: SightSingingStage.analyzing,
+          analyzingProgress: 0,
+          errorMessage: resp.displayMsg.isNotEmpty
+              ? resp.displayMsg
+              : '教材详情加载失败',
+        );
+        return;
+      }
+
+      final map = Map<String, dynamic>.from(resp.data as Map);
+      final url = extractTextbookResourceUrl(map);
+      if (url.isEmpty || !isSupportedSightSingingResource(url)) {
+        state = state.copyWith(
+          stage: SightSingingStage.analyzing,
+          analyzingProgress: 0,
+          errorMessage: '该教材未配置可跟唱的 MIDI / MusicXML 资源',
+        );
+        return;
+      }
+
+      final favorite =
+          map['isFavorite'] == true ||
+          map['isFavorite']?.toString() == '1' ||
+          map['favorite'] == true ||
+          map['favorite']?.toString() == '1';
+      final shortText1 = map['shortText1']?.toString().trim() ?? '';
+      state = state.copyWith(
+        favorite: favorite,
+        shortText1: shortText1.isEmpty ? null : shortText1,
+      );
+
+      final title = map['title']?.toString();
+      await _loadOnlineResource(
+        url: url,
+        displayName: resourceDisplayName(url: url, title: title, id: id),
+      );
+    } catch (e, stack) {
+      if (!mounted) return;
+      state = state.copyWith(
+        stage: SightSingingStage.analyzing,
+        analyzingProgress: 0,
+        errorMessage: _formatDebugError('教材资源加载失败', e, stack),
+      );
+    }
+  }
+
   /// 下载并解析在线 MIDI 地址。
   Future<void> analyzeOnlineAudio(String rawUrl) async {
     if (_blocksImport()) return;
@@ -218,6 +291,13 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       return;
     }
 
+    await _loadOnlineResource(url: url, displayName: displayName);
+  }
+
+  Future<void> _loadOnlineResource({
+    required String url,
+    required String displayName,
+  }) async {
     state = state.copyWith(
       stage: SightSingingStage.analyzing,
       audioPath: url,
@@ -249,29 +329,50 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       ).get<List<int>>(url);
       final data = response.data;
       if (data == null || data.isEmpty) {
-        throw MidiSightSingingException('在线 MIDI 为空，请换一个地址试试。');
+        throw MidiSightSingingException('在线资源为空，请换一个地址试试。');
       }
       if (data.length > SmartSightSingingImportConfig.maxOnlineMidiBytes) {
-        throw MidiSightSingingException('在线 MIDI 过大，请使用 8MB 以内的文件。');
+        throw MidiSightSingingException('在线文件过大，请使用 8MB 以内的文件。');
+      }
+
+      final ext = inferSightSingingResourceExtension(
+        url,
+        displayName: displayName,
+      );
+      final bytes = Uint8List.fromList(data);
+      if (ext == 'musicxml' || ext == 'xml' || ext == 'mxl') {
+        await _prepareFromMusicXmlBytes(
+          bytes: bytes,
+          displayName: displayName,
+          sourceLabel: url,
+        );
+        return;
       }
 
       await _prepareFromMidiBytes(
-        bytes: Uint8List.fromList(data),
+        bytes: bytes,
         displayName: displayName,
         sourceLabel: url,
       );
     } on MidiSightSingingException catch (e, stack) {
       if (!mounted) return;
       state = state.copyWith(
-        stage: SightSingingStage.idle,
-        errorMessage: _formatDebugError('在线 MIDI 解析失败', e.message, stack),
+        stage: SightSingingStage.analyzing,
+        errorMessage: _formatDebugError('在线资源解析失败', e.message, stack),
+        analyzingProgress: 0,
+      );
+    } on MusicXmlSightSingingException catch (e, stack) {
+      if (!mounted) return;
+      state = state.copyWith(
+        stage: SightSingingStage.analyzing,
+        errorMessage: _formatDebugError('在线 MusicXML 解析失败', e.message, stack),
         analyzingProgress: 0,
       );
     } catch (e, stack) {
       if (!mounted) return;
       state = state.copyWith(
-        stage: SightSingingStage.idle,
-        errorMessage: _formatDebugError('在线 MIDI 解析失败', e, stack),
+        stage: SightSingingStage.analyzing,
+        errorMessage: _formatDebugError('在线资源解析失败', e, stack),
         analyzingProgress: 0,
       );
     }
@@ -326,6 +427,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       trackSummaries: preview.summaries,
       selectedTrackIndex: preview.suggestedPartIndex,
     );
+    await confirmSelectedTrack();
   }
 
   Future<void> _prepareFromMidiBytes({
@@ -371,6 +473,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       trackSummaries: preview.summaries,
       selectedTrackIndex: preview.suggestedTrackIndex,
     );
+    await confirmSelectedTrack();
   }
 
   void setSelectedTrack(int trackIndex) {
@@ -800,6 +903,30 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
         currentUserAmplitude: 0,
         completedNoteScores: const <KtvNoteScore>[],
       );
+    }
+  }
+
+  /// 收藏 / 取消收藏当前教材（智能视唱 type=11）。乐观更新 + 失败回滚。
+  Future<void> toggleFavorite() async {
+    final repo = _musicPlayRepository;
+    final id = state.textbookId;
+    if (repo == null || id == null) return;
+
+    final next = !state.favorite;
+    state = state.copyWith(favorite: next);
+    try {
+      final resp = await repo.setFavorite(
+        targetId: id,
+        type: 11,
+        favorite: next,
+      );
+      if (!mounted) return;
+      if (!resp.isSuccess) {
+        state = state.copyWith(favorite: !next);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      state = state.copyWith(favorite: !next);
     }
   }
 

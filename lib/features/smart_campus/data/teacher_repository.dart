@@ -13,7 +13,11 @@ import '../../../core/providers/app_providers.dart';
 ///
 /// 与教师视图相关的几个核心接口：
 ///   - [classList]                       我教的班级列表（可按 type 过滤）
+///   - [classroomList]                   教室下拉列表
 ///   - [courseList]                      我的课表（按 begin/end 日期过滤）
+///   - [courseTeacherNoticeList]         任课老师首页通知列表
+///   - [headTeacherNoticeList]           班主任首页通知列表
+///   - [noticeDetail]                    校级通知详情
 ///   - [schoolSmallCourseApplySave]      提交"申请小课"
 ///   - [schoolSmallCourseApplyList]      我的小课申请列表
 ///   - [schoolSmallCourseApplyDetail]    我的小课申请详情
@@ -67,6 +71,13 @@ class TeacherRepository {
     if (campusId != null) body['campusId'] = campusId;
     if (keyword != null && keyword.isNotEmpty) body['keyword'] = keyword;
     return client.post('$_base/classList', data: body);
+  }
+
+  /// 任课老师端教室下拉列表。
+  Future<ApiResponse> classroomList({int? campusId}) {
+    final body = <String, dynamic>{};
+    if (campusId != null) body['campusId'] = campusId;
+    return client.post('$_base/classroomList', data: body);
   }
 
   /// 任课老师"我的课表"。后端会基于 token 自动定位到当前老师的全部排课。
@@ -170,6 +181,93 @@ class TeacherRepository {
       data: <String, dynamic>{
         'classId': classId,
         'title': title,
+        'content': content,
+      },
+    );
+  }
+
+  // ============== 校级通知（任课老师端） ==============
+
+  /// 任课老师首页通知列表。
+  Future<ApiResponse> courseTeacherNoticeList({
+    int current = 1,
+    int size = 20,
+  }) {
+    return client.post(
+      '$_base/courseTeacherNoticeList',
+      data: <String, dynamic>{'current': current, 'size': size},
+    );
+  }
+
+  /// 班主任首页通知列表。
+  Future<ApiResponse> headTeacherNoticeList({
+    int current = 1,
+    int size = 20,
+  }) {
+    return client.post(
+      '$_base/headTeacherNoticeList',
+      data: <String, dynamic>{'current': current, 'size': size},
+    );
+  }
+
+  /// 校级通知详情。`id` 为雪花 long 字符串。
+  Future<ApiResponse> noticeDetail({required String id}) {
+    return client.post(
+      '$_base/noticeDetail',
+      data: <String, dynamic>{'id': readSnowflakeId(id) ?? id},
+    );
+  }
+
+  // ============== 家校沟通 ==============
+
+  /// 家校沟通统计。
+  Future<ApiResponse> chatStat() {
+    return client.post('$_base/chatStat');
+  }
+
+  /// 家校沟通会话列表。
+  Future<ApiResponse> chatConversationList({
+    int current = 1,
+    int size = 50,
+    String tab = 'all',
+    String keyword = '',
+  }) {
+    final body = <String, dynamic>{
+      'current': current,
+      'size': size,
+      'tab': tab,
+    };
+    if (keyword.trim().isNotEmpty) body['keyword'] = keyword.trim();
+    return client.post('$_base/chatConversationList', data: body);
+  }
+
+  /// 家校沟通消息列表。
+  Future<ApiResponse> chatMessageList({
+    required String conversationId,
+    int current = 1,
+    int size = 100,
+  }) {
+    return client.post(
+      '$_base/chatMessageList',
+      data: <String, dynamic>{
+        'conversationId': readSnowflakeId(conversationId) ?? conversationId,
+        'current': current,
+        'size': size,
+      },
+    );
+  }
+
+  /// 班主任发送家校沟通消息。
+  Future<ApiResponse> chatSend({
+    required String studentId,
+    required String parentId,
+    required String content,
+  }) {
+    return client.post(
+      '$_base/chatSend',
+      data: <String, dynamic>{
+        'studentId': readSnowflakeId(studentId) ?? studentId,
+        'parentId': readSnowflakeId(parentId) ?? parentId,
         'content': content,
       },
     );

@@ -49,7 +49,6 @@ import '../../../core/widgets/popup_selector_field.dart';
 import '../../school/data/school_repository.dart';
 import '../../shell/state/shell_controller.dart';
 import '../../shell/ui/shell_layout.dart';
-import '../data/admin_repository.dart';
 import '../data/teacher_repository.dart';
 import 'widgets/schedule_idle_slot.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -374,18 +373,17 @@ class _TeacherLessonScheduleViewState
   /// 拉教室 / 科目字典 —— 仅给「我的小课申请」幽灵卡补齐展示字段，与课表
   /// 主流程解耦：失败 / 慢都不会阻断 schedule 渲染。
   ///
-  /// - 教室走 admin `classroomList`（教室是全校公共资源，与身份无关），
-  ///   一次拿全量；
+  /// - 教室走 teacher `classroomList`，一次拿全量；
   /// - 科目走 user `subjectList(classId)`，必须按班级查 —— 接口不传 classId
   ///   后端实测不返回全量。所以这里对 `_classNameById` 里的每个班级并行
   ///   发 N 个请求，结果合并成一张大字典。教师通常只教若干班级 (<20)，
   ///   单次开页面的成本可控。
   Future<void> _loadDirectories() async {
-    final adminRepo = ref.read(adminRepositoryProvider);
+    final teacherRepo = ref.read(teacherRepositoryProvider);
     final schoolRepo = ref.read(schoolRepositoryProvider);
 
     final classIds = _classNameById.keys.toList();
-    final classroomFuture = adminRepo.classroomList();
+    final classroomFuture = teacherRepo.classroomList();
     final subjectFutures = <Future<ApiResponse>>[
       for (final cid in classIds) schoolRepo.subjectList(classId: cid),
     ];
@@ -2963,7 +2961,7 @@ class _ApplyRecordCard extends StatelessWidget {
 //   1. 课程时间：只读 #F5F6FA 灰底 48 高
 //   2. 班级：调 teacher.classList(type: 1)，String id 下拉 ——
 //          仅展示「我的小班」（type=1），避免把小课申请挂到大班上。
-//   3. 教室：调 admin.classroomList，int id 下拉
+//   3. 教室：调 teacher.classroomList，int id 下拉
 //   4. 科目：调 user.subjectList(classId)，int id 下拉
 //   5. 颜色：13 色色板 + 当前 hex chip
 //   6. 是否复用：不复用 / 本学期所有 / 后续 4 周 / 后续 8 周
@@ -3113,13 +3111,11 @@ class _ApplySmallLessonDrawerState
   }
 
   Future<void> _loadOptions() async {
-    // 班级走 teacher.classList(type: 1) → 仅返回我担任教师的小班；
-    // 教室仍走 admin.classroomList，因为教室是全校公共资源不区分身份。
+    // 班级 / 教室均走 teacher 端接口。
     final teacherRepo = ref.read(teacherRepositoryProvider);
-    final adminRepo = ref.read(adminRepositoryProvider);
     final results = await Future.wait([
       teacherRepo.classList(type: 1),
-      adminRepo.classroomList(),
+      teacherRepo.classroomList(),
     ]);
     if (!mounted) return;
     setState(() {

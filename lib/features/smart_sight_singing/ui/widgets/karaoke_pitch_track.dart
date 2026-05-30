@@ -74,12 +74,16 @@ class _KaraokePainter extends CustomPainter {
   static const _bg = Color(0xFFF5F6F8);
   static const _grid = Color(0xFFD8DCE3);
   static const _label = Color(0xFF788698);
-  static const _refFill = Color(0xFFB8BEC8);
-  static const _refStroke = Color(0xFF6B7280);
-  static const _nowLine = Color(0xFF1A1A1A);
+  static const _accent = Color(0xFF8741FF);
+  static const _refFill = Color(0x268741FF);
+  static const _refStroke = _accent;
+  static const _nowLine = _accent;
   static const _userOn = Color(0xFF4A5568);
   static const _userNear = Color(0xFF9CA3AF);
   static const _userOff = Color(0xFFC4C9D1);
+
+  /// 参考音符条高度（设计稿 20px）。
+  static const _noteBarHeight = 20.0;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -163,8 +167,8 @@ class _KaraokePainter extends CustomPainter {
         final x1 = xFromTime(note.endMs);
         final y = yFromMidi(note.midi);
         final rect = RRect.fromRectAndRadius(
-          Rect.fromLTRB(x0, y - 5, x1, y + 5),
-          const Radius.circular(4),
+          Rect.fromLTRB(x0, y - _noteBarHeight / 2, x1, y + _noteBarHeight / 2),
+          const Radius.circular(_noteBarHeight / 2),
         );
         canvas.drawRRect(rect, refPaint);
         canvas.drawRRect(rect, refOutline);
@@ -190,8 +194,8 @@ class _KaraokePainter extends CustomPainter {
         final x1 = xFromTime(f.timeMs + stepMs ~/ 2);
         final y = yFromMidi(f.midi);
         final rect = RRect.fromRectAndRadius(
-          Rect.fromLTRB(x0, y - 3, x1, y + 3),
-          const Radius.circular(3),
+          Rect.fromLTRB(x0, y - _noteBarHeight / 2, x1, y + _noteBarHeight / 2),
+          const Radius.circular(_noteBarHeight / 2),
         );
         canvas.drawRRect(rect, refPaint);
         canvas.drawRRect(rect, refOutline);
@@ -221,24 +225,14 @@ class _KaraokePainter extends CustomPainter {
     }
 
     if (currentUserMidi >= 0) {
+      // 唱得标准时（与参考音同八度且零偏差），displayMidiAt 会把用户音高
+      // 折叠到参考音本身，y 即等于参考矩形中线 → 气泡上下居中。
       final y = yFromMidi(displayMidiAt(currentUserMidi, playbackMs));
-      final ref = track.sampleAt(playbackMs);
-      final cents = ref == null
-          ? double.nan
-          : PitchUtils.octaveNormalizedCents(currentUserMidi, ref.midi);
-      final on = !cents.isNaN && cents.abs() < 45;
-      final color = on ? _userOn : _userNear;
-      canvas.drawCircle(
-        Offset(centerX, y),
-        14,
-        Paint()..color = color.withValues(alpha: 0.12),
-      );
       canvas.drawCircle(
         Offset(centerX, y),
         7,
-        Paint()..color = color.withValues(alpha: 0.35),
+        Paint()..color = _accent.withValues(alpha: 0.8),
       );
-      canvas.drawCircle(Offset(centerX, y), 4, Paint()..color = color);
     } else if (currentUserAmplitude >
         SmartSightSingingViewConfig.micActivityIndicatorMinAmplitude) {
       // 有响度但未识别音高：在 Now 线底部显示麦克风活动指示。
@@ -261,13 +255,37 @@ class _KaraokePainter extends CustomPainter {
     }
 
     final nowPaint = Paint()
-      ..color = _nowLine
-      ..strokeWidth = 1.5;
+      ..color = _nowLine.withValues(alpha: 0.8)
+      ..strokeWidth = 4
+      ..strokeCap = StrokeCap.round;
     canvas.drawLine(
       Offset(centerX, 6),
       Offset(centerX, size.height - 6),
       nowPaint,
     );
+
+    _drawNowGlow(canvas, centerX, _glowCenterY);
+  }
+
+  /// 紫色竖线顶部的扩散圆：由外到内 5 层同心圆，半径与透明度对齐设计稿
+  /// （34/28.09/22.17/16.26/10.35 直径，alpha 0.2/0.3/0.5/0.7/1.0）。
+  static const _glowCenterY = 48.0;
+
+  void _drawNowGlow(Canvas canvas, double cx, double cy) {
+    const layers = <(double, double)>[
+      (17.0, 0.20),
+      (14.045, 0.30),
+      (11.085, 0.50),
+      (8.13, 0.70),
+      (5.175, 1.0),
+    ];
+    for (final (radius, alpha) in layers) {
+      canvas.drawCircle(
+        Offset(cx, cy),
+        radius,
+        Paint()..color = _accent.withValues(alpha: alpha),
+      );
+    }
   }
 
   @override

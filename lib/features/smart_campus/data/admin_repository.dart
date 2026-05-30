@@ -509,4 +509,40 @@ class AdminRepository {
       },
     );
   }
+
+  // ============== 通知管理 ==============
+
+  /// 通知管理列表。`status`：0=草稿 1=已发布 2=定时中 3=已撤回。
+  Future<ApiResponse> noticeManageList({
+    int current = 1,
+    int size = 200,
+    int? status,
+    String? type,
+  }) {
+    final body = <String, dynamic>{'current': current, 'size': size};
+    if (status != null) body['status'] = status;
+    if (type != null && type.isNotEmpty) body['type'] = type;
+    return client.post('$_base/noticeManageList', data: body);
+  }
+
+  /// 发布 / 保存通知（新建或编辑时传 `id`）。
+  Future<ApiResponse> noticeSave(Map<String, dynamic> body) {
+    return client.post('$_base/noticeSave', data: body);
+  }
+
+  /// 通知详情。`id` 为雪花 long 字符串。
+  Future<ApiResponse> noticeDetail({required String id}) {
+    return client.post(
+      '$_base/noticeDetail',
+      data: <String, dynamic>{'id': readSnowflakeId(id) ?? id},
+    );
+  }
+
+  /// 删除通知。
+  Future<ApiResponse> noticeDelete({required String id}) {
+    return client.post(
+      '$_base/noticeDelete',
+      data: <String, dynamic>{'id': readSnowflakeId(id) ?? id},
+    );
+  }
 }

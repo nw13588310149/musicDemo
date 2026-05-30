@@ -221,7 +221,6 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             icon: Icons.forum_rounded,
             background: _pinkSoft,
             foreground: _pink,
-            badge: 10,
             imagePath: 'assets/images/schoolA/6.png',
           ),
           SmartCampusQuickActionData(
@@ -376,7 +375,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
           SmartCampusStatCardData(label: '今日授课', value: '6'),
           SmartCampusStatCardData(label: '待批改', value: '6'),
           SmartCampusStatCardData(label: '待签课', value: '86.5'),
-          SmartCampusStatCardData(label: '未读消息', value: '4', highlight: true),
+          SmartCampusStatCardData(label: '待办事项', value: '0'),
           SmartCampusStatCardData(label: '本周课时', value: '周五'),
           SmartCampusStatCardData(
             label: '下一节',
@@ -432,7 +431,6 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             icon: Icons.forum_rounded,
             background: _purpleSoft,
             foreground: _purple,
-            badge: 10,
             imagePath: 'assets/images/schoolA/6.png',
           ),
           SmartCampusQuickActionData(
@@ -617,7 +615,6 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             icon: Icons.forum_rounded,
             background: _purpleSoft,
             foreground: _purple,
-            badge: 10,
             imagePath: 'assets/images/schoolA/6.png',
           ),
           SmartCampusQuickActionData(
@@ -784,7 +781,6 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             icon: Icons.forum_rounded,
             background: _purpleSoft,
             foreground: _purple,
-            badge: 10,
           ),
           SmartCampusQuickActionData(
             label: '校长信箱',
@@ -952,7 +948,6 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             icon: Icons.forum_rounded,
             background: _purpleSoft,
             foreground: _purple,
-            badge: 10,
           ),
           SmartCampusQuickActionData(
             label: '校长信箱',

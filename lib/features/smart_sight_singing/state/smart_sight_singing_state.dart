@@ -90,6 +90,9 @@ class SightSingingState {
     this.lastPlaybackMidi = -1,
     this.lastCents = double.nan,
     this.completedNoteScores = const <KtvNoteScore>[],
+    this.textbookId,
+    this.favorite = false,
+    this.shortText1,
   });
 
   final SightSingingStage stage;
@@ -177,6 +180,15 @@ class SightSingingState {
   /// 演唱结束后的逐音详情（finished 阶段展示在底部）。
   final List<KtvNoteScore> completedNoteScores;
 
+  /// 当前教材 id（用于收藏接口）。
+  final int? textbookId;
+
+  /// 是否已收藏。
+  final bool favorite;
+
+  /// 教材详情 `shortText1`，播放条副标题。
+  final String? shortText1;
+
   bool get hasTrack => track != null && !(track!.isEmpty);
 
   bool get isBusy =>
@@ -224,6 +236,9 @@ class SightSingingState {
     double? lastPlaybackMidi,
     double? lastCents,
     List<KtvNoteScore>? completedNoteScores,
+    Object? textbookId = _sentinel,
+    bool? favorite,
+    Object? shortText1 = _sentinel,
   }) {
     return SightSingingState(
       stage: stage ?? this.stage,
@@ -271,6 +286,13 @@ class SightSingingState {
       lastPlaybackMidi: lastPlaybackMidi ?? this.lastPlaybackMidi,
       lastCents: lastCents ?? this.lastCents,
       completedNoteScores: completedNoteScores ?? this.completedNoteScores,
+      textbookId: identical(textbookId, _sentinel)
+          ? this.textbookId
+          : textbookId as int?,
+      favorite: favorite ?? this.favorite,
+      shortText1: identical(shortText1, _sentinel)
+          ? this.shortText1
+          : shortText1 as String?,
     );
   }
 }

@@ -151,6 +151,14 @@ StudentLeaveStepStatus _headTeacherStepFromStatus(int status) {
   };
 }
 
+/// API 提交 / 展示用时间格式：`yyyy-MM-dd HH:mm:ss`
+String formatStudentLeaveDateTime(DateTime d) {
+  final local = d.toLocal();
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${local.year}-${two(local.month)}-${two(local.day)} '
+      '${two(local.hour)}:${two(local.minute)}:${two(local.second)}';
+}
+
 List<StudentLeaveRecord> parseStudentLeaveList(dynamic raw) {
   final rows = _extractRecordMaps(raw);
   final parsed = <StudentLeaveRecord>[];
@@ -160,6 +168,30 @@ List<StudentLeaveRecord> parseStudentLeaveList(dynamic raw) {
     parsed.add(StudentLeaveRecord.fromJson(m));
   }
   return parsed;
+}
+
+StudentLeaveRecord? parseStudentLeaveDetail(dynamic raw) {
+  if (raw is Map) {
+    final map = Map<String, dynamic>.from(raw);
+    if (map['data'] is Map) {
+      return StudentLeaveRecord.fromJson(
+        Map<String, dynamic>.from(map['data'] as Map),
+      );
+    }
+    if (map.containsKey('id')) {
+      return StudentLeaveRecord.fromJson(map);
+    }
+  }
+  return null;
+}
+
+/// UI 请假类型 → API `type`：0 病假 / 1 事假
+int studentLeaveTypeToApi(String typeLabel) {
+  return switch (typeLabel) {
+    '病假' => 0,
+    '事假' => 1,
+    _ => 1,
+  };
 }
 
 int? parseStudentLeaveTotal(dynamic raw) {
@@ -186,18 +218,19 @@ List<Map<String, dynamic>> _extractRecordMaps(dynamic raw) {
     ];
   }
   if (raw is Map) {
-    final m = raw.cast<String, dynamic>();
-    if (m['records'] is List) {
-      return [
-        for (final item in m['records'] as List)
-          if (item is Map) Map<String, dynamic>.from(item),
-      ];
+    final m = Map<dynamic, dynamic>.from(raw);
+    for (final key in ['records', 'list', 'rows']) {
+      final v = m[key];
+      if (v is List) {
+        return [
+          for (final item in v)
+            if (item is Map) Map<String, dynamic>.from(item),
+        ];
+      }
     }
-    if (m['data'] is Map) {
-      return _extractRecordMaps(m['data']);
-    }
-    if (m['data'] is List) {
-      return _extractRecordMaps(m['data']);
+    final nested = m['data'];
+    if (nested != null) {
+      return _extractRecordMaps(nested);
     }
   }
   return const [];
@@ -239,5 +272,5 @@ String _formatDateTime(dynamic raw) {
   final local = dt.toLocal();
   String two(int n) => n.toString().padLeft(2, '0');
   return '${local.year}-${two(local.month)}-${two(local.day)} '
-      '${two(local.hour)}:${two(local.minute)}';
+      '${two(local.hour)}:${two(local.minute)}:${two(local.second)}';
 }

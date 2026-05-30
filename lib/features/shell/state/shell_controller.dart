@@ -415,10 +415,10 @@ class ShellController extends StateNotifier<ShellState> {
     return _vipExemptRoutes.contains(route);
   }
 
-  void _syncCampusBadge(int unreadCount) {
+  void _syncCampusBadge(int _) {
     final updated = state.navItems.map((item) {
       if (item.route == RoutePaths.smartCampus) {
-        return item.copyWith(badge: unreadCount);
+        return item.copyWith(badge: 0);
       }
       return item;
     }).toList();

@@ -5,13 +5,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_response.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/scaled_dialog.dart';
 import '../../school/data/school_repository.dart';
 import '../../shell/state/shell_state.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/smart_campus_dashboard_data.dart';
 import '../data/student_repository.dart';
+import '../data/teacher_notice_data.dart';
 import '../data/teacher_repository.dart';
 import '../state/smart_campus_state.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'widgets/role_switcher_buttons.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
@@ -862,7 +865,7 @@ class _TeacherActionTile extends StatelessWidget {
             clipBehavior: Clip.none,
             children: [
               iconBox,
-              if (item.badge > 0)
+              if (item.badge > 0 && item.label != '群聊')
                 Positioned(
                   right: ui(-10),
                   top: ui(-4),
@@ -1020,13 +1023,18 @@ class _TeacherSidebar extends StatelessWidget {
             SizedBox(height: ui(12)),
             if (fillHeight)
               Expanded(
-                child: _TeacherNoticeList(
-                  notices: data.notices,
+                child: _TeacherNoticePanel(
+                  role: selectedTab ?? data.role,
+                  fallbackNotices: data.notices,
                   scrollable: true,
                 ),
               )
             else
-              _TeacherNoticeList(notices: data.notices, scrollable: false),
+              _TeacherNoticePanel(
+                role: selectedTab ?? data.role,
+                fallbackNotices: data.notices,
+                scrollable: false,
+              ),
             SizedBox(height: ui(16)),
           ],
         ),
@@ -1132,7 +1140,7 @@ class _TeacherProfileBlock extends StatelessWidget {
                 vertical: ui(2),
               ),
               decoration: BoxDecoration(
-                color: const Color(0xFFFFC13C),
+                color: const Color(0xFFE4FAF5),
                 borderRadius: BorderRadius.circular(ui(10)),
                 border: Border.all(color: Colors.white, width: 1),
               ),
@@ -1431,8 +1439,136 @@ class _TeacherRoleTabButton extends StatelessWidget {
   }
 }
 
-class _TeacherNoticeList extends StatelessWidget {
-  const _TeacherNoticeList({required this.notices, required this.scrollable});
+class _TeacherNoticePanel extends ConsumerStatefulWidget {
+  const _TeacherNoticePanel({
+    required this.role,
+    required this.fallbackNotices,
+    required this.scrollable,
+  });
+
+  final SmartCampusRole role;
+  final List<SmartCampusNoticeData> fallbackNotices;
+  final bool scrollable;
+
+  @override
+  ConsumerState<_TeacherNoticePanel> createState() =>
+      _TeacherNoticePanelState();
+}
+
+class _TeacherNoticePanelState extends ConsumerState<_TeacherNoticePanel> {
+  List<TeacherNoticeListItem> _notices = const [];
+  bool _loading = false;
+
+  bool get _usesNoticeApi =>
+      widget.role == SmartCampusRole.teacher ||
+      widget.role == SmartCampusRole.headTeacher ||
+      widget.role == SmartCampusRole.student;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_usesNoticeApi) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadNotices());
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _TeacherNoticePanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.role != widget.role && _usesNoticeApi) {
+      _loadNotices();
+    }
+  }
+
+  Future<void> _loadNotices() async {
+    if (!_usesNoticeApi) return;
+    setState(() => _loading = true);
+    try {
+      final ApiResponse resp;
+      if (widget.role == SmartCampusRole.student) {
+        resp = await ref.read(studentRepositoryProvider).noticeList(size: 20);
+      } else {
+        final repo = ref.read(teacherRepositoryProvider);
+        resp = widget.role == SmartCampusRole.headTeacher
+            ? await repo.headTeacherNoticeList(size: 20)
+            : await repo.courseTeacherNoticeList(size: 20);
+      }
+      if (!mounted) return;
+      if (!resp.isSuccess) {
+        setState(() {
+          _notices = const [];
+          _loading = false;
+        });
+        return;
+      }
+      setState(() {
+        _notices = parseTeacherNoticeList(resp.data);
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _notices = const [];
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _openNoticeDetail(TeacherNoticeListItem item) async {
+    final ApiResponse resp;
+    if (widget.role == SmartCampusRole.student) {
+      resp = await ref.read(studentRepositoryProvider).noticeDetail(id: item.id);
+    } else {
+      resp = await ref.read(teacherRepositoryProvider).noticeDetail(id: item.id);
+    }
+    if (!mounted) return;
+    if (!resp.isSuccess) {
+      AppToast.show(
+        context,
+        resp.msg.isNotEmpty ? resp.msg : '通知详情加载失败',
+      );
+      return;
+    }
+    final detail = parseTeacherNoticeDetail(resp.data);
+    if (detail == null) {
+      AppToast.show(context, '通知详情加载失败');
+      return;
+    }
+    await showScaledDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.18),
+      builder: (ctx) => GradientHeaderDialog(
+        title: '通知详情',
+        width: 460,
+        child: _TeacherSchoolNoticeDetailBody(notice: detail),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_usesNoticeApi) {
+      if (_loading) {
+        return const Center(child: AppLoadingIndicator());
+      }
+      return _TeacherNoticeList(
+        items: _notices,
+        scrollable: widget.scrollable,
+        onTap: _openNoticeDetail,
+      );
+    }
+    return _TeacherNoticeFallbackList(
+      notices: widget.fallbackNotices,
+      scrollable: widget.scrollable,
+    );
+  }
+}
+
+class _TeacherNoticeFallbackList extends StatelessWidget {
+  const _TeacherNoticeFallbackList({
+    required this.notices,
+    required this.scrollable,
+  });
 
   final List<SmartCampusNoticeData> notices;
   final bool scrollable;
@@ -1460,96 +1596,303 @@ class _TeacherNoticeList extends StatelessWidget {
   }
 }
 
-class _TeacherNoticeCard extends StatelessWidget {
-  const _TeacherNoticeCard({required this.item});
+class _TeacherNoticeList extends StatelessWidget {
+  const _TeacherNoticeList({
+    required this.items,
+    required this.scrollable,
+    required this.onTap,
+  });
 
-  final SmartCampusNoticeData item;
+  final List<TeacherNoticeListItem> items;
+  final bool scrollable;
+  final ValueChanged<TeacherNoticeListItem> onTap;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.fromLTRB(ui(10), ui(10), ui(10), ui(10)),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF5F6FA),
-        borderRadius: BorderRadius.circular(ui(8)),
+    if (items.isEmpty) {
+      return Padding(
+        padding: EdgeInsets.symmetric(horizontal: ui(16)),
+        child: Text(
+          '暂无通知',
+          style: TextStyle(
+            fontSize: ui(12),
+            color: const Color(0xFFCECED1),
+            fontFamily: 'PingFang SC',
+          ),
+        ),
+      );
+    }
+    final children = <Widget>[];
+    for (var i = 0; i < items.length; i++) {
+      if (i > 0) children.add(SizedBox(height: ui(8)));
+      final item = items[i];
+      final style = item.tagStyle;
+      children.add(
+        _TeacherNoticeCard(
+          item: SmartCampusNoticeData(
+            tag: item.tag,
+            title: item.title,
+            time: item.time,
+            tagForeground: style.foreground,
+            tagBackground: style.background,
+          ),
+          onTap: () => onTap(item),
+        ),
+      );
+    }
+    final list = Padding(
+      padding: EdgeInsets.symmetric(horizontal: ui(16)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: children,
       ),
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Padding(
-            padding: EdgeInsets.only(right: ui(10)),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: ui(4),
-                        vertical: ui(2),
-                      ),
-                      decoration: BoxDecoration(
-                        color: item.tagBackground,
-                        borderRadius: BorderRadius.circular(ui(4)),
-                      ),
-                      child: Text(
-                        item.tag,
-                        style: TextStyle(
-                          fontSize: ui(10),
-                          color: item.tagForeground,
-                          fontWeight: FontWeight.w500,
-                          height: 1.1,
-                        ),
-                      ),
-                    ),
-                    SizedBox(width: ui(4)),
-                    Expanded(
-                      child: Text(
-                        item.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: ui(12),
-                          color: const Color(0xFF0B081A),
-                          fontWeight: FontWeight.w400,
-                          height: 1.2,
-                        ),
-                      ),
-                    ),
-                  ],
+    );
+    if (scrollable) {
+      return SingleChildScrollView(child: list);
+    }
+    return list;
+  }
+}
+
+class _TeacherSchoolNoticeDetailBody extends StatelessWidget {
+  const _TeacherSchoolNoticeDetailBody({required this.notice});
+
+  final TeacherNoticeListItem notice;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final tagStyle = notice.tagStyle;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          notice.title,
+          style: TextStyle(
+            fontSize: ui(15),
+            color: const Color(0xFF0B081A),
+            fontFamily: 'PingFang SC',
+            fontWeight: AppFont.w600,
+            height: 1.5,
+          ),
+        ),
+        SizedBox(height: ui(8)),
+        Row(
+          children: [
+            Container(
+              padding: EdgeInsets.symmetric(
+                horizontal: ui(6),
+                vertical: ui(2),
+              ),
+              decoration: BoxDecoration(
+                color: tagStyle.background,
+                borderRadius: BorderRadius.circular(ui(4)),
+              ),
+              child: Text(
+                notice.tag,
+                style: TextStyle(
+                  fontSize: ui(12),
+                  color: tagStyle.foreground,
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w400,
+                  height: 1.2,
                 ),
-                SizedBox(height: ui(4)),
-                Text(
-                  item.time,
+              ),
+            ),
+            if (notice.author.isNotEmpty && notice.author != '—') ...[
+              SizedBox(width: ui(8)),
+              Expanded(
+                child: Text(
+                  notice.author,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: ui(12),
-                    color: const Color(0xFFCECED1),
-                    fontWeight: FontWeight.w400,
-                    height: 1,
+                    color: const Color(0xFF6D6B75),
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w400,
+                    height: 1.4,
                   ),
                 ),
-              ],
+              ),
+            ],
+          ],
+        ),
+        SizedBox(height: ui(16)),
+        _TeacherNoticeDetailRow(label: '类型', value: notice.type),
+        if (notice.priority.isNotEmpty)
+          _TeacherNoticeDetailRow(label: '优先级', value: notice.priority),
+        if (notice.scopeLabel.isNotEmpty && notice.scopeLabel != '—')
+          _TeacherNoticeDetailRow(label: '推送范围', value: notice.scopeLabel),
+        _TeacherNoticeDetailRow(
+          label: '时间',
+          value: notice.publishedAt.isNotEmpty ? notice.publishedAt : notice.time,
+          isLast: true,
+        ),
+        SizedBox(height: ui(12)),
+        Text(
+          '内容',
+          style: TextStyle(
+            fontSize: ui(13),
+            color: const Color(0xFF6D6B75),
+            fontFamily: 'PingFang SC',
+            fontWeight: AppFont.w400,
+            height: 1.4,
+          ),
+        ),
+        SizedBox(height: ui(6)),
+        Container(
+          width: double.infinity,
+          padding: EdgeInsets.all(ui(12)),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF5F6FA),
+            borderRadius: BorderRadius.circular(ui(10)),
+          ),
+          child: Text(
+            notice.content.isEmpty ? '（暂无正文）' : notice.content,
+            style: TextStyle(
+              fontSize: ui(13),
+              color: const Color(0xFF0B081A),
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w400,
+              height: 22 / 13,
             ),
           ),
-          Positioned(
-            right: 0,
-            top: 0,
-            child: Container(
-              width: ui(6),
-              height: ui(6),
-              decoration: BoxDecoration(
-                color: item.unread
-                    ? const Color(0xFFFF323C)
-                    : const Color(0xFFCECED1),
-                shape: BoxShape.circle,
+        ),
+      ],
+    );
+  }
+}
+
+class _TeacherNoticeDetailRow extends StatelessWidget {
+  const _TeacherNoticeDetailRow({
+    required this.label,
+    required this.value,
+    this.isLast = false,
+  });
+
+  final String label;
+  final String value;
+  final bool isLast;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Padding(
+      padding: EdgeInsets.only(bottom: isLast ? 0 : ui(10)),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: ui(64),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: ui(13),
+                color: const Color(0xFFB6B5BB),
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w400,
+                height: 20 / 13,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value.isEmpty ? '—' : value,
+              style: TextStyle(
+                fontSize: ui(13),
+                color: const Color(0xFF0B081A),
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w500,
+                height: 20 / 13,
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _TeacherNoticeCard extends StatelessWidget {
+  const _TeacherNoticeCard({required this.item, this.onTap});
+
+  final SmartCampusNoticeData item;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(ui(8)),
+        child: Container(
+          width: double.infinity,
+          padding: EdgeInsets.all(ui(10)),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF5F6FA),
+            borderRadius: BorderRadius.circular(ui(8)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: ui(4),
+                      vertical: ui(2),
+                    ),
+                    decoration: BoxDecoration(
+                      color: item.tagBackground,
+                      borderRadius: BorderRadius.circular(ui(4)),
+                    ),
+                    child: Text(
+                      item.tag,
+                      style: TextStyle(
+                        fontSize: ui(10),
+                        color: item.tagForeground,
+                        fontWeight: FontWeight.w500,
+                        height: 1.1,
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: ui(4)),
+                  Expanded(
+                    child: Text(
+                      item.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: ui(12),
+                        color: const Color(0xFF0B081A),
+                        fontWeight: FontWeight.w400,
+                        height: 1.2,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: ui(4)),
+              Text(
+                item.time,
+                style: TextStyle(
+                  fontSize: ui(12),
+                  color: const Color(0xFFCECED1),
+                  fontWeight: FontWeight.w400,
+                  height: 1,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

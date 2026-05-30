@@ -34,11 +34,18 @@
 //      · 底部 "备注：…" 12/#B6B5BB。
 // =============================================================================
 
-import 'package:flutter/material.dart';
+import 'dart:async';
 
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
+
+import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/popup_selector_field.dart';
 import '../../shell/ui/shell_layout.dart';
+import '../data/dormitory_check_data.dart';
+import '../data/dormitory_repository.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // —— 颜色 ————————————————————————————————————————————————————————
@@ -48,178 +55,200 @@ const Color _kBorderSoft = Color(0xFFF3F2F3);
 const Color _kBorderHair = Color(0xFFE5E7EB);
 const Color _kBorderLine = Color(0xFFCECED1);
 const Color _kTextDark = Color(0xFF0B081A);
-const Color _kTextDarker = Color(0xFF1A1A1A);
-const Color _kTextSecondary = Color(0xFF6D6B75);
 const Color _kTextHint = Color(0xFFB6B5BB);
 const Color _kPurple = Color(0xFF8741FF);
-const Color _kPurpleSolid = Color(0xFFA773FF);
 const Color _kPurpleSoftBg = Color(0xFFE7D9FF);
-const Color _kRed = Color(0xFFFF323C);
-const Color _kBlue = Color(0xFF325BFF);
 const Color _kGreen = Color(0xFF1CD097);
-
-// —— 学生打卡状态 ——————————————————————————————————————————————————
-enum _StudentCheckStatus {
-  checked('已打卡'),
-  unchecked('未打卡'),
-  lateReturn('晚归'),
-  leaveExempt('请假免检');
-
-  const _StudentCheckStatus(this.label);
-  final String label;
-}
-
-// —— 历史查寝状态（实色徽章）—————————————————————————————————————
-enum _HistoryStatus {
-  normal('正常', _kPurpleSolid),
-  absent('未打卡', _kRed),
-  late_('迟到', _kBlue);
-
-  const _HistoryStatus(this.label, this.bg);
-  final String label;
-  final Color bg;
-}
-
-// —— 数据模型 ——————————————————————————————————————————————————
-
-class _RoomStudent {
-  _RoomStudent({
-    required this.name,
-    required this.studentNo,
-    required this.avatarUrl,
-    required this.status,
-  });
-
-  final String name;
-  final String studentNo;
-  final String avatarUrl;
-  _StudentCheckStatus status;
-}
-
-class _DormRoom {
-  _DormRoom({
-    required this.roomName,
-    required this.buildingDesc,
-    required this.session,
-    required this.deadline,
-    required this.students,
-  });
-
-  final String roomName;
-  final String buildingDesc;
-  final String session;
-  final String deadline;
-  final List<_RoomStudent> students;
-
-  /// 该宿舍所有学生是否都已完成「已打卡」之外的非「未打卡」状态。
-  /// 这里只要每个人都不是 "未打卡" 就算"打卡完成"，「一键打卡」按钮置灰。
-  bool get allDone =>
-      students.every((s) => s.status != _StudentCheckStatus.unchecked);
-}
-
-class _HistoryRecord {
-  const _HistoryRecord({
-    required this.title,
-    required this.status,
-    required this.dormName,
-    required this.date,
-    required this.requiredTime,
-    required this.punchTime,
-    required this.note,
-  });
-
-  final String title; // 晨查寝 / 晚查寝
-  final _HistoryStatus status;
-  final String dormName;
-  final String date;
-  final String requiredTime;
-  final String punchTime;
-  final String note;
-}
 
 // =============================================================================
 // 顶级视图
 // =============================================================================
 
-class DormManagerCheckByRoomView extends StatefulWidget {
+class DormManagerCheckByRoomView extends ConsumerStatefulWidget {
   const DormManagerCheckByRoomView({super.key, required this.onBack});
 
   final VoidCallback onBack;
 
   @override
-  State<DormManagerCheckByRoomView> createState() =>
+  ConsumerState<DormManagerCheckByRoomView> createState() =>
       _DormManagerCheckByRoomViewState();
 }
 
 class _DormManagerCheckByRoomViewState
-    extends State<DormManagerCheckByRoomView> {
-  late List<_DormRoom> _rooms;
-  late List<_HistoryRecord> _history;
+    extends ConsumerState<DormManagerCheckByRoomView> {
+  final _checkDate = dormitoryCheckDateParam();
 
-  static const String _deadlineText = '2026-04-22 23:00前';
+  DormitoryCheckStat _stat = DormitoryCheckStat.zero;
+  List<DormitoryRoomCheck> _rooms = const [];
+  List<DormitoryBuildingOption> _buildingOptions = const [
+    DormitoryBuildingOption.all,
+  ];
+  List<DormitoryFloorOption> _floorOptions = const [
+    DormitoryFloorOption.all,
+  ];
+  DormitoryBuildingOption _selectedBuilding = DormitoryBuildingOption.all;
+  DormitoryFloorOption _selectedFloor = DormitoryFloorOption.all;
+
+  bool _loading = false;
+  bool _loadingFloors = false;
+  String? _loadError;
+  int _loadToken = 0;
+
+  String get _deadlineText {
+    for (final room in _rooms) {
+      if (room.deadline.isNotEmpty && room.deadline != '—') {
+        return '$_checkDate ${room.deadline}';
+      }
+    }
+    return '$_checkDate 查寝';
+  }
 
   @override
   void initState() {
     super.initState();
-    _rooms = _demoRooms();
-    _history = _demoHistory();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_bootstrap());
+    });
   }
 
-  /// 4 张统计卡数据。
-  ///
-  /// - 在册床位：所有宿舍学生数之和。
-  /// - 正常口径：已打卡 + 请假免检（不属于异常）。
-  /// - 晚归：状态 = lateReturn。
-  /// - 未打卡：状态 = unchecked。
-  ({int beds, int normal, int late_, int absent}) _stats() {
-    var beds = 0;
-    var normal = 0;
-    var late_ = 0;
-    var absent = 0;
-    for (final r in _rooms) {
-      for (final s in r.students) {
-        beds++;
-        switch (s.status) {
-          case _StudentCheckStatus.checked:
-          case _StudentCheckStatus.leaveExempt:
-            normal++;
-            break;
-          case _StudentCheckStatus.lateReturn:
-            late_++;
-            break;
-          case _StudentCheckStatus.unchecked:
-            absent++;
-            break;
-        }
-      }
+  Future<void> _bootstrap() async {
+    await _loadBuildings();
+    await _reloadAll();
+  }
+
+  Future<void> _loadBuildings() async {
+    final resp =
+        await ref.read(dormitoryRepositoryProvider).dormitoryManagedBuildingList();
+    if (!mounted) return;
+    if (!resp.isSuccess) {
+      setState(() {
+        _buildingOptions = const [DormitoryBuildingOption.all];
+      });
+      return;
     }
-    return (beds: beds, normal: normal, late_: late_, absent: absent);
+    setState(() {
+      _buildingOptions = parseDormitoryManagedBuildingList(resp.data);
+    });
   }
 
-  void _checkInAll(_DormRoom room) {
+  Future<void> _loadFloors(String buildingId) async {
+    if (buildingId.isEmpty) {
+      setState(() {
+        _floorOptions = const [DormitoryFloorOption.all];
+        _selectedFloor = DormitoryFloorOption.all;
+        _loadingFloors = false;
+      });
+      return;
+    }
+    setState(() => _loadingFloors = true);
+    final resp = await ref
+        .read(dormitoryRepositoryProvider)
+        .dormitoryFloorList(buildingId: buildingId);
+    if (!mounted) return;
     setState(() {
-      for (final s in room.students) {
-        if (s.status == _StudentCheckStatus.unchecked) {
-          s.status = _StudentCheckStatus.checked;
-        }
-      }
+      _floorOptions = resp.isSuccess
+          ? parseDormitoryFloorList(resp.data)
+          : const [DormitoryFloorOption.all];
+      _selectedFloor = DormitoryFloorOption.all;
+      _loadingFloors = false;
     });
-    AppToast.show(context, '${room.roomName} 已全员打卡（演示）');
   }
 
-  void _updateStudentStatus(
-    _RoomStudent student,
-    _StudentCheckStatus next,
-  ) {
+  Future<void> _reloadAll() async {
+    final token = ++_loadToken;
     setState(() {
-      student.status = next;
+      _loading = true;
+      _loadError = null;
     });
+    final repo = ref.read(dormitoryRepositoryProvider);
+    final buildingId =
+        _selectedBuilding.id.isEmpty ? null : _selectedBuilding.id;
+    final floorId = _selectedFloor.id.isEmpty ? null : _selectedFloor.id;
+    final results = await Future.wait([
+      repo.dormitoryCheckStat(
+        buildingId: buildingId,
+        floorId: floorId,
+        date: _checkDate,
+      ),
+      repo.dormitoryCheckRoomList(
+        buildingId: buildingId,
+        floorId: floorId,
+        date: _checkDate,
+      ),
+    ]);
+    if (!mounted || token != _loadToken) return;
+
+    final statResp = results[0];
+    final roomResp = results[1];
+    if (!statResp.isSuccess || !roomResp.isSuccess) {
+      setState(() {
+        _stat = DormitoryCheckStat.zero;
+        _rooms = const [];
+        _loading = false;
+        _loadError = !statResp.isSuccess
+            ? statResp.displayMsg
+            : roomResp.displayMsg;
+      });
+      return;
+    }
+
+    setState(() {
+      _stat = parseDormitoryCheckStat(statResp.data);
+      _rooms = parseDormitoryCheckRoomList(roomResp.data);
+      _loading = false;
+      _loadError = null;
+    });
+  }
+
+  Future<void> _onBuildingChanged(DormitoryBuildingOption option) async {
+    setState(() {
+      _selectedBuilding = option;
+      _selectedFloor = DormitoryFloorOption.all;
+    });
+    await _loadFloors(option.id);
+    await _reloadAll();
+  }
+
+  Future<void> _onFloorChanged(DormitoryFloorOption option) async {
+    setState(() => _selectedFloor = option);
+    await _reloadAll();
+  }
+
+  Future<void> _checkInAll(DormitoryRoomCheck room) async {
+    final resp = await ref.read(dormitoryRepositoryProvider).dormitoryCheckRoomOneClick(
+          roomId: room.roomId,
+          date: _checkDate,
+        );
+    if (!mounted) return;
+    if (!resp.isSuccess) {
+      AppToast.show(context, resp.displayMsg);
+      return;
+    }
+    AppToast.show(context, '${room.roomName} 已一键打卡');
+    await _reloadAll();
+  }
+
+  Future<void> _updateStudentStatus(
+    DormitoryRoomStudent student,
+    DormitoryStudentCheckStatus next,
+  ) async {
+    final resp =
+        await ref.read(dormitoryRepositoryProvider).dormitoryCheckUserUpdate(
+              userId: student.userId,
+              status: next.apiValue,
+              date: _checkDate,
+            );
+    if (!mounted) return;
+    if (!resp.isSuccess) {
+      AppToast.show(context, resp.displayMsg);
+      return;
+    }
+    await _reloadAll();
   }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final stats = _stats();
     return Container(
       color: _kPageBg,
       child: SingleChildScrollView(
@@ -229,7 +258,16 @@ class _DormManagerCheckByRoomViewState
           children: [
             _Banner(onBack: widget.onBack),
             SizedBox(height: ui(16)),
-            // 截止时间 16/500（去掉了 Figma 右侧的晨/晚查寝分段切换）。
+            _FilterRow(
+              buildingOptions: _buildingOptions,
+              floorOptions: _floorOptions,
+              selectedBuilding: _selectedBuilding,
+              selectedFloor: _selectedFloor,
+              floorEnabled: _selectedBuilding.id.isNotEmpty && !_loadingFloors,
+              onBuildingChanged: (v) => unawaited(_onBuildingChanged(v)),
+              onFloorChanged: (v) => unawaited(_onFloorChanged(v)),
+            ),
+            SizedBox(height: ui(12)),
             Padding(
               padding: EdgeInsets.only(left: ui(4)),
               child: Text(
@@ -245,22 +283,36 @@ class _DormManagerCheckByRoomViewState
             ),
             SizedBox(height: ui(16)),
             _StatsRow(
-              beds: stats.beds,
-              normal: stats.normal,
-              lateReturn: stats.late_,
-              absent: stats.absent,
+              beds: _stat.bedCount,
+              normal: _stat.normalCount,
+              lateReturn: _stat.lateCount,
+              absent: _stat.notCheckedCount,
             ),
             SizedBox(height: ui(16)),
-            for (var i = 0; i < _rooms.length; i++) ...[
-              if (i > 0) SizedBox(height: ui(16)),
-              _RoomCard(
-                room: _rooms[i],
-                onCheckInAll: () => _checkInAll(_rooms[i]),
-                onChangeStatus: _updateStudentStatus,
-              ),
-            ],
-            SizedBox(height: ui(20)),
-            _HistoryRow(records: _history),
+            if (_loading)
+              Padding(
+                padding: EdgeInsets.symmetric(vertical: ui(40)),
+                child: const Center(child: AppLoadingIndicator()),
+              )
+            else if (_loadError != null)
+              _LoadErrorHint(
+                message: _loadError!,
+                onRetry: _reloadAll,
+              )
+            else if (_rooms.isEmpty)
+              _EmptyRoomsHint()
+            else
+              for (var i = 0; i < _rooms.length; i++) ...[
+                if (i > 0) SizedBox(height: ui(16)),
+                _RoomCard(
+                  room: _rooms[i],
+                  onCheckInAll: _rooms[i].allChecked
+                      ? null
+                      : () => unawaited(_checkInAll(_rooms[i])),
+                  onChangeStatus: (student, next) =>
+                      unawaited(_updateStudentStatus(student, next)),
+                ),
+              ],
           ],
         ),
       ),
@@ -285,12 +337,12 @@ class _Banner extends StatelessWidget {
       height: ui(62),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.bottomCenter,
-          end: Alignment.topCenter,
-          colors: [Colors.white, Color(0xFFF9EDFF)],
-        ),
         borderRadius: BorderRadius.circular(ui(16)),
+        image: DecorationImage(
+          image: AssetImage(AppAssets.xiaoquanHeaderBg),
+          fit: BoxFit.cover,
+          alignment: Alignment.centerRight,
+        ),
       ),
       child: Stack(
         children: [
@@ -333,24 +385,232 @@ class _Banner extends StatelessWidget {
                       height: 1.2,
                     ),
                   ),
-                  SizedBox(height: ui(2)),
-                  Text(
-                    '进入每个宿舍后先可一键打卡（全员记为正常），再针对个人修改为晚归、未打卡、请假免检等；与年级闸机数据对接后在此提交即可同步备案。',
-                    style: TextStyle(
-                      fontSize: ui(12),
-                      color: _kTextHint,
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w400,
-                      height: 1.4,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
                 ],
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _FilterRow extends StatelessWidget {
+  const _FilterRow({
+    required this.buildingOptions,
+    required this.floorOptions,
+    required this.selectedBuilding,
+    required this.selectedFloor,
+    required this.floorEnabled,
+    required this.onBuildingChanged,
+    required this.onFloorChanged,
+  });
+
+  final List<DormitoryBuildingOption> buildingOptions;
+  final List<DormitoryFloorOption> floorOptions;
+  final DormitoryBuildingOption selectedBuilding;
+  final DormitoryFloorOption selectedFloor;
+  final bool floorEnabled;
+  final ValueChanged<DormitoryBuildingOption> onBuildingChanged;
+  final ValueChanged<DormitoryFloorOption> onFloorChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Row(
+      children: [
+        _DormitorySelectField<DormitoryBuildingOption>(
+          value: selectedBuilding,
+          items: buildingOptions,
+          itemLabel: (o) => o.label,
+          icon: Icons.apartment_outlined,
+          width: ui(220),
+          menuWidth: ui(280),
+          onChanged: onBuildingChanged,
+        ),
+        SizedBox(width: ui(12)),
+        _DormitorySelectField<DormitoryFloorOption>(
+          value: selectedFloor,
+          items: floorOptions,
+          itemLabel: (o) => o.label,
+          icon: Icons.layers_outlined,
+          width: ui(220),
+          menuWidth: ui(280),
+          enabled: floorEnabled,
+          onChanged: onFloorChanged,
+        ),
+      ],
+    );
+  }
+}
+
+/// 与管理员「教师管理」[_ClassFilterField] 一致的下拉触发器样式。
+class _DormitorySelectField<T> extends StatefulWidget {
+  const _DormitorySelectField({
+    required this.value,
+    required this.items,
+    required this.itemLabel,
+    required this.icon,
+    required this.width,
+    required this.menuWidth,
+    required this.onChanged,
+    this.enabled = true,
+  });
+
+  final T value;
+  final List<T> items;
+  final String Function(T) itemLabel;
+  final IconData icon;
+  final double width;
+  final double menuWidth;
+  final ValueChanged<T> onChanged;
+  final bool enabled;
+
+  @override
+  State<_DormitorySelectField<T>> createState() =>
+      _DormitorySelectFieldState<T>();
+}
+
+class _DormitorySelectFieldState<T> extends State<_DormitorySelectField<T>> {
+  final _fieldKey = GlobalKey();
+  bool _open = false;
+
+  Future<void> _openMenu() async {
+    if (!widget.enabled) return;
+    final fieldCtx = _fieldKey.currentContext;
+    if (fieldCtx == null) return;
+    setState(() => _open = true);
+    final selected = await showAppPopupSelector<T>(
+      anchorContext: fieldCtx,
+      items: widget.items,
+      value: widget.value,
+      itemLabel: widget.itemLabel,
+      width: widget.menuWidth,
+    );
+    if (!mounted) return;
+    setState(() => _open = false);
+    if (selected != null) widget.onChanged(selected);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return InkWell(
+      key: _fieldKey,
+      onTap: _openMenu,
+      borderRadius: BorderRadius.circular(ui(12)),
+      child: Container(
+        width: widget.width,
+        height: ui(44),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(ui(12)),
+          border: Border.all(color: _kBorderSoft, width: 1),
+        ),
+        padding: EdgeInsets.symmetric(horizontal: ui(16)),
+        child: Row(
+          children: [
+            Icon(
+              widget.icon,
+              size: ui(16),
+              color: const Color(0xFFC6C6C6),
+            ),
+            SizedBox(width: ui(10)),
+            Expanded(
+              child: Text(
+                widget.itemLabel(widget.value),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: ui(14),
+                  height: 1.2,
+                  color: _kTextDark,
+                  fontFamily: 'PingFang SC',
+                ),
+              ),
+            ),
+            AnimatedRotation(
+              turns: _open ? 0.5 : 0,
+              duration: const Duration(milliseconds: 160),
+              child: Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: ui(18),
+                color: const Color(0xFFC6C6C6),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LoadErrorHint extends StatelessWidget {
+  const _LoadErrorHint({required this.message, required this.onRetry});
+
+  final String message;
+  final Future<void> Function() onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(vertical: ui(32), horizontal: ui(16)),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(ui(12)),
+      ),
+      child: Column(
+        children: [
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: ui(13),
+              color: _kTextHint,
+              fontFamily: 'PingFang SC',
+            ),
+          ),
+          SizedBox(height: ui(12)),
+          InkWell(
+            onTap: () => unawaited(onRetry()),
+            child: Text(
+              '重试',
+              style: TextStyle(
+                fontSize: ui(13),
+                color: _kPurple,
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyRoomsHint extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(vertical: ui(32)),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(ui(12)),
+      ),
+      child: Center(
+        child: Text(
+          '暂无查寝数据',
+          style: TextStyle(
+            fontSize: ui(13),
+            color: _kTextHint,
+            fontFamily: 'PingFang SC',
+          ),
+        ),
       ),
     );
   }
@@ -539,10 +799,12 @@ class _RoomCard extends StatelessWidget {
     required this.onChangeStatus,
   });
 
-  final _DormRoom room;
-  final VoidCallback onCheckInAll;
-  final void Function(_RoomStudent student, _StudentCheckStatus next)
-      onChangeStatus;
+  final DormitoryRoomCheck room;
+  final VoidCallback? onCheckInAll;
+  final void Function(
+    DormitoryRoomStudent student,
+    DormitoryStudentCheckStatus next,
+  ) onChangeStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -560,7 +822,7 @@ class _RoomCard extends StatelessWidget {
         children: [
           _RoomHeader(
             room: room,
-            onCheckInAll: room.allDone ? null : onCheckInAll,
+            onCheckInAll: onCheckInAll,
           ),
           SizedBox(height: ui(12)),
           _RoomStudentGrid(
@@ -576,7 +838,7 @@ class _RoomCard extends StatelessWidget {
 class _RoomHeader extends StatelessWidget {
   const _RoomHeader({required this.room, required this.onCheckInAll});
 
-  final _DormRoom room;
+  final DormitoryRoomCheck room;
 
   /// 为 `null` 时按钮置灰（已完成全员打卡时）。
   final VoidCallback? onCheckInAll;
@@ -729,9 +991,11 @@ class _RoomStudentGrid extends StatelessWidget {
     required this.onChangeStatus,
   });
 
-  final List<_RoomStudent> students;
-  final void Function(_RoomStudent student, _StudentCheckStatus next)
-      onChangeStatus;
+  final List<DormitoryRoomStudent> students;
+  final void Function(
+    DormitoryRoomStudent student,
+    DormitoryStudentCheckStatus next,
+  ) onChangeStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -759,8 +1023,8 @@ class _RoomStudentTile extends StatelessWidget {
     required this.onChangeStatus,
   });
 
-  final _RoomStudent student;
-  final ValueChanged<_StudentCheckStatus> onChangeStatus;
+  final DormitoryRoomStudent student;
+  final ValueChanged<DormitoryStudentCheckStatus> onChangeStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -869,8 +1133,8 @@ class _Avatar extends StatelessWidget {
 class _StatusDropdown extends StatefulWidget {
   const _StatusDropdown({required this.current, required this.onChange});
 
-  final _StudentCheckStatus current;
-  final ValueChanged<_StudentCheckStatus> onChange;
+  final DormitoryStudentCheckStatus current;
+  final ValueChanged<DormitoryStudentCheckStatus> onChange;
 
   @override
   State<_StatusDropdown> createState() => _StatusDropdownState();
@@ -885,11 +1149,11 @@ class _StatusDropdownState extends State<_StatusDropdown> {
     if (ctx == null) return;
     final ui = DashboardScaleScope.of(context).ui;
     setState(() => _open = true);
-    final selected = await showAppPopupSelector<_StudentCheckStatus>(
+    final selected = await showAppPopupSelector<DormitoryStudentCheckStatus>(
       anchorContext: ctx,
-      items: _StudentCheckStatus.values,
+      items: DormitoryStudentCheckStatus.values,
       value: widget.current,
-      itemLabel: (s) => s.label,
+      itemLabel: (s) => s.apiValue,
       width: ui(120),
     );
     if (!mounted) return;
@@ -918,7 +1182,7 @@ class _StatusDropdownState extends State<_StatusDropdown> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              widget.current.label,
+              widget.current.apiValue,
               style: TextStyle(
                 fontSize: ui(12),
                 color: _kTextDark,
@@ -942,291 +1206,4 @@ class _StatusDropdownState extends State<_StatusDropdown> {
       ),
     );
   }
-}
-
-// =============================================================================
-// 底部历史卡 3 列
-// =============================================================================
-
-class _HistoryRow extends StatelessWidget {
-  const _HistoryRow({required this.records});
-
-  final List<_HistoryRecord> records;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (var i = 0; i < records.length; i++) ...[
-          if (i > 0) SizedBox(width: ui(16)),
-          Expanded(child: _HistoryCard(record: records[i])),
-        ],
-      ],
-    );
-  }
-}
-
-class _HistoryCard extends StatelessWidget {
-  const _HistoryCard({required this.record});
-
-  final _HistoryRecord record;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      padding: EdgeInsets.all(ui(12)),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-          colors: [Color(0xFFFAF0FF), Colors.white],
-        ),
-        borderRadius: BorderRadius.circular(ui(16)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Text(
-                record.title,
-                style: TextStyle(
-                  fontSize: ui(18),
-                  color: _kTextDarker,
-                  fontFamily: 'Barlow',
-                  fontWeight: FontWeight.w600,
-                  height: 1.2,
-                ),
-              ),
-              _StatusBadge(status: record.status),
-            ],
-          ),
-          SizedBox(height: ui(4)),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Text(
-                  record.dormName,
-                  style: TextStyle(
-                    fontSize: ui(13),
-                    color: _kTextSecondary,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w400,
-                    height: 1.5,
-                  ),
-                ),
-              ),
-              SizedBox(width: ui(4)),
-              Text(
-                record.date,
-                style: TextStyle(
-                  fontSize: ui(12),
-                  color: _kTextHint,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w400,
-                  height: 1.0,
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: ui(12)),
-          Container(
-            width: double.infinity,
-            padding: EdgeInsets.symmetric(
-              horizontal: ui(12),
-              vertical: ui(11),
-            ),
-            decoration: BoxDecoration(
-              color: _kCardGreyBg,
-              borderRadius: BorderRadius.circular(ui(8)),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _TimePair(
-                    label: '规定时间',
-                    value: record.requiredTime,
-                  ),
-                ),
-                Expanded(
-                  child: _TimePair(
-                    label: '打卡时间',
-                    value: record.punchTime,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          SizedBox(height: ui(10)),
-          Text(
-            '备注：${record.note}',
-            style: TextStyle(
-              fontSize: ui(12),
-              color: _kTextHint,
-              fontFamily: 'PingFang SC',
-              fontWeight: AppFont.w400,
-              height: 1.0,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({required this.status});
-
-  final _HistoryStatus status;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: ui(6), vertical: ui(2)),
-      decoration: BoxDecoration(
-        color: status.bg,
-        borderRadius: BorderRadius.circular(ui(4)),
-      ),
-      child: Text(
-        status.label,
-        style: TextStyle(
-          fontSize: ui(12),
-          color: Colors.white,
-          fontFamily: 'PingFang SC',
-          fontWeight: AppFont.w400,
-          height: 1.27,
-        ),
-      ),
-    );
-  }
-}
-
-class _TimePair extends StatelessWidget {
-  const _TimePair({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          label,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: ui(12),
-            color: _kTextHint,
-            fontFamily: 'PingFang SC',
-            fontWeight: AppFont.w400,
-            height: 1.0,
-          ),
-        ),
-        SizedBox(height: ui(5)),
-        Text(
-          value,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: ui(12),
-            color: _kTextDark,
-            fontFamily: 'PingFang SC',
-            fontWeight: AppFont.w400,
-            height: 1.0,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// =============================================================================
-// 演示数据
-// =============================================================================
-
-List<_DormRoom> _demoRooms() {
-  // 头像统一用 placehold，后续接 myInfo/headUrl 时按真实头像替换即可。
-  _RoomStudent s(String name, String no, {_StudentCheckStatus? st}) =>
-      _RoomStudent(
-        name: name,
-        studentNo: no,
-        avatarUrl: 'https://placehold.co/40x40',
-        status: st ?? _StudentCheckStatus.unchecked,
-      );
-
-  return [
-    _DormRoom(
-      roomName: '宿舍 A-901',
-      buildingDesc: '女生公寓A座·6层',
-      session: '晚查寝',
-      deadline: '22:30前',
-      students: [
-        s('王晴', 'G3030201'),
-      ],
-    ),
-    _DormRoom(
-      roomName: '宿舍 A-902',
-      buildingDesc: '女生公寓A座·6层',
-      session: '晚查寝',
-      deadline: '22:30前',
-      students: [
-        s('王晴', 'G3030202', st: _StudentCheckStatus.checked),
-        s('李欣', 'G3030203', st: _StudentCheckStatus.checked),
-        s('赵子', 'G3030204', st: _StudentCheckStatus.checked),
-      ],
-    ),
-    _DormRoom(
-      roomName: '宿舍 A-903',
-      buildingDesc: '女生公寓A座·6层',
-      session: '晚查寝',
-      deadline: '22:30前',
-      students: [
-        s('王晴', 'G3030205', st: _StudentCheckStatus.checked),
-        s('陈雨', 'G3030206', st: _StudentCheckStatus.checked),
-        s('刘悦', 'G3030207', st: _StudentCheckStatus.checked),
-      ],
-    ),
-  ];
-}
-
-List<_HistoryRecord> _demoHistory() {
-  return const [
-    _HistoryRecord(
-      title: '晨查寝',
-      status: _HistoryStatus.normal,
-      dormName: '女生宿舍3号楼 612',
-      date: '2026-04-02',
-      requiredTime: '07:20前',
-      punchTime: '07:18',
-      note: '无',
-    ),
-    _HistoryRecord(
-      title: '晨查寝',
-      status: _HistoryStatus.absent,
-      dormName: '女生宿舍3号楼 612',
-      date: '2026-04-02',
-      requiredTime: '07:20前',
-      punchTime: '07:18',
-      note: '无',
-    ),
-    _HistoryRecord(
-      title: '晚查寝',
-      status: _HistoryStatus.late_,
-      dormName: '女生宿舍3号楼 612',
-      date: '2026-04-02',
-      requiredTime: '21:20前',
-      punchTime: '21:23',
-      note: '教师拖堂',
-    ),
-  ];
 }

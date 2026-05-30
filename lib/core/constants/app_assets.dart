@@ -230,6 +230,17 @@ abstract final class AppAssets {
   static const homeV2VoiceCardBg = 'assets/images/home/v2/voice_card_bg.png';
   /// 声乐二级页（[VoicePage]）卡片封面：紫色霓虹「VOCAL MUSIC / 声乐」海报。
   static const homeFmCover = 'assets/images/home/fm.png';
+  /// 智能视唱列表卡片封面（纯图，无文字叠加）。
+  static const smartSightSingingFmCover = 'assets/images/sightsing/fm.png';
+  static const smartSightSingingSetIcon = 'assets/images/sightsing/set.png';
+  /// 智能视唱底部控制条「试听旋律」按钮（整图）。
+  static const smartSightSingingPreviewBtn = 'assets/images/sightsing/1.png';
+  /// 「试听旋律」播放中（暂停态）按钮（整图）。
+  static const smartSightSingingPreviewPauseBtn = 'assets/images/sightsing/2.png';
+  /// 「开始跟唱」按钮（整图，紫色渐变）。
+  static const smartSightSingingStartBtn = 'assets/images/sightsing/3.png';
+  /// 调试面板右上角关闭按钮（紫色圆形 X）。
+  static const smartSightSingingClose = 'assets/images/sightsing/close.png';
   /// 器乐二级页（[InstrumentalPage] 内部复用 [VoicePage]）卡片封面：
   /// 紫色霓虹「INSTRUMENTAL MUSIC / 器乐」海报。与 [homeFmCover] 同尺寸/同设计语言。
   static const homeFm2Cover = 'assets/images/home/fm2.png';

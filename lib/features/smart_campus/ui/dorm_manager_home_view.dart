@@ -1,10 +1,17 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
 
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
+
+import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
+import '../data/dormitory_repository.dart';
+import '../data/teacher_notice_data.dart';
 import '../state/smart_campus_state.dart';
 import 'widgets/role_switcher_buttons.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
-
 /// 宿管端 · 智慧校园首页。
 ///
 /// 970×~820 双栏布局，参考 Figma 设计稿：
@@ -16,7 +23,7 @@ import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 ///    圆角底 + 28×28 图标 + 14/500 文案。
 ///    - 按宿舍查寝（16.png）/ 查寝历史（17.png）/ 宿管请假（19.png）/
 ///      校圈（adminHome/10.png）
-///    - 群聊（adminHome/8.png，带 10+ 红色角标）/ 校长信箱（adminHome/9.png）
+///    - 群聊（adminHome/8.png）/ 校长信箱（adminHome/9.png）
 /// 3. **当前事项 + 今日值班** 两张 340×340 大白卡并排：
 ///    - 当前事项：单一灰底 92 高时间卡（紫色「晚查」徽标 + 21:50-22:25 +
 ///      "晚查寝预备·设备与名单核对"）
@@ -166,17 +173,10 @@ const _dormStats = <_StatItem>[
 ];
 
 class _QuickAction {
-  const _QuickAction(
-    this.label,
-    this.iconAsset, {
-    this.badge,
-  });
+  const _QuickAction(this.label, this.iconAsset);
 
   final String label;
   final String iconAsset;
-
-  /// 右上角红色角标（如 "10+"）。当前仅「群聊」默认 "10+"。
-  final String? badge;
 }
 
 const _dormQuickActions = <_QuickAction>[
@@ -184,61 +184,8 @@ const _dormQuickActions = <_QuickAction>[
   _QuickAction('查寝历史', 'assets/images/schoolA/17.png'),
   _QuickAction('宿管请假', 'assets/images/schoolA/19.png'),
   _QuickAction('校圈', 'assets/images/adminHome/10.png'),
-  _QuickAction('群聊', 'assets/images/adminHome/8.png', badge: '10+'),
+  _QuickAction('群聊', 'assets/images/adminHome/8.png'),
   _QuickAction('校长信箱', 'assets/images/adminHome/9.png'),
-];
-
-class _NoticeItem {
-  const _NoticeItem({
-    required this.tag,
-    required this.text,
-    required this.time,
-    required this.unread,
-  });
-
-  final String tag;
-  final String text;
-  final String time;
-  final bool unread;
-}
-
-const _schoolNotices = <_NoticeItem>[
-  _NoticeItem(
-    tag: '后勤',
-    text: '笔试与面试场次确认截止本周五 17:00，逾期将影响准考证打印。',
-    time: '09:10',
-    unread: true,
-  ),
-  _NoticeItem(
-    tag: '联动',
-    text: '断电提醒教学楼夜间 21:00 后静音巡查，22:00 断电，请提前保存练习视频。',
-    time: '周一',
-    unread: true,
-  ),
-  _NoticeItem(
-    tag: '制度',
-    text: '本周末女生公寓 A 区开展安全检查，请提前告知本区域学生留意时间。',
-    time: '周一',
-    unread: false,
-  ),
-  _NoticeItem(
-    tag: '大师课',
-    text: '本周六上午 10:00 邀请上海音乐学院教授开设大师课，请相关学生准时到场。',
-    time: '周一',
-    unread: false,
-  ),
-  _NoticeItem(
-    tag: '大师课',
-    text: '高三汇报演出排练时间调整为周三下午 16:30，地点不变。',
-    time: '周一',
-    unread: false,
-  ),
-  _NoticeItem(
-    tag: '大师课',
-    text: '声乐组本月专题课报名截止时间延期至下周一 12:00。',
-    time: '周一',
-    unread: false,
-  ),
 ];
 
 class _DutyTask {
@@ -543,30 +490,6 @@ class _QuickActionCell extends StatelessWidget {
                     height: ui(28),
                     fit: BoxFit.contain,
                   ),
-                  if (action.badge != null)
-                    Positioned(
-                      right: -ui(2),
-                      top: -ui(2),
-                      child: Container(
-                        height: ui(15),
-                        padding: EdgeInsets.symmetric(horizontal: ui(5)),
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF04545),
-                          borderRadius: BorderRadius.circular(ui(20)),
-                        ),
-                        child: Text(
-                          action.badge!,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: ui(10),
-                            height: 1.0,
-                            fontWeight: FontWeight.w800,
-                            fontFamily: 'Manrope',
-                          ),
-                        ),
-                      ),
-                    ),
                 ],
               ),
             ),
@@ -838,12 +761,7 @@ class _DormManagerSidePanel extends StatelessWidget {
           SizedBox(height: ui(12)),
           SizedBox(
             height: ui(500),
-            child: ListView.separated(
-              padding: EdgeInsets.zero,
-              itemCount: _schoolNotices.length,
-              separatorBuilder: (_, _) => SizedBox(height: ui(8)),
-              itemBuilder: (_, i) => _SchoolNoticeCard(item: _schoolNotices[i]),
-            ),
+            child: const _DormNoticePanel(),
           ),
         ],
       ),
@@ -1053,23 +971,285 @@ class _AreaLine extends StatelessWidget {
   }
 }
 
-class _SchoolNoticeCard extends StatelessWidget {
-  const _SchoolNoticeCard({required this.item});
+class _DormNoticePanel extends ConsumerStatefulWidget {
+  const _DormNoticePanel();
 
-  final _NoticeItem item;
+  @override
+  ConsumerState<_DormNoticePanel> createState() => _DormNoticePanelState();
+}
+
+class _DormNoticePanelState extends ConsumerState<_DormNoticePanel> {
+  List<TeacherNoticeListItem> _notices = const [];
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_loadNotices());
+    });
+  }
+
+  Future<void> _loadNotices() async {
+    setState(() => _loading = true);
+    final resp = await ref.read(dormitoryRepositoryProvider).noticeList(size: 20);
+    if (!mounted) return;
+    if (!resp.isSuccess) {
+      setState(() {
+        _notices = const [];
+        _loading = false;
+      });
+      return;
+    }
+    setState(() {
+      _notices = parseTeacherNoticeList(resp.data);
+      _loading = false;
+    });
+  }
+
+  Future<void> _openNoticeDetail(TeacherNoticeListItem item) async {
+    final resp =
+        await ref.read(dormitoryRepositoryProvider).noticeDetail(id: item.id);
+    if (!mounted) return;
+    if (!resp.isSuccess) {
+      AppToast.show(
+        context,
+        resp.msg.isNotEmpty ? resp.msg : '通知详情加载失败',
+      );
+      return;
+    }
+    final detail = parseTeacherNoticeDetail(resp.data);
+    if (detail == null) {
+      AppToast.show(context, '通知详情加载失败');
+      return;
+    }
+    await showScaledDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.18),
+      builder: (ctx) => GradientHeaderDialog(
+        title: '通知详情',
+        width: 460,
+        child: _DormNoticeDetailBody(notice: detail),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      padding: EdgeInsets.fromLTRB(ui(10), ui(10), ui(20), ui(10)),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF5F6FA),
-        borderRadius: BorderRadius.circular(ui(8)),
-      ),
-      child: Stack(
+    if (_loading) {
+      return const Center(child: AppLoadingIndicator());
+    }
+    if (_notices.isEmpty) {
+      return Center(
+        child: Text(
+          '暂无通知',
+          style: TextStyle(
+            fontSize: ui(12),
+            color: const Color(0xFFCECED1),
+            fontFamily: 'PingFang SC',
+          ),
+        ),
+      );
+    }
+    return ListView.separated(
+      padding: EdgeInsets.zero,
+      itemCount: _notices.length,
+      separatorBuilder: (_, _) => SizedBox(height: ui(8)),
+      itemBuilder: (_, i) {
+        final item = _notices[i];
+        return _SchoolNoticeCard(
+          item: item,
+          onTap: () => unawaited(_openNoticeDetail(item)),
+        );
+      },
+    );
+  }
+}
+
+class _DormNoticeDetailBody extends StatelessWidget {
+  const _DormNoticeDetailBody({required this.notice});
+
+  final TeacherNoticeListItem notice;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final tagStyle = notice.tagStyle;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          notice.title,
+          style: TextStyle(
+            fontSize: ui(15),
+            color: const Color(0xFF0B081A),
+            fontFamily: 'PingFang SC',
+            fontWeight: AppFont.w600,
+            height: 1.5,
+          ),
+        ),
+        SizedBox(height: ui(8)),
+        Row(
+          children: [
+            Container(
+              padding: EdgeInsets.symmetric(
+                horizontal: ui(6),
+                vertical: ui(2),
+              ),
+              decoration: BoxDecoration(
+                color: tagStyle.background,
+                borderRadius: BorderRadius.circular(ui(4)),
+              ),
+              child: Text(
+                notice.tag,
+                style: TextStyle(
+                  fontSize: ui(12),
+                  color: tagStyle.foreground,
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w400,
+                  height: 1.2,
+                ),
+              ),
+            ),
+            if (notice.author.isNotEmpty && notice.author != '—') ...[
+              SizedBox(width: ui(8)),
+              Expanded(
+                child: Text(
+                  notice.author,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: ui(12),
+                    color: const Color(0xFF6D6B75),
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w400,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        SizedBox(height: ui(16)),
+        _DormNoticeDetailRow(label: '类型', value: notice.type),
+        if (notice.priority.isNotEmpty)
+          _DormNoticeDetailRow(label: '优先级', value: notice.priority),
+        if (notice.scopeLabel.isNotEmpty && notice.scopeLabel != '—')
+          _DormNoticeDetailRow(label: '推送范围', value: notice.scopeLabel),
+        _DormNoticeDetailRow(
+          label: '时间',
+          value: notice.publishedAt.isNotEmpty ? notice.publishedAt : notice.time,
+          isLast: true,
+        ),
+        SizedBox(height: ui(12)),
+        Text(
+          '内容',
+          style: TextStyle(
+            fontSize: ui(13),
+            color: const Color(0xFF6D6B75),
+            fontFamily: 'PingFang SC',
+            fontWeight: AppFont.w400,
+            height: 1.4,
+          ),
+        ),
+        SizedBox(height: ui(6)),
+        Container(
+          width: double.infinity,
+          padding: EdgeInsets.all(ui(12)),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF5F6FA),
+            borderRadius: BorderRadius.circular(ui(10)),
+          ),
+          child: Text(
+            notice.content.isEmpty ? '（暂无正文）' : notice.content,
+            style: TextStyle(
+              fontSize: ui(13),
+              color: const Color(0xFF0B081A),
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w400,
+              height: 22 / 13,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DormNoticeDetailRow extends StatelessWidget {
+  const _DormNoticeDetailRow({
+    required this.label,
+    required this.value,
+    this.isLast = false,
+  });
+
+  final String label;
+  final String value;
+  final bool isLast;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Padding(
+      padding: EdgeInsets.only(bottom: isLast ? 0 : ui(8)),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Column(
+          SizedBox(
+            width: ui(64),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: ui(12),
+                color: const Color(0xFFB6B5BB),
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w400,
+                height: 1.4,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value.isEmpty ? '—' : value,
+              style: TextStyle(
+                fontSize: ui(12),
+                color: const Color(0xFF0B081A),
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w400,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SchoolNoticeCard extends StatelessWidget {
+  const _SchoolNoticeCard({required this.item, this.onTap});
+
+  final TeacherNoticeListItem item;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final tagStyle = item.tagStyle;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(ui(8)),
+        child: Container(
+          padding: EdgeInsets.fromLTRB(ui(10), ui(10), ui(20), ui(10)),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF5F6FA),
+            borderRadius: BorderRadius.circular(ui(8)),
+          ),
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1082,7 +1262,7 @@ class _SchoolNoticeCard extends StatelessWidget {
                       vertical: ui(2),
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFEAE5FF),
+                      color: tagStyle.background,
                       borderRadius: BorderRadius.circular(ui(4)),
                     ),
                     child: Text(
@@ -1091,7 +1271,7 @@ class _SchoolNoticeCard extends StatelessWidget {
                         fontSize: ui(10),
                         height: 1.2,
                         fontWeight: AppFont.w500,
-                        color: const Color(0xFF0B081A),
+                        color: tagStyle.foreground,
                         fontFamily: 'PingFang SC',
                       ),
                     ),
@@ -1099,7 +1279,7 @@ class _SchoolNoticeCard extends StatelessWidget {
                   SizedBox(width: ui(6)),
                   Expanded(
                     child: Text(
-                      item.text,
+                      item.title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -1124,21 +1304,7 @@ class _SchoolNoticeCard extends StatelessWidget {
               ),
             ],
           ),
-          Positioned(
-            right: 0,
-            top: 0,
-            child: Container(
-              width: ui(6),
-              height: ui(6),
-              decoration: BoxDecoration(
-                color: item.unread
-                    ? const Color(0xFFFF323C)
-                    : const Color(0xFFCECED1),
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

@@ -398,8 +398,8 @@ class SmartCampusPage extends ConsumerWidget {
       );
     }
 
-    // 宿管端：复用 admin / 教师端的「群聊 / 校长信箱 / 校圈」全站入口，
-    // 「按宿舍查寝 / 查寝历史」已接入独立视图，「宿管请假」目前先保留占位回调。
+    // 宿管端：复用 admin / 教师端的「群聊 / 校长信箱 / 校圈」全站入口；
+    // 「按宿舍查寝 / 查寝历史 / 宿管请假」已接入独立视图（请假复用任课老师「我的请假」）。
     if (state.selectedRole == SmartCampusRole.dormManager) {
       if (state.mainView == SmartCampusMainView.principalMailbox) {
         return PrincipalMailboxView(onBack: controller.backToDashboard);
@@ -422,6 +422,9 @@ class SmartCampusPage extends ConsumerWidget {
           onBack: controller.backToDashboard,
         );
       }
+      if (state.mainView == SmartCampusMainView.myTeacherLeave) {
+        return TeacherMyLeaveView(onBack: controller.backToDashboard);
+      }
       if (state.mainView == SmartCampusMainView.dashboard) {
         return DormManagerHomeView(
           shellDisplayName: shellState.user.displayName,
@@ -434,6 +437,7 @@ class SmartCampusPage extends ConsumerWidget {
           onOpenSchoolCircle: openSchoolCircle,
           onOpenDormCheckByRoom: controller.openDormCheckByRoom,
           onOpenDormCheckHistory: controller.openDormHistory,
+          onOpenDormManagerLeave: controller.openMyTeacherLeave,
         );
       }
     }

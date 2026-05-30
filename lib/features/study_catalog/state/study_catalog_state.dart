@@ -9,6 +9,7 @@ enum StudyCatalogSubtitleField { none, shortText1, shortText2 }
 enum StudyCatalogArtworkLabel {
   dictation,
   sightSinging,
+  smartSightSinging,
   musicTheory,
   answer,
   voice,
@@ -67,6 +68,18 @@ class StudyCatalogConfig {
     artworkLabel: StudyCatalogArtworkLabel.sightSinging,
     targetRoute: RoutePaths.musicPlay,
     targetArgsBuilder: _buildSightSingingArgs,
+  );
+
+  static const smartSightSinging = StudyCatalogConfig(
+    key: 'smartSightSinging',
+    title: '智能视唱',
+    type: 11,
+    defaultFirstMenuId: '1',
+    groupField: StudyCatalogGroupField.shortText2,
+    subtitleField: StudyCatalogSubtitleField.shortText1,
+    artworkLabel: StudyCatalogArtworkLabel.smartSightSinging,
+    targetRoute: RoutePaths.smartSightSinging,
+    targetArgsBuilder: _buildSmartSightSingingArgs,
   );
 
   static const musicTheory = StudyCatalogConfig(
@@ -314,6 +327,16 @@ Map<String, dynamic> _buildSightSingingArgs(
   return <String, dynamic>{
     'id': lesson.id,
     'type': 3,
+    'all': state.flatLessons.map((item) => item.id).toList(growable: false),
+  };
+}
+
+Map<String, dynamic> _buildSmartSightSingingArgs(
+  StudyCatalogState state,
+  StudyCatalogLesson lesson,
+) {
+  return <String, dynamic>{
+    'id': lesson.id,
     'all': state.flatLessons.map((item) => item.id).toList(growable: false),
   };
 }

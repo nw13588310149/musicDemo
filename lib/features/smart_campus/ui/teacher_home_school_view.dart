@@ -1,4 +1,4 @@
-﻿// =============================================================================
+// =============================================================================
 // 班主任端「家校沟通」独立页面
 //
 // 入口：班主任 dashboard 快捷区「家校沟通」按钮 →
@@ -27,11 +27,20 @@
 //      信息 + 老师/家长气泡 + 输入栏 + 退出链接。
 // =============================================================================
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 
+import '../../../core/constants/app_assets.dart';
+import '../../../core/widgets/app_asset_graphic.dart';
+import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
+import '../data/home_school_chat_data.dart';
+import '../data/teacher_repository.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // —— 颜色 ————————————————————————————————————————————————————————
@@ -45,133 +54,127 @@ const Color _kTextHintLight = Color(0xFFCECED1);
 const Color _kTextPlaceholder = Color(0xFFD1D1D1);
 const Color _kPurple = Color(0xFF8741FF);
 const Color _kPurpleSoftBg = Color(0xFFDAD2FF);
-const Color _kRed = Color(0xFFFF323C);
 const Color _kBadgeRed = Color(0xFFF04545);
 
 // —— 顶部 tab 枚举 ——————————————————————————————————————————————
 enum _TopTab {
-  all('全部'),
-  unread('未读'),
-  pending('待回复');
+  all('全部', 'all'),
+  unread('未读', 'unread'),
+  pending('待回复', 'waitingReply');
 
-  const _TopTab(this.label);
+  const _TopTab(this.label, this.apiTab);
   final String label;
-}
-
-// —— 数据模型 ——————————————————————————————————————————————————
-
-class _ChatMessage {
-  const _ChatMessage({
-    required this.fromTeacher,
-    required this.text,
-    required this.time,
-    this.delivered = true,
-  });
-
-  /// true 表示老师发的（紫底白字气泡，靠右），false 表示家长发的（灰底，靠左）。
-  final bool fromTeacher;
-  final String text;
-  final String time;
-  final bool delivered;
-}
-
-class _Conversation {
-  _Conversation({
-    required this.id,
-    required this.studentName,
-    required this.studentNo,
-    required this.parentName,
-    required this.parentRelation,
-    required this.tags,
-    required this.lastSpeaker,
-    required this.lastMessage,
-    required this.timeText,
-    required this.unreadCount,
-    required this.replyPending,
-    required this.smsFailed,
-    required this.messages,
-  });
-
-  final String id;
-  final String studentName;
-  final String studentNo;
-  final String parentName;
-  final String parentRelation; // 例如 "母亲"
-  final List<String> tags;
-  final String lastSpeaker; // "家长" / "老师"
-  final String lastMessage;
-  final String timeText; // 例如 "今天 09:32"
-  int unreadCount;
-  final bool replyPending;
-  final bool smsFailed;
-  final List<_ChatMessage> messages;
+  final String apiTab;
 }
 
 // —— 顶级视图 ——————————————————————————————————————————————————
 
-class TeacherHomeSchoolView extends StatefulWidget {
+class TeacherHomeSchoolView extends ConsumerStatefulWidget {
   const TeacherHomeSchoolView({super.key, required this.onBack});
 
   final VoidCallback onBack;
 
   @override
-  State<TeacherHomeSchoolView> createState() => _TeacherHomeSchoolViewState();
+  ConsumerState<TeacherHomeSchoolView> createState() =>
+      _TeacherHomeSchoolViewState();
 }
 
-class _TeacherHomeSchoolViewState extends State<TeacherHomeSchoolView> {
+class _TeacherHomeSchoolViewState extends ConsumerState<TeacherHomeSchoolView> {
   _TopTab _tab = _TopTab.all;
   String _query = '';
-  late List<_Conversation> _conversations;
+  String _debouncedKeyword = '';
+  Timer? _searchDebounce;
+
+  HomeSchoolChatStat _stat = HomeSchoolChatStat.zero;
+  List<HomeSchoolConversation> _conversations = const [];
+  bool _loading = false;
+  String? _loadError;
+  int _listToken = 0;
 
   @override
   void initState() {
     super.initState();
-    _conversations = _demoConversations();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_reloadAll());
+    });
   }
 
-  int get _unreadCount => _conversations.where((c) => c.unreadCount > 0).length;
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    super.dispose();
+  }
 
-  int get _pendingCount => _conversations.where((c) => c.replyPending).length;
+  Future<void> _loadStat() async {
+    final resp = await ref.read(teacherRepositoryProvider).chatStat();
+    if (!mounted) return;
+    if (!resp.isSuccess) return;
+    setState(() {
+      _stat = parseHomeSchoolChatStat(resp.data);
+    });
+  }
 
-  int get _totalCount => _conversations.length;
+  Future<void> _loadList() async {
+    final token = ++_listToken;
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
+    final resp = await ref.read(teacherRepositoryProvider).chatConversationList(
+          current: 1,
+          size: 100,
+          tab: _tab.apiTab,
+          keyword: _debouncedKeyword,
+        );
+    if (!mounted || token != _listToken) return;
 
-  List<_Conversation> get _filtered {
-    Iterable<_Conversation> list = _conversations;
-    switch (_tab) {
-      case _TopTab.all:
-        break;
-      case _TopTab.unread:
-        list = list.where((c) => c.unreadCount > 0);
-        break;
-      case _TopTab.pending:
-        list = list.where((c) => c.replyPending);
-        break;
-    }
-    final q = _query.trim().toLowerCase();
-    if (q.isNotEmpty) {
-      list = list.where((c) {
-        final hay =
-            '${c.studentName} ${c.studentNo} ${c.parentName} ${c.parentRelation}'
-                .toLowerCase();
-        return hay.contains(q);
+    if (!resp.isSuccess) {
+      setState(() {
+        _conversations = const [];
+        _loading = false;
+        _loadError = resp.displayMsg;
       });
+      return;
     }
-    return list.toList();
+
+    setState(() {
+      _conversations = parseHomeSchoolConversationList(resp.data);
+      _loading = false;
+      _loadError = null;
+    });
   }
 
-  void _openConversation(_Conversation conv) {
-    // 使用 showScaledDialog（root overlay 之外仍然能拿到 DashboardScaleScope，
-    // 否则弹窗子树里 `DashboardScaleScope.of(context)` 会断言失败）。
+  Future<void> _reloadAll() async {
+    await Future.wait([_loadStat(), _loadList()]);
+  }
+
+  void _onTabChanged(_TopTab tab) {
+    if (_tab == tab) return;
+    setState(() => _tab = tab);
+    unawaited(_loadList());
+  }
+
+  void _onQueryChanged(String v) {
+    setState(() => _query = v);
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 400), () {
+      if (!mounted) return;
+      setState(() => _debouncedKeyword = v.trim());
+      unawaited(_loadList());
+    });
+  }
+
+  void _openConversation(HomeSchoolConversation conv) {
     showScaledDialog<void>(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.80),
-      builder: (dialogContext) => _ChatDetailDialog(conversation: conv),
+      builder: (dialogContext) => _ChatDetailDialog(
+        conversation: conv,
+        onSent: _reloadAll,
+      ),
     ).then((_) {
-      // 演示：进入详情即视为已读 → 清空未读计数。
       if (!mounted) return;
-      if (conv.unreadCount > 0) {
-        setState(() => conv.unreadCount = 0);
-      }
+      unawaited(_reloadAll());
     });
   }
 
@@ -186,38 +189,34 @@ class _TeacherHomeSchoolViewState extends State<TeacherHomeSchoolView> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _Banner(onBack: widget.onBack),
-            SizedBox(height: ui(10)),
-            Padding(
-              padding: EdgeInsets.only(left: ui(8)),
-              child: Text(
-                '默认由家长在小程序审批后再由班主任审批；已与家长充分沟通的可选择班主任直接审批。补课协调以教务安排为准。',
-                style: TextStyle(
-                  fontSize: ui(12),
-                  color: _kTextHint,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w400,
-                  height: 1.5,
-                ),
-              ),
-            ),
-            SizedBox(height: ui(12)),
+            SizedBox(height: ui(16)),
             _StatsRow(
-              unread: _unreadCount,
-              pending: _pendingCount,
-              total: _totalCount,
+              unread: _stat.unreadCount,
+              pending: _stat.waitingReplyCount,
+              total: _stat.totalCount,
             ),
             SizedBox(height: ui(16)),
             _TabsAndSearchRow(
               current: _tab,
               query: _query,
-              onTabChanged: (t) => setState(() => _tab = t),
-              onQueryChanged: (v) => setState(() => _query = v),
+              onTabChanged: _onTabChanged,
+              onQueryChanged: _onQueryChanged,
             ),
             SizedBox(height: ui(16)),
-            if (_filtered.isEmpty)
+            if (_loading)
+              Padding(
+                padding: EdgeInsets.symmetric(vertical: ui(40)),
+                child: Center(child: AppLoadingIndicator(size: ui(32))),
+              )
+            else if (_loadError != null)
+              _ErrorHint(message: _loadError!, onRetry: _reloadAll)
+            else if (_conversations.isEmpty)
               _EmptyHint(query: _query, tab: _tab)
             else
-              _ConversationGrid(items: _filtered, onTap: _openConversation),
+              _ConversationGrid(
+                items: _conversations,
+                onTap: _openConversation,
+              ),
           ],
         ),
       ),
@@ -240,12 +239,12 @@ class _Banner extends StatelessWidget {
       height: ui(62),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.bottomCenter,
-          end: Alignment.topCenter,
-          colors: [Colors.white, Color(0xFFF9EDFF)],
-        ),
         borderRadius: BorderRadius.circular(ui(16)),
+        image: DecorationImage(
+          image: AssetImage(AppAssets.xiaoquanHeaderBg),
+          fit: BoxFit.cover,
+          alignment: Alignment.centerRight,
+        ),
       ),
       child: Stack(
         children: [
@@ -287,19 +286,6 @@ class _Banner extends StatelessWidget {
                       fontWeight: AppFont.w600,
                       height: 1.2,
                     ),
-                  ),
-                  SizedBox(height: ui(2)),
-                  Text(
-                    '与本班学生家长就请假、成绩、心理等进行文字沟通；可查看短信送达演示状态。消息以站内信为主，接入后可同步微信/App推送。',
-                    style: TextStyle(
-                      fontSize: ui(12),
-                      color: _kTextHint,
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w400,
-                      height: 1.4,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
@@ -537,17 +523,45 @@ class _TabPill extends StatelessWidget {
   }
 }
 
-class _SearchBox extends StatelessWidget {
+class _SearchBox extends StatefulWidget {
   const _SearchBox({required this.value, required this.onChanged});
 
   final String value;
   final ValueChanged<String> onChanged;
 
   @override
+  State<_SearchBox> createState() => _SearchBoxState();
+}
+
+class _SearchBoxState extends State<_SearchBox> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.value);
+  }
+
+  @override
+  void didUpdateWidget(covariant _SearchBox oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.value != _controller.text) {
+      _controller.text = widget.value;
+      _controller.selection = TextSelection.collapsed(
+        offset: widget.value.length,
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final controller = TextEditingController(text: value)
-      ..selection = TextSelection.collapsed(offset: value.length);
     return Container(
       height: ui(44),
       padding: EdgeInsets.symmetric(horizontal: ui(16)),
@@ -557,16 +571,17 @@ class _SearchBox extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(
-            Icons.search_rounded,
-            size: ui(16),
-            color: const Color(0xFFC6C6C6),
+          AppAssetGraphic(
+            AppAssets.shellV2Search,
+            width: ui(16),
+            height: ui(16),
+            fit: BoxFit.contain,
           ),
           SizedBox(width: ui(8)),
           Expanded(
             child: AppTextField(
-              controller: controller,
-              onChanged: onChanged,
+              controller: _controller,
+              onChanged: widget.onChanged,
               cursorColor: _kPurple,
               cursorWidth: 1.5,
               cursorHeight: ui(16),
@@ -578,7 +593,7 @@ class _SearchBox extends StatelessWidget {
                 height: 1.2,
               ),
               decoration: InputDecoration(
-                hintText: '搜索姓名、学号、手机、宿舍、家长',
+                hintText: '搜索姓名、学号、手机、家长',
                 hintStyle: TextStyle(
                   fontSize: ui(14),
                   color: _kTextPlaceholder,
@@ -589,6 +604,60 @@ class _SearchBox extends StatelessWidget {
                 isCollapsed: true,
                 contentPadding: EdgeInsets.zero,
                 border: InputBorder.none,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// —— 空状态 / 错误 ——————————————————————————————————————————————
+
+class _ErrorHint extends StatelessWidget {
+  const _ErrorHint({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(vertical: ui(32), horizontal: ui(16)),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(ui(12)),
+      ),
+      child: Column(
+        children: [
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: ui(13),
+              color: _kTextHint,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w400,
+              height: 1.4,
+            ),
+          ),
+          SizedBox(height: ui(12)),
+          InkWell(
+            onTap: onRetry,
+            borderRadius: BorderRadius.circular(ui(6)),
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(6)),
+              child: Text(
+                '重试',
+                style: TextStyle(
+                  fontSize: ui(13),
+                  color: _kPurple,
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w500,
+                ),
               ),
             ),
           ),
@@ -637,8 +706,8 @@ class _EmptyHint extends StatelessWidget {
 class _ConversationGrid extends StatelessWidget {
   const _ConversationGrid({required this.items, required this.onTap});
 
-  final List<_Conversation> items;
-  final ValueChanged<_Conversation> onTap;
+  final List<HomeSchoolConversation> items;
+  final ValueChanged<HomeSchoolConversation> onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -672,7 +741,7 @@ class _ConversationGrid extends StatelessWidget {
 class _ConversationCard extends StatelessWidget {
   const _ConversationCard({required this.conversation, required this.onTap});
 
-  final _Conversation conversation;
+  final HomeSchoolConversation conversation;
   final VoidCallback onTap;
 
   @override
@@ -816,17 +885,6 @@ class _ConversationCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  if (conversation.smsFailed)
-                    Text(
-                      '短信未送达',
-                      style: TextStyle(
-                        fontSize: ui(12),
-                        color: _kRed,
-                        fontFamily: 'PingFang SC',
-                        fontWeight: AppFont.w400,
-                        height: 1.2,
-                      ),
-                    ),
                 ],
               ),
             ],
@@ -966,23 +1024,31 @@ class _TagPill extends StatelessWidget {
 // 输入栏 + 退出。
 // =============================================================================
 
-class _ChatDetailDialog extends StatefulWidget {
-  const _ChatDetailDialog({required this.conversation});
+class _ChatDetailDialog extends ConsumerStatefulWidget {
+  const _ChatDetailDialog({
+    required this.conversation,
+    required this.onSent,
+  });
 
-  final _Conversation conversation;
+  final HomeSchoolConversation conversation;
+  final Future<void> Function() onSent;
 
   @override
-  State<_ChatDetailDialog> createState() => _ChatDetailDialogState();
+  ConsumerState<_ChatDetailDialog> createState() => _ChatDetailDialogState();
 }
 
-class _ChatDetailDialogState extends State<_ChatDetailDialog> {
-  late final List<_ChatMessage> _messages;
+class _ChatDetailDialogState extends ConsumerState<_ChatDetailDialog> {
+  List<HomeSchoolChatMessage> _messages = const [];
+  bool _loading = true;
+  bool _sending = false;
   final _inputController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _messages = List<_ChatMessage>.from(widget.conversation.messages);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_loadMessages());
+    });
   }
 
   @override
@@ -991,18 +1057,44 @@ class _ChatDetailDialogState extends State<_ChatDetailDialog> {
     super.dispose();
   }
 
-  void _onSend() {
-    final text = _inputController.text.trim();
-    if (text.isEmpty) return;
-    final now = DateTime.now();
-    final hh = now.hour.toString().padLeft(2, '0');
-    final mm = now.minute.toString().padLeft(2, '0');
+  Future<void> _loadMessages() async {
+    setState(() => _loading = true);
+    final resp = await ref.read(teacherRepositoryProvider).chatMessageList(
+          conversationId: widget.conversation.id,
+          current: 1,
+          size: 200,
+        );
+    if (!mounted) return;
+    if (!resp.isSuccess) {
+      setState(() => _loading = false);
+      AppToast.show(context, resp.displayMsg);
+      return;
+    }
+    final parsed = parseHomeSchoolChatMessageList(resp.data);
     setState(() {
-      _messages.add(
-        _ChatMessage(fromTeacher: true, text: text, time: '$hh:$mm'),
-      );
-      _inputController.clear();
+      _messages = parsed.reversed.toList();
+      _loading = false;
     });
+  }
+
+  Future<void> _onSend() async {
+    final text = _inputController.text.trim();
+    if (text.isEmpty || _sending) return;
+    setState(() => _sending = true);
+    final resp = await ref.read(teacherRepositoryProvider).chatSend(
+          studentId: widget.conversation.studentId,
+          parentId: widget.conversation.parentId,
+          content: text,
+        );
+    if (!mounted) return;
+    setState(() => _sending = false);
+    if (!resp.isSuccess) {
+      AppToast.show(context, resp.displayMsg);
+      return;
+    }
+    _inputController.clear();
+    await _loadMessages();
+    await widget.onSent();
   }
 
   @override
@@ -1025,17 +1117,19 @@ class _ChatDetailDialogState extends State<_ChatDetailDialog> {
               Flexible(
                 child: Padding(
                   padding: EdgeInsets.fromLTRB(ui(24), ui(8), ui(24), ui(0)),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        for (final m in _messages) ...[
-                          _ChatBubble(message: m),
-                          SizedBox(height: ui(8)),
-                        ],
-                      ],
-                    ),
-                  ),
+                  child: _loading
+                      ? Center(child: AppLoadingIndicator(size: ui(28)))
+                      : SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              for (final m in _messages) ...[
+                                _ChatBubble(message: m),
+                                SizedBox(height: ui(8)),
+                              ],
+                            ],
+                          ),
+                        ),
                 ),
               ),
               Padding(
@@ -1043,7 +1137,11 @@ class _ChatDetailDialogState extends State<_ChatDetailDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    _InputBar(controller: _inputController, onSend: _onSend),
+                    _InputBar(
+                      controller: _inputController,
+                      onSend: _onSend,
+                      sending: _sending,
+                    ),
                     SizedBox(height: ui(12)),
                     InkWell(
                       onTap: () => Navigator.of(context).pop(),
@@ -1080,7 +1178,7 @@ class _ChatDetailDialogState extends State<_ChatDetailDialog> {
 class _DialogHeader extends StatelessWidget {
   const _DialogHeader({required this.conversation});
 
-  final _Conversation conversation;
+  final HomeSchoolConversation conversation;
 
   @override
   Widget build(BuildContext context) {
@@ -1150,17 +1248,6 @@ class _DialogHeader extends StatelessWidget {
                       conversation.studentNo,
                       style: TextStyle(
                         fontSize: ui(12),
-                        color: _kTextSecondary,
-                        fontFamily: 'PingFang SC',
-                        fontWeight: AppFont.w400,
-                        height: 1.2,
-                      ),
-                    ),
-                    SizedBox(height: ui(2)),
-                    Text(
-                      conversation.studentNo,
-                      style: TextStyle(
-                        fontSize: ui(12),
                         color: _kTextHint,
                         fontFamily: 'PingFang SC',
                         fontWeight: AppFont.w400,
@@ -1211,7 +1298,7 @@ class _DialogHeader extends StatelessWidget {
 class _ChatBubble extends StatelessWidget {
   const _ChatBubble({required this.message});
 
-  final _ChatMessage message;
+  final HomeSchoolChatMessage message;
 
   @override
   Widget build(BuildContext context) {
@@ -1236,7 +1323,7 @@ class _ChatBubble extends StatelessWidget {
                 borderRadius: BorderRadius.circular(ui(8)),
               ),
               child: Text(
-                message.text,
+                message.content,
                 style: TextStyle(
                   fontSize: ui(13),
                   color: fromTeacher ? Colors.white : _kTextDark,
@@ -1247,35 +1334,15 @@ class _ChatBubble extends StatelessWidget {
               ),
             ),
             SizedBox(height: ui(4)),
-            Row(
-              mainAxisAlignment: fromTeacher
-                  ? MainAxisAlignment.end
-                  : MainAxisAlignment.start,
-              children: [
-                if (fromTeacher) ...[
-                  Text(
-                    message.delivered ? '已送达' : '未送达',
-                    style: TextStyle(
-                      fontSize: ui(12),
-                      color: message.delivered ? _kTextHint : _kRed,
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w400,
-                      height: 1.0,
-                    ),
-                  ),
-                  SizedBox(width: ui(6)),
-                ],
-                Text(
-                  message.time,
-                  style: TextStyle(
-                    fontSize: ui(12),
-                    color: _kTextHintLight,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w400,
-                    height: 1.0,
-                  ),
-                ),
-              ],
+            Text(
+              message.timeText,
+              style: TextStyle(
+                fontSize: ui(12),
+                color: _kTextHintLight,
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w400,
+                height: 1.0,
+              ),
             ),
           ],
         ),
@@ -1285,10 +1352,15 @@ class _ChatBubble extends StatelessWidget {
 }
 
 class _InputBar extends StatelessWidget {
-  const _InputBar({required this.controller, required this.onSend});
+  const _InputBar({
+    required this.controller,
+    required this.onSend,
+    this.sending = false,
+  });
 
   final TextEditingController controller;
   final VoidCallback onSend;
+  final bool sending;
 
   @override
   Widget build(BuildContext context) {
@@ -1335,7 +1407,7 @@ class _InputBar extends StatelessWidget {
           SizedBox(width: ui(8)),
           // 发送按钮（紫色 pill）
           InkWell(
-            onTap: onSend,
+            onTap: sending ? null : onSend,
             borderRadius: BorderRadius.circular(ui(6)),
             child: Container(
               padding: EdgeInsets.symmetric(
@@ -1343,14 +1415,14 @@ class _InputBar extends StatelessWidget {
                 vertical: ui(6),
               ),
               decoration: BoxDecoration(
-                color: _kPurple,
+                color: sending ? _kPurple.withValues(alpha: 0.5) : _kPurple,
                 borderRadius: BorderRadius.circular(ui(6)),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    '发送',
+                    sending ? '发送中' : '发送',
                     style: TextStyle(
                       fontSize: ui(13),
                       color: Colors.white,
@@ -1399,70 +1471,4 @@ class _IconBtn extends StatelessWidget {
       ),
     );
   }
-}
-
-// —— 演示数据 ——————————————————————————————————————————————————
-
-List<_Conversation> _demoConversations() {
-  final commonMessages = <_ChatMessage>[
-    const _ChatMessage(
-      fromTeacher: true,
-      text: '王女士您好，本周月考后王晴情绪有些波动，建议您周末多倾听，若持续焦虑可预约心理老师。',
-      time: '20:38',
-      delivered: true,
-    ),
-    const _ChatMessage(fromTeacher: false, text: '知道了', time: '20:38'),
-    const _ChatMessage(
-      fromTeacher: false,
-      text: '收到，谢谢老师关心。我会和她聊聊，周末带她散步放松。',
-      time: '今天 09:32',
-    ),
-  ];
-  return [
-    _Conversation(
-      id: 'c1',
-      studentName: '王晴',
-      studentNo: 'G3030201',
-      parentName: '王丽',
-      parentRelation: '母亲',
-      tags: ['心理关注', '成绩'],
-      lastSpeaker: '家长',
-      lastMessage: '收到，谢谢老师关心。我会和她聊聊，周末带她散步放松。',
-      timeText: '今天 09:32',
-      unreadCount: 12,
-      replyPending: true,
-      smsFailed: false,
-      messages: List<_ChatMessage>.from(commonMessages),
-    ),
-    _Conversation(
-      id: 'c2',
-      studentName: '王晴',
-      studentNo: 'G3030201',
-      parentName: '王丽',
-      parentRelation: '母亲',
-      tags: ['心理关注', '成绩'],
-      lastSpeaker: '家长',
-      lastMessage: '收到，谢谢老师关心。我会和她聊聊，周末带她散步放松。',
-      timeText: '今天 09:32',
-      unreadCount: 3,
-      replyPending: true,
-      smsFailed: true,
-      messages: List<_ChatMessage>.from(commonMessages),
-    ),
-    _Conversation(
-      id: 'c3',
-      studentName: '苏音筒',
-      studentNo: 'G3030218',
-      parentName: '王丽',
-      parentRelation: '母亲',
-      tags: ['心理关注', '成绩'],
-      lastSpeaker: '家长',
-      lastMessage: '收到，谢谢老师关心。我会和她聊聊，周末带她散步放松。',
-      timeText: '今天 09:32',
-      unreadCount: 0,
-      replyPending: true,
-      smsFailed: false,
-      messages: List<_ChatMessage>.from(commonMessages),
-    ),
-  ];
 }

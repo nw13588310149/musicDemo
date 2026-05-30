@@ -7,9 +7,16 @@ import '../config/smart_sight_singing_config.dart';
 import 'music_xml_file_picker.dart';
 
 Future<PickedMusicXmlFile?> pickLocalMusicXmlFileImpl() async {
+  // iOS / iPad 的 UIDocumentPicker 对 FileType.custom 只接受「扩展名 → 单一 UTI」
+  // 映射；MusicXML 的 .musicxml / .mxl 在高版本 iOS 上常对不上 UTI，文件会
+  // 显示为灰色不可选。改走 FileType.any（public.item），选完再在 Dart 侧校验
+  // 扩展名。Android / 桌面仍用 custom 过滤，减少无关文件干扰。
+  final useBroadPicker = Platform.isIOS;
   final result = await FilePicker.platform.pickFiles(
-    type: FileType.custom,
-    allowedExtensions: SmartSightSingingImportConfig.musicXmlExtensions,
+    type: useBroadPicker ? FileType.any : FileType.custom,
+    allowedExtensions: useBroadPicker
+        ? null
+        : SmartSightSingingImportConfig.musicXmlExtensions,
     allowMultiple: false,
     withData: false,
   );
@@ -24,6 +31,14 @@ Future<PickedMusicXmlFile?> pickLocalMusicXmlFileImpl() async {
     return null;
   }
 
+  final name = file.name.trim().isEmpty ? _nameFromPath(path) : file.name.trim();
+  if (!SmartSightSingingImportConfig.isMusicXmlFileName(name)) {
+    throw StateError(
+      '请选择 MusicXML 文件（.xml / .musicxml / .mxl）。'
+      '高版本 iPad 若列表里文件呈灰色，请先在「文件」App 中确认扩展名正确。',
+    );
+  }
+
   final ioFile = File(path);
   final size = await ioFile.length();
   if (size <= 0) {
@@ -34,7 +49,6 @@ Future<PickedMusicXmlFile?> pickLocalMusicXmlFileImpl() async {
   }
 
   final bytes = Uint8List.fromList(await ioFile.readAsBytes());
-  final name = file.name.trim().isEmpty ? _nameFromPath(path) : file.name.trim();
   return PickedMusicXmlFile(name: name, path: path, bytes: bytes);
 }
 

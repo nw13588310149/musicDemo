@@ -88,7 +88,6 @@ const Color _kRecordRed = Color(0xFFFF323C);
 const Color _kRecordRedLight = Color(0xFFFF7A7A);
 const Color _kAnnouncementBg = Color(0xBDEFE5FF); // rgba(239,229,255,0.74)
 const Color _kBlueLink = Color(0xFF325BFF);
-const Color _kBadgeRed = Color(0xFFFF323C);
 const Color _kPdfBlueGradStart = Color(0xFFD7E2FF);
 const Color _kPdfBlueGradEnd = Color(0xFFF9FBFF);
 const Color _kPdfBorder = Color(0xFFE5EFFF);
@@ -3160,43 +3159,12 @@ class _ConversationCell extends StatelessWidget {
             SizedBox(
               width: ui(40),
               height: ui(40),
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  _AvatarCircle(
-                    avatarUrl: conv.avatarUrl,
-                    fallback: conv.name,
-                    size: ui(40),
-                    radius: ui(8),
-                    color: conv.avatarColor,
-                  ),
-                  if (conv.unread > 0)
-                    Positioned(
-                      top: -ui(3),
-                      right: -ui(3),
-                      child: Container(
-                        constraints: BoxConstraints(minWidth: ui(16)),
-                        height: ui(16),
-                        padding: EdgeInsets.symmetric(horizontal: ui(4)),
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: _kBadgeRed,
-                          borderRadius: BorderRadius.circular(ui(8)),
-                          border: Border.all(color: Colors.white, width: 1.5),
-                        ),
-                        child: Text(
-                          conv.unread > 99 ? '99+' : '${conv.unread}',
-                          style: TextStyle(
-                            fontSize: ui(10),
-                            color: Colors.white,
-                            fontFamily: 'PingFang SC',
-                            fontWeight: AppFont.w500,
-                            height: 1,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
+              child: _AvatarCircle(
+                avatarUrl: conv.avatarUrl,
+                fallback: conv.name,
+                size: ui(40),
+                radius: ui(8),
+                color: conv.avatarColor,
               ),
             ),
             SizedBox(width: ui(10)),

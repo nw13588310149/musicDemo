@@ -6,12 +6,12 @@
 // 返回：顶部 banner 左上角返回按钮 → onBack（controller.backToDashboard）。
 //
 // 视觉（Figma 970 设计宽）：
-//   1. 顶部 banner（高 62）：白→#F9EDFF 渐变，左返回按钮，居中"我的班级"标题
+//   1. 顶部 banner（高 62）：xiaoquanHeaderBg 背景图，左返回按钮，居中"我的班级"标题
 //   2. 班级信息卡（高 163）：左上 班级名 + 副标题 + 三列信息（班主任 / 辅导员 / 教室）
 //      + 底部"教务与艺术实践办公室·列表展示12/42人"；右上 全班 / 男生 / 女生 三个
 //      100×100 紫色数字统计盒
-//   3. 班级通知：标题行（"班级通知" + "查看全部 >"）+ 白卡内最多 2 条紫底通知
-//      （数据来自 `/student/schoolClassNotice/list`）
+//   3. 班级通知：标题行（"班级通知" + "查看全部 >"）+ 白卡内一行多个紧凑通知预览
+//      （数据来自 `/student/schoolClassNotice/list`，点击弹窗展示全文）
 //   4. 师资：三段（教务老师 / 班主任 / 任课老师），每段一张白卡内若干 308×171 灰底
 //      老师卡（任课卡右上多一个粉色课程标签）
 //   5. 同班同学：标题行（"同班同学" + 搜索框）+ 白卡内 124×124 学生卡 7 列网格，
@@ -27,8 +27,11 @@ import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 
+import '../../../core/constants/app_assets.dart';
 import '../../../core/network/media_url.dart';
+import '../../../core/widgets/app_asset_graphic.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/state/shell_controller.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/student_repository.dart';
@@ -44,6 +47,7 @@ const Color _kBorderSoft = Color(0xFFF3F2F3);
 const Color _kPurple = Color(0xFF8741FF);
 const Color _kPurpleAvatar = Color(0xFFB98FFF);
 const Color _kAnnounceBg = Color(0xFFF0E8FC);
+const Color _kAnnouncementBg = Color(0xBDEFE5FF);
 const Color _kCoursePink = Color(0xFFFFC8D9);
 const Color _kSelfTagBg = Color(0xFFF7F2FF);
 const Color _kPlaceholder = Color(0xFFD1D1D1);
@@ -155,7 +159,11 @@ class _StudentMyClassViewState extends ConsumerState<StudentMyClassView> {
           else
             _EmptyHintCard(message: '暂无班级信息'),
           SizedBox(height: ui(16)),
-          _AnnouncementSection(notices: _notices, onViewAll: _openNoticeDrawer),
+          _AnnouncementSection(
+            notices: _notices,
+            onViewAll: _openNoticeDrawer,
+            onNoticeTap: _showNoticeDetail,
+          ),
           if (_facultySections.isNotEmpty) ...[
             SizedBox(height: ui(16)),
             _FacultySection(sections: _facultySections),
@@ -191,6 +199,7 @@ class _StudentMyClassViewState extends ConsumerState<StudentMyClassView> {
               child: _ClassNoticeListDrawer(
                 initialNotices: _notices,
                 onClose: () => Navigator.of(ctx).maybePop(),
+                onNoticeTap: _showNoticeDetail,
               ),
             ),
           ),
@@ -205,6 +214,59 @@ class _StudentMyClassViewState extends ConsumerState<StudentMyClassView> {
           child: child,
         );
       },
+    );
+  }
+
+  void _showNoticeDetail(_ClassNoticeItem item) {
+    final ui = DashboardScaleScope.of(context).ui;
+    showScaledDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.18),
+      builder: (ctx) => GradientHeaderDialog(
+        title: item.title.isNotEmpty ? item.title : '班级通知',
+        width: 460,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (item.content.isNotEmpty)
+              Text(
+                item.content,
+                style: TextStyle(
+                  fontSize: ui(13),
+                  color: _kTextDark,
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w400,
+                  height: 22 / 13,
+                ),
+              )
+            else
+              Text(
+                item.title,
+                style: TextStyle(
+                  fontSize: ui(13),
+                  color: _kTextDark,
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w400,
+                  height: 22 / 13,
+                ),
+              ),
+            if (item.fullDate.isNotEmpty) ...[
+              SizedBox(height: ui(12)),
+              Text(
+                item.fullDate,
+                style: TextStyle(
+                  fontSize: ui(12),
+                  color: _kTextHint,
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w400,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
@@ -243,6 +305,7 @@ class _ClassNoticeItem {
     required this.title,
     required this.content,
     required this.date,
+    required this.fullDate,
     this.highlighted = false,
   });
 
@@ -250,6 +313,7 @@ class _ClassNoticeItem {
   final String title;
   final String content;
   final String date;
+  final String fullDate;
   final bool highlighted;
 
   String get text {
@@ -257,6 +321,8 @@ class _ClassNoticeItem {
     if (content.isEmpty) return title;
     return '$title：$content';
   }
+
+  String get previewText => content.isNotEmpty ? content : title;
 }
 
 class _ParsedMySchoolClass {
@@ -480,6 +546,7 @@ List<_ClassNoticeItem> _parseClassNotices(dynamic raw) {
         title: title,
         content: content,
         date: date.isEmpty ? '—' : date,
+        fullDate: createTime,
         highlighted: i == 0,
       ),
     );
@@ -488,7 +555,7 @@ List<_ClassNoticeItem> _parseClassNotices(dynamic raw) {
 }
 
 // =============================================================================
-// 顶部 banner：白→紫淡色渐变，左返回按钮 + 居中标题
+// 顶部 banner：xiaoquanHeaderBg 背景图，左返回按钮 + 居中标题
 // =============================================================================
 
 class _MyClassBanner extends StatelessWidget {
@@ -502,12 +569,13 @@ class _MyClassBanner extends StatelessWidget {
     return Container(
       width: double.infinity,
       height: ui(62),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(ui(12)),
-        gradient: const LinearGradient(
-          begin: Alignment.bottomLeft,
-          end: Alignment.topRight,
-          colors: [Colors.white, Color(0xFFF9EDFF)],
+        borderRadius: BorderRadius.circular(ui(16)),
+        image: DecorationImage(
+          image: AssetImage(AppAssets.xiaoquanHeaderBg),
+          fit: BoxFit.cover,
+          alignment: Alignment.centerRight,
         ),
       ),
       child: Stack(
@@ -793,10 +861,15 @@ class _StatBox extends StatelessWidget {
 // =============================================================================
 
 class _AnnouncementSection extends StatelessWidget {
-  const _AnnouncementSection({required this.notices, required this.onViewAll});
+  const _AnnouncementSection({
+    required this.notices,
+    required this.onViewAll,
+    required this.onNoticeTap,
+  });
 
   final List<_ClassNoticeItem> notices;
   final VoidCallback onViewAll;
+  final ValueChanged<_ClassNoticeItem> onNoticeTap;
 
   @override
   Widget build(BuildContext context) {
@@ -836,7 +909,12 @@ class _AnnouncementSection extends StatelessWidget {
                     children: [
                       for (var i = 0; i < preview.length; i++) ...[
                         if (i > 0) SizedBox(width: ui(8)),
-                        Expanded(child: _AnnouncementCard(item: preview[i])),
+                        Expanded(
+                          child: _AnnouncementCard(
+                            item: preview[i],
+                            onTap: () => onNoticeTap(preview[i]),
+                          ),
+                        ),
                       ],
                     ],
                   ),
@@ -848,69 +926,169 @@ class _AnnouncementSection extends StatelessWidget {
 }
 
 class _AnnouncementCard extends StatelessWidget {
-  const _AnnouncementCard({required this.item});
+  const _AnnouncementCard({required this.item, required this.onTap});
 
   final _ClassNoticeItem item;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      padding: EdgeInsets.all(ui(8)),
-      decoration: BoxDecoration(
-        color: _kAnnounceBg,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(ui(8)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
+        child: Container(
+          padding: EdgeInsets.all(ui(8)),
+          decoration: BoxDecoration(
+            color: _kAnnounceBg,
+            borderRadius: BorderRadius.circular(ui(8)),
+          ),
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              if (item.highlighted) ...[
-                SizedBox(
-                  width: ui(12),
-                  height: ui(20),
-                  child: Center(
-                    child: Container(
-                      width: ui(10),
-                      height: ui(10),
-                      color: _kPurple,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: EdgeInsets.only(top: ui(2)),
+                    child: AppAssetGraphic(
+                      AppAssets.groupChatInfo,
+                      width: ui(12),
+                      height: ui(12),
+                      fit: BoxFit.contain,
                     ),
                   ),
-                ),
-                SizedBox(width: ui(8)),
-              ],
-              Expanded(
+                  SizedBox(width: ui(8)),
+                  Expanded(
+                    child: Text(
+                      item.text,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: ui(13),
+                        color: _kTextDark,
+                        fontFamily: 'PingFang SC',
+                        fontWeight: AppFont.w500,
+                        height: 20 / 13,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: ui(4)),
+              Padding(
+                padding: EdgeInsets.only(left: ui(20)),
                 child: Text(
-                  item.text,
+                  item.date,
                   style: TextStyle(
-                    fontSize: ui(13),
-                    color: _kTextDark,
+                    fontSize: ui(11),
+                    color: _kTextSecondary,
                     fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w500,
-                    height: 20 / 13,
+                    fontWeight: AppFont.w400,
+                    height: 12 / 11,
                   ),
                 ),
               ),
             ],
           ),
-          SizedBox(height: ui(4)),
-          Padding(
-            padding: EdgeInsets.only(left: ui(20)),
-            child: Text(
-              item.date,
-              style: TextStyle(
-                fontSize: ui(11),
-                color: _kTextSecondary,
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w400,
-                height: 12 / 11,
-              ),
-            ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 与群聊 `_DetailAnnouncementCard` 一致的班级通知卡（用于「查看全部」抽屉）。
+class _ClassNoticeAnnouncementCard extends StatelessWidget {
+  const _ClassNoticeAnnouncementCard({
+    required this.item,
+    required this.onTap,
+  });
+
+  final _ClassNoticeItem item;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(ui(12)),
+        child: Container(
+          padding: EdgeInsets.all(ui(14)),
+          decoration: BoxDecoration(
+            color: _kAnnouncementBg,
+            borderRadius: BorderRadius.circular(ui(12)),
           ),
-        ],
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: ui(28),
+                height: ui(28),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(ui(8)),
+                ),
+                child: AppAssetGraphic(
+                  AppAssets.groupChatInfo,
+                  width: ui(16),
+                  height: ui(16),
+                  fit: BoxFit.contain,
+                ),
+              ),
+              SizedBox(width: ui(10)),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '班级通知',
+                      style: TextStyle(
+                        fontSize: ui(12),
+                        color: _kPurple,
+                        fontFamily: 'PingFang SC',
+                        fontWeight: AppFont.w600,
+                        height: 1.2,
+                      ),
+                    ),
+                    SizedBox(height: ui(6)),
+                    Text(
+                      item.previewText,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: ui(13),
+                        color: _kTextDark,
+                        fontFamily: 'PingFang SC',
+                        fontWeight: AppFont.w400,
+                        height: 1.6,
+                      ),
+                    ),
+                    if (item.date.isNotEmpty && item.date != '—') ...[
+                      SizedBox(height: ui(6)),
+                      Text(
+                        item.date,
+                        style: TextStyle(
+                          fontSize: ui(11),
+                          color: _kTextSecondary,
+                          fontFamily: 'PingFang SC',
+                          fontWeight: AppFont.w400,
+                          height: 12 / 11,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -920,10 +1098,12 @@ class _ClassNoticeListDrawer extends ConsumerStatefulWidget {
   const _ClassNoticeListDrawer({
     required this.initialNotices,
     required this.onClose,
+    required this.onNoticeTap,
   });
 
   final List<_ClassNoticeItem> initialNotices;
   final VoidCallback onClose;
+  final ValueChanged<_ClassNoticeItem> onNoticeTap;
 
   @override
   ConsumerState<_ClassNoticeListDrawer> createState() =>
@@ -1002,7 +1182,11 @@ class _ClassNoticeListDrawerState
                     itemCount: _notices.length,
                     separatorBuilder: (_, _) => SizedBox(height: ui(12)),
                     itemBuilder: (context, index) {
-                      return _ClassNoticeDrawerTile(item: _notices[index]);
+                      final item = _notices[index];
+                      return _ClassNoticeAnnouncementCard(
+                        item: item,
+                        onTap: () => widget.onNoticeTap(item),
+                      );
                     },
                   ),
           ),
@@ -1059,74 +1243,6 @@ class _ClassNoticeDrawerHeader extends StatelessWidget {
                 size: ui(18),
                 color: _kTextSecondary,
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ClassNoticeDrawerTile extends StatelessWidget {
-  const _ClassNoticeDrawerTile({required this.item});
-
-  final _ClassNoticeItem item;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(ui(12)),
-      decoration: BoxDecoration(
-        color: _kAnnounceBg,
-        borderRadius: BorderRadius.circular(ui(8)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (item.title.isNotEmpty)
-            Text(
-              item.title,
-              style: TextStyle(
-                fontSize: ui(14),
-                color: _kTextDark,
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w500,
-                height: 20 / 14,
-              ),
-            ),
-          if (item.title.isNotEmpty && item.content.isNotEmpty)
-            SizedBox(height: ui(6)),
-          if (item.content.isNotEmpty)
-            Text(
-              item.content,
-              style: TextStyle(
-                fontSize: ui(13),
-                color: _kTextDark,
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w400,
-                height: 20 / 13,
-              ),
-            ),
-          if (item.title.isEmpty && item.content.isEmpty)
-            Text(
-              '—',
-              style: TextStyle(
-                fontSize: ui(13),
-                color: _kTextHint,
-                fontFamily: 'PingFang SC',
-              ),
-            ),
-          SizedBox(height: ui(8)),
-          Text(
-            item.date,
-            style: TextStyle(
-              fontSize: ui(11),
-              color: _kTextSecondary,
-              fontFamily: 'PingFang SC',
-              fontWeight: AppFont.w400,
-              height: 12 / 11,
             ),
           ),
         ],
@@ -1221,13 +1337,31 @@ class _FacultyGroupCard extends StatelessWidget {
             ),
           ),
           SizedBox(height: ui(8)),
-          Wrap(
-            spacing: ui(12),
-            runSpacing: ui(12),
-            children: [
-              for (final m in section.members) _FacultyCard(member: m),
-            ],
-          ),
+          if (section.title == '任课老师')
+            LayoutBuilder(
+              builder: (context, constraints) {
+                const cols = 3;
+                final gap = ui(12);
+                final cardWidth =
+                    (constraints.maxWidth - gap * (cols - 1)) / cols;
+                return Wrap(
+                  spacing: gap,
+                  runSpacing: gap,
+                  children: [
+                    for (final m in section.members)
+                      _FacultyCard(member: m, width: cardWidth),
+                  ],
+                );
+              },
+            )
+          else
+            Wrap(
+              spacing: ui(12),
+              runSpacing: ui(12),
+              children: [
+                for (final m in section.members) _FacultyCard(member: m),
+              ],
+            ),
         ],
       ),
     );
@@ -1235,152 +1369,143 @@ class _FacultyGroupCard extends StatelessWidget {
 }
 
 class _FacultyCard extends StatelessWidget {
-  const _FacultyCard({required this.member});
+  const _FacultyCard({required this.member, this.width});
 
   final _FacultyMember member;
+  final double? width;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final cardWidth = width ?? ui(308);
     return Container(
-      width: ui(308),
+      width: cardWidth,
       height: ui(171),
+      padding: EdgeInsets.all(ui(12)),
       decoration: BoxDecoration(
         color: _kInnerGray,
         borderRadius: BorderRadius.circular(ui(12)),
       ),
-      child: Stack(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 头像 40×40
-          Positioned(
-            left: ui(12),
-            top: ui(8),
-            child: _UserAvatarBox(
-              name: member.name,
-              avatarUrl: member.avatarUrl,
-              size: ui(40),
-            ),
-          ),
-          // 姓名
-          Positioned(
-            left: ui(60),
-            top: ui(8),
-            child: Text(
-              member.name,
-              style: TextStyle(
-                fontSize: ui(14),
-                color: _kTextDark,
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w500,
-                height: 1,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _UserAvatarBox(
+                name: member.name,
+                avatarUrl: member.avatarUrl,
+                size: ui(40),
               ),
-            ),
+              SizedBox(width: ui(8)),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            member.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: ui(14),
+                              color: _kTextDark,
+                              fontFamily: 'PingFang SC',
+                              fontWeight: AppFont.w500,
+                              height: 1,
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: ui(8)),
+                        Text(
+                          member.role,
+                          style: TextStyle(
+                            fontSize: ui(12),
+                            color: _kPurple,
+                            fontFamily: 'PingFang SC',
+                            fontWeight: AppFont.w400,
+                            height: 1,
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: ui(8)),
+                    Text(
+                      member.location,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: ui(12),
+                        color: _kTextDark,
+                        fontFamily: 'PingFang SC',
+                        fontWeight: AppFont.w400,
+                        height: 1,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (member.courseTag != null) ...[
+                SizedBox(width: ui(8)),
+                Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: ui(4),
+                    vertical: ui(2),
+                  ),
+                  decoration: BoxDecoration(
+                    color: _kCoursePink,
+                    borderRadius: BorderRadius.circular(ui(4)),
+                  ),
+                  child: Text(
+                    member.courseTag!,
+                    style: TextStyle(
+                      fontSize: ui(12),
+                      color: _kTextDark,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w400,
+                      height: 15.24 / 12,
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
-          // 角色（紫字）
-          Positioned(
-            left: ui(108),
-            top: ui(10),
+          SizedBox(height: ui(8)),
+          Expanded(
             child: Text(
-              member.role,
+              member.description,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: ui(12),
-                color: _kPurple,
+                color: _kTextHint,
                 fontFamily: 'PingFang SC',
                 fontWeight: AppFont.w400,
-                height: 1,
+                height: 1.4,
               ),
             ),
           ),
-          // 课程标签（仅任课）
-          if (member.courseTag != null)
-            Positioned(
-              right: ui(12),
-              top: ui(8),
-              child: Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: ui(4),
-                  vertical: ui(2),
-                ),
-                decoration: BoxDecoration(
-                  color: _kCoursePink,
-                  borderRadius: BorderRadius.circular(ui(4)),
-                ),
-                child: Text(
-                  member.courseTag!,
-                  style: TextStyle(
-                    fontSize: ui(12),
-                    color: _kTextDark,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w400,
-                    height: 15.24 / 12,
-                  ),
-                ),
-              ),
+          Container(
+            width: double.infinity,
+            padding: EdgeInsets.symmetric(
+              horizontal: ui(2),
+              vertical: ui(12),
             ),
-          // 位置
-          Positioned(
-            left: ui(60),
-            top: ui(32),
-            child: SizedBox(
-              width: ui(209),
-              child: Text(
-                member.location,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: ui(12),
-                  color: _kTextDark,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w400,
-                  height: 1,
-                ),
-              ),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(ui(8)),
             ),
-          ),
-          // 描述
-          Positioned(
-            left: ui(12),
-            top: ui(57),
-            child: SizedBox(
-              width: ui(282),
-              child: Text(
-                member.description,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: ui(12),
-                  color: _kTextHint,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w400,
-                  height: 1.4,
+            child: Row(
+              children: [
+                Expanded(
+                  child: _ContactCol(label: '电话', value: member.phone),
                 ),
-              ),
-            ),
-          ),
-          // 联系信息：电话 / 邮箱
-          Positioned(
-            left: ui(12),
-            top: ui(96),
-            child: Container(
-              width: ui(284),
-              padding: EdgeInsets.symmetric(
-                horizontal: ui(2),
-                vertical: ui(12),
-              ),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(ui(8)),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _ContactCol(label: '电话', value: member.phone),
-                  ),
-                  Expanded(
-                    child: _ContactCol(label: '邮箱', value: member.email),
-                  ),
-                ],
-              ),
+                Expanded(
+                  child: _ContactCol(label: '邮箱', value: member.email),
+                ),
+              ],
             ),
           ),
         ],

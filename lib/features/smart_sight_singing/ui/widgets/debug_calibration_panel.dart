@@ -1,19 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
+import '../../../../core/constants/app_assets.dart';
 import '../../../shell/ui/shell_layout.dart';
 import '../../audio/pitch_track.dart';
 import '../../config/smart_sight_singing_tuning.dart';
 import '../../state/smart_sight_singing_controller.dart';
 import '../../state/smart_sight_singing_state.dart';
 
-/// 智能视唱调试面板：实时指标 + 关键参数滑条 + Dart 导出。
+/// 智能视唱调试面板：实时指标 + 关键参数滑条。
 ///
 /// 设计目标：
 /// - 在真机调试时即时改参数（音准容差、麦克风延迟、串音阈值、稳定平滑…），
 ///   全链路实时生效；
-/// - 调到满意值后一键导出 Dart 源码片段到剪贴板，直接粘回 config 文件作为新默认；
+/// - 调到满意值后可一键复位为默认值；
 /// - 不影响生产用户：只有点击页面右上角「调试」按钮才会弹出。
 class DebugCalibrationPanel extends ConsumerStatefulWidget {
   const DebugCalibrationPanel({super.key});
@@ -56,13 +57,12 @@ class _DebugCalibrationPanelState
     return Material(
       color: Colors.transparent,
       child: Container(
-        width: ui(340),
+        width: ui(400),
         margin: EdgeInsets.only(left: ui(8)),
-        padding: EdgeInsets.fromLTRB(ui(14), ui(12), ui(14), ui(14)),
+        padding: EdgeInsets.fromLTRB(ui(20), ui(20), ui(20), ui(20)),
         decoration: BoxDecoration(
-          color: const Color(0xFFF8FAFD),
+          color: Colors.white,
           borderRadius: BorderRadius.circular(ui(16)),
-          border: Border.all(color: const Color(0xFFD4DCE7)),
           boxShadow: const [
             BoxShadow(
               color: Color(0x14000000),
@@ -79,9 +79,9 @@ class _DebugCalibrationPanelState
               overrideCount: tuning.overrideCount,
               onClose: () => controller.setDebugPanelVisible(false),
             ),
-            SizedBox(height: ui(10)),
+            SizedBox(height: ui(14)),
             _LiveMetricsCard(state: state),
-            SizedBox(height: ui(10)),
+            SizedBox(height: ui(16)),
             Expanded(
               child: SingleChildScrollView(
                 child: Column(
@@ -287,7 +287,7 @@ class _DebugCalibrationPanelState
                 ),
               ),
             ),
-            SizedBox(height: ui(10)),
+            SizedBox(height: ui(16)),
             _Actions(
               onReset: tuning.hasAnyOverride
                   ? () async {
@@ -296,17 +296,6 @@ class _DebugCalibrationPanelState
                       _showSnack(context, '已恢复默认参数');
                     }
                   : null,
-              onExport: () async {
-                final code = tuning.exportDartSource();
-                await Clipboard.setData(ClipboardData(text: code));
-                if (!context.mounted) return;
-                _showSnack(
-                  context,
-                  tuning.hasAnyOverride
-                      ? '已复制 Dart 源码到剪贴板，可粘贴到 smart_sight_singing_config.dart'
-                      : '当前没有任何修改可导出',
-                );
-              },
             ),
           ],
         ),
@@ -339,51 +328,55 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(
-          Icons.tune_rounded,
-          color: const Color(0xFF1A1A1A),
-          size: ui(20),
-        ),
-        SizedBox(width: ui(8)),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              width: ui(3.5),
+              height: ui(15),
+              decoration: BoxDecoration(
+                color: const Color(0xFF8741FF),
+                borderRadius: BorderRadius.circular(ui(6)),
+              ),
+            ),
+            SizedBox(width: ui(4)),
+            Expanded(
+              child: Text(
                 '调试面板',
                 style: TextStyle(
-                  fontSize: ui(14),
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF1A1A1A),
+                  fontSize: ui(16),
+                  fontWeight: AppFont.w600,
+                  color: const Color(0xFF0B081A),
                   fontFamily: 'PingFang SC',
                 ),
               ),
-              SizedBox(height: ui(2)),
-              Text(
-                hasOverride
-                    ? '已自定义 $overrideCount 项参数（已本地持久化）'
-                    : '所有参数为默认值',
-                style: TextStyle(
-                  fontSize: ui(11),
-                  color: const Color(0xFF788698),
-                  fontFamily: 'PingFang SC',
-                ),
-              ),
-            ],
-          ),
-        ),
-        InkWell(
-          onTap: onClose,
-          borderRadius: BorderRadius.circular(ui(12)),
-          child: Padding(
-            padding: EdgeInsets.all(ui(4)),
-            child: Icon(
-              Icons.close_rounded,
-              color: const Color(0xFF788698),
-              size: ui(20),
             ),
+            InkWell(
+              onTap: onClose,
+              borderRadius: BorderRadius.circular(ui(9)),
+              child: Image.asset(
+                AppAssets.smartSightSingingClose,
+                width: ui(18),
+                height: ui(18),
+                fit: BoxFit.contain,
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: ui(8)),
+        Text(
+          hasOverride
+              ? '已自定义 $overrideCount 项参数（已本地持久化）'
+              : '所有参数为默认值',
+          style: TextStyle(
+            fontSize: ui(12),
+            color: const Color(0xFFCECED1),
+            fontFamily: 'PingFang SC',
+            fontWeight: AppFont.w400,
+            height: 1,
           ),
         ),
       ],
@@ -411,11 +404,10 @@ class _LiveMetricsCard extends StatelessWidget {
     final amplitude = state.currentUserAmplitude;
 
     return Container(
-      padding: EdgeInsets.all(ui(10)),
+      padding: EdgeInsets.symmetric(horizontal: ui(20), vertical: ui(18)),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(10)),
-        border: Border.all(color: const Color(0xFFE5E7EF)),
+        color: const Color(0xFFF5F6FA),
+        borderRadius: BorderRadius.circular(ui(8)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -427,74 +419,32 @@ class _LiveMetricsCard extends StatelessWidget {
                 value: _midiName(userMidi),
                 subValue: userMidi >= 0
                     ? '${state.lastFrequencyHz.toStringAsFixed(1)} Hz'
-                    : '--',
+                    : '- -',
               ),
               _Metric(label: '参考', value: _midiName(refMidi)),
               _Metric(label: '伴奏', value: _midiName(playbackMidi)),
             ],
           ),
-          SizedBox(height: ui(8)),
+          SizedBox(height: ui(18)),
           Row(
             children: [
               _Metric(
                 label: '偏差',
                 value: cents.isFinite
                     ? '${cents > 0 ? '+' : ''}${cents.round()}c'
-                    : '--',
+                    : '- -',
               ),
               _Metric(
                 label: '置信',
                 value: state.lastFrameConfidence > 0
                     ? state.lastFrameConfidence.toStringAsFixed(2)
-                    : '--',
+                    : '- -',
               ),
               _Metric(
                 label: '振幅',
                 value: amplitude > 0
                     ? amplitude.toStringAsFixed(3)
-                    : '--',
-              ),
-            ],
-          ),
-          SizedBox(height: ui(6)),
-          Row(
-            children: [
-              Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: ui(8),
-                  vertical: ui(3),
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEDEFF3),
-                  borderRadius: BorderRadius.circular(ui(8)),
-                ),
-                child: Text(
-                  '链路: ${state.lastSourceLabel}',
-                  style: TextStyle(
-                    fontSize: ui(10),
-                    color: const Color(0xFF4A5568),
-                    fontFamily: 'Inter',
-                  ),
-                ),
-              ),
-              SizedBox(width: ui(6)),
-              Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: ui(8),
-                  vertical: ui(3),
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEDEFF3),
-                  borderRadius: BorderRadius.circular(ui(8)),
-                ),
-                child: Text(
-                  '${state.scoredCount}/${state.hitCount} hit',
-                  style: TextStyle(
-                    fontSize: ui(10),
-                    color: const Color(0xFF4A5568),
-                    fontFamily: 'Inter',
-                  ),
-                ),
+                    : '- -',
               ),
             ],
           ),
@@ -522,30 +472,37 @@ class _Metric extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              fontSize: ui(10),
-              color: const Color(0xFF788698),
+              fontSize: ui(14),
+              color: const Color(0xFFB6B5BB),
               fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w400,
+              height: 1,
             ),
           ),
-          SizedBox(height: ui(2)),
+          SizedBox(height: ui(10)),
           Text(
             value,
             style: TextStyle(
-              fontSize: ui(14),
-              fontWeight: FontWeight.w600,
-              color: const Color(0xFF1A1A1A),
-              fontFamily: 'Barlow',
+              fontSize: ui(18),
+              fontWeight: AppFont.w600,
+              color: const Color(0xFF0B081A),
+              fontFamily: 'Manrope',
+              height: 1,
             ),
           ),
-          if (subValue != null)
+          if (subValue != null) ...[
+            SizedBox(height: ui(6)),
             Text(
               subValue!,
               style: TextStyle(
-                fontSize: ui(10),
-                color: const Color(0xFF788698),
-                fontFamily: 'Inter',
+                fontSize: ui(14),
+                color: const Color(0xFFB6B5BB),
+                fontFamily: 'Manrope',
+                fontWeight: AppFont.w600,
+                height: 1,
               ),
             ),
+          ],
         ],
       ),
     );
@@ -561,24 +518,38 @@ class _Section extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final rows = <Widget>[];
+    for (var i = 0; i < children.length; i++) {
+      rows.add(children[i]);
+      if (i != children.length - 1) {
+        rows.add(
+          Container(
+            height: ui(0.5),
+            margin: EdgeInsets.symmetric(vertical: ui(8)),
+            color: const Color(0xFFF3F2F3),
+          ),
+        );
+      }
+    }
     return Padding(
-      padding: EdgeInsets.only(bottom: ui(10)),
+      padding: EdgeInsets.only(top: ui(12), bottom: ui(4)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: EdgeInsets.only(bottom: ui(4), top: ui(4)),
+            padding: EdgeInsets.only(bottom: ui(12)),
             child: Text(
               title,
               style: TextStyle(
-                fontSize: ui(12),
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF4A5568),
+                fontSize: ui(14),
+                fontWeight: AppFont.w500,
+                color: Colors.black,
                 fontFamily: 'PingFang SC',
+                height: 20 / 14,
               ),
             ),
           ),
-          ...children,
+          ...rows,
         ],
       ),
     );
@@ -679,59 +650,115 @@ class _SliderRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Padding(
-      padding: EdgeInsets.only(bottom: ui(2)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: ui(11),
-                    color: const Color(0xFF1A1A1A),
-                    fontFamily: 'PingFang SC',
-                  ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: ui(12),
+                  color: const Color(0xFF6D6B75),
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w400,
+                  height: 1,
                 ),
               ),
-              Text(
+            ),
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(6)),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(ui(8)),
+                border: Border.all(color: const Color(0xFFF3F2F3), width: ui(1)),
+              ),
+              child: Text(
                 valueLabel,
                 style: TextStyle(
-                  fontSize: ui(11),
-                  color: const Color(0xFF1A1A1A),
+                  fontSize: ui(12),
+                  color: Colors.black,
                   fontFamily: 'Barlow',
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              trackHeight: 2.5,
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
-              overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-              activeTrackColor: const Color(0xFF1A1A1A),
-              inactiveTrackColor: const Color(0xFFD0D5DD),
-              thumbColor: const Color(0xFF1A1A1A),
-            ),
-            child: slider,
-          ),
-          if (hint != null)
-            Padding(
-              padding: EdgeInsets.only(bottom: ui(4)),
-              child: Text(
-                hint!,
-                style: TextStyle(
-                  fontSize: ui(10),
-                  color: const Color(0xFF788698),
-                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w500,
+                  height: 1,
                 ),
               ),
             ),
-        ],
-      ),
+          ],
+        ),
+        SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            trackHeight: ui(4),
+            thumbShape: _ShadowThumbShape(radius: ui(6)),
+            overlayShape: RoundSliderOverlayShape(overlayRadius: ui(14)),
+            overlayColor: const Color(0x298741FF),
+            activeTrackColor: Colors.black,
+            inactiveTrackColor: const Color(0xFFE1E2E5),
+            thumbColor: Colors.black,
+          ),
+          child: slider,
+        ),
+        if (hint != null)
+          Padding(
+            padding: EdgeInsets.only(bottom: ui(2)),
+            child: Text(
+              hint!,
+              style: TextStyle(
+                fontSize: ui(8),
+                color: const Color(0xFFCECED1),
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w400,
+                height: 1,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// 滑条 thumb：黑色实心圆 + 白色描边 + 阴影，匹配设计稿。
+class _ShadowThumbShape extends SliderComponentShape {
+  const _ShadowThumbShape({required this.radius});
+
+  final double radius;
+
+  @override
+  Size getPreferredSize(bool isEnabled, bool isDiscrete) =>
+      Size.fromRadius(radius);
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset center, {
+    required Animation<double> activationAnimation,
+    required Animation<double> enableAnimation,
+    required bool isDiscrete,
+    required TextPainter labelPainter,
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required TextDirection textDirection,
+    required double value,
+    required double textScaleFactor,
+    required Size sizeWithOverflow,
+  }) {
+    final canvas = context.canvas;
+    canvas.drawShadow(
+      Path()..addOval(Rect.fromCircle(center: center, radius: radius)),
+      Colors.black.withValues(alpha: 0.12),
+      4,
+      true,
+    );
+    canvas.drawCircle(center, radius, Paint()..color = Colors.black);
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1
+        ..color = Colors.white,
     );
   }
 }
@@ -752,95 +779,98 @@ class _BoolRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: ui(4)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: ui(11),
-                    color: const Color(0xFF1A1A1A),
-                    fontFamily: 'PingFang SC',
-                  ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: ui(12),
+                  color: const Color(0xFF6D6B75),
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w400,
+                  height: 1,
                 ),
               ),
-              Switch.adaptive(
-                value: value,
-                onChanged: onChanged,
-                activeTrackColor: const Color(0xFF1A1A1A),
-              ),
-            ],
-          ),
-          if (hint != null)
-            Text(
-              hint!,
-              style: TextStyle(
-                fontSize: ui(10),
-                color: const Color(0xFF788698),
-                fontFamily: 'PingFang SC',
-              ),
             ),
-        ],
-      ),
+            Switch.adaptive(
+              value: value,
+              onChanged: onChanged,
+              activeThumbColor: Colors.white,
+              activeTrackColor: const Color(0xFFA773FF),
+            ),
+          ],
+        ),
+        if (hint != null)
+          Text(
+            hint!,
+            style: TextStyle(
+              fontSize: ui(8),
+              color: const Color(0xFFCECED1),
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w400,
+              height: 1,
+            ),
+          ),
+      ],
     );
   }
 }
 
 class _Actions extends StatelessWidget {
-  const _Actions({required this.onReset, required this.onExport});
+  const _Actions({required this.onReset});
 
   final VoidCallback? onReset;
-  final VoidCallback onExport;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Row(
-      children: [
-        Expanded(
-          child: OutlinedButton.icon(
-            onPressed: onReset,
-            icon: const Icon(Icons.restart_alt_rounded, size: 16),
-            label: Text(
-              '复位',
-              style: TextStyle(fontSize: ui(12), fontFamily: 'PingFang SC'),
-            ),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFF1A1A1A),
-              side: const BorderSide(color: Color(0xFFD0D5DD)),
-              padding: EdgeInsets.symmetric(vertical: ui(8)),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(ui(20)),
+    final enabled = onReset != null;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Opacity(
+        opacity: enabled ? 1 : 0.5,
+        child: InkWell(
+          onTap: onReset,
+          borderRadius: BorderRadius.circular(ui(12)),
+          child: Container(
+            width: ui(190),
+            height: ui(48),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.centerRight,
+                end: Alignment.centerLeft,
+                colors: <Color>[Color(0xFFB68EFF), Color(0xFF8640FF)],
               ),
+              borderRadius: BorderRadius.circular(ui(12)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.restart_alt_rounded,
+                  color: Colors.white,
+                  size: ui(20),
+                ),
+                SizedBox(width: ui(8)),
+                Text(
+                  '复位',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: ui(16),
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w500,
+                    height: 28 / 16,
+                  ),
+                ),
+              ],
             ),
           ),
         ),
-        SizedBox(width: ui(8)),
-        Expanded(
-          flex: 2,
-          child: FilledButton.icon(
-            onPressed: onExport,
-            icon: const Icon(Icons.copy_all_rounded, size: 16),
-            label: Text(
-              '复制 Dart 源码',
-              style: TextStyle(fontSize: ui(12), fontFamily: 'PingFang SC'),
-            ),
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF1A1A1A),
-              foregroundColor: Colors.white,
-              padding: EdgeInsets.symmetric(vertical: ui(8)),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(ui(20)),
-              ),
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 }

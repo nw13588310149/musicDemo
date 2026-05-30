@@ -1,4 +1,4 @@
-﻿// =============================================================================
+// =============================================================================
 // 学生端「请假管理」独立页面
 //
 // 入口：学生 dashboard 快捷区「请假管理」按钮 → controller.openLeaveManagement()
@@ -35,13 +35,21 @@
 //   状态徽章配色见上；字体 PingFang SC，数字 32 用 Barlow（与 Figma 一致）。
 // =============================================================================
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 
+import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_date_time_pickers.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/popup_selector_field.dart';
+import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
+import '../data/student_leave_data.dart';
+import '../data/student_repository.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // —— 颜色 ————————————————————————————————————————————————————————
@@ -64,48 +72,111 @@ const Color _kOrangeSoftBg = Color(0xFFFFEDD3);
 
 // —— 顶级视图 ——————————————————————————————————————————————————————
 
-class StudentLeaveManagementView extends StatefulWidget {
+class StudentLeaveManagementView extends ConsumerStatefulWidget {
   const StudentLeaveManagementView({super.key, required this.onBack});
 
   final VoidCallback onBack;
 
   @override
-  State<StudentLeaveManagementView> createState() =>
+  ConsumerState<StudentLeaveManagementView> createState() =>
       _StudentLeaveManagementViewState();
 }
 
 class _StudentLeaveManagementViewState
-    extends State<StudentLeaveManagementView> {
+    extends ConsumerState<StudentLeaveManagementView> {
   _StatusTab _tab = _StatusTab.all;
-  late List<_LeaveRecord> _records;
+  List<_LeaveRecord> _records = const [];
+  bool _loading = true;
+  bool _submitting = false;
+  String? _loadError;
 
   @override
   void initState() {
     super.initState();
-    _records = List<_LeaveRecord>.from(_kDemoLeaveRecords);
+    WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_loadList()));
   }
 
-  /// 撤销 demo：把对应申请置为「已撤销」，并把审批步骤上的 "待审批" / 当前
-  /// 进行中节点都置回 dim 状态。真实接入时换成 API call。
-  void _withdraw(String id) {
+  Future<void> _loadList() async {
+    if (!mounted) return;
     setState(() {
-      _records = [
-        for (final r in _records)
-          if (r.id == id)
-            r.copyWith(
-              status: _LeaveStatus.withdrawn,
-              steps: [
-                for (final s in r.steps)
-                  if (s.state == _StepState.pending)
-                    s.copyWith(state: _StepState.dim, label: '已撤销')
-                  else
-                    s,
-              ],
-            )
-          else
-            r,
-      ];
+      _loading = true;
+      _loadError = null;
     });
+
+    try {
+      final resp = await ref.read(studentRepositoryProvider).studentLeaveList(
+            current: 1,
+            size: 200,
+          );
+      if (!mounted) return;
+
+      if (!resp.isSuccess) {
+        setState(() {
+          _records = const [];
+          _loading = false;
+          _loadError = resp.displayMsg;
+        });
+        return;
+      }
+
+      final rows = parseStudentLeaveList(resp.data);
+      setState(() {
+        _records = [for (final r in rows) _mapLeaveRecord(r)];
+        _loading = false;
+        _loadError = null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _records = const [];
+        _loading = false;
+        _loadError = '加载失败，请重试';
+      });
+    }
+  }
+
+  Future<void> _showDetail(String id) async {
+    final resp =
+        await ref.read(studentRepositoryProvider).studentLeaveDetail(id: id);
+    if (!mounted) return;
+    if (!resp.isSuccess) {
+      AppToast.show(context, resp.displayMsg);
+      return;
+    }
+    final detail = parseStudentLeaveDetail(resp.data);
+    if (detail == null) {
+      AppToast.show(context, '未获取到请假详情');
+      return;
+    }
+    final record = _mapLeaveRecord(detail);
+    final ui = DashboardScaleScope.of(context).ui;
+    await showScaledDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.18),
+      builder: (ctx) => GradientHeaderDialog(
+        title: '${record.type} · ${record.statusLabel}',
+        width: 460,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _LabelRow(label: '请假时间：', value: record.timeRange),
+            SizedBox(height: ui(6)),
+            _LabelRow(label: '请假时长：', value: record.durationLabel),
+            SizedBox(height: ui(6)),
+            _LabelRow(label: '请假事由：', value: record.reason),
+            SizedBox(height: ui(6)),
+            _LabelRow(label: '申请时间：', value: record.appliedAt),
+            SizedBox(height: ui(6)),
+            _LabelRow(label: '路径：', value: record.flowPath),
+            SizedBox(height: ui(8)),
+            _ApprovalStepper(steps: record.steps),
+            SizedBox(height: ui(8)),
+            _LabelRow(label: '备注：', value: record.note),
+          ],
+        ),
+      ),
+    );
   }
 
   /// 弹出右侧抽屉发起请假，提交后追加到 _records 顶部。
@@ -153,30 +224,28 @@ class _StudentLeaveManagementViewState
 
     if (!mounted || result == null) return;
 
-    final newRecord = _LeaveRecord(
-      id: 'leave-${DateTime.now().microsecondsSinceEpoch}',
-      type: result.type,
-      durationLabel: result.durationLabel,
-      timeRange:
-          '${_LeaveApplyDrawer.formatDateTime(result.start)} - '
-          '${_LeaveApplyDrawer.formatDateTime(result.end)}',
-      reason: result.reason,
-      appliedAt: _LeaveApplyDrawer.formatDateTime(DateTime.now()),
-      flowPath: '家长小程序 - 班主任',
-      steps: const [
-        _ApprovalStep(title: '家长', label: '待审批', state: _StepState.pending),
-        _ApprovalStep(title: '班主任', label: '未开始', state: _StepState.dim),
-      ],
-      note: result.note.isEmpty ? '—' : result.note,
-      status: _LeaveStatus.reviewing,
-    );
+    setState(() => _submitting = true);
+    final reason = result.note.isEmpty
+        ? result.reason
+        : '${result.reason}\n${result.note}';
+    final resp = await ref.read(studentRepositoryProvider).studentLeaveSave(
+          startTime: result.start,
+          endTime: result.end,
+          leaveDuration: result.durationLabel,
+          leaveReason: reason,
+          type: studentLeaveTypeToApi(result.type),
+        );
+    if (!mounted) return;
+    setState(() => _submitting = false);
 
-    setState(() {
-      _records = [newRecord, ..._records];
-      _tab = _StatusTab.reviewing;
-    });
+    if (!resp.isSuccess) {
+      AppToast.show(context, resp.displayMsg);
+      return;
+    }
 
     AppToast.show(context, '请假申请已提交，等待审批');
+    setState(() => _tab = _StatusTab.reviewing);
+    await _loadList();
   }
 
   List<_LeaveRecord> get _visible {
@@ -219,10 +288,18 @@ class _StudentLeaveManagementViewState
             _TabsAndCreateRow(
               tab: _tab,
               onTab: (t) => setState(() => _tab = t),
-              onCreate: _showApplyDrawer,
+              onCreate: _submitting ? null : _showApplyDrawer,
             ),
             SizedBox(height: ui(12)),
-            _LeaveCardsGrid(records: _visible, onWithdraw: _withdraw),
+            if (_loading)
+              Padding(
+                padding: EdgeInsets.symmetric(vertical: ui(48)),
+                child: const Center(child: AppLoadingIndicator()),
+              )
+            else if (_loadError != null)
+              _ErrorState(message: _loadError!, onRetry: _loadList)
+            else
+              _LeaveCardsGrid(records: _visible, onTap: _showDetail),
           ],
         ),
       ),
@@ -245,21 +322,25 @@ class _LeaveBanner extends StatelessWidget {
     return Container(
       width: double.infinity,
       height: ui(62),
-      padding: EdgeInsets.symmetric(horizontal: ui(12)),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(ui(16)),
-        gradient: const LinearGradient(
-          begin: Alignment.bottomLeft,
-          end: Alignment.topRight,
-          colors: [Colors.white, Color(0xFFF9EDFF)],
+        image: DecorationImage(
+          image: AssetImage(AppAssets.xiaoquanHeaderBg),
+          fit: BoxFit.cover,
+          alignment: Alignment.centerRight,
         ),
       ),
-      child: Row(
+      child: Stack(
         children: [
-          _BackButton(onTap: onBack),
-          Expanded(
+          Positioned(
+            left: ui(12),
+            top: ui(15),
+            child: _BackButton(onTap: onBack),
+          ),
+          Center(
             child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: ui(12)),
+              padding: EdgeInsets.symmetric(horizontal: ui(56)),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -278,6 +359,7 @@ class _LeaveBanner extends StatelessWidget {
                     '默认由家长在小程序审批后再由班主任审批；已与家长充分沟通的可选择班主任直接审批。',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: ui(12),
                       color: _kTextHint,
@@ -290,7 +372,6 @@ class _LeaveBanner extends StatelessWidget {
               ),
             ),
           ),
-          SizedBox(width: ui(32)),
         ],
       ),
     );
@@ -497,7 +578,7 @@ class _TabsAndCreateRow extends StatelessWidget {
 
   final _StatusTab tab;
   final ValueChanged<_StatusTab> onTab;
-  final VoidCallback onCreate;
+  final VoidCallback? onCreate;
 
   @override
   Widget build(BuildContext context) {
@@ -578,7 +659,7 @@ class _TabPill extends StatelessWidget {
 class _CreateApplyButton extends StatelessWidget {
   const _CreateApplyButton({required this.onTap});
 
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -586,7 +667,9 @@ class _CreateApplyButton extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(ui(8)),
-      child: Container(
+      child: Opacity(
+        opacity: onTap == null ? 0.55 : 1,
+        child: Container(
         height: ui(44),
         padding: EdgeInsets.symmetric(horizontal: ui(14)),
         alignment: Alignment.center,
@@ -623,6 +706,44 @@ class _CreateApplyButton extends StatelessWidget {
           ],
         ),
       ),
+      ),
+    );
+  }
+}
+
+class _ErrorState extends StatelessWidget {
+  const _ErrorState({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(vertical: ui(40), horizontal: ui(16)),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(ui(12)),
+      ),
+      child: Column(
+        children: [
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: ui(13),
+              color: _kTextSecondary,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w400,
+            ),
+          ),
+          SizedBox(height: ui(12)),
+          TextButton(onPressed: onRetry, child: const Text('重试')),
+        ],
+      ),
     );
   }
 }
@@ -632,10 +753,10 @@ class _CreateApplyButton extends StatelessWidget {
 // =============================================================================
 
 class _LeaveCardsGrid extends StatelessWidget {
-  const _LeaveCardsGrid({required this.records, required this.onWithdraw});
+  const _LeaveCardsGrid({required this.records, required this.onTap});
 
   final List<_LeaveRecord> records;
-  final ValueChanged<String> onWithdraw;
+  final ValueChanged<String> onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -657,7 +778,7 @@ class _LeaveCardsGrid extends StatelessWidget {
                 width: cardWidth,
                 child: _LeaveCard(
                   record: r,
-                  onWithdraw: () => onWithdraw(r.id),
+                  onTap: () => onTap(r.id),
                 ),
               ),
           ],
@@ -700,36 +821,39 @@ class _EmptyState extends StatelessWidget {
 }
 
 class _LeaveCard extends StatelessWidget {
-  const _LeaveCard({required this.record, required this.onWithdraw});
+  const _LeaveCard({required this.record, required this.onTap});
 
   final _LeaveRecord record;
-  final VoidCallback onWithdraw;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      padding: EdgeInsets.all(ui(12)),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-          colors: [Color(0xFFF9EEFF), Colors.white],
-        ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(ui(12)),
-        border: Border.all(color: Colors.white),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _CardHeaderRow(record: record),
-          SizedBox(height: ui(8)),
-          _CardBoardBody(record: record),
-          if (record.status == _LeaveStatus.reviewing) ...[
-            SizedBox(height: ui(8)),
-            _WithdrawButton(onTap: onWithdraw),
-          ],
-        ],
+        child: Container(
+          padding: EdgeInsets.all(ui(12)),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topRight,
+              end: Alignment.bottomLeft,
+              colors: [Color(0xFFF9EEFF), Colors.white],
+            ),
+            borderRadius: BorderRadius.circular(ui(12)),
+            border: Border.all(color: Colors.white),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _CardHeaderRow(record: record),
+              SizedBox(height: ui(8)),
+              _CardBoardBody(record: record),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -854,19 +978,19 @@ class _LabelRow extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(
-          width: ui(60),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: ui(12),
-              color: _kTextHint,
-              fontFamily: 'PingFang SC',
-              fontWeight: AppFont.w400,
-              height: 1.4,
-            ),
+        Text(
+          label,
+          maxLines: 1,
+          softWrap: false,
+          style: TextStyle(
+            fontSize: ui(12),
+            color: _kTextHint,
+            fontFamily: 'PingFang SC',
+            fontWeight: AppFont.w400,
+            height: 1.4,
           ),
         ),
+        SizedBox(width: ui(8)),
         Expanded(
           child: Text(
             value,
@@ -1041,43 +1165,8 @@ class _ApprovalNodeView extends StatelessWidget {
   }
 }
 
-class _WithdrawButton extends StatelessWidget {
-  const _WithdrawButton({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(ui(8)),
-      child: Container(
-        width: double.infinity,
-        height: ui(40),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(ui(8)),
-          border: Border.all(color: _kBorderSoft),
-        ),
-        child: Text(
-          '撤销申请',
-          style: TextStyle(
-            fontSize: ui(14),
-            color: _kTextDark,
-            fontFamily: 'PingFang SC',
-            fontWeight: AppFont.w400,
-            height: 24 / 14,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 // =============================================================================
-// 数据模型 + Demo 数据
+// 数据模型 + API 映射
 // =============================================================================
 
 enum _LeaveStatus { reviewing, approved, rejected, withdrawn }
@@ -1140,70 +1229,85 @@ class _LeaveRecord {
         note: note,
         status: status ?? this.status,
       );
+
+  String get statusLabel => switch (status) {
+    _LeaveStatus.reviewing => '审批中',
+    _LeaveStatus.approved => '已通过',
+    _LeaveStatus.rejected => '已拒绝',
+    _LeaveStatus.withdrawn => '已撤销',
+  };
 }
 
-const List<_LeaveRecord> _kDemoLeaveRecords = [
-  _LeaveRecord(
-    id: 'leave-1',
-    type: '病假',
-    durationLabel: '4小时',
-    timeRange: '2026-04-02 08:00 - 2026-04-02 12:00',
-    reason: '发热就诊，需上午门诊检查。',
-    appliedAt: '2026-04-01 18:00',
-    flowPath: '家长小程序 - 班主任',
+_LeaveRecord _mapLeaveRecord(StudentLeaveRecord source) {
+  final duration = source.duration.trim();
+  final durationLabel = duration.isEmpty || duration == '—'
+      ? '—'
+      : duration.replaceFirst(RegExp(r'^时长'), '');
+
+  return _LeaveRecord(
+    id: source.id,
+    type: source.leaveType,
+    durationLabel: durationLabel,
+    timeRange: source.timeRange,
+    reason: source.reason,
+    appliedAt: source.appliedAt,
+    flowPath: source.path,
     steps: [
-      _ApprovalStep(title: '家长', label: '已通过', state: _StepState.passed),
-      _ApprovalStep(title: '班主任', label: '待审批', state: _StepState.pending),
+      _ApprovalStep(
+        title: '家长',
+        label: source.parentStep.label,
+        state: _stepStateFromApi(source.parentStep),
+      ),
+      _ApprovalStep(
+        title: '班主任',
+        label: _headTeacherStepLabel(source),
+        state: _headTeacherStepState(source),
+      ),
     ],
-    note: '已知晓注意休息',
-    status: _LeaveStatus.reviewing,
-  ),
-  _LeaveRecord(
-    id: 'leave-2',
-    type: '病假',
-    durationLabel: '4小时',
-    timeRange: '2026-03-22 08:00 - 2026-03-22 12:00',
-    reason: '发热就诊，需上午门诊检查。',
-    appliedAt: '2026-03-21 18:00',
-    flowPath: '家长小程序 - 班主任',
-    steps: [
-      _ApprovalStep(title: '家长', label: '已通过', state: _StepState.passed),
-      _ApprovalStep(title: '班主任', label: '已通过', state: _StepState.passed),
-    ],
-    note: '已知晓注意休息',
-    status: _LeaveStatus.approved,
-  ),
-  _LeaveRecord(
-    id: 'leave-3',
-    type: '事假',
-    durationLabel: '4小时',
-    timeRange: '2026-03-15 14:00 - 2026-03-15 18:00',
-    reason: '家中有事需提前回家协助。',
-    appliedAt: '2026-03-14 18:00',
-    flowPath: '家长小程序 - 班主任',
-    steps: [
-      _ApprovalStep(title: '家长', label: '已通过', state: _StepState.passed),
-      _ApprovalStep(title: '班主任', label: '已拒绝', state: _StepState.rejected),
-    ],
-    note: '请协调班委处理课程笔记',
-    status: _LeaveStatus.rejected,
-  ),
-  _LeaveRecord(
-    id: 'leave-4',
-    type: '病假',
-    durationLabel: '4小时',
-    timeRange: '2026-03-08 08:00 - 2026-03-08 12:00',
-    reason: '复诊检查，需上午就诊。',
-    appliedAt: '2026-03-07 19:00',
-    flowPath: '家长小程序 - 班主任',
-    steps: [
-      _ApprovalStep(title: '家长', label: '已通过', state: _StepState.passed),
-      _ApprovalStep(title: '班主任', label: '已通过', state: _StepState.passed),
-    ],
-    note: '已知晓注意休息',
-    status: _LeaveStatus.approved,
-  ),
-];
+    note: source.note,
+    status: _leaveStatusFromApi(source.status),
+  );
+}
+
+_LeaveStatus _leaveStatusFromApi(StudentLeaveStatus status) {
+  return switch (status) {
+    StudentLeaveStatus.waitingParent ||
+    StudentLeaveStatus.waitingTeacher =>
+      _LeaveStatus.reviewing,
+    StudentLeaveStatus.approved => _LeaveStatus.approved,
+    StudentLeaveStatus.parentRejected ||
+    StudentLeaveStatus.teacherRejected =>
+      _LeaveStatus.rejected,
+  };
+}
+
+_StepState _stepStateFromApi(StudentLeaveStepStatus step) {
+  return switch (step) {
+    StudentLeaveStepStatus.pending => _StepState.pending,
+    StudentLeaveStepStatus.approved => _StepState.passed,
+    StudentLeaveStepStatus.rejected => _StepState.rejected,
+  };
+}
+
+_StepState _headTeacherStepState(StudentLeaveRecord source) {
+  return switch (source.status) {
+    StudentLeaveStatus.waitingParent => _StepState.dim,
+    StudentLeaveStatus.waitingTeacher => _StepState.pending,
+    StudentLeaveStatus.approved => _StepState.passed,
+    StudentLeaveStatus.teacherRejected => _StepState.rejected,
+    StudentLeaveStatus.parentRejected => _StepState.dim,
+  };
+}
+
+String _headTeacherStepLabel(StudentLeaveRecord source) {
+  return switch (source.status) {
+    StudentLeaveStatus.waitingParent => '未开始',
+    StudentLeaveStatus.waitingTeacher => source.headTeacherStep.label,
+    StudentLeaveStatus.approved => source.headTeacherStep.label,
+    StudentLeaveStatus.teacherRejected => source.headTeacherStep.label,
+    StudentLeaveStatus.parentRejected => '未开始',
+  };
+}
 
 // =============================================================================
 // 发起请假 · 右侧抽屉
@@ -1238,9 +1342,7 @@ class _LeaveApplyDrawer extends StatefulWidget {
   final ValueChanged<_LeaveApplyResult> onSubmit;
 
   static String formatDateTime(DateTime dt) {
-    String two(int v) => v.toString().padLeft(2, '0');
-    return '${dt.year}-${two(dt.month)}-${two(dt.day)} '
-        '${two(dt.hour)}:${two(dt.minute)}';
+    return formatStudentLeaveDateTime(dt);
   }
 
   @override
@@ -1248,7 +1350,7 @@ class _LeaveApplyDrawer extends StatefulWidget {
 }
 
 class _LeaveApplyDrawerState extends State<_LeaveApplyDrawer> {
-  static const _types = ['病假', '事假', '其他'];
+  static const _types = ['病假', '事假'];
 
   String _type = '病假';
   DateTime? _start;

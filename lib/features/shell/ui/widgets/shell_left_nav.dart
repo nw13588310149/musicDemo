@@ -529,10 +529,11 @@ class _NavTile extends StatelessWidget {
   Widget _buildIcon(BuildContext context) {
     final scale = DashboardScaleScope.of(context);
     final ui = scale.ui;
+    final size = item.iconSize ?? 24;
     return AppAssetGraphic(
       active ? item.activeIcon : item.icon,
-      width: ui(24),
-      height: ui(24),
+      width: ui(size),
+      height: ui(size),
       fit: BoxFit.contain,
       colorFilter: active
           ? const ColorFilter.mode(Colors.white, BlendMode.srcIn)

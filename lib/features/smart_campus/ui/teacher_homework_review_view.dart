@@ -1,4 +1,4 @@
-﻿// =============================================================================
+// =============================================================================
 // 任课老师 / 班主任端「作业批改」独立页面（"作业与批改"总览）
 //
 // 入口：教师 dashboard 快捷区「作业批改」按钮 → controller.openHomeworkReview()
@@ -48,6 +48,7 @@ import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dar
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/constants/app_assets.dart';
 import '../../../core/network/api_response.dart';
 import '../../../core/network/media_url.dart';
 import '../../courseware/ui/courseware_url_opener.dart';
@@ -55,6 +56,7 @@ import 'student_homework_submission_preview.dart';
 import '../../../core/widgets/app_date_time_pickers.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/popup_selector_field.dart';
+import '../../../core/widgets/scaled_dialog.dart';
 import '../../school/data/school_repository.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/teacher_repository.dart';
@@ -719,6 +721,13 @@ class _TeacherHomeworkReviewViewState
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   Future<void> _deleteHomework(_HomeworkItem item) async {
+    final ok = await showConfirmDialog(
+      context: context,
+      title: '删除作业',
+      content: '确认删除「${item.title}」？删除后学生将无法再查看或提交，操作不可恢复。',
+      confirmLabel: '删除',
+    );
+    if (!ok || !mounted) return;
     final res = await ref
         .read(teacherRepositoryProvider)
         .teacherHomeworkDelete(id: item.id);
@@ -968,10 +977,10 @@ class _ReviewBanner extends StatelessWidget {
       height: ui(62),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(ui(16)),
-        gradient: const LinearGradient(
-          begin: Alignment.bottomLeft,
-          end: Alignment.topRight,
-          colors: [Colors.white, Color(0xFFF9EDFF)],
+        image: const DecorationImage(
+          image: AssetImage(AppAssets.xiaoquanHeaderBg),
+          fit: BoxFit.cover,
+          alignment: Alignment.centerRight,
         ),
       ),
       child: Stack(

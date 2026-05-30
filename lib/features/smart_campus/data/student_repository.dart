@@ -2,7 +2,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_response.dart';
+import '../../../core/network/snowflake_id.dart';
 import '../../../core/providers/app_providers.dart';
+import 'student_leave_data.dart';
 
 /// 智慧校园 **学生端** `POST /app/school/v2/student/*`。
 ///
@@ -107,6 +109,112 @@ class StudentRepository {
         'studentParam1': studentParam1,
         'studentParam2': studentParam2,
         'studentParam3': studentParam3,
+      },
+    );
+  }
+
+  /// 学生首页通知列表。
+  Future<ApiResponse> noticeList({
+    int current = 1,
+    int size = 20,
+  }) {
+    return client.post(
+      '$_base/noticeList',
+      data: <String, dynamic>{'current': current, 'size': size},
+    );
+  }
+
+  /// 学生端通知详情。`id` 为雪花 long 字符串。
+  Future<ApiResponse> noticeDetail({required String id}) {
+    return client.post(
+      '$_base/noticeDetail',
+      data: <String, dynamic>{'id': readSnowflakeId(id) ?? id},
+    );
+  }
+
+  /// 小课上课签到。
+  Future<ApiResponse> courseStudentSignIn({
+    required String courseId,
+    String remark = '',
+    int signStatus = 1,
+  }) {
+    return client.post(
+      '$_base/courseStudentSignIn',
+      data: <String, dynamic>{
+        'courseId': readSnowflakeId(courseId) ?? courseId,
+        'remark': remark,
+        'signStatus': signStatus,
+      },
+    );
+  }
+
+  /// 小课下课签到。
+  Future<ApiResponse> courseStudentSignOut({
+    required String courseId,
+    String remark = '',
+    int signStatus = 1,
+  }) {
+    return client.post(
+      '$_base/courseStudentSignOut',
+      data: <String, dynamic>{
+        'courseId': readSnowflakeId(courseId) ?? courseId,
+        'remark': remark,
+        'signStatus': signStatus,
+      },
+    );
+  }
+
+  /// 小课学生评价。
+  Future<ApiResponse> courseStudentComment({
+    required String courseId,
+    required String comment,
+    required int score,
+  }) {
+    return client.post(
+      '$_base/courseStudentComment',
+      data: <String, dynamic>{
+        'courseId': readSnowflakeId(courseId) ?? courseId,
+        'comment': comment,
+        'score': score,
+      },
+    );
+  }
+
+  /// 学生请假列表（分页）。
+  Future<ApiResponse> studentLeaveList({
+    int current = 1,
+    int size = 50,
+  }) {
+    return client.post(
+      '$_base/studentLeaveList',
+      data: <String, dynamic>{'current': current, 'size': size},
+    );
+  }
+
+  /// 学生请假详情。
+  Future<ApiResponse> studentLeaveDetail({required String id}) {
+    return client.post(
+      '$_base/studentLeaveDetail',
+      data: <String, dynamic>{'id': readSnowflakeId(id) ?? id},
+    );
+  }
+
+  /// 学生发起请假。
+  Future<ApiResponse> studentLeaveSave({
+    required DateTime startTime,
+    required DateTime endTime,
+    required String leaveDuration,
+    required String leaveReason,
+    required int type,
+  }) {
+    return client.post(
+      '$_base/studentLeaveSave',
+      data: <String, dynamic>{
+        'startTime': formatStudentLeaveDateTime(startTime),
+        'endTime': formatStudentLeaveDateTime(endTime),
+        'leaveDuration': leaveDuration,
+        'leaveReason': leaveReason,
+        'type': type,
       },
     );
   }

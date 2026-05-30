@@ -667,6 +667,19 @@ class _LessonArtwork extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    if (label == StudyCatalogArtworkLabel.smartSightSinging) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(ui(8)),
+        child: SizedBox(
+          width: ui(60),
+          height: ui(80),
+          child: Image.asset(
+            AppAssets.smartSightSingingFmCover,
+            fit: BoxFit.cover,
+          ),
+        ),
+      );
+    }
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(ui(8)),
@@ -738,6 +751,8 @@ class _LessonArtwork extends StatelessWidget {
         return '听写';
       case StudyCatalogArtworkLabel.sightSinging:
         return '视唱';
+      case StudyCatalogArtworkLabel.smartSightSinging:
+        return '';
       case StudyCatalogArtworkLabel.musicTheory:
         return '';
       case StudyCatalogArtworkLabel.answer:
@@ -770,6 +785,8 @@ class _LessonArtwork extends StatelessWidget {
       case StudyCatalogArtworkLabel.sightSinging:
         // "视唱基础 / 视唱无调 / 视唱升号 / 视唱降号"
         return const ['基础', '无调', '升号', '降号'];
+      case StudyCatalogArtworkLabel.smartSightSinging:
+        return const [];
       case StudyCatalogArtworkLabel.musicTheory:
         // "乐理\n章节讲义 / 专项练习 / 音乐常识"
         return const ['章节讲义', '专项练习', '音乐常识', '章节讲义', '专项练习', '音乐常识'];
@@ -789,6 +806,8 @@ class _LessonArtwork extends StatelessWidget {
         return '单音';
       case StudyCatalogArtworkLabel.sightSinging:
         return '基础';
+      case StudyCatalogArtworkLabel.smartSightSinging:
+        return '';
       case StudyCatalogArtworkLabel.musicTheory:
         return '讲义';
       case StudyCatalogArtworkLabel.answer:

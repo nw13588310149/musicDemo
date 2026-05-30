@@ -3,16 +3,18 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
-import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
+import 'package:the_road_of_music_flutter/core/widgets/scaled_dialog.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/router/app_navigator.dart';
+import '../../../app/router/route_paths.dart';
+import '../../../core/constants/app_assets.dart';
 import '../../shell/ui/shell_layout.dart';
+import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 import '../audio/ktv_scoring.dart';
-import '../audio/midi_sight_singing_service.dart';
 import '../audio/pitch_track.dart';
 import '../config/smart_sight_singing_config.dart';
 import '../config/smart_sight_singing_tuning.dart';
-import '../state/sight_singing_platform.dart';
 import '../state/smart_sight_singing_controller.dart';
 import '../state/smart_sight_singing_state.dart';
 import 'widgets/debug_calibration_panel.dart';
@@ -23,14 +25,7 @@ import 'widgets/score_sight_reading_track.dart';
 /// demo 页中性色，不使用产品主色。
 abstract final class _DemoUi {
   static const accent = Color(0xFF1A1A1A);
-  static const accentMuted = Color(0xFF4A5568);
-  static const border = Color(0xFFE5E7EF);
   static const borderStrong = Color(0xFFD0D5DD);
-  static const surface = Color(0xFFF5F6F8);
-  static const surfaceSelected = Color(0xFFEDEDF0);
-  static const textSecondary = Color(0xFF788698);
-  static const badgeBg = Color(0xFFEDEDF0);
-  static const badgeText = Color(0xFF4A5568);
 }
 
 /// 智能视唱主页：内置 demo.mid → MIDI 参考轨 → 跟唱实时打分。
@@ -43,28 +38,110 @@ class SmartSightSingingPage extends ConsumerStatefulWidget {
 }
 
 class _SmartSightSingingPageState extends ConsumerState<SmartSightSingingPage> {
-  final TextEditingController _onlineUrlController = TextEditingController();
-
   @override
   void initState() {
     super.initState();
-    // 调试面板里所有 override 已自动持久化；这里先触发一次加载，避免
-    // 真机第一次出声前还是 const 默认值。
     unawaited(SightSingingTuning.instance.ensureLoaded());
-    if (kIsWeb) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        ref
-            .read(smartSightSingingControllerProvider.notifier)
-            .reportError('Web 端暂不支持智能视唱实时录音，请在 iPad 上使用。');
-      });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final controller = ref.read(smartSightSingingControllerProvider.notifier);
+      if (kIsWeb) {
+        controller.reportError('Web 端暂不支持智能视唱实时录音，请在 iPad 上使用。');
+      }
+      final id = _parseTextbookId(ModalRoute.of(context)?.settings.arguments);
+      if (id == null) {
+        controller.reportError('缺少教材信息，请从列表进入');
+        return;
+      }
+      unawaited(controller.loadFromTextbook(id));
+    });
+  }
+
+  int? _parseTextbookId(dynamic raw) {
+    if (raw is Map) {
+      return int.tryParse(raw['id']?.toString() ?? '');
+    }
+    return null;
+  }
+
+  Future<void> _handleBack(BuildContext context) async {
+    final navigator = rootNavigatorKey.currentState ?? Navigator.of(context);
+    await ref.read(smartSightSingingControllerProvider.notifier).returnToHome();
+    if (!context.mounted) return;
+
+    var reachedCatalog = false;
+    navigator.popUntil((route) {
+      if (route.settings.name == RoutePaths.smartSinging) {
+        reachedCatalog = true;
+        return true;
+      }
+      return route.isFirst;
+    });
+    if (!reachedCatalog) {
+      await navigator.pushReplacementNamed(RoutePaths.smartSinging);
     }
   }
 
   @override
   void dispose() {
-    _onlineUrlController.dispose();
     super.dispose();
+  }
+
+  /// 跟唱结束后弹出「本次视唱结束」结果弹窗。
+  Future<void> _showResultDialog() async {
+    final controller = ref.read(smartSightSingingControllerProvider.notifier);
+    final result = await showScaledDialog<String>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.18),
+      builder: (dialogContext) {
+        final state = ref.read(smartSightSingingControllerProvider);
+        final scores = state.completedNoteScores;
+        final perfect = scores.where((s) => s.hitLevel == 'perfect').length;
+        final good = scores.where((s) => s.hitLevel == 'good').length;
+        final ok = scores.where((s) => s.hitLevel == 'ok').length;
+        final miss = scores.where((s) => s.hitLevel == 'miss').length;
+        final dialogUi = DashboardScaleScope.of(dialogContext).ui;
+        return GradientHeaderDialog(
+          title: '本次视唱结束',
+          headerHeight: 169,
+          gradientMidStop: 0.35,
+          actionBar: AppDialogActionBar(
+            cancelLabel: '重新跟唱',
+            confirmLabel: '退出',
+            onCancel: () =>
+                Navigator.of(dialogContext, rootNavigator: true).pop('restart'),
+            onConfirm: () =>
+                Navigator.of(dialogContext, rootNavigator: true).pop('exit'),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _ResultStatCell(label: '准神', value: '$perfect'),
+              SizedBox(width: dialogUi(8)),
+              _ResultStatCell(label: '优秀', value: '$good'),
+              SizedBox(width: dialogUi(8)),
+              _ResultStatCell(label: '及格', value: '$ok'),
+              SizedBox(width: dialogUi(8)),
+              _ResultStatCell(
+                label: '不及格',
+                value: '$miss',
+                valueColor: const Color(0xFFFF323C),
+              ),
+              SizedBox(width: dialogUi(8)),
+              _ResultStatCell(
+                label: '综合得分',
+                value: '${state.currentScore}',
+                valueColor: const Color(0xFF8741FF),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (result == 'restart' && mounted) {
+      unawaited(controller.startSinging());
+    }
   }
 
   @override
@@ -72,61 +149,129 @@ class _SmartSightSingingPageState extends ConsumerState<SmartSightSingingPage> {
     final state = ref.watch(smartSightSingingControllerProvider);
     final controller = ref.read(smartSightSingingControllerProvider.notifier);
 
+    ref.listen(smartSightSingingControllerProvider, (prev, next) {
+      if (prev?.stage != SightSingingStage.finished &&
+          next.stage == SightSingingStage.finished) {
+        unawaited(_showResultDialog());
+      }
+    });
+
     final ui = DashboardScaleScope.of(context).ui;
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(16)),
-      ),
-      child: Stack(
-        children: [
-          Padding(
-            padding: EdgeInsets.all(ui(20)),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _Header(
-                        state: state,
-                        onImport: () => controller.importAudio(),
-                        onToggleDebug: controller.toggleDebugPanel,
-                      ),
-                      if (state.errorMessage != null) ...[
-                        SizedBox(height: ui(12)),
-                        if (kDebugMode)
-                          _DebugErrorPanel(
-                            message: state.errorMessage!,
-                            stage: state.stage,
-                            onDismiss: controller.dismissError,
-                          )
-                        else
-                          _UserErrorBanner(
-                            message: state.errorMessage!.split('\n').first,
-                            onDismiss: controller.dismissError,
-                          ),
-                      ],
-                      SizedBox(height: ui(16)),
-                      Expanded(
-                        child: _Body(
-                          state: state,
-                          controller: controller,
-                          onlineUrlController: _onlineUrlController,
-                        ),
-                      ),
-                    ],
+    return ShellPageSurface(
+      padding: EdgeInsets.zero,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(ui(ShellLayoutSpec.panelRadius)),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(ui(20), 0, ui(20), 0),
+                    child: _Header(
+                      state: state,
+                      onBack: () => unawaited(_handleBack(context)),
+                      onToggleDebug: controller.toggleDebugPanel,
+                      onScoreModeChanged: controller.setScoreSightReadingMode,
+                    ),
                   ),
-                ),
-                if (state.debugPanelVisible) const DebugCalibrationPanel(),
-              ],
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(ui(12), 0, ui(12), ui(12)),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (state.errorMessage != null) ...[
+                            SizedBox(height: ui(12)),
+                            if (kDebugMode)
+                              _DebugErrorPanel(
+                                message: state.errorMessage!,
+                                stage: state.stage,
+                                onDismiss: controller.dismissError,
+                              )
+                            else
+                              _UserErrorBanner(
+                                message:
+                                    state.errorMessage!.split('\n').first,
+                                onDismiss: controller.dismissError,
+                              ),
+                          ],
+                          SizedBox(height: ui(4)),
+                          Expanded(
+                            child: _Body(
+                              state: state,
+                              controller: controller,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (state.debugPanelVisible) const DebugCalibrationPanel(),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 结果弹窗中的单项统计：上方灰色标签 + 下方浅底数值盒（62×32）。
+class _ResultStatCell extends StatelessWidget {
+  const _ResultStatCell({
+    required this.label,
+    required this.value,
+    this.valueColor = const Color(0xFF0B081A),
+  });
+
+  final String label;
+  final String value;
+  final Color valueColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          maxLines: 1,
+          style: TextStyle(
+            fontSize: ui(14),
+            color: const Color(0xFF6D6B75),
+            fontFamily: 'PingFang SC',
+            fontWeight: AppFont.w400,
+            height: 1,
+          ),
+        ),
+        SizedBox(height: ui(8)),
+        Container(
+          width: ui(62),
+          height: ui(32),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: const Color(0xFFF5F6FA),
+            borderRadius: BorderRadius.circular(ui(6)),
+          ),
+          child: Text(
+            value,
+            maxLines: 1,
+            style: TextStyle(
+              fontSize: ui(18),
+              color: valueColor,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w500,
+              height: 1,
             ),
           ),
-          const Positioned.fill(child: _TrialWatermark()),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -275,220 +420,158 @@ class _DebugErrorPanel extends StatelessWidget {
   }
 }
 
-class _TrialWatermark extends StatelessWidget {
-  const _TrialWatermark();
+class _Header extends StatelessWidget {
+  const _Header({
+    required this.state,
+    required this.onBack,
+    required this.onToggleDebug,
+    required this.onScoreModeChanged,
+  });
 
-  static const String _text = 'loti\u63d2\u4ef6-\u8bd5\u7528\u7248';
+  final SightSingingState state;
+  final VoidCallback onBack;
+  final VoidCallback onToggleDebug;
+  final ValueChanged<bool> onScoreModeChanged;
+
+  static const _practiceTitle = 'AI智能视唱';
+  static const _practiceSubtitle = '准备就绪:点击下方开始跟唱后看谱视唱';
+  static const _examTitle = '视唱考试';
+  static const _examSubtitle = '考试模式：不播放伴奏，请对照谱例完成视唱考试';
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return IgnorePointer(
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(ui(16)),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final tileWidth = ui(210);
-            final tileHeight = ui(112);
-            final columns = (constraints.maxWidth / tileWidth).ceil() + 1;
-            final rows = (constraints.maxHeight / tileHeight).ceil() + 1;
-            final textStyle = TextStyle(
-              fontSize: ui(20),
-              fontWeight: FontWeight.w600,
-              color: const Color(0xFF0B081A),
-              letterSpacing: ui(0.8),
-              fontFamily: 'PingFang SC',
-            );
+    final scoreModeLocked =
+        state.stage == SightSingingStage.singing ||
+        state.stage == SightSingingStage.countdown;
+    final examMode = state.visualOnlyMode;
+    final title = examMode ? _examTitle : _practiceTitle;
+    final subtitle = examMode ? _examSubtitle : _practiceSubtitle;
 
-            return SizedBox(
-              width: constraints.maxWidth,
-              height: constraints.maxHeight,
-              child: Stack(
-                clipBehavior: Clip.hardEdge,
+    return SizedBox(
+      height: ui(72),
+      width: double.infinity,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          IgnorePointer(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: ui(16),
+                    fontWeight: AppFont.w600,
+                    color: Colors.black,
+                    fontFamily: 'PingFang SC',
+                    height: 1,
+                  ),
+                ),
+                SizedBox(height: ui(6)),
+                Text(
+                  subtitle,
+                  maxLines: examMode ? 2 : 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: ui(12),
+                    color: const Color(0xFFB6B5BB),
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w400,
+                    height: 1,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            child: Center(
+              child: _GlassIconButton(
+                icon: Icons.arrow_back_ios_new_rounded,
+                onTap: onBack,
+              ),
+            ),
+          ),
+          Positioned(
+            right: 0,
+            top: 0,
+            bottom: 0,
+            child: Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  for (var row = 0; row < rows; row++)
-                    for (var col = 0; col < columns; col++)
-                      Positioned(
-                        left: col * tileWidth,
-                        top: row * tileHeight,
-                        width: tileWidth,
-                        height: tileHeight,
-                        child: Opacity(
-                          opacity: 0.13,
-                          child: Center(
-                            child: Transform.rotate(
-                              angle: -0.52,
-                              child: Text(
-                                _text,
-                                textAlign: TextAlign.center,
-                                style: textStyle,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
+                  _ScoreModeSegmentSwitch(
+                    selectedIndex: state.scoreSightReadingMode ? 0 : 1,
+                    onLeftTap: scoreModeLocked
+                        ? null
+                        : () => onScoreModeChanged(true),
+                    onRightTap: scoreModeLocked
+                        ? null
+                        : () => onScoreModeChanged(false),
+                  ),
+                  SizedBox(width: ui(8)),
+                  _GlassImageButton(
+                    asset: AppAssets.smartSightSingingSetIcon,
+                    active: state.debugPanelVisible,
+                    onTap: onToggleDebug,
+                  ),
                 ],
               ),
-            );
-          },
-        ),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _Header extends StatelessWidget {
-  const _Header({
-    required this.state,
-    required this.onImport,
-    required this.onToggleDebug,
-  });
-  final SightSingingState state;
-  final VoidCallback onImport;
-  final VoidCallback onToggleDebug;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Container(
-          width: ui(40),
-          height: ui(40),
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: _DemoUi.surface,
-            border: Border.all(color: _DemoUi.border),
-          ),
-          child: Icon(
-            Icons.graphic_eq_rounded,
-            color: _DemoUi.accent,
-            size: ui(22),
-          ),
-        ),
-        SizedBox(width: ui(12)),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              '智能视唱',
-              style: TextStyle(
-                fontSize: ui(20),
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF1A1A1A),
-                fontFamily: 'PingFang SC',
-              ),
-            ),
-            SizedBox(height: ui(2)),
-            Text(
-              _subtitle(state),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: ui(12),
-                color: const Color(0xFF788698),
-                fontFamily: 'PingFang SC',
-              ),
-            ),
-          ],
-        ),
-        const Spacer(),
-        if (state.stage != SightSingingStage.singing &&
-            state.stage != SightSingingStage.countdown) ...[
-          _ActionButton(
-            label: _importLabel(state),
-            icon: Icons.auto_graph_rounded,
-            primary: !state.hasTrack && !state.isSelectingTrack,
-            onTap: state.isBusy ? null : onImport,
-          ),
-          SizedBox(width: ui(10)),
-        ],
-        _DebugToggleButton(
-          active: state.debugPanelVisible,
-          onTap: onToggleDebug,
-        ),
-      ],
-    );
-  }
-
-  String _subtitle(SightSingingState state) {
-    if (state.audioName == null) {
-      return '内置 demo → 选轨 → KTV 跟唱 → 实时打分';
-    }
-    if (state.melodyTrackIndex != null) {
-      return '${state.audioName} · 主旋律轨 ${state.melodyTrackIndex}';
-    }
-    return state.audioName!;
-  }
-
-  String _importLabel(SightSingingState state) {
-    if (state.isSelectingTrack) return '重新解析';
-    if (state.hasTrack) return '重新解析';
-    return '解析 demo';
-  }
-}
-
 class _Body extends StatelessWidget {
-  const _Body({
-    required this.state,
-    required this.controller,
-    required this.onlineUrlController,
-  });
+  const _Body({required this.state, required this.controller});
+
   final SightSingingState state;
   final SmartSightSingingController controller;
-  final TextEditingController onlineUrlController;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     switch (state.stage) {
       case SightSingingStage.idle:
-        return _EmptyHint(
-          onImport: controller.importAudio,
-          onImportLocal: controller.importLocalMidi,
-          onImportMusicXml: controller.importLocalMusicXml,
-          onlineUrlController: onlineUrlController,
-          onAnalyzeUrl: controller.analyzeOnlineAudio,
-        );
       case SightSingingStage.analyzing:
-        return _AnalyzingHint(state: state);
       case SightSingingStage.selectTrack:
-        return _TrackSelectionPanel(state: state, controller: controller);
+        return _AnalyzingHint(state: state);
       case SightSingingStage.countdown:
         final track = state.track;
         if (track == null || track.isEmpty) {
-          return _EmptyHint(
-            onImport: controller.importAudio,
-            onImportLocal: controller.importLocalMidi,
-            onImportMusicXml: controller.importLocalMusicXml,
-            onlineUrlController: onlineUrlController,
-            onAnalyzeUrl: controller.analyzeOnlineAudio,
-          );
+          return _AnalyzingHint(state: state);
         }
         return Stack(
           children: [
             Column(
               children: [
-                _SingingModeBanner(state: state, controller: controller),
-                SizedBox(height: ui(12)),
-                _ScoreBoard(state: state),
-                SizedBox(height: ui(12)),
+                _ScoreBoard(state: state, controller: controller),
+                SizedBox(height: ui(16)),
                 Expanded(
-                  child: _PracticeTrackView(
-                    track: track,
-                    playbackMs: 0,
-                    userPoints: const <UserPitchPoint>[],
-                    currentUserMidi: state.currentUserMidi,
-                    currentUserAmplitude: state.currentUserAmplitude,
-                    scoreSightReadingMode: state.scoreSightReadingMode,
-                    musicXmlContent: state.musicXmlContent,
-                    scoringStandardCents: state.scoringStandardCents,
+                  child: _PracticeSurface(
+                    trackView: _PracticeTrackView(
+                      track: track,
+                      playbackMs: 0,
+                      userPoints: const <UserPitchPoint>[],
+                      currentUserMidi: state.currentUserMidi,
+                      currentUserAmplitude: state.currentUserAmplitude,
+                      scoreSightReadingMode: state.scoreSightReadingMode,
+                      musicXmlContent: state.musicXmlContent,
+                      scoringStandardCents: state.scoringStandardCents,
+                    ),
+                    controls: _Controls(state: state, controller: controller),
                   ),
                 ),
-                SizedBox(height: ui(12)),
-                _Controls(state: state, controller: controller),
               ],
             ),
             _CountdownOverlay(seconds: state.countdownSeconds),
@@ -499,49 +582,73 @@ class _Body extends StatelessWidget {
       case SightSingingStage.finished:
         final track = state.track;
         if (track == null || track.isEmpty) {
-          return _EmptyHint(
-            onImport: controller.importAudio,
-            onImportLocal: controller.importLocalMidi,
-            onImportMusicXml: controller.importLocalMusicXml,
-            onlineUrlController: onlineUrlController,
-            onAnalyzeUrl: controller.analyzeOnlineAudio,
-          );
+          return _AnalyzingHint(state: state);
         }
         final showNoteDetails =
             state.stage == SightSingingStage.finished &&
             state.completedNoteScores.isNotEmpty;
         return Column(
           children: [
-            _SingingModeBanner(state: state, controller: controller),
-            SizedBox(height: ui(12)),
-            _ScoreBoard(state: state),
-            SizedBox(height: ui(12)),
+            _ScoreBoard(state: state, controller: controller),
+            SizedBox(height: ui(16)),
             Expanded(
-              child: _PracticeTrackView(
-                track: track,
-                playbackMs: state.playbackMs,
-                userPoints: state.userPoints,
-                currentUserMidi: state.currentUserMidi,
-                currentUserAmplitude: state.currentUserAmplitude,
-                scoreSightReadingMode: state.scoreSightReadingMode,
-                musicXmlContent: state.musicXmlContent,
-                scoringStandardCents: state.scoringStandardCents,
+              child: _PracticeSurface(
+                trackView: _PracticeTrackView(
+                  track: track,
+                  playbackMs: state.playbackMs,
+                  userPoints: state.userPoints,
+                  currentUserMidi: state.currentUserMidi,
+                  currentUserAmplitude: state.currentUserAmplitude,
+                  scoreSightReadingMode: state.scoreSightReadingMode,
+                  musicXmlContent: state.musicXmlContent,
+                  scoringStandardCents: state.scoringStandardCents,
+                ),
+                controls: _Controls(state: state, controller: controller),
+                extra: showNoteDetails
+                    ? _NoteScoresPanel(scores: state.completedNoteScores)
+                    : null,
               ),
             ),
-            if (showNoteDetails) ...[
-              SizedBox(height: ui(12)),
-              _NoteScoresPanel(scores: state.completedNoteScores),
-            ],
-            SizedBox(height: ui(12)),
-            _Controls(state: state, controller: controller),
           ],
         );
     }
   }
 }
 
-/// 演唱结束后的「逐音详情」：横向滚动展示每颗音的等级 + 偏差，
-/// 帮助老师/学生定位哪几颗音偏了。
+/// 设计稿中部的浅灰圆角大容器：上方谱面 / 音高轨 + 底部操作条。
+class _PracticeSurface extends StatelessWidget {
+  const _PracticeSurface({
+    required this.trackView,
+    required this.controls,
+    this.extra,
+  });
+
+  final Widget trackView;
+  final Widget controls;
+  final Widget? extra;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      padding: EdgeInsets.fromLTRB(ui(16), ui(16), ui(16), ui(12)),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F6FA),
+        borderRadius: BorderRadius.circular(ui(16)),
+      ),
+      child: Column(
+        children: [
+          Expanded(child: trackView),
+          if (extra != null) ...[SizedBox(height: ui(12)), extra!],
+          SizedBox(height: ui(12)),
+          controls,
+        ],
+      ),
+    );
+  }
+}
+
+/// 演唱结束后的「结果分析」：标题 + 四档统计角标 + 横向滚动逐音卡片。
 class _NoteScoresPanel extends StatelessWidget {
   const _NoteScoresPanel({required this.scores});
 
@@ -556,12 +663,11 @@ class _NoteScoresPanel extends StatelessWidget {
     final missCount = scores.where((s) => s.hitLevel == 'miss').length;
 
     return Container(
-      height: ui(98),
-      padding: EdgeInsets.fromLTRB(ui(14), ui(8), ui(14), ui(10)),
+      height: ui(92),
+      padding: EdgeInsets.fromLTRB(ui(12), ui(8), ui(12), ui(8)),
       decoration: BoxDecoration(
-        color: _DemoUi.surface,
+        color: const Color(0xFFF5F6FA),
         borderRadius: BorderRadius.circular(ui(12)),
-        border: Border.all(color: _DemoUi.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -569,46 +675,55 @@ class _NoteScoresPanel extends StatelessWidget {
           Row(
             children: [
               Text(
-                '逐音详情',
+                '结果分析',
                 style: TextStyle(
-                  fontSize: ui(12),
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF1A1A1A),
+                  fontSize: ui(13),
+                  fontWeight: AppFont.w500,
+                  color: const Color(0xFF0B081A),
                   fontFamily: 'PingFang SC',
+                  height: 1,
                 ),
               ),
-              SizedBox(width: ui(10)),
+              SizedBox(width: ui(12)),
               _NoteBadge(
-                label: 'Perfect',
+                label: '准神',
                 count: perfectCount,
-                color: const Color(0xFF2E7D5B),
+                color: const Color(0xFF40C06C),
+                background: const Color(0x3340C06C),
+                width: 44,
               ),
-              SizedBox(width: ui(6)),
+              SizedBox(width: ui(4)),
               _NoteBadge(
-                label: 'Good',
+                label: '优秀',
                 count: goodCount,
-                color: const Color(0xFF4A5568),
+                color: const Color(0xFF5EA9FF),
+                background: const Color(0x4D5EA9FF),
+                width: 44,
               ),
-              SizedBox(width: ui(6)),
+              SizedBox(width: ui(4)),
               _NoteBadge(
-                label: 'OK',
+                label: '及格',
                 count: okCount,
-                color: const Color(0xFFB7791F),
+                color: const Color(0xFF8741FF),
+                background: const Color(0xFFE7D9FF),
+                width: 44,
               ),
-              SizedBox(width: ui(6)),
+              SizedBox(width: ui(4)),
               _NoteBadge(
-                label: 'Miss',
+                label: '不及格',
                 count: missCount,
-                color: const Color(0xFFC05621),
+                color: const Color(0xFFFF4E7B),
+                background: const Color(0xFFFEE4E8),
+                width: 53,
               ),
             ],
           ),
-          SizedBox(height: ui(6)),
+          SizedBox(height: ui(8)),
           Expanded(
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: scores.length,
-              separatorBuilder: (_, _) => SizedBox(width: ui(6)),
+              separatorBuilder: (_, _) => SizedBox(width: ui(8)),
               itemBuilder: (context, index) {
                 final s = scores[index];
                 return _NoteChip(index: index + 1, score: s);
@@ -626,28 +741,37 @@ class _NoteBadge extends StatelessWidget {
     required this.label,
     required this.count,
     required this.color,
+    required this.background,
+    required this.width,
   });
 
   final String label;
   final int count;
   final Color color;
+  final Color background;
+  final double width;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: ui(6), vertical: ui(2)),
+      width: ui(width),
+      height: ui(14),
+      alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(ui(6)),
+        color: background,
+        borderRadius: BorderRadius.circular(ui(3)),
       ),
       child: Text(
         '$label $count',
+        maxLines: 1,
+        overflow: TextOverflow.clip,
         style: TextStyle(
-          fontSize: ui(10),
+          fontSize: ui(9),
           color: color,
           fontFamily: 'PingFang SC',
-          fontWeight: FontWeight.w600,
+          fontWeight: AppFont.w400,
+          height: 1,
         ),
       ),
     );
@@ -660,30 +784,33 @@ class _NoteChip extends StatelessWidget {
   final int index;
   final KtvNoteScore score;
 
-  static const _green = Color(0xFF2E7D5B);
-  static const _gray = Color(0xFF4A5568);
-  static const _amber = Color(0xFFB7791F);
-  static const _red = Color(0xFFC05621);
+  /// 每档等级的 (描边/文字色, 背景色)。
+  static (Color, Color) _palette(String level) {
+    switch (level) {
+      case 'perfect':
+        return (const Color(0xFF40C06C), const Color(0x3340C06C));
+      case 'good':
+        return (const Color(0xFF5EA9FF), const Color(0x335EA9FF));
+      case 'ok':
+        return (const Color(0xFF8741FF), const Color(0xFFE7D9FF));
+      default:
+        return (const Color(0xFFFF386B), const Color(0xFFFEE4E8));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final color = switch (score.hitLevel) {
-      'perfect' => _green,
-      'good' => _gray,
-      'ok' => _amber,
-      _ => _red,
-    };
+    final (color, background) = _palette(score.hitLevel);
     final centsLabel = score.cents.isFinite
         ? '${score.cents > 0 ? '+' : ''}${score.cents.round()}c'
         : '--';
     return Container(
-      width: ui(58),
-      padding: EdgeInsets.symmetric(horizontal: ui(4), vertical: ui(4)),
+      width: ui(52),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
-        borderRadius: BorderRadius.circular(ui(6)),
+        color: background,
+        border: Border.all(color: color, width: ui(0.6)),
+        borderRadius: BorderRadius.circular(ui(7)),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -691,27 +818,33 @@ class _NoteChip extends StatelessWidget {
           Text(
             '#$index ${PitchUtils.midiToNoteName(score.refMidi)}',
             style: TextStyle(
-              fontSize: ui(10),
-              color: const Color(0xFF1A1A1A),
-              fontFamily: 'Inter',
-              fontWeight: FontWeight.w600,
+              fontSize: ui(9),
+              color: Colors.black,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w500,
+              height: 1,
             ),
           ),
+          SizedBox(height: ui(5)),
           Text(
             centsLabel,
             style: TextStyle(
-              fontSize: ui(10),
+              fontSize: ui(9),
               color: color,
-              fontFamily: 'Inter',
-              fontWeight: FontWeight.w600,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w400,
+              height: 1,
             ),
           ),
+          SizedBox(height: ui(5)),
           Text(
             '${score.points}',
             style: TextStyle(
-              fontSize: ui(10),
+              fontSize: ui(9),
               color: color,
-              fontFamily: 'Inter',
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w400,
+              height: 1,
             ),
           ),
         ],
@@ -775,164 +908,16 @@ class _PracticeTrackView extends StatelessWidget {
   }
 }
 
-class _EmptyHint extends StatelessWidget {
-  const _EmptyHint({
-    required this.onImport,
-    required this.onImportLocal,
-    required this.onImportMusicXml,
-    required this.onlineUrlController,
-    required this.onAnalyzeUrl,
-  });
-  final VoidCallback onImport;
-  final VoidCallback onImportLocal;
-  final VoidCallback onImportMusicXml;
-  final TextEditingController onlineUrlController;
-  final ValueChanged<String> onAnalyzeUrl;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: ui(96),
-            height: ui(96),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: _DemoUi.surface,
-              border: Border.all(color: _DemoUi.border),
-            ),
-            child: Icon(
-              Icons.library_music_rounded,
-              size: ui(48),
-              color: _DemoUi.accentMuted,
-            ),
-          ),
-          SizedBox(height: ui(20)),
-          Text(
-            '导入乐谱，开启智能视唱',
-            style: TextStyle(
-              fontSize: ui(18),
-              color: const Color(0xFF1A1A1A),
-              fontWeight: FontWeight.w600,
-              fontFamily: 'PingFang SC',
-            ),
-          ),
-          SizedBox(height: ui(8)),
-          SizedBox(
-            width: ui(420),
-            child: Text(
-              '支持内置 demo、本地 MIDI（.mid/.midi）、本地 MusicXML（.xml/.musicxml/.mxl）'
-              '或在线 MIDI 链接。MusicXML 将按标准五线谱排版显示。',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: ui(13),
-                color: const Color(0xFF788698),
-                fontFamily: 'PingFang SC',
-                height: 1.5,
-              ),
-            ),
-          ),
-          SizedBox(height: ui(24)),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _ActionButton(
-                label: '解析 demo',
-                icon: Icons.auto_graph_rounded,
-                primary: true,
-                onTap: onImport,
-              ),
-              SizedBox(width: ui(12)),
-              _ActionButton(
-                label: '上传本地 MIDI',
-                icon: Icons.upload_file_rounded,
-                primary: false,
-                onTap: onImportLocal,
-              ),
-              SizedBox(width: ui(12)),
-              _ActionButton(
-                label: '上传 MusicXML',
-                icon: Icons.description_outlined,
-                primary: false,
-                onTap: onImportMusicXml,
-              ),
-            ],
-          ),
-          SizedBox(height: ui(12)),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.info_outline,
-                size: ui(14),
-                color: _DemoUi.textSecondary,
-              ),
-              SizedBox(width: ui(6)),
-              Text(
-                '伴奏音量由设备实体键调节；跟唱时麦克风识别音高并评分',
-                style: TextStyle(
-                  fontSize: ui(12),
-                  color: _DemoUi.textSecondary,
-                  fontFamily: 'PingFang SC',
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: ui(18)),
-          SizedBox(
-            width: ui(520),
-            child: Row(
-              children: [
-                Expanded(
-                  child: AppTextField(
-                    controller: onlineUrlController,
-                    keyboardType: TextInputType.url,
-                    textInputAction: TextInputAction.done,
-                    onSubmitted: onAnalyzeUrl,
-                    decoration: InputDecoration(
-                      isDense: true,
-                      hintText: '输入在线 MIDI 地址（.mid / .midi）',
-                      prefixIcon: const Icon(Icons.link_rounded),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(ui(12)),
-                      ),
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: ui(12),
-                        vertical: ui(12),
-                      ),
-                    ),
-                    style: TextStyle(
-                      fontSize: ui(13),
-                      color: const Color(0xFF1A1A1A),
-                      fontFamily: 'PingFang SC',
-                    ),
-                  ),
-                ),
-                SizedBox(width: ui(10)),
-                _ActionButton(
-                  label: '解析链接',
-                  icon: Icons.cloud_download_outlined,
-                  primary: false,
-                  onTap: () => onAnalyzeUrl(onlineUrlController.text),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _AnalyzingHint extends StatelessWidget {
   const _AnalyzingHint({required this.state});
   final SightSingingState state;
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final name = state.audioName?.trim();
+    final headline = name != null && name.isNotEmpty
+        ? '正在解析「$name」…'
+        : '正在加载教材详情…';
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -940,7 +925,7 @@ class _AnalyzingHint extends StatelessWidget {
           const AppLoadingIndicator(),
           SizedBox(height: ui(18)),
           Text(
-            '正在解析「${state.audioName ?? 'MIDI'}」…',
+            headline,
             style: TextStyle(
               fontSize: ui(15),
               fontWeight: FontWeight.w500,
@@ -950,7 +935,7 @@ class _AnalyzingHint extends StatelessWidget {
           ),
           SizedBox(height: ui(6)),
           Text(
-            '读取各轨道信息，随后请你选择主旋律轨…',
+            '准备跟唱界面，请稍候…',
             style: TextStyle(
               fontSize: ui(12),
               color: const Color(0xFF788698),
@@ -963,130 +948,16 @@ class _AnalyzingHint extends StatelessWidget {
   }
 }
 
-class _SingingModeBanner extends StatelessWidget {
-  const _SingingModeBanner({required this.state, required this.controller});
-
+class _ScoreBoard extends StatelessWidget {
+  const _ScoreBoard({required this.state, required this.controller});
   final SightSingingState state;
   final SmartSightSingingController controller;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final visualOnly = state.visualOnlyMode;
-    final isIosTablet = SightSingingPlatform.isIosTablet;
-
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: ui(14), vertical: ui(10)),
-      decoration: BoxDecoration(
-        color: _DemoUi.surface,
-        borderRadius: BorderRadius.circular(ui(12)),
-        border: Border.all(color: _DemoUi.border),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            visualOnly ? Icons.visibility_rounded : Icons.headphones_rounded,
-            color: _DemoUi.accentMuted,
-            size: ui(18),
-          ),
-          SizedBox(width: ui(8)),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  visualOnly
-                      ? '无声跟唱：不播放伴奏，请对照音符条演唱。'
-                      : (isIosTablet
-                            ? 'iPad 跟唱：伴奏按 MIDI 原力度播放，音量由实体键调节；'
-                                  '麦克风实时识别你的音高并绘制轨迹。'
-                            : '伴奏按 MIDI 原力度播放，音量由实体键调节；'
-                                  '麦克风实时识别你的音高并绘制轨迹。'),
-                  style: TextStyle(
-                    fontSize: ui(12),
-                    color: _DemoUi.accentMuted,
-                    fontFamily: 'PingFang SC',
-                    height: 1.4,
-                  ),
-                ),
-                SizedBox(height: ui(8)),
-                Wrap(
-                  spacing: ui(18),
-                  runSpacing: ui(8),
-                  children: [
-                    _ModeSwitch(
-                      label: '谱例视唱',
-                      value: state.scoreSightReadingMode,
-                      onChanged: controller.setScoreSightReadingMode,
-                    ),
-                    if (isIosTablet)
-                      _ModeSwitch(
-                        label: '无声跟唱',
-                        value: visualOnly,
-                        onChanged:
-                            state.isPreviewPlaying ||
-                                state.stage == SightSingingStage.singing ||
-                                state.stage == SightSingingStage.countdown
-                            ? null
-                            : controller.setVisualOnlyMode,
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ModeSwitch extends StatelessWidget {
-  const _ModeSwitch({
-    required this.label,
-    required this.value,
-    required this.onChanged,
-  });
-
-  final String label;
-  final bool value;
-  final ValueChanged<bool>? onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: ui(12),
-            color: onChanged == null ? _DemoUi.textSecondary : _DemoUi.accent,
-            fontFamily: 'PingFang SC',
-          ),
-        ),
-        SizedBox(width: ui(8)),
-        Switch.adaptive(
-          value: value,
-          onChanged: onChanged,
-          activeTrackColor: _DemoUi.accent,
-        ),
-      ],
-    );
-  }
-}
-
-class _ScoreBoard extends StatelessWidget {
-  const _ScoreBoard({required this.state});
-  final SightSingingState state;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
     final ref = state.track?.sampleAt(state.playbackMs);
-    final refName = ref != null ? PitchUtils.midiToNoteName(ref.midi) : '--';
+    final refName = ref != null ? PitchUtils.midiToNoteName(ref.midi) : '- -';
     final currentCents = state.currentUserMidi >= 0 && ref != null
         ? PitchUtils.octaveNormalizedCents(state.currentUserMidi, ref.midi)
         : double.nan;
@@ -1095,81 +966,74 @@ class _ScoreBoard extends StatelessWidget {
         : state.currentUserAmplitude >
               SmartSightSingingViewConfig.pickupLabelMinAmplitude
         ? '识别中'
-        : '--';
+        : '- -';
     final centsLabel = currentCents.isFinite
         ? '${currentCents > 0 ? '+' : ''}${currentCents.round()}c'
-        : '--';
+        : '- -';
+    final hitRate = state.scoredCount == 0
+        ? '- -'
+        : '${(100 * state.hitCount / state.scoredCount).round()}%';
 
-    final progress = state.track == null || state.track!.totalMs == 0
-        ? 0.0
-        : (state.playbackMs / state.track!.totalMs).clamp(0.0, 1.0);
+    final examLocked =
+        state.isPreviewPlaying ||
+        state.stage == SightSingingStage.singing ||
+        state.stage == SightSingingStage.countdown;
 
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(12)),
+      height: ui(88),
+      padding: EdgeInsets.symmetric(horizontal: ui(24)),
       decoration: BoxDecoration(
-        color: _DemoUi.surface,
-        borderRadius: BorderRadius.circular(ui(14)),
-        border: Border.all(color: _DemoUi.border),
+        color: const Color(0xFFF5F6FA),
+        borderRadius: BorderRadius.circular(ui(16)),
       ),
       child: Row(
         children: [
-          _ScoreCell(label: '得分', value: '${state.currentScore}'),
-          SizedBox(width: ui(24)),
-          _ScoreCell(label: '连击', value: '${state.combo}'),
-          SizedBox(width: ui(24)),
           _ScoreCell(
-            label: '命中率',
-            value: state.scoredCount == 0
-                ? '--'
-                : '${(100 * state.hitCount / state.scoredCount).round()}%',
+            label: '得分',
+            value: '${state.currentScore}',
+            valueColor: const Color(0xFF8741FF),
           ),
-          SizedBox(width: ui(24)),
+          SizedBox(width: ui(30)),
+          _ScoreCell(label: '连击', value: '${state.combo}'),
+          SizedBox(width: ui(30)),
+          _ScoreCell(label: '命中率', value: hitRate),
+          SizedBox(width: ui(30)),
           _ScoreCell(label: '标准音', value: refName),
-          SizedBox(width: ui(24)),
+          SizedBox(width: ui(30)),
           _ScoreCell(label: '你的音', value: userName),
-          SizedBox(width: ui(24)),
+          SizedBox(width: ui(30)),
           _ScoreCell(label: '偏差', value: centsLabel),
           const Spacer(),
-          // 进度条。
-          SizedBox(
-            width: ui(180),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(ui(4)),
-              child: LinearProgressIndicator(
-                value: progress,
-                minHeight: ui(6),
-                backgroundColor: const Color(0x33000000),
-                color: _DemoUi.accent,
-              ),
+          Text(
+            '考试模式',
+            style: TextStyle(
+              fontSize: ui(14),
+              color: Colors.black,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w400,
+              height: 1,
             ),
           ),
-          SizedBox(width: ui(10)),
-          Text(
-            _formatMs(state.playbackMs),
-            style: TextStyle(
-              fontSize: ui(12),
-              color: const Color(0xFF1A1A1A),
-              fontFamily: 'Barlow',
-              fontWeight: FontWeight.w600,
-            ),
+          SizedBox(width: ui(12)),
+          _ExamModeSwitch(
+            value: state.visualOnlyMode,
+            onChanged: examLocked ? null : controller.setVisualOnlyMode,
           ),
         ],
       ),
     );
   }
-
-  String _formatMs(int ms) {
-    final s = ms ~/ 1000;
-    final mm = (s ~/ 60).toString().padLeft(2, '0');
-    final ss = (s % 60).toString().padLeft(2, '0');
-    return '$mm:$ss';
-  }
 }
 
 class _ScoreCell extends StatelessWidget {
-  const _ScoreCell({required this.label, required this.value});
+  const _ScoreCell({
+    required this.label,
+    required this.value,
+    this.valueColor = const Color(0xFF0B081A),
+  });
   final String label;
   final String value;
+  final Color valueColor;
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
@@ -1180,19 +1044,22 @@ class _ScoreCell extends StatelessWidget {
         Text(
           label,
           style: TextStyle(
-            fontSize: ui(11),
-            color: const Color(0xFF788698),
+            fontSize: ui(14),
+            color: const Color(0xFFB6B5BB),
             fontFamily: 'PingFang SC',
+            fontWeight: AppFont.w400,
+            height: 1,
           ),
         ),
-        SizedBox(height: ui(2)),
+        SizedBox(height: ui(12)),
         Text(
           value,
           style: TextStyle(
             fontSize: ui(20),
-            color: const Color(0xFF1A1A1A),
-            fontFamily: 'Barlow',
-            fontWeight: FontWeight.w600,
+            color: valueColor,
+            fontFamily: 'Manrope',
+            fontWeight: AppFont.w600,
+            height: 1,
           ),
         ),
       ],
@@ -1200,217 +1067,39 @@ class _ScoreCell extends StatelessWidget {
   }
 }
 
-class _TrackSelectionPanel extends StatelessWidget {
-  const _TrackSelectionPanel({required this.state, required this.controller});
+/// 设计稿「考试模式」开关：44×24 轨道，开启 #A773FF，关闭浅灰。
+class _ExamModeSwitch extends StatelessWidget {
+  const _ExamModeSwitch({required this.value, required this.onChanged});
 
-  final SightSingingState state;
-  final SmartSightSingingController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    final selected = state.selectedTrackIndex;
-
-    MidiTrackSummary? findSummary(int trackIndex) {
-      for (final s in state.trackSummaries) {
-        if (s.trackIndex == trackIndex) return s;
-      }
-      return null;
-    }
-
-    final summary = selected == null ? null : findSummary(selected);
-    final canConfirm = summary?.hasNotes ?? false;
-
-    final isMusicXml = state.importFormat == SightSingingImportFormat.musicXml;
-    final unitLabel = isMusicXml ? '声部' : '轨道';
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          isMusicXml ? '选择主旋律声部' : '选择主旋律轨',
-          style: TextStyle(
-            fontSize: ui(18),
-            fontWeight: FontWeight.w600,
-            color: const Color(0xFF1A1A1A),
-            fontFamily: 'PingFang SC',
-          ),
-        ),
-        SizedBox(height: ui(6)),
-        Text(
-          '「${state.audioName ?? (isMusicXml ? 'MusicXML' : 'MIDI')}」共 ${state.trackSummaries.length} 个$unitLabel。'
-          '系统已预选推荐$unitLabel，请确认或改选后再开始跟唱。',
-          style: TextStyle(
-            fontSize: ui(13),
-            color: const Color(0xFF788698),
-            fontFamily: 'PingFang SC',
-            height: 1.45,
-          ),
-        ),
-        SizedBox(height: ui(14)),
-        Expanded(
-          child: ListView.separated(
-            itemCount: state.trackSummaries.length,
-            separatorBuilder: (_, _) => SizedBox(height: ui(8)),
-            itemBuilder: (context, index) {
-              final item = state.trackSummaries[index];
-              final isSelected = item.trackIndex == selected;
-              return _TrackListTile(
-                summary: item,
-                selected: isSelected,
-                onTap: item.hasNotes
-                    ? () => controller.setSelectedTrack(item.trackIndex)
-                    : null,
-              );
-            },
-          ),
-        ),
-        SizedBox(height: ui(12)),
-        Row(
-          children: [
-            Text(
-              summary == null
-                  ? '请选择一个含音符的$unitLabel'
-                  : summary.hasNotes
-                  ? '已选$unitLabel ${summary.trackIndex} · ${summary.noteCount} 个音符 · ${summary.pitchRangeLabel}'
-                  : '$unitLabel ${summary.trackIndex} 无音符，请换选',
-              style: TextStyle(
-                fontSize: ui(13),
-                color: const Color(0xFF1A1A1A),
-                fontFamily: 'PingFang SC',
-              ),
-            ),
-            const Spacer(),
-            _ActionButton(
-              label: '取消',
-              icon: Icons.close_rounded,
-              primary: false,
-              onTap: controller.cancelTrackSelection,
-            ),
-            SizedBox(width: ui(10)),
-            _ActionButton(
-              label: isMusicXml ? '确认声部' : '确认轨道',
-              icon: Icons.check_rounded,
-              primary: true,
-              onTap: canConfirm ? controller.confirmSelectedTrack : null,
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _TrackListTile extends StatelessWidget {
-  const _TrackListTile({
-    required this.summary,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final MidiTrackSummary summary;
-  final bool selected;
-  final VoidCallback? onTap;
-
-  String _formatDuration(int ms) {
-    final s = ms ~/ 1000;
-    final mm = (s ~/ 60).toString().padLeft(2, '0');
-    final ss = (s % 60).toString().padLeft(2, '0');
-    return '$mm:$ss';
-  }
+  final bool value;
+  final ValueChanged<bool>? onChanged;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final disabled = !summary.hasNotes;
-    final borderColor = selected ? _DemoUi.accent : _DemoUi.border;
-    final bg = selected
-        ? _DemoUi.surfaceSelected
-        : disabled
-        ? const Color(0xFFFAFAFC)
-        : Colors.white;
-
-    return Material(
-      color: bg,
-      borderRadius: BorderRadius.circular(ui(12)),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(ui(12)),
-        child: Container(
-          padding: EdgeInsets.symmetric(horizontal: ui(14), vertical: ui(12)),
+    final disabled = onChanged == null;
+    return Opacity(
+      opacity: disabled ? 0.5 : 1,
+      child: GestureDetector(
+        onTap: disabled ? null : () => onChanged!(!value),
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          width: ui(44),
+          height: ui(24),
+          padding: EdgeInsets.all(ui(2)),
+          alignment: value ? Alignment.centerRight : Alignment.centerLeft,
           decoration: BoxDecoration(
+            color: value ? const Color(0xFFA773FF) : const Color(0xFFD7D7DE),
             borderRadius: BorderRadius.circular(ui(12)),
-            border: Border.all(color: borderColor, width: selected ? 1.5 : 1),
           ),
-          child: Row(
-            children: [
-              Icon(
-                selected
-                    ? Icons.radio_button_checked_rounded
-                    : Icons.radio_button_off_rounded,
-                color: disabled
-                    ? const Color(0xFFB0B6C2)
-                    : selected
-                    ? _DemoUi.accent
-                    : _DemoUi.textSecondary,
-                size: ui(20),
-              ),
-              SizedBox(width: ui(10)),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          '轨道 ${summary.trackIndex}',
-                          style: TextStyle(
-                            fontSize: ui(14),
-                            fontWeight: FontWeight.w600,
-                            color: disabled
-                                ? const Color(0xFFB0B6C2)
-                                : const Color(0xFF1A1A1A),
-                            fontFamily: 'PingFang SC',
-                          ),
-                        ),
-                        if (summary.recommended) ...[
-                          SizedBox(width: ui(8)),
-                          Container(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: ui(8),
-                              vertical: ui(2),
-                            ),
-                            decoration: BoxDecoration(
-                              color: _DemoUi.badgeBg,
-                              borderRadius: BorderRadius.circular(ui(8)),
-                            ),
-                            child: Text(
-                              '推荐',
-                              style: TextStyle(
-                                fontSize: ui(11),
-                                color: _DemoUi.badgeText,
-                                fontFamily: 'PingFang SC',
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    SizedBox(height: ui(4)),
-                    Text(
-                      summary.hasNotes
-                          ? '${summary.noteCount} 个音符 · ${summary.pitchRangeLabel} · ${_formatDuration(summary.durationMs)}'
-                          : '无音符',
-                      style: TextStyle(
-                        fontSize: ui(12),
-                        color: const Color(0xFF788698),
-                        fontFamily: 'PingFang SC',
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          child: Container(
+            width: ui(20),
+            height: ui(20),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+            ),
           ),
         ),
       ),
@@ -1427,29 +1116,36 @@ class _CountdownOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Positioned.fill(
-      child: ColoredBox(
-        color: const Color(0x99000000),
-        child: Center(
+      child: Center(
+        child: Container(
+          width: ui(128),
+          height: ui(128),
+          decoration: BoxDecoration(
+            color: const Color(0xE6FFFFFF),
+            borderRadius: BorderRadius.circular(ui(16)),
+            border: Border.all(color: Colors.white, width: ui(2)),
+          ),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
                 '$seconds',
                 style: TextStyle(
-                  fontSize: ui(96),
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
+                  fontSize: ui(80),
+                  fontWeight: AppFont.w600,
+                  color: const Color(0xFF8741FF),
                   fontFamily: 'Barlow',
-                  height: 1,
+                  height: 50 / 80,
                 ),
               ),
-              SizedBox(height: ui(12)),
+              SizedBox(height: ui(14)),
               Text(
-                '准备跟唱…',
+                '准备跟唱...',
                 style: TextStyle(
-                  fontSize: ui(18),
-                  color: Colors.white,
+                  fontSize: ui(12),
+                  color: const Color(0xFFB6B5BB),
                   fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w400,
                 ),
               ),
             ],
@@ -1460,6 +1156,12 @@ class _CountdownOverlay extends StatelessWidget {
   }
 }
 
+/// 底部播放条：封面 + 标题/副标题 + 试听/跟唱按钮 + 进度条 + 时间。
+///
+/// 进度数据来源：MusicXML/MIDI 本身不含音频时长，而是解析成参考音高轨
+/// （[PitchTrack]）后由内部播放调度器驱动。因此「总时长 = track.totalMs」、
+/// 「当前进度 = state.playbackMs」，跟唱 / 试听过程中实时更新。进度条为
+/// 只读展示（视唱打分依赖严格的播放时间轴，不支持任意拖拽 seek）。
 class _Controls extends StatelessWidget {
   const _Controls({required this.state, required this.controller});
   final SightSingingState state;
@@ -1468,101 +1170,486 @@ class _Controls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final singing = state.stage == SightSingingStage.singing;
-    final countdown = state.stage == SightSingingStage.countdown;
-    return Row(
-      children: [
-        Text(
-          countdown
-              ? '倒计时中，请准备…'
-              : state.stage == SightSingingStage.finished
-              ? '本次演唱结束 · 综合得分 ${state.currentScore}'
-              : singing
-              ? (state.scoreSightReadingMode
-                    ? '谱例视唱中…看谱保持节奏和音准'
-                    : state.visualOnlyMode
-                    ? '无声跟唱中…请对照音符条保持音准'
-                    : '正在跟唱中…保持音准更稳更高分')
-              : (state.isPreviewPlaying
-                    ? '试听中…熟悉旋律后可开始跟唱'
-                    : state.stage == SightSingingStage.ready
-                    ? (state.scoreSightReadingMode
-                          ? '准备就绪：点击「开始跟唱」后看谱视唱'
-                          : '准备就绪：点击「开始跟唱」后将采集麦克风并绘制你的音高')
-                    : '准备就绪，点击「开始跟唱」即可'),
-          style: TextStyle(
-            fontSize: ui(13),
-            color: const Color(0xFF1A1A1A),
-            fontFamily: 'PingFang SC',
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const Spacer(),
-        if (countdown)
-          _ActionButton(
-            label: '取消',
-            icon: Icons.close_rounded,
-            primary: false,
-            onTap: () => controller.cancelCountdown(),
-          )
-        else if (singing)
-          _ActionButton(
-            label: '停止',
-            icon: Icons.stop_rounded,
-            primary: false,
-            onTap: () => controller.stopSinging(),
-          )
-        else ...[
-          if (state.stage == SightSingingStage.ready) ...[
-            _ActionButton(
-              label: state.isPreviewPlaying ? '停止试听' : '试听旋律',
-              icon: state.isPreviewPlaying
-                  ? Icons.stop_circle_outlined
-                  : Icons.play_circle_outline_rounded,
-              primary: false,
-              onTap: () => controller.previewMelody(),
+    final track = state.track;
+    final totalMs = track?.totalMs ?? 0;
+    final currentMs = state.playbackMs.clamp(0, totalMs == 0 ? 0 : totalMs);
+    final ratio = totalMs > 0 ? (currentMs / totalMs).clamp(0.0, 1.0) : 0.0;
+
+    final title = (state.audioName?.trim().isNotEmpty ?? false)
+        ? state.audioName!.trim()
+        : '智能视唱';
+    final subtitle = state.shortText1?.trim() ?? '';
+
+    return Container(
+      height: ui(72),
+      padding: EdgeInsets.fromLTRB(ui(12), 0, ui(12), 0),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(ui(12)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: ui(190),
+            child: Row(
+              children: [
+                Container(
+                  width: ui(48),
+                  height: ui(48),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF5F6FA),
+                    borderRadius: BorderRadius.circular(ui(4)),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: Image.asset(
+                    'assets/images/home/feng.png',
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                SizedBox(width: ui(12)),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: const Color(0xFF0B081A),
+                          fontSize: ui(15),
+                          fontFamily: 'PingFang SC',
+                          fontWeight: AppFont.w500,
+                          height: 1,
+                        ),
+                      ),
+                      if (subtitle.isNotEmpty) ...[
+                        SizedBox(height: ui(6)),
+                        Text(
+                          subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: const Color(0xFFB6B5BB),
+                            fontSize: ui(12),
+                            fontFamily: 'PingFang SC',
+                            fontWeight: AppFont.w400,
+                            height: 1,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
             ),
-            SizedBox(width: ui(10)),
-          ],
-          _ActionButton(
-            label: state.stage == SightSingingStage.finished ? '重新跟唱' : '开始跟唱',
-            icon: Icons.mic_rounded,
-            primary: true,
-            onTap: state.isPreviewPlaying
-                ? null
-                : () => controller.startSinging(),
+          ),
+          _ControlButtons(state: state, controller: controller),
+          SizedBox(width: ui(16)),
+          Expanded(
+            child: _SightProgressTrack(
+              ratio: ratio,
+              currentMs: currentMs,
+              totalMs: totalMs,
+            ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 播放条中段的按钮组：倒计时显示「取消」、跟唱中显示「停止」，
+/// 其余状态显示「试听旋律 + 开始跟唱」图片按钮。
+class _ControlButtons extends StatelessWidget {
+  const _ControlButtons({required this.state, required this.controller});
+  final SightSingingState state;
+  final SmartSightSingingController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final singing = state.stage == SightSingingStage.singing;
+    final countdown = state.stage == SightSingingStage.countdown;
+
+    if (countdown) {
+      return _ActionButton(
+        label: '取消',
+        icon: Icons.close_rounded,
+        onTap: () => controller.cancelCountdown(),
+      );
+    }
+    if (singing) {
+      return _ActionButton(
+        label: '停止',
+        icon: Icons.stop_rounded,
+        onTap: () => controller.stopSinging(),
+      );
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _ImageActionButton(
+          asset: state.isPreviewPlaying
+              ? AppAssets.smartSightSingingPreviewPauseBtn
+              : AppAssets.smartSightSingingPreviewBtn,
+          onTap: () => controller.previewMelody(),
+        ),
+        SizedBox(width: ui(12)),
+        _ImageActionButton(
+          asset: AppAssets.smartSightSingingStartBtn,
+          onTap: state.isPreviewPlaying
+              ? null
+              : () => controller.startSinging(),
+        ),
       ],
     );
   }
 }
 
-class _DebugToggleButton extends StatelessWidget {
-  const _DebugToggleButton({required this.active, required this.onTap});
+/// 只读进度条 + 时间标签（`当前/总时长`）。样式对齐 musicPlay 的
+/// 紫色渐变进度条，但不接收手势（视唱不支持任意 seek）。
+class _SightProgressTrack extends StatelessWidget {
+  const _SightProgressTrack({
+    required this.ratio,
+    required this.currentMs,
+    required this.totalMs,
+  });
 
-  final bool active;
+  final double ratio;
+  final int currentMs;
+  final int totalMs;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final hitHeight = ui(20);
+    final trackHeight = ui(4);
+    final thumbSize = ui(12);
+    final labelStyle = TextStyle(
+      fontFamily: 'PingFang SC',
+      fontWeight: AppFont.w500,
+      fontSize: ui(12),
+      height: 1,
+    );
+
+    return SizedBox(
+      height: hitHeight,
+      child: Transform.translate(
+        offset: Offset(0, ui(2)),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned.fill(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final width = constraints.maxWidth;
+                  final clamped = ratio.clamp(0.0, 1.0);
+                  final fillWidth = width * clamped;
+                  final thumbLeft = (width - thumbSize) * clamped;
+                  return Stack(
+                    alignment: Alignment.centerLeft,
+                    clipBehavior: Clip.none,
+                    children: [
+                      Container(
+                        height: trackHeight,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE1E2E5),
+                          borderRadius: BorderRadius.circular(ui(23)),
+                        ),
+                      ),
+                      Container(
+                        height: trackHeight,
+                        width: fillWidth,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                            colors: [Color(0xFFE2D0FF), Color(0xFF8741FF)],
+                          ),
+                          borderRadius: BorderRadius.circular(ui(23)),
+                        ),
+                      ),
+                      Positioned(
+                        left: thumbLeft,
+                        child: Container(
+                          width: thumbSize,
+                          height: thumbSize,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF8741FF),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 1),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.12),
+                                offset: const Offset(0, 4),
+                                blurRadius: 4,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+            Positioned(
+              right: 0,
+              bottom: ui(14),
+              child: Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: _formatMs(currentMs),
+                      style: labelStyle.copyWith(
+                        color: const Color(0xFF0B081A),
+                      ),
+                    ),
+                    TextSpan(
+                      text: '/${_formatMs(totalMs)}',
+                      style: labelStyle.copyWith(
+                        color: const Color(0xFFB6B5BB),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _formatMs(int ms) {
+    final totalSeconds = (ms / 1000).floor();
+    final minutes = totalSeconds ~/ 60;
+    final seconds = (totalSeconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+}
+
+/// 底部操作条整图按钮（试听 / 暂停 / 开始跟唱），设计稿 96×36。
+class _ImageActionButton extends StatelessWidget {
+  const _ImageActionButton({
+    required this.asset,
+    required this.onTap,
+  });
+
+  final String asset;
+  final VoidCallback? onTap;
+
+  static const _width = 96.0;
+  static const _height = 36.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final disabled = onTap == null;
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Opacity(
+        opacity: disabled ? 0.45 : 1,
+        child: Image.asset(
+          asset,
+          width: ui(_width),
+          height: ui(_height),
+          fit: BoxFit.fill,
+        ),
+      ),
+    );
+  }
+}
+
+class _GlassIconButton extends StatelessWidget {
+  const _GlassIconButton({required this.icon, required this.onTap});
+
+  final IconData icon;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final fg = active ? Colors.white : _DemoUi.accent;
-    final bg = active ? _DemoUi.accent : Colors.white;
-    return InkWell(
+    return GestureDetector(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(ui(20)),
       child: Container(
-        width: ui(36),
-        height: ui(36),
+        width: ui(32),
+        height: ui(32),
         decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(ui(18)),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(ui(8)),
+          border: Border.all(color: const Color(0xFFF3F2F3)),
+        ),
+        child: Center(
+          child: Icon(icon, size: ui(16), color: const Color(0xFF1C274C)),
+        ),
+      ),
+    );
+  }
+}
+
+class _GlassImageButton extends StatelessWidget {
+  const _GlassImageButton({
+    required this.asset,
+    required this.onTap,
+    this.active = false,
+  });
+
+  final String asset;
+  final VoidCallback onTap;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: ui(32),
+        height: ui(32),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(ui(8)),
           border: Border.all(
-            color: active ? _DemoUi.accent : _DemoUi.borderStrong,
+            color: active ? const Color(0xFF8741FF) : const Color(0xFFF3F2F3),
           ),
         ),
-        child: Icon(Icons.tune_rounded, color: fg, size: ui(18)),
+        alignment: Alignment.center,
+        clipBehavior: Clip.antiAlias,
+        child: Image.asset(
+          asset,
+          width: ui(32),
+          height: ui(32),
+          fit: BoxFit.fill,
+        ),
+      ),
+    );
+  }
+}
+
+/// 与 [MusicPlayPage] 右上角 `_SegmentSwitch` 同款样式，尺寸 157×32。
+class _ScoreModeSegmentSwitch extends StatelessWidget {
+  const _ScoreModeSegmentSwitch({
+    required this.selectedIndex,
+    required this.onLeftTap,
+    required this.onRightTap,
+  });
+
+  final int selectedIndex;
+  final VoidCallback? onLeftTap;
+  final VoidCallback? onRightTap;
+
+  static const _switchWidth = 157.0;
+  static const _switchHeight = 32.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final disabled = onLeftTap == null && onRightTap == null;
+
+    return Opacity(
+      opacity: disabled ? 0.55 : 1,
+      child: SizedBox(
+        width: ui(_switchWidth),
+        height: ui(_switchHeight),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: const Color(0xFFF4F4FF),
+            borderRadius: BorderRadius.circular(ui(8)),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(ui(2)),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final segmentWidth = constraints.maxWidth / 2;
+                return SizedBox(
+                  height: constraints.maxHeight,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      AnimatedPositioned(
+                        duration: const Duration(milliseconds: 180),
+                        curve: Curves.easeOut,
+                        left: selectedIndex * segmentWidth,
+                        top: 0,
+                        bottom: 0,
+                        width: segmentWidth,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF8741FF),
+                            borderRadius: BorderRadius.circular(ui(6)),
+                          ),
+                        ),
+                      ),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(
+                            child: _ScoreModeSegmentSwitchItem(
+                              label: '谱例视唱',
+                              selected: selectedIndex == 0,
+                              onTap: onLeftTap,
+                            ),
+                          ),
+                          Expanded(
+                            child: _ScoreModeSegmentSwitchItem(
+                              label: '无谱视唱',
+                              selected: selectedIndex == 1,
+                              onTap: onRightTap,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ScoreModeSegmentSwitchItem extends StatelessWidget {
+  const _ScoreModeSegmentSwitchItem({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox.expand(
+        child: Center(
+          child: AnimatedDefaultTextStyle(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            style: TextStyle(
+              color: selected ? Colors.white : const Color(0xFFB6B5BB),
+              fontSize: ui(13),
+              fontFamily: 'PingFang SC',
+              fontWeight: selected ? AppFont.w500 : AppFont.w400,
+              height: 1,
+            ),
+            child: Text(label),
+          ),
+        ),
       ),
     );
   }
@@ -1573,27 +1660,17 @@ class _ActionButton extends StatelessWidget {
     required this.label,
     required this.icon,
     required this.onTap,
-    this.primary = false,
   });
   final String label;
   final IconData icon;
   final VoidCallback? onTap;
-  final bool primary;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final disabled = onTap == null;
-    final bg = disabled
-        ? const Color(0xFFE5E5EF)
-        : primary
-        ? _DemoUi.accent
-        : Colors.white;
-    final fg = disabled
-        ? const Color(0xFFB0B6C2)
-        : primary
-        ? Colors.white
-        : _DemoUi.accent;
+    final bg = disabled ? const Color(0xFFE5E5EF) : Colors.white;
+    final fg = disabled ? const Color(0xFFB0B6C2) : _DemoUi.accent;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(ui(24)),
@@ -1602,18 +1679,9 @@ class _ActionButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: bg,
           borderRadius: BorderRadius.circular(ui(24)),
-          border: primary || disabled
+          border: disabled
               ? null
               : Border.all(color: _DemoUi.borderStrong, width: 1),
-          boxShadow: primary && !disabled
-              ? const [
-                  BoxShadow(
-                    color: Color(0x1A000000),
-                    blurRadius: 8,
-                    offset: Offset(0, 2),
-                  ),
-                ]
-              : null,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,

@@ -481,7 +481,7 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
     state = state.copyWith(mainView: SmartCampusMainView.leaveApproval);
   }
 
-  /// 任课老师 / 班主任「我的请假」入口：查看本人请假记录并发起新申请。
+  /// 任课老师 / 班主任 / 宿管「我的请假」入口：查看本人请假记录并发起新申请。
   void openMyTeacherLeave() {
     if (state.mainView == SmartCampusMainView.myTeacherLeave) {
       return;

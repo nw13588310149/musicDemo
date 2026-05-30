@@ -10,6 +10,8 @@ class ShellNavItem {
     required this.activeIcon,
     this.badge = 0,
     this.badgeColor = 0xFFE61F62,
+    /// 导航 icon 边长（设计稿逻辑 px）；未指定时默认 24。
+    this.iconSize,
   });
 
   final String label;
@@ -18,6 +20,7 @@ class ShellNavItem {
   final String activeIcon;
   final int badge;
   final int badgeColor;
+  final double? iconSize;
 
   ShellNavItem copyWith({int? badge}) {
     return ShellNavItem(
@@ -27,6 +30,7 @@ class ShellNavItem {
       activeIcon: activeIcon,
       badge: badge ?? this.badge,
       badgeColor: badgeColor,
+      iconSize: iconSize,
     );
   }
 }
@@ -246,6 +250,7 @@ List<ShellNavItem> buildDefaultNavItems({
       route: RoutePaths.smartSinging,
       icon: AppAssets.navV2MusicMain,
       activeIcon: AppAssets.navV2MusicMain,
+      iconSize: 24,
     ),
     const ShellNavItem(
       label: '\u97f3\u4e50\u4f34\u4fa3',
