@@ -20,43 +20,66 @@ enum MusicCompanionMetronomeCue {
   tone3Beat12,
 }
 
+/// 音乐伴侣 / 智能视唱共用的播放增益。
+///
+/// 最终响度由系统音量键控制；软件层钢琴满幅输出，节拍器仅强拍/弱拍区分。
+abstract final class MusicCompanionPlaybackVolume {
+  static const double piano = 1.0;
+  static const double metronomeAccent = 1.0;
+  static const double metronomeWeak = 0.92;
+
+  static double metronomeVolumeForCue(MusicCompanionMetronomeCue cue) {
+    switch (cue) {
+      case MusicCompanionMetronomeCue.tone1Accent:
+      case MusicCompanionMetronomeCue.tone2Accent:
+        return metronomeAccent;
+      default:
+        return metronomeWeak;
+    }
+  }
+
+  static double metronomeVolumeForBeat(int beatIndex) {
+    return beatIndex == 0 ? metronomeAccent : metronomeWeak;
+  }
+}
+
 /// Shared piano map for music companion, music play, smart sight singing, etc.
 const Map<String, String> kMusicCompanionPianoAssetByNote = kPianoNoteAssetByNote;
 
 const Map<MusicCompanionMetronomeCue, String>
 kMusicCompanionMetronomeAssetByCue = <MusicCompanionMetronomeCue, String>{
   MusicCompanionMetronomeCue.tone1Accent:
-      'assets/audio/music_companion/metronome/beat0/audio1.mp3',
+      'assets/audio/music_companion/metronome/beat0/audio1.wav',
   MusicCompanionMetronomeCue.tone1Regular:
-      'assets/audio/music_companion/metronome/beat0/audio2.mp3',
+      'assets/audio/music_companion/metronome/beat0/audio2.wav',
   MusicCompanionMetronomeCue.tone2Accent:
-      'assets/audio/music_companion/metronome/beat2/2.mp3',
+      'assets/audio/music_companion/metronome/beat2/2.wav',
   MusicCompanionMetronomeCue.tone2Regular:
-      'assets/audio/music_companion/metronome/beat2/3.mp3',
+      'assets/audio/music_companion/metronome/beat2/3.wav',
   MusicCompanionMetronomeCue.tone2Special:
       'assets/audio/music_companion/metronome/beat2/4.mp3',
   MusicCompanionMetronomeCue.tone3Beat1:
-      'assets/audio/music_companion/metronome/beat3/1.mp3',
+      'assets/audio/music_companion/metronome/beat3/01.wav',
   MusicCompanionMetronomeCue.tone3Beat2:
-      'assets/audio/music_companion/metronome/beat3/2.mp3',
+      'assets/audio/music_companion/metronome/beat3/02.wav',
   MusicCompanionMetronomeCue.tone3Beat3:
-      'assets/audio/music_companion/metronome/beat3/3.mp3',
+      'assets/audio/music_companion/metronome/beat3/03.wav',
   MusicCompanionMetronomeCue.tone3Beat4:
-      'assets/audio/music_companion/metronome/beat3/4.mp3',
+      'assets/audio/music_companion/metronome/beat3/04.wav',
   MusicCompanionMetronomeCue.tone3Beat5:
-      'assets/audio/music_companion/metronome/beat3/5.mp3',
+      'assets/audio/music_companion/metronome/beat3/05.wav',
   MusicCompanionMetronomeCue.tone3Beat6:
-      'assets/audio/music_companion/metronome/beat3/6.mp3',
+      'assets/audio/music_companion/metronome/beat3/06.wav',
   MusicCompanionMetronomeCue.tone3Beat7:
-      'assets/audio/music_companion/metronome/beat3/7.mp3',
+      'assets/audio/music_companion/metronome/beat3/07.wav',
   MusicCompanionMetronomeCue.tone3Beat8:
-      'assets/audio/music_companion/metronome/beat3/8.mp3',
+      'assets/audio/music_companion/metronome/beat3/08.wav',
   MusicCompanionMetronomeCue.tone3Beat9:
-      'assets/audio/music_companion/metronome/beat3/9.mp3',
+      'assets/audio/music_companion/metronome/beat3/09.wav',
   MusicCompanionMetronomeCue.tone3Beat10:
-      'assets/audio/music_companion/metronome/beat3/10.mp3',
+      'assets/audio/music_companion/metronome/beat3/10.wav',
   MusicCompanionMetronomeCue.tone3Beat11:
-      'assets/audio/music_companion/metronome/beat3/11.mp3',
+      'assets/audio/music_companion/metronome/beat3/11.wav',
   MusicCompanionMetronomeCue.tone3Beat12:
-      'assets/audio/music_companion/metronome/beat3/12.mp3',
+      'assets/audio/music_companion/metronome/beat3/12.wav',
 };

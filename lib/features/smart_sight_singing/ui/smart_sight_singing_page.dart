@@ -21,6 +21,7 @@ import 'widgets/debug_calibration_panel.dart';
 import 'widgets/karaoke_pitch_track.dart';
 import 'widgets/osmd_score_viewer.dart';
 import 'widgets/score_sight_reading_track.dart';
+import 'widgets/sight_singing_action_button.dart';
 
 /// 智能视唱主页：内置 demo.mid → MIDI 参考轨 → 跟唱实时打分。
 class SmartSightSingingPage extends ConsumerStatefulWidget {
@@ -1523,13 +1524,13 @@ class _ControlButtons extends StatelessWidget {
     final countdown = state.stage == SightSingingStage.countdown;
 
     if (countdown) {
-      return _ImageActionButton(
+      return SightSingingImageActionButton(
         asset: AppAssets.smartSightSingingCancelBtn,
         onTap: () => controller.cancelCountdown(),
       );
     }
     if (singing) {
-      return _ImageActionButton(
+      return SightSingingImageActionButton(
         asset: AppAssets.smartSightSingingStopBtn,
         onTap: () => controller.stopSinging(),
       );
@@ -1557,7 +1558,7 @@ class _PreviewMelodyButton extends ConsumerWidget {
     final isPlaying = ref.watch(
       smartSightSingingControllerProvider.select((s) => s.isPreviewPlaying),
     );
-    return _ImageActionButton(
+    return SightSingingImageActionButton(
       asset: isPlaying
           ? AppAssets.smartSightSingingPreviewPauseBtn
           : AppAssets.smartSightSingingPreviewBtn,
@@ -1574,7 +1575,7 @@ class _StartSingingButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _ImageActionButton(
+    return SightSingingImageActionButton(
       asset: AppAssets.smartSightSingingStartBtn,
       onTap: () => controller.startSinging(),
     );
@@ -1701,44 +1702,6 @@ class _SightProgressTrack extends StatelessWidget {
     final minutes = totalSeconds ~/ 60;
     final seconds = (totalSeconds % 60).toString().padLeft(2, '0');
     return '$minutes:$seconds';
-  }
-}
-
-/// 底部操作条整图按钮（试听 / 开始跟唱 / 停止 / 取消）。
-///
-/// 高度固定 36（随 [DashboardScaleScope] 缩放），宽度按切图宽高比自适应。
-class _ImageActionButton extends StatelessWidget {
-  const _ImageActionButton({
-    required this.asset,
-    required this.onTap,
-  });
-
-  final String asset;
-  final VoidCallback? onTap;
-
-  static const _height = 36.0;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    final disabled = onTap == null;
-    final height = ui(_height);
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Opacity(
-        opacity: disabled ? 0.45 : 1,
-        child: SizedBox(
-          height: height,
-          child: Image.asset(
-            asset,
-            height: height,
-            fit: BoxFit.fitHeight,
-            filterQuality: FilterQuality.medium,
-          ),
-        ),
-      ),
-    );
   }
 }
 

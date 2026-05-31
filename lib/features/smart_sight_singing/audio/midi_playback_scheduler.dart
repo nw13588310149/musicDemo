@@ -195,7 +195,10 @@ class MidiPlaybackScheduler {
     if (cue != null) {
       _activePlaybackPitch = null;
       try {
-        await _audio.playMetronomeCue(cue, volume: event.velocity / 127.0);
+        await _audio.playMetronomeCue(
+          cue,
+          volume: MusicCompanionPlaybackVolume.metronomeVolumeForCue(cue),
+        );
       } catch (error, stack) {
         debugPrint(
           'MidiPlaybackScheduler.playMetronomeCue($cue) failed: '
@@ -208,9 +211,11 @@ class MidiPlaybackScheduler {
     _activePlaybackPitch = event.pitch;
     final token = _pitchToToken(event.pitch);
     if (token == null) return;
-    final volume = (event.velocity / 127.0).clamp(0.0, 1.0);
     try {
-      await _audio.playNote(token, volume: volume);
+      await _audio.playNote(
+        token,
+        volume: MusicCompanionPlaybackVolume.piano,
+      );
     } catch (error, stack) {
       debugPrint(
         'MidiPlaybackScheduler.playNote($token) failed: $error\n$stack',
