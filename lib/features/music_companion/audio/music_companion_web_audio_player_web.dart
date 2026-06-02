@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'dart:js_interop';
-import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
 import 'package:web/web.dart' as web;
 
+import '../../../core/audio/piano_playback_mix.dart';
 import 'music_companion_web_audio_player_base.dart';
 
 MusicCompanionWebAudioPlayer createMusicCompanionWebAudioPlayer() {
@@ -12,14 +12,6 @@ MusicCompanionWebAudioPlayer createMusicCompanionWebAudioPlayer() {
 }
 
 class _MusicCompanionWebAudioPlayer implements MusicCompanionWebAudioPlayer {
-  /// 并发发声上限，超出时优先清理已结束的节点，避免硬停造成截断杂音。
-  static const _maxVoices = 24;
-
-  /// 单音基础增益，为和弦叠加留出 headroom，减轻多音叠加削波/电流声。
-  static const _baseNoteGain = 0.38;
-
-  static const _masterLevel = 0.88;
-
   web.AudioContext? _audioContext;
   web.GainNode? _masterGain;
   final Map<String, web.AudioBuffer> _buffersByAsset =
@@ -42,7 +34,8 @@ class _MusicCompanionWebAudioPlayer implements MusicCompanionWebAudioPlayer {
     final context = web.AudioContext(
       web.AudioContextOptions(latencyHint: 'interactive'.toJS),
     );
-    final master = context.createGain()..gain.value = _masterLevel;
+    final master = context.createGain()
+      ..gain.value = PianoPlaybackMix.masterLevel;
     master.connect(context.destination);
     _audioContext = context;
     _masterGain = master;
@@ -102,8 +95,8 @@ class _MusicCompanionWebAudioPlayer implements MusicCompanionWebAudioPlayer {
     }
 
     _purgeFinishedPlaybacks();
-    if (_playbackOrder.length >= _maxVoices) {
-      await _releasePlayback(_playbackOrder.first, fadeMs: 28);
+    if (_activePlaybackCount >= PianoPlaybackMix.maxVoices) {
+      await _releasePlayback(_playbackOrder.first, fadeMs: PianoPlaybackMix.voiceStealFadeMs);
     }
 
     final context = _ensureContext();
@@ -118,7 +111,10 @@ class _MusicCompanionWebAudioPlayer implements MusicCompanionWebAudioPlayer {
 
     final source = context.createBufferSource()..buffer = buffer;
     final gain = context.createGain()
-      ..gain.value = _scaledVolume(volume.clamp(0.0, 1.0));
+      ..gain.value = PianoPlaybackMix.noteGain(
+        requested: volume.clamp(0.0, 1.0),
+        activeVoicesIncludingNew: _activePlaybackCount + 1,
+      );
 
     source.connect(gain);
     gain.connect(master);
@@ -141,13 +137,21 @@ class _MusicCompanionWebAudioPlayer implements MusicCompanionWebAudioPlayer {
     source.start();
   }
 
+  int get _activePlaybackCount =>
+      _activePlaybacks.where((p) => !p.released).length;
+
   @override
   Future<void> stopMetronomePlaybacks() async {
     final targets = _playbackOrder
         .where((playback) => playback.metronome)
         .toList(growable: false);
     await Future.wait(
-      targets.map((playback) => _releasePlayback(playback, fadeMs: 35)),
+      targets.map(
+        (playback) => _releasePlayback(
+          playback,
+          fadeMs: PianoPlaybackMix.metronomeStopFadeMs,
+        ),
+      ),
     );
   }
 
@@ -155,7 +159,12 @@ class _MusicCompanionWebAudioPlayer implements MusicCompanionWebAudioPlayer {
   Future<void> stopAll() async {
     final targets = List<_ActivePlayback>.from(_playbackOrder);
     await Future.wait(
-      targets.map((playback) => _releasePlayback(playback, fadeMs: 120)),
+      targets.map(
+        (playback) => _releasePlayback(
+          playback,
+          fadeMs: PianoPlaybackMix.stopAllFadeMs,
+        ),
+      ),
     );
   }
 
@@ -172,12 +181,6 @@ class _MusicCompanionWebAudioPlayer implements MusicCompanionWebAudioPlayer {
     if (context != null && context.state != 'closed') {
       await context.close().toDart;
     }
-  }
-
-  double _scaledVolume(double requested) {
-    final voices = math.max(1, _activePlaybacks.length);
-    final headroom = 0.9 / math.sqrt(voices.clamp(1, 32).toDouble());
-    return requested * _baseNoteGain * headroom;
   }
 
   void _purgeFinishedPlaybacks() {

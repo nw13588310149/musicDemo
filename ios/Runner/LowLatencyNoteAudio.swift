@@ -4,6 +4,9 @@ import UIKit
 
 /// Low-latency short-note playback for iPad piano / dictation / smart sight singing.
 ///
+/// 行为对齐 Web [PianoPlaybackMix]：每次按键独立发声节点，自然结束只释放不 stop，
+/// 池满时同步淡出最旧钢琴声后再播，避免截断与多音丢失。
+///
 /// Long audio stays in media_kit. Session category is owned by Dart
 /// [NativePlaybackAudioSession]; this class resets the engine when the session
 /// changes (playAndRecord ↔ playback) so AVAudioPlayerNode.play() does not abort.
@@ -18,13 +21,15 @@ final class LowLatencyNoteAudio {
   private var fadeGeneration = 0
   private var sessionObservers: [NSObjectProtocol] = []
 
-  private let maxPoolSize = 32
+  // 与 lib/core/audio/piano_playback_mix.dart 保持一致
+  private let maxPoolSize = 24
   private let fadeOutSteps = 16
   private let fadeOutStepMs = 10
-  private let baseNoteGain: Float = 0.32
-  private let masterOutputLevel: Float = 0.85
-  private let softAttackMs: Double = 1.8
-  private let softReleaseMs: Double = 3.0
+  private let voiceStealFadeSteps = 7
+  private let voiceStealStepMs = 4
+  private let baseNoteGain: Float = 0.38
+  private let masterOutputLevel: Float = 0.88
+  private let headroomFactor: Float = 0.9
   private var pendingEngineReset = false
 
   /// 所有采样统一为同一格式，避免运行中改 connect format 产生爆音。
@@ -37,15 +42,16 @@ final class LowLatencyNoteAudio {
     )!
   }()
 
-  /// 常驻发声节点：一旦 attach + connect 到 mixer 就保持连接，
-  /// 播放结束只 stop + 标记空闲，不再 detach/重连，避免修改运行中的引擎图
-  /// 造成的「关闭爆音」。
+  /// 单次按键对应一个 player 节点（等同 Web BufferSource），播完后回收。
   private final class VoiceNode {
     let player = AVAudioPlayerNode()
     var connectedFormat: AVAudioFormat?
     var busy = false
     var isMetronome = false
+    var order: UInt64 = 0
   }
+
+  private var nextPlaybackOrder: UInt64 = 0
 
   init(messenger: FlutterBinaryMessenger) {
     channel = FlutterMethodChannel(
@@ -201,17 +207,13 @@ final class LowLatencyNoteAudio {
         guard let buffer = self.buffersByKey[key] else {
           throw LowLatencyNoteAudioError.bufferNotPrepared(key)
         }
-        guard let playbackBuffer = self.copyBuffer(buffer, softAttack: !metronome) else {
+        guard let playbackBuffer = self.copyBuffer(buffer) else {
           throw LowLatencyNoteAudioError.decodeFailed(key)
         }
 
         self.tryApplyEngineResetIfNeeded()
 
-        // 先建好图（attach + connect）再启动引擎，避免在空图上 prepare/start。
-        guard let voice = try self.borrowVoice(format: self.standardFormat) else {
-          DispatchQueue.main.async { result(nil) }
-          return
-        }
+        let voice = try self.acquireVoice(format: self.standardFormat, metronome: metronome)
         acquiredVoice = voice
         voice.isMetronome = metronome
         voice.player.volume = self.scaledVolume(requested: volume)
@@ -248,6 +250,8 @@ final class LowLatencyNoteAudio {
             (error as NSError).localizedDescription
           )
         }
+
+        self.scheduleVoiceReleaseFallback(voice: voice, buffer: playbackBuffer)
 
         DispatchQueue.main.async {
           result(nil)
@@ -331,12 +335,13 @@ final class LowLatencyNoteAudio {
     pendingEngineReset = false
   }
 
-  private func activeVoiceCount() -> Int {
+  private func activePlaybackCount() -> Int {
     voices.filter { $0.busy || $0.player.isPlaying }.count
   }
 
   private func scaledVolume(requested: Float) -> Float {
-    let headroom = 0.85 / sqrt(Float(max(1, activeVoiceCount())))
+    let voices = max(1, activePlaybackCount())
+    let headroom = headroomFactor / sqrt(Float(voices))
     return max(0, min(1, requested * baseNoteGain * headroom))
   }
 
@@ -344,7 +349,8 @@ final class LowLatencyNoteAudio {
   private func markVoiceIdle(_ voice: VoiceNode) {
     voice.busy = false
     voice.isMetronome = false
-    if activeVoiceCount() == 0 {
+    purgeInactiveSlots()
+    if activePlaybackCount() == 0 {
       tryApplyEngineResetIfNeeded()
     }
   }
@@ -368,7 +374,7 @@ final class LowLatencyNoteAudio {
 
   private func tryApplyEngineResetIfNeeded() {
     guard engineNeedsReset || pendingEngineReset else { return }
-    if activeVoiceCount() > 0 {
+    if activePlaybackCount() > 0 {
       pendingEngineReset = true
       return
     }
@@ -377,41 +383,88 @@ final class LowLatencyNoteAudio {
     engineNeedsReset = false
   }
 
-  /// 取发声节点：优先空闲复用；池满时仅异步淡出最旧声部，绝不同步 stop 抢占（对齐 Web）。
-  private func borrowVoice(format: AVAudioFormat) throws -> VoiceNode? {
+  /// 与 Web playAsset 一致：清理已结束 → 池满则同步淡出最旧声部 → 新建节点。
+  private func acquireVoice(format: AVAudioFormat, metronome: Bool) throws -> VoiceNode {
     reclaimStuckVoices()
+    purgeInactiveSlots()
+    ensureVoiceCapacity(metronome: metronome)
+    return try createVoice(format: format)
+  }
 
+  private func purgeInactiveSlots() {
+    var retired: [VoiceNode] = []
     for voice in voices where !voice.busy && !voice.player.isPlaying {
-      do {
-        try prepareVoiceForSchedule(voice, format: format)
-        voice.busy = true
-        return voice
-      } catch {
-        continue
+      if engine.attachedNodes.contains(voice.player) {
+        engine.disconnectNodeOutput(voice.player)
+        engine.detach(voice.player)
       }
+      retired.append(voice)
     }
+    for voice in retired {
+      voices.removeAll { $0 === voice }
+    }
+  }
 
-    if voices.count < maxPoolSize {
-      let voice = VoiceNode()
+  /// 池满时同步淡出并停止最旧钢琴声（对齐 Web voiceStealFadeMs）。
+  private func ensureVoiceCapacity(metronome: Bool) {
+    while activePlaybackCount() >= maxPoolSize {
+      let victim =
+        voices.sorted(by: { $0.order < $1.order }).first(where: { slot in
+          (slot.busy || slot.player.isPlaying) && (!metronome || !slot.isMetronome)
+        })
+        ?? voices.sorted(by: { $0.order < $1.order }).first(where: { $0.busy || $0.player.isPlaying })
+      guard let victim else { break }
+      synchronousFadeAndStop(victim)
+      detachVoice(victim)
+      voices.removeAll { $0 === victim }
+    }
+  }
+
+  private func synchronousFadeAndStop(_ voice: VoiceNode) {
+    let startVol = max(0, min(voice.player.volume, 1))
+    for step in 1...voiceStealFadeSteps {
+      let scale = Float(voiceStealFadeSteps - step) / Float(voiceStealFadeSteps)
+      voice.player.volume = startVol * scale
+      Thread.sleep(forTimeInterval: Double(voiceStealStepMs) / 1000)
+    }
+    hardStopVoice(voice)
+  }
+
+  private func detachVoice(_ voice: VoiceNode) {
+    if engine.attachedNodes.contains(voice.player) {
+      engine.disconnectNodeOutput(voice.player)
+      engine.detach(voice.player)
+    }
+  }
+
+  private func createVoice(format: AVAudioFormat) throws -> VoiceNode {
+    let voice = VoiceNode()
+    nextPlaybackOrder += 1
+    voice.order = nextPlaybackOrder
+    do {
       try LowLatencyNoteAudioSafePlay.attachNode(voice.player, toEngine: engine)
       voices.append(voice)
-      do {
-        try prepareVoiceForSchedule(voice, format: format)
-      } catch {
-        voices.removeAll { $0 === voice }
-        if engine.attachedNodes.contains(voice.player) {
-          engine.detach(voice.player)
-        }
-        throw error
-      }
+      try prepareVoiceForSchedule(voice, format: format)
       voice.busy = true
       return voice
+    } catch {
+      detachVoice(voice)
+      voices.removeAll { $0 === voice }
+      throw error
     }
+  }
 
-    if let oldest = voices.first(where: { ($0.busy || $0.player.isPlaying) && !$0.isMetronome }) {
-      fadeOutVoices([oldest], steps: 10, stepMs: 5)
+  /// 若系统未回调 playedBack，按采样时长兜底释放 busy，避免声部池被占满。
+  private func scheduleVoiceReleaseFallback(voice: VoiceNode, buffer: AVAudioPCMBuffer) {
+    let sampleRate = buffer.format.sampleRate
+    guard sampleRate > 0 else { return }
+    let durationSec = Double(buffer.frameLength) / sampleRate
+    let delayMs = max(40, Int(durationSec * 1000) + 80)
+    queue.asyncAfter(deadline: .now() + .milliseconds(delayMs)) { [weak self, weak voice] in
+      guard let self = self, let voice = voice else { return }
+      guard voice.busy, !voice.player.isPlaying else { return }
+      self.markVoiceIdle(voice)
     }
-    return nil
   }
 
   private func prepareVoiceForSchedule(_ voice: VoiceNode, format: AVAudioFormat) throws {
@@ -458,7 +511,8 @@ final class LowLatencyNoteAudio {
           for voice in targets {
             self.hardStopVoice(voice)
           }
-          if self.activeVoiceCount() == 0 {
+          self.purgeInactiveSlots()
+          if self.activePlaybackCount() == 0 {
             self.tryApplyEngineResetIfNeeded()
           }
         }
@@ -466,11 +520,8 @@ final class LowLatencyNoteAudio {
     }
   }
 
-  /// AVAudioPCMBuffer 在 completion 前不可复用；缓存区供多次 schedule 会闪退。
-  private func copyBuffer(
-    _ source: AVAudioPCMBuffer,
-    softAttack: Bool = true
-  ) -> AVAudioPCMBuffer? {
+  /// AVAudioPCMBuffer 在 completion 前不可复用；每声部独立拷贝（采样自带包络，不再叠加工整形）。
+  private func copyBuffer(_ source: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
     guard
       let copy = AVAudioPCMBuffer(
         pcmFormat: source.format,
@@ -491,10 +542,6 @@ final class LowLatencyNoteAudio {
       for channel in 0..<channels {
         memcpy(dst[channel], src[channel], byteCount)
       }
-      if softAttack {
-        applySoftAttack(to: copy)
-        applySoftRelease(to: copy)
-      }
       return copy
     }
 
@@ -508,84 +555,10 @@ final class LowLatencyNoteAudio {
       for channel in 0..<channels {
         memcpy(dst[channel], src[channel], byteCount)
       }
-      if softAttack {
-        applySoftAttackInt16(to: copy)
-        applySoftReleaseInt16(to: copy)
-      }
       return copy
     }
 
     return nil
-  }
-
-  private func applySoftAttack(to buffer: AVAudioPCMBuffer) {
-    guard let channels = buffer.floatChannelData else { return }
-    let sampleRate = buffer.format.sampleRate
-    let attackFrames = min(
-      Int(buffer.frameLength),
-      max(1, Int(softAttackMs * 0.001 * sampleRate))
-    )
-    for channel in 0..<Int(buffer.format.channelCount) {
-      let samples = channels[channel]
-      for frame in 0..<attackFrames {
-        let ramp = Float(frame + 1) / Float(attackFrames)
-        samples[frame] *= ramp
-      }
-    }
-  }
-
-  private func applySoftRelease(to buffer: AVAudioPCMBuffer) {
-    guard let channels = buffer.floatChannelData else { return }
-    let sampleRate = buffer.format.sampleRate
-    let releaseFrames = min(
-      Int(buffer.frameLength) / 2,
-      max(1, Int(softReleaseMs * 0.001 * sampleRate))
-    )
-    let totalFrames = Int(buffer.frameLength)
-    for channel in 0..<Int(buffer.format.channelCount) {
-      let samples = channels[channel]
-      for offset in 0..<releaseFrames {
-        let frame = totalFrames - releaseFrames + offset
-        let ramp = Float(releaseFrames - offset) / Float(releaseFrames)
-        samples[frame] *= ramp
-      }
-    }
-  }
-
-  private func applySoftReleaseInt16(to buffer: AVAudioPCMBuffer) {
-    guard let channels = buffer.int16ChannelData else { return }
-    let sampleRate = buffer.format.sampleRate
-    let releaseFrames = min(
-      Int(buffer.frameLength) / 2,
-      max(1, Int(softReleaseMs * 0.001 * sampleRate))
-    )
-    let totalFrames = Int(buffer.frameLength)
-    for channel in 0..<Int(buffer.format.channelCount) {
-      let samples = channels[channel]
-      for offset in 0..<releaseFrames {
-        let frame = totalFrames - releaseFrames + offset
-        let ramp = Float(releaseFrames - offset) / Float(releaseFrames)
-        let scaled = Float(samples[frame]) * ramp
-        samples[frame] = Int16(max(-32768, min(32767, scaled)))
-      }
-    }
-  }
-
-  private func applySoftAttackInt16(to buffer: AVAudioPCMBuffer) {
-    guard let channels = buffer.int16ChannelData else { return }
-    let sampleRate = buffer.format.sampleRate
-    let attackFrames = min(
-      Int(buffer.frameLength),
-      max(1, Int(softAttackMs * 0.001 * sampleRate))
-    )
-    for channel in 0..<Int(buffer.format.channelCount) {
-      let samples = channels[channel]
-      for frame in 0..<attackFrames {
-        let ramp = Float(frame + 1) / Float(attackFrames)
-        let scaled = Float(samples[frame]) * ramp
-        samples[frame] = Int16(max(-32768, min(32767, scaled)))
-      }
-    }
   }
 
   private func resolveFlutterAsset(_ asset: String) -> URL? {
