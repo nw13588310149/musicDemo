@@ -149,9 +149,17 @@ final class LowLatencyNoteAudio {
     queue.async { [weak self] in self?.engineNeedsReset = true }
   }
 
+  /// Dart 在 AVAudioSession 类别切换后调用：会话变化不会发系统通知，
+  /// 因此这里强制标记需要重建——会话切换会改硬件 IO 格式，必须重连图，
+  /// 否则 player 在新会话下静默或 scheduleBuffer 失败（智能视唱试听/跟唱切换）。
   private func reclaimEngine(result: @escaping FlutterResult) {
     queue.async { [weak self] in
-      self?.applyPendingResetIfIdle()
+      guard let self = self else {
+        DispatchQueue.main.async { result(nil) }
+        return
+      }
+      self.engineNeedsReset = true
+      self.applyPendingResetIfIdle()
       DispatchQueue.main.async { result(nil) }
     }
   }
