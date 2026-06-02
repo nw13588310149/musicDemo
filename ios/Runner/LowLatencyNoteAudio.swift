@@ -237,6 +237,16 @@ final class LowLatencyNoteAudio {
           try LowLatencyNoteAudioSafePlay.play(voice.player)
         }
 
+        // 兜底：若 playedBack 回调未触发（极少数情况），按采样时长 + 余量释放 busy，
+        // 避免 busy 卡死导致 activeVoiceCount 永不归零、引擎无法在会话切换后重建。
+        let durationMs =
+          Int(Double(buffer.frameLength) / buffer.format.sampleRate * 1000) + 150
+        self.queue.asyncAfter(deadline: .now() + .milliseconds(durationMs)) {
+          [weak voice] in
+          guard let voice = voice, voice.sequence == seq, voice.busy else { return }
+          voice.busy = false
+        }
+
         DispatchQueue.main.async { result(nil) }
       } catch {
         self.engineNeedsReset = true
@@ -263,8 +273,9 @@ final class LowLatencyNoteAudio {
   // MARK: - Stop（淡出，绝不硬停）
 
   private func stopVoices(metronomeOnly: Bool, fadeMs: Int) {
+    // 只淡出真正在播 buffer 的 busy 节点；其余 playing-idle 节点不动。
     let targets = voices.filter {
-      ($0.busy || $0.player.isPlaying) && (!metronomeOnly || $0.isMetronome)
+      $0.busy && (!metronomeOnly || $0.isMetronome)
     }
     guard !targets.isEmpty else { return }
 
@@ -376,8 +387,10 @@ final class LowLatencyNoteAudio {
     try? buildGraph()
   }
 
+  /// 真正在发声的音数量：固定池中所有节点常驻 playing-idle，
+  /// 故 `player.isPlaying` 恒为 true 不可用于判断；只数显式 busy。
   private func activeVoiceCount() -> Int {
-    voices.filter { $0.busy || $0.player.isPlaying }.count
+    voices.filter { $0.busy }.count
   }
 
   private func teardown() {
