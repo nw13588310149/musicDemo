@@ -625,6 +625,10 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
     bool fromUserGesture = false,
   }) async {
     try {
+      if (!kIsWeb) {
+        await NativeAudioBootstrap.reactivatePlaybackSession();
+        await _audioEngine.reclaimNativeEngineAfterSessionChange();
+      }
       if (!state.audioReady) {
         state = state.copyWith(audioLoading: true, clearErrorMessage: true);
         await _audioEngine.ensureInitialized();

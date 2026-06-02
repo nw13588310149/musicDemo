@@ -99,6 +99,12 @@ class SmartDictationAudioEngine {
     // entering a lesson / challenge must stay silent.
   }
 
+  /// iOS：其它模块（如智能视唱）切走 AVAudioSession 后，重建原生引擎。
+  Future<void> reclaimNativeEngineAfterSessionChange() async {
+    if (kIsWeb || _disposed) return;
+    await _nativePlayer.reclaimEngine();
+  }
+
   Future<void> playTokensHarmonic(
     List<String> tokens, {
     double volume = 1,

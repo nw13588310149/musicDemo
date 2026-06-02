@@ -9,6 +9,7 @@ import '../../audio/pitch_track.dart';
 import '../../config/smart_sight_singing_tuning.dart';
 import '../../state/smart_sight_singing_controller.dart';
 import '../../state/smart_sight_singing_state.dart';
+import 'sight_singing_action_button.dart';
 
 /// 智能视唱调试面板：实时指标 + 关键参数滑条。
 ///
@@ -863,49 +864,12 @@ class _Actions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    final enabled = onReset != null;
     return Align(
       alignment: Alignment.centerLeft,
-      child: Opacity(
-        opacity: enabled ? 1 : 0.5,
-        child: InkWell(
-          onTap: onReset,
-          borderRadius: BorderRadius.circular(ui(12)),
-          child: Container(
-            width: ui(190),
-            height: ui(48),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.centerRight,
-                end: Alignment.centerLeft,
-                colors: <Color>[Color(0xFFB68EFF), Color(0xFF8640FF)],
-              ),
-              borderRadius: BorderRadius.circular(ui(12)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.restart_alt_rounded,
-                  color: Colors.white,
-                  size: ui(20),
-                ),
-                SizedBox(width: ui(8)),
-                Text(
-                  '复位',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: ui(16),
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w500,
-                    height: 28 / 16,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+      child: SightSingingGradientActionButton(
+        icon: Icons.mic_none_rounded,
+        label: '复位',
+        onTap: onReset,
       ),
     );
   }

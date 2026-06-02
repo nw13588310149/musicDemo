@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../config/smart_sight_singing_config.dart';
@@ -162,11 +164,15 @@ class _KaraokePainter extends CustomPainter {
       ..style = PaintingStyle.stroke;
 
     final visibleStartMs = playbackMs - windowMs ~/ 2;
-    // 参考条预绘至曲末：x 由绝对时间映射，随 playback 左移；若只画半窗 lookahead，
-    // 音符会在右缘逐个「弹出」。用户拖尾等仍可按半窗裁剪以省绘制。
-    final refDrawEndMs = track.totalMs;
-
+    // 参考条预绘至曲末：音符时间轴与 playbackMs 对齐（含 MusicXML 预备段偏移）。
+    // track.totalMs 仅表示旋律时长（供进度条），不能用作绘制终点。
     final notes = track.notes;
+    final refDrawEndMs = notes.isEmpty
+        ? track.totalMs
+        : notes.fold<int>(
+            0,
+            (maxEnd, note) => math.max(maxEnd, note.endMs),
+          );
     if (notes.isNotEmpty) {
       for (final note in notes) {
         if (note.isRest) continue;

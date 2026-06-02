@@ -116,7 +116,10 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
         await _audioEngine.activateByUserGesture();
       }
       if (!_audioEngine.tryPlayNoteFromUserGesture(note)) {
-        await _audioEngine.playNote(note, volume: 1);
+        await _audioEngine.playNote(
+          note,
+          volume: MusicCompanionPlaybackVolume.piano,
+        );
       }
       if (!mounted) return;
       state = state.copyWith(audioReady: true, errorMessage: null);
@@ -257,7 +260,9 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
       final beatIndex = _metronomeTickCount % state.activeSignature.numerator;
       state = state.copyWith(metronomeActiveBeat: beatIndex);
       final cue = _resolveMetronomeCue(beatIndex);
-      final vol = beatIndex == 0 ? 1.0 : 0.92;
+      final vol = MusicCompanionPlaybackVolume.metronomeVolumeForBeat(
+        beatIndex,
+      );
       if (!_audioEngine.tryPlayMetronomeCueFromUserGesture(cue, volume: vol)) {
         unawaited(_audioEngine.playMetronomeCue(cue, volume: vol));
       }

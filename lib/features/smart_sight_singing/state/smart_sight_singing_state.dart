@@ -79,7 +79,7 @@ class SightSingingState {
     this.scoredCount = 0,
     this.combo = 0,
     this.visualOnlyMode = false,
-    this.scoreSightReadingMode = false,
+    this.scoreSightReadingMode = true,
     this.scoringStandardCents =
         SmartSightSingingScoringConfig.defaultStandardCents,
     this.isPreviewPlaying = false,

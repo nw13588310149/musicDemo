@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:music_xml/music_xml.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../../../core/audio/native_audio_bootstrap.dart';
 import '../../../core/audio/native_playback_audio_session.dart';
 import '../audio/ktv_scoring.dart';
 import '../audio/midi_file_parser.dart';
@@ -215,6 +216,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       analyzingProgress: 0.02,
       errorMessage: null,
       textbookId: id,
+      scoreSightReadingMode: true,
     );
 
     try {
@@ -896,35 +898,32 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     }
     if (state.stage == SightSingingStage.countdown) {
       await cancelCountdown();
-      return;
-    }
-    if (state.stage == SightSingingStage.singing) {
+    } else if (state.stage == SightSingingStage.singing) {
       await stopSinging(reset: true);
-      return;
-    }
-    if (state.stage == SightSingingStage.selectTrack) {
+    } else if (state.stage == SightSingingStage.selectTrack) {
       cancelTrackSelection();
-      return;
+    } else {
+      if (state.isPreviewPlaying) {
+        await stopPreview();
+      }
+      await _playback.stop();
+      if (!mounted) return;
+      if (state.stage == SightSingingStage.finished) {
+        state = state.copyWith(
+          stage: SightSingingStage.ready,
+          playbackMs: 0,
+          userPoints: const <UserPitchPoint>[],
+          currentScore: 0,
+          hitCount: 0,
+          scoredCount: 0,
+          combo: 0,
+          currentUserMidi: -1,
+          currentUserAmplitude: 0,
+          completedNoteScores: const <KtvNoteScore>[],
+        );
+      }
     }
-    if (state.isPreviewPlaying) {
-      await stopPreview();
-    }
-    await _playback.stop();
-    if (!mounted) return;
-    if (state.stage == SightSingingStage.finished) {
-      state = state.copyWith(
-        stage: SightSingingStage.ready,
-        playbackMs: 0,
-        userPoints: const <UserPitchPoint>[],
-        currentScore: 0,
-        hitCount: 0,
-        scoredCount: 0,
-        combo: 0,
-        currentUserMidi: -1,
-        currentUserAmplitude: 0,
-        completedNoteScores: const <KtvNoteScore>[],
-      );
-    }
+    await _restorePlaybackSessionForHandoff();
   }
 
   /// 收藏 / 取消收藏当前教材（智能视唱 type=11）。乐观更新 + 失败回滚。
@@ -984,6 +983,14 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     _positionSub = null;
     _completedSub = null;
     await _playback.dispose();
+    await _restorePlaybackSessionForHandoff();
+  }
+
+  /// 视唱/试听会把 AVAudioSession 切到 playAndRecord；离开页面前必须切回
+  /// playback，否则智能听写等模块的钢琴声会明显变小，直到重启 App。
+  Future<void> _restorePlaybackSessionForHandoff() async {
+    if (kIsWeb) return;
+    await NativeAudioBootstrap.reactivatePlaybackSession();
   }
 
   bool _blocksImport() {
