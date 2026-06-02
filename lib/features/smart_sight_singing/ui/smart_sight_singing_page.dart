@@ -927,7 +927,10 @@ class _PracticeTrackView extends StatelessWidget {
     final xml = musicXmlContent?.trim() ?? '';
     final Widget scorePane;
     if (xml.isNotEmpty) {
-      final onsetMs = <int>[for (final note in track.notes) note.startMs];
+      // 含休止符 onset，与 OSMD 光标逐步 next() 对齐。
+      final onsetMs = <int>[
+        for (final event in track.notes) event.startMs,
+      ];
       scorePane = OsmdScoreViewer(
         musicXml: xml,
         playbackMs: playbackMs,

@@ -64,6 +64,7 @@ class PitchTrack {
     if (notes.isEmpty) return null;
     for (var i = 0; i < notes.length; i++) {
       final n = notes[i];
+      if (n.isRest) continue;
       if (ms >= n.startMs - earlyMs && ms <= n.endMs + lateMs) {
         return i;
       }

@@ -126,13 +126,13 @@ class _ScoreSightReadingPainter extends CustomPainter {
 
     _drawClef(canvas, Offset(18, staffTop - lineSpacing * 0.35), lineSpacing);
 
+    final restY = staffTop + lineSpacing * 2;
     for (final note in notes) {
       if (note.endMs < visibleStartMs || note.startMs > visibleEndMs) {
         continue;
       }
       final x0 = xFromTime(note.startMs);
       final x1 = xFromTime(note.endMs).clamp(x0 + 12, size.width + 48);
-      final y = yFromMidi(note.midi);
       final active = playbackMs >= note.startMs && playbackMs <= note.endMs;
       final past = note.endMs < playbackMs;
       final color = active
@@ -141,6 +141,13 @@ class _ScoreSightReadingPainter extends CustomPainter {
           ? _notePast
           : _note;
 
+      if (note.isRest) {
+        _drawDurationGuide(canvas, x0, x1, restY, color, active);
+        _drawRest(canvas, note, Offset(x0, restY), color, active);
+        continue;
+      }
+
+      final y = yFromMidi(note.midi);
       _drawDurationGuide(canvas, x0, x1, y, color, active);
       _drawLedgerLines(canvas, x0, yFromStep, _spell(note.midi).step, color);
       _drawNote(canvas, note, Offset(x0, y), color, active);
@@ -287,6 +294,59 @@ class _ScoreSightReadingPainter extends CustomPainter {
       ..strokeWidth = active ? 5 : 3
       ..strokeCap = StrokeCap.round;
     canvas.drawLine(Offset(x0, y), Offset(x1, y), paint);
+  }
+
+  void _drawRest(
+    Canvas canvas,
+    KtvNoteSegment note,
+    Offset anchor,
+    Color color,
+    bool active,
+  ) {
+    final value = _noteValue(note);
+    final paint = Paint()
+      ..color = active ? _active : color
+      ..style = PaintingStyle.fill;
+
+    switch (value) {
+      case _ScoreNoteValue.whole:
+        canvas.drawRect(
+          Rect.fromCenter(
+            center: anchor + const Offset(0, -2),
+            width: 18,
+            height: 5,
+          ),
+          paint,
+        );
+      case _ScoreNoteValue.half:
+        canvas.drawRect(
+          Rect.fromCenter(
+            center: anchor + const Offset(0, -3),
+            width: 16,
+            height: 4.5,
+          ),
+          paint,
+        );
+      default:
+        final path = Path()
+          ..moveTo(anchor.dx - 2, anchor.dy + 2)
+          ..cubicTo(
+            anchor.dx + 6,
+            anchor.dy - 10,
+            anchor.dx + 14,
+            anchor.dy + 4,
+            anchor.dx + 4,
+            anchor.dy + 10,
+          );
+        canvas.drawPath(
+          path,
+          Paint()
+            ..color = active ? _active : color
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = active ? 2.2 : 1.8
+            ..strokeCap = StrokeCap.round,
+        );
+    }
   }
 
   void _drawNote(

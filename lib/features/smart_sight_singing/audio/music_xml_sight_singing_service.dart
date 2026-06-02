@@ -102,17 +102,21 @@ abstract final class MusicXmlSightSingingService {
 
     final part = document.score.parts[partIndex - 1];
     final notes = _collectPartNotes(part);
-    if (notes.isEmpty) {
+    final pitchedNotes =
+        notes.where((n) => !n.isRest).toList(growable: false);
+    if (pitchedNotes.isEmpty) {
       throw MusicXmlSightSingingException('声部 $partIndex 没有可跟唱音符。');
     }
 
     final leadIn = _resolveLeadIn(document, partIndex, rawXml: rawXml);
     final leadInMs = leadIn?.durationMs ?? 0;
     final shiftedNotes = leadInMs > 0 ? _shiftNotes(notes, leadInMs) : notes;
+    final pitchedShifted =
+        shiftedNotes.where((n) => !n.isRest).toList(growable: false);
 
     final range = KtvPitchGuideBuilder.rangeForNotes(shiftedNotes);
     final baseTotalMs =
-        notes.map((n) => n.endMs).reduce(math.max) +
+        pitchedShifted.map((n) => n.endMs).reduce(math.max) +
         SmartSightSingingMidiConfig.playbackTailMs;
     // 播放时间轴含预备拍；进度条总时长仅反映旋律部分。
     final playbackTotalMs = baseTotalMs + leadInMs;
@@ -128,9 +132,9 @@ abstract final class MusicXmlSightSingingService {
 
     final playbackEvents = <MidiPlaybackEvent>[
       if (leadIn != null) ...leadIn.playbackEvents,
-      ...notes.map(
+      ...pitchedShifted.map(
         (n) => MidiPlaybackEvent(
-          timeMs: n.startMs + leadInMs,
+          timeMs: n.startMs,
           pitch: n.midi.round(),
           velocity: 96,
         ),
@@ -170,44 +174,60 @@ abstract final class MusicXmlSightSingingService {
     final notes = <KtvNoteSegment>[];
     for (final measure in part.measures) {
       for (final note in measure.notes) {
-        if (note.isRest || note.isGraceNote || note.continuesOtherNote) {
-          continue;
-        }
-        if (note.isInChord) {
-          continue;
-        }
-        final midi = note.pitchMap?.value;
-        if (midi == null || midi <= 0) {
+        if (note.isGraceNote || note.continuesOtherNote || note.isInChord) {
           continue;
         }
 
-        final tiedDuration = note.noteDurationTied;
-        final durationSec = tiedDuration.seconds > 0
-            ? tiedDuration.seconds
-            : note.noteDuration.seconds;
-        if (durationSec <= 0) {
-          continue;
+        final segment = _segmentFromXmlNote(note);
+        if (segment != null) {
+          notes.add(segment);
         }
-
-        final startMs = (note.noteDuration.timePosition * 1000).round();
-        final endMs = math.max(
-          startMs + SmartSightSingingMidiConfig.minMidiNoteMs,
-          ((note.noteDuration.timePosition + durationSec) * 1000).round(),
-        );
-
-        notes.add(
-          KtvNoteSegment(
-            startMs: startMs,
-            endMs: endMs,
-            midi: midi.toDouble(),
-            startBeat: note.noteDuration.timePosition,
-            durationBeats: durationSec,
-          ),
-        );
       }
     }
     notes.sort((a, b) => a.startMs.compareTo(b.startMs));
     return notes;
+  }
+
+  static KtvNoteSegment? _segmentFromXmlNote(Note note) {
+    final tiedDuration = note.noteDurationTied;
+    final durationSec = tiedDuration.seconds > 0
+        ? tiedDuration.seconds
+        : note.noteDuration.seconds;
+    if (durationSec <= 0) {
+      return null;
+    }
+
+    final startMs = (note.noteDuration.timePosition * 1000).round();
+    final endMs = math.max(
+      startMs + SmartSightSingingMidiConfig.minMidiNoteMs,
+      ((note.noteDuration.timePosition + durationSec) * 1000).round(),
+    );
+    final startBeat = note.noteDuration.timePosition;
+    final durationBeats = durationSec;
+
+    if (note.isRest) {
+      return KtvNoteSegment(
+        startMs: startMs,
+        endMs: endMs,
+        midi: -1,
+        startBeat: startBeat,
+        durationBeats: durationBeats,
+        isRest: true,
+      );
+    }
+
+    final midi = note.pitchMap?.value;
+    if (midi == null || midi <= 0) {
+      return null;
+    }
+
+    return KtvNoteSegment(
+      startMs: startMs,
+      endMs: endMs,
+      midi: midi.toDouble(),
+      startBeat: startBeat,
+      durationBeats: durationBeats,
+    );
   }
 
   static List<KtvNoteSegment> _shiftNotes(
@@ -222,6 +242,7 @@ abstract final class MusicXmlSightSingingService {
             midi: note.midi,
             startBeat: note.startBeat,
             durationBeats: note.durationBeats,
+            isRest: note.isRest,
           ),
         )
         .toList(growable: false);
@@ -342,7 +363,8 @@ abstract final class MusicXmlSightSingingService {
     final part = document.score.parts[partIndex];
     final notes = _collectPartNotes(part);
 
-    if (notes.isEmpty) {
+    final pitched = notes.where((n) => !n.isRest).toList(growable: false);
+    if (pitched.isEmpty) {
       return MidiTrackSummary(
         trackIndex: partIndex + 1,
         noteCount: 0,
@@ -353,10 +375,10 @@ abstract final class MusicXmlSightSingingService {
       );
     }
 
-    final pitches = notes.map((n) => n.midi.round()).toList(growable: false);
+    final pitches = pitched.map((n) => n.midi.round()).toList(growable: false);
     return MidiTrackSummary(
       trackIndex: partIndex + 1,
-      noteCount: notes.length,
+      noteCount: pitched.length,
       minPitch: pitches.reduce(math.min),
       maxPitch: pitches.reduce(math.max),
       durationMs: notes.map((n) => n.endMs).reduce(math.max),
@@ -370,11 +392,12 @@ abstract final class MusicXmlSightSingingService {
 
     for (var i = 0; i < document.score.parts.length; i++) {
       final notes = _collectPartNotes(document.score.parts[i]);
-      if (notes.isEmpty) {
+      final pitched = notes.where((n) => !n.isRest).toList();
+      if (pitched.isEmpty) {
         continue;
       }
 
-      final pitches = notes.map((n) => n.midi.round()).toList();
+      final pitches = pitched.map((n) => n.midi.round()).toList();
       final vocalCount = pitches
           .where(
             (p) =>
@@ -390,7 +413,7 @@ abstract final class MusicXmlSightSingingService {
       final score =
           vocalCount * SmartSightSingingMidiConfig.vocalPitchWeight -
           lowCount * SmartSightSingingMidiConfig.lowPitchPenaltyWeight -
-          (notes.length - SmartSightSingingMidiConfig.idealMelodyNoteCount)
+          (pitched.length - SmartSightSingingMidiConfig.idealMelodyNoteCount)
                   .abs() *
               SmartSightSingingMidiConfig.noteCountDistancePenalty;
 

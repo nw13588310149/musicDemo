@@ -1027,13 +1027,14 @@ class _NoticeAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final url = MediaUrl.resolve(primaryUrl);
     return ClipOval(
       child: SizedBox(
         width: size,
         height: size,
-        child: primaryUrl.isNotEmpty
+        child: url.isNotEmpty
             ? Image.network(
-                primaryUrl,
+                url,
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stack) => _placeholder(),
               )

@@ -11,6 +11,7 @@ class KtvNoteSegment {
     required this.midi,
     this.startBeat,
     this.durationBeats,
+    this.isRest = false,
   });
 
   final int startMs;
@@ -18,6 +19,9 @@ class KtvNoteSegment {
   final double midi;
   final double? startBeat;
   final double? durationBeats;
+
+  /// MusicXML 休止符：仅用于谱面展示与 OSMD 光标对齐，不参与打分与钢琴播放。
+  final bool isRest;
 
   int get durationMs => math.max(0, endMs - startMs);
 
@@ -159,8 +163,15 @@ abstract final class KtvPitchGuideBuilder {
     var minM = double.infinity;
     var maxM = -double.infinity;
     for (final n in notes) {
+      if (n.isRest) continue;
       if (n.midi < minM) minM = n.midi;
       if (n.midi > maxM) maxM = n.midi;
+    }
+    if (!minM.isFinite || !maxM.isFinite) {
+      return (
+        minMidi: SmartSightSingingPitchRangeConfig.defaultMinMidi,
+        maxMidi: SmartSightSingingPitchRangeConfig.defaultMaxMidi,
+      );
     }
     return (
       minMidi: (minM - SmartSightSingingPitchRangeConfig.rangePaddingSemitones)

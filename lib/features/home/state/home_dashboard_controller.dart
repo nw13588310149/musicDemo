@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_response.dart';
+import '../../../core/network/media_url.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/storage/app_storage.dart';
 import '../data/home_repository.dart';
@@ -184,18 +185,25 @@ class HomeDashboardController extends StateNotifier<HomeDashboardState> {
   }
 
   List<HomeCourseNotice> _parseCourseNotices(dynamic data) {
-    if (data is! List || data.isEmpty) {
+    final items = <Map<String, dynamic>>[];
+    if (data is Map<String, dynamic>) {
+      items.add(data);
+    } else if (data is List) {
+      for (final item in data) {
+        if (item is Map<String, dynamic>) {
+          items.add(item);
+        }
+      }
+    }
+    if (items.isEmpty) {
       return const [];
     }
 
     final result = <HomeCourseNotice>[];
-    for (final item in data) {
-      if (item is! Map<String, dynamic>) {
-        continue;
-      }
-
+    for (final item in items) {
       final subject = _extractMap(item['subject']);
       final teacher = _extractMap(item['teacher']);
+      final schoolClass = _extractMap(item['schoolClass']);
       final beginTime = _toTimeText(item['timeBegin']?.toString() ?? '');
       final endTime = _toTimeText(item['timeEnd']?.toString() ?? '');
       final subjectName = subject['name']?.toString() ?? '';
@@ -203,6 +211,7 @@ class HomeDashboardController extends StateNotifier<HomeDashboardState> {
           teacher['realname']?.toString().trim().isNotEmpty == true
           ? teacher['realname'].toString().trim()
           : teacher['nickname']?.toString().trim() ?? '';
+      final className = schoolClass['name']?.toString().trim() ?? '';
 
       if (subjectName.isEmpty || teacherName.isEmpty) {
         continue;
@@ -213,12 +222,14 @@ class HomeDashboardController extends StateNotifier<HomeDashboardState> {
         item['timeBegin']?.toString() ?? '',
         item['timeEnd']?.toString() ?? '',
       );
+      final classLabel = className.isNotEmpty ? className : '课程';
       final durationText = durationMinutes > 0
-          ? '$durationMinutes分钟·音乐体验课'
-          : '45分钟·音乐体验课';
+          ? '$durationMinutes分钟·$classLabel'
+          : '45分钟·$classLabel';
 
       // 接口 color 字段作为卡片彩色标记（如 "#fed7aa"）
       final colorHex = item['color']?.toString();
+      final avatarRaw = teacher['headUrl']?.toString() ?? '';
 
       result.add(
         HomeCourseNotice(
@@ -226,7 +237,7 @@ class HomeDashboardController extends StateNotifier<HomeDashboardState> {
           endTime: endTime,
           subjectName: subjectName,
           teacherName: teacherName,
-          teacherAvatar: teacher['headUrl']?.toString() ?? '',
+          teacherAvatar: MediaUrl.resolve(avatarRaw),
           description: durationText,
           status: _isEnded(item)
               ? HomeCourseStatus.ended

@@ -169,6 +169,7 @@ class _KaraokePainter extends CustomPainter {
     final notes = track.notes;
     if (notes.isNotEmpty) {
       for (final note in notes) {
+        if (note.isRest) continue;
         if (note.endMs < visibleStartMs || note.startMs > refDrawEndMs) {
           continue;
         }
