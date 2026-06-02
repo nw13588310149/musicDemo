@@ -27,9 +27,8 @@ final class LowLatencyNoteAudio {
   private let fadeOutStepMs = 10
   private let voiceStealFadeSteps = 7
   private let voiceStealStepMs = 4
-  private let baseNoteGain: Float = 0.38
-  private let masterOutputLevel: Float = 0.88
-  private let headroomFactor: Float = 0.9
+  private let masterOutputLevel: Float = 1.0
+  private let maxIdleAttachedNodes = 12
   private var pendingEngineReset = false
 
   /// 所有采样统一为同一格式，避免运行中改 connect format 产生爆音。
@@ -216,7 +215,7 @@ final class LowLatencyNoteAudio {
         let voice = try self.acquireVoice(format: self.standardFormat, metronome: metronome)
         acquiredVoice = voice
         voice.isMetronome = metronome
-        voice.player.volume = self.scaledVolume(requested: volume)
+        voice.player.volume = self.outputVolume(requested: volume)
 
         try self.startEngineIfNeeded()
 
@@ -339,18 +338,17 @@ final class LowLatencyNoteAudio {
     voices.filter { $0.busy || $0.player.isPlaying }.count
   }
 
-  private func scaledVolume(requested: Float) -> Float {
-    let voices = max(1, activePlaybackCount())
-    let headroom = headroomFactor / sqrt(Float(voices))
-    return max(0, min(1, requested * baseNoteGain * headroom))
+  /// 不做软件衰减；响度由系统音量与采样本身决定。
+  private func outputVolume(requested: Float) -> Float {
+    max(0, min(1, requested))
   }
 
-  /// 自然播完：与 Web `ended` 一样只标记空闲，不 stop/reset（避免截断尾音与关闭爆音）。
+  /// 自然播完：只标记空闲，不 stop/reset/detach（detach 会在尾音处产生爆音）。
   private func markVoiceIdle(_ voice: VoiceNode) {
     voice.busy = false
     voice.isMetronome = false
-    purgeInactiveSlots()
-    if activePlaybackCount() == 0 {
+    scheduleDeferredIdleTrim()
+    if engineNeedsReset || pendingEngineReset {
       tryApplyEngineResetIfNeeded()
     }
   }
@@ -383,24 +381,44 @@ final class LowLatencyNoteAudio {
     engineNeedsReset = false
   }
 
-  /// 与 Web playAsset 一致：清理已结束 → 池满则同步淡出最旧声部 → 新建节点。
+  /// 有叠音时新建节点；静音后复用已连接节点，避免播完瞬间 detach 爆音。
   private func acquireVoice(format: AVAudioFormat, metronome: Bool) throws -> VoiceNode {
     reclaimStuckVoices()
-    purgeInactiveSlots()
     ensureVoiceCapacity(metronome: metronome)
+
+    let hasActivePlayback = voices.contains { $0.busy || $0.player.isPlaying }
+    if hasActivePlayback, voices.count < maxPoolSize {
+      return try createVoice(format: format)
+    }
+
+    if let idle = voices.first(where: { !$0.busy && !$0.player.isPlaying }) {
+      do {
+        try prepareVoiceForSchedule(idle, format: format)
+        idle.busy = true
+        return idle
+      } catch {
+        // fall through
+      }
+    }
+
     return try createVoice(format: format)
   }
 
-  private func purgeInactiveSlots() {
-    var retired: [VoiceNode] = []
-    for voice in voices where !voice.busy && !voice.player.isPlaying {
-      if engine.attachedNodes.contains(voice.player) {
-        engine.disconnectNodeOutput(voice.player)
-        engine.detach(voice.player)
-      }
-      retired.append(voice)
+  /// 延迟回收多余空闲节点，避免在音符结束瞬间改音频图产生杂音。
+  private func scheduleDeferredIdleTrim() {
+    queue.asyncAfter(deadline: .now() + .milliseconds(180)) { [weak self] in
+      self?.trimExcessIdleAttachedNodes()
     }
-    for voice in retired {
+  }
+
+  private func trimExcessIdleAttachedNodes() {
+    let idle = voices.filter { !$0.busy && !$0.player.isPlaying }
+    guard idle.count > maxIdleAttachedNodes else { return }
+    let sorted = idle.sorted { $0.order < $1.order }
+    let retireCount = idle.count - maxIdleAttachedNodes
+    for voice in sorted.prefix(retireCount) {
+      guard !voice.busy, !voice.player.isPlaying else { continue }
+      detachVoice(voice)
       voices.removeAll { $0 === voice }
     }
   }
@@ -454,16 +472,18 @@ final class LowLatencyNoteAudio {
     }
   }
 
-  /// 若系统未回调 playedBack，按采样时长兜底释放 busy，避免声部池被占满。
+  /// 仅当 playedBack 未触发时释放 busy，且不再 detach。
   private func scheduleVoiceReleaseFallback(voice: VoiceNode, buffer: AVAudioPCMBuffer) {
     let sampleRate = buffer.format.sampleRate
     guard sampleRate > 0 else { return }
     let durationSec = Double(buffer.frameLength) / sampleRate
-    let delayMs = max(40, Int(durationSec * 1000) + 80)
+    let delayMs = max(60, Int(durationSec * 1000) + 120)
     queue.asyncAfter(deadline: .now() + .milliseconds(delayMs)) { [weak self, weak voice] in
       guard let self = self, let voice = voice else { return }
       guard voice.busy, !voice.player.isPlaying else { return }
-      self.markVoiceIdle(voice)
+      voice.busy = false
+      voice.isMetronome = false
+      self.scheduleDeferredIdleTrim()
     }
   }
 
@@ -471,6 +491,7 @@ final class LowLatencyNoteAudio {
     guard !voice.player.isPlaying, !voice.busy else {
       throw LowLatencyNoteAudioError.playRejected("voice not idle")
     }
+    // 仅清队列，不 stop：避免在尾音余振阶段硬停产生咔嗒声。
     voice.player.reset()
     voice.player.volume = 1
     try ensureConnected(voice, format: format)
@@ -511,8 +532,8 @@ final class LowLatencyNoteAudio {
           for voice in targets {
             self.hardStopVoice(voice)
           }
-          self.purgeInactiveSlots()
-          if self.activePlaybackCount() == 0 {
+          self.scheduleDeferredIdleTrim()
+          if self.engineNeedsReset || self.pendingEngineReset {
             self.tryApplyEngineResetIfNeeded()
           }
         }

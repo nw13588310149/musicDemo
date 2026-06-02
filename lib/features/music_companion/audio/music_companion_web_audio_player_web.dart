@@ -113,7 +113,6 @@ class _MusicCompanionWebAudioPlayer implements MusicCompanionWebAudioPlayer {
     final gain = context.createGain()
       ..gain.value = PianoPlaybackMix.noteGain(
         requested: volume.clamp(0.0, 1.0),
-        activeVoicesIncludingNew: _activePlaybackCount + 1,
       );
 
     source.connect(gain);
