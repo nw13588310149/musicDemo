@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:js_interop';
+import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
 import 'package:web/web.dart' as web;
@@ -11,9 +12,19 @@ MusicCompanionWebAudioPlayer createMusicCompanionWebAudioPlayer() {
 }
 
 class _MusicCompanionWebAudioPlayer implements MusicCompanionWebAudioPlayer {
+  /// 并发发声上限，超出时优先清理已结束的节点，避免硬停造成截断杂音。
+  static const _maxVoices = 24;
+
+  /// 单音基础增益，为和弦叠加留出 headroom，减轻多音叠加削波/电流声。
+  static const _baseNoteGain = 0.38;
+
+  static const _masterLevel = 0.88;
+
   web.AudioContext? _audioContext;
+  web.GainNode? _masterGain;
   final Map<String, web.AudioBuffer> _buffersByAsset =
       <String, web.AudioBuffer>{};
+  final List<_ActivePlayback> _playbackOrder = <_ActivePlayback>[];
   final Set<_ActivePlayback> _activePlaybacks = <_ActivePlayback>{};
   final Set<String> _requestedAssets = <String>{};
 
@@ -24,9 +35,18 @@ class _MusicCompanionWebAudioPlayer implements MusicCompanionWebAudioPlayer {
   bool get isReady => _ready;
 
   web.AudioContext _ensureContext() {
-    return _audioContext ??= web.AudioContext(
+    final existing = _audioContext;
+    if (existing != null) {
+      return existing;
+    }
+    final context = web.AudioContext(
       web.AudioContextOptions(latencyHint: 'interactive'.toJS),
     );
+    final master = context.createGain()..gain.value = _masterLevel;
+    master.connect(context.destination);
+    _audioContext = context;
+    _masterGain = master;
+    return context;
   }
 
   @override
@@ -71,10 +91,19 @@ class _MusicCompanionWebAudioPlayer implements MusicCompanionWebAudioPlayer {
   }
 
   @override
-  Future<void> playAsset(String asset, {double volume = 1}) async {
+  Future<void> playAsset(
+    String asset, {
+    double volume = 1,
+    bool metronome = false,
+  }) async {
     final buffer = _buffersByAsset[asset];
     if (buffer == null) {
       return;
+    }
+
+    _purgeFinishedPlaybacks();
+    if (_playbackOrder.length >= _maxVoices) {
+      await _releasePlayback(_playbackOrder.first, fadeMs: 28);
     }
 
     final context = _ensureContext();
@@ -82,29 +111,52 @@ class _MusicCompanionWebAudioPlayer implements MusicCompanionWebAudioPlayer {
       await context.resume().toDart;
     }
 
+    final master = _masterGain;
+    if (master == null) {
+      return;
+    }
+
     final source = context.createBufferSource()..buffer = buffer;
     final gain = context.createGain()
-      ..gain.value = volume.clamp(0.0, 1.0).toDouble();
+      ..gain.value = _scaledVolume(volume.clamp(0.0, 1.0));
 
     source.connect(gain);
-    gain.connect(context.destination);
-    source.start();
+    gain.connect(master);
 
-    final playback = _ActivePlayback(source: source, gain: gain);
-    _activePlaybacks.add(playback);
-
-    final cleanupDelay = Duration(
-      milliseconds: (buffer.duration * 1000).ceil() + 48,
+    final playback = _ActivePlayback(
+      source: source,
+      gain: gain,
+      metronome: metronome,
     );
-    playback.cleanupTimer = Timer(cleanupDelay, () {
-      _cleanupPlayback(playback);
-    });
+    _activePlaybacks.add(playback);
+    _playbackOrder.add(playback);
+
+    source.addEventListener(
+      'ended',
+      ((web.Event _) {
+        _cleanupPlayback(playback);
+      }).toJS,
+    );
+
+    source.start();
+  }
+
+  @override
+  Future<void> stopMetronomePlaybacks() async {
+    final targets = _playbackOrder
+        .where((playback) => playback.metronome)
+        .toList(growable: false);
+    await Future.wait(
+      targets.map((playback) => _releasePlayback(playback, fadeMs: 35)),
+    );
   }
 
   @override
   Future<void> stopAll() async {
-    final playbacks = List<_ActivePlayback>.from(_activePlaybacks);
-    await Future.wait(playbacks.map(_fadeOutAndCleanup));
+    final targets = List<_ActivePlayback>.from(_playbackOrder);
+    await Future.wait(
+      targets.map((playback) => _releasePlayback(playback, fadeMs: 120)),
+    );
   }
 
   @override
@@ -116,22 +168,48 @@ class _MusicCompanionWebAudioPlayer implements MusicCompanionWebAudioPlayer {
 
     final context = _audioContext;
     _audioContext = null;
+    _masterGain = null;
     if (context != null && context.state != 'closed') {
       await context.close().toDart;
     }
   }
 
-  /// 用 WebAudio 的参数自动化做淡出（音频级插值，无 zipper 杂音），
-  /// 并让 source 在淡出结束的精确采样点停止，避免「关闭爆音」。
-  Future<void> _fadeOutAndCleanup(_ActivePlayback playback) async {
-    if (!_activePlaybacks.contains(playback)) {
+  double _scaledVolume(double requested) {
+    final voices = math.max(1, _activePlaybacks.length);
+    final headroom = 0.9 / math.sqrt(voices.clamp(1, 32).toDouble());
+    return requested * _baseNoteGain * headroom;
+  }
+
+  void _purgeFinishedPlaybacks() {
+    final stale = _playbackOrder
+        .where((playback) => playback.released)
+        .toList(growable: false);
+    for (final playback in stale) {
+      _detachPlayback(playback);
+    }
+  }
+
+  Future<void> _releasePlayback(
+    _ActivePlayback playback, {
+    required int fadeMs,
+  }) async {
+    if (!_activePlaybacks.contains(playback) || playback.released) {
       return;
     }
-    playback.cleanupTimer?.cancel();
-    playback.cleanupTimer = null;
+    playback.released = true;
 
-    const fadeSec = 0.12;
-    final context = _ensureContext();
+    if (fadeMs <= 0) {
+      _detachPlayback(playback);
+      return;
+    }
+
+    final context = _audioContext;
+    if (context == null) {
+      _detachPlayback(playback);
+      return;
+    }
+
+    final fadeSec = fadeMs / 1000.0;
     final now = context.currentTime;
     final gainParam = playback.gain.gain;
     try {
@@ -139,27 +217,24 @@ class _MusicCompanionWebAudioPlayer implements MusicCompanionWebAudioPlayer {
       gainParam.setValueAtTime(gainParam.value, now);
       gainParam.linearRampToValueAtTime(0.0001, now + fadeSec);
     } catch (_) {}
-    try {
-      playback.source.stop(now + fadeSec);
-    } catch (_) {}
 
-    await Future<void>.delayed(const Duration(milliseconds: 140));
-    _cleanupPlayback(playback);
+    await Future<void>.delayed(Duration(milliseconds: fadeMs + 20));
+    _detachPlayback(playback);
   }
 
-  void _cleanupPlayback(_ActivePlayback playback, {bool stopSource = false}) {
+  void _cleanupPlayback(_ActivePlayback playback) {
+    if (playback.released) {
+      return;
+    }
+    playback.released = true;
+    _detachPlayback(playback);
+  }
+
+  void _detachPlayback(_ActivePlayback playback) {
     if (!_activePlaybacks.remove(playback)) {
       return;
     }
-
-    playback.cleanupTimer?.cancel();
-    playback.cleanupTimer = null;
-
-    if (stopSource) {
-      try {
-        playback.source.stop();
-      } catch (_) {}
-    }
+    _playbackOrder.remove(playback);
 
     try {
       playback.source.disconnect();
@@ -171,9 +246,14 @@ class _MusicCompanionWebAudioPlayer implements MusicCompanionWebAudioPlayer {
 }
 
 class _ActivePlayback {
-  _ActivePlayback({required this.source, required this.gain});
+  _ActivePlayback({
+    required this.source,
+    required this.gain,
+    required this.metronome,
+  });
 
   final web.AudioBufferSourceNode source;
   final web.GainNode gain;
-  Timer? cleanupTimer;
+  final bool metronome;
+  bool released = false;
 }

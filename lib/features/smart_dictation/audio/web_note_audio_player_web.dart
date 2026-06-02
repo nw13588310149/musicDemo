@@ -10,11 +10,17 @@ import 'web_note_audio_player_base.dart';
 WebNoteAudioPlayer createWebNoteAudioPlayer() => _WebNoteAudioPlayer();
 
 class _WebNoteAudioPlayer implements WebNoteAudioPlayer {
+  static const _maxVoices = 18;
+  static const _baseNoteGain = 0.42;
+  static const _masterLevel = 0.9;
+
   bool _ready = false;
   web.AudioContext? _audioContext;
+  web.GainNode? _masterGain;
   web.AnalyserNode? _analyser;
   final Map<String, web.AudioBuffer> _buffersByAsset =
       <String, web.AudioBuffer>{};
+  final List<_ActivePlayback> _playbackOrder = <_ActivePlayback>[];
   final Set<_ActivePlayback> _activePlaybacks = <_ActivePlayback>{};
   final StreamController<List<double>> _frequencyController =
       StreamController<List<double>>.broadcast();
@@ -34,11 +40,14 @@ class _WebNoteAudioPlayer implements WebNoteAudioPlayer {
     final context = web.AudioContext(
       web.AudioContextOptions(latencyHint: 'interactive'.toJS),
     );
+    final master = context.createGain()..gain.value = _masterLevel;
     final analyser = context.createAnalyser()
       ..fftSize = 512
       ..smoothingTimeConstant = 0.76;
+    master.connect(analyser);
     analyser.connect(context.destination);
     _audioContext = context;
+    _masterGain = master;
     _analyser = analyser;
     return context;
   }
@@ -79,38 +88,50 @@ class _WebNoteAudioPlayer implements WebNoteAudioPlayer {
     if (buffer == null) {
       return;
     }
+
+    _purgeFinishedPlaybacks();
+    if (_playbackOrder.length >= _maxVoices) {
+      await _releasePlayback(_playbackOrder.first, fadeMs: 12);
+    }
+
     final context = _ensureContext();
     if (context.state == 'suspended') {
       await context.resume().toDart;
     }
 
-    final source = context.createBufferSource()..buffer = buffer;
-    final gain = context.createGain()
-      ..gain.value = volume.clamp(0.0, 1.0).toDouble();
-    final analyser = _analyser;
-    if (analyser == null) {
+    final master = _masterGain;
+    if (master == null) {
       return;
     }
 
+    final source = context.createBufferSource()..buffer = buffer;
+    final gain = context.createGain()
+      ..gain.value = _scaledVolume(volume.clamp(0.0, 1.0));
+
     source.connect(gain);
-    gain.connect(analyser);
-    source.start();
+    gain.connect(master);
 
     final playback = _ActivePlayback(source: source, gain: gain);
     _activePlaybacks.add(playback);
+    _playbackOrder.add(playback);
     _startVisualTicker();
 
-    playback.cleanupTimer = Timer(
-      Duration(milliseconds: (buffer.duration * 1000).ceil() + 80),
-      () => _cleanupPlayback(playback),
+    source.addEventListener(
+      'ended',
+      ((web.Event _) {
+        _cleanupPlayback(playback);
+      }).toJS,
     );
+
+    source.start();
   }
 
   @override
   Future<void> stopAll() async {
-    for (final playback in List<_ActivePlayback>.from(_activePlaybacks)) {
-      _cleanupPlayback(playback, stopSource: true);
-    }
+    final targets = List<_ActivePlayback>.from(_playbackOrder);
+    await Future.wait(
+      targets.map((playback) => _releasePlayback(playback, fadeMs: 90)),
+    );
     _stopVisualTicker();
   }
 
@@ -123,29 +144,82 @@ class _WebNoteAudioPlayer implements WebNoteAudioPlayer {
 
     final context = _audioContext;
     _audioContext = null;
+    _masterGain = null;
     _analyser = null;
     if (context != null && context.state != 'closed') {
       await context.close().toDart;
     }
   }
 
-  void _cleanupPlayback(_ActivePlayback playback, {bool stopSource = false}) {
+  double _scaledVolume(double requested) {
+    final voices = math.max(1, _activePlaybacks.length);
+    final headroom = 0.9 / math.sqrt(voices.clamp(1, 32).toDouble());
+    return requested * _baseNoteGain * headroom;
+  }
+
+  void _purgeFinishedPlaybacks() {
+    final stale = _playbackOrder
+        .where((playback) => playback.released)
+        .toList(growable: false);
+    for (final playback in stale) {
+      _detachPlayback(playback);
+    }
+  }
+
+  Future<void> _releasePlayback(
+    _ActivePlayback playback, {
+    required int fadeMs,
+  }) async {
+    if (!_activePlaybacks.contains(playback) || playback.released) {
+      return;
+    }
+    playback.released = true;
+
+    if (fadeMs <= 0) {
+      _detachPlayback(playback);
+      return;
+    }
+
+    final context = _audioContext;
+    if (context == null) {
+      _detachPlayback(playback);
+      return;
+    }
+
+    final fadeSec = fadeMs / 1000.0;
+    final now = context.currentTime;
+    final gainParam = playback.gain.gain;
+    try {
+      gainParam.cancelScheduledValues(now);
+      gainParam.setValueAtTime(gainParam.value, now);
+      gainParam.linearRampToValueAtTime(0.0001, now + fadeSec);
+    } catch (_) {}
+
+    await Future<void>.delayed(Duration(milliseconds: fadeMs + 20));
+    _detachPlayback(playback);
+  }
+
+  void _cleanupPlayback(_ActivePlayback playback) {
+    if (playback.released) {
+      return;
+    }
+    playback.released = true;
+    _detachPlayback(playback);
+  }
+
+  void _detachPlayback(_ActivePlayback playback) {
     if (!_activePlaybacks.remove(playback)) {
       return;
     }
-    playback.cleanupTimer?.cancel();
-    playback.cleanupTimer = null;
-    if (stopSource) {
-      try {
-        playback.source.stop();
-      } catch (_) {}
-    }
+    _playbackOrder.remove(playback);
+
     try {
       playback.source.disconnect();
     } catch (_) {}
     try {
       playback.gain.disconnect();
     } catch (_) {}
+
     if (_activePlaybacks.isEmpty) {
       _stopVisualTicker();
     }
@@ -199,5 +273,5 @@ class _ActivePlayback {
 
   final web.AudioBufferSourceNode source;
   final web.GainNode gain;
-  Timer? cleanupTimer;
+  bool released = false;
 }

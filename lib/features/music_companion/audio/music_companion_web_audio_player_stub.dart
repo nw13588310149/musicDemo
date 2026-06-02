@@ -16,10 +16,17 @@ class _UnsupportedMusicCompanionWebAudioPlayer
   Future<void> dispose() async {}
 
   @override
-  Future<void> playAsset(String asset, {double volume = 1}) async {}
+  Future<void> playAsset(
+    String asset, {
+    double volume = 1,
+    bool metronome = false,
+  }) async {}
 
   @override
   Future<void> prepare(Iterable<String> assets) async {}
+
+  @override
+  Future<void> stopMetronomePlaybacks() async {}
 
   @override
   Future<void> stopAll() async {}

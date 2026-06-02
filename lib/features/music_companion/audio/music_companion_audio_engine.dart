@@ -120,7 +120,7 @@ class MusicCompanionAudioEngine {
       }
       if (_disposed) return;
       try {
-        await _webPlayer.playAsset(asset, volume: volume);
+        await _webPlayer.playAsset(asset, volume: volume, metronome: false);
       } catch (error, stack) {
         debugPrint(
           'MusicCompanionAudioEngine.playNote web $note failed: $error\n$stack',
@@ -132,7 +132,10 @@ class MusicCompanionAudioEngine {
     try {
       await ensurePianoInitialized();
       if (_disposed) return;
-      await _nativePlayer.play(note, volume: volume);
+      if (_nativePlayer.tryPlay(note, volume: volume, metronome: false)) {
+        return;
+      }
+      await _nativePlayer.play(note, volume: volume, metronome: false);
     } catch (error, stack) {
       debugPrint(
         'MusicCompanionAudioEngine.playNote $note failed: $error\n$stack',
@@ -161,7 +164,7 @@ class MusicCompanionAudioEngine {
       }
       if (_disposed) return;
       try {
-        await _webPlayer.playAsset(asset, volume: volume);
+        await _webPlayer.playAsset(asset, volume: volume, metronome: true);
       } catch (error, stack) {
         debugPrint(
           'MusicCompanionAudioEngine.playMetronomeCue web $cue failed: '
@@ -174,11 +177,27 @@ class MusicCompanionAudioEngine {
     try {
       await ensureMetronomeInitialized();
       if (_disposed) return;
-      await _nativePlayer.play(_metronomeKey(cue), volume: volume);
+      final key = _metronomeKey(cue);
+      if (_nativePlayer.tryPlay(key, volume: volume, metronome: true)) {
+        return;
+      }
+      await _nativePlayer.play(key, volume: volume, metronome: true);
     } catch (error, stack) {
       debugPrint(
         'MusicCompanionAudioEngine.playMetronomeCue $cue failed: $error\n$stack',
       );
+    }
+  }
+
+  /// 仅停止节拍器，不截断虚拟钢琴正在发声的音符。
+  Future<void> stopMetronomePlaybacks() async {
+    if (_disposed) return;
+    if (kIsWeb) {
+      await _webPlayer.stopMetronomePlaybacks();
+      return;
+    }
+    if (!kIsWeb) {
+      await _nativePlayer.stopMetronomePlaybacks();
     }
   }
 

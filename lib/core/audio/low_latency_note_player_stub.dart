@@ -24,13 +24,17 @@ class _StubLowLatencyNotePlayer implements LowLatencyNotePlayer {
   bool hasPrepared(String key) => _keys.contains(key);
 
   @override
-  bool tryPlay(String key, {double volume = 1}) => false;
+  bool tryPlay(String key, {double volume = 1, bool metronome = false}) =>
+      false;
 
   @override
-  Future<void> play(String key, {double volume = 1}) async {}
+  Future<void> play(String key, {double volume = 1, bool metronome = false}) async {}
 
   @override
   Future<void> reclaimEngine() async {}
+
+  @override
+  Future<void> stopMetronomePlaybacks() async {}
 
   @override
   Future<void> stopAll() async {}

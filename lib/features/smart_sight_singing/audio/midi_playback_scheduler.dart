@@ -28,7 +28,6 @@ class MidiPlaybackScheduler {
   var _lastMs = -1;
   var _running = false;
   var _finishing = false;
-  Future<void>? _audioChain;
 
   /// 为 true 时不播放旋律伴奏；若 [prepare] 传入 [leadInDurationMs] > 0，
   /// 预备段内的标准音与节拍器仍会出声（考试模式）。
@@ -70,7 +69,6 @@ class MidiPlaybackScheduler {
     _eventIndex = 0;
     _lastMs = -1;
     _activePlaybackPitch = null;
-    _audioChain = null;
     _finishing = false;
   }
 
@@ -122,7 +120,6 @@ class MidiPlaybackScheduler {
     _eventIndex = 0;
     _lastMs = -1;
     _activePlaybackPitch = null;
-    _audioChain = null;
     _finishing = false;
     _stopwatch = Stopwatch()..start();
     _timer?.cancel();
@@ -173,10 +170,6 @@ class MidiPlaybackScheduler {
     if (_finishing || !_running) return;
     _finishing = true;
     try {
-      final chain = _audioChain;
-      if (chain != null) {
-        await chain;
-      }
       await _finish();
     } finally {
       _finishing = false;
@@ -184,9 +177,7 @@ class MidiPlaybackScheduler {
   }
 
   void _enqueuePlayEvent(MidiPlaybackEvent event) {
-    _audioChain = (_audioChain ?? Future<void>.value()).then(
-      (_) => _playEvent(event),
-    );
+    unawaited(_playEvent(event));
   }
 
   Future<void> _playEvent(MidiPlaybackEvent event) async {

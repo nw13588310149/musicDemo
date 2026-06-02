@@ -70,11 +70,11 @@ class _IoLowLatencyNotePlayer implements LowLatencyNotePlayer {
   }
 
   @override
-  bool tryPlay(String key, {double volume = 1}) {
+  bool tryPlay(String key, {double volume = 1, bool metronome = false}) {
     if (_disposed || !_assetByKey.containsKey(key) || !_nativeReady) {
       return false;
     }
-    unawaited(play(key, volume: volume));
+    unawaited(play(key, volume: volume, metronome: metronome));
     return true;
   }
 
@@ -96,7 +96,7 @@ class _IoLowLatencyNotePlayer implements LowLatencyNotePlayer {
   }
 
   @override
-  Future<void> play(String key, {double volume = 1}) async {
+  Future<void> play(String key, {double volume = 1, bool metronome = false}) async {
     if (_disposed || !_assetByKey.containsKey(key)) return;
     final safeVolume = volume.clamp(0.0, 1.0).toDouble();
 
@@ -105,6 +105,7 @@ class _IoLowLatencyNotePlayer implements LowLatencyNotePlayer {
         await _channel.invokeMethod<void>('play', <String, Object>{
           'key': key,
           'volume': safeVolume,
+          'metronome': metronome,
         });
         return;
       } on PlatformException catch (error, stack) {
@@ -167,6 +168,14 @@ class _IoLowLatencyNotePlayer implements LowLatencyNotePlayer {
     await player.setVolume(volume);
     await player.seek(Duration.zero);
     await player.play();
+  }
+
+  @override
+  Future<void> stopMetronomePlaybacks() async {
+    if (!_nativeReady) return;
+    try {
+      await _channel.invokeMethod<void>('stopMetronome');
+    } catch (_) {}
   }
 
   @override

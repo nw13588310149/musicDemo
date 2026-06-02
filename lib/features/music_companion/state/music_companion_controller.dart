@@ -87,6 +87,9 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
       await _stopTuner();
       if (tab != MusicCompanionTab.metronome) {
         await NativePlaybackAudioSession.ensurePlaybackActive();
+        if (!kIsWeb) {
+          await _audioEngine.reclaimNativeEngineAfterSessionChange();
+        }
       }
     }
   }
@@ -331,7 +334,7 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
     _cancelMetronomeScheduler();
 
     if (wasPlaying) {
-      _audioEngine.stopAllImmediately();
+      unawaited(_audioEngine.stopMetronomePlaybacks());
     }
 
     state = state.copyWith(
