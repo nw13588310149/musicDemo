@@ -1038,7 +1038,6 @@ class _ScoreBoard extends StatelessWidget {
 
     final examLocked =
         state.isPreviewPlaying ||
-        state.isPreviewLoading ||
         state.stage == SightSingingStage.singing ||
         state.stage == SightSingingStage.preparing ||
         state.stage == SightSingingStage.countdown;
@@ -1597,7 +1596,6 @@ class _ControlButtons extends StatelessWidget {
     if (singing) {
       return SightSingingImageActionButton(
         asset: AppAssets.smartSightSingingStopBtn,
-        loading: state.isStoppingSinging,
         onTap: state.isStoppingSinging ? null : () => controller.stopSinging(),
       );
     }
@@ -1623,15 +1621,14 @@ class _PreviewMelodyButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final preview = ref.watch(
       smartSightSingingControllerProvider.select(
-        (s) => (s.isPreviewPlaying, s.isPreviewLoading, s.controlsLocked),
+        (s) => (s.isPreviewPlaying, s.controlsLocked),
       ),
     );
-    final locked = preview.$3;
+    final locked = preview.$2;
     return SightSingingImageActionButton(
       asset: preview.$1
           ? AppAssets.smartSightSingingPreviewPauseBtn
           : AppAssets.smartSightSingingPreviewBtn,
-      loading: preview.$2,
       onTap: locked ? null : () => controller.previewMelody(),
     );
   }

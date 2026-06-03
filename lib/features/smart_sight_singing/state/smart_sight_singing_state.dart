@@ -214,9 +214,8 @@ class SightSingingState {
 
   bool get isSinging => stage == SightSingingStage.singing;
 
-  /// 底部主操作是否应禁用（防连点、准备中与跟唱中互斥）。
+  /// 底部主操作是否应禁用（准备中、倒计时与跟唱中互斥）。
   bool get controlsLocked =>
-      isPreviewLoading ||
       stage == SightSingingStage.preparing ||
       stage == SightSingingStage.countdown ||
       stage == SightSingingStage.singing ||

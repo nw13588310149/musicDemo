@@ -86,6 +86,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
   var _isPreviewSession = false;
   bool _shuttingDown = false;
   var _previewInFlight = false;
+  var _previewGeneration = 0;
   var _startSingingGeneration = 0;
   Future<void>? _readyPrimeTask;
   final MusicPlayRepository? _musicPlayRepository;
@@ -652,10 +653,12 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     });
   }
 
-  /// 进入 ready 后后台预热采集会话与钢琴，缩短首次「开始跟唱」等待。
+  /// 进入 ready 后后台预热钢琴采样。
+  ///
+  /// 不在这里提前切到 playAndRecord：多数用户会先点「试听旋律」，
+  /// 若 ready 阶段先占用录音会话，试听时又要切回 playback，iOS 上会变慢。
   Future<void> _primeReadyStageAudio() async {
     try {
-      await PageAudioLifecycle.enterSightSingingCapture(soft: true);
       await _playback.warmupAudioEngine();
     } catch (e, stack) {
       debugPrint('SmartSightSinging ready prime failed: $e\n$stack');
@@ -665,36 +668,35 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
   /// iPad 无声模式下试听旋律（会短暂开启扬声器伴奏）。
   Future<void> previewMelody() async {
     if (state.stage != SightSingingStage.ready || _midiBundle == null) return;
-    if (_previewInFlight) return;
-    if (state.isPreviewPlaying || state.isPreviewLoading) {
-      await stopPreview();
+    if (state.isPreviewPlaying || _isPreviewSession || _previewInFlight) {
+      stopPreview();
       return;
     }
+    final generation = ++_previewGeneration;
     _previewInFlight = true;
     state = state.copyWith(
       isPreviewPlaying: true,
-      isPreviewLoading: true,
+      isPreviewLoading: false,
       playbackMs: 0,
       errorMessage: null,
     );
-    try {
-      await _runPreviewStart();
-    } finally {
-      _previewInFlight = false;
-    }
+    unawaited(_runPreviewStart(generation));
   }
 
-  Future<void> _runPreviewStart() async {
+  Future<void> _runPreviewStart(int generation) async {
     final bundle = _midiBundle!;
     final leadInMs = state.playbackLeadInMs;
     try {
       await _playback.stop();
+      if (!_isCurrentPreviewGeneration(generation)) return;
       _isPreviewSession = true;
       _playback.muteAudioOutput = false;
 
       if (!kIsWeb) {
         await NativePlaybackAudioSession.ensurePlaybackActive();
+        if (!_isCurrentPreviewGeneration(generation)) return;
         await _playback.reclaimNativeEngine();
+        if (!_isCurrentPreviewGeneration(generation)) return;
       }
 
       await _playback.prepare(
@@ -702,6 +704,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
         totalMs: bundle.totalMs,
         leadInDurationMs: leadInMs,
       );
+      if (!_isCurrentPreviewGeneration(generation)) return;
       await _playback.start(muteAudio: false);
     } catch (e) {
       _isPreviewSession = false;
@@ -713,28 +716,34 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
         errorMessage: '旋律试听失败：$e',
       );
       return;
-    }
-
-    if (!mounted) return;
-    state = state.copyWith(isPreviewLoading: false);
-  }
-
-  Future<void> stopPreview() async {
-    if (!state.isPreviewPlaying && !state.isPreviewLoading && !_isPreviewSession) {
-      return;
-    }
-    if (_previewInFlight) return;
-    _previewInFlight = true;
-    state = state.copyWith(
-      isPreviewPlaying: false,
-      isPreviewLoading: true,
-      playbackMs: 0,
-    );
-    try {
-      await _stopPreview();
     } finally {
       _previewInFlight = false;
     }
+
+    if (!mounted) return;
+    if (!_isCurrentPreviewGeneration(generation)) return;
+    state = state.copyWith(isPreviewLoading: false);
+  }
+
+  bool _isCurrentPreviewGeneration(int generation) {
+    if (generation == _previewGeneration && !_shuttingDown) return true;
+    _isPreviewSession = false;
+    _playback.muteAudioOutput = state.visualOnlyMode;
+    unawaited(_playback.stop());
+    return false;
+  }
+
+  void stopPreview() {
+    if (!state.isPreviewPlaying && !state.isPreviewLoading && !_isPreviewSession) {
+      return;
+    }
+    _previewGeneration++;
+    state = state.copyWith(
+      isPreviewPlaying: false,
+      isPreviewLoading: false,
+      playbackMs: 0,
+    );
+    unawaited(_stopPreview());
   }
 
   Future<void> _stopPreview() async {
@@ -768,7 +777,6 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       return;
     }
     if (state.track == null || _midiBundle == null) return;
-    if (state.isPreviewLoading) return;
 
     final generation = ++_startSingingGeneration;
     state = state.copyWith(
@@ -782,6 +790,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
 
   Future<void> _runStartSinging(int generation) async {
     if (state.isPreviewPlaying || _isPreviewSession) {
+      _previewGeneration++;
       await _stopPreview();
     }
     if (!mounted || generation != _startSingingGeneration) return;
@@ -1003,7 +1012,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       cancelTrackSelection();
     } else {
       if (state.isPreviewPlaying) {
-        await stopPreview();
+        stopPreview();
       }
       await _playback.stop();
       if (!mounted) return;

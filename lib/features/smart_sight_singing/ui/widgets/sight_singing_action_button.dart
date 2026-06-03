@@ -10,15 +10,11 @@ class SightSingingImageActionButton extends StatelessWidget {
   const SightSingingImageActionButton({
     required this.asset,
     required this.onTap,
-    this.loading = false,
     super.key,
   });
 
   final String asset;
   final VoidCallback? onTap;
-
-  /// 为 true 时在按钮上叠小号 loading（会话切换等中间态）。
-  final bool loading;
 
   /// 与 `assets/images/sightsing/3.png`（开始跟唱）一致的设计稿高度。
   static const double designHeight = 36;
@@ -38,25 +34,11 @@ class SightSingingImageActionButton extends StatelessWidget {
         opacity: disabled ? 0.45 : 1,
         child: SizedBox(
           height: height,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Image.asset(
-                asset,
-                height: height,
-                fit: BoxFit.fitHeight,
-                filterQuality: FilterQuality.medium,
-              ),
-              if (loading)
-                SizedBox(
-                  width: ui(18),
-                  height: ui(18),
-                  child: const CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Color(0xFF8741FF),
-                  ),
-                ),
-            ],
+          child: Image.asset(
+            asset,
+            height: height,
+            fit: BoxFit.fitHeight,
+            filterQuality: FilterQuality.medium,
           ),
         ),
       ),
