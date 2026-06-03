@@ -653,12 +653,14 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     });
   }
 
-  /// 进入 ready 后后台预热钢琴采样。
+  /// 进入 ready 后后台预热 playback 会话与钢琴采样。
   ///
-  /// 不在这里提前切到 playAndRecord：多数用户会先点「试听旋律」，
-  /// 若 ready 阶段先占用录音会话，试听时又要切回 playback，iOS 上会变慢。
+  /// ready 阶段用户最常做的是「试听旋律」，因此保持 playback 侧；
+  /// 真正开始跟唱时再切到 playAndRecord。
   Future<void> _primeReadyStageAudio() async {
     try {
+      await NativePlaybackAudioSession.ensurePlaybackActive();
+      await _playback.reclaimNativeEngine();
       await _playback.warmupAudioEngine();
     } catch (e, stack) {
       debugPrint('SmartSightSinging ready prime failed: $e\n$stack');
@@ -750,11 +752,6 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     _isPreviewSession = false;
     await _playback.stop();
     _playback.muteAudioOutput = state.visualOnlyMode;
-    if (!kIsWeb) {
-      NativePlaybackAudioSession.invalidatePlaybackCache();
-      await PageAudioLifecycle.enterSightSingingCapture();
-      await _playback.reclaimNativeEngine();
-    }
     if (!mounted) return;
     state = state.copyWith(
       isPreviewPlaying: false,
