@@ -554,13 +554,23 @@ class _Body extends StatelessWidget {
       case SightSingingStage.analyzing:
       case SightSingingStage.selectTrack:
         return _AnalyzingHint(state: state);
+      case SightSingingStage.ready:
       case SightSingingStage.preparing:
       case SightSingingStage.countdown:
+      case SightSingingStage.singing:
+      case SightSingingStage.finished:
         final track = state.track;
         if (track == null || track.isEmpty) {
           return _AnalyzingHint(state: state);
         }
         final preparing = state.stage == SightSingingStage.preparing;
+        final countdown = state.stage == SightSingingStage.countdown;
+        // 预备 / 倒计时阶段把轨道视图复位到起点，但保持同一棵子树，
+        // 不重建 OSMD 谱面（否则 iOS 上会白屏刷新一下）。
+        final resetTrackView = preparing || countdown;
+        final showNoteDetails =
+            state.stage == SightSingingStage.finished &&
+            state.completedNoteScores.isNotEmpty;
         return Stack(
           children: [
             Column(
@@ -571,60 +581,26 @@ class _Body extends StatelessWidget {
                   child: _PracticeWorkspace(
                     trackView: _PracticeTrackView(
                       track: track,
-                      playbackMs: 0,
-                      userPoints: const <UserPitchPoint>[],
+                      playbackMs: resetTrackView ? 0 : state.playbackMs,
+                      userPoints: resetTrackView
+                          ? const <UserPitchPoint>[]
+                          : state.userPoints,
                       currentUserMidi: state.currentUserMidi,
                       currentUserAmplitude: state.currentUserAmplitude,
                       scoreSightReadingMode: state.scoreSightReadingMode,
                       musicXmlContent: state.musicXmlContent,
                       scoringStandardCents: state.scoringStandardCents,
                     ),
-                    controls: _Controls(
-                      state: state,
-                      controller: controller,
-                    ),
+                    controls: _Controls(state: state, controller: controller),
+                    extra: showNoteDetails
+                        ? _NoteScoresPanel(scores: state.completedNoteScores)
+                        : null,
                   ),
                 ),
               ],
             ),
-            if (preparing)
-              const _PreparingOverlay()
-            else
-              _CountdownOverlay(seconds: state.countdownSeconds),
-          ],
-        );
-      case SightSingingStage.ready:
-      case SightSingingStage.singing:
-      case SightSingingStage.finished:
-        final track = state.track;
-        if (track == null || track.isEmpty) {
-          return _AnalyzingHint(state: state);
-        }
-        final showNoteDetails =
-            state.stage == SightSingingStage.finished &&
-            state.completedNoteScores.isNotEmpty;
-        return Column(
-          children: [
-            _ScoreBoard(state: state, controller: controller),
-            SizedBox(height: ui(16)),
-            Expanded(
-              child: _PracticeWorkspace(
-                trackView: _PracticeTrackView(
-                  track: track,
-                  playbackMs: state.playbackMs,
-                  userPoints: state.userPoints,
-                  currentUserMidi: state.currentUserMidi,
-                  currentUserAmplitude: state.currentUserAmplitude,
-                  scoreSightReadingMode: state.scoreSightReadingMode,
-                  musicXmlContent: state.musicXmlContent,
-                  scoringStandardCents: state.scoringStandardCents,
-                ),
-                controls: _Controls(state: state, controller: controller),
-                extra: showNoteDetails
-                    ? _NoteScoresPanel(scores: state.completedNoteScores)
-                    : null,
-              ),
-            ),
+            if (preparing) const _PreparingOverlay(),
+            if (countdown) _CountdownOverlay(seconds: state.countdownSeconds),
           ],
         );
     }

@@ -667,9 +667,14 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     }
   }
 
-  /// iPad 无声模式下试听旋律（会短暂开启扬声器伴奏）。
+  /// 试听旋律（ready / finished 均可触发；iPad 无声模式会短暂开启扬声器伴奏）。
   Future<void> previewMelody() async {
-    if (state.stage != SightSingingStage.ready || _midiBundle == null) return;
+    final stage = state.stage;
+    if ((stage != SightSingingStage.ready &&
+            stage != SightSingingStage.finished) ||
+        _midiBundle == null) {
+      return;
+    }
     if (state.isPreviewPlaying || _isPreviewSession || _previewInFlight) {
       stopPreview();
       return;
@@ -689,12 +694,22 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     final bundle = _midiBundle!;
     final leadInMs = state.playbackLeadInMs;
     try {
+      // 先等就绪预热（playback 会话 + 钢琴）跑完，避免与之并发重建原生图，
+      // 否则 iOS 上首次试听刚排好的音符会被预热里的 reclaim 立刻打掉（无声 + 进度不动）。
+      final prime = _readyPrimeTask;
+      if (prime != null) {
+        await prime;
+        if (!_isCurrentPreviewGeneration(generation)) return;
+      }
+
       await _playback.stop();
       if (!_isCurrentPreviewGeneration(generation)) return;
       _isPreviewSession = true;
       _playback.muteAudioOutput = false;
 
-      if (!kIsWeb) {
+      // 仅当原生图被切到录音会话（例如刚跟唱过）时才重建，
+      // 普通连续试听不再每次重切会话，响应更快。
+      if (!kIsWeb && NativePlaybackAudioSession.nativePianoGraphNeedsReclaim) {
         await NativePlaybackAudioSession.ensurePlaybackActive();
         if (!_isCurrentPreviewGeneration(generation)) return;
         await _playback.reclaimNativeEngine();
