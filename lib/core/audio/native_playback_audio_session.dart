@@ -39,18 +39,29 @@ abstract final class NativePlaybackAudioSession {
   ///
   /// musicPlay 页内虚拟钢琴与长音频应共用此配置（勿在播长音频时再调
   /// [ensurePlaybackActive]，否则会 setActive(false) 打断 mpv）。
-  static Future<void> ensureMediaKitPlaybackActive() {
+  /// [releaseOthersFirst] 为 false 时不先 setActive(false)，用于长音频已播时
+  /// 仅刷新 category 并 reclaim 钢琴，避免掐断 mpv。
+  static Future<void> ensureMediaKitPlaybackActive({
+    bool releaseOthersFirst = true,
+  }) {
     if (kIsWeb) return Future<void>.value();
-    return _mediaKitTask ??= _configureMediaKitPlaybackBestEffort().whenComplete(
+    if (!releaseOthersFirst) {
+      return _configureMediaKitPlaybackBestEffort(releaseOthersFirst: false);
+    }
+    return _mediaKitTask ??= _configureMediaKitPlaybackBestEffort(
+      releaseOthersFirst: true,
+    ).whenComplete(
       () {
         _mediaKitTask = null;
       },
     );
   }
 
-  static Future<void> _configureMediaKitPlaybackBestEffort() async {
+  static Future<void> _configureMediaKitPlaybackBestEffort({
+    bool releaseOthersFirst = true,
+  }) async {
     try {
-      await _configureMediaKitPlayback();
+      await _configureMediaKitPlayback(releaseOthersFirst: releaseOthersFirst);
     } catch (error, stack) {
       debugPrint(
         'NativePlaybackAudioSession mediaKit setup failed: $error\n$stack',
@@ -58,7 +69,9 @@ abstract final class NativePlaybackAudioSession {
     }
   }
 
-  static Future<void> _configureMediaKitPlayback() async {
+  static Future<void> _configureMediaKitPlayback({
+    bool releaseOthersFirst = true,
+  }) async {
     final session = await AudioSession.instance.timeout(
       _kChannelTimeout,
       onTimeout: () => throw TimeoutException(
@@ -66,15 +79,17 @@ abstract final class NativePlaybackAudioSession {
       ),
     );
 
-    try {
-      await session
-          .setActive(false)
-          .timeout(_kChannelTimeout, onTimeout: () => false);
-    } catch (error, stack) {
-      debugPrint(
-        'NativePlaybackAudioSession.mediaKit setActive(false) ignored: '
-        '$error\n$stack',
-      );
+    if (releaseOthersFirst) {
+      try {
+        await session
+            .setActive(false)
+            .timeout(_kChannelTimeout, onTimeout: () => false);
+      } catch (error, stack) {
+        debugPrint(
+          'NativePlaybackAudioSession.mediaKit setActive(false) ignored: '
+          '$error\n$stack',
+        );
+      }
     }
 
     await session

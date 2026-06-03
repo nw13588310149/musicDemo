@@ -50,17 +50,20 @@ class MusicCompanionAudioEngine {
     await engine.ensurePianoInitialized();
   }
 
-  /// musicPlay：长音频与钢琴混播时，仅重建原生钢琴图。
+  /// musicPlay：长音频与钢琴混播时，刷新会话（可选软刷新）并重建原生钢琴图。
   ///
-  /// [skipSessionReconfigure] 为 true 时不触碰 AVAudioSession（长音频正在播或
-  /// 已用 media_kit 配好会话时必传），避免 setActive(false) 把 mpv 掐断。
+  /// [softMediaKitSession] 为 true 时不先 setActive(false)，与正在播的 mpv 共存。
   static Future<void> recoverNativePianoAfterMediaKit(
     MusicCompanionAudioEngine engine, {
-    bool skipSessionReconfigure = false,
+    bool softMediaKitSession = false,
   }) async {
     if (engine._disposed || kIsWeb) return;
-    if (!skipSessionReconfigure) {
-      await NativePlaybackAudioSession.ensurePlaybackActive();
+    if (softMediaKitSession) {
+      await NativePlaybackAudioSession.ensureMediaKitPlaybackActive(
+        releaseOthersFirst: false,
+      );
+    } else {
+      await NativePlaybackAudioSession.ensureMediaKitPlaybackActive();
     }
     await engine.reclaimNativeEngineAfterSessionChange();
     if (!engine.isPianoReady) {
