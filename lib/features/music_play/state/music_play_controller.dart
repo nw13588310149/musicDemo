@@ -138,15 +138,18 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   }
 
   Future<void> _initialize() async {
+    // 钢琴/会话预热与详情加载并行：预热先发起以尽量先占好会话，但**绝不阻塞**
+    // 详情加载与 loading spinner——否则一旦 iOS 音频会话卡住，整页会一直转圈。
+    final warmUp = _warmUpPiano();
     try {
-      await _warmUpPiano();
       await loadDetail(state.args.id, preserveShowAnswer: false);
     } catch (_) {
-      if (!mounted) {
-        return;
+      if (mounted) {
+        state = state.copyWith(loading: false, errorMessage: '');
       }
-      state = state.copyWith(loading: false, errorMessage: '');
     }
+    // _warmUpPiano 自身已 try/catch 不抛出；这里仅消化其完成，不影响内容展示。
+    await warmUp;
   }
 
   Future<void> _primeIosMusicPlayAudioSession({bool forceRelease = false}) async {

@@ -15,6 +15,10 @@ class _IoLowLatencyNotePlayer implements LowLatencyNotePlayer {
     'com.yyzl.music/low_latency_notes',
   );
 
+  /// 原生引擎重建 / 采样解码的最长等待。iOS 上 AVAudioEngine 重连偶发不返回，
+  /// 不加超时会让上层 handoff 永久卡住、整页转圈。
+  static const Duration _kHeavyChannelTimeout = Duration(seconds: 6);
+
   final Map<String, String> _assetByKey = <String, String>{};
   final Map<String, AudioPlayer> _fallbackPlayers = <String, AudioPlayer>{};
   final Map<String, Future<AudioPlayer?>> _fallbackLoads =
@@ -43,12 +47,16 @@ class _IoLowLatencyNotePlayer implements LowLatencyNotePlayer {
 
     if (defaultTargetPlatform == TargetPlatform.iOS) {
       try {
-        await _channel.invokeMethod<void>('prepare', <String, Object>{
-          'assets': _assetByKey,
-        });
+        await _channel
+            .invokeMethod<void>('prepare', <String, Object>{
+              'assets': _assetByKey,
+            })
+            .timeout(_kHeavyChannelTimeout);
         _nativeReady = true;
         _fallbackMode = false;
         return;
+      } on TimeoutException catch (error, stack) {
+        debugPrint('LowLatencyNotePlayer native prepare timed out: $error\n$stack');
       } on MissingPluginException catch (error, stack) {
         debugPrint('LowLatencyNotePlayer native channel missing: $error\n$stack');
       } on PlatformException catch (error, stack) {
@@ -87,7 +95,11 @@ class _IoLowLatencyNotePlayer implements LowLatencyNotePlayer {
     }
     if (!_nativeReady) return;
     try {
-      await _channel.invokeMethod<void>('reclaimEngine');
+      await _channel
+          .invokeMethod<void>('reclaimEngine')
+          .timeout(_kHeavyChannelTimeout);
+    } on TimeoutException catch (error, stack) {
+      debugPrint('LowLatencyNotePlayer reclaimEngine timed out: $error\n$stack');
     } on PlatformException catch (error, stack) {
       debugPrint('LowLatencyNotePlayer reclaimEngine failed: $error\n$stack');
     } on MissingPluginException catch (error, stack) {

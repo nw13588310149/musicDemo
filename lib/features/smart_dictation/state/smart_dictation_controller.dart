@@ -62,9 +62,12 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
       clearNoticeMessage: true,
     );
 
+    // 音频预热放后台：即便 iOS 音频会话卡住/失败，关卡列表也照常展示。
+    // 音频侧有独立的 audioReady 状态与「初始化失败可重试」入口，互不阻塞。
+    unawaited(_prepareAudio());
+
     try {
       await Future.wait(<Future<void>>[
-        _prepareAudio(),
         _loadVipInfo(),
         // 仅拉当前激活 track 的关卡列表（默认是绝对音感 type=0），
         // 其它 track 等用户切到对应 tab 时再按需拉取。
