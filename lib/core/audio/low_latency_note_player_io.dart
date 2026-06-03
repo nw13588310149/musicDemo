@@ -96,7 +96,12 @@ class _IoLowLatencyNotePlayer implements LowLatencyNotePlayer {
   }
 
   @override
-  Future<void> play(String key, {double volume = 1, bool metronome = false}) async {
+  Future<void> play(
+    String key, {
+    double volume = 1,
+    bool metronome = false,
+    bool waitUntilFinished = false,
+  }) async {
     if (_disposed || !_assetByKey.containsKey(key)) return;
     final safeVolume = volume.clamp(0.0, 1.0).toDouble();
 
@@ -106,6 +111,7 @@ class _IoLowLatencyNotePlayer implements LowLatencyNotePlayer {
           'key': key,
           'volume': safeVolume,
           'metronome': metronome,
+          'waitUntilFinished': waitUntilFinished,
         });
         return;
       } on PlatformException catch (error, stack) {

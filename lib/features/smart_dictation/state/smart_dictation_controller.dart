@@ -50,6 +50,9 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
   /// 在闯关结算后会主动刷新（绕过缓存）。
   final Set<SmartDictationTrack> _loadedTracks = <SmartDictationTrack>{};
 
+  /// iOS：会话 + 原生引擎只在进入听写模块时 prime 一次，避免每次播题 reclaim 截断尾音。
+  bool _playbackSessionPrimed = false;
+
   Future<void> bootstrap() async {
     state = state.copyWith(
       bootstrapping: true,
@@ -131,9 +134,29 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
     }
   }
 
+  Future<void> _primePlaybackSessionOnce() async {
+    if (kIsWeb || _playbackSessionPrimed) {
+      return;
+    }
+    await NativeAudioBootstrap.reactivatePlaybackSession();
+    await _audioEngine.stopAll();
+    await _audioEngine.reclaimNativeEngineAfterSessionChange();
+    _playbackSessionPrimed = true;
+  }
+
+  /// 切题前淡出短音，避免上一题尾音与下一题提示音叠在一起产生滋滋声。
+  Future<void> _softStopQuestionAudio() async {
+    if (kIsWeb) {
+      return;
+    }
+    await _audioEngine.stopAll();
+    await Future<void>.delayed(const Duration(milliseconds: 90));
+  }
+
   Future<void> _prepareAudio() async {
     state = state.copyWith(audioLoading: true);
     try {
+      await _primePlaybackSessionOnce();
       await _audioEngine.ensureInitialized();
       state = state.copyWith(audioLoading: false, audioReady: true);
     } catch (_) {
@@ -148,6 +171,7 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
   /// UI 重试入口：在「初始化失败」气泡 / 重播按钮上调用，先清掉全局缓存再重跑。
   Future<void> retryAudio() async {
     NativeAudioBootstrap.resetForRetry();
+    _playbackSessionPrimed = false;
     state = state.copyWith(
       audioLoading: true,
       audioReady: false,
@@ -415,6 +439,7 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
       remainingMillis: latest.answerSeconds * 1000,
       running: true,
     );
+    await _softStopQuestionAudio();
     state = state.copyWith(session: advanced, clearNoticeMessage: true);
     _restartTimer();
   }
@@ -473,7 +498,12 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
   void confirmLeaveSession() {
     _stopTimer();
     _resumeAfterExitDialog = false;
-    unawaited(_audioEngine.stopAll());
+    unawaited(() async {
+      await _audioEngine.stopAll();
+      if (!kIsWeb) {
+        await _audioEngine.reclaimNativeEngineAfterSessionChange();
+      }
+    }());
     _clearVisualNotes();
     state = state.copyWith(
       clearSession: true,
@@ -625,9 +655,9 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
     bool fromUserGesture = false,
   }) async {
     try {
-      if (!kIsWeb) {
+      await _primePlaybackSessionOnce();
+      if (fromUserGesture && !kIsWeb) {
         await NativeAudioBootstrap.reactivatePlaybackSession();
-        await _audioEngine.reclaimNativeEngineAfterSessionChange();
       }
       if (!state.audioReady) {
         state = state.copyWith(audioLoading: true, clearErrorMessage: true);
@@ -774,6 +804,7 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
       remainingMillis: afterDelay.answerSeconds * 1000,
       running: true,
     );
+    await _softStopQuestionAudio();
     state = state.copyWith(session: advanced, clearNoticeMessage: true);
     _restartTimer();
   }

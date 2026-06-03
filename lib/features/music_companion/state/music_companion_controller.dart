@@ -49,11 +49,29 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
   double _metronomeLastTickMs = 0;
 
   StreamSubscription<Uint8List>? _tunerSubscription;
+  Future<void>? _pianoHandoffTask;
+
+  Future<void> _ensurePianoHandoff() async {
+    if (_pianoHandoffTask != null) {
+      await _pianoHandoffTask;
+      return;
+    }
+    final task = MusicCompanionAudioEngine.primeAfterForeignAudioSession(
+      _audioEngine,
+    );
+    _pianoHandoffTask = task;
+    try {
+      await task;
+    } finally {
+      if (identical(_pianoHandoffTask, task)) {
+        _pianoHandoffTask = null;
+      }
+    }
+  }
 
   Future<void> _prepareAudio() async {
     try {
-      await NativePlaybackAudioSession.ensurePlaybackActive();
-      await _audioEngine.ensurePianoInitialized();
+      await _ensurePianoHandoff();
       if (!mounted) return;
       state = state.copyWith(
         audioReady: _audioEngine.isPianoReady,
@@ -112,7 +130,7 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
 
     try {
       if (!_audioEngine.isPianoReady) {
-        await _audioEngine.ensurePianoInitialized();
+        await _ensurePianoHandoff();
       }
       if (!mounted) return;
       if (kIsWeb) {

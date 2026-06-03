@@ -8,6 +8,7 @@ import '../../../core/widgets/app_toast.dart';
 import '../../recording_system/state/recording_system_controller.dart';
 import '../../smart_sight_singing/state/smart_sight_singing_controller.dart';
 import '../state/school_binding_controller.dart';
+import '../state/school_binding_state.dart';
 import '../state/shell_controller.dart';
 import '../state/shell_state.dart';
 import 'dashboard_scaffold.dart';
@@ -46,6 +47,16 @@ class _ShellScaffoldState extends ConsumerState<ShellScaffold> {
     // 时把 SchoolBindingController 实例化（构造里会自动开启 5s 轮询）。
     final bindingState = ref.watch(schoolBindingControllerProvider);
     ref.read(schoolBindingControllerProvider.notifier);
+
+    // 绑定学校成功后立即刷新 schoolList，更新侧栏 logo。
+    ref.listen<SchoolBindingState>(schoolBindingControllerProvider, (
+      previous,
+      next,
+    ) {
+      if (next.hasSchool && previous?.hasSchool != true) {
+        unawaited(controller.refreshUserAndSchool());
+      }
+    });
 
     // 学校绑定遮罩优先：一旦遮罩生效，所有点击都被它兜住，VIP 校验暂停。
     // 等绑定完成、遮罩消失，下一帧 build 会按需触发 VIP 跳转。

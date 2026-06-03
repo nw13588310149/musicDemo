@@ -12,6 +12,7 @@ import '../../../core/widgets/class_share_drawer.dart';
 import '../../../core/widgets/image_gallery_viewer.dart';
 import '../../piano/ui/piano_keyboard.dart';
 import '../../shell/ui/shell_layout.dart';
+import '../../smart_campus/navigation/group_chat_return.dart';
 import '../state/music_play_controller.dart';
 import '../state/music_play_state.dart';
 import 'music_play_html_utils.dart';
@@ -158,7 +159,8 @@ class _MusicPlayPageState extends ConsumerState<MusicPlayPage> {
                       width: ui(320),
                       child: _TurntablePanel(
                         state: state,
-                        onBack: () => Navigator.of(context).maybePop(),
+                        onBack: () =>
+                            GroupChatReturnNavigator.pop(context, ref: ref),
                         onShare: controller.openShareDialog,
                       ),
                     ),
@@ -244,7 +246,8 @@ class _MusicPlayPageState extends ConsumerState<MusicPlayPage> {
                   children: [
                     _TurntablePanel(
                       state: state,
-                      onBack: () => Navigator.of(context).maybePop(),
+                      onBack: () =>
+                          GroupChatReturnNavigator.pop(context, ref: ref),
                       onShare: controller.openShareDialog,
                     ),
                     SizedBox(height: ui(12)),
@@ -1003,8 +1006,7 @@ class _PlaybackBar extends StatelessWidget {
                 : Image.asset('assets/images/home/feng.png', fit: BoxFit.cover),
           ),
           SizedBox(width: ui(12)),
-          // 多曲目时主标题切换为"当前音频文件名"，副标题降级显示教材名；
-          // 单曲目场景沿用旧的"教材名 + 听写/曲目名"。
+          // 主标题固定为详情接口 `title`；多曲目时副标题显示当前 `file1.filename`。
           //
           // 旧实现用 IntrinsicWidth + softWrap=false 让标题按内容宽度
           // 自由撑开——用户反馈这种写法在副标题很长（"四分、二八、二分、附点二分"）
@@ -1129,27 +1131,12 @@ class _PlaybackBar extends StatelessWidget {
     );
   }
 
-  /// 主标题：多曲目时显示"当前音频文件名"（与左侧标题随播放切换的需求对齐），
-  /// 单曲目时回退到教材名。
+  /// 主标题：课件详情接口 `title`（教材名），不随当前播放曲目切换。
   String _resolvePrimaryTitle(MusicPlayDetail? detail, MusicPlayTrack? track) {
-    if (detail != null && detail.tracks.length > 1) {
-      final title = track?.title.trim() ?? '';
-      if (title.isNotEmpty) return title;
-      return detail.title;
-    }
     return detail?.title ?? '未命名音频';
   }
 
-  /// 副标题：直接对齐课件详情接口的 `shortText*` 字段。
-  ///
-  ///  - 多曲目（`file1` 是 [{url, filename}, ...] 数组、典型场景节奏 / 和弦）：
-  ///    `shortText2 → shortText1 → "音频1"`
-  ///  - 单曲目（`file1` 只有一条 mp3，典型场景听写）：
-  ///    `shortText2 → "音频1"`（此场景下 shortText1 接口几乎都是空，按需求
-  ///    跳过它，免得偶发的旧数据把主副标题挤成重复内容）
-  ///
-  /// 兜底字符串 "音频1" 与 1.0 设计稿一致；副标题永远不为空，避免播放条
-  /// 因一行高度突变出现"标题往下漂移"。
+  /// 副标题：多曲目时显示当前 `file1` 项的 `filename`；单曲目走 `shortText2`。
   String _resolveSecondaryTitle(
     MusicPlayDetail? detail,
     MusicPlayTrack? track,
@@ -1157,15 +1144,20 @@ class _PlaybackBar extends StatelessWidget {
     if (detail == null) {
       return '音频1';
     }
+    if (detail.tracks.length > 1) {
+      final filename = track?.title.trim() ?? '';
+      if (filename.isNotEmpty) {
+        return filename;
+      }
+      final shortText2 = detail.shortText2.trim();
+      if (shortText2.isNotEmpty) {
+        return shortText2;
+      }
+      return '音频1';
+    }
     final shortText2 = detail.shortText2.trim();
     if (shortText2.isNotEmpty) {
       return shortText2;
-    }
-    if (detail.tracks.length > 1) {
-      final shortText1 = detail.shortText1.trim();
-      if (shortText1.isNotEmpty) {
-        return shortText1;
-      }
     }
     return '音频1';
   }

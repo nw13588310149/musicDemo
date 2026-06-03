@@ -7,6 +7,7 @@ import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/class_share_drawer.dart';
 import '../../shell/ui/shell_layout.dart';
+import '../../smart_campus/navigation/group_chat_return.dart';
 import '../state/consultation_detail_controller.dart';
 import '../state/consultation_detail_state.dart';
 import 'consultation_page.dart';
@@ -67,7 +68,8 @@ class _ConsultationDetailPageState
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _DetailHeader(
-                    onBack: () => Navigator.of(context).maybePop(),
+                    onBack: () =>
+                        GroupChatReturnNavigator.pop(context, ref: ref),
                     onShare: controller.openShareDialog,
                   ),
                   Expanded(

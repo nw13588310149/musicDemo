@@ -76,7 +76,13 @@ class SmartDictationAudioEngine {
     try {
       await ensureInitialized();
       if (_disposed) return;
-      await _nativePlayer.play(canonical, volume: volume);
+      final waitForPlayback =
+          !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+      await _nativePlayer.play(
+        canonical,
+        volume: volume,
+        waitUntilFinished: waitForPlayback,
+      );
     } catch (error, stack) {
       debugPrint(
         'SmartDictationAudioEngine.playToken $canonical failed: $error\n$stack',

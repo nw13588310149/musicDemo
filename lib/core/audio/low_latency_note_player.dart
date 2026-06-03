@@ -16,7 +16,12 @@ abstract interface class LowLatencyNotePlayer {
 
   bool tryPlay(String key, {double volume = 1, bool metronome = false});
 
-  Future<void> play(String key, {double volume = 1, bool metronome = false});
+  Future<void> play(
+    String key, {
+    double volume = 1,
+    bool metronome = false,
+    bool waitUntilFinished = false,
+  });
 
   /// iOS：AVAudioSession 切换后重建 AVAudioEngine，避免 play() 闪退。
   Future<void> reclaimEngine();

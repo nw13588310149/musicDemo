@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 
+import '../../../core/audio/native_playback_audio_session.dart';
 import '../../../core/network/api_response.dart';
 import '../../../core/network/media_url.dart';
 import '../../music_companion/audio/music_companion_audio_engine.dart';
@@ -49,6 +50,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   StreamSubscription<bool>? _playingSub;
   StreamSubscription<bool>? _completedSub;
   bool _recordSaved = false;
+  Future<void>? _pianoHandoffTask;
 
   /// 已经 dispose 的标志位。
   ///
@@ -90,6 +92,21 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   int _scrubUiHoldGen = 0;
   static const Duration _kScrubUiHoldClear = Duration(milliseconds: 200);
 
+  /// 主音频正常播放音量（media_kit 为 0–100）。
+  static const double _kPlayerNormalVolume = 100;
+
+  /// 暂停前淡出步数/间隔：减轻 mpv / Web 硬切 pause 时的滋滋底噪。
+  static const int _kPauseFadeSteps = 4;
+  static const Duration _kPauseFadeStepDelay = Duration(milliseconds: 18);
+
+  /// iOS CoreAudio / scaletempo 需要更长淡出 + 排空缓冲，否则 pause 易滋滋响。
+  static const int _kIosPauseFadeSteps = 8;
+  static const Duration _kIosPauseFadeStepDelay = Duration(milliseconds: 14);
+  static const Duration _kIosPauseDrainDelay = Duration(milliseconds: 48);
+
+  bool get _isIosNative =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+
   /// 把半音数转为 [Player.setPitch] 接受的频率倍率（2^(n/12)）。
   static double _pitchRatio(int semitones) =>
       math.pow(2, semitones / 12.0).toDouble();
@@ -126,9 +143,27 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     }
   }
 
+  Future<void> _ensurePianoHandoff() async {
+    if (_pianoHandoffTask != null) {
+      await _pianoHandoffTask;
+      return;
+    }
+    final task = MusicCompanionAudioEngine.primeAfterForeignAudioSession(
+      _pianoEngine,
+    );
+    _pianoHandoffTask = task;
+    try {
+      await task;
+    } finally {
+      if (identical(_pianoHandoffTask, task)) {
+        _pianoHandoffTask = null;
+      }
+    }
+  }
+
   Future<void> _warmUpPiano() async {
     try {
-      await _pianoEngine.ensurePianoInitialized();
+      await _ensurePianoHandoff();
       if (!mounted) {
         return;
       }
@@ -218,12 +253,109 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       return;
     }
     _endScrubUiHold(immediate: true);
+    if (state.isPlaying) {
+      await _pausePlayerSmooth(player);
+    } else {
+      await _resumePlayer(player);
+    }
+  }
+
+  Future<void> _setPlayerVolumeSafe(Player player, double volume) async {
     try {
-      if (state.isPlaying) {
-        await player.pause();
-      } else {
-        await player.play();
+      await player.setVolume(volume.clamp(0, 100));
+    } catch (_) {}
+  }
+
+  Future<void> _fadePlayerVolume(
+    Player player, {
+    required double to,
+    int? steps,
+    Duration? stepDelay,
+  }) async {
+    final fadeSteps = steps ?? _kPauseFadeSteps;
+    final fadeDelay = stepDelay ?? _kPauseFadeStepDelay;
+    final from = player.state.volume;
+    if ((from - to).abs() < 1) {
+      await _setPlayerVolumeSafe(player, to);
+      return;
+    }
+    for (var step = 1; step <= fadeSteps; step++) {
+      if (_disposed) {
+        return;
       }
+      final t = step / fadeSteps;
+      await _setPlayerVolumeSafe(player, from + (to - from) * t);
+      if (step < fadeSteps) {
+        await Future.delayed(fadeDelay);
+      }
+    }
+  }
+
+  Future<void> _applyPitchToPlayer(Player player) async {
+    if (state.detail?.hidePitchShift == true) {
+      return;
+    }
+    try {
+      await player.setPitch(_pitchRatio(state.pitchSemitones));
+    } catch (_) {}
+  }
+
+  /// 淡出后 pause，避免解码器硬切产生的短促底噪。
+  Future<void> _pausePlayerSmooth(Player player) async {
+    if (_disposed) {
+      return;
+    }
+    if (_isIosNative) {
+      await _pausePlayerSmoothIos(player);
+      return;
+    }
+    try {
+      await _fadePlayerVolume(player, to: 0);
+      await player.pause();
+    } catch (_) {}
+    await _setPlayerVolumeSafe(player, _kPlayerNormalVolume);
+  }
+
+  /// iOS：先停钢琴短音 → 临时复位 pitch 滤波 → 长淡出 → pause → 排空缓冲。
+  Future<void> _pausePlayerSmoothIos(Player player) async {
+    if (_disposed) {
+      return;
+    }
+    _pianoEngine.stopAllImmediately();
+    final hadPitchShift =
+        state.detail?.hidePitchShift != true && state.pitchSemitones != 0;
+    try {
+      if (hadPitchShift) {
+        await player.setPitch(1.0);
+      }
+      await _fadePlayerVolume(
+        player,
+        to: 0,
+        steps: _kIosPauseFadeSteps,
+        stepDelay: _kIosPauseFadeStepDelay,
+      );
+      await player.pause();
+      if (!_disposed) {
+        await Future.delayed(_kIosPauseDrainDelay);
+      }
+    } catch (_) {}
+    await _setPlayerVolumeSafe(player, _kPlayerNormalVolume);
+    if (hadPitchShift && !_disposed) {
+      await _applyPitchToPlayer(player);
+    }
+  }
+
+  Future<void> _resumePlayer(Player player) async {
+    if (_disposed) {
+      return;
+    }
+    if (_isIosNative) {
+      await NativePlaybackAudioSession.ensureMediaKitPlaybackActive();
+    }
+    try {
+      await _setPlayerVolumeSafe(player, _kPlayerNormalVolume);
+      await _applyPitchToPlayer(player);
+      await player.play();
     } catch (_) {}
   }
 
@@ -428,6 +560,15 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
 
     _beginScrubUiHold();
 
+    final duckIosScrub = _isIosNative;
+    final scrubPlayer = _player;
+    if (duckIosScrub) {
+      _pianoEngine.stopAllImmediately();
+      if (scrubPlayer != null) {
+        await _setPlayerVolumeSafe(scrubPlayer, 0);
+      }
+    }
+
     try {
       while (true) {
         if (_disposed) {
@@ -456,6 +597,12 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
         break;
       }
     } finally {
+      if (duckIosScrub && !_disposed) {
+        final player = _player;
+        if (player != null) {
+          await _setPlayerVolumeSafe(player, _kPlayerNormalVolume);
+        }
+      }
       _seekInFlight = false;
       _endScrubUiHold();
     }
@@ -529,7 +676,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       return;
     }
 
-    await _pianoEngine.ensurePianoInitialized();
+    await _ensurePianoHandoff();
     if (!mounted || _disposed) {
       return;
     }
@@ -688,6 +835,9 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
 
     try {
       if (isStale()) return;
+      if (_isIosNative) {
+        await NativePlaybackAudioSession.ensureMediaKitPlaybackActive();
+      }
       final player = _ensurePlayer();
       debugPrint('MusicPlay audio open: ${track.url}');
       _endScrubUiHold(immediate: true);
@@ -696,12 +846,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       try {
         await player.setRate(state.speed);
       } catch (_) {}
-      try {
-        final semitones = state.detail?.hidePitchShift == true
-            ? 0
-            : state.pitchSemitones;
-        await player.setPitch(_pitchRatio(semitones));
-      } catch (_) {}
+      await _applyPitchToPlayer(player);
     } catch (error) {
       if (isStale()) return;
       debugPrint('MusicPlay audio load failed: $error');
@@ -900,8 +1045,8 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     final player = _player;
     if (player != null) {
       try {
+        await _pausePlayerSmooth(player);
         await player.seek(Duration.zero);
-        await player.pause();
       } catch (_) {}
     }
     if (mounted) {
@@ -1023,13 +1168,52 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     return result;
   }
 
-  /// 解析 `filename` 字段（用于音轨标题），与 [_extractUrl] 对应。
-  String? _extractTitle(dynamic entry) {
+  /// 将 `file1` 单项规整为 Map（兼容 JSON 字符串：`{"url":"…","filename":"…"}`）。
+  Map<String, dynamic>? _entryAsMap(dynamic entry) {
     if (entry is Map) {
-      final raw = entry['filename']?.toString();
-      return raw?.split('.').first.trim();
+      return entry.map((key, value) => MapEntry(key.toString(), value));
+    }
+    final text = entry?.toString().trim() ?? '';
+    if (text.isEmpty) {
+      return null;
+    }
+    if ((text.startsWith('{') && text.endsWith('}')) ||
+        (text.startsWith('[') && text.endsWith(']'))) {
+      try {
+        final decoded = jsonDecode(text);
+        if (decoded is Map) {
+          return decoded.map((key, value) => MapEntry(key.toString(), value));
+        }
+      } catch (_) {
+        // 落到 Dart 风格字段解析。
+      }
+      if (text.startsWith('{') && text.endsWith('}')) {
+        final filename = RegExp(
+          r'filename:\s*([^,}]+)',
+        ).firstMatch(text)?.group(1)?.trim();
+        final url = RegExp(r'url:\s*([^,}\s][^,}]*)').firstMatch(text)?.group(1)?.trim();
+        if (filename != null || url != null) {
+          return <String, dynamic>{
+            'filename': ?filename,
+            'url': ?url,
+          };
+        }
+      }
     }
     return null;
+  }
+
+  /// 解析 `filename`（抽屉列表 / 当前曲目副标题），与 [_extractUrl] 对应。
+  String? _extractTitle(dynamic entry) {
+    final map = _entryAsMap(entry);
+    if (map == null) {
+      return null;
+    }
+    final raw = map['filename']?.toString().trim();
+    if (raw == null || raw.isEmpty) {
+      return null;
+    }
+    return raw;
   }
 
   /// 从一项资源中提取一个完整的可访问 URL。
@@ -1045,13 +1229,12 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   String _extractUrl(dynamic entry) {
     if (entry == null) return '';
 
-    if (entry is Map) {
-      final url = (entry['url'] ?? entry['fileUrl'])?.toString().trim() ?? '';
+    final map = _entryAsMap(entry);
+    if (map != null) {
+      final url = (map['url'] ?? map['fileUrl'])?.toString().trim() ?? '';
       if (url.isNotEmpty) return _resolveMediaUrl(url);
       final path =
-          (entry['path'] ?? entry['img'] ?? entry['filePath'])
-              ?.toString()
-              .trim() ??
+          (map['path'] ?? map['img'] ?? map['filePath'])?.toString().trim() ??
           '';
       if (path.isNotEmpty) return _resolveMediaUrl(path);
       return '';
@@ -1059,31 +1242,6 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
 
     final text = entry.toString().trim();
     if (text.isEmpty) return '';
-
-    if ((text.startsWith('{') && text.endsWith('}')) ||
-        (text.startsWith('[') && text.endsWith(']'))) {
-      try {
-        final decoded = jsonDecode(text);
-        if (decoded is Map) return _extractUrl(decoded);
-        if (decoded is List && decoded.isNotEmpty) {
-          return _extractUrl(decoded.first);
-        }
-      } catch (_) {
-        // 落到下面的 Dart 风格解析。
-      }
-    }
-
-    if (text.startsWith('{') && text.endsWith('}')) {
-      final urlMatch = RegExp(r'url:\s*([^,}\s][^,}]*)').firstMatch(text);
-      if (urlMatch != null) {
-        return _resolveMediaUrl(urlMatch.group(1)!.trim());
-      }
-      final pathMatch = RegExp(r'path:\s*([^,}\s][^,}]*)').firstMatch(text);
-      if (pathMatch != null) {
-        return _resolveMediaUrl(pathMatch.group(1)!.trim());
-      }
-      return '';
-    }
 
     return _resolveMediaUrl(text);
   }
@@ -1160,6 +1318,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     final player = _player;
     if (player != null) {
       try {
+        unawaited(_setPlayerVolumeSafe(player, 0));
         unawaited(player.pause());
       } catch (_) {}
       try {

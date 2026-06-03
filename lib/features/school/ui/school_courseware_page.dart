@@ -15,6 +15,21 @@ import '../state/school_page_controller.dart';
 import '../state/school_page_state.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
+/// iPad Pro 12.9 横屏常见逻辑分辨率 1366×1024；此宽度下左列 Banner/声乐卡
+/// 会挤占快捷按钮区高度，需单独收紧图标与内边距。
+abstract final class _SchoolIpadProLayout {
+  static bool matches(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final w = size.width.round();
+    final h = size.height.round();
+    bool near(int a, int target) => (a - target).abs() <= 2;
+    return (near(w, 1366) && near(h, 1024)) || (near(w, 1024) && near(h, 1366));
+  }
+
+  /// 快捷区内容（图标 + 文案 + 上下 padding）在常规样式下约需 104px。
+  static const quickActionsMinHeight = 104.0;
+}
+
 // ── Page entry ────────────────────────────────────────────────────────────────
 class SchoolCoursewareV2Page extends ConsumerWidget {
   const SchoolCoursewareV2Page({super.key});
@@ -71,6 +86,10 @@ class _SchoolView extends StatelessWidget {
                     // —— 保持响应式比例不变。
                     final voiceCardW = math.max(0.0, (leftW - gap) / 2.0);
                     final voiceH = voiceCardW * 121.0 / 315.0;
+                    final quickAreaH = leftH - bannerH - voiceH - gap * 2;
+                    final compactQuickActions =
+                        _SchoolIpadProLayout.matches(ctx) ||
+                        quickAreaH < _SchoolIpadProLayout.quickActionsMinHeight;
 
                     return Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -98,6 +117,7 @@ class _SchoolView extends StatelessWidget {
                                 child: _QuickActionsBoard(
                                   actions: actions,
                                   schoolId: state.schoolId,
+                                  compact: compactQuickActions,
                                 ),
                               ),
                               const SizedBox(height: gap),
@@ -305,25 +325,36 @@ class _SchoolBannerIndicator extends StatelessWidget {
 
 // ── Quick actions (6 icons in a row) ─────────────────────────────────────────
 class _QuickActionsBoard extends StatelessWidget {
-  const _QuickActionsBoard({required this.actions, required this.schoolId});
+  const _QuickActionsBoard({
+    required this.actions,
+    required this.schoolId,
+    this.compact = false,
+  });
 
   final List<SchoolQuickAction> actions;
   final int schoolId;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
+    final metrics = _QuickActionMetrics.fromCompact(compact);
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
       ),
-      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+      padding: EdgeInsets.symmetric(
+        vertical: metrics.boardPaddingV,
+        horizontal: 16,
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: actions
             .map(
               (a) => _QuickActionItem(
                 action: a,
+                metrics: metrics,
                 onTap: () => _handleTap(context, a),
               ),
             )
@@ -389,18 +420,61 @@ class _QuickActionsBoard extends StatelessWidget {
   }
 }
 
+class _QuickActionMetrics {
+  const _QuickActionMetrics({
+    required this.boardPaddingV,
+    required this.iconSlotSize,
+    required this.iconVisualSize,
+    required this.iconVisualSizeVideo,
+    required this.labelGap,
+    required this.labelFontSize,
+  });
+
+  final double boardPaddingV;
+  final double iconSlotSize;
+  final double iconVisualSize;
+  final double iconVisualSizeVideo;
+  final double labelGap;
+  final double labelFontSize;
+
+  factory _QuickActionMetrics.fromCompact(bool compact) {
+    if (compact) {
+      return const _QuickActionMetrics(
+        boardPaddingV: 10,
+        iconSlotSize: 38,
+        iconVisualSize: 38,
+        iconVisualSizeVideo: 32,
+        labelGap: 4,
+        labelFontSize: 13,
+      );
+    }
+    return const _QuickActionMetrics(
+      boardPaddingV: 20,
+      iconSlotSize: 44,
+      iconVisualSize: 44,
+      iconVisualSizeVideo: 36,
+      labelGap: 6,
+      labelFontSize: 14,
+    );
+  }
+}
+
 class _QuickActionItem extends StatelessWidget {
-  const _QuickActionItem({required this.action, required this.onTap});
+  const _QuickActionItem({
+    required this.action,
+    required this.metrics,
+    required this.onTap,
+  });
 
   final SchoolQuickAction action;
+  final _QuickActionMetrics metrics;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    const iconSlotSize = 44.0;
     final iconVisualSize = action.route == RoutePaths.videoTutorial
-        ? 36.0
-        : 44.0;
+        ? metrics.iconVisualSizeVideo
+        : metrics.iconVisualSize;
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
@@ -408,8 +482,8 @@ class _QuickActionItem extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           SizedBox(
-            width: iconSlotSize,
-            height: iconSlotSize,
+            width: metrics.iconSlotSize,
+            height: metrics.iconSlotSize,
             child: Center(
               child: action.icon.endsWith('.svg')
                   ? AppAssetGraphic(
@@ -427,12 +501,12 @@ class _QuickActionItem extends StatelessWidget {
                     ),
             ),
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: metrics.labelGap),
           Text(
             action.name,
             textAlign: TextAlign.center,
             style: TextStyle(
-              fontSize: 14,
+              fontSize: metrics.labelFontSize,
               color: Color(0xFF1A1A1A),
               fontWeight: AppFont.w500,
               fontFamily: 'PingFang SC',

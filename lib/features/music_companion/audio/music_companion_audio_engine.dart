@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../../core/audio/native_audio_bootstrap.dart';
+import '../../../core/audio/native_playback_audio_session.dart';
 import '../../../core/audio/low_latency_note_player.dart';
 import 'music_companion_audio_catalog.dart';
 import 'music_companion_web_audio_player_base.dart';
@@ -28,6 +30,25 @@ class MusicCompanionAudioEngine {
   bool get isReady => kIsWeb ? _webPlayer.isReady : !_disposed;
 
   bool get isPianoReady => kIsWeb ? _webPlayer.isReady : _nativePlayer.isReady;
+
+  /// 从智能视唱 / 智能听写等模块返回后，重建共享 iOS 钢琴引擎并清空排队音符。
+  ///
+  /// 须在打开音乐伴侣键盘或 musicPlay 钢琴条之前调用，避免「过一会才响
+  /// 之前按的音」。
+  static Future<void> primeAfterForeignAudioSession(
+    MusicCompanionAudioEngine engine,
+  ) async {
+    if (engine._disposed) return;
+    if (kIsWeb) {
+      await engine.ensurePianoInitialized();
+      return;
+    }
+    NativePlaybackAudioSession.invalidatePlaybackCache();
+    await NativeAudioBootstrap.reactivatePlaybackSession();
+    await engine.stopAll();
+    await engine.reclaimNativeEngineAfterSessionChange();
+    await engine.ensurePianoInitialized();
+  }
 
   Future<void> ensureInitialized() async {
     await ensurePianoInitialized();

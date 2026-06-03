@@ -924,6 +924,9 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       }
     }
     await _restorePlaybackSessionForHandoff();
+    if (!kIsWeb) {
+      await _playback.reclaimNativeEngine();
+    }
   }
 
   /// 收藏 / 取消收藏当前教材（智能视唱 type=11）。乐观更新 + 失败回滚。
@@ -984,6 +987,9 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     _completedSub = null;
     await _playback.dispose();
     await _restorePlaybackSessionForHandoff();
+    if (!kIsWeb) {
+      await _playback.reclaimNativeEngine();
+    }
   }
 
   /// 视唱/试听会把 AVAudioSession 切到 playAndRecord；离开页面前必须切回

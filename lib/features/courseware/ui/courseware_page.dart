@@ -18,6 +18,7 @@ import '../../../core/widgets/course_empty_placeholder.dart';
 import '../../../core/widgets/image_gallery_viewer.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
+import '../../smart_campus/navigation/group_chat_return.dart';
 import '../state/cloud_drive_controller.dart';
 import '../state/cloud_drive_state.dart';
 import 'courseware_file_picker.dart';
@@ -83,6 +84,15 @@ class _MyCloudDrivePageState extends ConsumerState<MyCloudDrivePage> {
     _fileRenameController?.dispose();
     _fileRenameFocusNode?.dispose();
     super.dispose();
+  }
+
+  void _handlePreviewClose() {
+    if (GroupChatReturnNavigator.isActive(context)) {
+      ref.read(cloudDriveControllerProvider.notifier).closePreview();
+      GroupChatReturnNavigator.pop(context, ref: ref);
+      return;
+    }
+    ref.read(cloudDriveControllerProvider.notifier).closePreview();
   }
 
   void _handleSearchChanged() {
@@ -239,7 +249,7 @@ class _MyCloudDrivePageState extends ConsumerState<MyCloudDrivePage> {
                   _CoursewarePreviewPage(
                     state: state,
                     controller: controller,
-                    onClose: controller.closePreview,
+                    onClose: _handlePreviewClose,
                     onRename: () =>
                         _handleFileAction(previewing, _CloudFileAction.rename),
                     onShare: () =>

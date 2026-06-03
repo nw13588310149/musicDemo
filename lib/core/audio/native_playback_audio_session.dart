@@ -15,6 +15,7 @@ import 'package:flutter/foundation.dart';
 ///    显式让出来，否则 setActive(true) 在 iPad 上有时不会真正生效。
 abstract final class NativePlaybackAudioSession {
   static Future<void>? _playbackTask;
+  static Future<void>? _mediaKitTask;
 
   /// 单次 platform channel 操作的最长等待时间，避免 iOS 不响应时永久阻塞。
   static const Duration _kChannelTimeout = Duration(seconds: 4);
@@ -29,6 +30,82 @@ abstract final class NativePlaybackAudioSession {
     return _playbackTask ??= _configurePlaybackBestEffort().whenComplete(() {
       _playbackTask = null;
     });
+  }
+
+  /// musicPlay / 云盘长音频（media_kit / mpv）在 iOS 上播放前的会话。
+  ///
+  /// 与 [ensurePlaybackActive] 相比增加 `defaultToSpeaker`，并与钢琴
+  /// `mixWithOthers` 共存，减轻 pause 时 CoreAudio 硬切产生的滋滋声。
+  static Future<void> ensureMediaKitPlaybackActive() {
+    if (kIsWeb) return Future<void>.value();
+    return _mediaKitTask ??= _configureMediaKitPlaybackBestEffort().whenComplete(
+      () {
+        _mediaKitTask = null;
+      },
+    );
+  }
+
+  static Future<void> _configureMediaKitPlaybackBestEffort() async {
+    try {
+      await _configureMediaKitPlayback();
+    } catch (error, stack) {
+      debugPrint(
+        'NativePlaybackAudioSession mediaKit setup failed: $error\n$stack',
+      );
+    }
+  }
+
+  static Future<void> _configureMediaKitPlayback() async {
+    final session = await AudioSession.instance.timeout(
+      _kChannelTimeout,
+      onTimeout: () => throw TimeoutException(
+        'AudioSession.instance hung > ${_kChannelTimeout.inSeconds}s',
+      ),
+    );
+
+    try {
+      await session
+          .setActive(false)
+          .timeout(_kChannelTimeout, onTimeout: () => false);
+    } catch (error, stack) {
+      debugPrint(
+        'NativePlaybackAudioSession.mediaKit setActive(false) ignored: '
+        '$error\n$stack',
+      );
+    }
+
+    await session
+        .configure(
+          AudioSessionConfiguration(
+            avAudioSessionCategory: AVAudioSessionCategory.playback,
+            avAudioSessionCategoryOptions:
+                AVAudioSessionCategoryOptions.mixWithOthers |
+                AVAudioSessionCategoryOptions.defaultToSpeaker,
+            avAudioSessionMode: AVAudioSessionMode.defaultMode,
+            androidAudioAttributes: AndroidAudioAttributes(
+              contentType: AndroidAudioContentType.music,
+              usage: AndroidAudioUsage.media,
+            ),
+            androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
+          ),
+        )
+        .timeout(
+          _kChannelTimeout,
+          onTimeout: () => throw TimeoutException(
+            'AudioSession.configure (mediaKit) hung > '
+            '${_kChannelTimeout.inSeconds}s',
+          ),
+        );
+
+    await session
+        .setActive(true)
+        .timeout(
+          _kChannelTimeout,
+          onTimeout: () => throw TimeoutException(
+            'AudioSession.setActive(true) mediaKit hung > '
+            '${_kChannelTimeout.inSeconds}s',
+          ),
+        );
   }
 
   static Future<void> _configurePlaybackBestEffort() async {
@@ -193,5 +270,6 @@ abstract final class NativePlaybackAudioSession {
 
   static void invalidatePlaybackCache() {
     _playbackTask = null;
+    _mediaKitTask = null;
   }
 }

@@ -70,6 +70,7 @@ import '../../recording_system/audio/recording_capture.dart';
 import '../../recording_system/audio/recording_playback.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../../courseware/ui/courseware_file_picker.dart';
+import '../navigation/group_chat_return.dart';
 import '../data/chat_repository.dart';
 import '../data/teacher_repository.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -3554,6 +3555,7 @@ class _ChatRightPaneState extends State<_ChatRightPane> {
                     playingVoiceId: widget.playingVoiceId,
                     playingFraction: widget.playingFraction,
                     onToggleVoice: widget.onToggleVoice,
+                    groupChatClassId: widget.conv.id,
                   ),
                 ),
                 if (widget.recording)
@@ -3806,6 +3808,7 @@ class _ChatBodyBoard extends StatelessWidget {
     required this.playingVoiceId,
     required this.playingFraction,
     required this.onToggleVoice,
+    required this.groupChatClassId,
   });
 
   final List<_ChatMessage> messages;
@@ -3830,6 +3833,7 @@ class _ChatBodyBoard extends StatelessWidget {
   final String? playingVoiceId;
   final double playingFraction;
   final ValueChanged<String> onToggleVoice;
+  final String groupChatClassId;
 
   @override
   Widget build(BuildContext context) {
@@ -3926,6 +3930,7 @@ class _ChatBodyBoard extends StatelessWidget {
                               playingFraction: playingFraction,
                               onToggleVoice: onToggleVoice,
                               onRecallMessage: onRecallMessage,
+                              groupChatClassId: groupChatClassId,
                             ),
                             SizedBox(height: ui(28)),
                           ],
@@ -4131,6 +4136,7 @@ class _MessageRowDispatcher extends StatelessWidget {
     required this.playingFraction,
     required this.onToggleVoice,
     required this.onRecallMessage,
+    required this.groupChatClassId,
   });
 
   final _ChatMessage message;
@@ -4139,6 +4145,7 @@ class _MessageRowDispatcher extends StatelessWidget {
   final double playingFraction;
   final ValueChanged<String> onToggleVoice;
   final ValueChanged<_UserChatMessage> onRecallMessage;
+  final String groupChatClassId;
 
   @override
   Widget build(BuildContext context) {
@@ -4157,6 +4164,7 @@ class _MessageRowDispatcher extends StatelessWidget {
         playingFraction: playingFraction,
         onToggleVoice: onToggleVoice,
         onRecallMessage: onRecallMessage,
+        groupChatClassId: groupChatClassId,
       );
     }
     return const SizedBox.shrink();
@@ -4232,6 +4240,7 @@ class _UserMessageRow extends StatelessWidget {
     required this.playingFraction,
     required this.onToggleVoice,
     required this.onRecallMessage,
+    required this.groupChatClassId,
   });
 
   final _UserChatMessage message;
@@ -4240,6 +4249,7 @@ class _UserMessageRow extends StatelessWidget {
   final double playingFraction;
   final ValueChanged<String> onToggleVoice;
   final ValueChanged<_UserChatMessage> onRecallMessage;
+  final String groupChatClassId;
 
   @override
   Widget build(BuildContext context) {
@@ -4256,6 +4266,7 @@ class _UserMessageRow extends StatelessWidget {
       playingVoiceId: playingVoiceId,
       playingFraction: playingFraction,
       onToggleVoice: onToggleVoice,
+      groupChatClassId: groupChatClassId,
     );
     if (isMine) {
       bubble = GestureDetector(
@@ -4347,12 +4358,14 @@ class _BubbleDispatcher extends StatelessWidget {
     required this.playingVoiceId,
     required this.playingFraction,
     required this.onToggleVoice,
+    required this.groupChatClassId,
   });
 
   final _UserChatMessage message;
   final String? playingVoiceId;
   final double playingFraction;
   final ValueChanged<String> onToggleVoice;
+  final String groupChatClassId;
 
   @override
   Widget build(BuildContext context) {
@@ -4377,7 +4390,11 @@ class _BubbleDispatcher extends StatelessWidget {
     }
     if (b is _SharedCardBubble) {
       return GestureDetector(
-        onTap: () => _navigateSharedContent(context, b),
+        onTap: () => _navigateSharedContent(
+          context,
+          b,
+          groupChatClassId: groupChatClassId,
+        ),
         child: _SharedCardBubbleView(bubble: b),
       );
     }
@@ -4807,14 +4824,21 @@ String _resolveMediaUrl(String? raw) {
 }
 
 /// 根据分享内容的子类型跳转到对应详情页。
-void _navigateSharedContent(BuildContext context, _SharedCardBubble b) {
+void _navigateSharedContent(
+  BuildContext context,
+  _SharedCardBubble b, {
+  required String groupChatClassId,
+}) {
   final id = b.contentId;
   switch (b.subtype) {
     case 'news':
       Navigator.pushNamed(
         context,
         RoutePaths.consultationDetail,
-        arguments: id == null ? 0 : (int.tryParse(id) ?? 0),
+        arguments: GroupChatReturnNavigator.wrapMap(
+          <String, dynamic>{'id': id == null ? 0 : (int.tryParse(id) ?? 0)},
+          classId: groupChatClassId,
+        ),
       );
     case 'video':
       if (b.schoolMode) {
@@ -4829,13 +4853,22 @@ void _navigateSharedContent(BuildContext context, _SharedCardBubble b) {
         Navigator.pushNamed(
           context,
           RoutePaths.schoolVideo,
-          arguments: routeArgs.isEmpty ? null : routeArgs,
+          arguments: GroupChatReturnNavigator.wrapMap(
+            routeArgs,
+            classId: groupChatClassId,
+          ),
         );
       } else {
+        final routeArgs = (id != null && id.isNotEmpty)
+            ? <String, dynamic>{'openVideoId': id}
+            : <String, dynamic>{};
         Navigator.pushNamed(
           context,
           RoutePaths.videoTutorial,
-          arguments: (id != null && id.isNotEmpty) ? {'openVideoId': id} : null,
+          arguments: GroupChatReturnNavigator.wrapMap(
+            routeArgs,
+            classId: groupChatClassId,
+          ),
         );
       }
     case 'kj':
@@ -4844,15 +4877,18 @@ void _navigateSharedContent(BuildContext context, _SharedCardBubble b) {
       Navigator.pushNamed(
         context,
         RoutePaths.courseware,
-        arguments: <String, dynamic>{
-          'previewItem': <String, dynamic>{
-            'id': int.tryParse(id ?? '') ?? 0,
-            'title': b.title,
-            'typeValue': b.kjTypeValue ?? '3',
-            'audioUrl': b.kjAudioUrl ?? '',
-            'imageUrls': b.kjImageUrls,
+        arguments: GroupChatReturnNavigator.wrapMap(
+          <String, dynamic>{
+            'previewItem': <String, dynamic>{
+              'id': int.tryParse(id ?? '') ?? 0,
+              'title': b.title,
+              'typeValue': b.kjTypeValue ?? '3',
+              'audioUrl': b.kjAudioUrl ?? '',
+              'imageUrls': b.kjImageUrls,
+            },
           },
-        },
+          classId: groupChatClassId,
+        ),
       );
     case 'book':
       if (id == null || id.isEmpty) return;
@@ -4861,31 +4897,46 @@ void _navigateSharedContent(BuildContext context, _SharedCardBubble b) {
         Navigator.pushNamed(
           context,
           RoutePaths.theory,
-          arguments: <String, dynamic>{'id': id},
+          arguments: GroupChatReturnNavigator.wrapMap(
+            <String, dynamic>{'id': id},
+            classId: groupChatClassId,
+          ),
         );
       } else if (bookType == 1) {
         Navigator.pushNamed(
           context,
           RoutePaths.musicPlay,
-          arguments: <String, dynamic>{'id': id, 'type': 3},
+          arguments: GroupChatReturnNavigator.wrapMap(
+            <String, dynamic>{'id': id, 'type': 3},
+            classId: groupChatClassId,
+          ),
         );
       } else if (bookType == 4 || bookType == 5) {
         Navigator.pushNamed(
           context,
           RoutePaths.musicPlay,
-          arguments: <String, dynamic>{'id': id, 'type': 2},
+          arguments: GroupChatReturnNavigator.wrapMap(
+            <String, dynamic>{'id': id, 'type': 2},
+            classId: groupChatClassId,
+          ),
         );
       } else if (bookType == 10) {
         Navigator.pushNamed(
           context,
           RoutePaths.answerEnd2,
-          arguments: <String, dynamic>{'id': id, 'closedByDefault': true},
+          arguments: GroupChatReturnNavigator.wrapMap(
+            <String, dynamic>{'id': id, 'closedByDefault': true},
+            classId: groupChatClassId,
+          ),
         );
       } else {
         Navigator.pushNamed(
           context,
           RoutePaths.musicPlay,
-          arguments: <String, dynamic>{'id': id},
+          arguments: GroupChatReturnNavigator.wrapMap(
+            <String, dynamic>{'id': id},
+            classId: groupChatClassId,
+          ),
         );
       }
     default:

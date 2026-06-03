@@ -25,6 +25,8 @@ final class LowLatencyNoteAudio {
   private var sessionObservers: [NSObjectProtocol] = []
   private var playSequence: UInt64 = 0
   private var fadeGeneration = 0
+  /// 会话切换 / stopAll 时递增；早于此次序号的 `play` 任务直接丢弃，避免排队迟播。
+  private var operationGeneration: UInt64 = 0
 
   /// 声部池大小：钢琴十指 + 延音绰绰有余，超出才会触发偷取。
   private let poolSize = 24
@@ -94,14 +96,25 @@ final class LowLatencyNoteAudio {
       }
       let volume = (args["volume"] as? NSNumber)?.floatValue ?? 1.0
       let metronome = (args["metronome"] as? NSNumber)?.boolValue ?? false
-      play(key: key, volume: volume, metronome: metronome, result: result)
+      let waitUntilFinished = (args["waitUntilFinished"] as? NSNumber)?.boolValue ?? false
+      play(
+        key: key,
+        volume: volume,
+        metronome: metronome,
+        waitUntilFinished: waitUntilFinished,
+        result: result
+      )
     case "reclaimEngine":
       reclaimEngine(result: result)
     case "stopMetronome":
       queue.async { [weak self] in self?.stopVoices(metronomeOnly: true, fadeMs: 35) }
       result(nil)
     case "stopAll":
-      queue.async { [weak self] in self?.stopVoices(metronomeOnly: false, fadeMs: 90) }
+      queue.async { [weak self] in
+        guard let self = self else { return }
+        self.operationGeneration &+= 1
+        self.stopVoices(metronomeOnly: false, fadeMs: 90)
+      }
       result(nil)
     case "dispose":
       queue.async { [weak self] in self?.teardown() }
@@ -158,9 +171,29 @@ final class LowLatencyNoteAudio {
         DispatchQueue.main.async { result(nil) }
         return
       }
-      self.engineNeedsReset = true
-      self.applyPendingResetIfIdle()
+      self.operationGeneration &+= 1
+      self.fadeGeneration &+= 1
+      self.forceStopAllVoicesImmediate()
+      self.rebuildGraph()
+      if self.prepared {
+        try? self.buildGraph()
+      }
       DispatchQueue.main.async { result(nil) }
+    }
+  }
+
+  /// 立即静音所有声部（无淡出），用于会话 handoff / reclaim。
+  private func forceStopAllVoicesImmediate() {
+    for voice in voices {
+      if voice.player.isPlaying {
+        voice.player.stop()
+      }
+      voice.player.volume = 1
+      voice.busy = false
+      voice.isMetronome = false
+      if graphBuilt, engine.isRunning {
+        try? LowLatencyNoteAudioSafePlay.play(voice.player)
+      }
     }
   }
 
@@ -199,10 +232,12 @@ final class LowLatencyNoteAudio {
     key: String,
     volume: Float,
     metronome: Bool,
+    waitUntilFinished: Bool,
     result: @escaping FlutterResult
   ) {
     queue.async { [weak self] in
       guard let self = self else { return }
+      let generation = self.operationGeneration
       do {
         guard let source = self.buffersByKey[key] else {
           throw LowLatencyNoteAudioError.bufferNotPrepared(key)
@@ -212,6 +247,10 @@ final class LowLatencyNoteAudio {
         }
 
         try self.ensureGraphReady()
+        guard generation == self.operationGeneration else {
+          DispatchQueue.main.async { result(nil) }
+          return
+        }
 
         let voice = self.acquireVoice()
         voice.busy = true
@@ -221,6 +260,14 @@ final class LowLatencyNoteAudio {
         voice.sequence = seq
         voice.player.volume = max(0, min(1, volume))
 
+        let playbackDone = DispatchSemaphore(value: 0)
+        var signaled = false
+        let signalPlaybackDone: () -> Void = {
+          if signaled { return }
+          signaled = true
+          playbackDone.signal()
+        }
+
         try LowLatencyNoteAudioSafePlay.scheduleBuffer(
           buffer,
           on: voice.player,
@@ -229,6 +276,9 @@ final class LowLatencyNoteAudio {
             self?.queue.async {
               guard let voice = voice, voice.sequence == seq else { return }
               voice.busy = false
+              if waitUntilFinished {
+                signalPlaybackDone()
+              }
             }
           }
         )
@@ -239,17 +289,34 @@ final class LowLatencyNoteAudio {
 
         // 兜底：若 playedBack 回调未触发（极少数情况），按采样时长 + 余量释放 busy，
         // 避免 busy 卡死导致 activeVoiceCount 永不归零、引擎无法在会话切换后重建。
-        let durationMs =
-          Int(Double(buffer.frameLength) / buffer.format.sampleRate * 1000) + 150
+        let durationMs = max(
+          400,
+          Int(Double(buffer.frameLength) / buffer.format.sampleRate * 1000) + 200
+        )
         self.queue.asyncAfter(deadline: .now() + .milliseconds(durationMs)) {
           [weak voice] in
           guard let voice = voice, voice.sequence == seq, voice.busy else { return }
           voice.busy = false
+          if waitUntilFinished {
+            signalPlaybackDone()
+          }
         }
 
+        if waitUntilFinished {
+          playbackDone.wait()
+        }
+
+        guard generation == self.operationGeneration else {
+          DispatchQueue.main.async { result(nil) }
+          return
+        }
         DispatchQueue.main.async { result(nil) }
       } catch {
         self.engineNeedsReset = true
+        guard generation == self.operationGeneration else {
+          DispatchQueue.main.async { result(nil) }
+          return
+        }
         DispatchQueue.main.async {
           result(FlutterError(code: "play_failed", message: "\(error)", details: nil))
         }

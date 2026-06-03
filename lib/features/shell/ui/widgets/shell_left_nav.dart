@@ -1,8 +1,10 @@
 import 'dart:math' as math;
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/constants/app_assets.dart';
+import '../../../../core/network/media_url.dart';
 import '../../../../core/theme/app_font.dart';
 import '../../../../core/widgets/app_asset_graphic.dart';
 import '../../state/shell_state.dart';
@@ -134,22 +136,15 @@ class _ShellLeftNavState extends State<ShellLeftNav>
                 children: [
                   SizedBox(height: ui(31.5)),
 
-                  // Logo：透明度由动画驱动，高度固定保持空间
+                  // Logo：schoolList 返回的 logo；无则回退默认资源
                   Transform.translate(
                     offset: Offset(0, -ui(4)),
                     child: Opacity(
                       opacity: _logoOpacity.value,
-                      child: SizedBox(
+                      child: _ShellSidebarLogo(
+                        logoUrl: widget.state.logoUrl,
+                        width: ui(132),
                         height: ui(36),
-                        child: Center(
-                          child: Image.asset(
-                            AppAssets.shellLogo,
-                            width: ui(132),
-                            height: ui(36),
-                            fit: BoxFit.contain,
-                            filterQuality: FilterQuality.high,
-                          ),
-                        ),
                       ),
                     ),
                   ),
@@ -595,6 +590,50 @@ class _NavUnreadCapsule extends StatelessWidget {
           height: 1,
         ),
       ),
+    );
+  }
+}
+
+/// 侧栏顶部 Logo：`/app/school/v2/user/schoolList` 的 `logo` 字段，空则默认图。
+class _ShellSidebarLogo extends StatelessWidget {
+  const _ShellSidebarLogo({
+    required this.logoUrl,
+    required this.width,
+    required this.height,
+  });
+
+  final String logoUrl;
+  final double width;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    final resolved = MediaUrl.resolve(logoUrl.trim());
+    return SizedBox(
+      height: height,
+      child: Center(
+        child: resolved.isNotEmpty
+            ? CachedNetworkImage(
+                imageUrl: resolved,
+                width: width,
+                height: height,
+                fit: BoxFit.contain,
+                filterQuality: FilterQuality.high,
+                placeholder: (context, url) => _fallback(),
+                errorWidget: (context, url, error) => _fallback(),
+              )
+            : _fallback(),
+      ),
+    );
+  }
+
+  Widget _fallback() {
+    return Image.asset(
+      AppAssets.shellLogo,
+      width: width,
+      height: height,
+      fit: BoxFit.contain,
+      filterQuality: FilterQuality.high,
     );
   }
 }

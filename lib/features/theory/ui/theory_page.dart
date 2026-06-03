@@ -10,6 +10,7 @@ import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/class_share_drawer.dart';
 import '../../../core/widgets/image_gallery_viewer.dart';
 import '../../shell/ui/shell_layout.dart';
+import '../../smart_campus/navigation/group_chat_return.dart';
 import '../state/theory_controller.dart';
 import '../state/theory_state.dart';
 import 'widgets/theory_pdf_view.dart';
@@ -71,7 +72,8 @@ class _TheoryPageState extends ConsumerState<TheoryPage> {
                 _TheoryHeader(
                   detail: detail,
                   answerEndMode: answerEndMode,
-                  onBack: () => Navigator.of(context).maybePop(),
+                  onBack: () =>
+                      GroupChatReturnNavigator.pop(context, ref: ref),
                   onShare: controller.openShareDialog,
                   onToggleFavorite: controller.toggleFavorite,
                   onOpenAssignment: () {

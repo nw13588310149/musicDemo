@@ -191,7 +191,7 @@ class ShellController extends StateNotifier<ShellState> {
       final data = _firstSchool(schoolResponse.data);
       await _storage.saveSchoolId(data['id']);
       if (data.isNotEmpty) {
-        final logo = data['logo']?.toString() ?? '';
+        final logo = _readSchoolLogo(data);
         final switchFlag = data['coursewareSwitch'];
         final schoolCoursewareEnabled = switchFlag == true || switchFlag == 1;
         state = state.copyWith(
@@ -210,6 +210,17 @@ class ShellController extends StateNotifier<ShellState> {
 
   /// 把 v2 `schoolList` 响应（List）或旧版 `mySchool` 响应（Map）规整成
   /// 同一种形态：当前学校信息的 Map（找不到时返回空 Map）。
+  /// 解析 schoolList 首条学校记录中的 logo 字段（兼容多种命名）。
+  String _readSchoolLogo(Map<String, dynamic> data) {
+    for (final key in ['logo', 'logoUrl', 'schoolLogo', 'school_logo']) {
+      final value = data[key]?.toString().trim() ?? '';
+      if (value.isNotEmpty) {
+        return value;
+      }
+    }
+    return '';
+  }
+
   Map<String, dynamic> _firstSchool(dynamic data) {
     if (data is Map<String, dynamic>) {
       return data;
