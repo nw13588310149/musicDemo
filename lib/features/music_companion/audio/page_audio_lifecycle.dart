@@ -32,6 +32,25 @@ abstract final class PageAudioLifecycle {
     });
   }
 
+  /// musicPlay 打开长音频前：仅配置 media_kit 用的 AVAudioSession。
+  ///
+  /// 不走 [NativePianoHandoff]，避免在 `player.open` 前排队等待
+  /// `reclaimEngine` / 钢琴采样 decode。钢琴图在
+  /// [enterMediaKitPiano] 或 [recoverPianoDuringMediaKit] 中后台完成即可。
+  static Future<void> primeMediaKitPlaybackSession({
+    bool releaseOthersFirst = true,
+  }) async {
+    if (kIsWeb) {
+      return;
+    }
+    if (releaseOthersFirst) {
+      NativePlaybackAudioSession.invalidatePlaybackCache();
+    }
+    await NativePlaybackAudioSession.ensureMediaKitPlaybackActive(
+      releaseOthersFirst: releaseOthersFirst,
+    );
+  }
+
   /// musicPlay 首次进入：media_kit 会话 + 钢琴（可强释放旧会话）。
   static Future<void> enterMediaKitPiano(
     MusicCompanionAudioEngine engine, {

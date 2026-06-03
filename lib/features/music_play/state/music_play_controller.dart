@@ -52,6 +52,8 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   StreamSubscription<bool>? _completedSub;
   bool _recordSaved = false;
   Future<void>? _iosPianoRecoverTask;
+  Future<void>? _iosSessionPrimeTask;
+  Future<void>? _iosPianoWarmTask;
   bool _iosMusicPlaySessionPrimed = false;
 
   /// 已经 dispose 的标志位。
@@ -68,6 +70,16 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   /// 出现"两个音频同时在响"。这里用最经典的 ticket 方案：每次进入
   /// 自增 1，await 之后比对，落后的那次直接放弃。
   int _openTicket = 0;
+
+  /// 串行化 open，便于 [dispose] 在释放 mpv 前等待最后一次 open 结束。
+  Future<void>? _openTrackChain;
+
+  /// 全应用串行释放 media_kit Player，避免页间快速切换时并发 dispose 触发
+  /// libmpv 在 `mp_client_send_property_changes` 里 abort。
+  static Future<void>? _mediaKitTeardownChain;
+
+  static const Duration _kMpvTeardownStepTimeout = Duration(seconds: 4);
+  static const Duration _kMpvOpenDrainTimeout = Duration(seconds: 8);
 
   // ── 进度条 seek 合并 ────────────────────────────────────────────────
   // iPad 上拖进度条时，60–120Hz 的 onHorizontalDragUpdate 会让每个手势
@@ -152,15 +164,57 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     await warmUp;
   }
 
-  Future<void> _primeIosMusicPlayAudioSession({bool forceRelease = false}) async {
+  /// iOS：为 media_kit 长音频准备会话（不阻塞在钢琴 reclaim 上）。
+  Future<void> _ensureIosMediaKitSessionForLongAudio({
+    bool forceRelease = false,
+  }) async {
     if (!_isIosNative || _disposed) {
       return;
     }
-    await PageAudioLifecycle.enterMediaKitPiano(
-      _pianoEngine,
-      forceSessionRelease: forceRelease || !_iosMusicPlaySessionPrimed,
+    if (_iosMusicPlaySessionPrimed && !forceRelease) {
+      await PageAudioLifecycle.primeMediaKitPlaybackSession(
+        releaseOthersFirst: false,
+      );
+      return;
+    }
+    if (_iosSessionPrimeTask != null) {
+      await _iosSessionPrimeTask;
+      return;
+    }
+    final task = PageAudioLifecycle.primeMediaKitPlaybackSession(
+      releaseOthersFirst: forceRelease || !_iosMusicPlaySessionPrimed,
     );
-    _iosMusicPlaySessionPrimed = true;
+    _iosSessionPrimeTask = task;
+    try {
+      await task;
+      _iosMusicPlaySessionPrimed = true;
+    } finally {
+      if (identical(_iosSessionPrimeTask, task)) {
+        _iosSessionPrimeTask = null;
+      }
+    }
+  }
+
+  /// iOS：后台预热钢琴（与长音频 open 并行，符合「详情优先」）。
+  void _scheduleIosPianoWarmUp() {
+    if (!_isIosNative || _disposed || _iosPianoWarmTask != null) {
+      return;
+    }
+    final task = PageAudioLifecycle.enterMediaKitPiano(
+      _pianoEngine,
+      forceSessionRelease: false,
+    );
+    _iosPianoWarmTask = task;
+    unawaited(
+      task.whenComplete(() {
+        if (identical(_iosPianoWarmTask, task)) {
+          _iosPianoWarmTask = null;
+        }
+        if (mounted && !_disposed && !state.ready) {
+          state = state.copyWith(ready: true);
+        }
+      }),
+    );
   }
 
   Future<void> _recoverIosPianoGraph({bool awaitCompletion = true}) async {
@@ -197,11 +251,9 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   Future<void> _warmUpPiano() async {
     try {
       if (_isIosNative) {
-        await PageAudioLifecycle.enterMediaKitPiano(
-          _pianoEngine,
-          forceSessionRelease: true,
-        );
-        _iosMusicPlaySessionPrimed = true;
+        // 仅抢占 media_kit 会话；钢琴采样在后台 handoff，不挡详情/长音频。
+        await _ensureIosMediaKitSessionForLongAudio(forceRelease: true);
+        _scheduleIosPianoWarmUp();
       } else {
         await _pianoEngine.ensurePianoInitialized();
       }
@@ -407,8 +459,8 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       return;
     }
     if (_isIosNative) {
-      await _primeIosMusicPlayAudioSession();
-      await _recoverIosPianoGraph();
+      await _ensureIosMediaKitSessionForLongAudio();
+      unawaited(_recoverIosPianoGraph(awaitCompletion: false));
     }
     try {
       await _setPlayerVolumeSafe(player, _kPlayerNormalVolume);
@@ -905,7 +957,24 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     await loadDetail(nextId, preserveShowAnswer: false);
   }
 
-  Future<void> _openActiveTrack({required bool play}) async {
+  Future<void> _openActiveTrack({required bool play}) {
+    final previous = _openTrackChain;
+    Future<void> run() => _openActiveTrackImpl(play: play);
+    final task = previous != null
+        ? previous.then((_) => run()).catchError((_) => run())
+        : run();
+    _openTrackChain = task.whenComplete(() {
+      if (identical(_openTrackChain, task)) {
+        _openTrackChain = null;
+      }
+    });
+    return task;
+  }
+
+  Future<void> _openActiveTrackImpl({required bool play}) async {
+    if (_disposed) {
+      return;
+    }
     final track = state.activeTrack;
     if (track == null || track.url.isEmpty) {
       return;
@@ -919,19 +988,24 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     try {
       if (isStale()) return;
       if (_isIosNative) {
-        await _primeIosMusicPlayAudioSession();
+        await _ensureIosMediaKitSessionForLongAudio();
       }
+      if (isStale()) return;
       final player = _ensurePlayer();
       debugPrint('MusicPlay audio open: ${track.url}');
       _endScrubUiHold(immediate: true);
       await player.open(Media(track.url), play: play);
-      if (isStale()) return;
+      if (isStale()) {
+        // 页面已销毁或已被新 open 取代：勿再 setRate/setPitch，避免 mpv abort。
+        return;
+      }
       try {
         await player.setRate(state.speed);
       } catch (_) {}
       await _applyPitchToPlayer(player);
       if (_isIosNative && !isStale()) {
-        await _recoverIosPianoGraph();
+        // 钢琴图在后台恢复，不拖慢首帧可播/切曲。
+        unawaited(_recoverIosPianoGraph(awaitCompletion: false));
       }
     } catch (error) {
       if (isStale()) return;
@@ -942,7 +1016,50 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     }
   }
 
+  /// 有序释放 mpv：pause → stop → dispose，并与其它页面的释放串行排队。
+  Future<void> _releaseMediaKitPlayer(Player player) async {
+    final waitFor = _mediaKitTeardownChain;
+    final task = _runMediaKitPlayerRelease(player);
+    _mediaKitTeardownChain = task;
+    if (waitFor != null) {
+      try {
+        await waitFor;
+      } catch (_) {}
+    }
+    try {
+      await task;
+    } finally {
+      if (identical(_mediaKitTeardownChain, task)) {
+        _mediaKitTeardownChain = null;
+      }
+    }
+  }
+
+  Future<void> _runMediaKitPlayerRelease(Player player) async {
+    try {
+      await player
+          .pause()
+          .timeout(_kMpvTeardownStepTimeout, onTimeout: () {});
+    } catch (_) {}
+    if (_isIosNative) {
+      await Future<void>.delayed(_kIosPauseDrainDelay);
+    }
+    try {
+      await player
+          .stop()
+          .timeout(_kMpvTeardownStepTimeout, onTimeout: () {});
+    } catch (_) {}
+    try {
+      await player
+          .dispose()
+          .timeout(_kMpvTeardownStepTimeout, onTimeout: () {});
+    } catch (_) {}
+  }
+
   Player _ensurePlayer() {
+    if (_disposed) {
+      throw StateError('MusicPlayController disposed');
+    }
     final current = _player;
     if (current != null) {
       return current;
@@ -1393,10 +1510,10 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
 
   @override
   void dispose() {
-    // 关键：所有"同步停声"动作必须在 super.dispose() 之前完成，
-    // 并先把 _disposed 置位，让任何还在 await 的异步链（[togglePlay]、
-    // [pressPianoKey]、[_openActiveTrack] 等）都能 short-circuit。
+    // 关键：_disposed + _openTicket 让 in-flight 的 open 在 await 后不再碰 mpv；
+    // 异步链在后台先等 open 结束，再 pause→stop→dispose，避免 libmpv abort。
     _disposed = true;
+    _openTicket++;
     _endScrubUiHold(immediate: true);
 
     _positionSub?.cancel();
@@ -1404,26 +1521,24 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     _playingSub?.cancel();
     _completedSub?.cancel();
 
+    final openChain = _openTrackChain;
     final player = _player;
-    if (player != null) {
-      try {
-        unawaited(_setPlayerVolumeSafe(player, 0));
-        unawaited(player.pause());
-      } catch (_) {}
-      try {
-        unawaited(player.dispose());
-      } catch (_) {}
-    }
     _player = null;
 
-    // 同步把所有钢琴声 stop 掉，再 unawaited dispose。前者立刻静音，
-    // 后者负责释放资源；引擎内部的 _disposed 也已经在 .dispose() 调用瞬间
-    // 同步置位（见 MusicCompanionAudioEngine.dispose 头部），因此就算
-    // pressPianoKey 的异步链此时还在挂起，最终 SoLoud.play 也不会被调到。
     _pianoEngine.stopAllImmediately();
     unawaited(() async {
-      await PageAudioLifecycle.leavePage(pianoEngine: _pianoEngine);
-      await _pianoEngine.dispose();
+      if (openChain != null) {
+        try {
+          await openChain.timeout(_kMpvOpenDrainTimeout);
+        } catch (_) {}
+      }
+      if (player != null) {
+        await _releaseMediaKitPlayer(player);
+      }
+      try {
+        await PageAudioLifecycle.leavePage(pianoEngine: _pianoEngine);
+        await _pianoEngine.dispose();
+      } catch (_) {}
     }());
     super.dispose();
   }
