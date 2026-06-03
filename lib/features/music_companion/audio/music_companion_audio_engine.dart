@@ -2,9 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import '../../../core/audio/native_audio_bootstrap.dart';
-import '../../../core/audio/native_playback_audio_session.dart';
 import '../../../core/audio/low_latency_note_player.dart';
+import '../../../core/audio/native_piano_handoff.dart';
+import '../../../core/audio/native_playback_audio_session.dart';
 import 'music_companion_audio_catalog.dart';
 import 'music_companion_web_audio_player_base.dart';
 import 'music_companion_web_audio_player_stub.dart'
@@ -43,11 +43,14 @@ class MusicCompanionAudioEngine {
       await engine.ensurePianoInitialized();
       return;
     }
-    NativePlaybackAudioSession.invalidatePlaybackCache();
-    await NativeAudioBootstrap.reactivatePlaybackSession();
-    await engine.stopAll();
-    await engine.reclaimNativeEngineAfterSessionChange();
-    await engine.ensurePianoInitialized();
+    await NativePianoHandoff.run(() async {
+      NativePlaybackAudioSession.invalidatePlaybackCache();
+      await NativePlaybackAudioSession.ensurePlaybackActive();
+      await engine.reclaimNativeGraphAfterSessionChange();
+      if (!engine.isPianoReady) {
+        await engine.ensurePianoInitialized();
+      }
+    });
   }
 
   /// musicPlay：长音频与钢琴混播时，刷新会话（可选软刷新）并重建原生钢琴图。
@@ -58,17 +61,19 @@ class MusicCompanionAudioEngine {
     bool softMediaKitSession = false,
   }) async {
     if (engine._disposed || kIsWeb) return;
-    if (softMediaKitSession) {
-      await NativePlaybackAudioSession.ensureMediaKitPlaybackActive(
-        releaseOthersFirst: false,
-      );
-    } else {
-      await NativePlaybackAudioSession.ensureMediaKitPlaybackActive();
-    }
-    await engine.reclaimNativeEngineAfterSessionChange();
-    if (!engine.isPianoReady) {
-      await engine.ensurePianoInitialized();
-    }
+    await NativePianoHandoff.run(() async {
+      if (softMediaKitSession) {
+        await NativePlaybackAudioSession.ensureMediaKitPlaybackActive(
+          releaseOthersFirst: false,
+        );
+      } else {
+        await NativePlaybackAudioSession.ensureMediaKitPlaybackActive();
+      }
+      await engine.reclaimNativeGraphAfterSessionChange();
+      if (!engine.isPianoReady) {
+        await engine.ensurePianoInitialized();
+      }
+    });
   }
 
   Future<void> ensureInitialized() async {
@@ -79,10 +84,20 @@ class MusicCompanionAudioEngine {
     return _pianoInitTask ??= _runEnsurePianoInitialized();
   }
 
-  /// iOS 智能视唱：playAndRecord ↔ playback 切换后重建原生钢琴引擎。
+  /// iOS：playAndRecord ↔ playback 切换后重建原生钢琴图（与 handoff 合并排队）。
   Future<void> reclaimNativeEngineAfterSessionChange() async {
+    return reclaimNativeGraphAfterSessionChange();
+  }
+
+  Future<void> reclaimNativeGraphAfterSessionChange() async {
+    if (_disposed || kIsWeb) return;
+    await NativePianoHandoff.run(_reclaimNativeGraphOnly);
+  }
+
+  Future<void> _reclaimNativeGraphOnly() async {
     if (_disposed || kIsWeb) return;
     await _nativePlayer.reclaimEngine();
+    NativePlaybackAudioSession.markNativePianoGraphFresh();
   }
 
   Future<void> _runEnsurePianoInitialized() async {

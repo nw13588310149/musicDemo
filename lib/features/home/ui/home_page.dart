@@ -10,6 +10,7 @@ import '../../../core/constants/app_assets.dart';
 import '../../../core/network/media_url.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../../core/widgets/seamless_banner_carousel.dart';
+import '../../../core/widgets/smooth_circle_network_avatar.dart';
 import '../state/home_dashboard_controller.dart';
 import '../state/home_dashboard_state.dart';
 import '../../shell/ui/shell_layout.dart';
@@ -359,7 +360,7 @@ class _HomePageViewState extends ConsumerState<_HomePageView> {
                     physics: const ClampingScrollPhysics(),
                     itemCount: notices.length,
                     separatorBuilder: (context, index) =>
-                        const SizedBox(height: 9),
+                        const SizedBox(height: 10),
                     itemBuilder: (context, index) {
                       return GestureDetector(
                         onTap: _openMySchedule,
@@ -1027,30 +1028,10 @@ class _NoticeAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final url = MediaUrl.resolve(primaryUrl);
-    return ClipOval(
-      child: SizedBox(
-        width: size,
-        height: size,
-        child: url.isNotEmpty
-            ? Image.network(
-                url,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stack) => _placeholder(),
-              )
-            : _placeholder(),
-      ),
+    return SmoothCircleNetworkAvatar(
+      url: MediaUrl.resolve(primaryUrl),
+      size: size,
     );
   }
-
-  Widget _placeholder() => Container(
-    color: const Color(0xFFEAE5FF),
-    alignment: Alignment.center,
-    child: Icon(
-      Icons.person,
-      color: const Color(0xFF8741FF),
-      size: size * 0.55,
-    ),
-  );
 }
 

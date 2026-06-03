@@ -7,7 +7,6 @@ import 'package:flutter/services.dart';
 import 'package:music_xml/music_xml.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-import '../../../core/audio/native_audio_bootstrap.dart';
 import '../../../core/audio/native_playback_audio_session.dart';
 import '../audio/ktv_scoring.dart';
 import '../audio/midi_file_parser.dart';
@@ -18,6 +17,7 @@ import '../audio/pitch_voice_gate.dart';
 import '../audio/realtime_pitch_capture.dart';
 import '../config/smart_sight_singing_config.dart';
 import '../config/smart_sight_singing_tuning.dart';
+import '../../music_companion/audio/page_audio_lifecycle.dart';
 import '../../music_play/data/music_play_repository.dart';
 import '../data/midi_file_picker.dart';
 import '../data/music_xml_file_picker.dart';
@@ -85,6 +85,9 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
   Timer? _countdownTimer;
   var _isPreviewSession = false;
   bool _shuttingDown = false;
+  var _previewInFlight = false;
+  var _startSingingGeneration = 0;
+  Future<void>? _readyPrimeTask;
   final MusicPlayRepository? _musicPlayRepository;
 
   static String _formatDebugError(
@@ -536,6 +539,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
         currentUserAmplitude: 0,
         errorMessage: null,
       );
+      _scheduleReadyStagePrime();
     } on MidiSightSingingException catch (e, stack) {
       if (!mounted) return;
       state = state.copyWith(
@@ -598,6 +602,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
         scoreSightReadingMode: true,
         musicXmlContent: _musicXmlRawContent,
       );
+      _scheduleReadyStagePrime();
     } on MusicXmlSightSingingException catch (e, stack) {
       if (!mounted) return;
       state = state.copyWith(
@@ -640,48 +645,96 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     state = state.copyWith(scoringStandardCents: normalized);
   }
 
+  void _scheduleReadyStagePrime() {
+    if (kIsWeb || _shuttingDown) return;
+    _readyPrimeTask ??= _primeReadyStageAudio().whenComplete(() {
+      _readyPrimeTask = null;
+    });
+  }
+
+  /// 进入 ready 后后台预热采集会话与钢琴，缩短首次「开始跟唱」等待。
+  Future<void> _primeReadyStageAudio() async {
+    try {
+      await PageAudioLifecycle.enterSightSingingCapture(soft: true);
+      await _playback.warmupAudioEngine();
+    } catch (e, stack) {
+      debugPrint('SmartSightSinging ready prime failed: $e\n$stack');
+    }
+  }
+
   /// iPad 无声模式下试听旋律（会短暂开启扬声器伴奏）。
   Future<void> previewMelody() async {
     if (state.stage != SightSingingStage.ready || _midiBundle == null) return;
-    if (state.isPreviewPlaying) {
+    if (_previewInFlight) return;
+    if (state.isPreviewPlaying || state.isPreviewLoading) {
       await stopPreview();
       return;
     }
+    _previewInFlight = true;
+    state = state.copyWith(
+      isPreviewPlaying: true,
+      isPreviewLoading: true,
+      playbackMs: 0,
+      errorMessage: null,
+    );
+    try {
+      await _runPreviewStart();
+    } finally {
+      _previewInFlight = false;
+    }
+  }
 
+  Future<void> _runPreviewStart() async {
     final bundle = _midiBundle!;
     final leadInMs = state.playbackLeadInMs;
-    await _playback.stop();
-    _isPreviewSession = true;
-    _playback.muteAudioOutput = false;
-
-    if (!kIsWeb) {
-      await NativePlaybackAudioSession.ensurePlaybackActive();
-      await _playback.reclaimNativeEngine();
-    }
-
-    await _playback.prepare(
-      bundle.playbackEvents,
-      totalMs: bundle.totalMs,
-      leadInDurationMs: leadInMs,
-    );
-
     try {
+      await _playback.stop();
+      _isPreviewSession = true;
+      _playback.muteAudioOutput = false;
+
+      if (!kIsWeb) {
+        await NativePlaybackAudioSession.ensurePlaybackActive();
+        await _playback.reclaimNativeEngine();
+      }
+
+      await _playback.prepare(
+        bundle.playbackEvents,
+        totalMs: bundle.totalMs,
+        leadInDurationMs: leadInMs,
+      );
       await _playback.start(muteAudio: false);
     } catch (e) {
       _isPreviewSession = false;
       _playback.muteAudioOutput = state.visualOnlyMode;
       if (!mounted) return;
-      state = state.copyWith(errorMessage: '旋律试听失败：$e');
+      state = state.copyWith(
+        isPreviewPlaying: false,
+        isPreviewLoading: false,
+        errorMessage: '旋律试听失败：$e',
+      );
       return;
     }
 
     if (!mounted) return;
-    state = state.copyWith(isPreviewPlaying: true, playbackMs: 0);
+    state = state.copyWith(isPreviewLoading: false);
   }
 
   Future<void> stopPreview() async {
-    if (!state.isPreviewPlaying && !_isPreviewSession) return;
-    await _stopPreview();
+    if (!state.isPreviewPlaying && !state.isPreviewLoading && !_isPreviewSession) {
+      return;
+    }
+    if (_previewInFlight) return;
+    _previewInFlight = true;
+    state = state.copyWith(
+      isPreviewPlaying: false,
+      isPreviewLoading: true,
+      playbackMs: 0,
+    );
+    try {
+      await _stopPreview();
+    } finally {
+      _previewInFlight = false;
+    }
   }
 
   Future<void> _stopPreview() async {
@@ -690,11 +743,15 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     _playback.muteAudioOutput = state.visualOnlyMode;
     if (!kIsWeb) {
       NativePlaybackAudioSession.invalidatePlaybackCache();
-      await NativePlaybackAudioSession.ensureSightSingingCaptureActive();
+      await PageAudioLifecycle.enterSightSingingCapture();
       await _playback.reclaimNativeEngine();
     }
     if (!mounted) return;
-    state = state.copyWith(isPreviewPlaying: false, playbackMs: 0);
+    state = state.copyWith(
+      isPreviewPlaying: false,
+      isPreviewLoading: false,
+      playbackMs: 0,
+    );
   }
 
   PitchVoiceGatePolicy get _voiceGatePolicy => state.visualOnlyMode
@@ -711,10 +768,24 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       return;
     }
     if (state.track == null || _midiBundle == null) return;
+    if (state.isPreviewLoading) return;
 
-    if (state.isPreviewPlaying) {
-      await stopPreview();
+    final generation = ++_startSingingGeneration;
+    state = state.copyWith(
+      stage: SightSingingStage.preparing,
+      errorMessage: null,
+      isPreviewPlaying: false,
+      isPreviewLoading: false,
+    );
+    unawaited(_runStartSinging(generation));
+  }
+
+  Future<void> _runStartSinging(int generation) async {
+    if (state.isPreviewPlaying || _isPreviewSession) {
+      await _stopPreview();
     }
+    if (!mounted || generation != _startSingingGeneration) return;
+    if (state.stage != SightSingingStage.preparing) return;
 
     final capture = createRealtimePitchCapture(profile: _captureProfile);
     _capture = capture;
@@ -726,9 +797,10 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
         }
         if (!hasPermission) {
           _capture = null;
-          if (!mounted) return;
+          if (!mounted || generation != _startSingingGeneration) return;
           final status = await Permission.microphone.status;
           state = state.copyWith(
+            stage: SightSingingStage.ready,
             errorMessage: status.isPermanentlyDenied
                 ? '麦克风权限被拒绝，请在系统「设置 → 音乐之路 → 麦克风」中开启。'
                 : '请允许麦克风权限后再开始跟唱。',
@@ -742,6 +814,11 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       }
 
       final pitchStream = await capture.start();
+      if (!mounted || generation != _startSingingGeneration) {
+        await capture.stop();
+        return;
+      }
+
       _pitchSub = pitchStream.listen(
         _onUserPitch,
         onError: (Object e, _) {
@@ -755,8 +832,9 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       }
     } catch (e) {
       _capture = null;
-      if (!mounted) return;
+      if (!mounted || generation != _startSingingGeneration) return;
       state = state.copyWith(
+        stage: SightSingingStage.ready,
         errorMessage: kIsWeb
             ? '麦克风启动失败，请在浏览器中允许麦克风权限后再试。'
             : '麦克风启动失败：$e',
@@ -764,7 +842,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       return;
     }
 
-    if (!mounted) {
+    if (!mounted || generation != _startSingingGeneration) {
       await capture.stop();
       return;
     }
@@ -810,6 +888,20 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     });
   }
 
+  /// 取消「准备中」或倒计时：先恢复 UI，再后台释放采集。
+  Future<void> cancelPreparingOrCountdown() async {
+    if (state.stage == SightSingingStage.preparing) {
+      _startSingingGeneration++;
+      _countdownTimer?.cancel();
+      _countdownTimer = null;
+      _scoringSession = null;
+      state = state.copyWith(stage: SightSingingStage.ready, countdownSeconds: 0);
+      unawaited(_stopCaptureSilently());
+      return;
+    }
+    await cancelCountdown();
+  }
+
   Future<void> _warmupAccompanimentPlayback() async {
     if (_midiBundle == null || kIsWeb) return;
     if (state.visualOnlyMode && state.playbackLeadInMs <= 0) return;
@@ -819,7 +911,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
         totalMs: _midiBundle!.totalMs,
         leadInDurationMs: state.playbackLeadInMs,
       );
-      await NativePlaybackAudioSession.ensureSightSingingCaptureActiveSoft();
+      await PageAudioLifecycle.enterSightSingingCapture(soft: true);
       await _playback.reclaimNativeEngine();
       await _playback.warmupAudioEngine();
     } catch (e) {
@@ -845,7 +937,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     try {
       if (!kIsWeb &&
           (!state.visualOnlyMode || state.playbackLeadInMs > 0)) {
-        await NativePlaybackAudioSession.ensureSightSingingCaptureActiveSoft();
+        await PageAudioLifecycle.enterSightSingingCapture(soft: true);
       }
       await _playback.start(muteAudio: state.visualOnlyMode);
     } catch (e) {
@@ -864,23 +956,21 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     _countdownTimer?.cancel();
     _countdownTimer = null;
     _scoringSession = null;
-    await _stopCaptureSilently();
-    if (!mounted) return;
     state = state.copyWith(stage: SightSingingStage.ready, countdownSeconds: 0);
+    unawaited(_stopCaptureSilently());
   }
 
   Future<void> stopSinging({bool reset = false}) async {
     if (state.stage != SightSingingStage.singing) return;
+    if (state.isStoppingSinging) return;
     final session = _scoringSession;
     final tick = session?.finalize();
     final completedScores = session == null
         ? const <KtvNoteScore>[]
         : session.completedScores;
     _scoringSession = null;
-    await _stopCaptureSilently();
-    await _playback.pause();
-    if (!mounted) return;
     state = state.copyWith(
+      isStoppingSinging: true,
       stage: reset ? SightSingingStage.ready : SightSingingStage.finished,
       currentScore: tick?.totalScore ?? state.currentScore,
       hitCount: tick?.hitCount ?? state.hitCount,
@@ -890,14 +980,23 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
           ? const <KtvNoteScore>[]
           : completedScores,
     );
+    try {
+      await _stopCaptureSilently();
+      await _playback.pause();
+    } finally {
+      if (mounted) {
+        state = state.copyWith(isStoppingSinging: false);
+      }
+    }
   }
 
   Future<void> returnToHome() async {
     if (state.stage == SightSingingStage.analyzing) {
       return;
     }
-    if (state.stage == SightSingingStage.countdown) {
-      await cancelCountdown();
+    if (state.stage == SightSingingStage.preparing ||
+        state.stage == SightSingingStage.countdown) {
+      await cancelPreparingOrCountdown();
     } else if (state.stage == SightSingingStage.singing) {
       await stopSinging(reset: true);
     } else if (state.stage == SightSingingStage.selectTrack) {
@@ -924,9 +1023,6 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       }
     }
     await _restorePlaybackSessionForHandoff();
-    if (!kIsWeb) {
-      await _playback.reclaimNativeEngine();
-    }
   }
 
   /// 收藏 / 取消收藏当前教材（智能视唱 type=11）。乐观更新 + 失败回滚。
@@ -987,20 +1083,17 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     _completedSub = null;
     await _playback.dispose();
     await _restorePlaybackSessionForHandoff();
-    if (!kIsWeb) {
-      await _playback.reclaimNativeEngine();
-    }
   }
 
   /// 视唱/试听会把 AVAudioSession 切到 playAndRecord；离开页面前必须切回
   /// playback，否则智能听写等模块的钢琴声会明显变小，直到重启 App。
   Future<void> _restorePlaybackSessionForHandoff() async {
-    if (kIsWeb) return;
-    await NativeAudioBootstrap.reactivatePlaybackSession();
+    await PageAudioLifecycle.leaveSightSinging();
   }
 
   bool _blocksImport() {
     return state.stage == SightSingingStage.analyzing ||
+        state.stage == SightSingingStage.preparing ||
         state.stage == SightSingingStage.singing ||
         state.stage == SightSingingStage.countdown;
   }
@@ -1057,12 +1150,26 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
   void _onUserPitch(RealtimePitchEvent event) {
     if (_shuttingDown || !mounted) return;
     if (state.stage != SightSingingStage.singing &&
+        state.stage != SightSingingStage.preparing &&
         state.stage != SightSingingStage.countdown) {
       return;
     }
 
     final playbackMs = _latestPlaybackMs;
     final session = _scoringSession;
+
+    if (state.stage == SightSingingStage.preparing) {
+      var displayMidi = event.pitched && event.midi >= 0 ? event.midi : -1.0;
+      state = state.copyWith(
+        currentUserMidi: displayMidi >= 0 ? displayMidi : -1,
+        currentUserAmplitude: event.amplitude,
+        lastFrequencyHz: event.frequencyHz,
+        lastFrameConfidence: event.confidence,
+        lastSourceLabel: event.pitched ? 'live' : '--',
+      );
+      return;
+    }
+
     if (session == null) return;
 
     final tuning = SightSingingTuning.instance;

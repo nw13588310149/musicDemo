@@ -20,6 +20,9 @@ enum SightSingingStage {
   /// 分析完成，等待开始跟唱。
   ready,
 
+  /// 用户已点「开始跟唱」，正在申请权限 / 开麦 / 预热（UI 即时反馈）。
+  preparing,
+
   /// 跟唱前倒计时（3→2→1）。
   countdown,
 
@@ -83,6 +86,8 @@ class SightSingingState {
     this.scoringStandardCents =
         SmartSightSingingScoringConfig.defaultStandardCents,
     this.isPreviewPlaying = false,
+    this.isPreviewLoading = false,
+    this.isStoppingSinging = false,
     this.debugPanelVisible = false,
     this.lastFrequencyHz = 0,
     this.lastFrameConfidence = 0,
@@ -168,8 +173,14 @@ class SightSingingState {
   /// 音准命中容差，单位 cents。默认 90 cents 内算 Good/命中。
   final double scoringStandardCents;
 
-  /// 就绪态试听旋律中。
+  /// 就绪态试听旋律中（含乐观态：点击后先为 true，音频就绪后再真正播放）。
   final bool isPreviewPlaying;
+
+  /// 试听按钮 loading：会话切换 / 钢琴 reclaim / 起播尚未完成。
+  final bool isPreviewLoading;
+
+  /// 停止跟唱后的收尾（采集停止、播放暂停）；界面已切到 finished/ready。
+  final bool isStoppingSinging;
 
   /// 调试面板可见性（覆盖在主页右侧）。
   final bool debugPanelVisible;
@@ -198,9 +209,18 @@ class SightSingingState {
 
   bool get isBusy =>
       stage == SightSingingStage.analyzing ||
+      stage == SightSingingStage.preparing ||
       stage == SightSingingStage.countdown;
 
   bool get isSinging => stage == SightSingingStage.singing;
+
+  /// 底部主操作是否应禁用（防连点、准备中与跟唱中互斥）。
+  bool get controlsLocked =>
+      isPreviewLoading ||
+      stage == SightSingingStage.preparing ||
+      stage == SightSingingStage.countdown ||
+      stage == SightSingingStage.singing ||
+      isStoppingSinging;
 
   bool get isSelectingTrack => stage == SightSingingStage.selectTrack;
 
@@ -234,6 +254,8 @@ class SightSingingState {
     bool? scoreSightReadingMode,
     double? scoringStandardCents,
     bool? isPreviewPlaying,
+    bool? isPreviewLoading,
+    bool? isStoppingSinging,
     bool? debugPanelVisible,
     double? lastFrequencyHz,
     double? lastFrameConfidence,
@@ -285,6 +307,8 @@ class SightSingingState {
           scoreSightReadingMode ?? this.scoreSightReadingMode,
       scoringStandardCents: scoringStandardCents ?? this.scoringStandardCents,
       isPreviewPlaying: isPreviewPlaying ?? this.isPreviewPlaying,
+      isPreviewLoading: isPreviewLoading ?? this.isPreviewLoading,
+      isStoppingSinging: isStoppingSinging ?? this.isStoppingSinging,
       debugPanelVisible: debugPanelVisible ?? this.debugPanelVisible,
       lastFrequencyHz: lastFrequencyHz ?? this.lastFrequencyHz,
       lastFrameConfidence: lastFrameConfidence ?? this.lastFrameConfidence,

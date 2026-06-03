@@ -336,6 +336,7 @@ class _DebugErrorPanel extends StatelessWidget {
       SightSingingStage.analyzing => 'analyzing',
       SightSingingStage.selectTrack => 'selectTrack',
       SightSingingStage.ready => 'ready',
+      SightSingingStage.preparing => 'preparing',
       SightSingingStage.countdown => 'countdown',
       SightSingingStage.singing => 'singing',
       SightSingingStage.finished => 'finished',
@@ -448,6 +449,7 @@ class _Header extends ConsumerWidget {
     );
     final scoreModeLocked =
         stage == SightSingingStage.singing ||
+        stage == SightSingingStage.preparing ||
         stage == SightSingingStage.countdown;
     final title = examMode ? _examTitle : _practiceTitle;
     final subtitle = examMode ? _examSubtitle : _practiceSubtitle;
@@ -552,11 +554,13 @@ class _Body extends StatelessWidget {
       case SightSingingStage.analyzing:
       case SightSingingStage.selectTrack:
         return _AnalyzingHint(state: state);
+      case SightSingingStage.preparing:
       case SightSingingStage.countdown:
         final track = state.track;
         if (track == null || track.isEmpty) {
           return _AnalyzingHint(state: state);
         }
+        final preparing = state.stage == SightSingingStage.preparing;
         return Stack(
           children: [
             Column(
@@ -583,7 +587,10 @@ class _Body extends StatelessWidget {
                 ),
               ],
             ),
-            _CountdownOverlay(seconds: state.countdownSeconds),
+            if (preparing)
+              const _PreparingOverlay()
+            else
+              _CountdownOverlay(seconds: state.countdownSeconds),
           ],
         );
       case SightSingingStage.ready:
@@ -1031,7 +1038,9 @@ class _ScoreBoard extends StatelessWidget {
 
     final examLocked =
         state.isPreviewPlaying ||
+        state.isPreviewLoading ||
         state.stage == SightSingingStage.singing ||
+        state.stage == SightSingingStage.preparing ||
         state.stage == SightSingingStage.countdown;
 
     final metrics = <_ScoreMetricEntry>[
@@ -1343,6 +1352,57 @@ class _ExamModeSwitch extends StatelessWidget {
   }
 }
 
+/// 用户点击「开始跟唱」后、倒计时前的麦克风/会话准备态。
+class _PreparingOverlay extends StatelessWidget {
+  const _PreparingOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Positioned.fill(
+      child: Center(
+        child: Container(
+          width: ui(160),
+          padding: EdgeInsets.symmetric(vertical: ui(24), horizontal: ui(16)),
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: const Color(0xE6FFFFFF),
+            borderRadius: BorderRadius.circular(ui(16)),
+            border: Border.all(color: Colors.white, width: ui(2)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const AppLoadingIndicator(),
+              SizedBox(height: ui(14)),
+              Text(
+                '正在准备麦克风…',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: ui(13),
+                  color: const Color(0xFF1A1A1A),
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w500,
+                ),
+              ),
+              SizedBox(height: ui(6)),
+              Text(
+                '请稍候',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: ui(12),
+                  color: const Color(0xFFB6B5BB),
+                  fontFamily: 'PingFang SC',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _CountdownOverlay extends StatelessWidget {
   const _CountdownOverlay({required this.seconds});
 
@@ -1524,18 +1584,21 @@ class _ControlButtons extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final singing = state.stage == SightSingingStage.singing;
-    final countdown = state.stage == SightSingingStage.countdown;
+    final cancelable =
+        state.stage == SightSingingStage.preparing ||
+        state.stage == SightSingingStage.countdown;
 
-    if (countdown) {
+    if (cancelable) {
       return SightSingingImageActionButton(
         asset: AppAssets.smartSightSingingCancelBtn,
-        onTap: () => controller.cancelCountdown(),
+        onTap: () => controller.cancelPreparingOrCountdown(),
       );
     }
     if (singing) {
       return SightSingingImageActionButton(
         asset: AppAssets.smartSightSingingStopBtn,
-        onTap: () => controller.stopSinging(),
+        loading: state.isStoppingSinging,
+        onTap: state.isStoppingSinging ? null : () => controller.stopSinging(),
       );
     }
 
@@ -1558,29 +1621,36 @@ class _PreviewMelodyButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isPlaying = ref.watch(
-      smartSightSingingControllerProvider.select((s) => s.isPreviewPlaying),
+    final preview = ref.watch(
+      smartSightSingingControllerProvider.select(
+        (s) => (s.isPreviewPlaying, s.isPreviewLoading, s.controlsLocked),
+      ),
     );
+    final locked = preview.$3;
     return SightSingingImageActionButton(
-      asset: isPlaying
+      asset: preview.$1
           ? AppAssets.smartSightSingingPreviewPauseBtn
           : AppAssets.smartSightSingingPreviewBtn,
-      onTap: () => controller.previewMelody(),
+      loading: preview.$2,
+      onTap: locked ? null : () => controller.previewMelody(),
     );
   }
 }
 
-/// 就绪态「开始跟唱」：外观与可点状态不随试听开关变化。
-class _StartSingingButton extends StatelessWidget {
+/// 就绪态「开始跟唱」：点击后立即进入 preparing 遮罩。
+class _StartSingingButton extends ConsumerWidget {
   const _StartSingingButton({required this.controller});
 
   final SmartSightSingingController controller;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final locked = ref.watch(
+      smartSightSingingControllerProvider.select((s) => s.controlsLocked),
+    );
     return SightSingingImageActionButton(
       asset: AppAssets.smartSightSingingStartBtn,
-      onTap: () => controller.startSinging(),
+      onTap: locked ? null : () => controller.startSinging(),
     );
   }
 }

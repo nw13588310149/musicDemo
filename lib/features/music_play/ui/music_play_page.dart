@@ -1006,43 +1006,52 @@ class _PlaybackBar extends StatelessWidget {
                 : Image.asset('assets/images/home/feng.png', fit: BoxFit.cover),
           ),
           SizedBox(width: ui(12)),
-          // 主标题固定为详情接口 `title`；多曲目时副标题显示当前 `file1.filename`。
-          //
-          // 旧实现用 IntrinsicWidth + softWrap=false 让标题按内容宽度
-          // 自由撑开——用户反馈这种写法在副标题很长（"四分、二八、二分、附点二分"）
-          // 时会把右侧的进度条压扁；现在改成给整列加一个上限宽度（180）+
-          // 单行省略号，长副标题溢出显示 "…"，进度条保持原宽度。
+          // 默认：上主（详情 title）下副（filename / shortText2）。
+          // 节奏 / 旋律入口（autoPlayNext）：上下对调，并去掉文件名里的 .mp3。
           ConstrainedBox(
             constraints: BoxConstraints(maxWidth: ui(180)),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
+            child: Builder(
+              builder: (context) {
+                final swapTitles = state.args.autoPlayNext;
+                final primaryLine = _stripMp3Suffix(
                   _resolvePrimaryTitle(detail, track),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: const Color(0xFF0B081A),
-                    fontSize: ui(15),
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w500,
-                  ),
-                ),
-                SizedBox(height: ui(6)),
-                Text(
+                );
+                final secondaryLine = _stripMp3Suffix(
                   _resolveSecondaryTitle(detail, track),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: const Color(0xFFB6B5BB),
-                    fontSize: ui(12),
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w400,
-                    height: 12 / 12,
-                  ),
-                ),
-              ],
+                );
+                final topLine = swapTitles ? secondaryLine : primaryLine;
+                final bottomLine = swapTitles ? primaryLine : secondaryLine;
+                return Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      topLine,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: const Color(0xFF0B081A),
+                        fontSize: ui(15),
+                        fontFamily: 'PingFang SC',
+                        fontWeight: AppFont.w500,
+                      ),
+                    ),
+                    SizedBox(height: ui(6)),
+                    Text(
+                      bottomLine,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: const Color(0xFFB6B5BB),
+                        fontSize: ui(12),
+                        fontFamily: 'PingFang SC',
+                        fontWeight: AppFont.w400,
+                        height: 12 / 12,
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
           SizedBox(width: ui(16)),
@@ -1129,6 +1138,18 @@ class _PlaybackBar extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// 去掉展示用文件名尾部的 `.mp3`（节奏 / 旋律进度条）。
+  String _stripMp3Suffix(String value) {
+    final trimmed = value.trim();
+    if (trimmed.length <= 4) {
+      return trimmed;
+    }
+    if (trimmed.toLowerCase().endsWith('.mp3')) {
+      return trimmed.substring(0, trimmed.length - 4).trimRight();
+    }
+    return trimmed;
   }
 
   /// 主标题：课件详情接口 `title`（教材名），不随当前播放曲目切换。

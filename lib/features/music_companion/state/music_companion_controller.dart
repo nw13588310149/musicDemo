@@ -9,6 +9,7 @@ import 'package:record/record.dart';
 import '../../../core/audio/native_playback_audio_session.dart';
 import '../audio/music_companion_audio_catalog.dart';
 import '../audio/music_companion_audio_engine.dart';
+import '../audio/page_audio_lifecycle.dart';
 import 'music_companion_state.dart';
 
 final musicCompanionControllerProvider =
@@ -56,9 +57,7 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
       await _pianoHandoffTask;
       return;
     }
-    final task = MusicCompanionAudioEngine.primeAfterForeignAudioSession(
-      _audioEngine,
-    );
+    final task = PageAudioLifecycle.enterPlaybackPiano(_audioEngine);
     _pianoHandoffTask = task;
     try {
       await task;
@@ -99,15 +98,12 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
     }
 
     if (tab == MusicCompanionTab.tuner) {
-      await NativePlaybackAudioSession.ensurePlayAndRecordActive();
+      await PageAudioLifecycle.enterTuner();
       await startTuner();
     } else {
       await _stopTuner();
       if (tab != MusicCompanionTab.metronome) {
-        await NativePlaybackAudioSession.ensurePlaybackActive();
-        if (!kIsWeb) {
-          await _audioEngine.reclaimNativeEngineAfterSessionChange();
-        }
+        await PageAudioLifecycle.leaveTunerToPlaybackPiano(_audioEngine);
       }
     }
   }
@@ -120,7 +116,24 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
       errorMessage: null,
     );
 
-    // iOS：必须在手势回调栈里同步 play，不能先 await 再 play。
+    if (!kIsWeb &&
+        (NativePlaybackAudioSession.nativePianoGraphNeedsReclaim ||
+            !_audioEngine.isPianoReady ||
+            _pianoHandoffTask != null)) {
+      try {
+        await _ensurePianoHandoff();
+      } catch (error, stack) {
+        debugPrint('MusicCompanion pressPianoKey handoff: $error\n$stack');
+        if (!mounted) return;
+        state = state.copyWith(
+          errorMessage: '音频切换中，请稍候再按琴键',
+        );
+        return;
+      }
+      if (!mounted) return;
+    }
+
+    // iOS：handoff 完成后须尽快同步 tryPlay。
     if (_audioEngine.tryPlayNoteFromUserGesture(note)) {
       if (!state.audioReady) {
         state = state.copyWith(audioReady: true);
@@ -129,9 +142,6 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
     }
 
     try {
-      if (!_audioEngine.isPianoReady) {
-        await _ensurePianoHandoff();
-      }
       if (!mounted) return;
       if (kIsWeb) {
         await _audioEngine.activateByUserGesture();
@@ -598,10 +608,7 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
       // iOS：调音器离开后必须把 playAndRecord/measurement 让出来，否则
       // 录音系统开录时麦克风增益异常偏低。
       try {
-        await NativePlaybackAudioSession.ensurePlaybackActive();
-      } catch (_) {}
-      try {
-        await _audioEngine.stopAll();
+        await PageAudioLifecycle.leavePage(pianoEngine: _audioEngine);
       } catch (_) {}
       try {
         await _audioEngine.dispose();

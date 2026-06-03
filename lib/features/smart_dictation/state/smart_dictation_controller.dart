@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../music_companion/audio/page_audio_lifecycle.dart';
 import '../../../core/audio/native_audio_bootstrap.dart';
 import '../audio/smart_dictation_audio_engine.dart';
 import '../data/smart_dictation_repository.dart';
@@ -138,9 +139,12 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
     if (kIsWeb || _playbackSessionPrimed) {
       return;
     }
-    await NativeAudioBootstrap.reactivatePlaybackSession();
-    await _audioEngine.stopAll();
-    await _audioEngine.reclaimNativeEngineAfterSessionChange();
+    await PageAudioLifecycle.enterPlaybackPianoNative(
+      prepareEngine: () async {
+        await _audioEngine.reclaimNativeEngineAfterSessionChange();
+        await _audioEngine.ensureInitialized();
+      },
+    );
     _playbackSessionPrimed = true;
   }
 
@@ -500,9 +504,7 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
     _resumeAfterExitDialog = false;
     unawaited(() async {
       await _audioEngine.stopAll();
-      if (!kIsWeb) {
-        await _audioEngine.reclaimNativeEngineAfterSessionChange();
-      }
+      await PageAudioLifecycle.leavePage();
     }());
     _clearVisualNotes();
     state = state.copyWith(
@@ -656,9 +658,6 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
   }) async {
     try {
       await _primePlaybackSessionOnce();
-      if (fromUserGesture && !kIsWeb) {
-        await NativeAudioBootstrap.reactivatePlaybackSession();
-      }
       if (!state.audioReady) {
         state = state.copyWith(audioLoading: true, clearErrorMessage: true);
         await _audioEngine.ensureInitialized();
@@ -1263,7 +1262,11 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
     _disposed = true;
     _stopTimer();
     _clearVisualNotes();
-    unawaited(_audioEngine.dispose());
+    unawaited(() async {
+      await _audioEngine.stopAll();
+      await PageAudioLifecycle.leavePage();
+      await _audioEngine.dispose();
+    }());
     super.dispose();
   }
 }

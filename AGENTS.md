@@ -30,6 +30,9 @@
   - bottom piano interaction reuses the existing Flutter short-audio ecosystem via `flutter_soloud`
   - page startup must not block on full piano/metronome asset preload
   - musicPlay should warm up piano audio in the background and load textbook detail first
+- Page audio lifecycle (`lib/features/music_companion/audio/page_audio_lifecycle.dart` + `lib/core/audio/native_piano_handoff.dart`):
+  - enter on page open (playback piano / mediaKit+piano / sight-singing capture / tuner)
+  - leave on page dispose or session exit: stop short audio, mark shared native graph stale; next page does one coalesced handoff (no double reclaim on sight-singing exit + music companion enter)
 - Smart sight singing (`/smart-singing`):
   - implemented under `lib/features/smart_sight_singing/`
   - left nav entry enabled; supports built-in demo, local `.mid/.midi` upload, and online URL

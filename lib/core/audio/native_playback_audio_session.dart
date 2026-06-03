@@ -17,6 +17,19 @@ abstract final class NativePlaybackAudioSession {
   static Future<void>? _playbackTask;
   static Future<void>? _mediaKitTask;
 
+  /// iOS 共享 [LowLatencyNotePlayer]：会话从 playAndRecord 等切回 playback 后，
+  /// 原生图须 reclaim；在 rebuild 完成前 [tryPlay] 可能静默或迟播。
+  static bool nativePianoGraphNeedsReclaim = false;
+
+  static void markNativePianoGraphStale() {
+    if (kIsWeb) return;
+    nativePianoGraphNeedsReclaim = true;
+  }
+
+  static void markNativePianoGraphFresh() {
+    nativePianoGraphNeedsReclaim = false;
+  }
+
   /// 单次 platform channel 操作的最长等待时间，避免 iOS 不响应时永久阻塞。
   static const Duration _kChannelTimeout = Duration(seconds: 4);
 
@@ -283,6 +296,7 @@ abstract final class NativePlaybackAudioSession {
       // 切到 playAndRecord 后，下次切回 playback 必须走完整的 release →
       // configure → claim 序列，不能复用旧的"已配置 playback"的缓存。
       _playbackTask = null;
+      markNativePianoGraphStale();
     }
   }
 
