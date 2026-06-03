@@ -50,7 +50,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   StreamSubscription<bool>? _playingSub;
   StreamSubscription<bool>? _completedSub;
   bool _recordSaved = false;
-  Future<void>? _pianoHandoffTask;
+  Future<void>? _iosPianoRecoverTask;
 
   /// 已经 dispose 的标志位。
   ///
@@ -143,27 +143,55 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     }
   }
 
-  Future<void> _ensurePianoHandoff() async {
-    if (_pianoHandoffTask != null) {
-      await _pianoHandoffTask;
+  /// iOS musicPlay：长音频与钢琴共用 media_kit 的 playback + mixWithOthers 会话。
+  Future<void> _primeIosMusicPlayAudioSession() async {
+    if (!_isIosNative || _disposed) {
       return;
     }
-    final task = MusicCompanionAudioEngine.primeAfterForeignAudioSession(
+    await NativePlaybackAudioSession.ensureMediaKitPlaybackActive();
+  }
+
+  /// 仅重建钢琴原生图；长音频已打开时不得重配 AVAudioSession。
+  bool get _skipIosSessionReconfigureForPiano => _isIosNative && _player != null;
+
+  Future<void> _recoverIosPianoGraph({bool awaitCompletion = true}) async {
+    if (!_isIosNative || _disposed) {
+      return;
+    }
+    if (_iosPianoRecoverTask != null) {
+      if (awaitCompletion) {
+        await _iosPianoRecoverTask;
+      }
+      return;
+    }
+    final task = MusicCompanionAudioEngine.recoverNativePianoAfterMediaKit(
       _pianoEngine,
+      skipSessionReconfigure: _skipIosSessionReconfigureForPiano,
     );
-    _pianoHandoffTask = task;
+    _iosPianoRecoverTask = task;
+    if (!awaitCompletion) {
+      unawaited(
+        task.whenComplete(() {
+          if (identical(_iosPianoRecoverTask, task)) {
+            _iosPianoRecoverTask = null;
+          }
+        }),
+      );
+      return;
+    }
     try {
       await task;
     } finally {
-      if (identical(_pianoHandoffTask, task)) {
-        _pianoHandoffTask = null;
+      if (identical(_iosPianoRecoverTask, task)) {
+        _iosPianoRecoverTask = null;
       }
     }
   }
 
   Future<void> _warmUpPiano() async {
     try {
-      await _ensurePianoHandoff();
+      await _primeIosMusicPlayAudioSession();
+      await _pianoEngine.ensurePianoInitialized();
       if (!mounted) {
         return;
       }
@@ -343,6 +371,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     if (hadPitchShift && !_disposed) {
       await _applyPitchToPlayer(player);
     }
+    unawaited(_recoverIosPianoGraph(awaitCompletion: false));
   }
 
   Future<void> _resumePlayer(Player player) async {
@@ -562,11 +591,8 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
 
     final duckIosScrub = _isIosNative;
     final scrubPlayer = _player;
-    if (duckIosScrub) {
-      _pianoEngine.stopAllImmediately();
-      if (scrubPlayer != null) {
-        await _setPlayerVolumeSafe(scrubPlayer, 0);
-      }
+    if (duckIosScrub && scrubPlayer != null) {
+      await _setPlayerVolumeSafe(scrubPlayer, 0);
     }
 
     try {
@@ -669,6 +695,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     final active = Set<String>.from(state.activePianoNotes)..add(note);
     state = state.copyWith(activePianoNotes: active);
 
+    // 长音频播放中：先即时触发钢琴，不在按键路径里切换 AVAudioSession。
     if (_pianoEngine.tryPlayNoteFromUserGesture(note)) {
       if (!state.ready && mounted && !_disposed) {
         state = state.copyWith(ready: true);
@@ -676,7 +703,25 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       return;
     }
 
-    await _ensurePianoHandoff();
+    if (!_pianoEngine.isPianoReady) {
+      await _primeIosMusicPlayAudioSession();
+      await _pianoEngine.ensurePianoInitialized();
+      if (!mounted || _disposed) {
+        return;
+      }
+      if (_pianoEngine.tryPlayNoteFromUserGesture(note)) {
+        if (!state.ready && mounted && !_disposed) {
+          state = state.copyWith(ready: true);
+        }
+        return;
+      }
+    }
+
+    if (_isIosNative) {
+      await _recoverIosPianoGraph();
+    } else {
+      await _pianoEngine.ensurePianoInitialized();
+    }
     if (!mounted || _disposed) {
       return;
     }
@@ -836,7 +881,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     try {
       if (isStale()) return;
       if (_isIosNative) {
-        await NativePlaybackAudioSession.ensureMediaKitPlaybackActive();
+        await _primeIosMusicPlayAudioSession();
       }
       final player = _ensurePlayer();
       debugPrint('MusicPlay audio open: ${track.url}');
@@ -847,6 +892,9 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
         await player.setRate(state.speed);
       } catch (_) {}
       await _applyPitchToPlayer(player);
+      if (_isIosNative && !isStale()) {
+        unawaited(_recoverIosPianoGraph(awaitCompletion: false));
+      }
     } catch (error) {
       if (isStale()) return;
       debugPrint('MusicPlay audio load failed: $error');

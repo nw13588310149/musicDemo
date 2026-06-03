@@ -36,6 +36,9 @@ abstract final class NativePlaybackAudioSession {
   ///
   /// 与 [ensurePlaybackActive] 相比增加 `defaultToSpeaker`，并与钢琴
   /// `mixWithOthers` 共存，减轻 pause 时 CoreAudio 硬切产生的滋滋声。
+  ///
+  /// musicPlay 页内虚拟钢琴与长音频应共用此配置（勿在播长音频时再调
+  /// [ensurePlaybackActive]，否则会 setActive(false) 打断 mpv）。
   static Future<void> ensureMediaKitPlaybackActive() {
     if (kIsWeb) return Future<void>.value();
     return _mediaKitTask ??= _configureMediaKitPlaybackBestEffort().whenComplete(

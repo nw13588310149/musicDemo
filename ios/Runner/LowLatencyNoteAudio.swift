@@ -260,12 +260,17 @@ final class LowLatencyNoteAudio {
         voice.sequence = seq
         voice.player.volume = max(0, min(1, volume))
 
-        let playbackDone = DispatchSemaphore(value: 0)
-        var signaled = false
-        let signalPlaybackDone: () -> Void = {
-          if signaled { return }
-          signaled = true
-          playbackDone.signal()
+        // 听写 waitUntilFinished 须在播完后才回 Dart，但不能 semaphore.wait 占住串行队列，
+        // 否则 musicPlay 钢琴 tryPlay 会排队数秒才响。
+        var waitReplySent = false
+        let sendWaitReply: () -> Void = {
+          if waitReplySent { return }
+          waitReplySent = true
+          guard generation == self.operationGeneration else {
+            DispatchQueue.main.async { result(nil) }
+            return
+          }
+          DispatchQueue.main.async { result(nil) }
         }
 
         try LowLatencyNoteAudioSafePlay.scheduleBuffer(
@@ -277,7 +282,7 @@ final class LowLatencyNoteAudio {
               guard let voice = voice, voice.sequence == seq else { return }
               voice.busy = false
               if waitUntilFinished {
-                signalPlaybackDone()
+                sendWaitReply()
               }
             }
           }
@@ -298,19 +303,17 @@ final class LowLatencyNoteAudio {
           guard let voice = voice, voice.sequence == seq, voice.busy else { return }
           voice.busy = false
           if waitUntilFinished {
-            signalPlaybackDone()
+            sendWaitReply()
           }
-        }
-
-        if waitUntilFinished {
-          playbackDone.wait()
         }
 
         guard generation == self.operationGeneration else {
           DispatchQueue.main.async { result(nil) }
           return
         }
-        DispatchQueue.main.async { result(nil) }
+        if !waitUntilFinished {
+          DispatchQueue.main.async { result(nil) }
+        }
       } catch {
         self.engineNeedsReset = true
         guard generation == self.operationGeneration else {
