@@ -53,9 +53,14 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
   Future<void>? _pianoHandoffTask;
 
   Future<void> _ensurePianoHandoff() async {
-    if (_pianoHandoffTask != null) {
-      await _pianoHandoffTask;
-      return;
+    final pending = _pianoHandoffTask;
+    if (pending != null) {
+      await pending;
+      if (!kIsWeb &&
+          _audioEngine.isPianoReady &&
+          !NativePlaybackAudioSession.nativePianoGraphNeedsReclaim) {
+        return;
+      }
     }
     final task = PageAudioLifecycle.enterPlaybackPiano(_audioEngine);
     _pianoHandoffTask = task;

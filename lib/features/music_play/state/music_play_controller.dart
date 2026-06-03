@@ -53,7 +53,6 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   bool _recordSaved = false;
   Future<void>? _iosPianoRecoverTask;
   Future<void>? _iosSessionPrimeTask;
-  Future<void>? _iosPianoWarmTask;
   bool _iosMusicPlaySessionPrimed = false;
 
   /// 已经 dispose 的标志位。
@@ -195,37 +194,34 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     }
   }
 
-  /// iOS：后台预热钢琴（与长音频 open 并行，符合「详情优先」）。
-  void _scheduleIosPianoWarmUp() {
-    if (!_isIosNative || _disposed || _iosPianoWarmTask != null) {
+  /// iOS：后台恢复钢琴图（软 mediaKit 会话，与 mpv 共存；不重复 enterMediaKitPiano）。
+  void _scheduleIosPianoPrime() {
+    if (!_isIosNative || _disposed) {
       return;
     }
-    final task = PageAudioLifecycle.enterMediaKitPiano(
-      _pianoEngine,
-      forceSessionRelease: false,
-    );
-    _iosPianoWarmTask = task;
-    unawaited(
-      task.whenComplete(() {
-        if (identical(_iosPianoWarmTask, task)) {
-          _iosPianoWarmTask = null;
-        }
-        if (mounted && !_disposed && !state.ready) {
-          state = state.copyWith(ready: true);
-        }
-      }),
-    );
+    if (_pianoEngine.isPianoReady &&
+        !NativePlaybackAudioSession.nativePianoGraphNeedsReclaim) {
+      return;
+    }
+    unawaited(_recoverIosPianoGraph(awaitCompletion: false));
   }
 
   Future<void> _recoverIosPianoGraph({bool awaitCompletion = true}) async {
     if (!_isIosNative || _disposed) {
       return;
     }
-    if (_iosPianoRecoverTask != null) {
+    final pending = _iosPianoRecoverTask;
+    if (pending != null) {
       if (awaitCompletion) {
-        await _iosPianoRecoverTask;
+        await pending;
+      } else {
+        return;
       }
-      return;
+      if (!_disposed &&
+          _pianoEngine.isPianoReady &&
+          !NativePlaybackAudioSession.nativePianoGraphNeedsReclaim) {
+        return;
+      }
     }
     final task = PageAudioLifecycle.recoverPianoDuringMediaKit(_pianoEngine);
     _iosPianoRecoverTask = task;
@@ -234,6 +230,9 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
         task.whenComplete(() {
           if (identical(_iosPianoRecoverTask, task)) {
             _iosPianoRecoverTask = null;
+          }
+          if (mounted && !_disposed && !state.ready && _pianoEngine.isPianoReady) {
+            state = state.copyWith(ready: true);
           }
         }),
       );
@@ -248,12 +247,27 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     }
   }
 
+  /// 按键前确保 iOS 钢琴图已就绪（合并进行中的 recover，避免重复 handoff）。
+  Future<void> _awaitIosPianoReadyForKeypress() async {
+    if (!_isIosNative || _disposed) {
+      return;
+    }
+    if (!_iosMusicPlaySessionPrimed) {
+      await _ensureIosMediaKitSessionForLongAudio();
+    }
+    if (_pianoEngine.isPianoReady &&
+        !NativePlaybackAudioSession.nativePianoGraphNeedsReclaim) {
+      return;
+    }
+    await _recoverIosPianoGraph();
+  }
+
   Future<void> _warmUpPiano() async {
     try {
       if (_isIosNative) {
         // 仅抢占 media_kit 会话；钢琴采样在后台 handoff，不挡详情/长音频。
         await _ensureIosMediaKitSessionForLongAudio(forceRelease: true);
-        _scheduleIosPianoWarmUp();
+        _scheduleIosPianoPrime();
       } else {
         await _pianoEngine.ensurePianoInitialized();
       }
@@ -786,13 +800,9 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
 
     if (_isIosNative &&
         (NativePlaybackAudioSession.nativePianoGraphNeedsReclaim ||
-            !_pianoEngine.isPianoReady)) {
-      if (_iosMusicPlaySessionPrimed) {
-        await _recoverIosPianoGraph();
-      } else {
-        await PageAudioLifecycle.enterMediaKitPiano(_pianoEngine);
-        _iosMusicPlaySessionPrimed = true;
-      }
+            !_pianoEngine.isPianoReady ||
+            _iosPianoRecoverTask != null)) {
+      await _awaitIosPianoReadyForKeypress();
       if (!mounted || _disposed) {
         return;
       }
@@ -1004,8 +1014,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       } catch (_) {}
       await _applyPitchToPlayer(player);
       if (_isIosNative && !isStale()) {
-        // 钢琴图在后台恢复，不拖慢首帧可播/切曲。
-        unawaited(_recoverIosPianoGraph(awaitCompletion: false));
+        _scheduleIosPianoPrime();
       }
     } catch (error) {
       if (isStale()) return;
