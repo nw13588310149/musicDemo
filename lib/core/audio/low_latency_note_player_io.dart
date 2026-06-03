@@ -40,7 +40,7 @@ class _IoLowLatencyNotePlayer implements LowLatencyNotePlayer {
     if (_disposed) return;
     _assetByKey.addAll(assetByKey);
 
-    if (_assetByKey.isEmpty) {
+    if (assetByKey.isEmpty && _assetByKey.isEmpty) {
       _nativeReady = true;
       return;
     }
@@ -49,18 +49,24 @@ class _IoLowLatencyNotePlayer implements LowLatencyNotePlayer {
       try {
         await _channel
             .invokeMethod<void>('prepare', <String, Object>{
-              'assets': _assetByKey,
+              'assets': assetByKey,
             })
             .timeout(_kHeavyChannelTimeout);
         _nativeReady = true;
         _fallbackMode = false;
         return;
       } on TimeoutException catch (error, stack) {
-        debugPrint('LowLatencyNotePlayer native prepare timed out: $error\n$stack');
+        debugPrint(
+          'LowLatencyNotePlayer native prepare timed out: $error\n$stack',
+        );
       } on MissingPluginException catch (error, stack) {
-        debugPrint('LowLatencyNotePlayer native channel missing: $error\n$stack');
+        debugPrint(
+          'LowLatencyNotePlayer native channel missing: $error\n$stack',
+        );
       } on PlatformException catch (error, stack) {
-        debugPrint('LowLatencyNotePlayer native prepare failed: $error\n$stack');
+        debugPrint(
+          'LowLatencyNotePlayer native prepare failed: $error\n$stack',
+        );
       }
     }
 
@@ -88,18 +94,17 @@ class _IoLowLatencyNotePlayer implements LowLatencyNotePlayer {
 
   @override
   Future<void> reclaimEngine() async {
-    if (_disposed ||
-        kIsWeb ||
-        defaultTargetPlatform != TargetPlatform.iOS) {
+    if (_disposed || kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) {
       return;
     }
-    if (!_nativeReady) return;
     try {
       await _channel
           .invokeMethod<void>('reclaimEngine')
           .timeout(_kHeavyChannelTimeout);
     } on TimeoutException catch (error, stack) {
-      debugPrint('LowLatencyNotePlayer reclaimEngine timed out: $error\n$stack');
+      debugPrint(
+        'LowLatencyNotePlayer reclaimEngine timed out: $error\n$stack',
+      );
     } on PlatformException catch (error, stack) {
       debugPrint('LowLatencyNotePlayer reclaimEngine failed: $error\n$stack');
     } on MissingPluginException catch (error, stack) {
@@ -161,16 +166,18 @@ class _IoLowLatencyNotePlayer implements LowLatencyNotePlayer {
 
     final asset = _assetByKey[key];
     if (asset == null) return null;
-    final future = _createFallbackPlayer(asset).then((player) {
-      if (_disposed) {
-        unawaited(player.dispose());
-        return null;
-      }
-      _fallbackPlayers[key] = player;
-      return player;
-    }).whenComplete(() {
-      _fallbackLoads.remove(key);
-    });
+    final future = _createFallbackPlayer(asset)
+        .then((player) {
+          if (_disposed) {
+            unawaited(player.dispose());
+            return null;
+          }
+          _fallbackPlayers[key] = player;
+          return player;
+        })
+        .whenComplete(() {
+          _fallbackLoads.remove(key);
+        });
     _fallbackLoads[key] = future;
     return future;
   }
@@ -182,7 +189,10 @@ class _IoLowLatencyNotePlayer implements LowLatencyNotePlayer {
     return player;
   }
 
-  Future<void> _playFallback(AudioPlayer player, {required double volume}) async {
+  Future<void> _playFallback(
+    AudioPlayer player, {
+    required double volume,
+  }) async {
     await player.setVolume(volume);
     await player.seek(Duration.zero);
     await player.play();
@@ -208,7 +218,9 @@ class _IoLowLatencyNotePlayer implements LowLatencyNotePlayer {
       ..._fallbackPlayers.values,
       ..._fallbackOneShots,
     };
-    await Future.wait(players.map((player) => player.stop().catchError((_) {})));
+    await Future.wait(
+      players.map((player) => player.stop().catchError((_) {})),
+    );
   }
 
   @override
@@ -217,7 +229,14 @@ class _IoLowLatencyNotePlayer implements LowLatencyNotePlayer {
     _disposed = true;
     if (_nativeReady) {
       try {
-        await _channel.invokeMethod<void>('dispose');
+        if (defaultTargetPlatform == TargetPlatform.iOS) {
+          // iOS 的 AVAudioEngine + decoded sample buffers 是 App 级短音频资源。
+          // 页面离开只停声，不销毁原生图；下一页 prepare 同一批 key 时原生层会复用
+          // buffers，避免 musicPlay / 音乐伴侣反复冷解码整张钢琴。
+          await _channel.invokeMethod<void>('stopAll');
+        } else {
+          await _channel.invokeMethod<void>('dispose');
+        }
       } catch (_) {}
     }
 

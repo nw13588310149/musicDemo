@@ -28,6 +28,7 @@ class SmartDictationAudioEngine {
   final StreamController<List<double>> _frequencyController =
       StreamController<List<double>>.broadcast();
   Future<void>? _initTask;
+  Future<void>? _warmupTask;
   bool _disposed = false;
 
   bool get isReady => kIsWeb ? _webPlayer.isReady : !_disposed;
@@ -46,7 +47,8 @@ class SmartDictationAudioEngine {
         await _webPlayer.prepare(_assetByCanonical.values);
         return;
       }
-      await _nativePlayer.prepare(_assetByCanonical);
+      await _nativePlayer.prepare(_initialAssetByCanonical);
+      _scheduleNativeBackgroundWarmup();
     } catch (error, stack) {
       _initTask = null;
       debugPrint(
@@ -77,6 +79,8 @@ class SmartDictationAudioEngine {
 
     try {
       await ensureInitialized();
+      if (_disposed) return;
+      await _ensureNativeTokenPrepared(canonical);
       if (_disposed) return;
       final waitForPlayback =
           !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
@@ -132,6 +136,8 @@ class SmartDictationAudioEngine {
     } catch (_) {
       return;
     }
+    await _ensureNativeTokensPrepared(tokens);
+    if (_disposed) return;
     for (final token in tokens) {
       if (_disposed) return;
       final canonical = canonicalFromToken(token);
@@ -185,6 +191,79 @@ class SmartDictationAudioEngine {
       await _frequencyController.close();
     }
     _initTask = null;
+    _warmupTask = null;
+  }
+
+  Future<void> _ensureNativeTokenPrepared(String canonical) async {
+    if (kIsWeb || canonical.isEmpty || _nativePlayer.hasPrepared(canonical)) {
+      return;
+    }
+    final asset = _assetByCanonical[canonical];
+    if (asset == null) return;
+    await _nativePlayer.prepare(<String, String>{canonical: asset});
+  }
+
+  Future<void> _ensureNativeTokensPrepared(Iterable<String> tokens) async {
+    if (kIsWeb) return;
+    final assets = <String, String>{};
+    for (final token in tokens) {
+      final canonical = canonicalFromToken(token);
+      if (canonical.isEmpty || _nativePlayer.hasPrepared(canonical)) {
+        continue;
+      }
+      final asset = _assetByCanonical[canonical];
+      if (asset != null) {
+        assets[canonical] = asset;
+      }
+    }
+    if (assets.isEmpty) return;
+    await _nativePlayer.prepare(assets);
+  }
+
+  void _scheduleNativeBackgroundWarmup() {
+    if (kIsWeb || _disposed || _warmupTask != null) return;
+    final task = _warmRemainingNativeAssets();
+    _warmupTask = task;
+    unawaited(
+      task.whenComplete(() {
+        if (identical(_warmupTask, task)) {
+          _warmupTask = null;
+        }
+      }),
+    );
+  }
+
+  Future<void> _warmRemainingNativeAssets() async {
+    final entries =
+        _assetByCanonical.entries
+            .where((entry) => !_nativePlayer.hasPrepared(entry.key))
+            .toList(growable: false)
+          ..sort(
+            (a, b) => _warmupPriority(a.key).compareTo(_warmupPriority(b.key)),
+          );
+
+    for (var index = 0; index < entries.length; index += _warmupChunkSize) {
+      if (_disposed) return;
+      final chunkEntries = entries.skip(index).take(_warmupChunkSize);
+      final chunk = <String, String>{
+        for (final entry in chunkEntries)
+          if (!_nativePlayer.hasPrepared(entry.key)) entry.key: entry.value,
+      };
+      if (chunk.isNotEmpty) {
+        try {
+          await _nativePlayer.prepare(chunk);
+        } catch (error, stack) {
+          debugPrint(
+            'SmartDictationAudioEngine background warmup failed: '
+            '$error\n$stack',
+          );
+          return;
+        }
+      }
+      if (!_disposed) {
+        await Future<void>.delayed(_warmupYieldDelay);
+      }
+    }
   }
 
   static List<String> splitTokenGroup(String raw) {
@@ -276,6 +355,52 @@ class SmartDictationAudioEngine {
   static final Map<String, String> _assetByCanonical = <String, String>{
     for (final note in _dictationNotes) note: kPianoNoteAssetByNote[note]!,
   };
+
+  static const int _warmupChunkSize = 4;
+  static const Duration _warmupYieldDelay = Duration(milliseconds: 24);
+
+  static Map<String, String> get _initialAssetByCanonical {
+    return <String, String>{
+      for (final entry in _assetByCanonical.entries)
+        if (_isInitialNote(entry.key)) entry.key: entry.value,
+    };
+  }
+
+  static bool _isInitialNote(String note) {
+    final midi = _noteMidi(note);
+    return midi >= 60 && midi <= 72; // C4..C5, includes standard tone A4.
+  }
+
+  static int _warmupPriority(String note) {
+    final midi = _noteMidi(note);
+    if (midi < 0) return 10000;
+    return (midi - 69).abs(); // Keep A4 and nearby dictation tones hot first.
+  }
+
+  static int _noteMidi(String note) {
+    final match = RegExp(r'^([A-G]#?)(-?\d+)$').firstMatch(note);
+    if (match == null) return -1;
+    final name = match.group(1);
+    final octave = int.tryParse(match.group(2) ?? '');
+    if (name == null || octave == null) return -1;
+    const pitchClass = <String, int>{
+      'C': 0,
+      'C#': 1,
+      'D': 2,
+      'D#': 3,
+      'E': 4,
+      'F': 5,
+      'F#': 6,
+      'G': 7,
+      'G#': 8,
+      'A': 9,
+      'A#': 10,
+      'B': 11,
+    };
+    final pc = pitchClass[name];
+    if (pc == null) return -1;
+    return (octave + 1) * 12 + pc;
+  }
 
   static const Map<String, String> _tokenToCanonical = <String, String>{
     'f': 'F3',

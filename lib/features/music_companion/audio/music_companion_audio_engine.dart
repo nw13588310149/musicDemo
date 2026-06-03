@@ -25,6 +25,7 @@ class MusicCompanionAudioEngine {
 
   Future<void>? _pianoInitTask;
   Future<void>? _metronomeInitTask;
+  Future<void>? _pianoWarmupTask;
   bool _disposed = false;
 
   bool get isReady => kIsWeb ? _webPlayer.isReady : !_disposed;
@@ -106,7 +107,8 @@ class MusicCompanionAudioEngine {
         await _webPlayer.prepare(kMusicCompanionPianoAssetByNote.values);
         return;
       }
-      await _nativePlayer.prepare(kMusicCompanionPianoAssetByNote);
+      await _nativePlayer.prepare(_initialPianoAssetByNote);
+      _scheduleNativePianoBackgroundWarmup();
     } catch (error, stack) {
       _pianoInitTask = null;
       debugPrint(
@@ -189,6 +191,8 @@ class MusicCompanionAudioEngine {
     try {
       await ensurePianoInitialized();
       if (_disposed) return;
+      await _ensureNativePianoNotePrepared(note);
+      if (_disposed) return;
       if (_nativePlayer.tryPlay(note, volume: volume, metronome: false)) {
         return;
       }
@@ -202,6 +206,16 @@ class MusicCompanionAudioEngine {
 
   Future<void> playNotes(Iterable<String> notes, {double volume = 1}) async {
     if (_disposed) return;
+    if (!kIsWeb) {
+      final normalized = notes.map(_normalizeNote).toList(growable: false);
+      await ensurePianoInitialized();
+      await _ensureNativePianoNotesPrepared(normalized);
+      if (_disposed) return;
+      await Future.wait(
+        normalized.map((note) => playNote(note, volume: volume)),
+      );
+      return;
+    }
     await Future.wait(notes.map((note) => playNote(note, volume: volume)));
   }
 
@@ -285,10 +299,80 @@ class MusicCompanionAudioEngine {
     await _nativePlayer.dispose();
     _pianoInitTask = null;
     _metronomeInitTask = null;
+    _pianoWarmupTask = null;
   }
 
   String _normalizeNote(String rawNote) {
     return rawNote.trim().replaceAll('♯', '#').toUpperCase();
+  }
+
+  Future<void> _ensureNativePianoNotePrepared(String note) async {
+    if (kIsWeb || _nativePlayer.hasPrepared(note)) return;
+    final asset = kMusicCompanionPianoAssetByNote[note];
+    if (asset == null) return;
+    await _nativePlayer.prepare(<String, String>{note: asset});
+  }
+
+  Future<void> _ensureNativePianoNotesPrepared(Iterable<String> notes) async {
+    if (kIsWeb) return;
+    final assets = <String, String>{};
+    for (final note in notes) {
+      if (_nativePlayer.hasPrepared(note)) continue;
+      final asset = kMusicCompanionPianoAssetByNote[note];
+      if (asset != null) {
+        assets[note] = asset;
+      }
+    }
+    if (assets.isEmpty) return;
+    await _nativePlayer.prepare(assets);
+  }
+
+  void _scheduleNativePianoBackgroundWarmup() {
+    if (kIsWeb || _disposed || _pianoWarmupTask != null) return;
+    final task = _warmRemainingNativePianoAssets();
+    _pianoWarmupTask = task;
+    unawaited(
+      task.whenComplete(() {
+        if (identical(_pianoWarmupTask, task)) {
+          _pianoWarmupTask = null;
+        }
+      }),
+    );
+  }
+
+  Future<void> _warmRemainingNativePianoAssets() async {
+    final entries =
+        kMusicCompanionPianoAssetByNote.entries
+            .where((entry) => !_nativePlayer.hasPrepared(entry.key))
+            .toList(growable: false)
+          ..sort(
+            (a, b) => _pianoWarmupPriority(
+              a.key,
+            ).compareTo(_pianoWarmupPriority(b.key)),
+          );
+
+    for (var index = 0; index < entries.length; index += _warmupChunkSize) {
+      if (_disposed) return;
+      final chunkEntries = entries.skip(index).take(_warmupChunkSize);
+      final chunk = <String, String>{
+        for (final entry in chunkEntries)
+          if (!_nativePlayer.hasPrepared(entry.key)) entry.key: entry.value,
+      };
+      if (chunk.isNotEmpty) {
+        try {
+          await _nativePlayer.prepare(chunk);
+        } catch (error, stack) {
+          debugPrint(
+            'MusicCompanionAudioEngine piano background warmup failed: '
+            '$error\n$stack',
+          );
+          return;
+        }
+      }
+      if (!_disposed) {
+        await Future<void>.delayed(_warmupYieldDelay);
+      }
+    }
   }
 
   static Map<String, String> get _metronomeAssetByKey {
@@ -300,5 +384,52 @@ class MusicCompanionAudioEngine {
 
   static String _metronomeKey(MusicCompanionMetronomeCue cue) {
     return 'metronome.${cue.name}';
+  }
+
+  static const int _warmupChunkSize = 4;
+  static const Duration _warmupYieldDelay = Duration(milliseconds: 24);
+
+  static Map<String, String> get _initialPianoAssetByNote {
+    return <String, String>{
+      for (final entry in kMusicCompanionPianoAssetByNote.entries)
+        if (_isInitialPianoNote(entry.key)) entry.key: entry.value,
+    };
+  }
+
+  static bool _isInitialPianoNote(String note) {
+    final midi = _noteMidi(note);
+    return midi >= 60 && midi <= 72; // C4..C5: central first-touch range.
+  }
+
+  static int _pianoWarmupPriority(String note) {
+    final midi = _noteMidi(note);
+    if (midi < 0) return 10000;
+    return (midi - 64)
+        .abs(); // E4 keeps the default visible keyboard hot first.
+  }
+
+  static int _noteMidi(String note) {
+    final match = RegExp(r'^([A-G]#?)(-?\d+)$').firstMatch(note);
+    if (match == null) return -1;
+    final name = match.group(1);
+    final octave = int.tryParse(match.group(2) ?? '');
+    if (name == null || octave == null) return -1;
+    const pitchClass = <String, int>{
+      'C': 0,
+      'C#': 1,
+      'D': 2,
+      'D#': 3,
+      'E': 4,
+      'F': 5,
+      'F#': 6,
+      'G': 7,
+      'G#': 8,
+      'A': 9,
+      'A#': 10,
+      'B': 11,
+    };
+    final pc = pitchClass[name];
+    if (pc == null) return -1;
+    return (octave + 1) * 12 + pc;
   }
 }
