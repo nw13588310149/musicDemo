@@ -1,4 +1,4 @@
-﻿// =============================================================================
+// =============================================================================
 // 学生端「我的作业」独立页面
 //
 // 入口：学生 dashboard 快捷区「我的作业」按钮 → controller.openMyHomework()
@@ -59,6 +59,7 @@ import '../../shell/ui/shell_layout.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 import '../data/student_repository.dart';
+import '../data/student_academic_data.dart';
 
 const Color _kCardBg = Colors.white;
 const Color _kPageBg = Color(0xFFEFF3FC);
@@ -127,7 +128,9 @@ bool _studentHomeworkOverdue({
   required String submitTimeRaw,
 }) {
   if (rowStatus != 0 || deadline == null) return false;
-  final sub = _tryParseStudentHwDate(submitTimeRaw.trim().isEmpty ? null : submitTimeRaw);
+  final sub = _tryParseStudentHwDate(
+    submitTimeRaw.trim().isEmpty ? null : submitTimeRaw,
+  );
   if (sub != null) {
     return sub.isAfter(deadline);
   }
@@ -189,7 +192,10 @@ Map<dynamic, dynamic> _flattenStudentHomeworkDetail(Map<dynamic, dynamic> m) {
 
   for (final e in m.entries) {
     final k = e.key;
-    if (k == 'homework' || k == 'homeworkStudent' || k == 'subject' || k == 'classInfo') {
+    if (k == 'homework' ||
+        k == 'homeworkStudent' ||
+        k == 'subject' ||
+        k == 'classInfo') {
       continue;
     }
     out.putIfAbsent(k, () => e.value);
@@ -203,7 +209,9 @@ Map<dynamic, dynamic> _flattenStudentHomeworkDetail(Map<dynamic, dynamic> m) {
 
 String _studentHwDeadlineLabel(String? endRaw) {
   final d = _tryParseStudentHwDate(endRaw);
-  if (d == null) return endRaw?.trim().isNotEmpty == true ? endRaw!.trim() : '—';
+  if (d == null) {
+    return endRaw?.trim().isNotEmpty == true ? endRaw!.trim() : '—';
+  }
   return '${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')} '
       '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 }
@@ -248,13 +256,23 @@ class _StudentMyHomeworkViewState extends ConsumerState<StudentMyHomeworkView> {
   _StatusTab _selectedTab = _StatusTab.all;
   _ChartGroup _chartGroup = _ChartGroup.bySubject;
   List<_HomeworkData> _records = const [];
+  StudentHomeworkSummary? _summary;
   bool _loadingList = false;
   bool _initialLoad = true;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadList());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadList();
+      _loadSummary();
+    });
+  }
+
+  Future<void> _loadSummary() async {
+    final res = await ref.read(studentRepositoryProvider).studentHomeworkSum();
+    if (!mounted || !res.isSuccess) return;
+    setState(() => _summary = StudentHomeworkSummary.fromData(res.data));
   }
 
   Future<void> _loadList() async {
@@ -268,11 +286,9 @@ class _StudentMyHomeworkViewState extends ConsumerState<StudentMyHomeworkView> {
       _StatusTab.submitted => 1,
       _StatusTab.reviewed => 2,
     };
-    final res = await ref.read(studentRepositoryProvider).studentHomeworkList(
-          current: 1,
-          size: 50,
-          status: statusParam,
-        );
+    final res = await ref
+        .read(studentRepositoryProvider)
+        .studentHomeworkList(current: 1, size: 50, status: statusParam);
     if (!mounted) return;
     if (res.isSuccess) {
       final rows = _extractStudentHomeworkRows(res.data);
@@ -337,7 +353,9 @@ class _StudentMyHomeworkViewState extends ConsumerState<StudentMyHomeworkView> {
     return Container(
       color: _kPageBg,
       child: AppRefreshIndicator(
-        onRefresh: _loadList,
+        onRefresh: () async {
+          await Future.wait([_loadList(), _loadSummary()]);
+        },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: EdgeInsets.only(bottom: ui(24)),
@@ -351,6 +369,7 @@ class _StudentMyHomeworkViewState extends ConsumerState<StudentMyHomeworkView> {
               _DualPanelRow(
                 chartGroup: _chartGroup,
                 onChartGroupChanged: (g) => setState(() => _chartGroup = g),
+                summary: _summary,
               ),
               SizedBox(height: ui(16)),
               _StatusTabsRow(
@@ -707,10 +726,12 @@ class _DualPanelRow extends StatelessWidget {
   const _DualPanelRow({
     required this.chartGroup,
     required this.onChartGroupChanged,
+    required this.summary,
   });
 
   final _ChartGroup chartGroup;
   final ValueChanged<_ChartGroup> onChartGroupChanged;
+  final StudentHomeworkSummary? summary;
 
   @override
   Widget build(BuildContext context) {
@@ -727,11 +748,12 @@ class _DualPanelRow extends StatelessWidget {
               _AverageBarChartCard(
                 group: chartGroup,
                 onGroupChanged: onChartGroupChanged,
+                bars: _summaryBars(summary),
               ),
               SizedBox(height: ui(20)),
               _SectionTitle('分数段分布'),
               SizedBox(height: ui(12)),
-              _ScoreDistributionCard(),
+              _ScoreDistributionCard(items: _summaryRanges(summary)),
             ],
           );
         }
@@ -748,6 +770,7 @@ class _DualPanelRow extends StatelessWidget {
                   _AverageBarChartCard(
                     group: chartGroup,
                     onGroupChanged: onChartGroupChanged,
+                    bars: _summaryBars(summary),
                   ),
                 ],
               ),
@@ -760,7 +783,7 @@ class _DualPanelRow extends StatelessWidget {
                 children: [
                   _SectionTitle('分数段分布'),
                   SizedBox(height: ui(12)),
-                  _ScoreDistributionCard(),
+                  _ScoreDistributionCard(items: _summaryRanges(summary)),
                 ],
               ),
             ),
@@ -777,17 +800,12 @@ class _AverageBarChartCard extends StatelessWidget {
   const _AverageBarChartCard({
     required this.group,
     required this.onGroupChanged,
+    required this.bars,
   });
 
   final _ChartGroup group;
   final ValueChanged<_ChartGroup> onGroupChanged;
-
-  static const _bars = <_BarItem>[
-    _BarItem(label: '音乐', value: 92),
-    _BarItem(label: '鉴赏', value: 88),
-    _BarItem(label: '视唱', value: 89),
-    _BarItem(label: '形体', value: 87),
-  ];
+  final List<_BarItem> bars;
 
   @override
   Widget build(BuildContext context) {
@@ -811,7 +829,7 @@ class _AverageBarChartCard extends StatelessWidget {
             onChanged: onGroupChanged,
           ),
           SizedBox(height: ui(12)),
-          Expanded(child: _BarChart(bars: _bars)),
+          Expanded(child: _BarChart(bars: bars)),
         ],
       ),
     );
@@ -965,12 +983,9 @@ class _Bar extends StatelessWidget {
 }
 
 class _ScoreDistributionCard extends StatelessWidget {
-  static const _items = <_ScoreSegment>[
-    _ScoreSegment(label: '90-100分', percent: 33, count: 3),
-    _ScoreSegment(label: '80-90分', percent: 33, count: 3),
-    _ScoreSegment(label: '70-80分', percent: 15, count: 1),
-    _ScoreSegment(label: '<70分', percent: 0, count: 0),
-  ];
+  const _ScoreDistributionCard({required this.items});
+
+  final List<_ScoreSegment> items;
 
   @override
   Widget build(BuildContext context) {
@@ -985,14 +1000,38 @@ class _ScoreDistributionCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (var i = 0; i < _items.length; i++) ...[
+          for (var i = 0; i < items.length; i++) ...[
             if (i > 0) SizedBox(height: ui(16)),
-            _ScoreSegmentTile(item: _items[i]),
+            _ScoreSegmentTile(item: items[i]),
           ],
         ],
       ),
     );
   }
+}
+
+List<_BarItem> _summaryBars(StudentHomeworkSummary? summary) {
+  final rows = summary?.subjectAvgScores ?? const <StudentSubjectAverage>[];
+  if (rows.isEmpty) {
+    return const [_BarItem(label: '暂无', value: 0)];
+  }
+  return rows
+      .take(6)
+      .map((e) => _BarItem(label: e.subjectName, value: e.score))
+      .toList();
+}
+
+List<_ScoreSegment> _summaryRanges(StudentHomeworkSummary? summary) {
+  final rows = summary?.scoreRanges ?? const <StudentScoreDistribution>[];
+  return rows
+      .map(
+        (e) => _ScoreSegment(
+          label: e.range,
+          percent: e.percent.round(),
+          count: e.count,
+        ),
+      )
+      .toList();
 }
 
 class _ScoreSegment {
@@ -1302,25 +1341,34 @@ class _HomeworkData {
   final _ReviewMediaType reviewMedia;
   final String? reviewMediaDuration;
   final String? reviewText;
+
   /// 教师发布的作业要求（列表或详情接口 `description`）。
   final String requirementText;
+
   /// 教师评语（接口 `feedback` / `teacherFeedback`）。
   final String teacherFeedback;
+
   /// 提交时间展示字符串。
   final String submitTimeDisplay;
+
   /// 期望提交格式（`expectedExt` → 中文，如 音频 / 文档）。
   final String mediumLabel;
+
   /// 学生提交作业时在接口里填的说明（`homeworkStudent.description`，与教师 `homework.description` 不同）。
   final String studentSubmitDescription;
+
   /// 提交文件名 `studentParam2`。
   final String submitAttachmentName;
+
   /// 提交类型标签 `studentParam3`（如 音频）。
   final String submitTypeTag;
+
   /// 提交文件完整 URL（由 `studentParam1` 经 [MediaUrl.resolve] 得到），用于预览。
   final String submitFileUrl;
 
   static _HomeworkData fromStudentListMap(Map<dynamic, dynamic> m) {
-    final recordId = m['homeworkStudentId']?.toString().trim() ??
+    final recordId =
+        m['homeworkStudentId']?.toString().trim() ??
         m['studentHomeworkId']?.toString().trim() ??
         '';
     final hw = m['homework'];
@@ -1331,7 +1379,9 @@ class _HomeworkData {
 
     String pick(String k) {
       final top = m[k];
-      if (top != null && top.toString().trim().isNotEmpty) return top.toString();
+      if (top != null && top.toString().trim().isNotEmpty) {
+        return top.toString();
+      }
       final nested = hwm?[k];
       return nested?.toString() ?? '';
     }
@@ -1376,13 +1426,17 @@ class _HomeworkData {
     }
 
     final scoreRaw = m['score'];
-    final String? score = (scoreRaw != null && scoreRaw.toString().trim().isNotEmpty)
+    final String? score =
+        (scoreRaw != null && scoreRaw.toString().trim().isNotEmpty)
         ? '$scoreRaw分'
         : null;
 
     final subjName = pick('subjectName');
     final subjId = int.tryParse(pick('subjectId'));
-    final subject = _subjectPillFromApi(subjName.isNotEmpty ? subjName : null, subjId);
+    final subject = _subjectPillFromApi(
+      subjName.isNotEmpty ? subjName : null,
+      subjId,
+    );
 
     final ext = pick('expectedExt');
     final mediumLabel = _expectedExtCn(ext);
@@ -1393,7 +1447,9 @@ class _HomeworkData {
         ? '${_expectedExtCn(ext)} ·$fileName'
         : (hasSubmitTime ? '${_expectedExtCn(ext)} ·已提交' : null);
 
-    final fb = pick('feedback').isNotEmpty ? pick('feedback') : pick('teacherFeedback');
+    final fb = pick('feedback').isNotEmpty
+        ? pick('feedback')
+        : pick('teacherFeedback');
     final reviewText = fb.isNotEmpty ? fb : null;
 
     return _HomeworkData(
@@ -1416,16 +1472,23 @@ class _HomeworkData {
   }
 
   /// 用详情接口返回覆盖列表摘要。
-  static _HomeworkData mergeDetail(_HomeworkData base, Map<dynamic, dynamic> raw) {
+  static _HomeworkData mergeDetail(
+    _HomeworkData base,
+    Map<dynamic, dynamic> raw,
+  ) {
     final m = _flattenStudentHomeworkDetail(Map<dynamic, dynamic>.from(raw));
     String pick(String k) => m[k]?.toString() ?? '';
 
     final title = pick('title');
     final description = pick('description');
-    final feedback = pick('feedback').isNotEmpty ? pick('feedback') : pick('teacherFeedback');
+    final feedback = pick('feedback').isNotEmpty
+        ? pick('feedback')
+        : pick('teacherFeedback');
     final submitTime = pick('submitTime');
     final endRaw = pick('endTime');
-    final deadline = endRaw.isNotEmpty ? _studentHwDeadlineLabel(endRaw) : base.deadline;
+    final deadline = endRaw.isNotEmpty
+        ? _studentHwDeadlineLabel(endRaw)
+        : base.deadline;
     final teacher = pick('teacherName').isNotEmpty
         ? pick('teacherName')
         : (pick('teacher').isNotEmpty ? pick('teacher') : base.teacher);
@@ -1460,7 +1523,8 @@ class _HomeworkData {
     }
 
     final scoreRaw = m['score'];
-    final String? score = (scoreRaw != null && scoreRaw.toString().trim().isNotEmpty)
+    final String? score =
+        (scoreRaw != null && scoreRaw.toString().trim().isNotEmpty)
         ? '$scoreRaw分'
         : base.score;
 
@@ -1478,8 +1542,12 @@ class _HomeworkData {
         ? _subjectPillFromApi(subjName.isNotEmpty ? subjName : null, subjId)
         : base.subject;
 
-    final mergedFeedback = feedback.isNotEmpty ? feedback : base.teacherFeedback;
-    final mergedReview = mergedFeedback.isNotEmpty ? mergedFeedback : base.reviewText;
+    final mergedFeedback = feedback.isNotEmpty
+        ? feedback
+        : base.teacherFeedback;
+    final mergedReview = mergedFeedback.isNotEmpty
+        ? mergedFeedback
+        : base.reviewText;
 
     final hid = pick('homeworkStudentId');
     final extRaw = pick('expectedExt');
@@ -1561,7 +1629,8 @@ class _HomeworkData {
       teacherFeedback: teacherFeedback ?? this.teacherFeedback,
       submitTimeDisplay: submitTimeDisplay ?? this.submitTimeDisplay,
       mediumLabel: mediumLabel ?? this.mediumLabel,
-      studentSubmitDescription: studentSubmitDescription ?? this.studentSubmitDescription,
+      studentSubmitDescription:
+          studentSubmitDescription ?? this.studentSubmitDescription,
       submitAttachmentName: submitAttachmentName ?? this.submitAttachmentName,
       submitTypeTag: submitTypeTag ?? this.submitTypeTag,
       submitFileUrl: submitFileUrl ?? this.submitFileUrl,
@@ -1911,7 +1980,8 @@ class _CardBody extends StatelessWidget {
           children: [
             if ((data.submittedFile ?? '').trim().isNotEmpty)
               _SubmittedFileRow(file: data.submittedFile!.trim()),
-            if ((data.submittedFile ?? '').trim().isNotEmpty) SizedBox(height: ui(8)),
+            if ((data.submittedFile ?? '').trim().isNotEmpty)
+              SizedBox(height: ui(8)),
             Text(
               '教师批阅中，请留意通知',
               style: TextStyle(
@@ -2430,7 +2500,9 @@ class _SubmitHomeworkDialogState extends ConsumerState<_SubmitHomeworkDialog> {
       _SubmitKind.photo => '照片',
       _SubmitKind.doc => '文档',
     };
-    final res = await ref.read(studentRepositoryProvider).studentHomeworkSubmit(
+    final res = await ref
+        .read(studentRepositoryProvider)
+        .studentHomeworkSubmit(
           id: widget.data.recordId,
           description: desc,
           studentParam1: _remotePath ?? '',
@@ -2455,9 +2527,7 @@ class _SubmitHomeworkDialogState extends ConsumerState<_SubmitHomeworkDialog> {
       contentPadding: EdgeInsets.fromLTRB(ui(24), ui(60), ui(24), ui(20)),
       actionBar: AppDialogActionBar(
         cancelLabel: '取消',
-        confirmLabel: _submitting
-            ? '提交中…'
-            : (_uploading ? '上传中…' : '确认'),
+        confirmLabel: _submitting ? '提交中…' : (_uploading ? '上传中…' : '确认'),
         confirmEnabled: _ready && !_submitting,
         onCancel: () => Navigator.of(context).pop(),
         onConfirm: _submit,
@@ -2841,7 +2911,8 @@ class _HomeworkDetailDialog extends ConsumerStatefulWidget {
   final _HomeworkData data;
 
   @override
-  ConsumerState<_HomeworkDetailDialog> createState() => _HomeworkDetailDialogState();
+  ConsumerState<_HomeworkDetailDialog> createState() =>
+      _HomeworkDetailDialogState();
 }
 
 class _HomeworkDetailDialogState extends ConsumerState<_HomeworkDetailDialog> {
@@ -2990,7 +3061,9 @@ class _HomeworkDetailDialogState extends ConsumerState<_HomeworkDetailDialog> {
             label: '提交情况',
             children: [
               _DetailGrayLine(
-                text: _d.submittedFile?.isNotEmpty == true ? _d.submittedFile! : '尚未提交',
+                text: _d.submittedFile?.isNotEmpty == true
+                    ? _d.submittedFile!
+                    : '尚未提交',
                 primary: _d.submittedFile?.isNotEmpty == true,
               ),
               if (_submittedAt(_d) != null) ...[
@@ -3008,14 +3081,23 @@ class _HomeworkDetailDialogState extends ConsumerState<_HomeworkDetailDialog> {
               label: '我的提交',
               children: [
                 if (_d.submitTypeTag.trim().isNotEmpty)
-                  _DetailGrayLine(text: '提交类型：${_d.submitTypeTag}', primary: true),
+                  _DetailGrayLine(
+                    text: '提交类型：${_d.submitTypeTag}',
+                    primary: true,
+                  ),
                 if (_d.submitAttachmentName.trim().isNotEmpty) ...[
                   SizedBox(height: ui(6)),
-                  _DetailGrayLine(text: '文件：${_d.submitAttachmentName}', primary: true),
+                  _DetailGrayLine(
+                    text: '文件：${_d.submitAttachmentName}',
+                    primary: true,
+                  ),
                 ],
                 if (_d.studentSubmitDescription.trim().isNotEmpty) ...[
                   SizedBox(height: ui(6)),
-                  _DetailGrayLine(text: '说明：${_d.studentSubmitDescription}', primary: false),
+                  _DetailGrayLine(
+                    text: '说明：${_d.studentSubmitDescription}',
+                    primary: false,
+                  ),
                 ],
                 if (_d.submitFileUrl.trim().isNotEmpty) ...[
                   SizedBox(height: ui(8)),
@@ -3031,7 +3113,11 @@ class _HomeworkDetailDialogState extends ConsumerState<_HomeworkDetailDialog> {
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.open_in_new_rounded, size: ui(16), color: _kBlueLink),
+                        Icon(
+                          Icons.open_in_new_rounded,
+                          size: ui(16),
+                          color: _kBlueLink,
+                        ),
                         SizedBox(width: ui(6)),
                         Text(
                           '预览提交文件',

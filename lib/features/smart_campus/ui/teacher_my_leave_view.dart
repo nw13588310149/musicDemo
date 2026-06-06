@@ -207,6 +207,31 @@ class _TeacherMyLeaveViewState extends ConsumerState<TeacherMyLeaveView> {
     );
   }
 
+  Future<void> _showLeaveDetail(TeacherLeaveRecord record) async {
+    final response = await ref
+        .read(teacherRepositoryProvider)
+        .teacherLeaveDetail(id: record.id);
+    if (!mounted) return;
+    if (!response.isSuccess) {
+      AppToast.show(context, response.displayMsg, type: AppToastType.error);
+      return;
+    }
+    final detail = parseTeacherLeaveDetail(response.data) ?? record;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('请假详情'),
+        content: SizedBox(width: 560, child: _LeaveCard(record: detail)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).maybePop(),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
@@ -257,6 +282,7 @@ class _TeacherMyLeaveViewState extends ConsumerState<TeacherMyLeaveView> {
             else
               _CardsGrid(
                 records: _records,
+                onOpen: _showLeaveDetail,
                 emptyMessage: _loadError ?? '暂无相关申请',
               ),
           ],
@@ -592,10 +618,15 @@ class _CreateLeaveButton extends StatelessWidget {
 // —— 卡片网格 ——————————————————————————————————————————————————————
 
 class _CardsGrid extends StatelessWidget {
-  const _CardsGrid({required this.records, required this.emptyMessage});
+  const _CardsGrid({
+    required this.records,
+    required this.emptyMessage,
+    required this.onOpen,
+  });
 
   final List<TeacherLeaveRecord> records;
   final String emptyMessage;
+  final ValueChanged<TeacherLeaveRecord> onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -628,7 +659,7 @@ class _CardsGrid extends StatelessWidget {
             for (final r in records)
               SizedBox(
                 width: cardWidth,
-                child: _LeaveCard(record: r),
+                child: _LeaveCard(record: r, onTap: () => onOpen(r)),
               ),
           ],
         );
@@ -638,14 +669,18 @@ class _CardsGrid extends StatelessWidget {
 }
 
 class _LeaveCard extends StatelessWidget {
-  const _LeaveCard({required this.record});
+  const _LeaveCard({required this.record, this.onTap});
 
   final TeacherLeaveRecord record;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(ui(12)),
+      child: Container(
       padding: EdgeInsets.all(ui(12)),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
@@ -718,6 +753,7 @@ class _LeaveCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
       ),
     );
   }

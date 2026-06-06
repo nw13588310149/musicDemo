@@ -135,6 +135,15 @@ List<TeacherLeaveRecord> parseTeacherLeaveList(dynamic raw) {
   return parsed;
 }
 
+TeacherLeaveRecord? parseTeacherLeaveDetail(dynamic raw) {
+  dynamic value = raw;
+  if (value is Map && value['data'] is Map) value = value['data'];
+  if (value is! Map) return null;
+  final map = Map<String, dynamic>.from(value);
+  if ((map['id']?.toString() ?? '').isEmpty) return null;
+  return TeacherLeaveRecord.fromJson(map);
+}
+
 int? parseTeacherLeaveTotal(dynamic raw) {
   if (raw is! Map) return null;
   var m = raw.cast<String, dynamic>();

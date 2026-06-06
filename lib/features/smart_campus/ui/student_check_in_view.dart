@@ -349,7 +349,14 @@ class _StudentCheckInViewState extends ConsumerState<StudentCheckInView> {
           SizedBox(height: ui(28)),
           _SectionTitle('最近课堂记录'),
           SizedBox(height: ui(12)),
-          _RecentRecordsGrid(records: _kDemoRecentRecords),
+          _RecentRecordsGrid(
+            records: _kDemoRecentRecords,
+            onApplyMakeup: () => AppToast.show(
+              context,
+              '补签申请接口暂未开放，请联系班主任处理',
+              type: AppToastType.error,
+            ),
+          ),
         ],
       ),
     );
@@ -1350,9 +1357,10 @@ class _RecentRecordData {
 }
 
 class _RecentRecordsGrid extends StatelessWidget {
-  const _RecentRecordsGrid({required this.records});
+  const _RecentRecordsGrid({required this.records, this.onApplyMakeup});
 
   final List<_RecentRecordData> records;
+  final VoidCallback? onApplyMakeup;
 
   @override
   Widget build(BuildContext context) {
@@ -1364,7 +1372,7 @@ class _RecentRecordsGrid extends StatelessWidget {
         for (final r in records)
           SizedBox(
             width: ui(312),
-            child: _RecentRecordCard(data: r),
+            child: _RecentRecordCard(data: r, onApplyMakeup: onApplyMakeup),
           ),
       ],
     );
@@ -1372,9 +1380,10 @@ class _RecentRecordsGrid extends StatelessWidget {
 }
 
 class _RecentRecordCard extends StatelessWidget {
-  const _RecentRecordCard({required this.data});
+  const _RecentRecordCard({required this.data, this.onApplyMakeup});
 
   final _RecentRecordData data;
+  final VoidCallback? onApplyMakeup;
 
   @override
   Widget build(BuildContext context) {
@@ -1510,25 +1519,32 @@ class _RecentRecordCard extends StatelessWidget {
               ),
             ),
             SizedBox(height: ui(8)),
-            Row(
-              children: [
-                Icon(
-                  Icons.event_note_rounded,
-                  size: ui(16),
-                  color: const Color(0xFF1C274C),
+            InkWell(
+              onTap: onApplyMakeup,
+              borderRadius: BorderRadius.circular(ui(6)),
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: ui(4)),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.event_note_rounded,
+                      size: ui(16),
+                      color: const Color(0xFF1C274C),
+                    ),
+                    SizedBox(width: ui(8)),
+                    Text(
+                      '申请补签',
+                      style: TextStyle(
+                        fontSize: ui(14),
+                        color: Colors.black,
+                        fontFamily: 'PingFang SC',
+                        fontWeight: AppFont.w400,
+                        height: 1,
+                      ),
+                    ),
+                  ],
                 ),
-                SizedBox(width: ui(8)),
-                Text(
-                  '申请补签',
-                  style: TextStyle(
-                    fontSize: ui(14),
-                    color: Colors.black,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w400,
-                    height: 1,
-                  ),
-                ),
-              ],
+              ),
             ),
           ] else
             _AttendStatsRow(

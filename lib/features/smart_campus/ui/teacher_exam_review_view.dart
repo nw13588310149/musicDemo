@@ -35,10 +35,15 @@
 // 字体：PingFang SC（10/11/12/13/14/16/600）+ Barlow（28 数值 + 16 分母）
 // =============================================================================
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 
+import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/popup_selector_field.dart';
+import '../data/teacher_repository.dart';
 import '../../shell/ui/shell_layout.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
@@ -68,6 +73,7 @@ enum _SubmissionState { passed, pending, missing, reviewed }
 
 class _Submission {
   const _Submission({
+    this.studentId = '',
     required this.studentName,
     required this.avatarSeed,
     required this.state,
@@ -77,6 +83,7 @@ class _Submission {
     required this.action,
   });
 
+  final String studentId;
   final String studentName;
   final int avatarSeed;
   final _SubmissionState state;
@@ -90,6 +97,8 @@ class _Submission {
 
 class _ExamItem {
   const _ExamItem({
+    this.id = '',
+    this.subjectId = 0,
     required this.title,
     required this.subject,
     required this.examLabel,
@@ -107,6 +116,8 @@ class _ExamItem {
     required this.publishedRatio,
   });
 
+  final String id;
+  final int subjectId;
   final String title;
   final String subject;
   final String examLabel;
@@ -137,33 +148,165 @@ class _ExamItem {
 
 enum _CornerKind { closed, pending }
 
+class _ExamOverviewStats {
+  const _ExamOverviewStats({
+    this.pending = 0,
+    this.subjects = 0,
+    this.reviewed = 0,
+    this.average,
+    this.max,
+    this.min,
+  });
+
+  final int pending;
+  final int subjects;
+  final int reviewed;
+  final double? average;
+  final double? max;
+  final double? min;
+
+  String get averageLabel => average?.toStringAsFixed(1) ?? '—';
+  String get maxLabel => max?.toStringAsFixed(1) ?? '—';
+  String get minLabel => min?.toStringAsFixed(1) ?? '—';
+
+  factory _ExamOverviewStats.fromApi(dynamic raw) {
+    final map = _apiMap(raw);
+    int integer(List<String> keys) =>
+        int.tryParse(_pickApiValue(map, keys)) ?? 0;
+    double? decimal(List<String> keys) =>
+        double.tryParse(_pickApiValue(map, keys));
+    return _ExamOverviewStats(
+      pending: integer(['unScoreCount', 'pendingCount', 'notScoreCount']),
+      subjects: 1,
+      reviewed: integer(['scoreCount', 'reviewedCount', 'scoredCount']),
+      average: decimal(['avgScore', 'averageScore', 'scoreAvg']),
+      max: decimal(['maxScore', 'highestScore']),
+      min: decimal(['minScore', 'lowestScore']),
+    );
+  }
+
+  static _ExamOverviewStats merge(List<_ExamOverviewStats> rows) {
+    if (rows.isEmpty) return const _ExamOverviewStats();
+    final reviewed = rows.fold<int>(0, (sum, item) => sum + item.reviewed);
+    final averages = rows.where((item) => item.average != null).toList();
+    return _ExamOverviewStats(
+      pending: rows.fold<int>(0, (sum, item) => sum + item.pending),
+      subjects: rows.length,
+      reviewed: reviewed,
+      average: averages.isEmpty
+          ? null
+          : reviewed == 0
+          ? averages.fold<double>(0, (sum, item) => sum + item.average!) /
+                averages.length
+          : averages.fold<double>(
+                  0,
+                  (sum, item) => sum + item.average! * item.reviewed,
+                ) /
+                reviewed,
+      max: _extreme(rows.map((item) => item.max), true),
+      min: _extreme(rows.map((item) => item.min), false),
+    );
+  }
+
+  static double? _extreme(Iterable<double?> values, bool highest) {
+    final numbers = values.whereType<double>().toList();
+    if (numbers.isEmpty) return null;
+    return numbers.reduce(highest
+        ? (a, b) => a > b ? a : b
+        : (a, b) => a < b ? a : b);
+  }
+}
+
 const List<String> _kStatusTabs = ['全部', '审批中', '已通过', '已拒绝', '已撤销'];
 const List<String> _kRangeTabs = ['累计', '本学期', '本月'];
 const List<String> _kClassOptions = ['全部班级', '高三音乐实验班', '高三声乐回课', '高二音乐实验班'];
 
 // ---- 入口 view --------------------------------------------------------------
 
-class TeacherExamReviewView extends StatefulWidget {
+class TeacherExamReviewView extends ConsumerStatefulWidget {
   const TeacherExamReviewView({super.key, required this.onBack});
 
   final VoidCallback onBack;
 
   @override
-  State<TeacherExamReviewView> createState() => _TeacherExamReviewViewState();
+  ConsumerState<TeacherExamReviewView> createState() =>
+      _TeacherExamReviewViewState();
 }
 
-class _TeacherExamReviewViewState extends State<TeacherExamReviewView> {
+class _TeacherExamReviewViewState
+    extends ConsumerState<TeacherExamReviewView> {
   int _statusTab = 0;
   int _rangeTab = 0;
   String _classFilter = _kClassOptions.first;
-  int _activeIdx = 1; // 默认选中第 2 张（紫底 #F4F4FF）。
+  int _activeIdx = 0;
+  bool _loading = true;
+  String? _loadError;
 
-  late final List<_ExamItem> _all = _buildDemoExams();
+  List<_ExamItem> _all = const [];
+  _ExamOverviewStats _overviewStats = const _ExamOverviewStats();
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadExams());
+  }
+
+  Future<void> _loadExams() async {
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
+    final repo = ref.read(teacherRepositoryProvider);
+    final response = await repo.examList();
+    if (!mounted) return;
+    if (!response.isSuccess) {
+      setState(() {
+        _loading = false;
+        _loadError = response.displayMsg;
+        _all = const [];
+      });
+      return;
+    }
+
+    final exams = <_ExamItem>[];
+    final stats = <_ExamOverviewStats>[];
+    for (final row in _examRows(response.data)) {
+      final subjectIds = _csvInts(row['subjectIds']);
+      final subjectNames = _csvStrings(row['subjectNames']);
+      final subjectId = subjectIds.isEmpty ? 0 : subjectIds.first;
+      final studentResponse = subjectId == 0
+          ? null
+          : await repo.examStudentList(
+              examId: _stringValue(row['id']),
+              subjectId: subjectId,
+            );
+      final submissions = studentResponse?.isSuccess == true
+          ? _submissionRows(studentResponse!.data)
+          : const <_Submission>[];
+      if (subjectId != 0) {
+        final statResponse = await repo.examStudentStat(
+          examId: _stringValue(row['id']),
+          subjectId: subjectId,
+        );
+        if (statResponse.isSuccess) {
+          stats.add(_ExamOverviewStats.fromApi(statResponse.data));
+        }
+      }
+      exams.add(_examFromApi(row, subjectId, subjectNames, submissions));
+    }
+    if (!mounted) return;
+    setState(() {
+      _all = exams;
+      _overviewStats = _ExamOverviewStats.merge(stats);
+      _activeIdx = 0;
+      _loading = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final active = _all[_activeIdx];
+    final active = _all.isEmpty ? null : _all[_activeIdx];
 
     return Container(
       color: _kPageBg,
@@ -185,19 +328,25 @@ class _TeacherExamReviewViewState extends State<TeacherExamReviewView> {
             ),
             SizedBox(height: ui(12)),
             _StatsPanel(
+              stats: _overviewStats,
               classFilter: _classFilter,
               onClassChanged: (v) => setState(() => _classFilter = v),
               rangeIdx: _rangeTab,
               onRangeChanged: (i) => setState(() => _rangeTab = i),
             ),
             SizedBox(height: ui(16)),
-            _BodyRow(
-              items: _all,
-              activeIdx: _activeIdx,
-              onSelect: (i) => setState(() => _activeIdx = i),
-              active: active,
-              onOpenScore: (s) => _openScoreDrawer(active, s),
-            ),
+            if (_loading)
+              const Center(child: CircularProgressIndicator())
+            else if (active == null)
+              Center(child: Text(_loadError ?? '暂无可批改的考试'))
+            else
+              _BodyRow(
+                items: _all,
+                activeIdx: _activeIdx,
+                onSelect: (i) => setState(() => _activeIdx = i),
+                active: active,
+                onOpenScore: (s) => _openScoreDrawer(active, s),
+              ),
           ],
         ),
       ),
@@ -246,7 +395,11 @@ class _TeacherExamReviewViewState extends State<TeacherExamReviewView> {
           alignment: Alignment.centerRight,
           child: DashboardScaleScope(
             data: scale,
-            child: _ScoreDrawer(item: item, submission: submission),
+            child: _ScoreDrawer(
+              item: item,
+              submission: submission,
+              onScored: _loadExams,
+            ),
           ),
         );
       },
@@ -493,12 +646,14 @@ class _SegmentChip extends StatelessWidget {
 
 class _StatsPanel extends StatelessWidget {
   const _StatsPanel({
+    required this.stats,
     required this.classFilter,
     required this.onClassChanged,
     required this.rangeIdx,
     required this.onRangeChanged,
   });
 
+  final _ExamOverviewStats stats;
   final String classFilter;
   final ValueChanged<String> onClassChanged;
   final int rangeIdx;
@@ -555,29 +710,29 @@ class _StatsPanel extends StatelessWidget {
           ),
           SizedBox(height: ui(12)),
           Row(
-            children: const [
+            children: [
               Expanded(
-                child: _StatCell(value: '6', label: '待评分人次'),
+                child: _StatCell(value: '${stats.pending}', label: '待评分人次'),
               ),
-              _StatGap(),
+              const _StatGap(),
               Expanded(
-                child: _StatCell(value: '6', label: '关联考试科目'),
+                child: _StatCell(value: '${stats.subjects}', label: '关联考试科目'),
               ),
-              _StatGap(),
+              const _StatGap(),
               Expanded(
-                child: _StatCell(value: '3', label: '已评人次'),
+                child: _StatCell(value: '${stats.reviewed}', label: '已评人次'),
               ),
-              _StatGap(),
+              const _StatGap(),
               Expanded(
-                child: _StatCell(value: '98', label: '已评均分'),
+                child: _StatCell(value: stats.averageLabel, label: '已评均分'),
               ),
-              _StatGap(),
+              const _StatGap(),
               Expanded(
-                child: _StatCell(value: '100', label: '最高分'),
+                child: _StatCell(value: stats.maxLabel, label: '最高分'),
               ),
-              _StatGap(),
+              const _StatGap(),
               Expanded(
-                child: _StatCell(value: '99', label: '最低分'),
+                child: _StatCell(value: stats.minLabel, label: '最低分'),
               ),
             ],
           ),
@@ -1623,21 +1778,27 @@ class _HistoryCard extends StatelessWidget {
 // 评分右抽屉（600 宽，与作业批改"作业点评"同款表单）
 // =============================================================================
 
-class _ScoreDrawer extends StatefulWidget {
-  const _ScoreDrawer({required this.item, required this.submission});
+class _ScoreDrawer extends ConsumerStatefulWidget {
+  const _ScoreDrawer({
+    required this.item,
+    required this.submission,
+    required this.onScored,
+  });
 
   final _ExamItem item;
   final _Submission submission;
+  final Future<void> Function() onScored;
 
   @override
-  State<_ScoreDrawer> createState() => _ScoreDrawerState();
+  ConsumerState<_ScoreDrawer> createState() => _ScoreDrawerState();
 }
 
-class _ScoreDrawerState extends State<_ScoreDrawer> {
+class _ScoreDrawerState extends ConsumerState<_ScoreDrawer> {
   String _scope = '高三音乐实验班';
   String _form = '文字 + 评分';
   final _scoreCtrl = TextEditingController(text: '95');
   final _commentCtrl = TextEditingController();
+  bool _submitting = false;
 
   @override
   void dispose() {
@@ -1737,14 +1898,49 @@ class _ScoreDrawerState extends State<_ScoreDrawer> {
               bottom: ui(20),
               child: _PrimaryGradientButton(
                 icon: Icons.check_circle_outline_rounded,
-                label: '提交评分',
-                onTap: () => Navigator.of(context).maybePop(),
+                label: _submitting ? '提交中...' : '提交评分',
+                onTap: _submit,
               ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _submit() async {
+    if (_submitting) return;
+    final score = int.tryParse(_scoreCtrl.text.trim());
+    if (score == null || score < 0 || score > 100) {
+      AppToast.show(context, '请输入 0-100 的分数', type: AppToastType.error);
+      return;
+    }
+    if (widget.item.id.isEmpty ||
+        widget.item.subjectId == 0 ||
+        widget.submission.studentId.isEmpty) {
+      AppToast.show(context, '考试或学生信息不完整', type: AppToastType.error);
+      return;
+    }
+    setState(() => _submitting = true);
+    final response = await ref.read(teacherRepositoryProvider).examStudentScore(
+      <String, dynamic>{
+        'examId': widget.item.id,
+        'subjectId': widget.item.subjectId,
+        'studentId': widget.submission.studentId,
+        'score': score,
+        if (_commentCtrl.text.trim().isNotEmpty)
+          'remark': _commentCtrl.text.trim(),
+      },
+    );
+    if (!mounted) return;
+    setState(() => _submitting = false);
+    if (!response.isSuccess) {
+      AppToast.show(context, response.displayMsg, type: AppToastType.error);
+      return;
+    }
+    AppToast.show(context, '评分提交成功', type: AppToastType.success);
+    await widget.onScored();
+    if (mounted) Navigator.of(context).maybePop();
   }
 
   String _extOf(String medium) {
@@ -2254,6 +2450,127 @@ class _PrimaryGradientButton extends StatelessWidget {
 // Demo 数据
 // =============================================================================
 
+List<Map<String, dynamic>> _examRows(dynamic raw) {
+  dynamic value = raw;
+  if (value is Map) {
+    value = value['records'] ?? value['list'] ?? value['rows'] ?? value['data'];
+  }
+  if (value is! List) return const [];
+  return value
+      .whereType<Map>()
+      .map((e) => e.map((key, value) => MapEntry(key.toString(), value)))
+      .toList(growable: false);
+}
+
+Map<String, dynamic> _apiMap(dynamic raw) {
+  dynamic value = raw;
+  while (value is Map && value['data'] is Map) {
+    value = value['data'];
+  }
+  return value is Map
+      ? value.map((key, value) => MapEntry(key.toString(), value))
+      : const {};
+}
+
+String _pickApiValue(Map<String, dynamic> map, List<String> keys) {
+  for (final key in keys) {
+    final value = map[key]?.toString().trim() ?? '';
+    if (value.isNotEmpty && value != 'null') return value;
+  }
+  return '';
+}
+
+List<_Submission> _submissionRows(dynamic raw) {
+  return _examRows(raw).map((row) {
+    final score = int.tryParse(_stringValue(row['score']));
+    final path = _stringValue(row['path']);
+    return _Submission(
+      studentId: _stringValue(row['studentId']),
+      studentName: _stringValue(row['realname'], fallback: '未命名学生'),
+      avatarSeed: _stringValue(row['studentId']).hashCode.abs(),
+      state: score == null
+          ? _SubmissionState.pending
+          : _SubmissionState.reviewed,
+      subject: _stringValue(row['subjectName'], fallback: '考试科目'),
+      medium: _mediumFromPath(path),
+      uploadAt: '',
+      action: score == null ? '评分' : '查看',
+    );
+  }).toList(growable: false);
+}
+
+_ExamItem _examFromApi(
+  Map<String, dynamic> row,
+  int subjectId,
+  List<String> subjectNames,
+  List<_Submission> submissions,
+) {
+  final reviewed =
+      submissions.where((s) => s.state == _SubmissionState.reviewed).length;
+  final pending = submissions.length - reviewed;
+  final classes = row['classList'] is List
+      ? (row['classList'] as List)
+          .whereType<Map>()
+          .map((e) => _stringValue(e['name']))
+          .where((e) => e.isNotEmpty)
+          .join('、')
+      : '';
+  final status = int.tryParse(_stringValue(row['status'])) ?? 0;
+  return _ExamItem(
+    id: _stringValue(row['id']),
+    subjectId: subjectId,
+    title: _stringValue(row['name'], fallback: '未命名考试'),
+    subject: subjectNames.isEmpty ? '未设置科目' : subjectNames.first,
+    examLabel: '考试',
+    classLabel: classes.isEmpty ? '全部关联班级' : classes,
+    deadline: _stringValue(row['examDate'], fallback: '--'),
+    syncNote: '数据来自教务考试安排',
+    officialDesc: _stringValue(row['remark'], fallback: '暂无考试说明'),
+    cornerLabel: status == 0 ? '进行中' : '已截止',
+    cornerKind: status == 0 ? _CornerKind.pending : _CornerKind.closed,
+    attended: submissions.length,
+    unsubmitted: 0,
+    pendingReview: pending,
+    reviewed: reviewed,
+    submissions: submissions,
+    publishedRatio: (submitted: submissions.length, total: submissions.length),
+  );
+}
+
+List<String> _csvStrings(dynamic raw) => _stringValue(raw)
+    .split(',')
+    .map((e) => e.trim())
+    .where((e) => e.isNotEmpty)
+    .toList(growable: false);
+
+List<int> _csvInts(dynamic raw) => _csvStrings(raw)
+    .map(int.tryParse)
+    .whereType<int>()
+    .toList(growable: false);
+
+String _stringValue(dynamic raw, {String fallback = ''}) {
+  final value = raw?.toString().trim() ?? '';
+  return value.isEmpty || value == 'null' ? fallback : value;
+}
+
+String _mediumFromPath(String path) {
+  final lower = path.toLowerCase();
+  if (lower.endsWith('.mp3') ||
+      lower.endsWith('.wav') ||
+      lower.endsWith('.m4a')) {
+    return '音频';
+  }
+  if (lower.endsWith('.mp4') || lower.endsWith('.mov')) return '视频';
+  if (lower.endsWith('.jpg') ||
+      lower.endsWith('.jpeg') ||
+      lower.endsWith('.png')) {
+    return '图片';
+  }
+  return '文件';
+}
+
+// Kept as a visual fixture for widget previews; production data uses the API.
+// ignore: unused_element
 List<_ExamItem> _buildDemoExams() {
   const submissions = [
     _Submission(

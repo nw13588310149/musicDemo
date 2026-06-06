@@ -174,15 +174,6 @@ abstract final class AppAudioService {
     });
   }
 
-  static Future<Map<String, Object?>> diagnostics() => _player.diagnostics();
-
-  static void registerDebugEngine(Object? engine) {
-    _debugEngine = engine;
-  }
-
-  static Object? _debugEngine;
-  static Object? get debugEngine => _debugEngine;
-
   /// 首次 prepare 成功后由引擎调用。
   static void markPianoCoreWarmed() {
     _pianoCoreWarmed = true;

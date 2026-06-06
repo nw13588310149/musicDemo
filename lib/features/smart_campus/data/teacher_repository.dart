@@ -94,6 +94,22 @@ class TeacherRepository {
     return client.post('$_base/courseList', data: body);
   }
 
+  /// 教师上课签到。`courseId` 为课表记录 id。
+  Future<ApiResponse> courseTeacherSignIn({required String courseId}) {
+    return client.post(
+      '$_base/courseTeacherSignIn',
+      data: <String, dynamic>{'courseId': readSnowflakeId(courseId) ?? courseId},
+    );
+  }
+
+  /// 教师下课签到。必须先完成上课签到。
+  Future<ApiResponse> courseTeacherSignOut({required String courseId}) {
+    return client.post(
+      '$_base/courseTeacherSignOut',
+      data: <String, dynamic>{'courseId': readSnowflakeId(courseId) ?? courseId},
+    );
+  }
+
   /// 班主任编辑班级群资料。当前用于更新群聊名称与头像。
   Future<ApiResponse> classUpdate(Map<String, dynamic> body) {
     return client.post('$_base/classUpdate', data: body);
@@ -329,6 +345,63 @@ class TeacherRepository {
     );
   }
 
+  /// 学生考试成绩详情。
+  Future<ApiResponse> studentExamRecordList({required String studentId}) {
+    return client.post(
+      '$_base/studentExamRecordList',
+      data: <String, dynamic>{
+        'studentId': readSnowflakeId(studentId) ?? studentId,
+      },
+    );
+  }
+
+  // ============== 考评管理 ==============
+
+  /// 当前老师有权批改的考试列表。`classId` 为空或 0 时查询全部班级。
+  Future<ApiResponse> examList({String classId = '0'}) {
+    return client.post(
+      '$_base/examList',
+      data: <String, dynamic>{
+        'classId': readSnowflakeId(classId) ?? int.tryParse(classId) ?? 0,
+      },
+    );
+  }
+
+  /// 考试考生列表。`scoreStatus`: 0 未打分、1 已打分；不传查询全部。
+  Future<ApiResponse> examStudentList({
+    required String examId,
+    required int subjectId,
+    int? scoreStatus,
+  }) {
+    return client.post(
+      '$_base/examStudentList',
+      data: <String, dynamic>{
+        'examId': readSnowflakeId(examId) ?? examId,
+        'subjectId': subjectId,
+        'scoreStatus': ?scoreStatus,
+      },
+    );
+  }
+
+  /// 考试打分。请求体字段与老师端 Swagger 保持一致。
+  Future<ApiResponse> examStudentScore(Map<String, dynamic> body) {
+    return client.post('$_base/examStudentScore', data: body);
+  }
+
+  /// 考试打分统计。
+  Future<ApiResponse> examStudentStat({
+    required String examId,
+    required int subjectId,
+  }) {
+    return client.post(
+      '$_base/examStudentStat',
+      data: <String, dynamic>{
+        'examId': readSnowflakeId(examId) ?? examId,
+        'subjectId': subjectId,
+      },
+    );
+  }
+
   // ============== 作业管理（任课老师端） ==============
 
   /// 作业数据汇总。返回待批改人次、发布数、均分、最高/最低分等聚合指标。
@@ -478,6 +551,14 @@ class TeacherRepository {
     );
   }
 
+  /// 班主任查看学生请假记录详情。
+  Future<ApiResponse> headTeacherStudentLeaveDetail({required String id}) {
+    return client.post(
+      '$_base/headTeacherStudentLeaveDetail',
+      data: <String, dynamic>{'id': readSnowflakeId(id) ?? id},
+    );
+  }
+
   // ============== 教师请假（任课老师 / 班主任 · 我的请假） ==============
 
   /// 我的请假列表。
@@ -533,6 +614,22 @@ class TeacherRepository {
         'leaveReason': leaveReason,
         'shiftHandover': shiftHandover,
       },
+    );
+  }
+
+  /// 老师查看本人请假记录详情。
+  Future<ApiResponse> teacherLeaveDetail({required String id}) {
+    return client.post(
+      '$_base/teacherLeaveDetail',
+      data: <String, dynamic>{'id': readSnowflakeId(id) ?? id},
+    );
+  }
+
+  /// 班级公告详情。
+  Future<ApiResponse> schoolClassNoticeDetail({required String id}) {
+    return client.post(
+      '$_base/schoolClassNoticeDetail',
+      data: <String, dynamic>{'id': readSnowflakeId(id) ?? id},
     );
   }
 }

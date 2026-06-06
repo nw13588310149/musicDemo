@@ -245,6 +245,7 @@ class CourseSignSession {
     this.teacherCheckOutTime,
     this.adminConfirmed = false,
     this.signStep,
+    this.courseType = 0,
   });
 
   final String courseId;
@@ -259,6 +260,7 @@ class CourseSignSession {
 
   /// 小课流程步骤（0–5），后端若下发 `signStep` / `step` 则直接使用。
   final int? signStep;
+  final int courseType;
 
   factory CourseSignSession.fromJson(Map<String, dynamic> json) {
     final courseId = _pickString(json, ['courseId', 'id', 'cId'], '');
@@ -322,6 +324,9 @@ class CourseSignSession {
       ]),
       adminConfirmed: adminConfirmed,
       signStep: step,
+      courseType:
+          int.tryParse((json['type'] ?? json['classType'] ?? 0).toString()) ??
+          0,
     );
   }
 }

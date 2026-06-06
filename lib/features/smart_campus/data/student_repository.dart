@@ -27,6 +27,16 @@ class StudentRepository {
     return client.post('$_base/index');
   }
 
+  /// 考试统计概览：均分、排名、最佳考试、趋势和分数段分布。
+  Future<ApiResponse> examOverview() {
+    return client.post('$_base/examOverview');
+  }
+
+  /// 已发布成绩的考试记录与各科成绩。
+  Future<ApiResponse> examRecordList() {
+    return client.post('$_base/examRecordList');
+  }
+
   /// 我的课表。`beginDate` / `endDate` 为 `yyyy-MM-dd`；后端按 token 过滤当前学生。
   Future<ApiResponse> courseList({
     required String beginDate,
@@ -36,10 +46,7 @@ class StudentRepository {
     String? teacherId,
     int? type,
   }) {
-    final body = <String, dynamic>{
-      'beginDate': beginDate,
-      'endDate': endDate,
-    };
+    final body = <String, dynamic>{'beginDate': beginDate, 'endDate': endDate};
     if (classId != null && classId.isNotEmpty) {
       body['classId'] = classId;
     }
@@ -61,10 +68,7 @@ class StudentRepository {
   }
 
   /// 班级公告列表（分页）。
-  Future<ApiResponse> schoolClassNoticeList({
-    int current = 1,
-    int size = 10,
-  }) {
+  Future<ApiResponse> schoolClassNoticeList({int current = 1, int size = 10}) {
     return client.post(
       '$_base/schoolClassNotice/list',
       data: <String, dynamic>{'current': current, 'size': size},
@@ -82,6 +86,11 @@ class StudentRepository {
     final body = <String, dynamic>{'current': current, 'size': size};
     if (status != null) body['status'] = status;
     return client.post('$_base/studentHomeworkList', data: body);
+  }
+
+  /// 学生作业数据统计：科目均分与分数段分布。
+  Future<ApiResponse> studentHomeworkSum() {
+    return client.post('$_base/studentHomeworkSum');
   }
 
   /// 作业详情。`id` 须传列表项的 **`homeworkStudentId`**（学生作业记录 id），勿用作业 `id`。
@@ -114,10 +123,7 @@ class StudentRepository {
   }
 
   /// 学生首页通知列表。
-  Future<ApiResponse> noticeList({
-    int current = 1,
-    int size = 20,
-  }) {
+  Future<ApiResponse> noticeList({int current = 1, int size = 20}) {
     return client.post(
       '$_base/noticeList',
       data: <String, dynamic>{'current': current, 'size': size},
@@ -181,10 +187,7 @@ class StudentRepository {
   }
 
   /// 学生请假列表（分页）。
-  Future<ApiResponse> studentLeaveList({
-    int current = 1,
-    int size = 50,
-  }) {
+  Future<ApiResponse> studentLeaveList({int current = 1, int size = 50}) {
     return client.post(
       '$_base/studentLeaveList',
       data: <String, dynamic>{'current': current, 'size': size},

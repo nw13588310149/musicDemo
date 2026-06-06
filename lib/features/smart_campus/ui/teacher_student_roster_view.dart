@@ -1387,15 +1387,10 @@ class _StudentDetailDrawerState extends ConsumerState<_StudentDetailDrawer> {
   // 0 = 声乐 / 1 = 乐理（与 Figma toggle 顺序一致）。
   int _subjectIdx = 0;
 
-  // demo：6 期成绩走势。每个 list 必须 6 项，对应 2月/3月/4月/5月/期中/6月。
-  static const Map<int, List<double>> _kSubjectScores = {
-    0: [88, 90, 91.5, 92, 95, 93], // 声乐
-    1: [86, 87, 86.5, 91, 93, 90], // 乐理（与 Figma demo 一致）
-  };
-
-  static const List<String> _kPeriods = ['2月', '3月', '4月', '5月', '期中', '6月'];
-
   Map<String, dynamic>? _detail;
+  List<String> _scoreSubjects = const [];
+  Map<String, List<double>> _scoresBySubject = const {};
+  Map<String, List<String>> _periodsBySubject = const {};
   bool _detailLoading = false;
 
   @override
@@ -1408,12 +1403,25 @@ class _StudentDetailDrawerState extends ConsumerState<_StudentDetailDrawer> {
     final id = widget.data.userId.trim();
     if (id.isEmpty) return;
     setState(() => _detailLoading = true);
-    final res = await ref.read(teacherRepositoryProvider).studentDetail(id: id);
+    final repo = ref.read(teacherRepositoryProvider);
+    final results = await Future.wait([
+      repo.studentDetail(id: id),
+      repo.studentExamRecordList(studentId: id),
+    ]);
     if (!mounted) return;
+    final res = results[0];
+    final scoreRes = results[1];
+    final scoreData = scoreRes.isSuccess
+        ? _parseStudentScoreSeries(scoreRes.data)
+        : const _StudentScoreSeries();
     if (res.isSuccess && res.data is Map) {
       setState(() {
         _detailLoading = false;
         _detail = _mapDataToStringKeyed(res.data);
+        _scoreSubjects = scoreData.subjects;
+        _scoresBySubject = scoreData.scores;
+        _periodsBySubject = scoreData.periods;
+        _subjectIdx = 0;
       });
     } else {
       setState(() => _detailLoading = false);
@@ -1473,16 +1481,20 @@ class _StudentDetailDrawerState extends ConsumerState<_StudentDetailDrawer> {
                           ),
                         ),
                         SizedBox(height: ui(12)),
-                        Padding(
-                          padding: EdgeInsets.symmetric(horizontal: ui(20)),
-                          child: _ScoreChartBlock(
-                            subjectIdx: _subjectIdx,
-                            onSubjectChanged: (i) =>
-                                setState(() => _subjectIdx = i),
-                            values: _kSubjectScores[_subjectIdx]!,
-                            periods: _kPeriods,
+                        if (_scoreSubjects.isNotEmpty)
+                          Padding(
+                            padding: EdgeInsets.symmetric(horizontal: ui(20)),
+                            child: _ScoreChartBlock(
+                              subjects: _scoreSubjects,
+                              subjectIdx: _subjectIdx,
+                              onSubjectChanged: (i) =>
+                                  setState(() => _subjectIdx = i),
+                              values:
+                                  _scoresBySubject[_scoreSubjects[_subjectIdx]]!,
+                              periods:
+                                  _periodsBySubject[_scoreSubjects[_subjectIdx]]!,
+                            ),
                           ),
-                        ),
                         SizedBox(height: ui(20)),
                         Padding(
                           padding: EdgeInsets.symmetric(horizontal: ui(20)),
@@ -1882,20 +1894,79 @@ class _TeacherRemarksBlock extends StatelessWidget {
 // 我教科目 · 分数走势（灰底卡 + 副标 + 科目切换 + 折线图）
 // =============================================================================
 
+class _StudentScoreSeries {
+  const _StudentScoreSeries({
+    this.subjects = const [],
+    this.scores = const {},
+    this.periods = const {},
+  });
+
+  final List<String> subjects;
+  final Map<String, List<double>> scores;
+  final Map<String, List<String>> periods;
+}
+
+_StudentScoreSeries _parseStudentScoreSeries(dynamic raw) {
+  dynamic value = raw;
+  if (value is Map) {
+    value = value['records'] ?? value['list'] ?? value['rows'] ?? value['data'];
+  }
+  if (value is! List) return const _StudentScoreSeries();
+  final scores = <String, List<double>>{};
+  final periods = <String, List<String>>{};
+  for (final item in value.whereType<Map>()) {
+    final subject = _firstScoreString(item, const [
+      'subjectName',
+      'subject',
+      'courseName',
+    ]);
+    final score = double.tryParse(
+      _firstScoreString(item, const ['score', 'studentScore', 'examScore']),
+    );
+    if (subject.isEmpty || score == null) continue;
+    scores.putIfAbsent(subject, () => <double>[]).add(score);
+    periods.putIfAbsent(subject, () => <String>[]).add(
+          _firstScoreString(
+            item,
+            const ['examName', 'name', 'examDate', 'createTime'],
+            fallback: '考试${scores[subject]!.length}',
+          ),
+        );
+  }
+  final subjects = scores.keys.where((key) => scores[key]!.isNotEmpty).toList();
+  return _StudentScoreSeries(
+    subjects: subjects,
+    scores: scores,
+    periods: periods,
+  );
+}
+
+String _firstScoreString(
+  Map<dynamic, dynamic> map,
+  List<String> keys, {
+  String fallback = '',
+}) {
+  for (final key in keys) {
+    final value = map[key]?.toString().trim() ?? '';
+    if (value.isNotEmpty && value != 'null') return value;
+  }
+  return fallback;
+}
+
 class _ScoreChartBlock extends StatelessWidget {
   const _ScoreChartBlock({
+    required this.subjects,
     required this.subjectIdx,
     required this.onSubjectChanged,
     required this.values,
     required this.periods,
   });
 
+  final List<String> subjects;
   final int subjectIdx;
   final ValueChanged<int> onSubjectChanged;
   final List<double> values;
   final List<String> periods;
-
-  static const List<String> _kSubjects = ['声乐', '乐理'];
 
   @override
   Widget build(BuildContext context) {
@@ -1931,7 +2002,7 @@ class _ScoreChartBlock extends StatelessWidget {
                     ),
                     SizedBox(height: ui(2)),
                     Text(
-                      '${_kSubjects[subjectIdx]} · 周测均分',
+                      '${subjects[subjectIdx]} · 考试成绩',
                       style: TextStyle(
                         fontSize: ui(12),
                         color: _kTextSecondary,
@@ -1944,7 +2015,7 @@ class _ScoreChartBlock extends StatelessWidget {
                 ),
               ),
               _SubjectToggle(
-                subjects: _kSubjects,
+                subjects: subjects,
                 activeIdx: subjectIdx,
                 onTap: onSubjectChanged,
               ),

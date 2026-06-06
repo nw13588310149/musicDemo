@@ -16,22 +16,6 @@ Future<void> warmupMusicCompanionPianoAudio() =>
 
 /// 音乐伴侣 / musicPlay 钢琴引擎（薄封装，共享 [AppAudioService.sharedNativePlayer]）。
 class MusicCompanionAudioEngine {
-  MusicCompanionAudioEngine() {
-    debugLastInstance = this;
-    AppAudioService.registerDebugEngine(this);
-  }
-
-  static MusicCompanionAudioEngine? debugLastInstance;
-
-  Future<Map<String, Object?>> diagnostics() =>
-      AppAudioService.diagnostics();
-
-  Future<void> debugPlayTestNote() async {
-    if (_disposed) return;
-    await AppAudioService.prepareForPianoKeypress();
-    await playNote('C4', volume: 1);
-  }
-
   final MusicCompanionWebAudioPlayer _webPlayer =
       createMusicCompanionWebAudioPlayer();
 

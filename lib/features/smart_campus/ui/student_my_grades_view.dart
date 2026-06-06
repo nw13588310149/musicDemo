@@ -40,10 +40,15 @@
 // 字体：PingFang SC（中文） + Barlow（数字 32 / 20）
 // =============================================================================
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shell/ui/shell_layout.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
+import '../data/student_academic_data.dart';
+import '../data/student_repository.dart';
 
 const Color _kCardBg = Colors.white;
 const Color _kPageBg = Color(0xFFEFF3FC);
@@ -70,18 +75,47 @@ const Color _kAxisLabel = Color(0xFFB6B5BB);
 // 顶级视图
 // =============================================================================
 
-class StudentMyGradesView extends StatefulWidget {
+class StudentMyGradesView extends ConsumerStatefulWidget {
   const StudentMyGradesView({super.key, required this.onBack});
 
   final VoidCallback onBack;
 
   @override
-  State<StudentMyGradesView> createState() => _StudentMyGradesViewState();
+  ConsumerState<StudentMyGradesView> createState() =>
+      _StudentMyGradesViewState();
 }
 
-class _StudentMyGradesViewState extends State<StudentMyGradesView> {
+class _StudentMyGradesViewState extends ConsumerState<StudentMyGradesView> {
   _SemesterTab _semester = _SemesterTab.current;
-  _LineSubject _lineSubject = _LineSubject.total;
+  StudentExamOverview? _overview;
+  List<_ExamRecordData> _records = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadGrades());
+  }
+
+  Future<void> _loadGrades() async {
+    final repository = ref.read(studentRepositoryProvider);
+    final responses = await Future.wait([
+      repository.examOverview(),
+      repository.examRecordList(),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      if (responses[0].isSuccess) {
+        _overview = StudentExamOverview.fromData(responses[0].data);
+      }
+      if (responses[1].isSuccess && responses[1].data is List) {
+        _records = (responses[1].data as List)
+            .whereType<Map<dynamic, dynamic>>()
+            .map(StudentExamRecord.fromMap)
+            .map(_examRecordFromApi)
+            .toList();
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -99,14 +133,11 @@ class _StudentMyGradesViewState extends State<StudentMyGradesView> {
               onSelected: (v) => setState(() => _semester = v),
             ),
             SizedBox(height: ui(16)),
-            const _GradesStatsRow(),
+            _GradesStatsRow(overview: _overview),
             SizedBox(height: ui(16)),
-            _DualPanelRow(
-              lineSubject: _lineSubject,
-              onLineSubjectChanged: (v) => setState(() => _lineSubject = v),
-            ),
+            _DualPanelRow(overview: _overview),
             SizedBox(height: ui(16)),
-            const _ExamRecordsSection(),
+            _ExamRecordsSection(records: _records),
           ],
         ),
       ),
@@ -260,7 +291,9 @@ class _SemesterTabs extends StatelessWidget {
 // =============================================================================
 
 class _GradesStatsRow extends StatelessWidget {
-  const _GradesStatsRow();
+  const _GradesStatsRow({required this.overview});
+
+  final StudentExamOverview? overview;
 
   @override
   Widget build(BuildContext context) {
@@ -273,17 +306,17 @@ class _GradesStatsRow extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Expanded(child: _AverageCard()),
+                  Expanded(child: _AverageCard(score: overview?.avgScore ?? 0)),
                   SizedBox(width: ui(12)),
-                  Expanded(child: _ClassRankCard()),
+                  Expanded(child: _ClassRankCard(overview: overview)),
                 ],
               ),
               SizedBox(height: ui(12)),
               Row(
                 children: [
-                  Expanded(child: _GradeRankCard()),
+                  Expanded(child: _GradeRankCard(overview: overview)),
                   SizedBox(width: ui(12)),
-                  Expanded(child: _BestExamCard()),
+                  Expanded(child: _BestExamCard(overview: overview)),
                 ],
               ),
             ],
@@ -292,13 +325,13 @@ class _GradesStatsRow extends StatelessWidget {
         return Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(child: _AverageCard()),
+            Expanded(child: _AverageCard(score: overview?.avgScore ?? 0)),
             SizedBox(width: ui(12)),
-            Expanded(child: _ClassRankCard()),
+            Expanded(child: _ClassRankCard(overview: overview)),
             SizedBox(width: ui(12)),
-            Expanded(child: _GradeRankCard()),
+            Expanded(child: _GradeRankCard(overview: overview)),
             SizedBox(width: ui(12)),
-            Expanded(child: _BestExamCard()),
+            Expanded(child: _BestExamCard(overview: overview)),
           ],
         );
       },
@@ -308,6 +341,10 @@ class _GradesStatsRow extends StatelessWidget {
 
 // 卡 A：学年考试均分（白底 + 进度条）
 class _AverageCard extends StatelessWidget {
+  const _AverageCard({required this.score});
+
+  final double score;
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
@@ -338,7 +375,7 @@ class _AverageCard extends StatelessWidget {
             left: 0,
             top: ui(28),
             child: Text(
-              '32',
+              _scoreLabel(score),
               style: TextStyle(
                 fontSize: ui(32),
                 color: _kTextDark,
@@ -376,7 +413,7 @@ class _AverageCard extends StatelessWidget {
                 children: [
                   Container(height: ui(8), color: _kProgressBg),
                   FractionallySizedBox(
-                    widthFactor: 0.73,
+                    widthFactor: (score / 100).clamp(0.0, 1.0),
                     child: Container(height: ui(8), color: _kPurpleLight),
                   ),
                 ],
@@ -399,29 +436,31 @@ class _RankCard extends StatelessWidget {
     required this.badge,
   });
 
-  factory _RankCard.classRank() => const _RankCard(
-    title: '最近班级',
-    value: '8',
-    totalSuffix: '/42',
-    gradient: LinearGradient(
-      begin: Alignment.bottomLeft,
-      end: Alignment.topRight,
-      colors: [Color(0x239346FF), Color(0x00FFFFFF)],
-    ),
-    badge: _RankBadge.flat(),
-  );
+  factory _RankCard.classRank({required int rank, required int total}) =>
+      _RankCard(
+        title: '最近班级',
+        value: '$rank',
+        totalSuffix: '/$total',
+        gradient: LinearGradient(
+          begin: Alignment.bottomLeft,
+          end: Alignment.topRight,
+          colors: [Color(0x239346FF), Color(0x00FFFFFF)],
+        ),
+        badge: _RankBadge.flat(),
+      );
 
-  factory _RankCard.gradeRank() => const _RankCard(
-    title: '最近年级',
-    value: '62',
-    totalSuffix: '/368',
-    gradient: LinearGradient(
-      begin: Alignment.bottomLeft,
-      end: Alignment.topRight,
-      colors: [Color(0x2E46FF77), Color(0x00FFFFFF)],
-    ),
-    badge: _RankBadge.rise('上升3名'),
-  );
+  factory _RankCard.gradeRank({required int rank, required int total}) =>
+      _RankCard(
+        title: '最近年级',
+        value: '$rank',
+        totalSuffix: '/$total',
+        gradient: LinearGradient(
+          begin: Alignment.bottomLeft,
+          end: Alignment.topRight,
+          colors: [Color(0x2E46FF77), Color(0x00FFFFFF)],
+        ),
+        badge: _RankBadge.rise('上升3名'),
+      );
 
   final String title;
   final String value;
@@ -498,13 +537,27 @@ class _RankCard extends StatelessWidget {
 }
 
 class _ClassRankCard extends StatelessWidget {
+  const _ClassRankCard({required this.overview});
+
+  final StudentExamOverview? overview;
+
   @override
-  Widget build(BuildContext context) => _RankCard.classRank();
+  Widget build(BuildContext context) => _RankCard.classRank(
+    rank: overview?.latestClassRank ?? 0,
+    total: overview?.latestClassTotal ?? 0,
+  );
 }
 
 class _GradeRankCard extends StatelessWidget {
+  const _GradeRankCard({required this.overview});
+
+  final StudentExamOverview? overview;
+
   @override
-  Widget build(BuildContext context) => _RankCard.gradeRank();
+  Widget build(BuildContext context) => _RankCard.gradeRank(
+    rank: overview?.latestSchoolRank ?? 0,
+    total: overview?.latestSchoolTotal ?? 0,
+  );
 }
 
 class _RankBadge {
@@ -552,6 +605,10 @@ class _RankBadge {
 
 // 卡 D：本学期最佳考试
 class _BestExamCard extends StatelessWidget {
+  const _BestExamCard({required this.overview});
+
+  final StudentExamOverview? overview;
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
@@ -582,7 +639,9 @@ class _BestExamCard extends StatelessWidget {
             top: ui(50),
             right: ui(12),
             child: Text(
-              '六月摸底考试',
+              overview?.bestExamName.isNotEmpty == true
+                  ? overview!.bestExamName
+                  : '暂无考试',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
@@ -619,7 +678,7 @@ class _BestExamCard extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '91分',
+                    '${_scoreLabel(overview?.bestExamScore ?? 0)}分',
                     style: TextStyle(
                       fontSize: ui(11),
                       color: _kPurple,
@@ -643,13 +702,9 @@ class _BestExamCard extends StatelessWidget {
 // =============================================================================
 
 class _DualPanelRow extends StatelessWidget {
-  const _DualPanelRow({
-    required this.lineSubject,
-    required this.onLineSubjectChanged,
-  });
+  const _DualPanelRow({required this.overview});
 
-  final _LineSubject lineSubject;
-  final ValueChanged<_LineSubject> onLineSubjectChanged;
+  final StudentExamOverview? overview;
 
   @override
   Widget build(BuildContext context) {
@@ -661,16 +716,19 @@ class _DualPanelRow extends StatelessWidget {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const _SectionTitle('6次考试 折线趋势'),
+              _SectionTitle('${overview?.trends.length ?? 0}次考试 成绩趋势'),
               SizedBox(height: ui(12)),
               _LineChartCard(
-                subject: lineSubject,
-                onSubjectChanged: onLineSubjectChanged,
+                trends: overview?.trends ?? const [],
+                classTotal: overview?.latestClassTotal ?? 0,
+                schoolTotal: overview?.latestSchoolTotal ?? 0,
               ),
               SizedBox(height: ui(20)),
               const _SectionTitle('场次均分分布'),
               SizedBox(height: ui(12)),
-              const _ScoreDistributionCard(),
+              _ScoreDistributionCard(
+                distribution: overview?.distribution ?? const [],
+              ),
             ],
           );
         }
@@ -682,11 +740,12 @@ class _DualPanelRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const _SectionTitle('6次考试 折线趋势'),
+                  _SectionTitle('${overview?.trends.length ?? 0}次考试 成绩趋势'),
                   SizedBox(height: ui(12)),
                   _LineChartCard(
-                    subject: lineSubject,
-                    onSubjectChanged: onLineSubjectChanged,
+                    trends: overview?.trends ?? const [],
+                    classTotal: overview?.latestClassTotal ?? 0,
+                    schoolTotal: overview?.latestSchoolTotal ?? 0,
                   ),
                 ],
               ),
@@ -699,7 +758,9 @@ class _DualPanelRow extends StatelessWidget {
                 children: [
                   const _SectionTitle('场次均分分布'),
                   SizedBox(height: ui(12)),
-                  const _ScoreDistributionCard(),
+                  _ScoreDistributionCard(
+                    distribution: overview?.distribution ?? const [],
+                  ),
                 ],
               ),
             ),
@@ -735,31 +796,35 @@ class _SectionTitle extends StatelessWidget {
 // 折线图卡（左 640 宽 / 496 高）
 // =============================================================================
 
-enum _LineSubject { total, major, minor, dictation, theory, sightSinging }
-
-const _kLineSubjectLabels = <_LineSubject, String>{
-  _LineSubject.total: '总均分',
-  _LineSubject.major: '主项',
-  _LineSubject.minor: '副项',
-  _LineSubject.dictation: '听写',
-  _LineSubject.theory: '乐理',
-  _LineSubject.sightSinging: '视唱',
-};
-
 class _LineChartCard extends StatelessWidget {
-  const _LineChartCard({required this.subject, required this.onSubjectChanged});
+  const _LineChartCard({
+    required this.trends,
+    required this.classTotal,
+    required this.schoolTotal,
+  });
 
-  final _LineSubject subject;
-  final ValueChanged<_LineSubject> onSubjectChanged;
-
-  static const _months = <String>['2月', '3月', '4月', '5月', '期中', '6月'];
-  static const _values = <double>[86, 87, 86.5, 91, 93, 90];
-  static const _classRanks = <int>[11, 11, 11, 11, 11, 11];
-  static const _schoolRanks = <int>[178, 178, 178, 178, 178, 178];
+  final List<StudentExamTrend> trends;
+  final int classTotal;
+  final int schoolTotal;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final visible = trends.length > 6
+        ? trends.sublist(trends.length - 6)
+        : trends;
+    final months = visible
+        .map((e) => e.examName.isNotEmpty ? e.examName : e.examDate)
+        .toList();
+    final values = visible.map((e) => e.totalScore).toList();
+    final classRanks = visible.map((e) => e.classRank).toList();
+    final schoolRanks = visible.map((e) => e.schoolRank).toList();
+    if (values.isEmpty) {
+      months.add('暂无');
+      values.add(0);
+      classRanks.add(0);
+      schoolRanks.add(0);
+    }
     return Container(
       height: ui(496),
       decoration: BoxDecoration(
@@ -770,101 +835,38 @@ class _LineChartCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _LineSubjectTabs(selected: subject, onSelected: onSubjectChanged),
-          SizedBox(height: ui(8)),
-          Expanded(
-            child: _LineChartArea(months: _months, values: _values),
-          ),
-          SizedBox(height: ui(8)),
-          _RankRowHeader(),
-          SizedBox(height: ui(6)),
-          _RankCellRow(
-            months: _months,
-            values: _values,
-            classRanks: _classRanks,
-            schoolRanks: _schoolRanks,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LineSubjectTabs extends StatelessWidget {
-  const _LineSubjectTabs({required this.selected, required this.onSelected});
-
-  final _LineSubject selected;
-  final ValueChanged<_LineSubject> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      height: ui(44),
-      padding: EdgeInsets.symmetric(horizontal: ui(4), vertical: ui(4)),
-      decoration: BoxDecoration(
-        color: _kInnerGray,
-        borderRadius: BorderRadius.circular(ui(8)),
-        border: Border.all(color: _kBorderSoft),
-      ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final entry in _kLineSubjectLabels.entries) ...[
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => onSelected(entry.key),
-                child: _LineTabChip(
-                  label: entry.value,
-                  active: selected == entry.key,
+          Row(
+            children: [
+              Text(
+                '总分趋势',
+                style: TextStyle(
+                  fontSize: ui(14),
+                  color: _kTextDark,
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w500,
                 ),
               ),
-              SizedBox(width: ui(8)),
+              const Spacer(),
+              Text(
+                '最近${trends.length}场',
+                style: TextStyle(fontSize: ui(12), color: _kTextHint),
+              ),
             ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _LineTabChip extends StatelessWidget {
-  const _LineTabChip({required this.label, required this.active});
-
-  final String label;
-  final bool active;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      height: ui(36),
-      padding: EdgeInsets.symmetric(horizontal: ui(16)),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: active ? Colors.white : Colors.transparent,
-        borderRadius: BorderRadius.circular(ui(6)),
-        boxShadow: active
-            ? [
-                BoxShadow(
-                  color: const Color(0xB5B5B5B5).withValues(alpha: 0.35),
-                  blurRadius: ui(20),
-                  offset: Offset(0, ui(8)),
-                ),
-              ]
-            : null,
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: ui(14),
-          color: active ? _kTextDark : _kTextSecondary,
-          fontFamily: 'PingFang SC',
-          fontWeight: AppFont.w500,
-          height: 1,
-        ),
+          ),
+          SizedBox(height: ui(8)),
+          Expanded(
+            child: _LineChartArea(months: months, values: values),
+          ),
+          SizedBox(height: ui(8)),
+          _RankRowHeader(classTotal: classTotal, schoolTotal: schoolTotal),
+          SizedBox(height: ui(6)),
+          _RankCellRow(
+            months: months,
+            values: values,
+            classRanks: classRanks,
+            schoolRanks: schoolRanks,
+          ),
+        ],
       ),
     );
   }
@@ -876,8 +878,6 @@ class _LineChartArea extends StatelessWidget {
 
   final List<String> months;
   final List<double> values;
-
-  static const _ticks = <int>[100, 95, 90, 85, 80, 0];
 
   @override
   Widget build(BuildContext context) {
@@ -892,15 +892,17 @@ class _LineChartArea extends StatelessWidget {
         final chartH = (h - xLabelH).clamp(0.0, double.infinity);
         const tickCount = 6;
         final tickGap = chartH / (tickCount - 1);
+        final maxValue = values.fold<double>(0, math.max);
+        final step = maxValue <= 100 ? 20.0 : 50.0;
+        final axisMax = math.max(100.0, (maxValue / step).ceil() * step);
+        final ticks = List<int>.generate(
+          tickCount,
+          (index) =>
+              (axisMax * (tickCount - 1 - index) / (tickCount - 1)).round(),
+        );
 
-        // 80→100 区间映射到上方 5/6 高度，最后 1/6 高度压缩 80→0。
-        double yForValue(double v) {
-          if (v >= 80) {
-            final ratio = (100 - v) / 20.0;
-            return ratio * (chartH * 5 / (tickCount - 1));
-          }
-          return chartH;
-        }
+        double yForValue(double value) =>
+            chartH * (1 - (value / axisMax).clamp(0.0, 1.0));
 
         final n = values.length;
         final cellW = chartW / n;
@@ -918,7 +920,7 @@ class _LineChartArea extends StatelessWidget {
                 top: i * tickGap - ui(10),
                 width: ui(20),
                 child: Text(
-                  '${_ticks[i]}',
+                  '${ticks[i]}',
                   textAlign: TextAlign.right,
                   style: TextStyle(
                     fontSize: ui(12),
@@ -933,14 +935,21 @@ class _LineChartArea extends StatelessWidget {
             Positioned.fill(
               bottom: xLabelH,
               child: CustomPaint(
-                painter: _LinePainter(points: points, chartHeight: chartH),
+                painter: _LinePainter(
+                  points: points,
+                  chartHeight: chartH,
+                  gridLineYs: List.generate(
+                    tickCount,
+                    (index) => index * tickGap,
+                  ),
+                ),
               ),
             ),
             // 数值标签（紫色 12px）位于点上方
             for (var i = 0; i < points.length; i++)
               Positioned(
                 left: points[i].dx - ui(20),
-                top: points[i].dy - ui(20),
+                top: (points[i].dy - ui(22)).clamp(0.0, chartH - ui(18)),
                 width: ui(40),
                 child: Text(
                   values[i] == values[i].roundToDouble()
@@ -990,45 +999,55 @@ class _LineChartArea extends StatelessWidget {
 }
 
 class _LinePainter extends CustomPainter {
-  _LinePainter({required this.points, required this.chartHeight});
+  _LinePainter({
+    required this.points,
+    required this.chartHeight,
+    required this.gridLineYs,
+  });
 
   final List<Offset> points;
   final double chartHeight;
+  final List<double> gridLineYs;
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (points.length < 2) return;
-
-    // Build smooth path
-    final linePath = Path()..moveTo(points.first.dx, points.first.dy);
-    for (var i = 1; i < points.length; i++) {
-      final p0 = points[i - 1];
-      final p1 = points[i];
-      final cx = (p0.dx + p1.dx) / 2;
-      linePath.cubicTo(cx, p0.dy, cx, p1.dy, p1.dx, p1.dy);
+    final gridPaint = Paint()
+      ..color = _kBorderHair
+      ..strokeWidth = 1;
+    for (final y in gridLineYs) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
     }
 
-    // Fill path: extend to bottom
-    final fillPath = Path.from(linePath)
-      ..lineTo(points.last.dx, chartHeight)
-      ..lineTo(points.first.dx, chartHeight)
-      ..close();
+    if (points.length >= 2) {
+      final linePath = Path()..moveTo(points.first.dx, points.first.dy);
+      for (var i = 1; i < points.length; i++) {
+        final p0 = points[i - 1];
+        final p1 = points[i];
+        final cx = (p0.dx + p1.dx) / 2;
+        linePath.cubicTo(cx, p0.dy, cx, p1.dy, p1.dx, p1.dy);
+      }
 
-    final fillPaint = Paint()
-      ..shader = const LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [Color(0xFFE7D9FF), Color(0x00E7D9FF)],
-      ).createShader(Rect.fromLTWH(0, 0, size.width, chartHeight));
-    canvas.drawPath(fillPath, fillPaint);
+      final fillPath = Path.from(linePath)
+        ..lineTo(points.last.dx, chartHeight)
+        ..lineTo(points.first.dx, chartHeight)
+        ..close();
 
-    final strokePaint = Paint()
-      ..color = _kPurple
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke
-      ..strokeJoin = StrokeJoin.round
-      ..strokeCap = StrokeCap.round;
-    canvas.drawPath(linePath, strokePaint);
+      final fillPaint = Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFFE7D9FF), Color(0x00E7D9FF)],
+        ).createShader(Rect.fromLTWH(0, 0, size.width, chartHeight));
+      canvas.drawPath(fillPath, fillPaint);
+
+      final strokePaint = Paint()
+        ..color = _kPurple
+        ..strokeWidth = 2
+        ..style = PaintingStyle.stroke
+        ..strokeJoin = StrokeJoin.round
+        ..strokeCap = StrokeCap.round;
+      canvas.drawPath(linePath, strokePaint);
+    }
 
     // Dots
     final dotFill = Paint()..color = Colors.white;
@@ -1044,11 +1063,18 @@ class _LinePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _LinePainter oldDelegate) =>
-      oldDelegate.points != points || oldDelegate.chartHeight != chartHeight;
+      oldDelegate.points != points ||
+      oldDelegate.chartHeight != chartHeight ||
+      oldDelegate.gridLineYs != gridLineYs;
 }
 
 // 折线图下方：每场·总成绩排名（班级/全校）行头
 class _RankRowHeader extends StatelessWidget {
+  const _RankRowHeader({required this.classTotal, required this.schoolTotal});
+
+  final int classTotal;
+  final int schoolTotal;
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
@@ -1068,7 +1094,7 @@ class _RankRowHeader extends StatelessWidget {
           ),
           const Spacer(),
           Text(
-            '班级总人数：42',
+            '班级总人数：$classTotal',
             style: TextStyle(
               fontSize: ui(10),
               color: _kTextHint,
@@ -1079,7 +1105,7 @@ class _RankRowHeader extends StatelessWidget {
           ),
           SizedBox(width: ui(20)),
           Text(
-            '全校总人数：368',
+            '全校总人数：$schoolTotal',
             style: TextStyle(
               fontSize: ui(10),
               color: _kTextHint,
@@ -1242,19 +1268,36 @@ class _MiniStatRow extends StatelessWidget {
 // =============================================================================
 
 class _ScoreDistributionCard extends StatelessWidget {
-  const _ScoreDistributionCard();
+  const _ScoreDistributionCard({required this.distribution});
 
-  static const _segments = <_ScoreSegment>[
-    _ScoreSegment(label: '90-100分', percent: 33, count: 3),
-    _ScoreSegment(label: '80-90分', percent: 33, count: 3),
-    _ScoreSegment(label: '70-80分', percent: 15, count: 1),
-    _ScoreSegment(label: '60-70分', percent: 0, count: 0),
-    _ScoreSegment(label: '<60分', percent: 0, count: 0),
-  ];
+  final List<StudentScoreDistribution> distribution;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final segments = distribution
+        .map(
+          (e) => _ScoreSegment(
+            label: e.range,
+            percent: e.percent.round(),
+            count: e.count,
+          ),
+        )
+        .toList();
+    if (segments.isEmpty) {
+      return Container(
+        height: ui(496),
+        decoration: BoxDecoration(
+          color: _kCardBg,
+          borderRadius: BorderRadius.circular(ui(12)),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          '暂无分数段数据',
+          style: TextStyle(fontSize: ui(14), color: _kTextHint),
+        ),
+      );
+    }
     return Container(
       height: ui(496),
       decoration: BoxDecoration(
@@ -1262,13 +1305,11 @@ class _ScoreDistributionCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(ui(12)),
       ),
       padding: EdgeInsets.all(ui(12)),
-      child: Column(
-        children: [
-          for (var i = 0; i < _segments.length; i++) ...[
-            if (i > 0) SizedBox(height: ui(12)),
-            Expanded(child: _ScoreSegmentTile(segment: _segments[i])),
-          ],
-        ],
+      child: ListView.separated(
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: segments.length,
+        separatorBuilder: (_, _) => SizedBox(height: ui(10)),
+        itemBuilder: (_, index) => _ScoreSegmentTile(segment: segments[index]),
       ),
     );
   }
@@ -1300,9 +1341,10 @@ class _ScoreSegmentTile extends StatelessWidget {
         color: _kInnerGray,
         borderRadius: BorderRadius.circular(ui(10)),
       ),
-      padding: EdgeInsets.fromLTRB(ui(14), ui(13), ui(14), ui(8)),
+      padding: EdgeInsets.symmetric(horizontal: ui(14), vertical: ui(8)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             children: [
@@ -1318,7 +1360,7 @@ class _ScoreSegmentTile extends StatelessWidget {
               ),
               const Spacer(),
               Text(
-                '${segment.percent}%',
+                '${segment.count}场  ·  ${segment.percent}%',
                 style: TextStyle(
                   fontSize: ui(14),
                   color: _kTextDark,
@@ -1329,7 +1371,7 @@ class _ScoreSegmentTile extends StatelessWidget {
               ),
             ],
           ),
-          SizedBox(height: ui(12)),
+          SizedBox(height: ui(10)),
           ClipRRect(
             borderRadius: BorderRadius.circular(ui(11)),
             child: SizedBox(
@@ -1354,20 +1396,6 @@ class _ScoreSegmentTile extends StatelessWidget {
               ),
             ),
           ),
-          SizedBox(height: ui(8)),
-          Align(
-            alignment: Alignment.centerRight,
-            child: Text(
-              '${segment.count}场',
-              style: TextStyle(
-                fontSize: ui(12),
-                color: _kPurple,
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w500,
-                height: 1,
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -1379,7 +1407,9 @@ class _ScoreSegmentTile extends StatelessWidget {
 // =============================================================================
 
 class _ExamRecordsSection extends StatelessWidget {
-  const _ExamRecordsSection();
+  const _ExamRecordsSection({required this.records});
+
+  final List<_ExamRecordData> records;
 
   @override
   Widget build(BuildContext context) {
@@ -1389,7 +1419,7 @@ class _ExamRecordsSection extends StatelessWidget {
       children: [
         const _SectionTitle('考试记录与各科成绩'),
         SizedBox(height: ui(12)),
-        _ExamRecordsGrid(records: _kDemoExams),
+        _ExamRecordsGrid(records: records),
       ],
     );
   }
@@ -1403,6 +1433,20 @@ class _ExamRecordsGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    if (records.isEmpty) {
+      return Container(
+        height: ui(112),
+        decoration: BoxDecoration(
+          color: _kCardBg,
+          borderRadius: BorderRadius.circular(ui(12)),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          '暂无考试记录',
+          style: TextStyle(fontSize: ui(14), color: _kTextHint),
+        ),
+      );
+    }
     return LayoutBuilder(
       builder: (context, c) {
         final isCompact = c.maxWidth < ui(720);
@@ -1452,7 +1496,7 @@ class _ExamRecordCard extends StatefulWidget {
 }
 
 class _ExamRecordCardState extends State<_ExamRecordCard> {
-  late bool _expanded = widget.record.initiallyExpanded;
+  bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {
@@ -1826,7 +1870,7 @@ class _ViewDetailButton extends StatelessWidget {
 }
 
 // =============================================================================
-// 数据模型 + Demo
+// 页面展示模型
 // =============================================================================
 
 enum _SubjectKind { vocal, instrument, sightSinging, theory }
@@ -1863,7 +1907,6 @@ class _ExamRecordData {
     required this.classRank,
     required this.schoolRank,
     required this.subjects,
-    this.initiallyExpanded = false,
   });
 
   final String title;
@@ -1874,109 +1917,55 @@ class _ExamRecordData {
   final int classRank;
   final int schoolRank;
   final List<_ExamSubjectData> subjects;
-  final bool initiallyExpanded;
 }
 
-const _kDemoSubjects = <_ExamSubjectData>[
-  _ExamSubjectData(
-    teacher: '刘老师',
-    subject: _SubjectKind.vocal,
-    classRank: 8,
-    schoolRank: 88,
-    comment: '寒假回课状态好，咬字再收',
-    score: 88,
-    media: _ReplayMedia.video,
-  ),
-  _ExamSubjectData(
-    teacher: '刘老师',
-    subject: _SubjectKind.instrument,
-    classRank: 8,
-    schoolRank: 88,
-    comment: '寒假回课状态好，咬字再收',
-    score: 92,
-    media: _ReplayMedia.video,
-  ),
-  _ExamSubjectData(
-    teacher: '陈老师',
-    subject: _SubjectKind.sightSinging,
-    classRank: 8,
-    schoolRank: 88,
-    comment: '寒假回课状态好，咬字再收',
-    score: 78,
-    media: _ReplayMedia.audio,
-  ),
-  _ExamSubjectData(
-    teacher: '刘老师',
-    subject: _SubjectKind.theory,
-    classRank: 8,
-    schoolRank: 88,
-    comment: '寒假回课状态好，咬字再收',
-    score: 83,
-    media: _ReplayMedia.none,
-  ),
-];
+_ExamRecordData _examRecordFromApi(StudentExamRecord record) {
+  return _ExamRecordData(
+    title: record.examName.isEmpty ? '考试' : record.examName,
+    date: record.examDate,
+    totalAvg: _scoreLabel(record.totalScore),
+    passCount: record.passSubjectCount,
+    excellentCount: record.excellentSubjectCount,
+    classRank: record.classRank,
+    schoolRank: record.schoolRank,
+    subjects: record.subjectScores.map(_examSubjectFromApi).toList(),
+  );
+}
 
-const _kDemoExams = <_ExamRecordData>[
-  _ExamRecordData(
-    title: '2月月考',
-    date: '2026-02-24',
-    totalAvg: '86',
-    passCount: 3,
-    excellentCount: 1,
-    classRank: 11,
-    schoolRank: 78,
-    subjects: _kDemoSubjects,
-    initiallyExpanded: true,
-  ),
-  _ExamRecordData(
-    title: '3月月考',
-    date: '2026-03-24',
-    totalAvg: '87',
-    passCount: 3,
-    excellentCount: 1,
-    classRank: 11,
-    schoolRank: 78,
-    subjects: _kDemoSubjects,
-    initiallyExpanded: true,
-  ),
-  _ExamRecordData(
-    title: '4月月考',
-    date: '2026-04-21',
-    totalAvg: '86.5',
-    passCount: 3,
-    excellentCount: 1,
-    classRank: 11,
-    schoolRank: 78,
-    subjects: _kDemoSubjects,
-  ),
-  _ExamRecordData(
-    title: '5月月考',
-    date: '2026-05-15',
-    totalAvg: '91',
-    passCount: 4,
-    excellentCount: 2,
-    classRank: 8,
-    schoolRank: 62,
-    subjects: _kDemoSubjects,
-  ),
-  _ExamRecordData(
-    title: '期中考试',
-    date: '2026-04-30',
-    totalAvg: '93',
-    passCount: 4,
-    excellentCount: 3,
-    classRank: 6,
-    schoolRank: 48,
-    subjects: _kDemoSubjects,
-  ),
-  _ExamRecordData(
-    title: '六月摸底考试',
-    date: '2026-06-10',
-    totalAvg: '90',
-    passCount: 4,
-    excellentCount: 3,
-    classRank: 8,
-    schoolRank: 62,
-    subjects: _kDemoSubjects,
-  ),
-];
+_ExamSubjectData _examSubjectFromApi(StudentExamSubjectScore score) {
+  return _ExamSubjectData(
+    teacher: '任课老师',
+    subject: _subjectKindFromName(score.subjectName),
+    classRank: score.classRank,
+    schoolRank: score.schoolRank,
+    comment: score.comment.isEmpty ? '暂无评语' : score.comment,
+    score: score.score.round(),
+    media: _mediaFromPath(score.path),
+  );
+}
+
+_SubjectKind _subjectKindFromName(String name) {
+  if (name.contains('声乐')) return _SubjectKind.vocal;
+  if (name.contains('器乐') || name.contains('钢琴')) {
+    return _SubjectKind.instrument;
+  }
+  if (name.contains('视唱')) return _SubjectKind.sightSinging;
+  return _SubjectKind.theory;
+}
+
+_ReplayMedia _mediaFromPath(String path) {
+  final lower = path.toLowerCase();
+  if (lower.endsWith('.mp4') || lower.endsWith('.mov')) {
+    return _ReplayMedia.video;
+  }
+  if (lower.endsWith('.mp3') ||
+      lower.endsWith('.wav') ||
+      lower.endsWith('.m4a')) {
+    return _ReplayMedia.audio;
+  }
+  return _ReplayMedia.none;
+}
+
+String _scoreLabel(double score) => score == score.roundToDouble()
+    ? '${score.round()}'
+    : score.toStringAsFixed(1);

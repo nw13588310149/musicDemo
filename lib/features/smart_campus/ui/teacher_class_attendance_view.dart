@@ -36,11 +36,16 @@
 // 字体：PingFang SC（标题 16/18 / 正文 12/14）+ Barlow（时间 18 / 数值 32）
 // =============================================================================
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 
 import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../data/course_sign_data.dart';
+import '../data/teacher_repository.dart';
 import '../../shell/ui/shell_layout.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
@@ -89,6 +94,7 @@ class _StudentAttend {
 
 class _AttendClass {
   _AttendClass({
+    required this.courseId,
     required this.periodIndex,
     required this.startTime,
     required this.endTime,
@@ -102,6 +108,7 @@ class _AttendClass {
     this.singleStudent,
   });
 
+  final String courseId;
   final int periodIndex;
   final String startTime;
   final String endTime;
@@ -154,18 +161,18 @@ class _RecentRecord {
 // 入口 widget
 // =============================================================================
 
-class TeacherClassAttendanceView extends StatefulWidget {
+class TeacherClassAttendanceView extends ConsumerStatefulWidget {
   const TeacherClassAttendanceView({super.key, required this.onBack});
 
   final VoidCallback onBack;
 
   @override
-  State<TeacherClassAttendanceView> createState() =>
+  ConsumerState<TeacherClassAttendanceView> createState() =>
       _TeacherClassAttendanceViewState();
 }
 
 class _TeacherClassAttendanceViewState
-    extends State<TeacherClassAttendanceView> {
+    extends ConsumerState<TeacherClassAttendanceView> {
   /// 0 = 总数据 / 1 = 本学期 / 2 = 本月。仅切换 stat 卡数值，不调接口（demo）。
   int _selectedTabIdx = 0;
 
@@ -193,6 +200,25 @@ class _TeacherClassAttendanceViewState
       (c) => c.runState == _ClassRunState.inProgress,
     );
     _activeClassIdx = inProgress >= 0 ? inProgress : 0;
+    unawaited(_loadTodayClasses());
+  }
+
+  Future<void> _loadTodayClasses() async {
+    final today = todayIsoDate();
+    final response = await ref
+        .read(teacherRepositoryProvider)
+        .courseList(beginDate: today, endDate: today);
+    if (!mounted || !response.isSuccess) return;
+    final sessions = parseCourseSignSessionList(response.data);
+    if (sessions.isEmpty) return;
+    final classes = sessions.map(_attendClassFromSession).toList();
+    final inProgress = classes.indexWhere(
+      (item) => item.runState == _ClassRunState.inProgress,
+    );
+    setState(() {
+      _classes = classes;
+      _activeClassIdx = inProgress >= 0 ? inProgress : 0;
+    });
   }
 
   void _selectClass(int idx) {
@@ -335,8 +361,9 @@ class _TeacherClassAttendanceViewState
   }
 
   String _todayPanelTitle() {
-    // 与 Figma 一致：固定到 demo 日期；接入接口时可改为 DateTime.now()。
-    return '2026年4月2日 周三';
+    final now = DateTime.now();
+    const weeks = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+    return '${now.year}年${now.month}月${now.day}日 ${weeks[now.weekday - 1]}';
   }
 
   List<_StatItem> _statsForTab(int idx) {
@@ -1725,18 +1752,22 @@ class _StudentAttendCell extends StatelessWidget {
 // 小课签到面板（614 宽 × ~280 高，参考学生端 _CheckInActionPanel）
 // =============================================================================
 
-class _SmallClassActionPanel extends StatefulWidget {
+class _SmallClassActionPanel extends ConsumerStatefulWidget {
   const _SmallClassActionPanel({required this.data});
 
   final _AttendClass data;
 
   @override
-  State<_SmallClassActionPanel> createState() => _SmallClassActionPanelState();
+  ConsumerState<_SmallClassActionPanel> createState() =>
+      _SmallClassActionPanelState();
 }
 
-class _SmallClassActionPanelState extends State<_SmallClassActionPanel> {
+class _SmallClassActionPanelState
+    extends ConsumerState<_SmallClassActionPanel> {
   String? _signedStartTime;
   String? _signedEndTime;
+  bool _signingStart = false;
+  bool _signingEnd = false;
 
   String _now() {
     final now = TimeOfDay.now();
@@ -1744,12 +1775,48 @@ class _SmallClassActionPanelState extends State<_SmallClassActionPanel> {
     return '${two(now.hour)}:${two(now.minute)}:${two(DateTime.now().second)}';
   }
 
-  void _onSignStart() {
-    setState(() => _signedStartTime = _now());
+  Future<void> _onSignStart() async {
+    if (_signingStart) return;
+    if (widget.data.courseId.isEmpty) {
+      AppToast.show(context, '当前课程缺少课表记录，无法签到', type: AppToastType.error);
+      return;
+    }
+    setState(() => _signingStart = true);
+    final response = await ref
+        .read(teacherRepositoryProvider)
+        .courseTeacherSignIn(courseId: widget.data.courseId);
+    if (!mounted) return;
+    setState(() {
+      _signingStart = false;
+      if (response.isSuccess) _signedStartTime = _now();
+    });
+    AppToast.show(
+      context,
+      response.isSuccess ? '上课签到成功' : response.displayMsg,
+      type: response.isSuccess ? AppToastType.success : AppToastType.error,
+    );
   }
 
-  void _onSignEnd() {
-    setState(() => _signedEndTime = _now());
+  Future<void> _onSignEnd() async {
+    if (_signingEnd) return;
+    if (widget.data.courseId.isEmpty) {
+      AppToast.show(context, '当前课程缺少课表记录，无法签到', type: AppToastType.error);
+      return;
+    }
+    setState(() => _signingEnd = true);
+    final response = await ref
+        .read(teacherRepositoryProvider)
+        .courseTeacherSignOut(courseId: widget.data.courseId);
+    if (!mounted) return;
+    setState(() {
+      _signingEnd = false;
+      if (response.isSuccess) _signedEndTime = _now();
+    });
+    AppToast.show(
+      context,
+      response.isSuccess ? '下课签到成功' : response.displayMsg,
+      type: response.isSuccess ? AppToastType.success : AppToastType.error,
+    );
   }
 
   @override
@@ -1878,18 +1945,19 @@ class _SmallClassActionPanelState extends State<_SmallClassActionPanel> {
                       child: _TeacherSignSlot(
                         title: '教师上课签',
                         signedTime: _signedStartTime,
-                        onSign: _onSignStart,
+                        onSign: () => _onSignStart(),
                         actionLabel: '上课签',
+                        enabled: !_signingStart,
                       ),
                     ),
                     Expanded(
                       child: _TeacherSignSlot(
                         title: '教师下课签',
                         signedTime: _signedEndTime,
-                        onSign: _onSignEnd,
+                        onSign: () => _onSignEnd(),
                         actionLabel: '下课签',
                         // 必须先签上课，才能签下课
-                        enabled: _signedStartTime != null,
+                        enabled: _signedStartTime != null && !_signingEnd,
                       ),
                     ),
                   ],
@@ -2084,6 +2152,73 @@ class _Avatar extends StatelessWidget {
 // 初始 demo 数据
 // =============================================================================
 
+_AttendClass _attendClassFromSession(CourseSignSession session) {
+  final parts = session.timeRange.split(RegExp(r'\s*-\s*'));
+  final start = parts.isEmpty ? '--:--' : _clockPart(parts.first);
+  final end = parts.length < 2 ? '--:--' : _clockPart(parts.last);
+  final now = TimeOfDay.now();
+  final startMinutes = _minutesOf(start);
+  final endMinutes = _minutesOf(end);
+  final nowMinutes = now.hour * 60 + now.minute;
+  final runState = startMinutes == null || endMinutes == null
+      ? _ClassRunState.upcoming
+      : nowMinutes > endMinutes
+      ? _ClassRunState.ended
+      : nowMinutes >= startMinutes
+      ? _ClassRunState.inProgress
+      : _ClassRunState.upcoming;
+  final students = session.students
+      .map(
+        (student) => _StudentAttend(
+          name: student.name,
+          status: switch (student.status) {
+            CourseSignStatus.present => _AttendStatus.present,
+            CourseSignStatus.late => _AttendStatus.late,
+            CourseSignStatus.leave => _AttendStatus.leave,
+            CourseSignStatus.absent => _AttendStatus.absent,
+            null => _AttendStatus.missing,
+          },
+        ),
+      )
+      .toList();
+  return _AttendClass(
+    courseId: session.courseId,
+    periodIndex: 1,
+    startTime: start,
+    endTime: end,
+    teacherName: session.teacherName,
+    courseName: session.courseName,
+    duration: _durationLabel(startMinutes, endMinutes),
+    location: session.classroom,
+    kind: session.courseType == 1 ? _ClassKind.small : _ClassKind.big,
+    runState: runState,
+    students: students,
+    singleStudent: session.courseType == 1 && students.isNotEmpty
+        ? students.first.name
+        : null,
+  );
+}
+
+String _clockPart(String value) {
+  final match = RegExp(r'(\d{1,2}):(\d{2})').firstMatch(value);
+  if (match == null) return value.trim();
+  return '${match.group(1)!.padLeft(2, '0')}:${match.group(2)}';
+}
+
+int? _minutesOf(String value) {
+  final parts = value.split(':');
+  if (parts.length < 2) return null;
+  final hour = int.tryParse(parts[0]);
+  final minute = int.tryParse(parts[1]);
+  if (hour == null || minute == null) return null;
+  return hour * 60 + minute;
+}
+
+String _durationLabel(int? start, int? end) {
+  if (start == null || end == null || end <= start) return '课表课程';
+  return '${end - start}分钟';
+}
+
 const List<_RecentRecord> _kDemoRecentRecords = [
   _RecentRecord(
     time: '08:54',
@@ -2123,6 +2258,7 @@ const List<_RecentRecord> _kDemoRecentRecords = [
 List<_AttendClass> _buildInitialClasses() {
   return [
     _AttendClass(
+      courseId: '',
       periodIndex: 1,
       startTime: '07:00',
       endTime: '07:45',
@@ -2136,6 +2272,7 @@ List<_AttendClass> _buildInitialClasses() {
       singleStudent: '陈江凯',
     ),
     _AttendClass(
+      courseId: '',
       periodIndex: 2,
       startTime: '08:35',
       endTime: '09:25',
@@ -2149,6 +2286,7 @@ List<_AttendClass> _buildInitialClasses() {
       singleStudent: '郝江',
     ),
     _AttendClass(
+      courseId: '',
       periodIndex: 3,
       startTime: '10:00',
       endTime: '10:45',
@@ -2174,6 +2312,7 @@ List<_AttendClass> _buildInitialClasses() {
       ],
     ),
     _AttendClass(
+      courseId: '',
       periodIndex: 4,
       startTime: '14:00',
       endTime: '14:45',

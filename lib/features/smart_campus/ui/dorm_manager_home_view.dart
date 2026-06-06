@@ -7,6 +7,7 @@ import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dar
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
+import '../data/dormitory_check_data.dart';
 import '../data/dormitory_repository.dart';
 import '../data/teacher_notice_data.dart';
 import '../state/smart_campus_state.dart';
@@ -38,7 +39,7 @@ import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 ///
 /// 不带 `onBack` —— 这就是 dormManager 角色下 `mainView == dashboard` 的根
 /// 视图，不会被 `controller.backToDashboard()` 弹出。
-class DormManagerHomeView extends StatelessWidget {
+class DormManagerHomeView extends ConsumerStatefulWidget {
   const DormManagerHomeView({
     super.key,
     required this.shellDisplayName,
@@ -81,6 +82,28 @@ class DormManagerHomeView extends StatelessWidget {
   final VoidCallback? onOpenDormManagerLeave;
 
   @override
+  ConsumerState<DormManagerHomeView> createState() =>
+      _DormManagerHomeViewState();
+}
+
+class _DormManagerHomeViewState extends ConsumerState<DormManagerHomeView> {
+  DormitoryCheckStat _stat = DormitoryCheckStat.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadStat());
+  }
+
+  Future<void> _loadStat() async {
+    final response = await ref
+        .read(dormitoryRepositoryProvider)
+        .dormitoryCheckStat(date: dormitoryCheckDateParam());
+    if (!mounted || !response.isSuccess) return;
+    setState(() => _stat = parseDormitoryCheckStat(response.data));
+  }
+
+  @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
 
@@ -93,15 +116,15 @@ class DormManagerHomeView extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const _DormStatsRow(),
+                _DormStatsRow(stat: _stat),
                 SizedBox(height: ui(16)),
                 _DormQuickActionsCard(
-                  onOpenGroupChat: onOpenGroupChat,
-                  onOpenPrincipalMailbox: onOpenPrincipalMailbox,
-                  onOpenSchoolCircle: onOpenSchoolCircle,
-                  onOpenDormCheckByRoom: onOpenDormCheckByRoom,
-                  onOpenDormCheckHistory: onOpenDormCheckHistory,
-                  onOpenDormManagerLeave: onOpenDormManagerLeave,
+                  onOpenGroupChat: widget.onOpenGroupChat,
+                  onOpenPrincipalMailbox: widget.onOpenPrincipalMailbox,
+                  onOpenSchoolCircle: widget.onOpenSchoolCircle,
+                  onOpenDormCheckByRoom: widget.onOpenDormCheckByRoom,
+                  onOpenDormCheckHistory: widget.onOpenDormCheckHistory,
+                  onOpenDormManagerLeave: widget.onOpenDormManagerLeave,
                 ),
                 SizedBox(height: ui(16)),
                 Row(
@@ -122,7 +145,9 @@ class DormManagerHomeView extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _TodayDutyHeader(onOpenDormCheckByRoom: onOpenDormCheckByRoom),
+                          _TodayDutyHeader(
+                            onOpenDormCheckByRoom: widget.onOpenDormCheckByRoom,
+                          ),
                           SizedBox(height: ui(12)),
                           const _TodayDutyCard(),
                         ],
@@ -137,11 +162,11 @@ class DormManagerHomeView extends StatelessWidget {
           SizedBox(
             width: ui(256),
             child: _DormManagerSidePanel(
-              displayName: shellDisplayName,
-              avatarUrl: avatarUrl,
-              availableRoles: availableRoles,
-              selectedRole: selectedRole,
-              onSelectRole: onSelectRole,
+              displayName: widget.shellDisplayName,
+              avatarUrl: widget.avatarUrl,
+              availableRoles: widget.availableRoles,
+              selectedRole: widget.selectedRole,
+              onSelectRole: widget.onSelectRole,
             ),
           ),
         ],
@@ -163,14 +188,6 @@ class _StatItem {
   /// 是否使用大数值字体（24/500）。在寝率 "98%" 用 16/500 小字号。
   final bool bigValue;
 }
-
-const _dormStats = <_StatItem>[
-  _StatItem('6', '今日批次'),
-  _StatItem('6', '待审补卡'),
-  _StatItem('3', '晚归登记'),
-  _StatItem('4', '异常未闭环'),
-  _StatItem('98%', '在寝率', bigValue: false),
-];
 
 class _QuickAction {
   const _QuickAction(this.label, this.iconAsset);
@@ -253,11 +270,23 @@ class _SectionTitle extends StatelessWidget {
 // ============================================================================
 
 class _DormStatsRow extends StatelessWidget {
-  const _DormStatsRow();
+  const _DormStatsRow({required this.stat});
+
+  final DormitoryCheckStat stat;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final rate = stat.bedCount == 0
+        ? '—'
+        : '${(stat.normalCount * 100 / stat.bedCount).round()}%';
+    final items = <_StatItem>[
+      _StatItem('${stat.bedCount}', '在册床位'),
+      _StatItem('${stat.normalCount}', '正常在寝'),
+      _StatItem('${stat.lateCount}', '晚归登记'),
+      _StatItem('${stat.notCheckedCount}', '未打卡'),
+      _StatItem(rate, '在寝率', bigValue: false),
+    ];
     // 用 IntrinsicHeight 让 Row 取「最高子卡」的内在高度作为有界纵向约束，
     // 所有 stat 卡再用 CrossAxisAlignment.stretch 等高对齐。
     // 避免写死高度时不同字号 / 字体的实际行高造成 overflow。
@@ -265,13 +294,16 @@ class _DormStatsRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (var i = 0; i < _dormStats.length; i++) ...[
-            Expanded(child: _StatCard(item: _dormStats[i])),
+          for (var i = 0; i < items.length; i++) ...[
+            Expanded(child: _StatCard(item: items[i])),
             SizedBox(width: ui(16)),
           ],
           SizedBox(
             width: ui(123),
-            child: const _PendingCard(value: '12', label: '待处理'),
+            child: _PendingCard(
+              value: '${stat.notCheckedCount}',
+              label: '待处理',
+            ),
           ),
         ],
       ),

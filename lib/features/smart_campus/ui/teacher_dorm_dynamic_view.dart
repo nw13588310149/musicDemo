@@ -950,7 +950,7 @@ class _StudentCard extends StatelessWidget {
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(ui(8)),
                   image: const DecorationImage(
-                    image: AssetImage('assets/images/schoolA/30.png'),
+                    image: AssetImage('assets/images/schoolA/18.png'),
                     fit: BoxFit.cover,
                   ),
                 ),
@@ -1375,7 +1375,7 @@ class _PunchAuditCard extends StatelessWidget {
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(ui(8)),
                   image: const DecorationImage(
-                    image: AssetImage('assets/images/schoolA/30.png'),
+                    image: AssetImage('assets/images/schoolA/18.png'),
                     fit: BoxFit.cover,
                   ),
                 ),
