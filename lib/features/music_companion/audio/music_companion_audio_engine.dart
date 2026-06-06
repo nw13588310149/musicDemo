@@ -82,6 +82,7 @@ class MusicCompanionAudioEngine {
         return;
       }
       await _nativePlayer.prepare(_initialPianoAssetByNote);
+      AppAudioService.markPianoCoreWarmed();
       unawaited(_warmUpRemainingPianoRange());
     } catch (error, stack) {
       _pianoInitTask = null;

@@ -387,24 +387,13 @@ final class LowLatencyNoteAudio {
           DispatchQueue.main.async { result(nil) }
         }
 
-        try LowLatencyNoteAudioSafePlay.scheduleBuffer(
-          buffer,
-          on: voice.player,
-          playedBackHandler: { [weak self, weak voice] in
-            // 数据真正播完后回调：只标记空闲，不 stop/不改图 → 无尾音爆音。
-            self?.queue.async {
-              guard let voice = voice, voice.sequence == seq else { return }
-              voice.busy = false
-              if waitUntilFinished {
-                sendWaitReply()
-              }
-            }
-          }
+        try self.scheduleBufferOnVoice(
+          voice,
+          buffer: buffer,
+          seq: seq,
+          waitUntilFinished: waitUntilFinished,
+          sendWaitReply: sendWaitReply
         )
-
-        if !voice.player.isPlaying {
-          try LowLatencyNoteAudioSafePlay.play(voice.player)
-        }
 
         // 兜底：若 playedBack 回调未触发（极少数情况），按采样时长 + 余量释放 busy，
         // 避免 busy 卡死导致 activeVoiceCount 永不归零、引擎无法在会话切换后重建。
@@ -435,6 +424,58 @@ final class LowLatencyNoteAudio {
         }
       }
     }
+  }
+
+  /// 在节点上排程缓冲。须先 `play()` 再 `scheduleBuffer`；mpv 切会话后
+  /// `isPlaying` 可能陈旧，遇 IO cycle 错误时强制重启引擎并重试一次。
+  private func scheduleBufferOnVoice(
+    _ voice: Voice,
+    buffer: AVAudioPCMBuffer,
+    seq: UInt64,
+    waitUntilFinished: Bool,
+    sendWaitReply: @escaping () -> Void
+  ) throws {
+    do {
+      try self.playAndSchedule(voice: voice, buffer: buffer, seq: seq,
+                               waitUntilFinished: waitUntilFinished,
+                               sendWaitReply: sendWaitReply)
+    } catch {
+      let msg = (error as NSError).localizedDescription
+      if msg.contains("IO cycle") {
+        try self.startEngineAndResumeNodes()
+        try self.playAndSchedule(voice: voice, buffer: buffer, seq: seq,
+                                 waitUntilFinished: waitUntilFinished,
+                                 sendWaitReply: sendWaitReply)
+        return
+      }
+      throw error
+    }
+  }
+
+  private func playAndSchedule(
+    voice: Voice,
+    buffer: AVAudioPCMBuffer,
+    seq: UInt64,
+    waitUntilFinished: Bool,
+    sendWaitReply: @escaping () -> Void
+  ) throws {
+    // AVAudioPlayerNode 要求引擎已跑且节点已 play，否则抛 IO cycle 异常。
+    if !voice.player.isPlaying {
+      try LowLatencyNoteAudioSafePlay.play(voice.player)
+    }
+    try LowLatencyNoteAudioSafePlay.scheduleBuffer(
+      buffer,
+      on: voice.player,
+      playedBackHandler: { [weak self, weak voice] in
+        self?.queue.async {
+          guard let voice = voice, voice.sequence == seq else { return }
+          voice.busy = false
+          if waitUntilFinished {
+            sendWaitReply()
+          }
+        }
+      }
+    )
   }
 
   private func playbackBufferForKey(_ key: String) throws -> AVAudioPCMBuffer {
@@ -569,7 +610,11 @@ final class LowLatencyNoteAudio {
   private func startEngineAndResumeNodes() throws {
     try LowLatencyNoteAudioSafePlay.prepareAndStartEngine(engine)
     engine.mainMixerNode.outputVolume = masterOutputLevel
-    for voice in voices where !voice.player.isPlaying {
+    // mpv / 会话切换后节点 isPlaying 常陈旧；stop + play 强制对齐 IO 周期。
+    for voice in voices {
+      if voice.player.isPlaying {
+        voice.player.stop()
+      }
       try? LowLatencyNoteAudioSafePlay.play(voice.player)
     }
     engineNeedsReset = false

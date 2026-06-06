@@ -47,6 +47,7 @@ class SmartDictationAudioEngine {
         return;
       }
       await _nativePlayer.prepare(_initialAssetByCanonical);
+      AppAudioService.markPianoCoreWarmed();
       // 后台补全剩余听写音域，避免首个题音落在非中央音区时同步解码迟播。
       unawaited(_warmUpRemainingRange());
     } catch (error, stack) {

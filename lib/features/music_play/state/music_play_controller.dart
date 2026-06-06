@@ -105,6 +105,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
 
   /// 拖动进度条期间保持 UI「播放中」状态；底层 seek 可能短暂上报 paused。
   bool _scrubbing = false;
+  bool _iosScrubVolumeDucked = false;
   Timer? _scrubUiHoldTimer;
   int _scrubUiHoldGen = 0;
   static const Duration _kScrubUiHoldClear = Duration(milliseconds: 200);
@@ -653,6 +654,39 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     _scrubbing = true;
     _scrubUiHoldTimer?.cancel();
     _scrubUiHoldTimer = null;
+    if (_isIosNative && !_iosScrubVolumeDucked) {
+      _iosScrubVolumeDucked = true;
+      unawaited(_duckPlayerVolumeForScrub());
+    }
+  }
+
+  Future<void> _duckPlayerVolumeForScrub() async {
+    final player = _player;
+    if (player == null || _disposed) return;
+    await _fadePlayerVolume(
+      player,
+      to: 0,
+      steps: 2,
+      stepDelay: const Duration(milliseconds: 4),
+    );
+  }
+
+  Future<void> _restorePlayerVolumeAfterScrub() async {
+    if (!_iosScrubVolumeDucked) return;
+    _iosScrubVolumeDucked = false;
+    final player = _player;
+    if (player == null || _disposed) return;
+    if (player.state.playing || state.isPlaying) {
+      await _fadePlayerVolume(
+        player,
+        to: _kPlayerNormalVolume,
+        from: 0,
+        steps: _kIosClickFadeSteps,
+        stepDelay: _kIosClickFadeStepDelay,
+      );
+    } else {
+      await _setPlayerVolumeSafe(player, _kPlayerNormalVolume);
+    }
   }
 
   void _endScrubUiHold({bool immediate = false}) {
@@ -660,6 +694,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     _scrubUiHoldTimer = null;
     if (immediate || _disposed) {
       _scrubbing = false;
+      unawaited(_restorePlayerVolumeAfterScrub());
       return;
     }
     final gen = ++_scrubUiHoldGen;
@@ -672,6 +707,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
         return;
       }
       _scrubbing = false;
+      unawaited(_restorePlayerVolumeAfterScrub());
       final player = _player;
       if (player != null && mounted) {
         state = state.copyWith(isPlaying: player.state.playing);
@@ -805,6 +841,14 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     state = state.copyWith(activePianoNotes: active);
 
     if (_isIosNative) {
+      if (_pianoEngine.isPianoReady &&
+          _pianoEngine.tryPlayNoteFromUserGesture(note)) {
+        unawaited(AppAudioService.prepareForPianoKeypress());
+        if (!state.ready && mounted && !_disposed) {
+          state = state.copyWith(ready: true);
+        }
+        return;
+      }
       await AppAudioService.prepareForPianoKeypress();
       if (_disposed || !mounted) return;
       if (!_pianoEngine.isPianoReady) {
@@ -1052,6 +1096,11 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       if (isStale()) return;
       if (_isIosNative) {
         await _ensureIosMediaKitSessionForLongAudio();
+        unawaited(
+          AppAudioService.recoverPianoAfterMediaKit(
+            ensurePrepared: () => _pianoEngine.ensurePianoInitialized(),
+          ),
+        );
       }
       if (isStale()) return;
       await _dropPlayerIfPitchConfigurationChanged();

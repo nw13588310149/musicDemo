@@ -120,6 +120,14 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
     );
 
     if (!kIsWeb) {
+      if (_audioEngine.isPianoReady &&
+          _audioEngine.tryPlayNoteFromUserGesture(note)) {
+        unawaited(AppAudioService.prepareForPianoKeypress());
+        if (!state.audioReady) {
+          state = state.copyWith(audioReady: true);
+        }
+        return;
+      }
       try {
         await AppAudioService.prepareForPianoKeypress();
         if (!_audioEngine.isPianoReady) {

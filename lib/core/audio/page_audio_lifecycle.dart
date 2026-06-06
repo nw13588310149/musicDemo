@@ -62,11 +62,7 @@ abstract final class PageAudioLifecycle {
   static Future<void> leavePage({
     MusicCompanionAudioEngine? pianoEngine,
   }) async {
-    if (pianoEngine != null) {
-      await pianoEngine.stopAll();
-    }
-    if (kIsWeb) return;
-    NativePlaybackAudioSession.invalidatePlaybackCache();
+    await AppAudioService.onPageLeave();
   }
 
   static Future<void> leaveSightSinging() async {
