@@ -122,7 +122,11 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   bool get _isIosNative =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 
+  bool get _shouldEnablePitchForCurrentState =>
+      state.detail?.hidePitchShift != true && state.pitchSemitones != 0;
+
   int _appliedPitchSemitones = 0;
+  bool _playerPitchEnabled = false;
 
   /// 把半音数转为 [Player.setPitch] 接受的频率倍率（2^(n/12)）。
   static double _pitchRatio(int semitones) =>
@@ -408,6 +412,13 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     if (state.detail?.hidePitchShift == true) {
       return;
     }
+    if (!_playerPitchEnabled && state.pitchSemitones != 0) {
+      return;
+    }
+    if (!_playerPitchEnabled && state.pitchSemitones == 0) {
+      _appliedPitchSemitones = 0;
+      return;
+    }
     if (state.pitchSemitones == _appliedPitchSemitones) {
       return;
     }
@@ -536,8 +547,18 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       return;
     }
     final next = semitones.clamp(-12, 12);
+    final pitchModeChanged =
+        (state.detail?.hidePitchShift != true && next != 0) !=
+        _playerPitchEnabled;
+    if (mounted) {
+      state = state.copyWith(pitchSemitones: next);
+    }
     final player = _player;
-    if (player != null) {
+    if (player != null && pitchModeChanged) {
+      await _reopenActiveTrackPreservingPlayback();
+      return;
+    }
+    if (player != null && _playerPitchEnabled) {
       try {
         await player.setPitch(_pitchRatio(next));
         _appliedPitchSemitones = next;
@@ -546,10 +567,10 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
         // UI 层依旧按照所选半音数显示。
       }
     }
-    if (!mounted) {
+    if (player != null && _playerPitchEnabled) {
       return;
     }
-    state = state.copyWith(pitchSemitones: next);
+    _appliedPitchSemitones = 0;
   }
 
   /// 切换"循环模式"：顺序 → 单曲循环 → 随机循环 → 顺序。
@@ -906,6 +927,60 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     return true;
   }
 
+  Future<void> _reopenActiveTrackPreservingPlayback() async {
+    final oldPlayer = _player;
+    final track = state.activeTrack;
+    if (oldPlayer == null || track == null || track.url.isEmpty || _disposed) {
+      return;
+    }
+
+    final resumePosition = state.position;
+    final resumePlaying = oldPlayer.state.playing || state.isPlaying;
+    _openTicket++;
+    _endScrubUiHold(immediate: true);
+    _positionSub?.cancel();
+    _durationSub?.cancel();
+    _playingSub?.cancel();
+    _completedSub?.cancel();
+    _player = null;
+
+    await _releaseMediaKitPlayer(oldPlayer);
+    if (_disposed || !mounted) {
+      return;
+    }
+
+    await _openActiveTrack(play: false);
+    if (_disposed || !mounted) {
+      return;
+    }
+    final nextPlayer = _player;
+    if (nextPlayer == null) {
+      return;
+    }
+    try {
+      await nextPlayer.seek(resumePosition);
+    } catch (_) {}
+    if (resumePlaying) {
+      await _resumePlayer(nextPlayer);
+    }
+  }
+
+  Future<void> _dropPlayerIfPitchConfigurationChanged() async {
+    final player = _player;
+    if (player == null ||
+        _playerPitchEnabled == _shouldEnablePitchForCurrentState) {
+      return;
+    }
+    _positionSub?.cancel();
+    _durationSub?.cancel();
+    _playingSub?.cancel();
+    _completedSub?.cancel();
+    _player = null;
+    _playerPitchEnabled = false;
+    _appliedPitchSemitones = 0;
+    await _releaseMediaKitPlayer(player);
+  }
+
   Future<void> _switchLesson(int delta) async {
     final ids = state.args.allLessonIds;
     if (ids.isEmpty) {
@@ -964,6 +1039,8 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       if (_isIosNative) {
         await _ensureIosMediaKitSessionForLongAudio();
       }
+      if (isStale()) return;
+      await _dropPlayerIfPitchConfigurationChanged();
       if (isStale()) return;
       final player = _ensurePlayer();
       debugPrint('MusicPlay audio open: ${track.url}');
@@ -1036,10 +1113,11 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     }
     // 页内支持升降调时必须打开 pitch，否则 [Player.setPitch] 无效。
     // 无升降调能力的教材页关闭 pitch，保留 mpv 默认音高校正，听感更稳。
-    final enablePitch = state.detail?.hidePitchShift != true;
+    final enablePitch = _shouldEnablePitchForCurrentState;
     final player = Player(
       configuration: PlayerConfiguration(pitch: enablePitch),
     );
+    _playerPitchEnabled = enablePitch;
     _appliedPitchSemitones = 0;
     _player = player;
     _bindPlayerStreams(player);
@@ -1492,6 +1570,8 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     final openChain = _openTrackChain;
     final player = _player;
     _player = null;
+    _playerPitchEnabled = false;
+    _appliedPitchSemitones = 0;
 
     _pianoEngine.stopAllImmediately();
     unawaited(() async {

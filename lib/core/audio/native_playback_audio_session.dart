@@ -41,9 +41,6 @@ abstract final class NativePlaybackAudioSession {
   /// → setActive 的完整序列。
   static Future<void> ensurePlaybackActive() {
     if (kIsWeb) return Future<void>.value();
-    if (_activeProfile == _NativeAudioSessionProfile.playback) {
-      return Future<void>.value();
-    }
     return _playbackTask ??= _configurePlaybackBestEffort().whenComplete(() {
       _playbackTask = null;
     });
@@ -62,7 +59,8 @@ abstract final class NativePlaybackAudioSession {
     bool releaseOthersFirst = true,
   }) {
     if (kIsWeb) return Future<void>.value();
-    if (_activeProfile == _NativeAudioSessionProfile.mediaKitPlayback) {
+    if (!releaseOthersFirst &&
+        _activeProfile == _NativeAudioSessionProfile.mediaKitPlayback) {
       return Future<void>.value();
     }
     if (!releaseOthersFirst) {

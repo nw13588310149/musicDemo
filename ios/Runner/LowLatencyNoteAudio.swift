@@ -271,6 +271,7 @@ final class LowLatencyNoteAudio {
       guard let self = self else { return }
       let generation = self.operationGeneration
       do {
+        try self.ensureSessionCanRenderShortAudio()
         let source = try self.bufferForPlayback(key: key)
         guard let buffer = self.copyBufferWithEnvelope(source) else {
           throw LowLatencyNoteAudioError.decodeFailed(key)
@@ -439,6 +440,7 @@ final class LowLatencyNoteAudio {
   }
 
   private func buildGraph() throws {
+    try ensureSessionCanRenderShortAudio()
     detachAllVoices()
     voices.removeAll()
 
@@ -467,6 +469,7 @@ final class LowLatencyNoteAudio {
   }
 
   private func startEngineAndResumeNodes() throws {
+    try ensureSessionCanRenderShortAudio()
     try LowLatencyNoteAudioSafePlay.prepareAndStartEngine(engine)
     engine.mainMixerNode.outputVolume = masterOutputLevel
     for voice in voices where !voice.player.isPlaying {
@@ -525,6 +528,49 @@ final class LowLatencyNoteAudio {
 
   /// 拷贝采样并加首尾极短淡入/淡出（保证归零，消除播放起止咔哒）。
   /// AVAudioPCMBuffer 在 completion 前不可复用，故每次播放独立拷贝。
+  @discardableResult
+  private func ensureSessionCanRenderShortAudio() throws -> Bool {
+    let session = AVAudioSession.sharedInstance()
+    let previousCategory = session.category
+    let previousMode = session.mode
+    let previousOptions = session.categoryOptions
+    let category = session.category
+
+    if category == .playAndRecord {
+      var options: AVAudioSession.CategoryOptions = [
+        .defaultToSpeaker,
+        .allowBluetooth,
+        .mixWithOthers,
+      ]
+      if #available(iOS 10.0, *) {
+        options.insert(.allowBluetoothA2DP)
+      }
+      try session.setCategory(.playAndRecord, mode: session.mode, options: options)
+    } else {
+      var options: AVAudioSession.CategoryOptions = [
+        .mixWithOthers,
+        .defaultToSpeaker,
+      ]
+      if #available(iOS 10.0, *) {
+        options.insert(.allowAirPlay)
+      }
+      try session.setCategory(.playback, mode: .default, options: options)
+    }
+
+    try? session.setPreferredSampleRate(44_100)
+    try? session.setPreferredIOBufferDuration(0.005)
+    try session.setActive(true)
+
+    let changed =
+      previousCategory != session.category ||
+      previousMode != session.mode ||
+      previousOptions != session.categoryOptions
+    if changed {
+      engineNeedsReset = true
+    }
+    return changed
+  }
+
   private func copyBufferWithEnvelope(_ source: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
     guard
       let copy = AVAudioPCMBuffer(
