@@ -21,7 +21,10 @@ import UIKit
 final class LowLatencyNoteAudio {
   private let channel: FlutterMethodChannel
   private let engine = AVAudioEngine()
-  private let queue = DispatchQueue(label: "com.yyzl.music.lowLatencyNotes")
+  private let queue = DispatchQueue(
+    label: "com.yyzl.music.lowLatencyNotes",
+    qos: .userInteractive
+  )
   private let decodeQueue = DispatchQueue(
     label: "com.yyzl.music.lowLatencyNotes.decode",
     qos: .utility
@@ -29,6 +32,8 @@ final class LowLatencyNoteAudio {
 
   private var assetByKey: [String: String] = [:]
   private var buffersByKey: [String: AVAudioPCMBuffer] = [:]
+  /// 解码时预加包络的播放缓冲，发声热路径零拷贝。
+  private var playbackBuffersByKey: [String: AVAudioPCMBuffer] = [:]
   private var voices: [Voice] = []
   private var prepared = false
   private var graphBuilt = false
@@ -116,8 +121,8 @@ final class LowLatencyNoteAudio {
         waitUntilFinished: waitUntilFinished,
         result: result
       )
-    case "reclaimEngine":
-      reclaimEngine(result: result)
+    case "reclaimEngine", "pingEngine":
+      pingEngine(result: result)
     case "stopMetronome":
       queue.async { [weak self] in self?.stopVoices(metronomeOnly: true, fadeMs: 35) }
       result(nil)
@@ -268,51 +273,22 @@ final class LowLatencyNoteAudio {
     }
   }
 
-  /// Dart 在会话类别 / 模式切换后调用：确保引擎在运行态（不重建图）。
-  /// 单一会话模型下会话不会被 deactivate，因此这里只需保证引擎已 start。
-  private func reclaimEngine(result: @escaping FlutterResult) {
+  /// Dart [reconcilePlayback] 后调用：仅确认引擎在运行态。
+  /// **不**递增 operationGeneration，避免丢弃已排队的 play 任务（旧 reclaim 根因）。
+  private func pingEngine(result: @escaping FlutterResult) {
     queue.async { [weak self] in
       guard let self = self else {
         DispatchQueue.main.async { result(nil) }
         return
       }
-      self.operationGeneration &+= 1
       do {
         if self.prepared {
           try self.ensureEngineRunning()
         }
       } catch {
-        debugPrint("LowLatencyNoteAudio reclaim/ensureRunning failed: \(error)")
+        debugPrint("LowLatencyNoteAudio ping/ensureRunning failed: \(error)")
       }
       DispatchQueue.main.async { result(nil) }
-    }
-  }
-
-  // MARK: - 会话兜底（仅 setActive(true)，绝不 setCategory / setActive(false)）
-
-  /// 发声前的会话兜底。
-  ///
-  /// 类别 / 激活的主配置归 Dart；但 media_kit(mpv) 会在长音频播放时把 mode 切成
-  /// `moviePlayback`，Dart 缓存仍以为 `default` 不会重配，表现为引擎 isRunning=true、
-  /// 采样已解码却长期无声、偶尔 ConfigurationChange 后才响一下。
-  /// 因此在每次 prepare/play 前检测并**就地**纠正 mode（幂等，仅 drift 时写入）。
-  private func activateSessionBestEffort() {
-    let session = AVAudioSession.sharedInstance()
-    let needsModeFix =
-      session.category != .playback || session.mode != .default
-    if needsModeFix {
-      try? session.setCategory(
-        .playback,
-        mode: .default,
-        options: [.mixWithOthers]
-      )
-    }
-    try? session.setPreferredSampleRate(44_100)
-    try? session.setPreferredIOBufferDuration(0.005)
-    try? session.setActive(true)
-    // mode 被 mpv 改掉后 isRunning 常陈旧为 true；纠正后强制续接引擎。
-    if needsModeFix && graphBuilt {
-      try? startEngineAndResumeNodes()
     }
   }
 
@@ -359,6 +335,9 @@ final class LowLatencyNoteAudio {
             guard self.assetByKey[key] == asset else { return }
             if self.buffersByKey[key] == nil {
               self.buffersByKey[key] = buffer
+              if let playback = self.copyBufferWithEnvelope(buffer) {
+                self.playbackBuffersByKey[key] = playback
+              }
             }
           }
         } catch {
@@ -381,12 +360,11 @@ final class LowLatencyNoteAudio {
       guard let self = self else { return }
       let generation = self.operationGeneration
       do {
-        let source = try self.bufferForPlayback(key: key)
-        guard let buffer = self.copyBufferWithEnvelope(source) else {
-          throw LowLatencyNoteAudioError.decodeFailed(key)
-        }
+        let buffer = try self.playbackBufferForKey(key)
 
-        try self.ensureEngineRunning()
+        if !self.graphBuilt || !self.engine.isRunning || self.engineNeedsReset {
+          try self.ensureEngineRunning()
+        }
         guard generation == self.operationGeneration else {
           DispatchQueue.main.async { result(nil) }
           return
@@ -459,7 +437,19 @@ final class LowLatencyNoteAudio {
     }
   }
 
-  private func bufferForPlayback(key: String) throws -> AVAudioPCMBuffer {
+  private func playbackBufferForKey(_ key: String) throws -> AVAudioPCMBuffer {
+    if let cached = playbackBuffersByKey[key] {
+      return cached
+    }
+    let source = try rawBufferForKey(key)
+    guard let playback = copyBufferWithEnvelope(source) else {
+      throw LowLatencyNoteAudioError.decodeFailed(key)
+    }
+    playbackBuffersByKey[key] = playback
+    return playback
+  }
+
+  private func rawBufferForKey(_ key: String) throws -> AVAudioPCMBuffer {
     if let cached = buffersByKey[key] {
       return cached
     }
@@ -471,6 +461,9 @@ final class LowLatencyNoteAudio {
     }
     let buffer = try decodeAsset(url: url)
     buffersByKey[key] = buffer
+    if let playback = copyBufferWithEnvelope(buffer) {
+      playbackBuffersByKey[key] = playback
+    }
     return buffer
   }
 
@@ -546,7 +539,6 @@ final class LowLatencyNoteAudio {
   }
 
   private func buildGraph() throws {
-    activateSessionBestEffort()
     detachAllVoices()
     voices.removeAll()
 
@@ -575,7 +567,6 @@ final class LowLatencyNoteAudio {
   }
 
   private func startEngineAndResumeNodes() throws {
-    activateSessionBestEffort()
     try LowLatencyNoteAudioSafePlay.prepareAndStartEngine(engine)
     engine.mainMixerNode.outputVolume = masterOutputLevel
     for voice in voices where !voice.player.isPlaying {

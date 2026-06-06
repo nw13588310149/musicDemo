@@ -26,7 +26,10 @@ abstract interface class LowLatencyNotePlayer {
     bool waitUntilFinished = false,
   });
 
-  /// iOS：AVAudioSession 切换后重建 AVAudioEngine，避免 play() 闪退。
+  /// iOS：轻量确认引擎在运行态（不丢弃排队音符）。
+  Future<void> pingEngine();
+
+  /// 兼容旧调用；实现应委托 [pingEngine]。
   Future<void> reclaimEngine();
 
   /// 仅淡出节拍器发声，不截断钢琴延音（iOS 原生池）。

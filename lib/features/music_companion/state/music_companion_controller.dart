@@ -6,7 +6,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:pitch_detector_dart/pitch_detector.dart';
 import 'package:record/record.dart';
 
-import '../../../core/audio/native_playback_audio_session.dart';
+import '../../../core/audio/app_audio_service.dart';
 import '../audio/music_companion_audio_catalog.dart';
 import '../audio/music_companion_audio_engine.dart';
 import '../audio/page_audio_lifecycle.dart';
@@ -56,9 +56,7 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
     final pending = _pianoHandoffTask;
     if (pending != null) {
       await pending;
-      if (!kIsWeb &&
-          _audioEngine.isPianoReady &&
-          !NativePlaybackAudioSession.nativePianoGraphNeedsReclaim) {
+      if (!kIsWeb && _audioEngine.isPianoReady) {
         return;
       }
     }
@@ -121,20 +119,14 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
       errorMessage: null,
     );
 
-    // iOS：mpv / 其他模块会把 session mode 改成 moviePlayback，须先重配再发声。
     if (!kIsWeb) {
-      await NativePlaybackAudioSession.refreshPlaybackForPiano();
-      if (!mounted) return;
-    }
-
-    if (!kIsWeb &&
-        (NativePlaybackAudioSession.nativePianoGraphNeedsReclaim ||
-            !_audioEngine.isPianoReady ||
-            _pianoHandoffTask != null)) {
       try {
-        await _ensurePianoHandoff();
+        await AppAudioService.prepareForPianoKeypress();
+        if (!_audioEngine.isPianoReady) {
+          await _ensurePianoHandoff();
+        }
       } catch (error, stack) {
-        debugPrint('MusicCompanion pressPianoKey handoff: $error\n$stack');
+        debugPrint('MusicCompanion pressPianoKey: $error\n$stack');
         if (!mounted) return;
         state = state.copyWith(
           errorMessage: '音频切换中，请稍候再按琴键',
@@ -259,7 +251,7 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
   Future<void> _startMetronome() async {
     final startSeq = ++_metronomeStartSeq;
     try {
-      await NativePlaybackAudioSession.ensurePlaybackActive();
+      await AppAudioService.reconcilePlaybackSession();
       await _audioEngine.ensureMetronomeInitialized();
     } catch (error, stack) {
       debugPrint('MusicCompanion _startMetronome init: $error\n$stack');

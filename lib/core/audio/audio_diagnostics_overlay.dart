@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../features/music_companion/audio/music_companion_audio_engine.dart';
+import 'app_audio_service.dart';
 import 'native_playback_audio_session.dart';
 
 /// 屏幕音频诊断面板（临时排障用）。
@@ -48,22 +49,19 @@ class _AudioDiagnosticsOverlayState extends State<AudioDiagnosticsOverlay> {
   }
 
   Future<void> _refresh() async {
-    final engine = MusicCompanionAudioEngine.debugLastInstance;
     final result = <String, Object?>{
       'session.profile': NativePlaybackAudioSession.currentProfileLabel,
       'session.activated': NativePlaybackAudioSession.isActivated,
       'session.lastError': NativePlaybackAudioSession.lastError ?? '-',
-      'engineInstance': engine == null ? 'null' : 'ok',
+      'pianoReady': AppAudioService.isNativePianoReady,
     };
-    if (engine != null) {
-      try {
-        final d = await engine.diagnostics().timeout(
-          const Duration(seconds: 4),
-        );
-        result.addAll(d);
-      } catch (e) {
-        result['diagnostics.error'] = '$e';
-      }
+    try {
+      final d = await AppAudioService.diagnostics().timeout(
+        const Duration(seconds: 4),
+      );
+      result.addAll(d);
+    } catch (e) {
+      result['diagnostics.error'] = '$e';
     }
     if (!mounted) return;
     setState(() => _snapshot = result);
@@ -172,16 +170,14 @@ class _AudioDiagnosticsOverlayState extends State<AudioDiagnosticsOverlay> {
               runSpacing: 6,
               children: [
                 _btn('刷新', _refresh),
-                _btn('激活播放会话', () async {
-                  await NativePlaybackAudioSession.refreshPlaybackForPiano();
-                }),
+                _btn('激活播放会话', AppAudioService.reconcilePlaybackSession),
                 _btn('初始化钢琴', () async {
-                  await MusicCompanionAudioEngine.debugLastInstance
-                      ?.ensurePianoInitialized();
+                  final engine = MusicCompanionAudioEngine.debugLastInstance;
+                  await engine?.ensurePianoInitialized();
                 }),
                 _btn('播放测试音C4', () async {
-                  await MusicCompanionAudioEngine.debugLastInstance
-                      ?.debugPlayTestNote();
+                  final engine = MusicCompanionAudioEngine.debugLastInstance;
+                  await engine?.debugPlayTestNote();
                 }),
               ],
             ),

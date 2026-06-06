@@ -2,45 +2,39 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../../core/audio/app_audio_service.dart';
 import '../../../core/audio/low_latency_note_player.dart';
-import '../../../core/audio/native_piano_handoff.dart';
-import '../../../core/audio/native_playback_audio_session.dart';
 import 'music_companion_audio_catalog.dart';
 import 'music_companion_web_audio_player_base.dart';
 import 'music_companion_web_audio_player_stub.dart'
     if (dart.library.html) 'music_companion_web_audio_player_web.dart';
 
-/// 启动预热占位：iOS 低延迟通道在页面进入时 prepare，保留 no-op 兼容旧调用。
+/// 启动预热占位：页面 enter 时由 [AppAudioService] 协调。
 Future<void> warmupMusicCompanionPianoAudio() async {}
 
-/// 音乐伴侣 / musicPlay 钢琴共用的音频引擎。
-///
-/// native/iOS 使用 AVAudioEngine buffer pool；Web 继续使用 WebAudio。
+/// 音乐伴侣 / musicPlay 钢琴引擎（薄封装，共享 [AppAudioService.sharedNativePlayer]）。
 class MusicCompanionAudioEngine {
   MusicCompanionAudioEngine() {
     debugLastInstance = this;
+    AppAudioService.registerDebugEngine(this);
   }
 
-  /// 屏幕诊断面板用：最近创建的钢琴引擎实例（musicPlay / 音乐伴侣各自一个）。
   static MusicCompanionAudioEngine? debugLastInstance;
 
-  /// 屏幕诊断面板用：返回钢琴播放器 + 原生引擎/会话状态快照。
-  Future<Map<String, Object?>> diagnostics() => _nativePlayer.diagnostics();
+  Future<Map<String, Object?>> diagnostics() =>
+      AppAudioService.diagnostics();
 
-  /// 屏幕诊断面板用：强制激活播放会话 → 重建图 → 播一个中央音区测试音，
-  /// 用于在面板上观察「按下后是否真的出声 / busyVoices 是否递增」。
   Future<void> debugPlayTestNote() async {
     if (_disposed) return;
-    if (!kIsWeb) {
-      await NativePlaybackAudioSession.refreshPlaybackForPiano();
-      await reclaimNativeGraphAfterSessionChange();
-    }
+    await AppAudioService.prepareForPianoKeypress();
     await playNote('C4', volume: 1);
   }
 
   final MusicCompanionWebAudioPlayer _webPlayer =
       createMusicCompanionWebAudioPlayer();
-  final LowLatencyNotePlayer _nativePlayer = createLowLatencyNotePlayer();
+
+  LowLatencyNotePlayer get _nativePlayer =>
+      AppAudioService.sharedNativePlayer;
 
   Future<void>? _pianoInitTask;
   Future<void>? _metronomeInitTask;
@@ -50,72 +44,35 @@ class MusicCompanionAudioEngine {
 
   bool get isPianoReady => kIsWeb ? _webPlayer.isReady : _nativePlayer.isReady;
 
-  /// 从智能视唱 / 智能听写等模块返回后，重建共享 iOS 钢琴引擎并清空排队音符。
-  ///
-  /// 须在打开音乐伴侣键盘或 musicPlay 钢琴条之前调用，避免「过一会才响
-  /// 之前按的音」。
   static Future<void> primeAfterForeignAudioSession(
     MusicCompanionAudioEngine engine,
-  ) async {
-    if (engine._disposed) return;
-    if (kIsWeb) {
-      await engine.ensurePianoInitialized();
-      return;
-    }
-    await NativePianoHandoff.run(() async {
-      await NativePlaybackAudioSession.ensurePlaybackActive();
-      await engine.reclaimNativeGraphAfterSessionChange();
-      if (!engine.isPianoReady) {
-        await engine.ensurePianoInitialized();
-      }
-    });
+  ) {
+    return AppAudioService.enterPianoPage(
+      prepareAssets: () => engine.ensurePianoInitialized(),
+    );
   }
 
-  /// musicPlay：长音频与钢琴混播时，刷新会话（可选软刷新）并重建原生钢琴图。
-  ///
-  /// [softMediaKitSession] 为 true 时不先 setActive(false)，与正在播的 mpv 共存。
   static Future<void> recoverNativePianoAfterMediaKit(
     MusicCompanionAudioEngine engine, {
     bool softMediaKitSession = false,
-  }) async {
-    if (engine._disposed || kIsWeb) return;
-    await NativePianoHandoff.run(() async {
-      if (softMediaKitSession) {
-        await NativePlaybackAudioSession.ensureMediaKitPlaybackActive(
-          releaseOthersFirst: false,
-        );
-      } else {
-        await NativePlaybackAudioSession.ensureMediaKitPlaybackActive();
-      }
-      await engine.reclaimNativeGraphAfterSessionChange();
-      if (!engine.isPianoReady) {
-        await engine.ensurePianoInitialized();
-      }
-    });
+  }) {
+    return AppAudioService.recoverPianoAfterMediaKit(
+      ensurePrepared: () => engine.ensurePianoInitialized(),
+    );
   }
 
-  Future<void> ensureInitialized() async {
-    await ensurePianoInitialized();
-  }
+  Future<void> ensureInitialized() => ensurePianoInitialized();
 
   Future<void> ensurePianoInitialized() {
     return _pianoInitTask ??= _runEnsurePianoInitialized();
   }
 
-  /// iOS：playAndRecord ↔ playback 切换后重建原生钢琴图（与 handoff 合并排队）。
-  Future<void> reclaimNativeEngineAfterSessionChange() async {
-    return reclaimNativeGraphAfterSessionChange();
-  }
+  Future<void> reclaimNativeEngineAfterSessionChange() =>
+      reclaimNativeGraphAfterSessionChange();
 
   Future<void> reclaimNativeGraphAfterSessionChange() async {
     if (_disposed || kIsWeb) return;
-    await NativePianoHandoff.run(_reclaimNativeGraphOnly);
-  }
-
-  Future<void> _reclaimNativeGraphOnly() async {
-    if (_disposed || kIsWeb) return;
-    await _nativePlayer.reclaimEngine();
-    NativePlaybackAudioSession.markNativePianoGraphFresh();
+    await _nativePlayer.pingEngine();
   }
 
   Future<void> _runEnsurePianoInitialized() async {
@@ -125,9 +82,6 @@ class MusicCompanionAudioEngine {
         return;
       }
       await _nativePlayer.prepare(_initialPianoAssetByNote);
-      // 首次只 prepare 中央音区（C4..C5）以最快进入可弹状态，随后在后台补全
-      // 其余音域。原生 prepare 内部把解码放后台串行队列，因此这一步不会阻塞
-      // 首音，但能避免「首次按非中央音区琴键时同步解码」造成的迟播。
       unawaited(_warmUpRemainingPianoRange());
     } catch (error, stack) {
       _pianoInitTask = null;
@@ -139,8 +93,6 @@ class MusicCompanionAudioEngine {
     }
   }
 
-  /// 后台补全整张钢琴采样（除已 prepare 的中央音区外）。失败静默——
-  /// 真正按到未预热的键时 [playNote] 仍会按需 prepare 兜底。
   Future<void> _warmUpRemainingPianoRange() async {
     if (_disposed || kIsWeb) return;
     final remaining = <String, String>{
@@ -181,7 +133,10 @@ class MusicCompanionAudioEngine {
 
   bool tryPlayNoteFromUserGesture(String rawNote, {double volume = 1}) {
     if (_disposed || kIsWeb) return false;
-    return _nativePlayer.tryPlay(_normalizeNote(rawNote), volume: volume);
+    return AppAudioService.playPianoFromGesture(
+      _normalizeNote(rawNote),
+      volume: volume,
+    );
   }
 
   bool tryPlayMetronomeCueFromUserGesture(
@@ -189,7 +144,11 @@ class MusicCompanionAudioEngine {
     double volume = 1,
   }) {
     if (_disposed || kIsWeb) return false;
-    return _nativePlayer.tryPlay(_metronomeKey(cue), volume: volume);
+    return AppAudioService.playPianoFromGesture(
+      _metronomeKey(cue),
+      volume: volume,
+      metronome: true,
+    );
   }
 
   Future<void> activateByUserGesture() async {
@@ -228,6 +187,7 @@ class MusicCompanionAudioEngine {
     }
 
     try {
+      await AppAudioService.prepareForPianoKeypress();
       await ensurePianoInitialized();
       if (_disposed) return;
       await _ensureNativePianoNotePrepared(note);
@@ -299,16 +259,13 @@ class MusicCompanionAudioEngine {
     }
   }
 
-  /// 仅停止节拍器，不截断虚拟钢琴正在发声的音符。
   Future<void> stopMetronomePlaybacks() async {
     if (_disposed) return;
     if (kIsWeb) {
       await _webPlayer.stopMetronomePlaybacks();
       return;
     }
-    if (!kIsWeb) {
-      await _nativePlayer.stopMetronomePlaybacks();
-    }
+    await _nativePlayer.stopMetronomePlaybacks();
   }
 
   Future<void> stopAll() async {
@@ -319,7 +276,6 @@ class MusicCompanionAudioEngine {
     await _nativePlayer.stopAll();
   }
 
-  /// 与 [stopAll] 相同：短音停止走淡出，避免截断杂音。
   void stopAllImmediately() {
     unawaited(stopAll());
   }
@@ -335,7 +291,7 @@ class MusicCompanionAudioEngine {
       _metronomeInitTask = null;
       return;
     }
-    await _nativePlayer.dispose();
+    // iOS：共享原生图，页面 dispose 只停声，不销毁 buffers。
     _pianoInitTask = null;
     _metronomeInitTask = null;
   }
@@ -385,7 +341,7 @@ class MusicCompanionAudioEngine {
 
   static bool _isInitialPianoNote(String note) {
     final midi = _noteMidi(note);
-    return midi >= 60 && midi <= 72; // C4..C5: central first-touch range.
+    return midi >= 60 && midi <= 72;
   }
 
   static int _noteMidi(String note) {

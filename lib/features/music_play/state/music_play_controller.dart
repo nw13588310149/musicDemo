@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 
-import '../../../core/audio/native_playback_audio_session.dart';
+import '../../../core/audio/app_audio_service.dart';
 import '../../../core/network/api_response.dart';
 import '../../../core/network/media_url.dart';
 import '../../music_companion/audio/music_companion_audio_engine.dart';
@@ -213,9 +213,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       } else {
         return;
       }
-      if (!_disposed &&
-          _pianoEngine.isPianoReady &&
-          !NativePlaybackAudioSession.nativePianoGraphNeedsReclaim) {
+      if (!_disposed && _pianoEngine.isPianoReady) {
         return;
       }
     }
@@ -254,8 +252,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     if (!_iosMusicPlaySessionPrimed) {
       await _ensureIosMediaKitSessionForLongAudio();
     }
-    if (_pianoEngine.isPianoReady &&
-        !NativePlaybackAudioSession.nativePianoGraphNeedsReclaim) {
+    if (_pianoEngine.isPianoReady) {
       return;
     }
     await _recoverIosPianoGraph();
@@ -807,13 +804,18 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     final active = Set<String>.from(state.activePianoNotes)..add(note);
     state = state.copyWith(activePianoNotes: active);
 
-    // iOS：mpv 会偷偷把 session mode 改成 moviePlayback，须先重配再 tryPlay。
     if (_isIosNative) {
-      await NativePlaybackAudioSession.refreshPlaybackForPiano();
+      await AppAudioService.prepareForPianoKeypress();
       if (_disposed || !mounted) return;
+      if (!_pianoEngine.isPianoReady) {
+        await _awaitIosPianoReadyForKeypress();
+        if (!mounted || _disposed) return;
+      }
+    } else if (!_pianoEngine.isPianoReady) {
+      await _pianoEngine.ensurePianoInitialized();
+      if (!mounted || _disposed) return;
     }
 
-    // iOS：须在手势栈里先同步 tryPlay；长音频已播时勿 setActive(false)。
     if (_pianoEngine.tryPlayNoteFromUserGesture(note)) {
       if (!state.ready && mounted && !_disposed) {
         state = state.copyWith(ready: true);
@@ -821,35 +823,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       return;
     }
 
-    if (_isIosNative &&
-        (NativePlaybackAudioSession.nativePianoGraphNeedsReclaim ||
-            !_pianoEngine.isPianoReady ||
-            _iosPianoRecoverTask != null)) {
-      await _awaitIosPianoReadyForKeypress();
-      if (!mounted || _disposed) {
-        return;
-      }
-      if (_pianoEngine.tryPlayNoteFromUserGesture(note)) {
-        if (!state.ready && mounted && !_disposed) {
-          state = state.copyWith(ready: true);
-        }
-        return;
-      }
-    } else if (!_pianoEngine.isPianoReady) {
-      await _pianoEngine.ensurePianoInitialized();
-      if (!mounted || _disposed) {
-        return;
-      }
-      if (_pianoEngine.tryPlayNoteFromUserGesture(note)) {
-        if (!state.ready && mounted && !_disposed) {
-          state = state.copyWith(ready: true);
-        }
-        return;
-      }
-    }
-    if (!mounted || _disposed) {
-      return;
-    }
+    if (!mounted || _disposed) return;
     if (!state.ready) {
       state = state.copyWith(ready: true);
     }

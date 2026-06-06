@@ -118,7 +118,6 @@ abstract final class NativeAudioBootstrap {
   /// 不会重新 init SoLoud，只刷 session。
   static Future<void> reactivatePlaybackSession() async {
     if (kIsWeb) return;
-    NativePlaybackAudioSession.invalidatePlaybackCache();
-    await NativePlaybackAudioSession.ensurePlaybackActive();
+    await NativePlaybackAudioSession.reconcilePlayback();
   }
 }

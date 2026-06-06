@@ -43,6 +43,9 @@ class _StubLowLatencyNotePlayer implements LowLatencyNotePlayer {
   }) async {}
 
   @override
+  Future<void> pingEngine() async {}
+
+  @override
   Future<void> reclaimEngine() async {}
 
   @override

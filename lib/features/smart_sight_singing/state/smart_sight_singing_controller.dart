@@ -7,7 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:music_xml/music_xml.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-import '../../../core/audio/native_playback_audio_session.dart';
+import '../../../core/audio/app_audio_service.dart';
 import '../audio/ktv_scoring.dart';
 import '../audio/midi_file_parser.dart';
 import '../audio/midi_playback_scheduler.dart';
@@ -684,8 +684,8 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
 
       // 仅当原生图被切到录音会话（例如刚跟唱过）时才重建，
       // 普通连续试听不再每次重切会话，响应更快。
-      if (!kIsWeb && NativePlaybackAudioSession.nativePianoGraphNeedsReclaim) {
-        await NativePlaybackAudioSession.ensurePlaybackActive();
+      if (!kIsWeb) {
+        await AppAudioService.reconcilePlaybackSession();
         if (!_isCurrentPreviewGeneration(generation)) return;
         await _playback.reclaimNativeEngine();
         if (!_isCurrentPreviewGeneration(generation)) return;

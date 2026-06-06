@@ -15,9 +15,8 @@ class _IoLowLatencyNotePlayer implements LowLatencyNotePlayer {
     'com.yyzl.music/low_latency_notes',
   );
 
-  /// 原生引擎重建 / 采样解码的最长等待。iOS 上 AVAudioEngine 重连偶发不返回，
-  /// 不加超时会让上层 handoff 永久卡住、整页转圈。
   static const Duration _kHeavyChannelTimeout = Duration(seconds: 6);
+  static const Duration _kPlayChannelTimeout = Duration(milliseconds: 800);
 
   final Map<String, String> _assetByKey = <String, String>{};
   final Map<String, AudioPlayer> _fallbackPlayers = <String, AudioPlayer>{};
@@ -123,27 +122,42 @@ class _IoLowLatencyNotePlayer implements LowLatencyNotePlayer {
     if (_disposed || !_assetByKey.containsKey(key) || !_nativeReady) {
       return false;
     }
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      final safeVolume = volume.clamp(0.0, 1.0).toDouble();
+      // 热路径：fire-and-forget，不 await，避免排队在 handoff/prepare 之后迟播。
+      _channel.invokeMethod<void>('play', <String, Object>{
+        'key': key,
+        'volume': safeVolume,
+        'metronome': metronome,
+        'waitUntilFinished': false,
+      }).catchError((Object error, StackTrace stack) {
+        _lastNativeError = 'tryPlay failed: $error';
+        debugPrint('LowLatencyNotePlayer tryPlay failed: $error\n$stack');
+      });
+      return true;
+    }
     unawaited(play(key, volume: volume, metronome: metronome));
     return true;
   }
 
   @override
-  Future<void> reclaimEngine() async {
+  Future<void> reclaimEngine() => pingEngine();
+
+  @override
+  Future<void> pingEngine() async {
     if (_disposed || kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) {
       return;
     }
     try {
       await _channel
-          .invokeMethod<void>('reclaimEngine')
-          .timeout(_kHeavyChannelTimeout);
+          .invokeMethod<void>('pingEngine')
+          .timeout(const Duration(seconds: 2));
     } on TimeoutException catch (error, stack) {
-      debugPrint(
-        'LowLatencyNotePlayer reclaimEngine timed out: $error\n$stack',
-      );
+      debugPrint('LowLatencyNotePlayer pingEngine timed out: $error\n$stack');
     } on PlatformException catch (error, stack) {
-      debugPrint('LowLatencyNotePlayer reclaimEngine failed: $error\n$stack');
+      debugPrint('LowLatencyNotePlayer pingEngine failed: $error\n$stack');
     } on MissingPluginException catch (error, stack) {
-      debugPrint('LowLatencyNotePlayer reclaimEngine missing: $error\n$stack');
+      debugPrint('LowLatencyNotePlayer pingEngine missing: $error\n$stack');
     }
   }
 
@@ -159,12 +173,14 @@ class _IoLowLatencyNotePlayer implements LowLatencyNotePlayer {
 
     if (_nativeReady) {
       try {
-        await _channel.invokeMethod<void>('play', <String, Object>{
-          'key': key,
-          'volume': safeVolume,
-          'metronome': metronome,
-          'waitUntilFinished': waitUntilFinished,
-        });
+        await _channel
+            .invokeMethod<void>('play', <String, Object>{
+              'key': key,
+              'volume': safeVolume,
+              'metronome': metronome,
+              'waitUntilFinished': waitUntilFinished,
+            })
+            .timeout(_kPlayChannelTimeout);
         return;
       } on PlatformException catch (error, stack) {
         debugPrint('LowLatencyNotePlayer native play failed: $error\n$stack');

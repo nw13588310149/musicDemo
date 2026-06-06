@@ -2,9 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../../core/audio/app_audio_service.dart';
 import '../../../core/audio/low_latency_note_player.dart';
-import '../../../core/audio/native_piano_handoff.dart';
-import '../../../core/audio/native_playback_audio_session.dart';
 import '../../../core/audio/piano_note_assets.dart';
 import 'web_note_audio_player_base.dart';
 import 'web_note_audio_player_stub.dart'
@@ -24,7 +23,8 @@ class SmartDictationAudioEngine {
   SmartDictationAudioEngine();
 
   final WebNoteAudioPlayer _webPlayer = createWebNoteAudioPlayer();
-  final LowLatencyNotePlayer _nativePlayer = createLowLatencyNotePlayer();
+  LowLatencyNotePlayer get _nativePlayer =>
+      AppAudioService.sharedNativePlayer;
   final StreamController<List<double>> _frequencyController =
       StreamController<List<double>>.broadcast();
   Future<void>? _initTask;
@@ -132,10 +132,8 @@ class SmartDictationAudioEngine {
   /// iOS：其它模块（如智能视唱）切走 AVAudioSession 后，重建原生引擎。
   Future<void> reclaimNativeEngineAfterSessionChange() async {
     if (kIsWeb || _disposed) return;
-    await NativePianoHandoff.run(() async {
-      await _nativePlayer.reclaimEngine();
-      NativePlaybackAudioSession.markNativePianoGraphFresh();
-    });
+    await AppAudioService.reconcilePlaybackSession();
+    await _nativePlayer.pingEngine();
   }
 
   Future<void> playTokensHarmonic(
