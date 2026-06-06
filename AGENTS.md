@@ -34,7 +34,8 @@
   - `lib/core/audio/app_audio_service.dart` — single coordinator: shared `LowLatencyNotePlayer`, `reconcilePlaybackSession()` (no cache short-circuit; fixes mpv `moviePlayback` drift), `prepareForPianoKeypress()`, fire-and-forget `playPianoFromGesture()`.
   - `lib/core/audio/native_playback_audio_session.dart` — sole AVAudioSession owner; never `setActive(false)` on navigation; `reconcilePlayback()` always re-applies `playback` + `defaultMode` + `mixWithOthers`.
   - `lib/core/audio/page_audio_lifecycle.dart` — page enter/leave wrappers (re-exported from music_companion for compat).
-  - `ios/Runner/LowLatencyNoteAudio.swift` — one persistent 24-voice `AVAudioEngine`; does NOT touch AVAudioSession; `pingEngine` (not generation-bump reclaim); pre-enveloped decode buffers; play queue `userInteractive`.
+  - `lib/core/audio/ios_piano_bootstrap.dart` — app-launch preload of all piano + metronome assets (GarageBand-style); page nav only reconcile + ping.
+  - `ios/Runner/LowLatencyNoteAudio.swift` — one persistent 24-voice `AVAudioEngine`; `controlQueue` + `playQueue` split; `prepare`/`ping`/`play` return to Dart immediately; stop fade on main queue; pre-enveloped decode buffers.
   - Long audio: `media_kit` (mpv) on shared `playback` session; piano keypress calls `AppAudioService.prepareForPianoKeypress()` before `tryPlay`.
   - Piano/metronome/dictation use native AVAudioEngine via shared player — NOT SoLoud (SoLoud is analysis-only via `NativeAudioBootstrap`).
 - Smart sight singing (`/smart-singing`):

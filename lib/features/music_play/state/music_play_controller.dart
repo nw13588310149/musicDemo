@@ -758,7 +758,21 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
           break;
         }
         try {
+          if (_isIosNative && !_iosScrubVolumeDucked) {
+            await _setPlayerVolumeSafe(activePlayer, 0);
+          }
           await activePlayer.seek(target);
+          if (_isIosNative &&
+              !_iosScrubVolumeDucked &&
+              (activePlayer.state.playing || state.isPlaying)) {
+            await _fadePlayerVolume(
+              activePlayer,
+              to: _kPlayerNormalVolume,
+              from: 0,
+              steps: 2,
+              stepDelay: const Duration(milliseconds: 4),
+            );
+          }
         } catch (_) {}
 
         final pending = _pendingSeek;
@@ -1108,10 +1122,19 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       final player = _ensurePlayer();
       debugPrint('MusicPlay audio open: ${track.url}');
       _endScrubUiHold(immediate: true);
-      if (_isIosNative && play) {
-        await _setPlayerVolumeSafe(player, _kPlayerNormalVolume);
+      if (_isIosNative) {
+        await _setPlayerVolumeSafe(player, 0);
       }
       await player.open(Media(track.url), play: play);
+      if (_isIosNative && play) {
+        await _fadePlayerVolume(
+          player,
+          to: _kPlayerNormalVolume,
+          from: 0,
+          steps: _kIosClickFadeSteps,
+          stepDelay: _kIosClickFadeStepDelay,
+        );
+      }
       if (isStale()) {
         // 页面已销毁或已被新 open 取代：勿再 setRate/setPitch，避免 mpv abort。
         return;

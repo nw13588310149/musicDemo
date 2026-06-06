@@ -8,6 +8,9 @@ import '../../features/music_companion/audio/music_companion_audio_engine.dart';
 /// 页面级音频生命周期（已迁至 core，全应用共用）。
 abstract final class PageAudioLifecycle {
   static Future<void> enterPlaybackPiano(MusicCompanionAudioEngine engine) {
+    if (AppAudioService.isNativePianoReady) {
+      return AppAudioService.onPianoPageVisible();
+    }
     return AppAudioService.enterPianoPage(
       prepareAssets: () => engine.ensurePianoInitialized(),
     );

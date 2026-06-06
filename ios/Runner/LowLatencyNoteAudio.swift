@@ -21,8 +21,14 @@ import UIKit
 final class LowLatencyNoteAudio {
   private let channel: FlutterMethodChannel
   private let engine = AVAudioEngine()
-  private let queue = DispatchQueue(
-    label: "com.yyzl.music.lowLatencyNotes",
+  /// 控制面：prepare / ping / stop / 建图（不与发声热路径抢队列）。
+  private let controlQueue = DispatchQueue(
+    label: "com.yyzl.music.lowLatencyNotes.control",
+    qos: .userInitiated
+  )
+  /// 发声热路径：独立队列，避免被 prepare/stop 淡出堵住 6s。
+  private let playQueue = DispatchQueue(
+    label: "com.yyzl.music.lowLatencyNotes.play",
     qos: .userInteractive
   )
   private let decodeQueue = DispatchQueue(
@@ -124,10 +130,10 @@ final class LowLatencyNoteAudio {
     case "reclaimEngine", "pingEngine":
       pingEngine(result: result)
     case "stopMetronome":
-      queue.async { [weak self] in self?.stopVoices(metronomeOnly: true, fadeMs: 35) }
+      controlQueue.async { [weak self] in self?.stopVoices(metronomeOnly: true, fadeMs: 35) }
       result(nil)
     case "stopAll":
-      queue.async { [weak self] in
+      controlQueue.async { [weak self] in
         guard let self = self else { return }
         self.operationGeneration &+= 1
         self.stopVoices(metronomeOnly: false, fadeMs: 90)
@@ -135,7 +141,7 @@ final class LowLatencyNoteAudio {
       result(nil)
     case "dispose":
       // App 级短音频资源：页面离开只停声，不销毁图（见 Dart dispose 注释）。
-      queue.async { [weak self] in self?.stopVoices(metronomeOnly: false, fadeMs: 90) }
+      controlQueue.async { [weak self] in self?.stopVoices(metronomeOnly: false, fadeMs: 90) }
       result(nil)
     case "diagnostics":
       diagnostics(result: result)
@@ -148,34 +154,29 @@ final class LowLatencyNoteAudio {
 
   /// 返回原生引擎 / 会话的实时状态，供 Dart 侧屏幕诊断面板显示。
   private func diagnostics(result: @escaping FlutterResult) {
-    queue.async { [weak self] in
-      guard let self = self else {
-        DispatchQueue.main.async { result([:]) }
-        return
-      }
-      let session = AVAudioSession.sharedInstance()
-      let categoryOptions = session.categoryOptions
-      let snapshot: [String: Any] = [
-        "prepared": self.prepared,
-        "graphBuilt": self.graphBuilt,
-        "engineRunning": self.engine.isRunning,
-        "engineNeedsReset": self.engineNeedsReset,
-        "interrupted": self.interrupted,
-        "voiceCount": self.voices.count,
-        "busyVoices": self.activeVoiceCount(),
-        "decodedBuffers": self.buffersByKey.count,
-        "registeredAssets": self.assetByKey.count,
-        "outputVolume": self.engine.mainMixerNode.outputVolume,
-        "sessionCategory": session.category.rawValue,
-        "sessionMode": session.mode.rawValue,
-        "sessionOptions": Int(categoryOptions.rawValue),
-        "outputVolumeSystem": session.outputVolume,
-        "otherAudioPlaying": session.isOtherAudioPlaying,
-        "outputRoute": session.currentRoute.outputs.map { $0.portType.rawValue }
-          .joined(separator: ","),
-      ]
-      DispatchQueue.main.async { result(snapshot) }
-    }
+    // 同步快照：不排队 controlQueue，避免 prepare 占队时诊断也 6s 超时。
+    let session = AVAudioSession.sharedInstance()
+    let categoryOptions = session.categoryOptions
+    let snapshot: [String: Any] = [
+      "prepared": prepared,
+      "graphBuilt": graphBuilt,
+      "engineRunning": engine.isRunning,
+      "engineNeedsReset": engineNeedsReset,
+      "interrupted": interrupted,
+      "voiceCount": voices.count,
+      "busyVoices": activeVoiceCount(),
+      "decodedBuffers": buffersByKey.count,
+      "registeredAssets": assetByKey.count,
+      "outputVolume": engine.mainMixerNode.outputVolume,
+      "sessionCategory": session.category.rawValue,
+      "sessionMode": session.mode.rawValue,
+      "sessionOptions": Int(categoryOptions.rawValue),
+      "outputVolumeSystem": session.outputVolume,
+      "otherAudioPlaying": session.isOtherAudioPlaying,
+      "outputRoute": session.currentRoute.outputs.map { $0.portType.rawValue }
+        .joined(separator: ","),
+    ]
+    result(snapshot)
   }
 
   // MARK: - 系统事件观察者（重启而非重建）
@@ -197,7 +198,7 @@ final class LowLatencyNoteAudio {
         queue: nil,
         using: { [weak self] _ in
           // CoreAudio 整体重启：节点 / 引擎全废，标记整图重建。
-          self?.queue.async {
+          self?.controlQueue.async {
             self?.engineNeedsReset = true
           }
         }
@@ -238,7 +239,7 @@ final class LowLatencyNoteAudio {
 
     switch type {
     case .began:
-      queue.async { [weak self] in self?.interrupted = true }
+      controlQueue.async { [weak self] in self?.interrupted = true }
     case .ended:
       let shouldResume: Bool
       if let rawOptions = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt {
@@ -247,7 +248,7 @@ final class LowLatencyNoteAudio {
       } else {
         shouldResume = true
       }
-      queue.async { [weak self] in
+      controlQueue.async { [weak self] in
         guard let self = self else { return }
         self.interrupted = false
         guard shouldResume else { return }
@@ -260,7 +261,7 @@ final class LowLatencyNoteAudio {
 
   /// 系统侧（路由 / 配置变化）触发的重启：派发到串行队列后重启常驻引擎。
   private func restartEngineAfterSystemChange() {
-    queue.async { [weak self] in self?.restartEngineLocked() }
+    controlQueue.async { [weak self] in self?.restartEngineLocked() }
   }
 
   /// 在串行队列内：确保常驻引擎处于运行态并续接所有节点（不重建图）。
@@ -276,11 +277,9 @@ final class LowLatencyNoteAudio {
   /// Dart [reconcilePlayback] 后调用：仅确认引擎在运行态。
   /// **不**递增 operationGeneration，避免丢弃已排队的 play 任务（旧 reclaim 根因）。
   private func pingEngine(result: @escaping FlutterResult) {
-    queue.async { [weak self] in
-      guard let self = self else {
-        DispatchQueue.main.async { result(nil) }
-        return
-      }
+    result(nil)
+    controlQueue.async { [weak self] in
+      guard let self = self else { return }
       do {
         if self.prepared {
           try self.ensureEngineRunning()
@@ -288,36 +287,41 @@ final class LowLatencyNoteAudio {
       } catch {
         debugPrint("LowLatencyNoteAudio ping/ensureRunning failed: \(error)")
       }
-      DispatchQueue.main.async { result(nil) }
     }
   }
 
   // MARK: - Prepare / decode
 
   private func prepare(assets: [String: String], result: @escaping FlutterResult) {
-    queue.async { [weak self] in
+    // 立即回 Dart：避免 ensureEngineRunning / 解码占满串行队列导致 6s prepare 超时。
+    var registered = 0
+    var decodeBatch: [(String, String)] = []
+    var prepareError: Error?
+    for (key, asset) in assets {
+      guard resolveFlutterAsset(asset) != nil else {
+        prepareError = LowLatencyNoteAudioError.assetNotFound(asset)
+        break
+      }
+      assetByKey[key] = asset
+      registered += 1
+      if buffersByKey[key] == nil {
+        decodeBatch.append((key, asset))
+      }
+    }
+    if let prepareError {
+      result(FlutterError(code: "prepare_failed", message: "\(prepareError)", details: nil))
+      return
+    }
+    prepared = true
+    result(["loaded": registered])
+
+    controlQueue.async { [weak self] in
       guard let self = self else { return }
       do {
-        var registered = 0
-        var decodeBatch: [(String, String)] = []
-        for (key, asset) in assets {
-          guard self.resolveFlutterAsset(asset) != nil else {
-            throw LowLatencyNoteAudioError.assetNotFound(asset)
-          }
-          self.assetByKey[key] = asset
-          registered += 1
-          if self.buffersByKey[key] == nil {
-            decodeBatch.append((key, asset))
-          }
-        }
-        self.prepared = true
         try self.ensureEngineRunning()
         self.scheduleBackgroundDecode(decodeBatch)
-        DispatchQueue.main.async { result(["loaded": registered]) }
       } catch {
-        DispatchQueue.main.async {
-          result(FlutterError(code: "prepare_failed", message: "\(error)", details: nil))
-        }
+        debugPrint("LowLatencyNoteAudio prepare background failed: \(error)")
       }
     }
   }
@@ -330,7 +334,7 @@ final class LowLatencyNoteAudio {
         do {
           guard let url = self.resolveFlutterAsset(asset) else { return }
           let buffer = try self.decodeAsset(url: url)
-          self.queue.async { [weak self] in
+          self.controlQueue.async { [weak self] in
             guard let self = self else { return }
             guard self.assetByKey[key] == asset else { return }
             if self.buffersByKey[key] == nil {
@@ -356,7 +360,10 @@ final class LowLatencyNoteAudio {
     waitUntilFinished: Bool,
     result: @escaping FlutterResult
   ) {
-    queue.async { [weak self] in
+    if !waitUntilFinished {
+      result(nil)
+    }
+    playQueue.async { [weak self] in
       guard let self = self else { return }
       let generation = self.operationGeneration
       do {
@@ -366,7 +373,9 @@ final class LowLatencyNoteAudio {
           try self.ensureEngineRunning()
         }
         guard generation == self.operationGeneration else {
-          DispatchQueue.main.async { result(nil) }
+          if waitUntilFinished {
+            DispatchQueue.main.async { result(nil) }
+          }
           return
         }
 
@@ -401,7 +410,7 @@ final class LowLatencyNoteAudio {
           400,
           Int(Double(buffer.frameLength) / buffer.format.sampleRate * 1000) + 200
         )
-        self.queue.asyncAfter(deadline: .now() + .milliseconds(durationMs)) {
+        self.playQueue.asyncAfter(deadline: .now() + .milliseconds(durationMs)) {
           [weak voice] in
           guard let voice = voice, voice.sequence == seq, voice.busy else { return }
           voice.busy = false
@@ -410,17 +419,20 @@ final class LowLatencyNoteAudio {
           }
         }
 
-        if !waitUntilFinished {
-          DispatchQueue.main.async { result(nil) }
-        }
       } catch {
         self.engineNeedsReset = true
         guard generation == self.operationGeneration else {
-          DispatchQueue.main.async { result(nil) }
+          if waitUntilFinished {
+            DispatchQueue.main.async { result(nil) }
+          }
           return
         }
-        DispatchQueue.main.async {
-          result(FlutterError(code: "play_failed", message: "\(error)", details: nil))
+        if waitUntilFinished {
+          DispatchQueue.main.async {
+            result(FlutterError(code: "play_failed", message: "\(error)", details: nil))
+          }
+        } else {
+          debugPrint("LowLatencyNoteAudio play failed (fire-and-forget): \(error)")
         }
       }
     }
@@ -467,7 +479,7 @@ final class LowLatencyNoteAudio {
       buffer,
       on: voice.player,
       playedBackHandler: { [weak self, weak voice] in
-        self?.queue.async {
+        self?.playQueue.async {
           guard let voice = voice, voice.sequence == seq else { return }
           voice.busy = false
           if waitUntilFinished {
@@ -536,25 +548,28 @@ final class LowLatencyNoteAudio {
     let stepMs = max(1, fadeMs / steps)
     let baseVolumes = targets.map { max(0, min($0.player.volume, 1)) }
 
+    // 淡出走主队列，不占 controlQueue / playQueue，避免页面切换时堵住发声。
     for step in 1...steps {
-      queue.asyncAfter(deadline: .now() + .milliseconds(step * stepMs)) { [weak self] in
+      DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(step * stepMs)) {
+        [weak self] in
         guard let self = self, generation == self.fadeGeneration else { return }
         let scale = max(0, Float(steps - step) / Float(steps))
         for (index, voice) in targets.enumerated() {
           voice.player.volume = baseVolumes[index] * scale
         }
         guard step == steps else { return }
-        // 音量已降到 0，此时 stop 不会有可闻咔哒；随后恢复到 playing-idle 以便复用。
-        for voice in targets {
-          voice.player.stop()
-          voice.player.volume = 1
-          voice.busy = false
-          voice.isMetronome = false
-          if self.graphBuilt, self.engine.isRunning {
-            try? LowLatencyNoteAudioSafePlay.play(voice.player)
+        self.controlQueue.async {
+          for voice in targets {
+            voice.player.stop()
+            voice.player.volume = 1
+            voice.busy = false
+            voice.isMetronome = false
+            if self.graphBuilt, self.engine.isRunning {
+              try? LowLatencyNoteAudioSafePlay.play(voice.player)
+            }
           }
+          self.applyPendingResetIfIdle()
         }
-        self.applyPendingResetIfIdle()
       }
     }
   }

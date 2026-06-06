@@ -8,6 +8,9 @@ import 'low_latency_note_player_stub.dart'
 abstract interface class LowLatencyNotePlayer {
   bool get isReady;
 
+  /// iOS 原生 AVAudioEngine 是否就绪（不含 just_audio 回退）。
+  bool get nativeReady;
+
   bool get supportsImmediatePlay;
 
   /// 屏幕诊断面板用：返回播放器 + 原生引擎/会话的实时状态快照。

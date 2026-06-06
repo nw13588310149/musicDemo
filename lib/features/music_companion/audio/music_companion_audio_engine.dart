@@ -3,14 +3,16 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../../core/audio/app_audio_service.dart';
+import '../../../core/audio/ios_piano_bootstrap.dart';
 import '../../../core/audio/low_latency_note_player.dart';
 import 'music_companion_audio_catalog.dart';
 import 'music_companion_web_audio_player_base.dart';
 import 'music_companion_web_audio_player_stub.dart'
     if (dart.library.html) 'music_companion_web_audio_player_web.dart';
 
-/// 启动预热占位：页面 enter 时由 [AppAudioService] 协调。
-Future<void> warmupMusicCompanionPianoAudio() async {}
+/// 启动时预加载钢琴 + 节拍器（iOS 常驻 AVAudioEngine 采样）。
+Future<void> warmupMusicCompanionPianoAudio() =>
+    IosPianoBootstrap.warmAtAppLaunch();
 
 /// 音乐伴侣 / musicPlay 钢琴引擎（薄封装，共享 [AppAudioService.sharedNativePlayer]）。
 class MusicCompanionAudioEngine {
@@ -79,6 +81,9 @@ class MusicCompanionAudioEngine {
     try {
       if (kIsWeb) {
         await _webPlayer.prepare(kMusicCompanionPianoAssetByNote.values);
+        return;
+      }
+      if (AppAudioService.isNativePianoReady) {
         return;
       }
       await _nativePlayer.prepare(_initialPianoAssetByNote);

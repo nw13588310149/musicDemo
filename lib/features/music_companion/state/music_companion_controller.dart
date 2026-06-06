@@ -73,6 +73,12 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
 
   Future<void> _prepareAudio() async {
     try {
+      if (AppAudioService.isNativePianoReady) {
+        if (!mounted) return;
+        state = state.copyWith(audioReady: true, errorMessage: null);
+        unawaited(_ensurePianoHandoff());
+        return;
+      }
       await _ensurePianoHandoff();
       if (!mounted) return;
       state = state.copyWith(

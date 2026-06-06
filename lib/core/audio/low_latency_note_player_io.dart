@@ -15,7 +15,8 @@ class _IoLowLatencyNotePlayer implements LowLatencyNotePlayer {
     'com.yyzl.music/low_latency_notes',
   );
 
-  static const Duration _kHeavyChannelTimeout = Duration(seconds: 6);
+  static const Duration _kPrepareTimeout = Duration(seconds: 15);
+  static const Duration _kIncrementalPrepareTimeout = Duration(seconds: 2);
   static const Duration _kPlayChannelTimeout = Duration(milliseconds: 800);
 
   final Map<String, String> _assetByKey = <String, String>{};
@@ -33,6 +34,9 @@ class _IoLowLatencyNotePlayer implements LowLatencyNotePlayer {
 
   @override
   bool get isReady => !_disposed && (_nativeReady || _fallbackMode);
+
+  @override
+  bool get nativeReady => !_disposed && _nativeReady;
 
   @override
   bool get supportsImmediatePlay => _nativeReady;
@@ -77,20 +81,35 @@ class _IoLowLatencyNotePlayer implements LowLatencyNotePlayer {
     }
 
     if (defaultTargetPlatform == TargetPlatform.iOS) {
+      final onlyIncremental = _nativeReady && assetByKey.isNotEmpty;
       try {
         await _channel
             .invokeMethod<void>('prepare', <String, Object>{
               'assets': assetByKey,
             })
-            .timeout(_kHeavyChannelTimeout);
+            .timeout(
+              onlyIncremental
+                  ? _kIncrementalPrepareTimeout
+                  : _kPrepareTimeout,
+            );
         _nativeReady = true;
         _fallbackMode = false;
+        _lastNativeError = null;
         return;
       } on TimeoutException catch (error, stack) {
         _lastNativeError = 'prepare timed out: $error';
         debugPrint(
           'LowLatencyNotePlayer native prepare timed out: $error\n$stack',
         );
+        // 启动预加载后增量 prepare 超时不切回退：后台继续同步原生。
+        if (_nativeReady) {
+          unawaited(
+            _channel.invokeMethod<void>('prepare', <String, Object>{
+              'assets': assetByKey,
+            }),
+          );
+          return;
+        }
       } on MissingPluginException catch (error, stack) {
         _lastNativeError = 'channel missing: $error';
         debugPrint(
@@ -102,10 +121,11 @@ class _IoLowLatencyNotePlayer implements LowLatencyNotePlayer {
           'LowLatencyNotePlayer native prepare failed: $error\n$stack',
         );
       }
+      // iOS 永不走 just_audio 回退（专业钢琴 App 只用 AVAudioEngine）。
+      return;
     }
 
-    // Android / desktop / iOS channel failure fallback. This is not intended for
-    // piano latency, but keeps non-iOS builds functional while iPad uses native.
+    // Android / desktop：通道失败时回退 just_audio。
     _fallbackMode = true;
     _nativeReady = false;
   }

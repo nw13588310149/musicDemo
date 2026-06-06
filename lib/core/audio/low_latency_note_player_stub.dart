@@ -12,6 +12,9 @@ class _StubLowLatencyNotePlayer implements LowLatencyNotePlayer {
   bool get isReady => !_disposed;
 
   @override
+  bool get nativeReady => !_disposed;
+
+  @override
   bool get supportsImmediatePlay => false;
 
   @override

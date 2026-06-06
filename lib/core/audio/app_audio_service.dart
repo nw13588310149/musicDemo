@@ -17,7 +17,7 @@ abstract final class AppAudioService {
   static DateTime? _lastReconcileAt;
   static const Duration _reconcileMinInterval = Duration(milliseconds: 350);
 
-  static bool get isNativePianoReady => _player.isReady;
+  static bool get isNativePianoReady => _player.nativeReady;
 
   static Future<void> reconcilePlaybackSession() {
     if (kIsWeb) return Future<void>.value();
@@ -42,7 +42,7 @@ abstract final class AppAudioService {
   static Future<void> prepareForPianoKeypress({bool force = false}) async {
     if (kIsWeb) return;
 
-    if (!force && _pianoCoreWarmed && _player.isReady) {
+    if (!force && _pianoCoreWarmed && _player.nativeReady) {
       unawaited(_reconcileIfDue());
       await _player.pingEngine();
       return;
@@ -50,7 +50,7 @@ abstract final class AppAudioService {
 
     await reconcilePlaybackSession();
     await _player.pingEngine();
-    if (!_pianoCoreWarmed || !_player.isReady) {
+    if (!_pianoCoreWarmed || !_player.nativeReady) {
       await warmupPianoCore();
     }
   }
@@ -71,7 +71,7 @@ abstract final class AppAudioService {
     double volume = 1,
     bool metronome = false,
   }) {
-    if (kIsWeb || !_player.isReady) return false;
+    if (kIsWeb || !_player.nativeReady) return false;
     return _player.tryPlay(note, volume: volume, metronome: metronome);
   }
 
@@ -86,11 +86,18 @@ abstract final class AppAudioService {
         await reconcilePlaybackSession();
         await _player.pingEngine();
       });
-      _pianoCoreWarmed = _player.isReady;
+      _pianoCoreWarmed = _player.nativeReady;
     } catch (error, stack) {
       _pianoWarmTask = null;
       debugPrint('AppAudioService.warmupPianoCore failed: $error\n$stack');
     }
+  }
+
+  /// 页面进入：仅 reconcile + ping（采样已在 [IosPianoBootstrap] 预加载）。
+  static Future<void> onPianoPageVisible() async {
+    if (kIsWeb) return;
+    await reconcilePlaybackSession();
+    await _player.pingEngine();
   }
 
   static Future<void> enterPianoPage({
@@ -101,10 +108,13 @@ abstract final class AppAudioService {
       await prepareAssets();
       return;
     }
-    // 已有缓冲：轻量恢复，避免从 musicPlay 返回时数秒 handoff。
-    if (_player.isReady && _pianoCoreWarmed && !invalidateSession) {
-      await reconcilePlaybackSession();
-      await _player.pingEngine();
+    // 采样已在启动预加载：页面进入只做 reconcile + ping，绝不重复 prepare。
+    if (_player.nativeReady) {
+      if (invalidateSession) {
+        NativePlaybackAudioSession.invalidatePlaybackCache();
+      }
+      await onPianoPageVisible();
+      _pianoCoreWarmed = true;
       return;
     }
     await NativePianoHandoff.run(() async {
@@ -114,7 +124,7 @@ abstract final class AppAudioService {
       await reconcilePlaybackSession();
       await prepareAssets();
       await _player.pingEngine();
-      _pianoCoreWarmed = _player.isReady;
+      _pianoCoreWarmed = _player.nativeReady;
     });
   }
 
@@ -125,18 +135,17 @@ abstract final class AppAudioService {
       await ensurePrepared();
       return;
     }
-    if (_player.isReady && _pianoCoreWarmed) {
-      await reconcilePlaybackSession();
-      await _player.pingEngine();
+    if (_player.nativeReady && _pianoCoreWarmed) {
+      await onPianoPageVisible();
       return;
     }
     await NativePianoHandoff.run(() async {
       await reconcilePlaybackSession();
       await _player.pingEngine();
-      if (!_player.isReady) {
+      if (!_player.nativeReady) {
         await ensurePrepared();
       }
-      _pianoCoreWarmed = _player.isReady;
+      _pianoCoreWarmed = _player.nativeReady;
     });
   }
 
@@ -159,7 +168,7 @@ abstract final class AppAudioService {
       await reconcilePlaybackSession();
       await _player.pingEngine();
       await ensurePrepared();
-      _pianoCoreWarmed = _player.isReady;
+      _pianoCoreWarmed = _player.nativeReady;
     });
   }
 
