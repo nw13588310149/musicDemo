@@ -25,7 +25,6 @@ abstract final class PageAudioLifecycle {
       return prepareEngine();
     }
     return NativePianoHandoff.run(() async {
-      NativePlaybackAudioSession.invalidatePlaybackCache();
       await NativePlaybackAudioSession.ensurePlaybackActive();
       await prepareEngine();
       NativePlaybackAudioSession.markNativePianoGraphFresh();
@@ -98,7 +97,9 @@ abstract final class PageAudioLifecycle {
   }
 
   /// 离开带钢琴/节拍器/听写短音的页面（引擎 dispose 前或后均可调 stopAll）。
-  static Future<void> leavePage({MusicCompanionAudioEngine? pianoEngine}) async {
+  static Future<void> leavePage({
+    MusicCompanionAudioEngine? pianoEngine,
+  }) async {
     if (pianoEngine != null) {
       await pianoEngine.stopAll();
     }
@@ -106,7 +107,6 @@ abstract final class PageAudioLifecycle {
       return;
     }
     NativePlaybackAudioSession.markNativePianoGraphStale();
-    NativePlaybackAudioSession.invalidatePlaybackCache();
   }
 
   /// 离开智能视唱：恢复 playback，标记钢琴图待下一页 handoff。

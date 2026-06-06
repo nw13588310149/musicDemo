@@ -307,11 +307,6 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
       state = state.copyWith(errorMessage: '该关卡题目异常，暂时无法开始');
       return;
     }
-    final audioOk = await _ensureAudioReadyForPlayback(fromUserGesture: true);
-    if (!audioOk) {
-      return;
-    }
-
     final session = SmartPracticeSession(
       track: state.activeTrack,
       sourceMode: SmartDictationMode.stage,
@@ -331,6 +326,7 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
     );
 
     _startSession(session);
+    unawaited(_ensureAudioReadyForPlayback(fromUserGesture: true));
   }
 
   Future<void> startSmartPractice() async {
@@ -358,11 +354,6 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
       state = state.copyWith(errorMessage: '题目生成失败，请调整配置后重试');
       return;
     }
-    final audioOk = await _ensureAudioReadyForPlayback(fromUserGesture: true);
-    if (!audioOk) {
-      return;
-    }
-
     final session = SmartPracticeSession(
       track: state.activeTrack,
       sourceMode: SmartDictationMode.smart,
@@ -382,6 +373,7 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
     );
 
     _startSession(session);
+    unawaited(_ensureAudioReadyForPlayback(fromUserGesture: true));
   }
 
   Future<void> replayCurrentQuestion() async {
@@ -398,7 +390,9 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
 
   Future<void> submitAnswer(String option) async {
     final session = state.session;
-    if (session == null || session.finished || session.currentQuestionAnswered) {
+    if (session == null ||
+        session.finished ||
+        session.currentQuestionAnswered) {
       return;
     }
 

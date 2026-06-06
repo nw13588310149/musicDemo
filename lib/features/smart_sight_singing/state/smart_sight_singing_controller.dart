@@ -88,7 +88,6 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
   var _previewInFlight = false;
   var _previewGeneration = 0;
   var _startSingingGeneration = 0;
-  Future<void>? _readyPrimeTask;
   final MusicPlayRepository? _musicPlayRepository;
 
   static String _formatDebugError(
@@ -647,24 +646,8 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
   }
 
   void _scheduleReadyStagePrime() {
-    if (kIsWeb || _shuttingDown) return;
-    _readyPrimeTask ??= _primeReadyStageAudio().whenComplete(() {
-      _readyPrimeTask = null;
-    });
-  }
-
-  /// 进入 ready 后后台预热 playback 会话与钢琴采样。
-  ///
-  /// ready 阶段用户最常做的是「试听旋律」，因此保持 playback 侧；
-  /// 真正开始跟唱时再切到 playAndRecord。
-  Future<void> _primeReadyStageAudio() async {
-    try {
-      await NativePlaybackAudioSession.ensurePlaybackActive();
-      await _playback.reclaimNativeEngine();
-      await _playback.warmupAudioEngine();
-    } catch (e, stack) {
-      debugPrint('SmartSightSinging ready prime failed: $e\n$stack');
-    }
+    // Deliberately no-op on iOS: background session/engine warmup can occupy
+    // the same native queue that preview, start, and back actions need.
   }
 
   /// 试听旋律（ready / finished 均可触发；iPad 无声模式会短暂开启扬声器伴奏）。
@@ -694,14 +677,6 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     final bundle = _midiBundle!;
     final leadInMs = state.playbackLeadInMs;
     try {
-      // 先等就绪预热（playback 会话 + 钢琴）跑完，避免与之并发重建原生图，
-      // 否则 iOS 上首次试听刚排好的音符会被预热里的 reclaim 立刻打掉（无声 + 进度不动）。
-      final prime = _readyPrimeTask;
-      if (prime != null) {
-        await prime;
-        if (!_isCurrentPreviewGeneration(generation)) return;
-      }
-
       await _playback.stop();
       if (!_isCurrentPreviewGeneration(generation)) return;
       _isPreviewSession = true;
@@ -751,7 +726,9 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
   }
 
   void stopPreview() {
-    if (!state.isPreviewPlaying && !state.isPreviewLoading && !_isPreviewSession) {
+    if (!state.isPreviewPlaying &&
+        !state.isPreviewLoading &&
+        !_isPreviewSession) {
       return;
     }
     _previewGeneration++;
@@ -830,10 +807,6 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
         }
       }
 
-      if (!kIsWeb) {
-        NativePlaybackAudioSession.invalidatePlaybackCache();
-      }
-
       final pitchStream = await capture.start();
       if (!mounted || generation != _startSingingGeneration) {
         await capture.stop();
@@ -847,18 +820,12 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
           state = state.copyWith(errorMessage: '录音异常：$e');
         },
       );
-
-      if (!state.visualOnlyMode || state.playbackLeadInMs > 0) {
-        unawaited(_warmupAccompanimentPlayback());
-      }
     } catch (e) {
       _capture = null;
       if (!mounted || generation != _startSingingGeneration) return;
       state = state.copyWith(
         stage: SightSingingStage.ready,
-        errorMessage: kIsWeb
-            ? '麦克风启动失败，请在浏览器中允许麦克风权限后再试。'
-            : '麦克风启动失败：$e',
+        errorMessage: kIsWeb ? '麦克风启动失败，请在浏览器中允许麦克风权限后再试。' : '麦克风启动失败：$e',
       );
       return;
     }
@@ -916,28 +883,14 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       _countdownTimer?.cancel();
       _countdownTimer = null;
       _scoringSession = null;
-      state = state.copyWith(stage: SightSingingStage.ready, countdownSeconds: 0);
+      state = state.copyWith(
+        stage: SightSingingStage.ready,
+        countdownSeconds: 0,
+      );
       unawaited(_stopCaptureSilently());
       return;
     }
     await cancelCountdown();
-  }
-
-  Future<void> _warmupAccompanimentPlayback() async {
-    if (_midiBundle == null || kIsWeb) return;
-    if (state.visualOnlyMode && state.playbackLeadInMs <= 0) return;
-    try {
-      await _playback.prepare(
-        _midiBundle!.playbackEvents,
-        totalMs: _midiBundle!.totalMs,
-        leadInDurationMs: state.playbackLeadInMs,
-      );
-      await PageAudioLifecycle.enterSightSingingCapture(soft: true);
-      await _playback.reclaimNativeEngine();
-      await _playback.warmupAudioEngine();
-    } catch (e) {
-      debugPrint('SmartSightSinging warmup accompaniment failed: $e');
-    }
   }
 
   Future<void> _beginSingingPlayback() async {
@@ -956,8 +909,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       leadInDurationMs: state.playbackLeadInMs,
     );
     try {
-      if (!kIsWeb &&
-          (!state.visualOnlyMode || state.playbackLeadInMs > 0)) {
+      if (!kIsWeb && (!state.visualOnlyMode || state.playbackLeadInMs > 0)) {
         await PageAudioLifecycle.enterSightSingingCapture(soft: true);
       }
       await _playback.start(muteAudio: state.visualOnlyMode);
@@ -997,9 +949,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       hitCount: tick?.hitCount ?? state.hitCount,
       scoredCount: tick?.scoredCount ?? state.scoredCount,
       combo: tick?.combo ?? state.combo,
-      completedNoteScores: reset
-          ? const <KtvNoteScore>[]
-          : completedScores,
+      completedNoteScores: reset ? const <KtvNoteScore>[] : completedScores,
     );
     try {
       await _stopCaptureSilently();
@@ -1043,7 +993,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
         );
       }
     }
-    await _restorePlaybackSessionForHandoff();
+    unawaited(_restorePlaybackSessionForHandoff());
   }
 
   /// 收藏 / 取消收藏当前教材（智能视唱 type=11）。乐观更新 + 失败回滚。
@@ -1235,10 +1185,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       _heldUserMidi = -1;
       _heldUserMidiUntilMs = 0;
       if (state.currentUserMidi >= 0 || state.currentUserAmplitude > 0) {
-        state = state.copyWith(
-          currentUserMidi: -1,
-          currentUserAmplitude: 0,
-        );
+        state = state.copyWith(currentUserMidi: -1, currentUserAmplitude: 0);
       }
       return;
     }

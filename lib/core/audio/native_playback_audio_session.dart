@@ -16,6 +16,7 @@ import 'package:flutter/foundation.dart';
 abstract final class NativePlaybackAudioSession {
   static Future<void>? _playbackTask;
   static Future<void>? _mediaKitTask;
+  static _NativeAudioSessionProfile? _activeProfile;
 
   /// iOS 共享 [LowLatencyNotePlayer]：会话从 playAndRecord 等切回 playback 后，
   /// 原生图须 reclaim；在 rebuild 完成前 [tryPlay] 可能静默或迟播。
@@ -40,6 +41,9 @@ abstract final class NativePlaybackAudioSession {
   /// → setActive 的完整序列。
   static Future<void> ensurePlaybackActive() {
     if (kIsWeb) return Future<void>.value();
+    if (_activeProfile == _NativeAudioSessionProfile.playback) {
+      return Future<void>.value();
+    }
     return _playbackTask ??= _configurePlaybackBestEffort().whenComplete(() {
       _playbackTask = null;
     });
@@ -58,16 +62,18 @@ abstract final class NativePlaybackAudioSession {
     bool releaseOthersFirst = true,
   }) {
     if (kIsWeb) return Future<void>.value();
+    if (_activeProfile == _NativeAudioSessionProfile.mediaKitPlayback) {
+      return Future<void>.value();
+    }
     if (!releaseOthersFirst) {
       return _configureMediaKitPlaybackBestEffort(releaseOthersFirst: false);
     }
-    return _mediaKitTask ??= _configureMediaKitPlaybackBestEffort(
-      releaseOthersFirst: true,
-    ).whenComplete(
-      () {
-        _mediaKitTask = null;
-      },
-    );
+    return _mediaKitTask ??=
+        _configureMediaKitPlaybackBestEffort(
+          releaseOthersFirst: true,
+        ).whenComplete(() {
+          _mediaKitTask = null;
+        });
   }
 
   static Future<void> _configureMediaKitPlaybackBestEffort({
@@ -137,6 +143,7 @@ abstract final class NativePlaybackAudioSession {
             '${_kChannelTimeout.inSeconds}s',
           ),
         );
+    _activeProfile = _NativeAudioSessionProfile.mediaKitPlayback;
   }
 
   static Future<void> _configurePlaybackBestEffort() async {
@@ -205,6 +212,7 @@ abstract final class NativePlaybackAudioSession {
             'AudioSession.setActive(true) hung > ${_kChannelTimeout.inSeconds}s',
           ),
         );
+    _activeProfile = _NativeAudioSessionProfile.playback;
   }
 
   /// 录音系统 / 视唱实时采集：麦克风录入，不用 measurement（调音器专用）。
@@ -212,21 +220,29 @@ abstract final class NativePlaybackAudioSession {
   /// iOS 上若沿用调音器的 `measurement` 或纯 `playback`，`record` 录到的
   /// AAC 电平会明显偏低。
   static Future<void> ensureRecordActive() {
+    if (_activeProfile == _NativeAudioSessionProfile.record) {
+      return Future<void>.value();
+    }
     return _ensurePlayAndRecordMode(
       AVAudioSessionMode.defaultMode,
       categoryOptions:
           AVAudioSessionCategoryOptions.defaultToSpeaker |
           AVAudioSessionCategoryOptions.allowBluetooth,
+      profile: _NativeAudioSessionProfile.record,
     );
   }
 
   /// 调音器：需要麦克风输入，measurement 利于低延迟音高检测。
   static Future<void> ensurePlayAndRecordActive() {
+    if (_activeProfile == _NativeAudioSessionProfile.tuner) {
+      return Future<void>.value();
+    }
     return _ensurePlayAndRecordMode(
       AVAudioSessionMode.measurement,
       categoryOptions:
           AVAudioSessionCategoryOptions.defaultToSpeaker |
           AVAudioSessionCategoryOptions.allowBluetooth,
+      profile: _NativeAudioSessionProfile.tuner,
     );
   }
 
@@ -235,6 +251,9 @@ abstract final class NativePlaybackAudioSession {
   /// 不用 voiceChat / 系统 AEC——跟唱时用户音高常与伴奏一致，AEC 会把人声当回声消掉，
   /// 导致 YIN 只有响度、没有音高。串音改由 [PitchVoiceGate] 在打分侧过滤。
   static Future<void> ensureSightSingingCaptureActive() {
+    if (_activeProfile == _NativeAudioSessionProfile.sightSingingCapture) {
+      return Future<void>.value();
+    }
     return _ensurePlayAndRecordMode(
       AVAudioSessionMode.measurement,
       categoryOptions:
@@ -242,11 +261,15 @@ abstract final class NativePlaybackAudioSession {
           AVAudioSessionCategoryOptions.allowBluetooth |
           AVAudioSessionCategoryOptions.mixWithOthers,
       deactivateFirst: true,
+      profile: _NativeAudioSessionProfile.sightSingingCapture,
     );
   }
 
   /// 钢琴 Short-audio 初始化后轻量 reclaim：不先 setActive(false)，避免掐断正在进行的录音。
   static Future<void> ensureSightSingingCaptureActiveSoft() {
+    if (_activeProfile == _NativeAudioSessionProfile.sightSingingCapture) {
+      return Future<void>.value();
+    }
     return _ensurePlayAndRecordMode(
       AVAudioSessionMode.measurement,
       categoryOptions:
@@ -254,12 +277,14 @@ abstract final class NativePlaybackAudioSession {
           AVAudioSessionCategoryOptions.allowBluetooth |
           AVAudioSessionCategoryOptions.mixWithOthers,
       deactivateFirst: false,
+      profile: _NativeAudioSessionProfile.sightSingingCapture,
     );
   }
 
   static Future<void> _ensurePlayAndRecordMode(
     AVAudioSessionMode avAudioSessionMode, {
     required AVAudioSessionCategoryOptions categoryOptions,
+    required _NativeAudioSessionProfile profile,
     bool deactivateFirst = true,
   }) async {
     if (kIsWeb) return;
@@ -287,6 +312,7 @@ abstract final class NativePlaybackAudioSession {
           )
           .timeout(_kChannelTimeout);
       await session.setActive(true).timeout(_kChannelTimeout);
+      _activeProfile = profile;
     } catch (error, stack) {
       debugPrint(
         'NativePlaybackAudioSession._ensurePlayAndRecordMode($avAudioSessionMode) '
@@ -303,5 +329,14 @@ abstract final class NativePlaybackAudioSession {
   static void invalidatePlaybackCache() {
     _playbackTask = null;
     _mediaKitTask = null;
+    _activeProfile = null;
   }
+}
+
+enum _NativeAudioSessionProfile {
+  playback,
+  mediaKitPlayback,
+  record,
+  tuner,
+  sightSingingCapture,
 }

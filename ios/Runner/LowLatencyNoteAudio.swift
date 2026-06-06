@@ -16,7 +16,12 @@ final class LowLatencyNoteAudio {
   private let channel: FlutterMethodChannel
   private let engine = AVAudioEngine()
   private let queue = DispatchQueue(label: "com.yyzl.music.lowLatencyNotes")
+  private let decodeQueue = DispatchQueue(
+    label: "com.yyzl.music.lowLatencyNotes.decode",
+    qos: .utility
+  )
 
+  private var assetByKey: [String: String] = [:]
   private var buffersByKey: [String: AVAudioPCMBuffer] = [:]
   private var voices: [Voice] = []
   private var prepared = false
@@ -41,14 +46,12 @@ final class LowLatencyNoteAudio {
   private let attackFadeMs: Double = 1.0
 
   /// 所有采样统一为该格式，保证整条图 connect 格式恒定，运行期不改格式。
-  private lazy var standardFormat: AVAudioFormat = {
-    AVAudioFormat(
-      commonFormat: .pcmFormatFloat32,
-      sampleRate: 44100,
-      channels: 2,
-      interleaved: false
-    )!
-  }()
+  private let standardFormat = AVAudioFormat(
+    commonFormat: .pcmFormatFloat32,
+    sampleRate: 44100,
+    channels: 2,
+    interleaved: false
+  )!
 
   /// 常驻发声节点。
   private final class Voice {
@@ -149,6 +152,12 @@ final class LowLatencyNoteAudio {
         queue: nil,
         using: { [weak self] _ in self?.markEngineNeedsReset() }
       ),
+      center.addObserver(
+        forName: AVAudioSession.routeChangeNotification,
+        object: nil,
+        queue: nil,
+        using: { [weak self] _ in self?.markEngineNeedsReset() }
+      ),
     ]
   }
 
@@ -203,24 +212,47 @@ final class LowLatencyNoteAudio {
     queue.async { [weak self] in
       guard let self = self else { return }
       do {
-        var loaded = 0
+        var registered = 0
+        var decodeBatch: [(String, String)] = []
         for (key, asset) in assets {
-          if self.buffersByKey[key] != nil {
-            loaded += 1
-            continue
-          }
-          guard let url = self.resolveFlutterAsset(asset) else {
+          guard self.resolveFlutterAsset(asset) != nil else {
             throw LowLatencyNoteAudioError.assetNotFound(asset)
           }
-          self.buffersByKey[key] = try self.decodeAsset(url: url)
-          loaded += 1
+          self.assetByKey[key] = asset
+          registered += 1
+          if self.buffersByKey[key] == nil {
+            decodeBatch.append((key, asset))
+          }
         }
         self.prepared = true
         try self.ensureGraphReady()
-        DispatchQueue.main.async { result(["loaded": loaded]) }
+        self.scheduleBackgroundDecode(decodeBatch)
+        DispatchQueue.main.async { result(["loaded": registered]) }
       } catch {
         DispatchQueue.main.async {
           result(FlutterError(code: "prepare_failed", message: "\(error)", details: nil))
+        }
+      }
+    }
+  }
+
+  private func scheduleBackgroundDecode(_ batch: [(String, String)]) {
+    guard !batch.isEmpty else { return }
+    for (key, asset) in batch {
+      decodeQueue.async { [weak self] in
+        guard let self = self else { return }
+        do {
+          guard let url = self.resolveFlutterAsset(asset) else { return }
+          let buffer = try self.decodeAsset(url: url)
+          self.queue.async { [weak self] in
+            guard let self = self else { return }
+            guard self.assetByKey[key] == asset else { return }
+            if self.buffersByKey[key] == nil {
+              self.buffersByKey[key] = buffer
+            }
+          }
+        } catch {
+          debugPrint("LowLatencyNoteAudio background decode failed for \(key): \(error)")
         }
       }
     }
@@ -239,9 +271,7 @@ final class LowLatencyNoteAudio {
       guard let self = self else { return }
       let generation = self.operationGeneration
       do {
-        guard let source = self.buffersByKey[key] else {
-          throw LowLatencyNoteAudioError.bufferNotPrepared(key)
-        }
+        let source = try self.bufferForPlayback(key: key)
         guard let buffer = self.copyBufferWithEnvelope(source) else {
           throw LowLatencyNoteAudioError.decodeFailed(key)
         }
@@ -325,6 +355,21 @@ final class LowLatencyNoteAudio {
         }
       }
     }
+  }
+
+  private func bufferForPlayback(key: String) throws -> AVAudioPCMBuffer {
+    if let cached = buffersByKey[key] {
+      return cached
+    }
+    guard let asset = assetByKey[key] else {
+      throw LowLatencyNoteAudioError.bufferNotPrepared(key)
+    }
+    guard let url = resolveFlutterAsset(asset) else {
+      throw LowLatencyNoteAudioError.assetNotFound(asset)
+    }
+    let buffer = try decodeAsset(url: url)
+    buffersByKey[key] = buffer
+    return buffer
   }
 
   /// 取一个发声节点：优先空闲；全忙时偷取序号最旧的非节拍器声部（极罕见）。
@@ -469,6 +514,7 @@ final class LowLatencyNoteAudio {
     voices.removeAll()
     if engine.isRunning { engine.stop() }
     engine.reset()
+    assetByKey.removeAll()
     buffersByKey.removeAll()
     graphBuilt = false
     prepared = false

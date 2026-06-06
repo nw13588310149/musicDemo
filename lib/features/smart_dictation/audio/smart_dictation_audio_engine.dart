@@ -28,7 +28,6 @@ class SmartDictationAudioEngine {
   final StreamController<List<double>> _frequencyController =
       StreamController<List<double>>.broadcast();
   Future<void>? _initTask;
-  Future<void>? _warmupTask;
   bool _disposed = false;
 
   bool get isReady => kIsWeb ? _webPlayer.isReady : !_disposed;
@@ -48,7 +47,6 @@ class SmartDictationAudioEngine {
         return;
       }
       await _nativePlayer.prepare(_initialAssetByCanonical);
-      _scheduleNativeBackgroundWarmup();
     } catch (error, stack) {
       _initTask = null;
       debugPrint(
@@ -191,7 +189,6 @@ class SmartDictationAudioEngine {
       await _frequencyController.close();
     }
     _initTask = null;
-    _warmupTask = null;
   }
 
   Future<void> _ensureNativeTokenPrepared(String canonical) async {
@@ -218,52 +215,6 @@ class SmartDictationAudioEngine {
     }
     if (assets.isEmpty) return;
     await _nativePlayer.prepare(assets);
-  }
-
-  void _scheduleNativeBackgroundWarmup() {
-    if (kIsWeb || _disposed || _warmupTask != null) return;
-    final task = _warmRemainingNativeAssets();
-    _warmupTask = task;
-    unawaited(
-      task.whenComplete(() {
-        if (identical(_warmupTask, task)) {
-          _warmupTask = null;
-        }
-      }),
-    );
-  }
-
-  Future<void> _warmRemainingNativeAssets() async {
-    final entries =
-        _assetByCanonical.entries
-            .where((entry) => !_nativePlayer.hasPrepared(entry.key))
-            .toList(growable: false)
-          ..sort(
-            (a, b) => _warmupPriority(a.key).compareTo(_warmupPriority(b.key)),
-          );
-
-    for (var index = 0; index < entries.length; index += _warmupChunkSize) {
-      if (_disposed) return;
-      final chunkEntries = entries.skip(index).take(_warmupChunkSize);
-      final chunk = <String, String>{
-        for (final entry in chunkEntries)
-          if (!_nativePlayer.hasPrepared(entry.key)) entry.key: entry.value,
-      };
-      if (chunk.isNotEmpty) {
-        try {
-          await _nativePlayer.prepare(chunk);
-        } catch (error, stack) {
-          debugPrint(
-            'SmartDictationAudioEngine background warmup failed: '
-            '$error\n$stack',
-          );
-          return;
-        }
-      }
-      if (!_disposed) {
-        await Future<void>.delayed(_warmupYieldDelay);
-      }
-    }
   }
 
   static List<String> splitTokenGroup(String raw) {
@@ -356,9 +307,6 @@ class SmartDictationAudioEngine {
     for (final note in _dictationNotes) note: kPianoNoteAssetByNote[note]!,
   };
 
-  static const int _warmupChunkSize = 4;
-  static const Duration _warmupYieldDelay = Duration(milliseconds: 24);
-
   static Map<String, String> get _initialAssetByCanonical {
     return <String, String>{
       for (final entry in _assetByCanonical.entries)
@@ -369,12 +317,6 @@ class SmartDictationAudioEngine {
   static bool _isInitialNote(String note) {
     final midi = _noteMidi(note);
     return midi >= 60 && midi <= 72; // C4..C5, includes standard tone A4.
-  }
-
-  static int _warmupPriority(String note) {
-    final midi = _noteMidi(note);
-    if (midi < 0) return 10000;
-    return (midi - 69).abs(); // Keep A4 and nearby dictation tones hot first.
   }
 
   static int _noteMidi(String note) {
