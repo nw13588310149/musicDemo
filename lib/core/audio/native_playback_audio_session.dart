@@ -41,14 +41,6 @@ abstract final class NativePlaybackAudioSession {
   /// → setActive 的完整序列。
   static Future<void> ensurePlaybackActive() {
     if (kIsWeb) return Future<void>.value();
-    // 已处于 playback profile 时直接复用，避免每次进短音页都重跑
-    // release → configure → setActive 三次平台往返（iPad 上每次数百 ms）。
-    // 录音 / 调音器 / media_kit 切走会话时都会把 _activeProfile 改写或
-    // invalidate，因此这里短路不会漏掉真正需要重配的场景；中断后由原生侧
-    // ensureSessionCanRenderShortAudio 自愈。
-    if (_activeProfile == _NativeAudioSessionProfile.playback) {
-      return Future<void>.value();
-    }
     return _playbackTask ??= _configurePlaybackBestEffort().whenComplete(() {
       _playbackTask = null;
     });

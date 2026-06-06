@@ -149,8 +149,7 @@ final class LowLatencyNoteAudio {
             let type = AVAudioSession.InterruptionType(rawValue: rawType),
             type == .began
           else { return }
-          // 系统会在中断开始时停掉引擎；不重建整图，下一次渲染前 lazy 重启即可。
-          self?.markSessionDirty()
+          self?.markEngineNeedsReset()
         }
       ),
       center.addObserver(
@@ -163,17 +162,7 @@ final class LowLatencyNoteAudio {
         forName: AVAudioSession.routeChangeNotification,
         object: nil,
         queue: nil,
-        // 路由变化（插拔耳机 / 蓝牙）只需重启引擎并续接常驻节点，
-        // 我们的 player→mainMixer 连接用固定 standardFormat，无需断开重连。
-        using: { [weak self] _ in self?.markSessionDirty(restart: true) }
-      ),
-      center.addObserver(
-        forName: .AVAudioEngineConfigurationChange,
-        object: engine,
-        queue: nil,
-        // 引擎级配置变化（设备 / 采样率切换）后，AVAudioEngine 会停止。
-        // 仅重启 + 续接节点，整图重建留给 mediaServicesWereReset。
-        using: { [weak self] _ in self?.markSessionDirty(restart: true) }
+        using: { [weak self] _ in self?.markEngineNeedsReset() }
       ),
     ]
   }
@@ -184,33 +173,25 @@ final class LowLatencyNoteAudio {
     sessionObservers.removeAll()
   }
 
-  /// CoreAudio 整体重启：所有节点 / 引擎失效，须整图重建。
   private func markEngineNeedsReset() {
     queue.async { [weak self] in
       guard let self = self else { return }
       self.engineNeedsReset = true
+      // 会话已被中断 / 路由变化弄脏：下一次渲染前须重新 setCategory + setActive，
+      // 不能再走 ensureSessionCanRenderShortAudio 的「已就绪」快路径。
       self.shortAudioSessionReady = false
-    }
-  }
-
-  /// 会话被打断 / 路由变化：标记会话脏；可选地在当前无发声时立即重启引擎，
-  /// 避免下一次按键才恢复造成的迟播。
-  private func markSessionDirty(restart: Bool = false) {
-    queue.async { [weak self] in
-      guard let self = self else { return }
-      self.shortAudioSessionReady = false
-      guard restart, self.prepared, self.graphBuilt else { return }
-      do {
-        try self.startEngineAndResumeNodes()
-      } catch {
-        debugPrint("LowLatencyNoteAudio restart after route/config change failed: \(error)")
-      }
     }
   }
 
   /// Dart 在 AVAudioSession 类别切换后调用：会话变化不会发系统通知，
-  /// 因此这里强制标记需要重建——会话切换会改硬件 IO 格式，必须重连图，
-  /// 否则 player 在新会话下静默或 scheduleBuffer 失败（智能视唱试听/跟唱切换）。
+  /// 因此这里强制重建——会话切换会改硬件 IO 格式，必须重连图，否则 player
+  /// 在新会话下静默或 scheduleBuffer 失败（智能视唱试听/跟唱切换、musicPlay
+  /// 长音频与钢琴混播）。
+  ///
+  /// 说明：本次重建的延迟已由各页「进入即后台预热」吸收（见 Dart 侧 P1），
+  /// 用户真正按键前图已重建并预热，因此这里坚持用最稳的整图重建，避免
+  /// `engine.isRunning` 在 setActive(false)→setActive(true) 后陈旧为 true
+  /// 导致的「假运行、实际无声」僵尸状态。
   private func reclaimEngine(result: @escaping FlutterResult) {
     queue.async { [weak self] in
       guard let self = self else {
@@ -220,21 +201,12 @@ final class LowLatencyNoteAudio {
       self.operationGeneration &+= 1
       self.fadeGeneration &+= 1
       self.forceStopAllVoicesImmediate()
-      // 会话类别在 Dart 侧已切换。轻量重连：刷新会话 + 重启引擎并续接常驻节点，
-      // **不**逐节点 detach/reset 整图（那是 musicPlay / 音乐伴侣首音慢的主因）。
-      // 仅当轻量路径抛错（极少数图损坏）才回退到整图重建。
+      // 会话刚切换：清掉「会话已就绪」缓存，使 buildGraph 内的
+      // ensureSessionCanRenderShortAudio 真正重新 setActive(true)。
       self.shortAudioSessionReady = false
-      do {
-        try self.ensureSessionCanRenderShortAudio()
-        if self.prepared {
-          try self.ensureGraphReady()
-        }
-      } catch {
-        debugPrint("LowLatencyNoteAudio reclaim light path failed, rebuilding: \(error)")
-        self.rebuildGraph()
-        if self.prepared {
-          try? self.buildGraph()
-        }
+      self.rebuildGraph()
+      if self.prepared {
+        try? self.buildGraph()
       }
       DispatchQueue.main.async { result(nil) }
     }
@@ -624,12 +596,13 @@ final class LowLatencyNoteAudio {
 
     shortAudioSessionReady = true
 
-    // 类别切换不强制整图重建：AVAudioEngine 只需重启（见 ensureGraphReady 中的
-    // `!engine.isRunning` 分支），节点与 player→mixer 连接（固定 standardFormat）仍有效。
     let changed =
       previousCategory != session.category ||
       previousMode != session.mode ||
       previousOptions != session.categoryOptions
+    if changed {
+      engineNeedsReset = true
+    }
     return changed
   }
 

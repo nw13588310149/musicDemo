@@ -116,6 +116,10 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   static const int _kPauseFadeSteps = 4;
   static const Duration _kPauseFadeStepDelay = Duration(milliseconds: 18);
 
+  /// iOS 暂停/恢复去爆音用的超短斜坡（约 3×6ms ≈ 18ms），尽量不影响响应手感。
+  static const int _kIosClickFadeSteps = 3;
+  static const Duration _kIosClickFadeStepDelay = Duration(milliseconds: 6);
+
   /// iOS mpv teardown 后给 CoreAudio 一个很短排空窗口，避免跨页释放时残留尾音。
   static const Duration _kIosPauseDrainDelay = Duration(milliseconds: 48);
 
@@ -392,11 +396,14 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     required double to,
     int? steps,
     Duration? stepDelay,
+    double? from,
   }) async {
     final fadeSteps = steps ?? _kPauseFadeSteps;
     final fadeDelay = stepDelay ?? _kPauseFadeStepDelay;
-    final from = player.state.volume;
-    if ((from - to).abs() < 1) {
+    // 允许显式传入起点：刚 setVolume 后 player.state.volume 可能仍是旧值，
+    // 不显式给 from 会导致 (from-to)<1 而跳过斜坡（恢复播放淡入失效）。
+    final fromVol = from ?? player.state.volume;
+    if ((fromVol - to).abs() < 1) {
       await _setPlayerVolumeSafe(player, to);
       return;
     }
@@ -405,7 +412,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
         return;
       }
       final t = step / fadeSteps;
-      await _setPlayerVolumeSafe(player, from + (to - from) * t);
+      await _setPlayerVolumeSafe(player, fromVol + (to - fromVol) * t);
       if (step < fadeSteps) {
         await Future.delayed(fadeDelay);
       }
@@ -448,15 +455,25 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     await _setPlayerVolumeSafe(player, _kPlayerNormalVolume);
   }
 
-  /// iOS: let media_kit handle pause directly. Extra volume/session changes
-  /// here can create audible artifacts during play/pause/seek gestures.
+  /// iOS：暂停前做一段极短的音量斜坡到 0 再 `pause()`，消除 mpv 硬切音频
+  /// 输出（ao 突然停）产生的咔哒/爆音。斜坡很短（约 18ms）以免影响响应；
+  /// 比非 iOS 路径的默认淡出更克制，避免之前观察到的「手势期间改音量引入
+  /// 别的杂音」。**不**触碰连续的 seek 手势（仍走原始即时 seek）。
   Future<void> _pausePlayerSmoothIos(Player player) async {
     if (_disposed) {
       return;
     }
     try {
+      await _fadePlayerVolume(
+        player,
+        to: 0,
+        steps: _kIosClickFadeSteps,
+        stepDelay: _kIosClickFadeStepDelay,
+      );
       await player.pause();
     } catch (_) {}
+    // 暂停后恢复音量，使下次 resume 的淡入从正常基准开始（暂停态下无声）。
+    await _setPlayerVolumeSafe(player, _kPlayerNormalVolume);
   }
 
   Future<void> _resumePlayer(Player player) async {
@@ -467,9 +484,22 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       await _ensureIosMediaKitSessionForLongAudio();
     }
     try {
-      await _setPlayerVolumeSafe(player, _kPlayerNormalVolume);
       await _applyPitchToPlayer(player);
-      await player.play();
+      if (_isIosNative) {
+        // 从 0 起播再极短淡入，消除 mpv 恢复输出瞬间的爆音。
+        await _setPlayerVolumeSafe(player, 0);
+        await player.play();
+        await _fadePlayerVolume(
+          player,
+          to: _kPlayerNormalVolume,
+          steps: _kIosClickFadeSteps,
+          stepDelay: _kIosClickFadeStepDelay,
+          from: 0,
+        );
+      } else {
+        await _setPlayerVolumeSafe(player, _kPlayerNormalVolume);
+        await player.play();
+      }
     } catch (_) {}
   }
 
