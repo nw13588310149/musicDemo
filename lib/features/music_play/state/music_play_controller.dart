@@ -260,8 +260,12 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   Future<void> _warmUpPiano() async {
     try {
       if (_isIosNative) {
-        // 仅准备 media_kit 会话；钢琴在用户按键时按需恢复，避免干扰长音频。
+        // 先准备 media_kit 长音频会话（前台、强释放旧 owner）。
         await _ensureIosMediaKitSessionForLongAudio(forceRelease: true);
+        // 然后在**后台**预热原生钢琴图（持久 AVAudioEngine 轻量 reclaim + 采样
+        // 解码）。不 await，避免阻塞 loading 或干扰长音频；预热完成后首次按键
+        // 直接命中 tryPlay，告别「钢琴等很久才响」。
+        unawaited(_recoverIosPianoGraph(awaitCompletion: false));
       } else {
         await _pianoEngine.ensurePianoInitialized();
       }

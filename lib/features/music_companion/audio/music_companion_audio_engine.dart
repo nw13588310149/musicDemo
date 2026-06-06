@@ -106,6 +106,10 @@ class MusicCompanionAudioEngine {
         return;
       }
       await _nativePlayer.prepare(_initialPianoAssetByNote);
+      // 首次只 prepare 中央音区（C4..C5）以最快进入可弹状态，随后在后台补全
+      // 其余音域。原生 prepare 内部把解码放后台串行队列，因此这一步不会阻塞
+      // 首音，但能避免「首次按非中央音区琴键时同步解码」造成的迟播。
+      unawaited(_warmUpRemainingPianoRange());
     } catch (error, stack) {
       _pianoInitTask = null;
       debugPrint(
@@ -113,6 +117,25 @@ class MusicCompanionAudioEngine {
         '$error\n$stack',
       );
       rethrow;
+    }
+  }
+
+  /// 后台补全整张钢琴采样（除已 prepare 的中央音区外）。失败静默——
+  /// 真正按到未预热的键时 [playNote] 仍会按需 prepare 兜底。
+  Future<void> _warmUpRemainingPianoRange() async {
+    if (_disposed || kIsWeb) return;
+    final remaining = <String, String>{
+      for (final entry in kMusicCompanionPianoAssetByNote.entries)
+        if (!_nativePlayer.hasPrepared(entry.key)) entry.key: entry.value,
+    };
+    if (remaining.isEmpty) return;
+    try {
+      await _nativePlayer.prepare(remaining);
+    } catch (error, stack) {
+      debugPrint(
+        'MusicCompanionAudioEngine._warmUpRemainingPianoRange failed: '
+        '$error\n$stack',
+      );
     }
   }
 

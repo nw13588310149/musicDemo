@@ -26,7 +26,13 @@ final class LowLatencyNoteAudio {
   private var voices: [Voice] = []
   private var prepared = false
   private var graphBuilt = false
+  /// 仅在 `mediaServicesWereReset`（CoreAudio 整体重启、所有节点/引擎失效）时置位。
+  /// 普通的会话类别切换 / 路由变化**不**走整图重建，只重启引擎。
   private var engineNeedsReset = false
+  /// 会话脏标记：中断 / 路由变化 / 类别切换后置 false，下一次渲染前重新
+  /// `setCategory + setActive`。稳定后保持 true，使每个音符的 `play()` 不再
+  /// 反复进 AVAudioSession 平台往返（这是单音延迟的主要来源之一）。
+  private var shortAudioSessionReady = false
   private var sessionObservers: [NSObjectProtocol] = []
   private var playSequence: UInt64 = 0
   private var fadeGeneration = 0
@@ -143,7 +149,8 @@ final class LowLatencyNoteAudio {
             let type = AVAudioSession.InterruptionType(rawValue: rawType),
             type == .began
           else { return }
-          self?.markEngineNeedsReset()
+          // 系统会在中断开始时停掉引擎；不重建整图，下一次渲染前 lazy 重启即可。
+          self?.markSessionDirty()
         }
       ),
       center.addObserver(
@@ -156,7 +163,17 @@ final class LowLatencyNoteAudio {
         forName: AVAudioSession.routeChangeNotification,
         object: nil,
         queue: nil,
-        using: { [weak self] _ in self?.markEngineNeedsReset() }
+        // 路由变化（插拔耳机 / 蓝牙）只需重启引擎并续接常驻节点，
+        // 我们的 player→mainMixer 连接用固定 standardFormat，无需断开重连。
+        using: { [weak self] _ in self?.markSessionDirty(restart: true) }
+      ),
+      center.addObserver(
+        forName: .AVAudioEngineConfigurationChange,
+        object: engine,
+        queue: nil,
+        // 引擎级配置变化（设备 / 采样率切换）后，AVAudioEngine 会停止。
+        // 仅重启 + 续接节点，整图重建留给 mediaServicesWereReset。
+        using: { [weak self] _ in self?.markSessionDirty(restart: true) }
       ),
     ]
   }
@@ -167,8 +184,28 @@ final class LowLatencyNoteAudio {
     sessionObservers.removeAll()
   }
 
+  /// CoreAudio 整体重启：所有节点 / 引擎失效，须整图重建。
   private func markEngineNeedsReset() {
-    queue.async { [weak self] in self?.engineNeedsReset = true }
+    queue.async { [weak self] in
+      guard let self = self else { return }
+      self.engineNeedsReset = true
+      self.shortAudioSessionReady = false
+    }
+  }
+
+  /// 会话被打断 / 路由变化：标记会话脏；可选地在当前无发声时立即重启引擎，
+  /// 避免下一次按键才恢复造成的迟播。
+  private func markSessionDirty(restart: Bool = false) {
+    queue.async { [weak self] in
+      guard let self = self else { return }
+      self.shortAudioSessionReady = false
+      guard restart, self.prepared, self.graphBuilt else { return }
+      do {
+        try self.startEngineAndResumeNodes()
+      } catch {
+        debugPrint("LowLatencyNoteAudio restart after route/config change failed: \(error)")
+      }
+    }
   }
 
   /// Dart 在 AVAudioSession 类别切换后调用：会话变化不会发系统通知，
@@ -183,9 +220,21 @@ final class LowLatencyNoteAudio {
       self.operationGeneration &+= 1
       self.fadeGeneration &+= 1
       self.forceStopAllVoicesImmediate()
-      self.rebuildGraph()
-      if self.prepared {
-        try? self.buildGraph()
+      // 会话类别在 Dart 侧已切换。轻量重连：刷新会话 + 重启引擎并续接常驻节点，
+      // **不**逐节点 detach/reset 整图（那是 musicPlay / 音乐伴侣首音慢的主因）。
+      // 仅当轻量路径抛错（极少数图损坏）才回退到整图重建。
+      self.shortAudioSessionReady = false
+      do {
+        try self.ensureSessionCanRenderShortAudio()
+        if self.prepared {
+          try self.ensureGraphReady()
+        }
+      } catch {
+        debugPrint("LowLatencyNoteAudio reclaim light path failed, rebuilding: \(error)")
+        self.rebuildGraph()
+        if self.prepared {
+          try? self.buildGraph()
+        }
       }
       DispatchQueue.main.async { result(nil) }
     }
@@ -531,10 +580,22 @@ final class LowLatencyNoteAudio {
   @discardableResult
   private func ensureSessionCanRenderShortAudio() throws -> Bool {
     let session = AVAudioSession.sharedInstance()
+    let category = session.category
+
+    // 快路径：会话已是可渲染短音的类别（playback / playAndRecord）且带 mixWithOthers，
+    // 且我们已确认激活过——直接复用，避免每个音符都进 setCategory / setActive 平台往返。
+    // 会话所有权归 Dart 侧 NativePlaybackAudioSession；这里只在它尚未配置或被
+    // 中断 / 路由变化弄脏时兜底配置一次。
+    let compatible =
+      (category == .playback || category == .playAndRecord) &&
+      session.categoryOptions.contains(.mixWithOthers)
+    if shortAudioSessionReady && compatible {
+      return false
+    }
+
     let previousCategory = session.category
     let previousMode = session.mode
     let previousOptions = session.categoryOptions
-    let category = session.category
 
     if category == .playAndRecord {
       var options: AVAudioSession.CategoryOptions = [
@@ -561,13 +622,14 @@ final class LowLatencyNoteAudio {
     try? session.setPreferredIOBufferDuration(0.005)
     try session.setActive(true)
 
+    shortAudioSessionReady = true
+
+    // 类别切换不强制整图重建：AVAudioEngine 只需重启（见 ensureGraphReady 中的
+    // `!engine.isRunning` 分支），节点与 player→mixer 连接（固定 standardFormat）仍有效。
     let changed =
       previousCategory != session.category ||
       previousMode != session.mode ||
       previousOptions != session.categoryOptions
-    if changed {
-      engineNeedsReset = true
-    }
     return changed
   }
 

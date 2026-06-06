@@ -47,12 +47,32 @@ class SmartDictationAudioEngine {
         return;
       }
       await _nativePlayer.prepare(_initialAssetByCanonical);
+      // 后台补全剩余听写音域，避免首个题音落在非中央音区时同步解码迟播。
+      unawaited(_warmUpRemainingRange());
     } catch (error, stack) {
       _initTask = null;
       debugPrint(
         'SmartDictationAudioEngine.ensureInitialized failed: $error\n$stack',
       );
       rethrow;
+    }
+  }
+
+  /// 后台补全整套听写采样（除已 prepare 的中央音区外）。失败静默——
+  /// 真正播到未预热的音时 [playToken] 仍会按需 prepare 兜底。
+  Future<void> _warmUpRemainingRange() async {
+    if (_disposed || kIsWeb) return;
+    final remaining = <String, String>{
+      for (final entry in _assetByCanonical.entries)
+        if (!_nativePlayer.hasPrepared(entry.key)) entry.key: entry.value,
+    };
+    if (remaining.isEmpty) return;
+    try {
+      await _nativePlayer.prepare(remaining);
+    } catch (error, stack) {
+      debugPrint(
+        'SmartDictationAudioEngine._warmUpRemainingRange failed: $error\n$stack',
+      );
     }
   }
 
