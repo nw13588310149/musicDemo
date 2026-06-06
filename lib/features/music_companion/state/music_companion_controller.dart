@@ -121,6 +121,12 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
       errorMessage: null,
     );
 
+    // iOS：mpv / 其他模块会把 session mode 改成 moviePlayback，须先重配再发声。
+    if (!kIsWeb) {
+      await NativePlaybackAudioSession.refreshPlaybackForPiano();
+      if (!mounted) return;
+    }
+
     if (!kIsWeb &&
         (NativePlaybackAudioSession.nativePianoGraphNeedsReclaim ||
             !_audioEngine.isPianoReady ||

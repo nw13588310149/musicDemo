@@ -82,6 +82,18 @@ abstract final class NativePlaybackAudioSession {
   /// 用于错误重试 / 应用恢复前强制重做一次 session 自检。
   static void invalidatePlaybackCache() {
     _current = _SessionProfile.none;
+    _activated = false;
+  }
+
+  /// 钢琴按键前强制重配 playback 会话。
+  ///
+  /// media_kit(mpv) 会把 AVAudioSession mode 切成 `moviePlayback` 且不会通知
+  /// Dart；[_ensure] 的 profile 缓存会误以为已就绪而跳过 configure，导致
+  /// AVAudioEngine 假运行、长期无声。按键 / 测试音前须调用此方法。
+  static Future<void> refreshPlaybackForPiano() {
+    if (kIsWeb) return Future<void>.value();
+    invalidatePlaybackCache();
+    return _ensure(_SessionProfile.playback);
   }
 
   // ── 内部实现 ──────────────────────────────────────────────────────

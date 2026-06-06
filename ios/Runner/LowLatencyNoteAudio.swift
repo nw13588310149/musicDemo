@@ -290,13 +290,30 @@ final class LowLatencyNoteAudio {
 
   // MARK: - 会话兜底（仅 setActive(true)，绝不 setCategory / setActive(false)）
 
-  /// 会话类别 / 激活归 Dart 侧统一管理；这里仅做幂等的低延迟参数 + setActive(true)
-  /// 兜底，**绝不** setCategory / setActive(false)，以免掐断常驻引擎。
+  /// 发声前的会话兜底。
+  ///
+  /// 类别 / 激活的主配置归 Dart；但 media_kit(mpv) 会在长音频播放时把 mode 切成
+  /// `moviePlayback`，Dart 缓存仍以为 `default` 不会重配，表现为引擎 isRunning=true、
+  /// 采样已解码却长期无声、偶尔 ConfigurationChange 后才响一下。
+  /// 因此在每次 prepare/play 前检测并**就地**纠正 mode（幂等，仅 drift 时写入）。
   private func activateSessionBestEffort() {
     let session = AVAudioSession.sharedInstance()
+    let needsModeFix =
+      session.category != .playback || session.mode != .default
+    if needsModeFix {
+      try? session.setCategory(
+        .playback,
+        mode: .default,
+        options: [.mixWithOthers]
+      )
+    }
     try? session.setPreferredSampleRate(44_100)
     try? session.setPreferredIOBufferDuration(0.005)
     try? session.setActive(true)
+    // mode 被 mpv 改掉后 isRunning 常陈旧为 true；纠正后强制续接引擎。
+    if needsModeFix && graphBuilt {
+      try? startEngineAndResumeNodes()
+    }
   }
 
   // MARK: - Prepare / decode

@@ -807,6 +807,12 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     final active = Set<String>.from(state.activePianoNotes)..add(note);
     state = state.copyWith(activePianoNotes: active);
 
+    // iOS：mpv 会偷偷把 session mode 改成 moviePlayback，须先重配再 tryPlay。
+    if (_isIosNative) {
+      await NativePlaybackAudioSession.refreshPlaybackForPiano();
+      if (_disposed || !mounted) return;
+    }
+
     // iOS：须在手势栈里先同步 tryPlay；长音频已播时勿 setActive(false)。
     if (_pianoEngine.tryPlayNoteFromUserGesture(note)) {
       if (!state.ready && mounted && !_disposed) {

@@ -32,7 +32,7 @@ class MusicCompanionAudioEngine {
   Future<void> debugPlayTestNote() async {
     if (_disposed) return;
     if (!kIsWeb) {
-      await NativePlaybackAudioSession.ensurePlaybackActive();
+      await NativePlaybackAudioSession.refreshPlaybackForPiano();
       await reclaimNativeGraphAfterSessionChange();
     }
     await playNote('C4', volume: 1);

@@ -173,7 +173,7 @@ class _AudioDiagnosticsOverlayState extends State<AudioDiagnosticsOverlay> {
               children: [
                 _btn('刷新', _refresh),
                 _btn('激活播放会话', () async {
-                  await NativePlaybackAudioSession.ensurePlaybackActive();
+                  await NativePlaybackAudioSession.refreshPlaybackForPiano();
                 }),
                 _btn('初始化钢琴', () async {
                   await MusicCompanionAudioEngine.debugLastInstance
@@ -199,11 +199,14 @@ class _AudioDiagnosticsOverlayState extends State<AudioDiagnosticsOverlay> {
   }
 
   Widget _line(String key, String value) {
+    final moviePlaybackDrift = key == 'native_sessionMode' &&
+        value.contains('MoviePlayback');
     final bad =
-        value == 'false' &&
+        moviePlaybackDrift ||
+        (value == 'false' &&
             (key.contains('Running') ||
                 key.contains('activated') ||
-                key.contains('Built')) ||
+                key.contains('Built'))) ||
         (key.toLowerCase().contains('error') && value != '-' && value != 'null');
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 1.5),
