@@ -30,6 +30,11 @@
   - bottom piano interaction reuses the existing Flutter short-audio ecosystem via `flutter_soloud`
   - page startup must not block on full piano/metronome asset preload
   - musicPlay should warm up piano audio in the background and load textbook detail first
+- iOS audio architecture (professional single-session model, refactored):
+  - `lib/core/audio/native_playback_audio_session.dart` is the SOLE owner of AVAudioSession. It configures + `setActive(true)` once and NEVER calls `setActive(false)` during in-app navigation. Default category `playback`; record/tuner/sight-singing temporarily escalate to `playAndRecord` (default vs `measurement` mode) by re-configuring on the live, still-active session.
+  - `ios/Runner/LowLatencyNoteAudio.swift` keeps ONE persistent `AVAudioEngine` (24-voice fixed pool, static graph) for ALL short audio (piano / metronome / dictation) for the whole app lifetime. It NEVER rebuilds the graph on navigation and NEVER touches the session category. It only restarts the engine (start + resume nodes) in response to `AVAudioEngineConfigurationChange`, interruption-ended, or route changes; a full graph rebuild happens ONLY on `mediaServicesWereReset`.
+  - Long audio uses `media_kit` (mpv) on the same shared `playback` session via `mixWithOthers`.
+  - Rationale: the previous deactivate/reactivate-per-navigation + per-keypress `setCategory` + graph rebuild caused iPad piano silence/large latency (engine IO killed by `setActive(false)`, stale `isRunning`). Do NOT reintroduce `setActive(false)` on navigation or per-page engine rebuilds.
 - Page audio lifecycle (`lib/features/music_companion/audio/page_audio_lifecycle.dart` + `lib/core/audio/native_piano_handoff.dart`):
   - enter on page open (playback piano / mediaKit+piano / sight-singing capture / tuner)
   - leave on page dispose or session exit: stop short audio, mark shared native graph stale; next page does one coalesced handoff (no double reclaim on sight-singing exit + music companion enter)

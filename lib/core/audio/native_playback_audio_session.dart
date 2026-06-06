@@ -3,23 +3,24 @@ import 'dart:async';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 
-/// iOS / Android 短音频（SoLoud 钢琴、节拍器）共用的播放会话配置。
+/// 全应用唯一的 AVAudioSession / Android 音频会话协调器（业界专业方案重构版）。
 ///
-/// 关键点（iPad 上吃过的亏）：
-/// 1. `media_kit` 长音频、`record` 录音、人脸相机都会把 AVAudioSession 切到
-///    `playAndRecord` / `record` / `soloAmbient`，SoLoud 底层 miniaudio 一旦
-///    在这个时点 init() 就会拿不到 CoreAudio 输出 → 页面卡在「加载中」。
-/// 2. `audio_session.configure()` / `setActive()` 是 platform channel 调用，
-///    iOS 偶发整体不返回，不加 timeout 整个 engine init 会跟着 hang 死。
-/// 3. 切回 playback 前必须先 `setActive(false)`，把上一个 owner（mpv / 录音器）
-///    显式让出来，否则 setActive(true) 在 iPad 上有时不会真正生效。
+/// 设计原则（解决 iPad 上「钢琴无声 / 迟播」「长音频杂音」的根因）：
+/// 1. **单一会话，配置 + 激活只发生一次，导航期间绝不 `setActive(false)`。**
+///    旧实现每次进页都 `setActive(false) → configure → setActive(true)`，
+///    这会把常驻 `AVAudioEngine`（钢琴）的 IO 静默掐断、`isRunning` 陈旧为
+///    true，表现为「假运行、实际无声」或要等数秒重建才出声。
+/// 2. 默认类别 `playback`（与 media_kit 长音频、SoLoud 解码、节拍器一致）。
+///    录音 / 调音器 / 视唱采集时**就地升级**为 `playAndRecord`（在活动会话上
+///    切类别，不 deactivate），离开时再降回 `playback`。
+/// 3. 类别 / 模式切换会让 iOS 给 `AVAudioEngine` 发 `ConfigurationChange`
+///    通知，原生侧据此**重启**（不重建图）。这里只负责会话，不碰引擎。
+///
+/// 所有 platform channel 调用都带超时兜底：iOS 偶发不返回，绝不让整条
+/// 音频初始化链 hang 死。
 abstract final class NativePlaybackAudioSession {
-  static Future<void>? _playbackTask;
-  static Future<void>? _mediaKitTask;
-  static _NativeAudioSessionProfile? _activeProfile;
-
-  /// iOS 共享 [LowLatencyNotePlayer]：会话从 playAndRecord 等切回 playback 后，
-  /// 原生图须 reclaim；在 rebuild 完成前 [tryPlay] 可能静默或迟播。
+  /// iOS 共享钢琴原生图：类别 / 模式切换后置位，提示原生侧在下次按键前
+  /// 确认引擎已重启（与原生 `ConfigurationChange` 观察者互为兜底）。
   static bool nativePianoGraphNeedsReclaim = false;
 
   static void markNativePianoGraphStale() {
@@ -31,64 +32,87 @@ abstract final class NativePlaybackAudioSession {
     nativePianoGraphNeedsReclaim = false;
   }
 
-  /// 单次 platform channel 操作的最长等待时间，避免 iOS 不响应时永久阻塞。
+  /// 单次 platform channel 操作的最长等待，避免 iOS 不响应时永久阻塞。
   static const Duration _kChannelTimeout = Duration(seconds: 4);
 
-  /// 钢琴 / 节拍器：纯播放，允许与其它模块混音。
-  ///
-  /// 多个调用方在 in-flight 期间复用同一个 Future，结束后清空缓存——
-  /// 下次任意模块再次需要 playback 时仍能重新走完 release → configure
-  /// → setActive 的完整序列。
-  static Future<void> ensurePlaybackActive() {
-    if (kIsWeb) return Future<void>.value();
-    return _playbackTask ??= _configurePlaybackBestEffort().whenComplete(() {
-      _playbackTask = null;
-    });
-  }
+  static _SessionProfile _current = _SessionProfile.none;
+  static bool _activated = false;
 
-  /// musicPlay / 云盘长音频（media_kit / mpv）在 iOS 上播放前的会话。
+  /// in-flight 串行：同一时刻只允许一个会话配置在跑，避免并发 configure 互相打架。
+  static Future<void>? _inflight;
+
+  // ── 对外 API（保持与旧版一致，便于上层不改动）─────────────────────
+
+  /// 钢琴 / 节拍器 / SoLoud 解码：默认播放会话。
+  static Future<void> ensurePlaybackActive() => _ensure(_SessionProfile.playback);
+
+  /// media_kit 长音频：与钢琴共用同一个 `playback` 会话。
   ///
-  /// 与 [ensurePlaybackActive] 相比增加 `defaultToSpeaker`，并与钢琴
-  /// `mixWithOthers` 共存，减轻 pause 时 CoreAudio 硬切产生的滋滋声。
-  ///
-  /// musicPlay 页内虚拟钢琴与长音频应共用此配置（勿在播长音频时再调
-  /// [ensurePlaybackActive]，否则会 setActive(false) 打断 mpv）。
-  /// [releaseOthersFirst] 为 false 时不先 setActive(false)，用于长音频已播时
-  /// 仅刷新 category 并 reclaim 钢琴，避免掐断 mpv。
+  /// [releaseOthersFirst] 保留以兼容旧调用，但**不再** `setActive(false)`——
+  /// 单一会话模型下不存在「先让出再抢回」，那正是掐断常驻引擎的根源。
   static Future<void> ensureMediaKitPlaybackActive({
     bool releaseOthersFirst = true,
-  }) {
+  }) => _ensure(_SessionProfile.playback);
+
+  /// 录音系统 / 视唱实时采集：playAndRecord + 默认模式。
+  static Future<void> ensureRecordActive() =>
+      _ensure(_SessionProfile.record);
+
+  /// 调音器：playAndRecord + measurement（低延迟音高检测）。
+  static Future<void> ensurePlayAndRecordActive() =>
+      _ensure(_SessionProfile.measurement);
+
+  /// 智能视唱采音：measurement + mixWithOthers（与钢琴伴奏并行，不用 AEC）。
+  static Future<void> ensureSightSingingCaptureActive() =>
+      _ensure(_SessionProfile.measurement);
+
+  /// 与上面相同：单一会话模型下不再区分 soft / hard（都不 deactivate）。
+  static Future<void> ensureSightSingingCaptureActiveSoft() =>
+      _ensure(_SessionProfile.measurement);
+
+  /// 让缓存失效，下一次 ensure 会重新 configure（不 deactivate）。
+  /// 用于错误重试 / 应用恢复前强制重做一次 session 自检。
+  static void invalidatePlaybackCache() {
+    _current = _SessionProfile.none;
+  }
+
+  // ── 内部实现 ──────────────────────────────────────────────────────
+
+  static Future<void> _ensure(_SessionProfile profile) {
     if (kIsWeb) return Future<void>.value();
-    if (!releaseOthersFirst &&
-        _activeProfile == _NativeAudioSessionProfile.mediaKitPlayback) {
+    // 已处于目标 profile 且已激活：直接复用，零 platform 往返。
+    if (_current == profile && _activated) {
       return Future<void>.value();
     }
-    if (!releaseOthersFirst) {
-      return _configureMediaKitPlaybackBestEffort(releaseOthersFirst: false);
-    }
-    return _mediaKitTask ??=
-        _configureMediaKitPlaybackBestEffort(
-          releaseOthersFirst: true,
-        ).whenComplete(() {
-          _mediaKitTask = null;
-        });
+    final previous = _inflight;
+    Future<void> run() => _applyBestEffort(profile);
+    final task = previous != null
+        ? previous.then((_) => run()).catchError((_) => run())
+        : run();
+    _inflight = task.whenComplete(() {
+      if (identical(_inflight, task)) {
+        _inflight = null;
+      }
+    });
+    return task;
   }
 
-  static Future<void> _configureMediaKitPlaybackBestEffort({
-    bool releaseOthersFirst = true,
-  }) async {
+  static Future<void> _applyBestEffort(_SessionProfile profile) async {
+    // 已被前一个排队任务切到目标 profile：跳过。
+    if (_current == profile && _activated) return;
     try {
-      await _configureMediaKitPlayback(releaseOthersFirst: releaseOthersFirst);
+      await _apply(profile);
     } catch (error, stack) {
+      // 配置失败不抛：原生引擎仍可尝试在已有会话上渲染；最坏情况只是这次
+      // 没切成，下次 ensure 会再试。iPad 上唯一更糟的就是整段 await 卡死，
+      // 所以这里只记日志。
       debugPrint(
-        'NativePlaybackAudioSession mediaKit setup failed: $error\n$stack',
+        'NativePlaybackAudioSession apply($profile) failed: $error\n$stack',
       );
     }
   }
 
-  static Future<void> _configureMediaKitPlayback({
-    bool releaseOthersFirst = true,
-  }) async {
+  static Future<void> _apply(_SessionProfile profile) async {
     final session = await AudioSession.instance.timeout(
       _kChannelTimeout,
       onTimeout: () => throw TimeoutException(
@@ -96,245 +120,98 @@ abstract final class NativePlaybackAudioSession {
       ),
     );
 
-    if (releaseOthersFirst) {
-      try {
-        await session
-            .setActive(false)
-            .timeout(_kChannelTimeout, onTimeout: () => false);
-      } catch (error, stack) {
-        debugPrint(
-          'NativePlaybackAudioSession.mediaKit setActive(false) ignored: '
-          '$error\n$stack',
-        );
-      }
-    }
-
+    // 在**活动**会话上切类别 / 模式：configure 不会 deactivate；绝不调
+    // setActive(false)。这是「不杀引擎」的关键。
     await session
-        .configure(
-          AudioSessionConfiguration(
-            avAudioSessionCategory: AVAudioSessionCategory.playback,
-            avAudioSessionCategoryOptions:
-                AVAudioSessionCategoryOptions.mixWithOthers |
-                AVAudioSessionCategoryOptions.defaultToSpeaker,
-            avAudioSessionMode: AVAudioSessionMode.defaultMode,
-            androidAudioAttributes: AndroidAudioAttributes(
-              contentType: AndroidAudioContentType.music,
-              usage: AndroidAudioUsage.media,
-            ),
-            androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
-          ),
-        )
+        .configure(_configFor(profile))
         .timeout(
           _kChannelTimeout,
           onTimeout: () => throw TimeoutException(
-            'AudioSession.configure (mediaKit) hung > '
+            'AudioSession.configure($profile) hung > '
             '${_kChannelTimeout.inSeconds}s',
           ),
         );
 
+    // 激活会话。**只** setActive(true)，永不 setActive(false)：在已活动的会话上
+    // 重新 setActive(true) 是安全幂等的，且能确保刚 configure 的新类别在 iPad 上
+    // 真正生效（旧实现靠 setActive(false) 强制生效，正是掐断常驻引擎的根因）。
     await session
         .setActive(true)
         .timeout(
           _kChannelTimeout,
           onTimeout: () => throw TimeoutException(
-            'AudioSession.setActive(true) mediaKit hung > '
+            'AudioSession.setActive(true) hung > '
             '${_kChannelTimeout.inSeconds}s',
           ),
         );
-    _activeProfile = _NativeAudioSessionProfile.mediaKitPlayback;
-  }
+    _activated = true;
 
-  static Future<void> _configurePlaybackBestEffort() async {
-    try {
-      await _configurePlayback();
-    } catch (error, stack) {
-      // Session 配置失败时不抛——SoLoud / WebAudio 仍然可以尝试初始化。
-      // iPad 上唯一比这更糟糕的情况就是整段 await 卡死，所以这里只记日志。
-      debugPrint(
-        'NativePlaybackAudioSession playback setup failed: $error\n$stack',
-      );
-    }
-  }
-
-  static Future<void> _configurePlayback() async {
-    final session = await AudioSession.instance.timeout(
-      _kChannelTimeout,
-      onTimeout: () => throw TimeoutException(
-        'AudioSession.instance hung > ${_kChannelTimeout.inSeconds}s',
-      ),
-    );
-
-    // Step 1：先让出当前会话所有权。media_kit / 录音器活跃时直接 configure
-    // 经常会被静默忽略；先 setActive(false) 是 iPad 上必须的步骤。
-    try {
-      await session
-          .setActive(false)
-          .timeout(_kChannelTimeout, onTimeout: () => false);
-    } catch (error, stack) {
-      // 没人持有会话时 setActive(false) 会直接抛——这里属于预期路径，
-      // 仅在 debug 日志里记一笔以便排查 iPad 的 session 流向。
-      debugPrint(
-        'NativePlaybackAudioSession.setActive(false) ignored: $error\n$stack',
-      );
-    }
-
-    // Step 2：把 category 切到 playback + mixWithOthers，
-    // 与 SoLoud miniaudio / WebAudio 的输出语义一致。
-    await session
-        .configure(
-          const AudioSessionConfiguration(
-            avAudioSessionCategory: AVAudioSessionCategory.playback,
-            avAudioSessionCategoryOptions:
-                AVAudioSessionCategoryOptions.mixWithOthers,
-            avAudioSessionMode: AVAudioSessionMode.defaultMode,
-            androidAudioAttributes: AndroidAudioAttributes(
-              contentType: AndroidAudioContentType.music,
-              usage: AndroidAudioUsage.media,
-            ),
-            androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
-          ),
-        )
-        .timeout(
-          _kChannelTimeout,
-          onTimeout: () => throw TimeoutException(
-            'AudioSession.configure hung > ${_kChannelTimeout.inSeconds}s',
-          ),
-        );
-
-    // Step 3：claim 新的 playback 所有权。
-    await session
-        .setActive(true)
-        .timeout(
-          _kChannelTimeout,
-          onTimeout: () => throw TimeoutException(
-            'AudioSession.setActive(true) hung > ${_kChannelTimeout.inSeconds}s',
-          ),
-        );
-    _activeProfile = _NativeAudioSessionProfile.playback;
-  }
-
-  /// 录音系统 / 视唱实时采集：麦克风录入，不用 measurement（调音器专用）。
-  ///
-  /// iOS 上若沿用调音器的 `measurement` 或纯 `playback`，`record` 录到的
-  /// AAC 电平会明显偏低。
-  static Future<void> ensureRecordActive() {
-    if (_activeProfile == _NativeAudioSessionProfile.record) {
-      return Future<void>.value();
-    }
-    return _ensurePlayAndRecordMode(
-      AVAudioSessionMode.defaultMode,
-      categoryOptions:
-          AVAudioSessionCategoryOptions.defaultToSpeaker |
-          AVAudioSessionCategoryOptions.allowBluetooth,
-      profile: _NativeAudioSessionProfile.record,
-    );
-  }
-
-  /// 调音器：需要麦克风输入，measurement 利于低延迟音高检测。
-  static Future<void> ensurePlayAndRecordActive() {
-    if (_activeProfile == _NativeAudioSessionProfile.tuner) {
-      return Future<void>.value();
-    }
-    return _ensurePlayAndRecordMode(
-      AVAudioSessionMode.measurement,
-      categoryOptions:
-          AVAudioSessionCategoryOptions.defaultToSpeaker |
-          AVAudioSessionCategoryOptions.allowBluetooth,
-      profile: _NativeAudioSessionProfile.tuner,
-    );
-  }
-
-  /// 智能视唱实时采音：measurement + mixWithOthers，与钢琴伴奏并行。
-  ///
-  /// 不用 voiceChat / 系统 AEC——跟唱时用户音高常与伴奏一致，AEC 会把人声当回声消掉，
-  /// 导致 YIN 只有响度、没有音高。串音改由 [PitchVoiceGate] 在打分侧过滤。
-  static Future<void> ensureSightSingingCaptureActive() {
-    if (_activeProfile == _NativeAudioSessionProfile.sightSingingCapture) {
-      return Future<void>.value();
-    }
-    return _ensurePlayAndRecordMode(
-      AVAudioSessionMode.measurement,
-      categoryOptions:
-          AVAudioSessionCategoryOptions.defaultToSpeaker |
-          AVAudioSessionCategoryOptions.allowBluetooth |
-          AVAudioSessionCategoryOptions.mixWithOthers,
-      deactivateFirst: true,
-      profile: _NativeAudioSessionProfile.sightSingingCapture,
-    );
-  }
-
-  /// 钢琴 Short-audio 初始化后轻量 reclaim：不先 setActive(false)，避免掐断正在进行的录音。
-  static Future<void> ensureSightSingingCaptureActiveSoft() {
-    if (_activeProfile == _NativeAudioSessionProfile.sightSingingCapture) {
-      return Future<void>.value();
-    }
-    return _ensurePlayAndRecordMode(
-      AVAudioSessionMode.measurement,
-      categoryOptions:
-          AVAudioSessionCategoryOptions.defaultToSpeaker |
-          AVAudioSessionCategoryOptions.allowBluetooth |
-          AVAudioSessionCategoryOptions.mixWithOthers,
-      deactivateFirst: false,
-      profile: _NativeAudioSessionProfile.sightSingingCapture,
-    );
-  }
-
-  static Future<void> _ensurePlayAndRecordMode(
-    AVAudioSessionMode avAudioSessionMode, {
-    required AVAudioSessionCategoryOptions categoryOptions,
-    required _NativeAudioSessionProfile profile,
-    bool deactivateFirst = true,
-  }) async {
-    if (kIsWeb) return;
-    try {
-      final session = await AudioSession.instance.timeout(_kChannelTimeout);
-      if (deactivateFirst) {
-        try {
-          await session
-              .setActive(false)
-              .timeout(_kChannelTimeout, onTimeout: () => false);
-        } catch (_) {}
-      }
-      await session
-          .configure(
-            AudioSessionConfiguration(
-              avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
-              avAudioSessionCategoryOptions: categoryOptions,
-              avAudioSessionMode: avAudioSessionMode,
-              androidAudioAttributes: const AndroidAudioAttributes(
-                contentType: AndroidAudioContentType.speech,
-                usage: AndroidAudioUsage.voiceCommunication,
-              ),
-              androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
-            ),
-          )
-          .timeout(_kChannelTimeout);
-      await session.setActive(true).timeout(_kChannelTimeout);
-      _activeProfile = profile;
-    } catch (error, stack) {
-      debugPrint(
-        'NativePlaybackAudioSession._ensurePlayAndRecordMode($avAudioSessionMode) '
-        'failed: $error\n$stack',
-      );
-    } finally {
-      // 切到 playAndRecord 后，下次切回 playback 必须走完整的 release →
-      // configure → claim 序列，不能复用旧的"已配置 playback"的缓存。
-      _playbackTask = null;
+    final categoryChanged = _categoryDiffers(_current, profile);
+    _current = profile;
+    // 类别 / 模式变化会触发 AVAudioEngine ConfigurationChange；提示钢琴图
+    // 在下次按键前确认已重启（原生观察者通常已自动重启，这里只是兜底）。
+    if (categoryChanged) {
       markNativePianoGraphStale();
     }
   }
 
-  static void invalidatePlaybackCache() {
-    _playbackTask = null;
-    _mediaKitTask = null;
-    _activeProfile = null;
+  static bool _categoryDiffers(_SessionProfile a, _SessionProfile b) {
+    bool isRecordLike(_SessionProfile p) =>
+        p == _SessionProfile.record || p == _SessionProfile.measurement;
+    return isRecordLike(a) != isRecordLike(b);
+  }
+
+  static AudioSessionConfiguration _configFor(_SessionProfile profile) {
+    switch (profile) {
+      case _SessionProfile.playback:
+      case _SessionProfile.none:
+        return AudioSessionConfiguration(
+          avAudioSessionCategory: AVAudioSessionCategory.playback,
+          avAudioSessionCategoryOptions:
+              AVAudioSessionCategoryOptions.mixWithOthers |
+              AVAudioSessionCategoryOptions.defaultToSpeaker,
+          avAudioSessionMode: AVAudioSessionMode.defaultMode,
+          androidAudioAttributes: AndroidAudioAttributes(
+            contentType: AndroidAudioContentType.music,
+            usage: AndroidAudioUsage.media,
+          ),
+          androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
+        );
+      case _SessionProfile.record:
+        return AudioSessionConfiguration(
+          avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
+          avAudioSessionCategoryOptions:
+              AVAudioSessionCategoryOptions.defaultToSpeaker |
+              AVAudioSessionCategoryOptions.allowBluetooth |
+              AVAudioSessionCategoryOptions.mixWithOthers,
+          avAudioSessionMode: AVAudioSessionMode.defaultMode,
+          androidAudioAttributes: AndroidAudioAttributes(
+            contentType: AndroidAudioContentType.speech,
+            usage: AndroidAudioUsage.voiceCommunication,
+          ),
+          androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
+        );
+      case _SessionProfile.measurement:
+        return AudioSessionConfiguration(
+          avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
+          avAudioSessionCategoryOptions:
+              AVAudioSessionCategoryOptions.defaultToSpeaker |
+              AVAudioSessionCategoryOptions.allowBluetooth |
+              AVAudioSessionCategoryOptions.mixWithOthers,
+          avAudioSessionMode: AVAudioSessionMode.measurement,
+          androidAudioAttributes: AndroidAudioAttributes(
+            contentType: AndroidAudioContentType.speech,
+            usage: AndroidAudioUsage.voiceCommunication,
+          ),
+          androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
+        );
+    }
   }
 }
 
-enum _NativeAudioSessionProfile {
+enum _SessionProfile {
+  none,
   playback,
-  mediaKitPlayback,
   record,
-  tuner,
-  sightSingingCapture,
+  measurement,
 }
