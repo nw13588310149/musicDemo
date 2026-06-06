@@ -12,6 +12,9 @@ abstract final class AppAudioService {
 
   static LowLatencyNotePlayer get sharedNativePlayer => _player;
 
+  // Feature/page wrappers may stop voices, but must never dispose this
+  // App-lifetime shared player.
+
   static bool _pianoCoreWarmed = false;
   static Future<void>? _pianoWarmTask;
   static DateTime? _lastReconcileAt;

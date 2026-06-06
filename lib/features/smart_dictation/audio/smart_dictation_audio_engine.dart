@@ -203,7 +203,9 @@ class SmartDictationAudioEngine {
       _initTask = null;
       return;
     }
-    await _nativePlayer.dispose();
+    // AppAudioService owns this player for the entire app process. Disposing
+    // it here would permanently silence every later short-audio page.
+    await _nativePlayer.stopAll();
     if (!_frequencyController.isClosed) {
       await _frequencyController.close();
     }

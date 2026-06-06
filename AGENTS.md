@@ -31,6 +31,7 @@
   - page startup must not block on full piano/metronome asset preload
   - musicPlay should warm up piano audio in the background and load textbook detail first
 - iOS audio architecture (AppAudioService refactor):
+  - The shared native short-audio player is App-lifetime owned; feature/page disposal may call `stopAll()` but must never call its `dispose()`.
   - `ios/Runner/AppAudioSessionCoordinator.swift` is the sole explicit iOS `AVAudioSession` owner; Dart session transitions go through its serialized MethodChannel.
   - Normal iOS MusicPlay long-audio playback uses the AVPlayer-backed `MusicPlayAudioPlayer`; `media_kit` is reserved for active independent pitch shifting and non-iOS platforms.
   - The native piano engine serializes all `AVAudioEngine` and node operations on one audio queue; `prepare` reports ready only after requested samples are decoded.
