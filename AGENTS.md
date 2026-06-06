@@ -31,12 +31,15 @@
   - page startup must not block on full piano/metronome asset preload
   - musicPlay should warm up piano audio in the background and load textbook detail first
 - iOS audio architecture (AppAudioService refactor):
+  - `ios/Runner/AppAudioSessionCoordinator.swift` is the sole explicit iOS `AVAudioSession` owner; Dart session transitions go through its serialized MethodChannel.
+  - Normal iOS MusicPlay long-audio playback uses the AVPlayer-backed `MusicPlayAudioPlayer`; `media_kit` is reserved for active independent pitch shifting and non-iOS platforms.
+  - The native piano engine serializes all `AVAudioEngine` and node operations on one audio queue; `prepare` reports ready only after requested samples are decoded.
   - `lib/core/audio/app_audio_service.dart` — single coordinator: shared `LowLatencyNotePlayer`, `reconcilePlaybackSession()` (no cache short-circuit; fixes mpv `moviePlayback` drift), `prepareForPianoKeypress()`, fire-and-forget `playPianoFromGesture()`.
-  - `lib/core/audio/native_playback_audio_session.dart` — sole AVAudioSession owner; never `setActive(false)` on navigation; `reconcilePlayback()` always re-applies `playback` + `defaultMode` + `mixWithOthers`.
+  - `lib/core/audio/native_playback_audio_session.dart` — cross-platform facade; iOS delegates session transitions to the native coordinator, while other platforms continue through `audio_session`.
   - `lib/core/audio/page_audio_lifecycle.dart` — page enter/leave wrappers (re-exported from music_companion for compat).
   - `lib/core/audio/ios_piano_bootstrap.dart` — app-launch preload of all piano + metronome assets (GarageBand-style); page nav only reconcile + ping.
-  - `ios/Runner/LowLatencyNoteAudio.swift` — one persistent 24-voice `AVAudioEngine`; `controlQueue` + `playQueue` split; `prepare`/`ping`/`play` return to Dart immediately; stop fade on main queue; pre-enveloped decode buffers.
-  - Long audio: `media_kit` (mpv) on shared `playback` session; piano keypress calls `AppAudioService.prepareForPianoKeypress()` before `tryPlay`.
+  - `ios/Runner/LowLatencyNoteAudio.swift` — one persistent 24-voice `AVAudioEngine`; all engine/node work is serialized on one audio queue; requested samples must decode before `prepare` reports ready.
+  - Long audio: normal iOS playback uses AVPlayer through `just_audio`; active pitch shifting and non-iOS platforms use `media_kit`.
   - Piano/metronome/dictation use native AVAudioEngine via shared player — NOT SoLoud (SoLoud is analysis-only via `NativeAudioBootstrap`).
 - Smart sight singing (`/smart-singing`):
   - implemented under `lib/features/smart_sight_singing/`

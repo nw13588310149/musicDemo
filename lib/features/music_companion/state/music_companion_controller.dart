@@ -128,7 +128,6 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
     if (!kIsWeb) {
       if (_audioEngine.isPianoReady &&
           _audioEngine.tryPlayNoteFromUserGesture(note)) {
-        unawaited(AppAudioService.prepareForPianoKeypress());
         if (!state.audioReady) {
           state = state.copyWith(audioReady: true);
         }
@@ -411,6 +410,7 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
         }
       }
 
+      await AppAudioService.enterMeasurementSession();
       final stream = await _recorder.startStream(
         const RecordConfig(
           encoder: AudioEncoder.pcm16bits,
@@ -576,6 +576,9 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
       }
     } catch (_) {
       // 录音器可能已经被释放，吞掉异常即可
+    }
+    if (!kIsWeb) {
+      await AppAudioService.reconcilePlaybackSession();
     }
 
     if (mounted && state.tunerListening) {

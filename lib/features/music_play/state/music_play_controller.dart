@@ -4,7 +4,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:media_kit/media_kit.dart';
 
 import '../../../core/audio/app_audio_service.dart';
 import '../../../core/network/api_response.dart';
@@ -12,6 +11,7 @@ import '../../../core/network/media_url.dart';
 import '../../music_companion/audio/music_companion_audio_engine.dart';
 import '../../music_companion/audio/page_audio_lifecycle.dart';
 import '../../smart_campus/data/chat_share_payload.dart';
+import '../audio/music_play_audio_player.dart';
 import '../data/music_play_repository.dart';
 import 'music_play_state.dart';
 
@@ -45,7 +45,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   /// - [Player.setRate] —— 变速保音高（mpv 默认开启 audio-pitch-correction）；
   /// - [Player.setPitch] —— 独立的半音变调（speed 不动）。
   /// 钢琴弹奏仍然走 [MusicCompanionAudioEngine]（基于 SoLoud），与此处互不影响。
-  Player? _player;
+  MusicPlayAudioPlayer? _player;
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<Duration>? _durationSub;
   StreamSubscription<bool>? _playingSub;
@@ -250,7 +250,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     if (!_isIosNative || _disposed) {
       return;
     }
-    if (!_iosMusicPlaySessionPrimed) {
+    if (_shouldEnablePitchForCurrentState && !_iosMusicPlaySessionPrimed) {
       await _ensureIosMediaKitSessionForLongAudio();
     }
     if (_pianoEngine.isPianoReady) {
@@ -263,7 +263,6 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     try {
       if (_isIosNative) {
         // 先准备 media_kit 长音频会话（前台、强释放旧 owner）。
-        await _ensureIosMediaKitSessionForLongAudio(forceRelease: true);
         // 然后在**后台**预热原生钢琴图（持久 AVAudioEngine 轻量 reclaim + 采样
         // 解码）。不 await，避免阻塞 loading 或干扰长音频；预热完成后首次按键
         // 直接命中 tryPlay，告别「钢琴等很久才响」。
@@ -383,14 +382,17 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     state = state.copyWith(isPlaying: player.state.playing);
   }
 
-  Future<void> _setPlayerVolumeSafe(Player player, double volume) async {
+  Future<void> _setPlayerVolumeSafe(
+    MusicPlayAudioPlayer player,
+    double volume,
+  ) async {
     try {
       await player.setVolume(volume.clamp(0, 100));
     } catch (_) {}
   }
 
   Future<void> _fadePlayerVolume(
-    Player player, {
+    MusicPlayAudioPlayer player, {
     required double to,
     int? steps,
     Duration? stepDelay,
@@ -417,7 +419,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     }
   }
 
-  Future<void> _applyPitchToPlayer(Player player) async {
+  Future<void> _applyPitchToPlayer(MusicPlayAudioPlayer player) async {
     if (state.detail?.hidePitchShift == true) {
       return;
     }
@@ -438,7 +440,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   }
 
   /// 淡出后 pause，避免解码器硬切产生的短促底噪。
-  Future<void> _pausePlayerSmooth(Player player) async {
+  Future<void> _pausePlayerSmooth(MusicPlayAudioPlayer player) async {
     if (_disposed) {
       return;
     }
@@ -457,8 +459,12 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   /// 输出（ao 突然停）产生的咔哒/爆音。斜坡很短（约 18ms）以免影响响应；
   /// 比非 iOS 路径的默认淡出更克制，避免之前观察到的「手势期间改音量引入
   /// 别的杂音」。**不**触碰连续的 seek 手势（仍走原始即时 seek）。
-  Future<void> _pausePlayerSmoothIos(Player player) async {
+  Future<void> _pausePlayerSmoothIos(MusicPlayAudioPlayer player) async {
     if (_disposed) {
+      return;
+    }
+    if (player.usesNativeIosPlayback) {
+      await player.pause();
       return;
     }
     try {
@@ -474,16 +480,16 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     await _setPlayerVolumeSafe(player, _kPlayerNormalVolume);
   }
 
-  Future<void> _resumePlayer(Player player) async {
+  Future<void> _resumePlayer(MusicPlayAudioPlayer player) async {
     if (_disposed) {
       return;
     }
-    if (_isIosNative) {
+    if (_isIosNative && !player.usesNativeIosPlayback) {
       await _ensureIosMediaKitSessionForLongAudio();
     }
     try {
       await _applyPitchToPlayer(player);
-      if (_isIosNative) {
+      if (_isIosNative && !player.usesNativeIosPlayback) {
         // 从 0 起播再极短淡入，消除 mpv 恢复输出瞬间的爆音。
         await _setPlayerVolumeSafe(player, 0);
         await player.play();
@@ -654,7 +660,9 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     _scrubbing = true;
     _scrubUiHoldTimer?.cancel();
     _scrubUiHoldTimer = null;
-    if (_isIosNative && !_iosScrubVolumeDucked) {
+    if (_isIosNative &&
+        !(_player?.usesNativeIosPlayback ?? false) &&
+        !_iosScrubVolumeDucked) {
       _iosScrubVolumeDucked = true;
       unawaited(_duckPlayerVolumeForScrub());
     }
@@ -758,11 +766,14 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
           break;
         }
         try {
-          if (_isIosNative && !_iosScrubVolumeDucked) {
+          if (_isIosNative &&
+              !activePlayer.usesNativeIosPlayback &&
+              !_iosScrubVolumeDucked) {
             await _setPlayerVolumeSafe(activePlayer, 0);
           }
           await activePlayer.seek(target);
           if (_isIosNative &&
+              !activePlayer.usesNativeIosPlayback &&
               !_iosScrubVolumeDucked &&
               (activePlayer.state.playing || state.isPlaying)) {
             await _fadePlayerVolume(
@@ -857,7 +868,6 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     if (_isIosNative) {
       if (_pianoEngine.isPianoReady &&
           _pianoEngine.tryPlayNoteFromUserGesture(note)) {
-        unawaited(AppAudioService.prepareForPianoKeypress());
         if (!state.ready && mounted && !_disposed) {
           state = state.copyWith(ready: true);
         }
@@ -1108,7 +1118,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
 
     try {
       if (isStale()) return;
-      if (_isIosNative) {
+      if (_isIosNative && _shouldEnablePitchForCurrentState) {
         await _ensureIosMediaKitSessionForLongAudio();
         unawaited(
           AppAudioService.recoverPianoAfterMediaKit(
@@ -1122,11 +1132,11 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       final player = _ensurePlayer();
       debugPrint('MusicPlay audio open: ${track.url}');
       _endScrubUiHold(immediate: true);
-      if (_isIosNative) {
+      if (_isIosNative && !player.usesNativeIosPlayback) {
         await _setPlayerVolumeSafe(player, 0);
       }
-      await player.open(Media(track.url), play: play);
-      if (_isIosNative && play) {
+      await player.open(track.url, play: play);
+      if (_isIosNative && !player.usesNativeIosPlayback && play) {
         await _fadePlayerVolume(
           player,
           to: _kPlayerNormalVolume,
@@ -1153,7 +1163,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   }
 
   /// 有序释放 mpv：pause → stop → dispose，并与其它页面的释放串行排队。
-  Future<void> _releaseMediaKitPlayer(Player player) async {
+  Future<void> _releaseMediaKitPlayer(MusicPlayAudioPlayer player) async {
     final waitFor = _mediaKitTeardownChain;
     final task = _runMediaKitPlayerRelease(player);
     _mediaKitTeardownChain = task;
@@ -1171,11 +1181,11 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     }
   }
 
-  Future<void> _runMediaKitPlayerRelease(Player player) async {
+  Future<void> _runMediaKitPlayerRelease(MusicPlayAudioPlayer player) async {
     try {
       await player.pause().timeout(_kMpvTeardownStepTimeout, onTimeout: () {});
     } catch (_) {}
-    if (_isIosNative) {
+    if (_isIosNative && !player.usesNativeIosPlayback) {
       await Future<void>.delayed(_kIosPauseDrainDelay);
     }
     try {
@@ -1189,7 +1199,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     } catch (_) {}
   }
 
-  Player _ensurePlayer() {
+  MusicPlayAudioPlayer _ensurePlayer() {
     if (_disposed) {
       throw StateError('MusicPlayController disposed');
     }
@@ -1200,9 +1210,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     // 页内支持升降调时必须打开 pitch，否则 [Player.setPitch] 无效。
     // 无升降调能力的教材页关闭 pitch，保留 mpv 默认音高校正，听感更稳。
     final enablePitch = _shouldEnablePitchForCurrentState;
-    final player = Player(
-      configuration: PlayerConfiguration(pitch: enablePitch),
-    );
+    final player = MusicPlayAudioPlayer(enablePitch: enablePitch);
     _playerPitchEnabled = enablePitch;
     _appliedPitchSemitones = 0;
     _player = player;
@@ -1210,7 +1218,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     return player;
   }
 
-  void _bindPlayerStreams(Player player) {
+  void _bindPlayerStreams(MusicPlayAudioPlayer player) {
     _positionSub?.cancel();
     _durationSub?.cancel();
     _playingSub?.cancel();

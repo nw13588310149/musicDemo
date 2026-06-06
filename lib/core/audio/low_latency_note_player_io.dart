@@ -15,8 +15,11 @@ class _IoLowLatencyNotePlayer implements LowLatencyNotePlayer {
     'com.yyzl.music/low_latency_notes',
   );
 
-  static const Duration _kPrepareTimeout = Duration(seconds: 15);
-  static const Duration _kIncrementalPrepareTimeout = Duration(seconds: 2);
+  // Native iOS prepare now means "decoded and immediately playable", not just
+  // "asset names registered". App-launch warmup is fire-and-forget, so allow
+  // enough time for the full piano range to become genuinely ready.
+  static const Duration _kPrepareTimeout = Duration(seconds: 45);
+  static const Duration _kIncrementalPrepareTimeout = Duration(seconds: 5);
   static const Duration _kPlayChannelTimeout = Duration(milliseconds: 800);
 
   final Map<String, String> _assetByKey = <String, String>{};

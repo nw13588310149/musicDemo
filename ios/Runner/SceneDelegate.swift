@@ -35,6 +35,9 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     #endif
 
     GeneratedPluginRegistrant.register(with: flutterViewController)
+    AppAudioSessionCoordinator.shared.register(
+      messenger: flutterViewController.binaryMessenger
+    )
     lowLatencyNoteAudio = LowLatencyNoteAudio(
       messenger: flutterViewController.binaryMessenger
     )

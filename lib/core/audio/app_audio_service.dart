@@ -42,11 +42,10 @@ abstract final class AppAudioService {
   static Future<void> prepareForPianoKeypress({bool force = false}) async {
     if (kIsWeb) return;
 
-    if (!force && _pianoCoreWarmed && _player.nativeReady) {
-      unawaited(_reconcileIfDue());
-      await _player.pingEngine();
-      return;
-    }
+    // The keypress hot path must never cross a platform channel or reconfigure
+    // AVAudioSession. Native route/interruption observers keep the persistent
+    // engine alive; explicit reconciliation happens at feature transitions.
+    if (!force && _pianoCoreWarmed && _player.nativeReady) return;
 
     await reconcilePlaybackSession();
     await _player.pingEngine();

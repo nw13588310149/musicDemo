@@ -1,7 +1,8 @@
 import 'dart:async';
 
 import 'package:audio_session/audio_session.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 /// 全应用唯一的 AVAudioSession 协调器。
 ///
@@ -11,7 +12,10 @@ import 'package:flutter/foundation.dart';
 /// 3. 录音 / 调音器 / 视唱临时升到 `playAndRecord`。
 /// 4. [reconcilePlayback] **永不缓存短路**——media_kit(mpv) 会偷偷把 mode 改成
 ///    `moviePlayback`，缓存会导致 Dart 跳过 configure、钢琴长期无声。
-abstract final class NativePlaybackAudioSession {
+abstract final class NativePlaybackAudioSession {
+  static const MethodChannel _iosChannel = MethodChannel(
+    'com.yyzl.music/audio_session',
+  );
   static const Duration _kChannelTimeout = Duration(seconds: 4);
 
   static _SessionProfile _current = _SessionProfile.none;
@@ -94,7 +98,27 @@ abstract final class NativePlaybackAudioSession {
     }
   }
 
-  static Future<void> _apply(_SessionProfile profile) async {
+  static Future<void> _apply(_SessionProfile profile) async {
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      await _iosChannel
+          .invokeMethod<void>('apply', <String, Object>{
+            'profile': switch (profile) {
+              _SessionProfile.record => 'record',
+              _SessionProfile.measurement => 'measurement',
+              _ => 'playback',
+            },
+          })
+          .timeout(
+            _kChannelTimeout,
+            onTimeout: () => throw TimeoutException(
+              'Native iOS audio-session apply($profile) hung > '
+              '${_kChannelTimeout.inSeconds}s',
+            ),
+          );
+      _activated = true;
+      _current = profile;
+      return;
+    }
     final session = await AudioSession.instance.timeout(
       _kChannelTimeout,
       onTimeout: () => throw TimeoutException(

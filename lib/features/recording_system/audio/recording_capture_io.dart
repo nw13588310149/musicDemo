@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:record/record.dart';
 
+import '../../../core/audio/app_audio_service.dart';
 import 'recording_capture.dart';
 
 RecordingCapture createPlatformRecordingCapture() => _RecordPluginCapture();
@@ -21,6 +22,7 @@ class _RecordPluginCapture implements RecordingCapture {
 
   @override
   Future<void> start({required String path}) async {
+    await AppAudioService.enterRecordSession();
     await _amplitudeSub?.cancel();
     _amplitudeSub = null;
 
@@ -58,7 +60,9 @@ class _RecordPluginCapture implements RecordingCapture {
   Future<String?> stop() async {
     await _amplitudeSub?.cancel();
     _amplitudeSub = null;
-    return _recorder.stop();
+    final path = await _recorder.stop();
+    await AppAudioService.reconcilePlaybackSession();
+    return path;
   }
 
   @override
@@ -66,6 +70,7 @@ class _RecordPluginCapture implements RecordingCapture {
     await _amplitudeSub?.cancel();
     _amplitudeSub = null;
     await _recorder.cancel();
+    await AppAudioService.reconcilePlaybackSession();
   }
 
   @override

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:just_audio/just_audio.dart';
 
+import '../../../core/audio/app_audio_service.dart';
 import 'recording_playback.dart';
 
 RecordingPlayback createPlatformRecordingPlayback() => _JustAudioPlayback();
@@ -59,6 +60,7 @@ class _JustAudioPlayback implements RecordingPlayback {
 
   @override
   Future<int?> setSource(String source, {required bool isUrl}) async {
+    await AppAudioService.reconcilePlaybackSession();
     final duration = isUrl
         ? await _player.setUrl(source)
         : await _player.setFilePath(source);
@@ -72,6 +74,7 @@ class _JustAudioPlayback implements RecordingPlayback {
     List<int>? segmentDurationsMs,
     int? totalDurationMs,
   }) async {
+    await AppAudioService.reconcilePlaybackSession();
     if (sources.isEmpty) return null;
     if (sources.length == 1) {
       return setSource(sources.first, isUrl: isUrl);
@@ -88,7 +91,10 @@ class _JustAudioPlayback implements RecordingPlayback {
   }
 
   @override
-  Future<void> play() => _player.play();
+  Future<void> play() async {
+    await AppAudioService.reconcilePlaybackSession();
+    await _player.play();
+  }
 
   @override
   Future<void> pause() => _player.pause();

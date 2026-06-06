@@ -6,6 +6,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 
 import '../../../core/audio/native_playback_audio_session.dart';
+import '../../../core/audio/app_audio_service.dart';
 import '../config/smart_sight_singing_config.dart';
 import '../config/smart_sight_singing_tuning.dart';
 import 'live_pitch_detector.dart';
@@ -256,6 +257,7 @@ class _IORealtimePitchCapture implements RealtimePitchCapture {
     _filledBytes = 0;
     _detectInFlight = false;
     _pendingFrame = null;
+    await AppAudioService.reconcilePlaybackSession();
   }
 }
 
