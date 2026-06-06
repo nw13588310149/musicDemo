@@ -17,7 +17,26 @@ Future<void> warmupMusicCompanionPianoAudio() async {}
 ///
 /// native/iOS 使用 AVAudioEngine buffer pool；Web 继续使用 WebAudio。
 class MusicCompanionAudioEngine {
-  MusicCompanionAudioEngine();
+  MusicCompanionAudioEngine() {
+    debugLastInstance = this;
+  }
+
+  /// 屏幕诊断面板用：最近创建的钢琴引擎实例（musicPlay / 音乐伴侣各自一个）。
+  static MusicCompanionAudioEngine? debugLastInstance;
+
+  /// 屏幕诊断面板用：返回钢琴播放器 + 原生引擎/会话状态快照。
+  Future<Map<String, Object?>> diagnostics() => _nativePlayer.diagnostics();
+
+  /// 屏幕诊断面板用：强制激活播放会话 → 重建图 → 播一个中央音区测试音，
+  /// 用于在面板上观察「按下后是否真的出声 / busyVoices 是否递增」。
+  Future<void> debugPlayTestNote() async {
+    if (_disposed) return;
+    if (!kIsWeb) {
+      await NativePlaybackAudioSession.ensurePlaybackActive();
+      await reclaimNativeGraphAfterSessionChange();
+    }
+    await playNote('C4', volume: 1);
+  }
 
   final MusicCompanionWebAudioPlayer _webPlayer =
       createMusicCompanionWebAudioPlayer();

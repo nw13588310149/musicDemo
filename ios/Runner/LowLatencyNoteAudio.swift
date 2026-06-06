@@ -132,8 +132,44 @@ final class LowLatencyNoteAudio {
       // App 级短音频资源：页面离开只停声，不销毁图（见 Dart dispose 注释）。
       queue.async { [weak self] in self?.stopVoices(metronomeOnly: false, fadeMs: 90) }
       result(nil)
+    case "diagnostics":
+      diagnostics(result: result)
     default:
       result(FlutterMethodNotImplemented)
+    }
+  }
+
+  // MARK: - 屏幕诊断快照
+
+  /// 返回原生引擎 / 会话的实时状态，供 Dart 侧屏幕诊断面板显示。
+  private func diagnostics(result: @escaping FlutterResult) {
+    queue.async { [weak self] in
+      guard let self = self else {
+        DispatchQueue.main.async { result([:]) }
+        return
+      }
+      let session = AVAudioSession.sharedInstance()
+      let categoryOptions = session.categoryOptions
+      let snapshot: [String: Any] = [
+        "prepared": self.prepared,
+        "graphBuilt": self.graphBuilt,
+        "engineRunning": self.engine.isRunning,
+        "engineNeedsReset": self.engineNeedsReset,
+        "interrupted": self.interrupted,
+        "voiceCount": self.voices.count,
+        "busyVoices": self.activeVoiceCount(),
+        "decodedBuffers": self.buffersByKey.count,
+        "registeredAssets": self.assetByKey.count,
+        "outputVolume": self.engine.mainMixerNode.outputVolume,
+        "sessionCategory": session.category.rawValue,
+        "sessionMode": session.mode.rawValue,
+        "sessionOptions": Int(categoryOptions.rawValue),
+        "outputVolumeSystem": session.outputVolume,
+        "otherAudioPlaying": session.isOtherAudioPlaying,
+        "outputRoute": session.currentRoute.outputs.map { $0.portType.rawValue }
+          .joined(separator: ","),
+      ]
+      DispatchQueue.main.async { result(snapshot) }
     }
   }
 

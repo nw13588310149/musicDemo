@@ -15,6 +15,13 @@ class _StubLowLatencyNotePlayer implements LowLatencyNotePlayer {
   bool get supportsImmediatePlay => false;
 
   @override
+  Future<Map<String, Object?>> diagnostics() async => <String, Object?>{
+    'platform': 'web/stub',
+    'isReady': isReady,
+    'keys': _keys.length,
+  };
+
+  @override
   Future<void> prepare(Map<String, String> assetByKey) async {
     if (_disposed) return;
     _keys.addAll(assetByKey.keys);

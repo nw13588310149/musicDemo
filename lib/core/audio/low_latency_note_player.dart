@@ -10,6 +10,9 @@ abstract interface class LowLatencyNotePlayer {
 
   bool get supportsImmediatePlay;
 
+  /// 屏幕诊断面板用：返回播放器 + 原生引擎/会话的实时状态快照。
+  Future<Map<String, Object?>> diagnostics();
+
   Future<void> prepare(Map<String, String> assetByKey);
 
   bool hasPrepared(String key);

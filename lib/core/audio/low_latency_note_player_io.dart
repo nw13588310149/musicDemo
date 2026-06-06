@@ -29,11 +29,43 @@ class _IoLowLatencyNotePlayer implements LowLatencyNotePlayer {
   bool _fallbackMode = false;
   bool _disposed = false;
 
+  /// 诊断用：最近一次原生通道失败信息（屏幕诊断面板读取）。
+  String? _lastNativeError;
+
   @override
   bool get isReady => !_disposed && (_nativeReady || _fallbackMode);
 
   @override
   bool get supportsImmediatePlay => _nativeReady;
+
+  @override
+  Future<Map<String, Object?>> diagnostics() async {
+    final base = <String, Object?>{
+      'platform': defaultTargetPlatform.name,
+      'nativeReady': _nativeReady,
+      'fallbackMode': _fallbackMode,
+      'registeredKeys': _assetByKey.length,
+      'fallbackPlayers': _fallbackPlayers.length,
+      'lastNativeError': _lastNativeError,
+    };
+    if (defaultTargetPlatform == TargetPlatform.iOS && !_disposed) {
+      try {
+        final native = await _channel
+            .invokeMapMethod<String, Object?>('diagnostics')
+            .timeout(const Duration(seconds: 3));
+        if (native != null) {
+          native.forEach((key, value) => base['native_$key'] = value);
+        }
+      } on TimeoutException {
+        base['native_error'] = 'diagnostics timed out';
+      } on PlatformException catch (e) {
+        base['native_error'] = 'diagnostics failed: ${e.message}';
+      } on MissingPluginException {
+        base['native_error'] = 'channel missing (handler not registered)';
+      }
+    }
+    return base;
+  }
 
   @override
   Future<void> prepare(Map<String, String> assetByKey) async {
@@ -56,14 +88,17 @@ class _IoLowLatencyNotePlayer implements LowLatencyNotePlayer {
         _fallbackMode = false;
         return;
       } on TimeoutException catch (error, stack) {
+        _lastNativeError = 'prepare timed out: $error';
         debugPrint(
           'LowLatencyNotePlayer native prepare timed out: $error\n$stack',
         );
       } on MissingPluginException catch (error, stack) {
+        _lastNativeError = 'channel missing: $error';
         debugPrint(
           'LowLatencyNotePlayer native channel missing: $error\n$stack',
         );
       } on PlatformException catch (error, stack) {
+        _lastNativeError = 'prepare failed: $error';
         debugPrint(
           'LowLatencyNotePlayer native prepare failed: $error\n$stack',
         );

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/audio/audio_diagnostics_overlay.dart';
 import '../core/config/app_config_repository.dart';
 import '../core/network/chat_socket_service.dart';
 import '../features/ai_chat/state/ai_chat_socket_dispatcher.dart';
@@ -156,7 +157,10 @@ class _MyAppState extends ConsumerState<MyApp> {
             child: FirstLaunchPermissionHost(
               child: GlobalKeyboardFocusSentinel(
                 child: _TapOutsideToDismissKeyboard(
-                  child: child ?? const SizedBox.shrink(),
+                  // 临时音频诊断面板：排障完成后删除这层包装即可。
+                  child: AudioDiagnosticsOverlay(
+                    child: child ?? const SizedBox.shrink(),
+                  ),
                 ),
               ),
             ),

@@ -38,8 +38,16 @@ abstract final class NativePlaybackAudioSession {
   static _SessionProfile _current = _SessionProfile.none;
   static bool _activated = false;
 
+  /// 诊断用：最近一次会话配置失败的错误（屏幕诊断面板读取）。
+  static String? _lastError;
+
   /// in-flight 串行：同一时刻只允许一个会话配置在跑，避免并发 configure 互相打架。
   static Future<void>? _inflight;
+
+  // ── 诊断只读快照（供屏幕诊断面板使用）─────────────────────────────
+  static String get currentProfileLabel => _current.name;
+  static bool get isActivated => _activated;
+  static String? get lastError => _lastError;
 
   // ── 对外 API（保持与旧版一致，便于上层不改动）─────────────────────
 
@@ -102,7 +110,9 @@ abstract final class NativePlaybackAudioSession {
     if (_current == profile && _activated) return;
     try {
       await _apply(profile);
+      _lastError = null;
     } catch (error, stack) {
+      _lastError = '$profile: $error';
       // 配置失败不抛：原生引擎仍可尝试在已有会话上渲染；最坏情况只是这次
       // 没切成，下次 ensure 会再试。iPad 上唯一更糟的就是整段 await 卡死，
       // 所以这里只记日志。
@@ -165,11 +175,13 @@ abstract final class NativePlaybackAudioSession {
     switch (profile) {
       case _SessionProfile.playback:
       case _SessionProfile.none:
+        // 注意：`defaultToSpeaker` 仅对 `playAndRecord` 合法，配 `playback` 会让
+        // iOS configure 抛 -50(BadParam)，导致整个会话激活失败、全应用无声。
+        // playback 默认就走当前输出（无耳机时即扬声器），无需该选项。
         return AudioSessionConfiguration(
           avAudioSessionCategory: AVAudioSessionCategory.playback,
           avAudioSessionCategoryOptions:
-              AVAudioSessionCategoryOptions.mixWithOthers |
-              AVAudioSessionCategoryOptions.defaultToSpeaker,
+              AVAudioSessionCategoryOptions.mixWithOthers,
           avAudioSessionMode: AVAudioSessionMode.defaultMode,
           androidAudioAttributes: AndroidAudioAttributes(
             contentType: AndroidAudioContentType.music,
