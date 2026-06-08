@@ -76,6 +76,60 @@ def patch_file_picker_ios_phpicker_group
   Pod::UI.puts 'Applied file_picker iOS PHPicker dispatch_group crash patch.'
 end
 
+def media_kit_video_ios_dir
+  [
+    File.join(__dir__, '.symlinks', 'plugins', 'media_kit_video', 'ios'),
+    File.join(__dir__, 'Pods', '.symlinks', 'plugins', 'media_kit_video', 'ios'),
+  ].find { |path| File.directory?(path) }
+end
+
+def patch_media_kit_video_mpv_swift_module
+  ios_dir = media_kit_video_ios_dir
+  return unless ios_dir
+
+  headers_dir = File.join(ios_dir, 'Headers', 'mpv')
+  unless File.directory?(headers_dir)
+    Pod::UI.warn 'media_kit_video mpv headers not found; skipping CMpv module patch.'
+    return
+  end
+
+  File.write(
+    File.join(headers_dir, 'module.modulemap'),
+    <<~MODULE
+      module CMpv [system] {
+        header "client.h"
+        header "render.h"
+        header "render_gl.h"
+        export *
+      }
+    MODULE
+  )
+
+  patched_count = 0
+  Dir.glob(File.join(ios_dir, 'Classes', 'plugin', '**', '*.swift')).each do |path|
+    source = File.read(path)
+    next unless source.match?(/\bmpv(_|\b)|\bMPV_/)
+    next if source.include?('import CMpv')
+
+    patched = source.sub(/((?:import .+\n)+)/, "\\1import CMpv\n")
+    patched = "import CMpv\n#{source}" if patched == source
+    File.write(path, patched)
+    patched_count += 1
+  end
+
+  if patched_count.positive?
+    Pod::UI.puts "Applied media_kit_video CMpv import patch to #{patched_count} files."
+  end
+end
+
+def append_unique_build_setting(config, key, value)
+  current = config.build_settings[key]
+  values = current.is_a?(Array) ? current : current.to_s.split(/\s+/)
+  values = ['$(inherited)'] if values.empty?
+  values << value unless values.include?(value)
+  config.build_settings[key] = values
+end
+
 def media_kit_libs_ios_video_dir
   [
     File.join(__dir__, '.symlinks', 'plugins', 'media_kit_libs_ios_video', 'ios'),
@@ -151,8 +205,8 @@ def ensure_media_kit_mpv_framework_symlinks
 end
 
 pre_install do |_installer|
-  # pod install 可能在 post_install 之前因其它 pod 失败；提前修复 Mpv 符号链接。
   ensure_media_kit_mpv_framework_symlinks
+  patch_media_kit_video_mpv_swift_module
 end
 
 target 'Runner' do
@@ -170,6 +224,7 @@ end
 post_install do |installer|
   patch_file_picker_ios_phpicker_group
   ensure_media_kit_mpv_framework_symlinks
+  patch_media_kit_video_mpv_swift_module
 
   # 注意：不要在这里主动调用 flutter_soloud 的 build_cmake.sh。
   # 该脚本必须由 Xcode 构建时调用（依赖 PLATFORM_NAME 等环境变量），
@@ -181,6 +236,18 @@ post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
     target.build_configurations.each do |config|
+      if target.name == 'media_kit_video'
+        append_unique_build_setting(
+          config,
+          'SWIFT_INCLUDE_PATHS',
+          '$(PODS_TARGET_SRCROOT)/Headers/mpv'
+        )
+        append_unique_build_setting(
+          config,
+          'HEADER_SEARCH_PATHS',
+          '$(PODS_TARGET_SRCROOT)/Headers'
+        )
+      end
       config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
         '$(inherited)',
         'PERMISSION_MICROPHONE=1',

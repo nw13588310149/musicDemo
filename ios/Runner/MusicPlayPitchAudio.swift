@@ -263,6 +263,14 @@ final class MusicPlayPitchAudio {
       engine.stop()
     }
     engine.reset()
+    if engine.attachedNodes.contains(player) {
+      engine.disconnectNodeOutput(player)
+      engine.detach(player)
+    }
+    if engine.attachedNodes.contains(pitch) {
+      engine.disconnectNodeOutput(pitch)
+      engine.detach(pitch)
+    }
     graphBuilt = false
     audioFile = nil
     sourceURL = nil
@@ -274,8 +282,12 @@ final class MusicPlayPitchAudio {
 
   private func ensureGraph() throws {
     if !graphBuilt {
-      engine.attach(player)
-      engine.attach(pitch)
+      if !engine.attachedNodes.contains(player) {
+        engine.attach(player)
+      }
+      if !engine.attachedNodes.contains(pitch) {
+        engine.attach(pitch)
+      }
       engine.connect(player, to: pitch, format: nil)
       engine.connect(pitch, to: engine.mainMixerNode, format: nil)
       graphBuilt = true
