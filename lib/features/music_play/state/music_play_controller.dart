@@ -121,11 +121,51 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   static const int _kIosClickFadeSteps = 3;
   static const Duration _kIosClickFadeStepDelay = Duration(milliseconds: 6);
 
+  /// iOS mpv 升降调（rubberband）切换时略长一点的淡入，减轻滤波器重配咔哒。
+  static const int _kIosPitchOperationFadeSteps = 5;
+  static const Duration _kIosPitchOperationFadeStepDelay =
+      Duration(milliseconds: 8);
+
   /// iOS mpv teardown 后给 CoreAudio 一个很短排空窗口，避免跨页释放时残留尾音。
   static const Duration _kIosPauseDrainDelay = Duration(milliseconds: 48);
 
   bool get _isIosNative =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+
+  bool _usesMpvOnIos(MusicPlayAudioPlayer player) =>
+      _isIosNative && !player.usesNativeIosPlayback;
+
+  /// iOS mpv（含升降调）操作前短暂静音，完成后按需淡入，避免 rubberband/seek 硬切爆音。
+  Future<void> _runMpvOperationWithClickGuard(
+    MusicPlayAudioPlayer player,
+    Future<void> Function() action, {
+    bool restoreIfAudible = true,
+    int? fadeSteps,
+    Duration? fadeStepDelay,
+  }) async {
+    if (!_usesMpvOnIos(player)) {
+      await action();
+      return;
+    }
+    final shouldRestore =
+        restoreIfAudible &&
+        !_iosScrubVolumeDucked &&
+        (player.state.playing || state.isPlaying || _scrubbing);
+    if (shouldRestore) {
+      await _setPlayerVolumeSafe(player, 0);
+    }
+    await action();
+    if (!shouldRestore) {
+      return;
+    }
+    await _fadePlayerVolume(
+      player,
+      to: _kPlayerNormalVolume,
+      from: 0,
+      steps: fadeSteps ?? _kIosPitchOperationFadeSteps,
+      stepDelay: fadeStepDelay ?? _kIosPitchOperationFadeStepDelay,
+    );
+  }
 
   bool get _shouldEnablePitchForCurrentState =>
       state.detail?.hidePitchShift != true && state.pitchSemitones != 0;
@@ -419,7 +459,10 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     }
   }
 
-  Future<void> _applyPitchToPlayer(MusicPlayAudioPlayer player) async {
+  Future<void> _applyPitchToPlayer(
+    MusicPlayAudioPlayer player, {
+    bool muteGuard = true,
+  }) async {
     if (state.detail?.hidePitchShift == true) {
       return;
     }
@@ -433,9 +476,20 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     if (state.pitchSemitones == _appliedPitchSemitones) {
       return;
     }
-    try {
-      await player.setPitch(_pitchRatio(state.pitchSemitones));
+    final ratio = _pitchRatio(state.pitchSemitones);
+    Future<void> apply() async {
+      await player.setPitch(ratio);
       _appliedPitchSemitones = state.pitchSemitones;
+    }
+
+    if (!muteGuard || !_usesMpvOnIos(player)) {
+      try {
+        await apply();
+      } catch (_) {}
+      return;
+    }
+    try {
+      await _runMpvOperationWithClickGuard(player, apply);
     } catch (_) {}
   }
 
@@ -488,19 +542,19 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       await _ensureIosMediaKitSessionForLongAudio();
     }
     try {
-      await _applyPitchToPlayer(player);
       if (_isIosNative && !player.usesNativeIosPlayback) {
-        // 从 0 起播再极短淡入，消除 mpv 恢复输出瞬间的爆音。
         await _setPlayerVolumeSafe(player, 0);
+        await _applyPitchToPlayer(player, muteGuard: false);
         await player.play();
         await _fadePlayerVolume(
           player,
           to: _kPlayerNormalVolume,
-          steps: _kIosClickFadeSteps,
-          stepDelay: _kIosClickFadeStepDelay,
+          steps: _kIosPitchOperationFadeSteps,
+          stepDelay: _kIosPitchOperationFadeStepDelay,
           from: 0,
         );
       } else {
+        await _applyPitchToPlayer(player, muteGuard: false);
         await _setPlayerVolumeSafe(player, _kPlayerNormalVolume);
         await player.play();
       }
@@ -567,9 +621,18 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     final player = _player;
     if (player != null) {
       try {
-        // mpv 默认 audio-pitch-correction=yes：变速不变调。
-        // Web 端 HTML5 audio 的浏览器默认也保留音高。
-        await player.setRate(nextSpeed);
+        if (_usesMpvOnIos(player) && _playerPitchEnabled) {
+          await _runMpvOperationWithClickGuard(
+            player,
+            () => player.setRate(nextSpeed),
+            fadeSteps: _kIosClickFadeSteps,
+            fadeStepDelay: _kIosClickFadeStepDelay,
+          );
+        } else {
+          // mpv 默认 audio-pitch-correction=yes：变速不变调。
+          // Web 端 HTML5 audio 的浏览器默认也保留音高。
+          await player.setRate(nextSpeed);
+        }
       } catch (_) {}
     }
     if (!mounted) {
@@ -598,8 +661,10 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     }
     if (player != null && _playerPitchEnabled) {
       try {
-        await player.setPitch(_pitchRatio(next));
-        _appliedPitchSemitones = next;
+        await _runMpvOperationWithClickGuard(player, () async {
+          await player.setPitch(_pitchRatio(next));
+          _appliedPitchSemitones = next;
+        });
       } catch (_) {
         // Web/部分平台对 setPitch 不一定支持，静默吞掉，
         // UI 层依旧按照所选半音数显示。
@@ -689,8 +754,12 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
         player,
         to: _kPlayerNormalVolume,
         from: 0,
-        steps: _kIosClickFadeSteps,
-        stepDelay: _kIosClickFadeStepDelay,
+        steps: _playerPitchEnabled
+            ? _kIosPitchOperationFadeSteps
+            : _kIosClickFadeSteps,
+        stepDelay: _playerPitchEnabled
+            ? _kIosPitchOperationFadeStepDelay
+            : _kIosClickFadeStepDelay,
       );
     } else {
       await _setPlayerVolumeSafe(player, _kPlayerNormalVolume);
@@ -780,8 +849,12 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
               activePlayer,
               to: _kPlayerNormalVolume,
               from: 0,
-              steps: 2,
-              stepDelay: const Duration(milliseconds: 4),
+              steps: _playerPitchEnabled
+                  ? _kIosPitchOperationFadeSteps
+                  : 2,
+              stepDelay: _playerPitchEnabled
+                  ? _kIosPitchOperationFadeStepDelay
+                  : const Duration(milliseconds: 4),
             );
           }
         } catch (_) {}
@@ -1026,6 +1099,13 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     _completedSub?.cancel();
     _player = null;
 
+    if (_usesMpvOnIos(oldPlayer)) {
+      await _pausePlayerSmoothIos(oldPlayer);
+    } else {
+      try {
+        await oldPlayer.pause();
+      } catch (_) {}
+    }
     await _releaseMediaKitPlayer(oldPlayer);
     if (_disposed || !mounted) {
       return;
@@ -1040,7 +1120,11 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       return;
     }
     try {
+      if (_usesMpvOnIos(nextPlayer)) {
+        await _setPlayerVolumeSafe(nextPlayer, 0);
+      }
       await nextPlayer.seek(resumePosition);
+      await _applyPitchToPlayer(nextPlayer, muteGuard: false);
     } catch (_) {}
     if (resumePlaying) {
       await _resumePlayer(nextPlayer);
@@ -1136,15 +1220,6 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
         await _setPlayerVolumeSafe(player, 0);
       }
       await player.open(track.url, play: play);
-      if (_isIosNative && !player.usesNativeIosPlayback && play) {
-        await _fadePlayerVolume(
-          player,
-          to: _kPlayerNormalVolume,
-          from: 0,
-          steps: _kIosClickFadeSteps,
-          stepDelay: _kIosClickFadeStepDelay,
-        );
-      }
       if (isStale()) {
         // 页面已销毁或已被新 open 取代：勿再 setRate/setPitch，避免 mpv abort。
         return;
@@ -1152,7 +1227,17 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       try {
         await player.setRate(state.speed);
       } catch (_) {}
-      await _applyPitchToPlayer(player);
+      // 升降调须在淡入前、静音态下完成，否则 rubberband 重配会产生可闻咔哒。
+      await _applyPitchToPlayer(player, muteGuard: false);
+      if (_usesMpvOnIos(player) && play) {
+        await _fadePlayerVolume(
+          player,
+          to: _kPlayerNormalVolume,
+          from: 0,
+          steps: _kIosPitchOperationFadeSteps,
+          stepDelay: _kIosPitchOperationFadeStepDelay,
+        );
+      }
     } catch (error) {
       if (isStale()) return;
       debugPrint('MusicPlay audio load failed: $error');
@@ -1182,6 +1267,16 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   }
 
   Future<void> _runMediaKitPlayerRelease(MusicPlayAudioPlayer player) async {
+    if (_usesMpvOnIos(player)) {
+      try {
+        await _fadePlayerVolume(
+          player,
+          to: 0,
+          steps: _kIosClickFadeSteps,
+          stepDelay: _kIosClickFadeStepDelay,
+        );
+      } catch (_) {}
+    }
     try {
       await player.pause().timeout(_kMpvTeardownStepTimeout, onTimeout: () {});
     } catch (_) {}

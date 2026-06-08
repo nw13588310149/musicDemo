@@ -397,6 +397,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       stage: SightSingingStage.analyzing,
       importFormat: SightSingingImportFormat.musicXml,
       musicXmlContent: null,
+      musicXmlCursorOnsetMs: const <int>[],
       audioPath: sourceLabel,
       audioName: displayName,
       analyzingProgress: 0.2,
@@ -601,6 +602,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
         errorMessage: null,
         scoreSightReadingMode: true,
         musicXmlContent: _musicXmlRawContent,
+        musicXmlCursorOnsetMs: bundle.cursorOnsetMs,
       );
       _scheduleReadyStagePrime();
     } on MusicXmlSightSingingException catch (e, stack) {
@@ -622,6 +624,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       selectedTrackIndex: null,
       analyzingProgress: 0,
       musicXmlContent: null,
+      musicXmlCursorOnsetMs: const <int>[],
       importFormat: SightSingingImportFormat.midi,
     );
   }

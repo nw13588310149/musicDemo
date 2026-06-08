@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../music_companion/audio/page_audio_lifecycle.dart';
+import '../../../core/audio/ios_playback_volume.dart';
 import '../../../core/audio/native_audio_bootstrap.dart';
 import '../audio/smart_dictation_audio_engine.dart';
 import '../data/smart_dictation_repository.dart';
@@ -582,10 +583,16 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
         question.playTokens,
         hold: const Duration(milliseconds: 1200),
       );
-      await _audioEngine.playTokensHarmonic(question.playTokens, volume: 0.95);
+      await _audioEngine.playTokensHarmonic(
+        question.playTokens,
+        volume: IosPlaybackVolume.apply(0.95),
+      );
     } else if (question.playTokens.length <= 1) {
       _activateVisualNotes(question.playTokens);
-      await _audioEngine.playToken(question.playTokens.first, volume: 0.95);
+      await _audioEngine.playToken(
+        question.playTokens.first,
+        volume: IosPlaybackVolume.apply(0.95),
+      );
     } else {
       const gap = Duration(milliseconds: 320);
       for (var i = 0; i < question.playTokens.length; i++) {
@@ -593,7 +600,10 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
           return;
         }
         _activateVisualNotes(<String>[question.playTokens[i]]);
-        await _audioEngine.playToken(question.playTokens[i], volume: 0.95);
+        await _audioEngine.playToken(
+          question.playTokens[i],
+          volume: IosPlaybackVolume.apply(0.95),
+        );
         if (i < question.playTokens.length - 1) {
           await Future<void>.delayed(gap);
         }
@@ -730,7 +740,10 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
         }
         if (shouldPlayStandard) {
           _activateVisualNotes(const <String>['a1']);
-          await _audioEngine.playToken('a1', volume: 0.92);
+          await _audioEngine.playToken(
+            'a1',
+            volume: IosPlaybackVolume.apply(0.92),
+          );
         } else {
           _playedFourthSecondCue = true;
           await _playQuestionAudioOnly(session.currentQuestion);

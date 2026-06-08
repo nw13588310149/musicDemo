@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 
+import 'ios_playback_volume.dart';
 import 'low_latency_note_player.dart';
 
 LowLatencyNotePlayer createPlatformLowLatencyNotePlayer() {
@@ -140,13 +141,16 @@ class _IoLowLatencyNotePlayer implements LowLatencyNotePlayer {
     return _fallbackPlayers.containsKey(key);
   }
 
+  double _softwareVolume(double volume) =>
+      IosPlaybackVolume.apply(volume.clamp(0.0, 1.0).toDouble());
+
   @override
   bool tryPlay(String key, {double volume = 1, bool metronome = false}) {
     if (_disposed || !_assetByKey.containsKey(key) || !_nativeReady) {
       return false;
     }
     if (defaultTargetPlatform == TargetPlatform.iOS) {
-      final safeVolume = volume.clamp(0.0, 1.0).toDouble();
+      final safeVolume = _softwareVolume(volume);
       // 热路径：fire-and-forget，不 await，避免排队在 handoff/prepare 之后迟播。
       _channel.invokeMethod<void>('play', <String, Object>{
         'key': key,
@@ -192,7 +196,7 @@ class _IoLowLatencyNotePlayer implements LowLatencyNotePlayer {
     bool waitUntilFinished = false,
   }) async {
     if (_disposed || !_assetByKey.containsKey(key)) return;
-    final safeVolume = volume.clamp(0.0, 1.0).toDouble();
+    final safeVolume = _softwareVolume(volume);
 
     if (_nativeReady) {
       try {

@@ -1,3 +1,4 @@
+import '../../../core/audio/ios_playback_volume.dart';
 import '../../../core/audio/piano_note_assets.dart';
 
 enum MusicCompanionMetronomeCue {
@@ -22,13 +23,17 @@ enum MusicCompanionMetronomeCue {
 
 /// 音乐伴侣 / 智能视唱共用的播放增益。
 ///
-/// 最终响度由系统音量键控制；软件层钢琴满幅输出，节拍器仅强拍/弱拍区分。
+/// iOS：软件层恒为 1.0，响度完全跟随系统音量键。
+/// 其它平台：节拍器弱拍可略低以区分重音。
 abstract final class MusicCompanionPlaybackVolume {
   static const double piano = 1.0;
   static const double metronomeAccent = 1.0;
   static const double metronomeWeak = 0.92;
 
   static double metronomeVolumeForCue(MusicCompanionMetronomeCue cue) {
+    if (IosPlaybackVolume.isIosNative) {
+      return 1.0;
+    }
     switch (cue) {
       case MusicCompanionMetronomeCue.tone1Accent:
       case MusicCompanionMetronomeCue.tone2Accent:
@@ -39,6 +44,9 @@ abstract final class MusicCompanionPlaybackVolume {
   }
 
   static double metronomeVolumeForBeat(int beatIndex) {
+    if (IosPlaybackVolume.isIosNative) {
+      return 1.0;
+    }
     return beatIndex == 0 ? metronomeAccent : metronomeWeak;
   }
 }
@@ -57,7 +65,7 @@ kMusicCompanionMetronomeAssetByCue = <MusicCompanionMetronomeCue, String>{
   MusicCompanionMetronomeCue.tone2Regular:
       'assets/audio/music_companion/metronome/beat2/3.wav',
   MusicCompanionMetronomeCue.tone2Special:
-      'assets/audio/music_companion/metronome/beat2/4.mp3',
+      'assets/audio/music_companion/metronome/beat2/4.wav',
   MusicCompanionMetronomeCue.tone3Beat1:
       'assets/audio/music_companion/metronome/beat3/01.wav',
   MusicCompanionMetronomeCue.tone3Beat2:

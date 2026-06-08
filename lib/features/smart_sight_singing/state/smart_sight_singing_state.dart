@@ -62,6 +62,7 @@ class SightSingingState {
   const SightSingingState({
     this.importFormat = SightSingingImportFormat.midi,
     this.musicXmlContent,
+    this.musicXmlCursorOnsetMs = const <int>[],
     this.stage = SightSingingStage.idle,
     this.audioPath,
     this.audioName,
@@ -108,6 +109,9 @@ class SightSingingState {
 
   /// MusicXML 原文（仅 [importFormat] 为 musicXml 时有值，供 OSMD 渲染）。
   final String? musicXmlContent;
+
+  /// OSMD 光标逐步对齐用 onset（含延音线后续音头）；KTV 参考轨仍用 [track]。
+  final List<int> musicXmlCursorOnsetMs;
 
   /// 当前导入的音频路径（本地/缓存）。
   final String? audioPath;
@@ -231,6 +235,7 @@ class SightSingingState {
     SightSingingStage? stage,
     SightSingingImportFormat? importFormat,
     Object? musicXmlContent = _sentinel,
+    List<int>? musicXmlCursorOnsetMs,
     Object? audioPath = _sentinel,
     Object? audioName = _sentinel,
     double? analyzingProgress,
@@ -273,6 +278,8 @@ class SightSingingState {
       musicXmlContent: identical(musicXmlContent, _sentinel)
           ? this.musicXmlContent
           : musicXmlContent as String?,
+      musicXmlCursorOnsetMs:
+          musicXmlCursorOnsetMs ?? this.musicXmlCursorOnsetMs,
       audioPath: identical(audioPath, _sentinel)
           ? this.audioPath
           : audioPath as String?,

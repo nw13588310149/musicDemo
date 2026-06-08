@@ -15,6 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
+import '../../../core/audio/mpv_player_smooth.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/network/media_url.dart';
 import '../../../core/widgets/app_asset_graphic.dart';
@@ -28,6 +29,7 @@ import '../data/video_publisher_data.dart';
 import '../state/video_tutorial_controller.dart';
 import '../state/video_tutorial_state.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
+import 'video_player_smooth_session.dart';
 
 const int _kVideoPreloadLimit = 8;
 const int _kVideoPrecacheWidth = 720;
@@ -628,7 +630,7 @@ class _VideoDetailSheetState extends ConsumerState<_VideoDetailSheet>
     try {
       final player = Player();
       final ctrl = VideoController(player);
-      await player.open(Media(resolved), play: false);
+      await MpvPlayerSmooth.openSmooth(player, Media(resolved), play: false);
       if (mounted) {
         setState(() {
           _player = player;
@@ -1013,11 +1015,14 @@ class _ProfessionalPlayerState extends State<_ProfessionalPlayer> {
   // 全屏退出后用于强制 Video widget 重新 mount，恢复渲染纹理
   int _videoRemountKey = 0;
 
+  late VideoPlayerSmoothSession _smoothOps;
+
   static const List<double> _speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 
   @override
   void initState() {
     super.initState();
+    _smoothOps = VideoPlayerSmoothSession(widget.player);
     // 直接从 player.state 读取当前值，避免因流只推送新事件而错过已有状态
     _position = widget.player.state.position;
     _duration = widget.player.state.duration;
@@ -1037,6 +1042,7 @@ class _ProfessionalPlayerState extends State<_ProfessionalPlayer> {
         unawaited(s.cancel());
       }
       _subs.clear();
+      _smoothOps = VideoPlayerSmoothSession(widget.player);
       _subscribeToStreams(widget.player);
       _autoplayTimer?.cancel();
       setState(() {
@@ -1137,7 +1143,9 @@ class _ProfessionalPlayerState extends State<_ProfessionalPlayer> {
         : (_duration > Duration.zero && target > _duration
               ? _duration
               : target);
-    widget.player.seek(clamped);
+    unawaited(
+      _smoothOps.seek(clamped, isPlaying: _isPlaying || widget.player.state.playing),
+    );
     setState(() => _tapSeekHint = isLeft ? '← -10s' : '+10s →');
     _tapSeekHintTimer?.cancel();
     _tapSeekHintTimer = Timer(const Duration(milliseconds: 900), () {
@@ -1188,7 +1196,7 @@ class _ProfessionalPlayerState extends State<_ProfessionalPlayer> {
     if (wasPlaying && mounted) {
       // 等待下一帧确保 Video widget 完成重新挂载后再恢复播放
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) widget.player.play();
+        if (mounted) unawaited(_smoothOps.play());
       });
     }
     _showControlsTemporarily();
@@ -1239,11 +1247,15 @@ class _ProfessionalPlayerState extends State<_ProfessionalPlayer> {
 
     if (_activeGesture == _GestureMode.none) {
       if (dx.abs() < 8 && dy.abs() < 8) return;
-      _activeGesture = dx.abs() > dy.abs()
+      final nextGesture = dx.abs() > dy.abs()
           ? _GestureMode.seeking
           : (_panStartX < w / 2
                 ? _GestureMode.brightness
                 : _GestureMode.volume);
+      if (nextGesture == _GestureMode.seeking) {
+        unawaited(_smoothOps.duckForScrub());
+      }
+      _activeGesture = nextGesture;
     }
 
     switch (_activeGesture) {
@@ -1276,7 +1288,12 @@ class _ProfessionalPlayerState extends State<_ProfessionalPlayer> {
 
   void _onPanEnd(DragEndDetails d) {
     if (_activeGesture == _GestureMode.seeking) {
-      widget.player.seek(Duration(milliseconds: _gestureSeekPreviewMs.toInt()));
+      unawaited(
+        _smoothOps.seek(
+          Duration(milliseconds: _gestureSeekPreviewMs.toInt()),
+          isPlaying: _isPlaying || widget.player.state.playing,
+        ),
+      );
     }
     setState(() => _activeGesture = _GestureMode.none);
     _startAutoHide();
@@ -1401,9 +1418,9 @@ class _ProfessionalPlayerState extends State<_ProfessionalPlayer> {
                               isPlaying: _isPlaying,
                               onTap: () async {
                                 if (_isPlaying) {
-                                  await widget.player.pause();
+                                  await _smoothOps.pause();
                                 } else {
-                                  await widget.player.play();
+                                  await _smoothOps.play();
                                 }
                                 _showControlsTemporarily();
                               },
@@ -1425,29 +1442,40 @@ class _ProfessionalPlayerState extends State<_ProfessionalPlayer> {
                             fmt: _fmt,
                             onTogglePlay: () async {
                               if (_isPlaying) {
-                                await widget.player.pause();
+                                await _smoothOps.pause();
                               } else {
                                 if (_isCompleted) {
                                   setState(() => _isCompleted = false);
-                                  await widget.player.seek(Duration.zero);
+                                  await _smoothOps.seek(
+                                    Duration.zero,
+                                    isPlaying: false,
+                                  );
                                 }
-                                await widget.player.play();
+                                await _smoothOps.play();
                               }
                               _showControlsTemporarily();
                             },
                             onSeekBack: () {
                               final t = _position - const Duration(seconds: 15);
-                              widget.player.seek(
-                                t.isNegative ? Duration.zero : t,
+                              unawaited(
+                                _smoothOps.seek(
+                                  t.isNegative ? Duration.zero : t,
+                                  isPlaying:
+                                      _isPlaying || widget.player.state.playing,
+                                ),
                               );
                               _showControlsTemporarily();
                             },
                             onSeekForward: () {
                               final t = _position + const Duration(seconds: 15);
-                              widget.player.seek(
-                                _duration > Duration.zero && t > _duration
-                                    ? _duration
-                                    : t,
+                              unawaited(
+                                _smoothOps.seek(
+                                  _duration > Duration.zero && t > _duration
+                                      ? _duration
+                                      : t,
+                                  isPlaying:
+                                      _isPlaying || widget.player.state.playing,
+                                ),
                               );
                               _showControlsTemporarily();
                             },
@@ -1472,12 +1500,15 @@ class _ProfessionalPlayerState extends State<_ProfessionalPlayer> {
                                     .toDouble();
                               });
                               _hideTimer?.cancel();
+                              unawaited(_smoothOps.duckForScrub());
                             },
                             onDragUpdate: (v) =>
                                 setState(() => _dragProgressMs = v),
                             onDragEnd: (v) async {
-                              await widget.player.seek(
+                              await _smoothOps.seek(
                                 Duration(milliseconds: v.toInt()),
+                                isPlaying:
+                                    _isPlaying || widget.player.state.playing,
                               );
                               if (!mounted) return;
                               setState(() {
@@ -1525,8 +1556,7 @@ class _ProfessionalPlayerState extends State<_ProfessionalPlayer> {
                       onReplay: () async {
                         _cancelAutoplay();
                         setState(() => _isCompleted = false);
-                        await widget.player.seek(Duration.zero);
-                        await widget.player.play();
+                        await _smoothOps.replayFromStart();
                       },
                       onPlayNext: _nextVideo != null
                           ? () {
@@ -2291,9 +2321,12 @@ class _FullscreenPageState extends State<_FullscreenPage> {
   double _gestureSeekMs = 0;
   double _brightnessOverlay = 0;
 
+  late VideoPlayerSmoothSession _smoothOps;
+
   @override
   void initState() {
     super.initState();
+    _smoothOps = VideoPlayerSmoothSession(widget.player);
     // 全屏页打开时，流不会重播已发出的值，必须先从 player.state 同步当前状态，
     // 否则 _duration 永远是 Duration.zero，进度条 max=1ms，进度显示错误。
     final s = widget.player.state;
@@ -2308,7 +2341,7 @@ class _FullscreenPageState extends State<_FullscreenPage> {
     // 全屏 Video widget 挂载后确保播放状态不因纹理重绑而中断
     if (s.playing) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) widget.player.play();
+        if (mounted) unawaited(_smoothOps.play());
       });
     }
   }
@@ -2379,7 +2412,9 @@ class _FullscreenPageState extends State<_FullscreenPage> {
         : (_duration > Duration.zero && target > _duration
               ? _duration
               : target);
-    widget.player.seek(clamped);
+    unawaited(
+      _smoothOps.seek(clamped, isPlaying: _isPlaying || widget.player.state.playing),
+    );
     setState(() => _tapSeekHint = isLeft ? '← -10s' : '+10s →');
     _tapSeekHintTimer?.cancel();
     _tapSeekHintTimer = Timer(const Duration(milliseconds: 800), () {
@@ -2403,11 +2438,15 @@ class _FullscreenPageState extends State<_FullscreenPage> {
     final dy = d.localPosition.dy - _panStartY;
     if (_activeGesture == _GestureMode.none) {
       if (dx.abs() < 8 && dy.abs() < 8) return;
-      _activeGesture = dx.abs() > dy.abs()
+      final nextGesture = dx.abs() > dy.abs()
           ? _GestureMode.seeking
           : (_panStartX < w / 2
                 ? _GestureMode.brightness
                 : _GestureMode.volume);
+      if (nextGesture == _GestureMode.seeking) {
+        unawaited(_smoothOps.duckForScrub());
+      }
+      _activeGesture = nextGesture;
     }
     switch (_activeGesture) {
       case _GestureMode.seeking:
@@ -2433,7 +2472,12 @@ class _FullscreenPageState extends State<_FullscreenPage> {
 
   void _onPanEnd(DragEndDetails d) {
     if (_activeGesture == _GestureMode.seeking) {
-      widget.player.seek(Duration(milliseconds: _gestureSeekMs.toInt()));
+      unawaited(
+        _smoothOps.seek(
+          Duration(milliseconds: _gestureSeekMs.toInt()),
+          isPlaying: _isPlaying || widget.player.state.playing,
+        ),
+      );
     }
     setState(() => _activeGesture = _GestureMode.none);
     _autoHide();
@@ -2646,11 +2690,11 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                               isPlaying: _isPlaying,
                               iconSize: 64,
                               containerSize: 64,
-                              onTap: () {
+                              onTap: () async {
                                 if (_isPlaying) {
-                                  widget.player.pause();
+                                  await _smoothOps.pause();
                                 } else {
-                                  widget.player.play();
+                                  await _smoothOps.play();
                                 }
                                 _autoHide();
                               },
@@ -2707,12 +2751,15 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                       onChangeStart: (_) {
                                         setState(() => _isDragging = true);
                                         _hideTimer?.cancel();
+                                        unawaited(_smoothOps.duckForScrub());
                                       },
                                       onChanged: (v) =>
                                           setState(() => _dragMs = v),
                                       onChangeEnd: (v) async {
-                                        await widget.player.seek(
+                                        await _smoothOps.seek(
                                           Duration(milliseconds: v.toInt()),
+                                          isPlaying: _isPlaying ||
+                                              widget.player.state.playing,
                                         );
                                         if (!mounted) return;
                                         setState(() {
@@ -2735,8 +2782,14 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                           final t =
                                               _position -
                                               const Duration(seconds: 15);
-                                          widget.player.seek(
-                                            t.isNegative ? Duration.zero : t,
+                                          unawaited(
+                                            _smoothOps.seek(
+                                              t.isNegative
+                                                  ? Duration.zero
+                                                  : t,
+                                              isPlaying: _isPlaying ||
+                                                  widget.player.state.playing,
+                                            ),
                                           );
                                           _autoHide();
                                         },
@@ -2757,11 +2810,11 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                         width: _kVideoCtrlFullscreenIconGap,
                                       ),
                                       GestureDetector(
-                                        onTap: () {
+                                        onTap: () async {
                                           if (_isPlaying) {
-                                            widget.player.pause();
+                                            await _smoothOps.pause();
                                           } else {
-                                            widget.player.play();
+                                            await _smoothOps.play();
                                           }
                                           _autoHide();
                                         },
@@ -2789,11 +2842,15 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                           final t =
                                               _position +
                                               const Duration(seconds: 15);
-                                          widget.player.seek(
-                                            _duration > Duration.zero &&
-                                                    t > _duration
-                                                ? _duration
-                                                : t,
+                                          unawaited(
+                                            _smoothOps.seek(
+                                              _duration > Duration.zero &&
+                                                      t > _duration
+                                                  ? _duration
+                                                  : t,
+                                              isPlaying: _isPlaying ||
+                                                  widget.player.state.playing,
+                                            ),
                                           );
                                           _autoHide();
                                         },
@@ -2911,10 +2968,12 @@ class _FloatingMiniPlayerState extends State<_FloatingMiniPlayer> {
   bool _initialized = false;
   bool _isPlaying = false;
   StreamSubscription<bool>? _playSub;
+  late VideoPlayerSmoothSession _smoothOps;
 
   @override
   void initState() {
     super.initState();
+    _smoothOps = VideoPlayerSmoothSession(widget.player);
     _isPlaying = widget.player.state.playing;
     _playSub = widget.player.stream.playing.listen((v) {
       if (mounted) setState(() => _isPlaying = v);
@@ -2980,11 +3039,11 @@ class _FloatingMiniPlayerState extends State<_FloatingMiniPlayer> {
                   // 点击切换播放/暂停
                   Positioned.fill(
                     child: GestureDetector(
-                      onTap: () {
+                      onTap: () async {
                         if (_isPlaying) {
-                          widget.player.pause();
+                          await _smoothOps.pause();
                         } else {
-                          widget.player.play();
+                          await _smoothOps.play();
                         }
                       },
                       child: const ColoredBox(color: Colors.transparent),

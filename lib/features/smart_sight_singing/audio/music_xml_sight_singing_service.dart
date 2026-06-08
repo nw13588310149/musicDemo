@@ -33,12 +33,16 @@ class MusicXmlSightSingingBundle {
     required this.playbackEvents,
     required this.melodyPartIndex,
     required this.totalMs,
+    required this.cursorOnsetMs,
   });
 
   final PitchTrack track;
   final List<MidiPlaybackEvent> playbackEvents;
   final int melodyPartIndex;
   final int totalMs;
+
+  /// OSMD 光标逐步 next() 的时间轴（含延音线后续音头、休止符；不含 grace/chord）。
+  final List<int> cursorOnsetMs;
 }
 
 class MusicXmlSightSingingException implements Exception {
@@ -111,6 +115,7 @@ abstract final class MusicXmlSightSingingService {
     final leadIn = _resolveLeadIn(document, partIndex, rawXml: rawXml);
     final leadInMs = leadIn?.durationMs ?? 0;
     final shiftedNotes = leadInMs > 0 ? _shiftNotes(notes, leadInMs) : notes;
+    final cursorOnsetMs = _collectOsmdCursorOnsets(part, leadInMs: leadInMs);
     final pitchedShifted =
         shiftedNotes.where((n) => !n.isRest).toList(growable: false);
 
@@ -147,6 +152,7 @@ abstract final class MusicXmlSightSingingService {
       playbackEvents: playbackEvents,
       melodyPartIndex: partIndex,
       totalMs: playbackTotalMs,
+      cursorOnsetMs: cursorOnsetMs,
     );
   }
 
@@ -174,6 +180,7 @@ abstract final class MusicXmlSightSingingService {
     final notes = <KtvNoteSegment>[];
     for (final measure in part.measures) {
       for (final note in measure.notes) {
+        // 延音线后续音头：时长已并入 tie 起点，此处跳过以免 KTV/打分重复或错位。
         if (note.isGraceNote || note.continuesOtherNote || note.isInChord) {
           continue;
         }
@@ -188,6 +195,26 @@ abstract final class MusicXmlSightSingingService {
     return notes;
   }
 
+  /// OSMD 光标与 XML 逐 note 对齐（含 tie stop、休止符），与 [_collectPartNotes] 分离。
+  static List<int> _collectOsmdCursorOnsets(
+    Part part, {
+    int leadInMs = 0,
+  }) {
+    final onsets = <int>[];
+    for (final measure in part.measures) {
+      for (final note in measure.notes) {
+        if (note.isGraceNote || note.isInChord) {
+          continue;
+        }
+        final startMs =
+            (note.noteDuration.timePosition * 1000).round() + leadInMs;
+        onsets.add(startMs);
+      }
+    }
+    onsets.sort();
+    return onsets;
+  }
+
   static KtvNoteSegment? _segmentFromXmlNote(Note note) {
     final tiedDuration = note.noteDurationTied;
     final durationSec = tiedDuration.seconds > 0
@@ -197,12 +224,13 @@ abstract final class MusicXmlSightSingingService {
       return null;
     }
 
-    final startMs = (note.noteDuration.timePosition * 1000).round();
+    final startSec = tiedDuration.timePosition;
+    final startMs = (startSec * 1000).round();
     final endMs = math.max(
       startMs + SmartSightSingingMidiConfig.minMidiNoteMs,
-      ((note.noteDuration.timePosition + durationSec) * 1000).round(),
+      ((startSec + durationSec) * 1000).round(),
     );
-    final startBeat = note.noteDuration.timePosition;
+    final startBeat = startSec;
     final durationBeats = durationSec;
 
     if (note.isRest) {

@@ -589,6 +589,7 @@ class _Body extends StatelessWidget {
                       currentUserAmplitude: state.currentUserAmplitude,
                       scoreSightReadingMode: state.scoreSightReadingMode,
                       musicXmlContent: state.musicXmlContent,
+                      musicXmlCursorOnsetMs: state.musicXmlCursorOnsetMs,
                       scoringStandardCents: state.scoringStandardCents,
                     ),
                     controls: _Controls(state: state, controller: controller),
@@ -877,6 +878,7 @@ class _PracticeTrackView extends StatelessWidget {
     required this.scoreSightReadingMode,
     required this.scoringStandardCents,
     this.musicXmlContent,
+    this.musicXmlCursorOnsetMs = const <int>[],
   });
 
   final PitchTrack track;
@@ -887,6 +889,7 @@ class _PracticeTrackView extends StatelessWidget {
   final bool scoreSightReadingMode;
   final double scoringStandardCents;
   final String? musicXmlContent;
+  final List<int> musicXmlCursorOnsetMs;
 
   @override
   Widget build(BuildContext context) {
@@ -911,10 +914,10 @@ class _PracticeTrackView extends StatelessWidget {
     final xml = musicXmlContent?.trim() ?? '';
     final Widget scorePane;
     if (xml.isNotEmpty) {
-      // 含休止符 onset，与 OSMD 光标逐步 next() 对齐。
-      final onsetMs = <int>[
-        for (final event in track.notes) event.startMs,
-      ];
+      // OSMD 光标含延音线后续音头；KTV/打分轨仍用合并后的 track.notes。
+      final onsetMs = musicXmlCursorOnsetMs.isNotEmpty
+          ? musicXmlCursorOnsetMs
+          : <int>[for (final event in track.notes) event.startMs];
       scorePane = OsmdScoreViewer(
         musicXml: xml,
         playbackMs: playbackMs,
