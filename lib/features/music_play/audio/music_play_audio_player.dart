@@ -6,6 +6,7 @@ import 'package:just_audio/just_audio.dart' as ja;
 import 'package:media_kit/media_kit.dart' as mk;
 
 import '../../../core/audio/app_audio_service.dart';
+import '../../../core/audio/mpv_pitch_transport.dart';
 
 class MusicPlayAudioPlayerState {
   const MusicPlayAudioPlayerState({
@@ -39,7 +40,9 @@ class MusicPlayAudioPlayerStreams {
 class MusicPlayAudioPlayer {
   MusicPlayAudioPlayer({required bool enablePitch})
     : _usesNativeIosPlayback =
-          !kIsWeb && Platform.isIOS && !enablePitch {
+          !kIsWeb && Platform.isIOS && !enablePitch,
+      _usesPitchTransport =
+          !kIsWeb && Platform.isIOS && enablePitch {
     if (_usesNativeIosPlayback) {
       final player = ja.AudioPlayer();
       _justAudio = player;
@@ -58,9 +61,18 @@ class MusicPlayAudioPlayer {
       return;
     }
 
+    mk.Player? configuredPlayer;
     final player = mk.Player(
-      configuration: mk.PlayerConfiguration(pitch: enablePitch),
+      configuration: mk.PlayerConfiguration(
+        pitch: enablePitch,
+        ready: _usesPitchTransport
+            ? () => unawaited(
+                MpvPitchTransport.configure(configuredPlayer!),
+              )
+            : null,
+      ),
     );
+    configuredPlayer = player;
     _mediaKit = player;
     _position = player.stream.position;
     _duration = player.stream.duration;
@@ -69,8 +81,10 @@ class MusicPlayAudioPlayer {
   }
 
   final bool _usesNativeIosPlayback;
+  final bool _usesPitchTransport;
   ja.AudioPlayer? _justAudio;
   mk.Player? _mediaKit;
+  bool _outputMuted = false;
   late final Stream<Duration> _position;
   late final Stream<Duration> _duration;
   late final Stream<bool> _playing;
@@ -78,6 +92,9 @@ class MusicPlayAudioPlayer {
   double _volume = 100;
 
   bool get usesNativeIosPlayback => _usesNativeIosPlayback;
+
+  /// iOS mpv 升降调（scaletempo）路径：pause/seek 走 mute 包裹，避免 ao 硬切爆音。
+  bool get usesPitchTransport => _usesPitchTransport;
 
   MusicPlayAudioPlayerState get state => MusicPlayAudioPlayerState(
     playing: _usesNativeIosPlayback
@@ -104,10 +121,31 @@ class MusicPlayAudioPlayer {
     await _mediaKit!.open(mk.Media(url), play: play);
   }
 
+  Future<void> ensureOutputMuted() async {
+    if (!_usesPitchTransport || _outputMuted) {
+      return;
+    }
+    await MpvPitchTransport.setMuted(_mediaKit!, true);
+    _outputMuted = true;
+  }
+
+  Future<void> restoreOutputAudible() async {
+    if (!_usesPitchTransport || !_outputMuted) {
+      return;
+    }
+    await MpvPitchTransport.setMuted(_mediaKit!, false);
+    _outputMuted = false;
+  }
+
   Future<void> play() async {
     if (_usesNativeIosPlayback) {
       await AppAudioService.reconcilePlaybackSession();
       unawaited(_justAudio!.play());
+      return;
+    }
+    if (_usesPitchTransport) {
+      await MpvPitchTransport.playSmooth(_mediaKit!);
+      _outputMuted = false;
       return;
     }
     await _mediaKit!.play();
@@ -116,6 +154,11 @@ class MusicPlayAudioPlayer {
   Future<void> pause() async {
     if (_usesNativeIosPlayback) {
       await _justAudio!.pause();
+      return;
+    }
+    if (_usesPitchTransport) {
+      await MpvPitchTransport.pauseSmooth(_mediaKit!);
+      _outputMuted = true;
       return;
     }
     await _mediaKit!.pause();
@@ -129,12 +172,43 @@ class MusicPlayAudioPlayer {
     await _mediaKit!.stop();
   }
 
-  Future<void> seek(Duration position) async {
+  Future<void> seek(
+    Duration position, {
+    bool restoreAudible = true,
+  }) async {
     if (_usesNativeIosPlayback) {
       await _justAudio!.seek(position);
       return;
     }
+    if (_usesPitchTransport) {
+      await MpvPitchTransport.seekSmooth(
+        _mediaKit!,
+        position,
+        restoreAudible: restoreAudible,
+      );
+      _outputMuted = !restoreAudible;
+      return;
+    }
     await _mediaKit!.seek(position);
+  }
+
+  /// 升降调滤波器参数变更（setPitch / setRate）前后短暂静音，避免 scaletempo 重配咔哒。
+  Future<void> runPitchFilterChange(
+    Future<void> Function() action, {
+    bool restoreAudible = true,
+  }) async {
+    if (!_usesPitchTransport) {
+      await action();
+      return;
+    }
+    final shouldRestore = restoreAudible && !_outputMuted;
+    if (shouldRestore) {
+      await ensureOutputMuted();
+    }
+    await action();
+    if (shouldRestore) {
+      await restoreOutputAudible();
+    }
   }
 
   Future<void> setRate(double rate) async {

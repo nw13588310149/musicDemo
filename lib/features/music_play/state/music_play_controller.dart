@@ -105,7 +105,6 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
 
   /// 拖动进度条期间保持 UI「播放中」状态；底层 seek 可能短暂上报 paused。
   bool _scrubbing = false;
-  bool _iosScrubVolumeDucked = false;
   Timer? _scrubUiHoldTimer;
   int _scrubUiHoldGen = 0;
   static const Duration _kScrubUiHoldClear = Duration(milliseconds: 200);
@@ -121,11 +120,6 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   static const int _kIosClickFadeSteps = 3;
   static const Duration _kIosClickFadeStepDelay = Duration(milliseconds: 6);
 
-  /// iOS mpv 升降调（rubberband）切换时略长一点的淡入，减轻滤波器重配咔哒。
-  static const int _kIosPitchOperationFadeSteps = 5;
-  static const Duration _kIosPitchOperationFadeStepDelay =
-      Duration(milliseconds: 8);
-
   /// iOS mpv teardown 后给 CoreAudio 一个很短排空窗口，避免跨页释放时残留尾音。
   static const Duration _kIosPauseDrainDelay = Duration(milliseconds: 48);
 
@@ -135,45 +129,8 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   bool _usesMpvOnIos(MusicPlayAudioPlayer player) =>
       _isIosNative && !player.usesNativeIosPlayback;
 
-  /// 升降调（rubberband）激活时略长的 iOS 淡出/淡入，减轻滤波器重配咔哒。
-  int get _iosOpFadeSteps =>
-      _playerPitchEnabled ? _kIosPitchOperationFadeSteps : _kIosClickFadeSteps;
-
-  Duration get _iosOpFadeDelay => _playerPitchEnabled
-      ? _kIosPitchOperationFadeStepDelay
-      : _kIosClickFadeStepDelay;
-
-  /// iOS mpv（含升降调）操作前短暂静音，完成后按需淡入，避免 rubberband/seek 硬切爆音。
-  Future<void> _runMpvOperationWithClickGuard(
-    MusicPlayAudioPlayer player,
-    Future<void> Function() action, {
-    bool restoreIfAudible = true,
-    int? fadeSteps,
-    Duration? fadeStepDelay,
-  }) async {
-    if (!_usesMpvOnIos(player)) {
-      await action();
-      return;
-    }
-    final shouldRestore =
-        restoreIfAudible &&
-        !_iosScrubVolumeDucked &&
-        (player.state.playing || state.isPlaying || _scrubbing);
-    if (shouldRestore) {
-      await _setPlayerVolumeSafe(player, 0);
-    }
-    await action();
-    if (!shouldRestore) {
-      return;
-    }
-    await _fadePlayerVolume(
-      player,
-      to: _kPlayerNormalVolume,
-      from: 0,
-      steps: fadeSteps ?? _iosOpFadeSteps,
-      stepDelay: fadeStepDelay ?? _iosOpFadeDelay,
-    );
-  }
+  /// iOS 升降调：拖动只更新 UI，松手单次 native seek（避免 scaletempo 连续重配）。
+  bool get _deferPitchScrubSeeks => _playerPitchEnabled && _isIosNative;
 
   bool get _shouldEnablePitchForCurrentState =>
       state.detail?.hidePitchShift != true && state.pitchSemitones != 0;
@@ -490,14 +447,15 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       _appliedPitchSemitones = state.pitchSemitones;
     }
 
-    if (!muteGuard || !_usesMpvOnIos(player)) {
-      try {
-        await apply();
-      } catch (_) {}
-      return;
-    }
     try {
-      await _runMpvOperationWithClickGuard(player, apply);
+      if (muteGuard && player.usesPitchTransport) {
+        await player.runPitchFilterChange(
+          apply,
+          restoreAudible: state.isPlaying,
+        );
+      } else {
+        await apply();
+      }
     } catch (_) {}
   }
 
@@ -517,28 +475,26 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     await _setPlayerVolumeSafe(player, _kPlayerNormalVolume);
   }
 
-  /// iOS：暂停前做一段极短的音量斜坡到 0 再 `pause()`，消除 mpv 硬切音频
-  /// 输出（ao 突然停）产生的咔哒/爆音。斜坡很短（约 18ms）以免影响响应；
-  /// 比非 iOS 路径的默认淡出更克制，避免之前观察到的「手势期间改音量引入
-  /// 别的杂音」。**不**触碰连续的 seek 手势（仍走原始即时 seek）。
+  /// iOS：无升降调用 AVPlayer；有升降调用 mpv mute 包裹 pause（scaletempo 不吃音量斜坡）。
   Future<void> _pausePlayerSmoothIos(MusicPlayAudioPlayer player) async {
     if (_disposed) {
       return;
     }
-    if (player.usesNativeIosPlayback) {
-      await player.pause();
+    if (player.usesNativeIosPlayback || player.usesPitchTransport) {
+      try {
+        await player.pause();
+      } catch (_) {}
       return;
     }
     try {
       await _fadePlayerVolume(
         player,
         to: 0,
-        steps: _iosOpFadeSteps,
-        stepDelay: _iosOpFadeDelay,
+        steps: _kIosClickFadeSteps,
+        stepDelay: _kIosClickFadeStepDelay,
       );
       await player.pause();
     } catch (_) {}
-    // 暂停后恢复音量，使下次 resume 的淡入从正常基准开始（暂停态下无声）。
     await _setPlayerVolumeSafe(player, _kPlayerNormalVolume);
   }
 
@@ -550,19 +506,20 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       await _ensureIosMediaKitSessionForLongAudio();
     }
     try {
-      if (_isIosNative && !player.usesNativeIosPlayback) {
+      await _applyPitchToPlayer(player, muteGuard: false);
+      if (player.usesPitchTransport) {
+        await player.play();
+      } else if (_isIosNative && !player.usesNativeIosPlayback) {
         await _setPlayerVolumeSafe(player, 0);
-        await _applyPitchToPlayer(player, muteGuard: false);
         await player.play();
         await _fadePlayerVolume(
           player,
           to: _kPlayerNormalVolume,
-          steps: _iosOpFadeSteps,
-          stepDelay: _iosOpFadeDelay,
+          steps: _kIosClickFadeSteps,
+          stepDelay: _kIosClickFadeStepDelay,
           from: 0,
         );
       } else {
-        await _applyPitchToPlayer(player, muteGuard: false);
         await _setPlayerVolumeSafe(player, _kPlayerNormalVolume);
         await player.play();
       }
@@ -629,12 +586,10 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     final player = _player;
     if (player != null) {
       try {
-        if (_usesMpvOnIos(player) && _playerPitchEnabled) {
-          await _runMpvOperationWithClickGuard(
-            player,
+        if (player.usesPitchTransport) {
+          await player.runPitchFilterChange(
             () => player.setRate(nextSpeed),
-            fadeSteps: _kIosClickFadeSteps,
-            fadeStepDelay: _kIosClickFadeStepDelay,
+            restoreAudible: state.isPlaying,
           );
         } else {
           // mpv 默认 audio-pitch-correction=yes：变速不变调。
@@ -669,10 +624,10 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     }
     if (player != null && _playerPitchEnabled) {
       try {
-        await _runMpvOperationWithClickGuard(player, () async {
+        await player.runPitchFilterChange(() async {
           await player.setPitch(_pitchRatio(next));
           _appliedPitchSemitones = next;
-        });
+        }, restoreAudible: state.isPlaying);
       } catch (_) {
         // Web/部分平台对 setPitch 不一定支持，静默吞掉，
         // UI 层依旧按照所选半音数显示。
@@ -724,80 +679,80 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     await _openActiveTrack(play: true);
   }
 
-  /// 拖动/点按进度条前 duck 音量；必须 await 完成后再 seek，否则 rubberband 下
-  /// 会在淡出未完成时硬跳产生咔哒。
-  Future<void> _beginScrubUiHold() async {
+  void _beginScrubUiHold() {
     if (!state.isPlaying) {
       return;
     }
     _scrubbing = true;
     _scrubUiHoldTimer?.cancel();
     _scrubUiHoldTimer = null;
-    if (_isIosNative &&
-        !(_player?.usesNativeIosPlayback ?? false) &&
-        !_iosScrubVolumeDucked) {
-      _iosScrubVolumeDucked = true;
-      await _duckPlayerVolumeForScrub();
+  }
+
+  /// 升降调拖动期间只刷新 thumb / 时间标签，不触发 native seek。
+  void previewSeekPosition(Duration position) {
+    final max = state.duration;
+    final safe = max == Duration.zero
+        ? position
+        : Duration(
+            milliseconds: position.inMilliseconds.clamp(0, max.inMilliseconds),
+          );
+    if (mounted) {
+      state = state.copyWith(position: safe);
     }
   }
 
-  Future<void> _duckPlayerVolumeForScrub() async {
+  Future<void> _commitPitchModeSeek(Duration target) async {
+    if (_disposed) {
+      return;
+    }
+    _lastSeekTarget = target;
+    _seekFilterUntil = DateTime.now().add(_kSeekStaleWindow);
+    if (mounted) {
+      state = state.copyWith(position: target);
+    }
     final player = _player;
-    if (player == null || _disposed) return;
-    await _fadePlayerVolume(
-      player,
-      to: 0,
-      steps: _iosOpFadeSteps,
-      stepDelay: _iosOpFadeDelay,
-    );
-  }
-
-  Future<void> _restorePlayerVolumeAfterScrub() async {
-    if (!_iosScrubVolumeDucked) return;
-    _iosScrubVolumeDucked = false;
-    final player = _player;
-    if (player == null || _disposed) return;
-    if (player.state.playing || state.isPlaying) {
-      await _fadePlayerVolume(
-        player,
-        to: _kPlayerNormalVolume,
-        from: 0,
-        steps: _iosOpFadeSteps,
-        stepDelay: _iosOpFadeDelay,
+    if (player == null) {
+      return;
+    }
+    _beginScrubUiHold();
+    try {
+      await player.seek(
+        target,
+        restoreAudible: state.isPlaying,
       );
-    } else {
-      await _setPlayerVolumeSafe(player, _kPlayerNormalVolume);
+    } catch (_) {}
+    _scrubUiHoldTimer?.cancel();
+    _scrubUiHoldTimer = null;
+    _scrubbing = false;
+    if (mounted) {
+      state = state.copyWith(isPlaying: player.state.playing);
     }
   }
 
-  /// iOS mpv seek：静音态下跳转，升降调时重配 rubberband，再按需淡入。
   Future<void> _seekPlayerSmooth(
     MusicPlayAudioPlayer player,
     Duration target,
   ) async {
+    if (player.usesPitchTransport) {
+      await player.seek(target, restoreAudible: state.isPlaying);
+      return;
+    }
     if (!_usesMpvOnIos(player)) {
       await player.seek(target);
       return;
     }
-    final restoreAudible =
-        !_iosScrubVolumeDucked && (player.state.playing || state.isPlaying);
+    final restoreAudible = player.state.playing || state.isPlaying;
     if (restoreAudible) {
       await _setPlayerVolumeSafe(player, 0);
     }
     await player.seek(target);
-    if (_playerPitchEnabled) {
-      try {
-        await player.setPitch(_pitchRatio(state.pitchSemitones));
-        _appliedPitchSemitones = state.pitchSemitones;
-      } catch (_) {}
-    }
     if (restoreAudible) {
       await _fadePlayerVolume(
         player,
         to: _kPlayerNormalVolume,
         from: 0,
-        steps: _iosOpFadeSteps,
-        stepDelay: _iosOpFadeDelay,
+        steps: _kIosClickFadeSteps,
+        stepDelay: _kIosClickFadeStepDelay,
       );
     }
   }
@@ -807,7 +762,6 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     _scrubUiHoldTimer = null;
     if (immediate || _disposed) {
       _scrubbing = false;
-      unawaited(_restorePlayerVolumeAfterScrub());
       return;
     }
     final gen = ++_scrubUiHoldGen;
@@ -820,7 +774,6 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
         return;
       }
       _scrubbing = false;
-      unawaited(_restorePlayerVolumeAfterScrub());
       final player = _player;
       if (player != null && mounted) {
         state = state.copyWith(isPlaying: player.state.playing);
@@ -835,6 +788,11 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
         : Duration(
             milliseconds: position.inMilliseconds.clamp(0, max.inMilliseconds),
           );
+
+    if (_deferPitchScrubSeeks) {
+      await _commitPitchModeSeek(safe);
+      return;
+    }
 
     // 1) 已有 seek 在飞 → 只更新 pending 目标 + 乐观刷 UI 后立刻返回，
     //    让正在跑的 seek 循环跑完当前帧后接到最新目标。这样无论拖多快，
@@ -859,7 +817,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       state = state.copyWith(position: target);
     }
 
-    await _beginScrubUiHold();
+    _beginScrubUiHold();
 
     try {
       while (true) {
@@ -893,7 +851,6 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       _scrubUiHoldTimer?.cancel();
       _scrubUiHoldTimer = null;
       _scrubbing = false;
-      await _restorePlayerVolumeAfterScrub();
       final player = _player;
       if (player != null && mounted) {
         state = state.copyWith(isPlaying: player.state.playing);
@@ -1142,7 +1099,11 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       return;
     }
     try {
-      if (_usesMpvOnIos(nextPlayer)) {
+      if (nextPlayer.usesPitchTransport) {
+        await nextPlayer.ensureOutputMuted();
+        await nextPlayer.seek(resumePosition, restoreAudible: false);
+        await _applyPitchToPlayer(nextPlayer, muteGuard: false);
+      } else if (_usesMpvOnIos(nextPlayer)) {
         await _setPlayerVolumeSafe(nextPlayer, 0);
         await nextPlayer.seek(resumePosition);
         await _applyPitchToPlayer(nextPlayer, muteGuard: false);
@@ -1241,7 +1202,9 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       final player = _ensurePlayer();
       debugPrint('MusicPlay audio open: ${track.url}');
       _endScrubUiHold(immediate: true);
-      if (_isIosNative && !player.usesNativeIosPlayback) {
+      if (player.usesPitchTransport) {
+        await player.ensureOutputMuted();
+      } else if (_isIosNative && !player.usesNativeIosPlayback) {
         await _setPlayerVolumeSafe(player, 0);
       }
       await player.open(track.url, play: play);
@@ -1252,15 +1215,16 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       try {
         await player.setRate(state.speed);
       } catch (_) {}
-      // 升降调须在淡入前、静音态下完成，否则 rubberband 重配会产生可闻咔哒。
       await _applyPitchToPlayer(player, muteGuard: false);
-      if (_usesMpvOnIos(player) && play) {
+      if (player.usesPitchTransport && play) {
+        await player.restoreOutputAudible();
+      } else if (_usesMpvOnIos(player) && play) {
         await _fadePlayerVolume(
           player,
           to: _kPlayerNormalVolume,
           from: 0,
-          steps: _kIosPitchOperationFadeSteps,
-          stepDelay: _kIosPitchOperationFadeStepDelay,
+          steps: _kIosClickFadeSteps,
+          stepDelay: _kIosClickFadeStepDelay,
         );
       }
     } catch (error) {
@@ -1292,7 +1256,11 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   }
 
   Future<void> _runMediaKitPlayerRelease(MusicPlayAudioPlayer player) async {
-    if (_usesMpvOnIos(player)) {
+    if (player.usesPitchTransport) {
+      try {
+        await player.ensureOutputMuted();
+      } catch (_) {}
+    } else if (_usesMpvOnIos(player)) {
       try {
         await _fadePlayerVolume(
           player,
@@ -1514,11 +1482,13 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     if (player != null) {
       try {
         await _pausePlayerSmooth(player);
-        if (_usesMpvOnIos(player) && _playerPitchEnabled) {
-          await _setPlayerVolumeSafe(player, 0);
+        await player.seek(
+          Duration.zero,
+          restoreAudible: false,
+        );
+        if (!player.usesPitchTransport) {
+          await _setPlayerVolumeSafe(player, _kPlayerNormalVolume);
         }
-        await player.seek(Duration.zero);
-        await _setPlayerVolumeSafe(player, _kPlayerNormalVolume);
       } catch (_) {}
     }
     if (mounted) {

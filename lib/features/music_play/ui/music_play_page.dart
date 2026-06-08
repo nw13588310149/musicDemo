@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -24,6 +25,20 @@ int _musicPlayDecodeWidth(BuildContext context) {
   final size = MediaQuery.sizeOf(context);
   final dpr = MediaQuery.devicePixelRatioOf(context);
   return (size.width * dpr).ceil().clamp(1, 2200).toInt();
+}
+
+/// iOS 升降调：拖动进度条只预览 UI，松手再单次 native seek。
+bool _deferPitchScrubCommits(MusicPlayState state) {
+  if (state.detail?.hidePitchShift == true || state.pitchSemitones == 0) {
+    return false;
+  }
+  return !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+}
+
+Duration _seekTargetFromRatio(MusicPlayState state, double ratio) {
+  return Duration(
+    milliseconds: (state.duration.inMilliseconds * ratio).round(),
+  );
 }
 
 class MusicPlayPage extends ConsumerStatefulWidget {
@@ -190,13 +205,16 @@ class _MusicPlayPageState extends ConsumerState<MusicPlayPage> {
                 onSkipForward: _resolveRightAction(controller, state),
                 leftAsset: _resolveLeftAsset(state),
                 rightAsset: _resolveRightAsset(state),
-                onSeekRatio: (ratio) {
-                  final target = Duration(
-                    milliseconds: (state.duration.inMilliseconds * ratio)
-                        .round(),
-                  );
-                  controller.seek(target);
-                },
+                onSeekRatio: _deferPitchScrubCommits(state)
+                    ? (ratio) => controller.previewSeekPosition(
+                        _seekTargetFromRatio(state, ratio),
+                      )
+                    : (ratio) =>
+                          controller.seek(_seekTargetFromRatio(state, ratio)),
+                onSeekCommit: _deferPitchScrubCommits(state)
+                    ? (ratio) =>
+                          controller.seek(_seekTargetFromRatio(state, ratio))
+                    : null,
                 onSpeedChanged: controller.setPlaybackSpeed,
                 onToggleFavorite: controller.toggleFavorite,
                 onTogglePlayMode: controller.togglePlayMode,
@@ -289,12 +307,15 @@ class _MusicPlayPageState extends ConsumerState<MusicPlayPage> {
           onSkipForward: _resolveRightAction(controller, state),
           leftAsset: _resolveLeftAsset(state),
           rightAsset: _resolveRightAsset(state),
-          onSeekRatio: (ratio) {
-            final target = Duration(
-              milliseconds: (state.duration.inMilliseconds * ratio).round(),
-            );
-            controller.seek(target);
-          },
+          onSeekRatio: _deferPitchScrubCommits(state)
+              ? (ratio) => controller.previewSeekPosition(
+                  _seekTargetFromRatio(state, ratio),
+                )
+              : (ratio) =>
+                    controller.seek(_seekTargetFromRatio(state, ratio)),
+          onSeekCommit: _deferPitchScrubCommits(state)
+              ? (ratio) => controller.seek(_seekTargetFromRatio(state, ratio))
+              : null,
           onSpeedChanged: controller.setPlaybackSpeed,
           onToggleFavorite: controller.toggleFavorite,
           onTogglePlayMode: controller.togglePlayMode,
@@ -937,6 +958,7 @@ class _PlaybackBar extends StatelessWidget {
     required this.onTogglePlay,
     required this.onSkipForward,
     required this.onSeekRatio,
+    this.onSeekCommit,
     required this.onSpeedChanged,
     required this.onToggleFavorite,
     required this.onTogglePlayMode,
@@ -950,6 +972,7 @@ class _PlaybackBar extends StatelessWidget {
   final Future<void> Function() onTogglePlay;
   final Future<void> Function() onSkipForward;
   final ValueChanged<double> onSeekRatio;
+  final ValueChanged<double>? onSeekCommit;
   final ValueChanged<double> onSpeedChanged;
   final Future<void> Function() onToggleFavorite;
 
@@ -1086,6 +1109,7 @@ class _PlaybackBar extends StatelessWidget {
               currentLabel: _formatDuration(state.position),
               totalLabel: _formatDuration(state.duration),
               onSeekRatio: onSeekRatio,
+              onSeekCommit: onSeekCommit,
             ),
           ),
           SizedBox(width: ui(19)),
@@ -1208,12 +1232,14 @@ class _ProgressTrack extends StatelessWidget {
     required this.currentLabel,
     required this.totalLabel,
     required this.onSeekRatio,
+    this.onSeekCommit,
   });
 
   final double ratio;
   final String currentLabel;
   final String totalLabel;
   final ValueChanged<double> onSeekRatio;
+  final ValueChanged<double>? onSeekCommit;
 
   static final _labelStyle = TextStyle(
     fontFamily: 'PingFang SC',
@@ -1234,7 +1260,11 @@ class _ProgressTrack extends StatelessWidget {
           clipBehavior: Clip.none,
           children: [
             Positioned.fill(
-              child: _GradientSlider(ratio: ratio, onSeekRatio: onSeekRatio),
+              child: _GradientSlider(
+                ratio: ratio,
+                onSeekRatio: onSeekRatio,
+                onSeekCommit: onSeekCommit,
+              ),
             ),
             // 时间标签：贴近可见进度条上方（轨道顶在 y=(20-4)/2=8，
             // bottom: 14 → 标签底边 y=6，距离轨道顶视觉约 ~4px）。
@@ -1278,10 +1308,15 @@ class _ProgressTrack extends StatelessWidget {
 ///   3. 松手后保留 250ms grace 再清掉 `_dragRatio`，给 player.stream.position
 ///      留出收敛时间，避免松手瞬间 thumb"回弹"到旧位置再跳回去。
 class _GradientSlider extends StatefulWidget {
-  const _GradientSlider({required this.ratio, required this.onSeekRatio});
+  const _GradientSlider({
+    required this.ratio,
+    required this.onSeekRatio,
+    this.onSeekCommit,
+  });
 
   final double ratio;
   final ValueChanged<double> onSeekRatio;
+  final ValueChanged<double>? onSeekCommit;
 
   @override
   State<_GradientSlider> createState() => _GradientSliderState();
@@ -1346,12 +1381,19 @@ class _GradientSliderState extends State<_GradientSlider> {
 
   void _endDrag() {
     final pending = _dragRatio;
-    if (pending != null && pending != _lastEmittedRatio) {
+    final commit = widget.onSeekCommit;
+    if (pending != null) {
       _trailingTimer?.cancel();
       _trailingTimer = null;
-      _lastEmittedRatio = pending;
-      _lastEmitAt = DateTime.now();
-      widget.onSeekRatio(pending);
+      if (commit != null) {
+        _lastEmittedRatio = pending;
+        _lastEmitAt = DateTime.now();
+        commit(pending);
+      } else if (pending != _lastEmittedRatio) {
+        _lastEmittedRatio = pending;
+        _lastEmitAt = DateTime.now();
+        widget.onSeekRatio(pending);
+      }
     }
     _graceTimer?.cancel();
     _graceTimer = Timer(_kGrace, () {
