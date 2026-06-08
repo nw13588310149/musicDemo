@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/app_providers.dart';
 import '../../../core/storage/app_storage.dart';
+import '../../shell/state/shell_controller.dart';
 import '../data/study_catalog_repository.dart';
 import 'study_catalog_state.dart';
 
@@ -14,11 +15,23 @@ final studyCatalogControllerProvider = StateNotifierProvider.autoDispose
     ) {
       final repository = ref.watch(studyCatalogRepositoryProvider);
       final storage = ref.watch(appStorageProvider);
-      return StudyCatalogController(
+      final controller = StudyCatalogController(
         repository: repository,
         storage: storage,
         args: args,
       );
+
+      ref.listen<String>(
+        shellControllerProvider.select((state) => state.user.province),
+        (previous, next) {
+          if (previous == next) {
+            return;
+          }
+          unawaited(controller.onShellProvinceChanged(next));
+        },
+      );
+
+      return controller;
     });
 
 class StudyCatalogController extends StateNotifier<StudyCatalogState> {
@@ -112,6 +125,16 @@ class StudyCatalogController extends StateNotifier<StudyCatalogState> {
       return;
     }
     state = state.copyWith(selectedChildId: childId, clearErrorMessage: true);
+    await refreshLessons();
+  }
+
+  /// 顶栏切换所在地区后，用新 province 重新拉教材列表（试题页等依赖地区筛选）。
+  Future<void> onShellProvinceChanged(String province) async {
+    final normalized = province.trim().isEmpty ? '甘肃' : province.trim();
+    if (state.province == normalized) {
+      return;
+    }
+    state = state.copyWith(province: normalized, clearErrorMessage: true);
     await refreshLessons();
   }
 
