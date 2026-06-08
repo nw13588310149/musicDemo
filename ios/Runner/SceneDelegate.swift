@@ -6,6 +6,7 @@ import UIKit
 class SceneDelegate: UIResponder, UIWindowSceneDelegate {
   var window: UIWindow?
   private var lowLatencyNoteAudio: LowLatencyNoteAudio?
+  private var musicPlayPitchAudio: MusicPlayPitchAudio?
 
   func scene(
     _ scene: UIScene,
@@ -39,6 +40,9 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
       messenger: flutterViewController.binaryMessenger
     )
     lowLatencyNoteAudio = LowLatencyNoteAudio(
+      messenger: flutterViewController.binaryMessenger
+    )
+    musicPlayPitchAudio = MusicPlayPitchAudio(
       messenger: flutterViewController.binaryMessenger
     )
 

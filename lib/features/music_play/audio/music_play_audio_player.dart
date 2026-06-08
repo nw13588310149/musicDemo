@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart' as ja;
 import 'package:media_kit/media_kit.dart' as mk;
 
@@ -34,15 +35,15 @@ class MusicPlayAudioPlayerStreams {
 
 /// MusicPlay backend adapter.
 ///
-/// Normal iOS playback uses AVPlayer through just_audio, avoiding mpv session
-/// and seek churn. When pitch shifting is explicitly enabled, media_kit remains
-/// available because AVPlayer does not provide independent pitch shifting.
+/// iOS uses AVPlayer/just_audio for normal playback. When independent pitch
+/// shifting is enabled, iOS switches to the app-owned native AVAudioEngine
+/// player instead of mpv, so build-time mpv frameworks are not required and
+/// pause/seek/pitch changes can be muted inside one serialized native queue.
 class MusicPlayAudioPlayer {
   MusicPlayAudioPlayer({required bool enablePitch})
-    : _usesNativeIosPlayback =
-          !kIsWeb && Platform.isIOS && !enablePitch,
-      _usesPitchTransport =
-          !kIsWeb && Platform.isIOS && enablePitch {
+    : _usesNativeIosPlayback = !kIsWeb && Platform.isIOS && !enablePitch,
+      _usesNativeIosPitchPlayback = !kIsWeb && Platform.isIOS && enablePitch,
+      _usesMpvPitchTransport = !kIsWeb && !Platform.isIOS && enablePitch {
     if (_usesNativeIosPlayback) {
       final player = ja.AudioPlayer();
       _justAudio = player;
@@ -61,14 +62,22 @@ class MusicPlayAudioPlayer {
       return;
     }
 
+    if (_usesNativeIosPitchPlayback) {
+      final player = NativeIosPitchAudioPlayer();
+      _nativeIosPitch = player;
+      _position = player.positionStream;
+      _duration = player.durationStream;
+      _playing = player.playingStream;
+      _completed = player.completedStream;
+      return;
+    }
+
     mk.Player? configuredPlayer;
     final player = mk.Player(
       configuration: mk.PlayerConfiguration(
         pitch: enablePitch,
-        ready: _usesPitchTransport
-            ? () => unawaited(
-                MpvPitchTransport.configure(configuredPlayer!),
-              )
+        ready: _usesMpvPitchTransport
+            ? () => unawaited(MpvPitchTransport.configure(configuredPlayer!))
             : null,
       ),
     );
@@ -81,8 +90,10 @@ class MusicPlayAudioPlayer {
   }
 
   final bool _usesNativeIosPlayback;
-  final bool _usesPitchTransport;
+  final bool _usesNativeIosPitchPlayback;
+  final bool _usesMpvPitchTransport;
   ja.AudioPlayer? _justAudio;
+  NativeIosPitchAudioPlayer? _nativeIosPitch;
   mk.Player? _mediaKit;
   bool _outputMuted = false;
   late final Stream<Duration> _position;
@@ -93,12 +104,16 @@ class MusicPlayAudioPlayer {
 
   bool get usesNativeIosPlayback => _usesNativeIosPlayback;
 
-  /// iOS mpv 升降调（scaletempo）路径：pause/seek 走 mute 包裹，避免 ao 硬切爆音。
-  bool get usesPitchTransport => _usesPitchTransport;
+  bool get usesNativeIosPitchPlayback => _usesNativeIosPitchPlayback;
+
+  bool get usesPitchTransport =>
+      _usesMpvPitchTransport || _usesNativeIosPitchPlayback;
 
   MusicPlayAudioPlayerState get state => MusicPlayAudioPlayerState(
     playing: _usesNativeIosPlayback
         ? (_justAudio?.playing ?? false)
+        : _usesNativeIosPitchPlayback
+        ? (_nativeIosPitch?.playing ?? false)
         : (_mediaKit?.state.playing ?? false),
     volume: _volume,
   );
@@ -118,22 +133,35 @@ class MusicPlayAudioPlayer {
       if (play) unawaited(player.play());
       return;
     }
+    if (_usesNativeIosPitchPlayback) {
+      await AppAudioService.reconcilePlaybackSession();
+      await _nativeIosPitch!.open(url, play: play);
+      return;
+    }
     await _mediaKit!.open(mk.Media(url), play: play);
   }
 
   Future<void> ensureOutputMuted() async {
-    if (!_usesPitchTransport || _outputMuted) {
+    if (!usesPitchTransport || _outputMuted) {
       return;
     }
-    await MpvPitchTransport.setMuted(_mediaKit!, true);
+    if (_usesNativeIosPitchPlayback) {
+      await _nativeIosPitch!.setMuted(true);
+    } else {
+      await MpvPitchTransport.setMuted(_mediaKit!, true);
+    }
     _outputMuted = true;
   }
 
   Future<void> restoreOutputAudible() async {
-    if (!_usesPitchTransport || !_outputMuted) {
+    if (!usesPitchTransport || !_outputMuted) {
       return;
     }
-    await MpvPitchTransport.setMuted(_mediaKit!, false);
+    if (_usesNativeIosPitchPlayback) {
+      await _nativeIosPitch!.setMuted(false);
+    } else {
+      await MpvPitchTransport.setMuted(_mediaKit!, false);
+    }
     _outputMuted = false;
   }
 
@@ -143,7 +171,13 @@ class MusicPlayAudioPlayer {
       unawaited(_justAudio!.play());
       return;
     }
-    if (_usesPitchTransport) {
+    if (_usesNativeIosPitchPlayback) {
+      await AppAudioService.reconcilePlaybackSession();
+      await _nativeIosPitch!.play();
+      _outputMuted = false;
+      return;
+    }
+    if (_usesMpvPitchTransport) {
       await MpvPitchTransport.playSmooth(_mediaKit!);
       _outputMuted = false;
       return;
@@ -156,7 +190,12 @@ class MusicPlayAudioPlayer {
       await _justAudio!.pause();
       return;
     }
-    if (_usesPitchTransport) {
+    if (_usesNativeIosPitchPlayback) {
+      await _nativeIosPitch!.pause();
+      _outputMuted = true;
+      return;
+    }
+    if (_usesMpvPitchTransport) {
       await MpvPitchTransport.pauseSmooth(_mediaKit!);
       _outputMuted = true;
       return;
@@ -169,18 +208,25 @@ class MusicPlayAudioPlayer {
       await _justAudio!.stop();
       return;
     }
+    if (_usesNativeIosPitchPlayback) {
+      await _nativeIosPitch!.stop();
+      _outputMuted = false;
+      return;
+    }
     await _mediaKit!.stop();
   }
 
-  Future<void> seek(
-    Duration position, {
-    bool restoreAudible = true,
-  }) async {
+  Future<void> seek(Duration position, {bool restoreAudible = true}) async {
     if (_usesNativeIosPlayback) {
       await _justAudio!.seek(position);
       return;
     }
-    if (_usesPitchTransport) {
+    if (_usesNativeIosPitchPlayback) {
+      await _nativeIosPitch!.seek(position, restoreAudible: restoreAudible);
+      _outputMuted = !restoreAudible;
+      return;
+    }
+    if (_usesMpvPitchTransport) {
       await MpvPitchTransport.seekSmooth(
         _mediaKit!,
         position,
@@ -192,12 +238,11 @@ class MusicPlayAudioPlayer {
     await _mediaKit!.seek(position);
   }
 
-  /// 升降调滤波器参数变更（setPitch / setRate）前后短暂静音，避免 scaletempo 重配咔哒。
   Future<void> runPitchFilterChange(
     Future<void> Function() action, {
     bool restoreAudible = true,
   }) async {
-    if (!_usesPitchTransport) {
+    if (!usesPitchTransport) {
       await action();
       return;
     }
@@ -216,11 +261,19 @@ class MusicPlayAudioPlayer {
       await _justAudio!.setSpeed(rate);
       return;
     }
+    if (_usesNativeIosPitchPlayback) {
+      await _nativeIosPitch!.setRate(rate);
+      return;
+    }
     await _mediaKit!.setRate(rate);
   }
 
   Future<void> setPitch(double pitch) async {
     if (_usesNativeIosPlayback) return;
+    if (_usesNativeIosPitchPlayback) {
+      await _nativeIosPitch!.setPitch(pitch);
+      return;
+    }
     await _mediaKit!.setPitch(pitch);
   }
 
@@ -228,6 +281,10 @@ class MusicPlayAudioPlayer {
     _volume = volume.clamp(0, 100);
     if (_usesNativeIosPlayback) {
       await _justAudio!.setVolume(_volume / 100);
+      return;
+    }
+    if (_usesNativeIosPitchPlayback) {
+      await _nativeIosPitch!.setVolume(_volume);
       return;
     }
     await _mediaKit!.setVolume(_volume);
@@ -239,7 +296,122 @@ class MusicPlayAudioPlayer {
       _justAudio = null;
       return;
     }
+    if (_usesNativeIosPitchPlayback) {
+      await _nativeIosPitch!.dispose();
+      _nativeIosPitch = null;
+      return;
+    }
     await _mediaKit!.dispose();
     _mediaKit = null;
+  }
+}
+
+class NativeIosPitchAudioPlayer {
+  NativeIosPitchAudioPlayer() {
+    _pollTimer = Timer.periodic(
+      const Duration(milliseconds: 200),
+      (_) => unawaited(_pollState()),
+    );
+  }
+
+  static const MethodChannel _channel = MethodChannel(
+    'com.yyzl.music/music_play_pitch',
+  );
+
+  final _position = StreamController<Duration>.broadcast();
+  final _duration = StreamController<Duration>.broadcast();
+  final _playing = StreamController<bool>.broadcast();
+  final _completed = StreamController<bool>.broadcast();
+
+  Timer? _pollTimer;
+  bool _disposed = false;
+  bool playing = false;
+  Duration _lastPosition = Duration.zero;
+  Duration _lastDuration = Duration.zero;
+  bool _lastCompleted = false;
+
+  Stream<Duration> get positionStream => _position.stream;
+  Stream<Duration> get durationStream => _duration.stream;
+  Stream<bool> get playingStream => _playing.stream;
+  Stream<bool> get completedStream => _completed.stream;
+
+  Future<void> open(String url, {required bool play}) async {
+    await _invoke('open', <String, Object>{'url': url, 'play': play});
+    await _pollState();
+  }
+
+  Future<void> play() => _invoke('play');
+
+  Future<void> pause() => _invoke('pause');
+
+  Future<void> stop() => _invoke('stop');
+
+  Future<void> seek(Duration position, {required bool restoreAudible}) =>
+      _invoke('seek', <String, Object>{
+        'positionMs': position.inMilliseconds,
+        'restoreAudible': restoreAudible,
+      });
+
+  Future<void> setPitch(double pitch) =>
+      _invoke('setPitch', <String, Object>{'pitch': pitch});
+
+  Future<void> setRate(double rate) =>
+      _invoke('setRate', <String, Object>{'rate': rate});
+
+  Future<void> setVolume(double volume) =>
+      _invoke('setVolume', <String, Object>{'volume': volume});
+
+  Future<void> setMuted(bool muted) =>
+      _invoke('setMuted', <String, Object>{'muted': muted});
+
+  Future<void> dispose() async {
+    _disposed = true;
+    _pollTimer?.cancel();
+    _pollTimer = null;
+    try {
+      await _channel.invokeMethod<void>('dispose');
+    } finally {
+      await _position.close();
+      await _duration.close();
+      await _playing.close();
+      await _completed.close();
+    }
+  }
+
+  Future<void> _invoke(String method, [Map<String, Object>? args]) async {
+    if (_disposed) return;
+    await _channel.invokeMethod<void>(method, args);
+    await _pollState();
+  }
+
+  Future<void> _pollState() async {
+    if (_disposed) return;
+    try {
+      final state = await _channel.invokeMapMethod<String, Object?>('state');
+      if (_disposed || state == null) return;
+      final position = Duration(
+        milliseconds: (state['positionMs'] as num? ?? 0).round(),
+      );
+      final duration = Duration(
+        milliseconds: (state['durationMs'] as num? ?? 0).round(),
+      );
+      final nextPlaying = state['playing'] == true;
+      final completed = state['completed'] == true;
+
+      playing = nextPlaying;
+      if (position != _lastPosition) {
+        _lastPosition = position;
+        _position.add(position);
+      }
+      if (duration != _lastDuration) {
+        _lastDuration = duration;
+        _duration.add(duration);
+      }
+      _playing.add(nextPlaying);
+      if (completed != _lastCompleted) {
+        _lastCompleted = completed;
+        _completed.add(completed);
+      }
+    } catch (_) {}
   }
 }
