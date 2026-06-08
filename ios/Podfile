@@ -150,6 +150,11 @@ def ensure_media_kit_mpv_framework_symlinks
   create_media_kit_mpv_symlinks_manual(xcframework, symlinks_dir)
 end
 
+pre_install do |_installer|
+  # pod install 可能在 post_install 之前因其它 pod 失败；提前修复 Mpv 符号链接。
+  ensure_media_kit_mpv_framework_symlinks
+end
+
 target 'Runner' do
   use_frameworks!
   use_modular_headers!
