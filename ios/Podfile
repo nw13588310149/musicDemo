@@ -76,6 +76,28 @@ def patch_file_picker_ios_phpicker_group
   Pod::UI.puts 'Applied file_picker iOS PHPicker dispatch_group crash patch.'
 end
 
+def patch_media_kit_video_mpv_imports
+  plugin_root = [
+    File.join(__dir__, '.symlinks', 'plugins', 'media_kit_video', 'ios'),
+    File.join(__dir__, 'Pods', '.symlinks', 'plugins', 'media_kit_video', 'ios'),
+  ].find { |path| File.directory?(path) }
+  return unless plugin_root
+
+  patched_count = 0
+  Dir.glob(File.join(plugin_root, 'Classes', 'plugin', '**', '*.swift')).each do |path|
+    source = File.read(path)
+    next unless source.match?(/\bmpv(_|\b)|\bMPV_/)
+    next if source.include?('import Mpv')
+
+    File.write(path, "import Mpv\n#{source}")
+    patched_count += 1
+  end
+
+  if patched_count.positive?
+    Pod::UI.puts "Applied media_kit_video Mpv Swift import patch to #{patched_count} files."
+  end
+end
+
 def media_kit_libs_ios_video_dir
   [
     File.join(__dir__, '.symlinks', 'plugins', 'media_kit_libs_ios_video', 'ios'),
@@ -153,6 +175,7 @@ end
 pre_install do |_installer|
   # pod install 可能在 post_install 之前因其它 pod 失败；提前修复 Mpv 符号链接。
   ensure_media_kit_mpv_framework_symlinks
+  patch_media_kit_video_mpv_imports
 end
 
 target 'Runner' do
@@ -169,6 +192,7 @@ end
 
 post_install do |installer|
   patch_file_picker_ios_phpicker_group
+  patch_media_kit_video_mpv_imports
   ensure_media_kit_mpv_framework_symlinks
 
   # 注意：不要在这里主动调用 flutter_soloud 的 build_cmake.sh。
