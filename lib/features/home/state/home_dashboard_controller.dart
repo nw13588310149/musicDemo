@@ -10,7 +10,7 @@ import '../data/home_repository.dart';
 import 'home_dashboard_state.dart';
 
 final homeDashboardControllerProvider =
-    StateNotifierProvider<HomeDashboardController, HomeDashboardState>((ref) {
+    StateNotifierProvider.autoDispose<HomeDashboardController, HomeDashboardState>((ref) {
       final repository = ref.watch(homeRepositoryProvider);
       final storage = ref.watch(appStorageProvider);
       return HomeDashboardController(

@@ -5,6 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/config/app_config_repository.dart';
+import '../core/network/app_network_monitor.dart';
 import '../core/network/chat_socket_service.dart';
 import '../features/ai_chat/state/ai_chat_socket_dispatcher.dart';
 import '../core/permissions/first_launch_permission_host.dart';
@@ -34,6 +35,7 @@ class _MyAppState extends ConsumerState<MyApp> {
     super.initState();
     _shellPollingRouteObserver = ShellPollingRouteObserver(ref);
     bindApiUnauthorizedSessionCleanup(ref);
+    ref.read(appNetworkMonitorProvider);
 
     // ────────────────────────────────────────────────────────────────────
     // 启动副作用：还原到 commit c3f7d2e（最后已知不闪退版本）的同步触发顺序，

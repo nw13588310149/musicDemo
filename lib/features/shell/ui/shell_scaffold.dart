@@ -1,10 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/route_paths.dart';
+import '../../../core/network/app_network_monitor.dart';
+import '../../../core/network/network_page_refresh.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/scaled_dialog.dart';
+import '../../home/state/home_dashboard_controller.dart';
 import '../../recording_system/state/recording_system_controller.dart';
 import '../../smart_sight_singing/state/smart_sight_singing_controller.dart';
 import '../state/school_binding_controller.dart';
@@ -37,6 +42,97 @@ class _ShellScaffoldState extends ConsumerState<ShellScaffold> {
   /// 实际限流由 [build] 中的 post-frame 调度兜底 —— 跳转后老实例会被销
   /// 毁，新实例（personalCenter）路由本身在豁免清单里，不会再次触发。
   bool _vipRedirectScheduled = false;
+  bool _offlineDialogOpen = false;
+  bool _offlineDialogScheduled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _syncOfflineDialogForCurrentNetwork();
+    });
+  }
+
+  void _syncOfflineDialogForCurrentNetwork() {
+    if (!mounted) {
+      return;
+    }
+    final network = ref.read(appNetworkMonitorProvider);
+    if (!network.hasConnection && !network.offlineUseAcknowledged) {
+      unawaited(_presentOfflineDialogIfNeeded());
+      return;
+    }
+    if (network.hasConnection) {
+      _dismissOfflineDialogIfOpen();
+    }
+  }
+
+  void _handleNetworkTransition(AppNetworkState? previous, AppNetworkState next) {
+    if (next.hasConnection) {
+      _dismissOfflineDialogIfOpen();
+      if (previous?.hasConnection == false) {
+        unawaited(refreshAfterNetworkRestore(ref, widget.currentRoute));
+      }
+      return;
+    }
+
+    if (previous?.hasConnection != false &&
+        !next.offlineUseAcknowledged &&
+        !_offlineDialogOpen &&
+        !_offlineDialogScheduled) {
+      unawaited(_presentOfflineDialogIfNeeded());
+    }
+  }
+
+  void _dismissOfflineDialogIfOpen() {
+    if (!_offlineDialogOpen) {
+      return;
+    }
+    final navigator = Navigator.of(context, rootNavigator: true);
+    if (navigator.canPop()) {
+      navigator.pop();
+    }
+    _offlineDialogOpen = false;
+    _offlineDialogScheduled = false;
+  }
+
+  Future<void> _presentOfflineDialogIfNeeded() async {
+    if (!mounted || _offlineDialogOpen || _offlineDialogScheduled) {
+      return;
+    }
+    final network = ref.read(appNetworkMonitorProvider);
+    if (network.hasConnection || network.offlineUseAcknowledged) {
+      return;
+    }
+
+    _offlineDialogScheduled = true;
+    _offlineDialogOpen = true;
+    final exitApp = await showConfirmDialog(
+      context: context,
+      barrierDismissible: false,
+      title: '网络不可用',
+      content: '当前设备未连接网络。您可以选择无网使用基础功能，或退出应用。',
+      cancelLabel: '无网使用',
+      confirmLabel: '退出应用',
+    );
+    _offlineDialogOpen = false;
+    _offlineDialogScheduled = false;
+
+    if (!mounted) {
+      return;
+    }
+
+    if (ref.read(appNetworkMonitorProvider).hasConnection) {
+      return;
+    }
+
+    if (exitApp) {
+      await SystemNavigator.pop();
+      return;
+    }
+
+    ref.read(appNetworkMonitorProvider.notifier).acknowledgeOfflineUse();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -57,6 +153,8 @@ class _ShellScaffoldState extends ConsumerState<ShellScaffold> {
         unawaited(controller.refreshUserAndSchool());
       }
     });
+
+    ref.listen<AppNetworkState>(appNetworkMonitorProvider, _handleNetworkTransition);
 
     // 学校绑定遮罩优先：一旦遮罩生效，所有点击都被它兜住，VIP 校验暂停。
     // 等绑定完成、遮罩消失，下一帧 build 会按需触发 VIP 跳转。
@@ -154,6 +252,11 @@ class _ShellScaffoldState extends ConsumerState<ShellScaffold> {
           ref
               .read(smartSightSingingControllerProvider.notifier)
               .returnToHome(),
+        );
+      } else if (route == RoutePaths.home &&
+          ref.exists(homeDashboardControllerProvider)) {
+        unawaited(
+          ref.read(homeDashboardControllerProvider.notifier).refresh(),
         );
       }
       return;

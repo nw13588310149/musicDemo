@@ -687,9 +687,11 @@ Future<bool> showConfirmDialog({
   required String content,
   String confirmLabel = '确认',
   String cancelLabel = '取消',
+  bool barrierDismissible = true,
 }) async {
   final result = await showScaledDialog<bool>(
     context: context,
+    barrierDismissible: barrierDismissible,
     barrierColor: Colors.black.withValues(alpha: 0.18),
     builder: (dialogContext) {
       final ui = DashboardScaleScope.of(dialogContext).ui;
