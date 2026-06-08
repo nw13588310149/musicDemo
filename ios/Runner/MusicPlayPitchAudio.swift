@@ -325,8 +325,13 @@ final class MusicPlayPitchAudio {
     }
   }
 
+  private func canQueryPlayerTiming() -> Bool {
+    engine.isRunning && player.engine != nil
+  }
+
   private func captureCurrentFrame() {
-    guard let nodeTime = player.lastRenderTime,
+    guard canQueryPlayerTiming(),
+          let nodeTime = player.lastRenderTime,
           let playerTime = player.playerTime(forNodeTime: nodeTime)
     else { return }
     let next = scheduledFromFrame + AVAudioFramePosition(playerTime.sampleTime)
@@ -339,11 +344,13 @@ final class MusicPlayPitchAudio {
 
   private func setMutedLocked(_ muted: Bool) {
     outputMuted = muted
+    guard engine.isRunning else { return }
     engine.mainMixerNode.outputVolume = muted ? 0 : volume
   }
 
   private func fadeMutedLocked(_ muted: Bool) {
     outputMuted = muted
+    guard engine.isRunning else { return }
     let from = engine.mainMixerNode.outputVolume
     let to: Float = muted ? 0 : volume
     let steps = 3

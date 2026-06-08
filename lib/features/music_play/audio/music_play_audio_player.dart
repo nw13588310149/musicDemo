@@ -325,6 +325,7 @@ class NativeIosPitchAudioPlayer {
 
   Timer? _pollTimer;
   bool _disposed = false;
+  int _pollGeneration = 0;
   bool playing = false;
   Duration _lastPosition = Duration.zero;
   Duration _lastDuration = Duration.zero;
@@ -366,6 +367,7 @@ class NativeIosPitchAudioPlayer {
 
   Future<void> dispose() async {
     _disposed = true;
+    _pollGeneration += 1;
     _pollTimer?.cancel();
     _pollTimer = null;
     try {
@@ -386,9 +388,10 @@ class NativeIosPitchAudioPlayer {
 
   Future<void> _pollState() async {
     if (_disposed) return;
+    final generation = _pollGeneration;
     try {
       final state = await _channel.invokeMapMethod<String, Object?>('state');
-      if (_disposed || state == null) return;
+      if (_disposed || generation != _pollGeneration || state == null) return;
       final position = Duration(
         milliseconds: (state['positionMs'] as num? ?? 0).round(),
       );
