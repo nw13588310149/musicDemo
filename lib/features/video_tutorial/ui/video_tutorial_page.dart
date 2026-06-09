@@ -409,19 +409,16 @@ class _VideoCachedImage extends StatelessWidget {
     }
     return LayoutBuilder(
       builder: (context, constraints) {
+        final cacheSize = _memCacheSizeForFit(
+          context: context,
+          constraints: constraints,
+          fit: fit,
+        );
         return CachedNetworkImage(
           imageUrl: url,
           fit: fit,
-          memCacheWidth: _decodeExtent(
-            context,
-            constraints.maxWidth,
-            _kVideoImageMaxDecodeWidth,
-          ),
-          memCacheHeight: _decodeExtent(
-            context,
-            constraints.maxHeight,
-            _kVideoImageMaxDecodeHeight,
-          ),
+          memCacheWidth: cacheSize.$1,
+          memCacheHeight: cacheSize.$2,
           fadeInDuration: Duration.zero,
           fadeOutDuration: Duration.zero,
           useOldImageOnUrlChange: true,
@@ -439,6 +436,47 @@ int? _decodeExtent(BuildContext context, double logicalExtent, int maxPixels) {
   }
   final dpr = MediaQuery.devicePixelRatioOf(context);
   return (logicalExtent * dpr).ceil().clamp(1, maxPixels).toInt();
+}
+
+/// 保持原图比例的 fit（cover/contain 等）只能指定单边 cache 尺寸；
+/// 同时传 width+height 会在解码阶段把图压成固定比例，封面看起来被「拉伸」。
+(int?, int?) _memCacheSizeForFit({
+  required BuildContext context,
+  required BoxConstraints constraints,
+  required BoxFit fit,
+}) {
+  final preserveAspect = switch (fit) {
+    BoxFit.cover ||
+    BoxFit.contain ||
+    BoxFit.fitWidth ||
+    BoxFit.fitHeight ||
+    BoxFit.scaleDown => true,
+    _ => false,
+  };
+
+  final width = constraints.maxWidth;
+  final height = constraints.maxHeight;
+
+  if (!preserveAspect) {
+    return (
+      _decodeExtent(context, width, _kVideoImageMaxDecodeWidth),
+      _decodeExtent(context, height, _kVideoImageMaxDecodeHeight),
+    );
+  }
+
+  if (width.isFinite && width > 0 && height.isFinite && height > 0) {
+    if (width >= height) {
+      return (_decodeExtent(context, width, _kVideoImageMaxDecodeWidth), null);
+    }
+    return (null, _decodeExtent(context, height, _kVideoImageMaxDecodeHeight));
+  }
+  if (width.isFinite && width > 0) {
+    return (_decodeExtent(context, width, _kVideoImageMaxDecodeWidth), null);
+  }
+  if (height.isFinite && height > 0) {
+    return (null, _decodeExtent(context, height, _kVideoImageMaxDecodeHeight));
+  }
+  return (_kVideoImageMaxDecodeWidth, null);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

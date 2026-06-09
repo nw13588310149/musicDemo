@@ -56,8 +56,13 @@ class MusicCompanionAudioEngine {
   Future<void> reclaimNativeEngineAfterSessionChange() =>
       reclaimNativeGraphAfterSessionChange();
 
-  Future<void> reclaimNativeGraphAfterSessionChange() async {
+  Future<void> reclaimNativeGraphAfterSessionChange({
+    bool restorePlaybackSession = true,
+  }) async {
     if (_disposed || kIsWeb) return;
+    if (restorePlaybackSession) {
+      await AppAudioService.reconcilePlaybackSession();
+    }
     await _nativePlayer.pingEngine();
   }
 

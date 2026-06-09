@@ -100,8 +100,10 @@ class MidiPlaybackScheduler {
   }
 
   /// AVAudioSession 变更后（试听结束、开始跟唱等）按需重建 iOS 钢琴引擎。
-  Future<void> reclaimNativeEngine() async {
-    await _audio.reclaimNativeEngineAfterSessionChange();
+  Future<void> reclaimNativeEngine({bool restorePlaybackSession = true}) async {
+    await _audio.reclaimNativeGraphAfterSessionChange(
+      restorePlaybackSession: restorePlaybackSession,
+    );
   }
 
   Future<void> start({bool? muteAudio}) async {

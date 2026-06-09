@@ -1616,7 +1616,11 @@ class _ControlButtons extends StatelessWidget {
 
     return Align(
       alignment: Alignment.centerRight,
-      child: buttons,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerRight,
+        child: buttons,
+      ),
     );
   }
 }

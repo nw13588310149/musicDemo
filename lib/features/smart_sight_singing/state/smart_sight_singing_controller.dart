@@ -671,6 +671,9 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       isPreviewPlaying: true,
       isPreviewLoading: false,
       playbackMs: 0,
+      userPoints: const <UserPitchPoint>[],
+      currentUserMidi: -1,
+      currentUserAmplitude: 0,
       errorMessage: null,
     );
     unawaited(_runPreviewStart(generation));
@@ -699,6 +702,8 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
         totalMs: bundle.totalMs,
         leadInDurationMs: leadInMs,
       );
+      if (!_isCurrentPreviewGeneration(generation)) return;
+      await _playback.warmupAudioEngine();
       if (!_isCurrentPreviewGeneration(generation)) return;
       await _playback.start(muteAudio: false);
     } catch (e) {
@@ -739,6 +744,9 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       isPreviewPlaying: false,
       isPreviewLoading: false,
       playbackMs: 0,
+      userPoints: const <UserPitchPoint>[],
+      currentUserMidi: -1,
+      currentUserAmplitude: 0,
     );
     unawaited(_stopPreview());
   }
@@ -752,6 +760,9 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       isPreviewPlaying: false,
       isPreviewLoading: false,
       playbackMs: 0,
+      userPoints: const <UserPitchPoint>[],
+      currentUserMidi: -1,
+      currentUserAmplitude: 0,
     );
   }
 
@@ -890,6 +901,9 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       state = state.copyWith(
         stage: SightSingingStage.ready,
         countdownSeconds: 0,
+        userPoints: const <UserPitchPoint>[],
+        currentUserMidi: -1,
+        currentUserAmplitude: 0,
       );
       unawaited(_stopCaptureSilently());
       return;
@@ -913,8 +927,13 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       leadInDurationMs: state.playbackLeadInMs,
     );
     try {
-      if (!kIsWeb && (!state.visualOnlyMode || state.playbackLeadInMs > 0)) {
-        await PageAudioLifecycle.enterSightSingingCapture(soft: true);
+      if (!kIsWeb) {
+        if (!state.visualOnlyMode || state.playbackLeadInMs > 0) {
+          await PageAudioLifecycle.enterSightSingingCapture(soft: true);
+        }
+        // 开麦后仍在 playAndRecord：只 ping + 预热节拍器，不切回 playback。
+        await _playback.reclaimNativeEngine(restorePlaybackSession: false);
+        await _playback.warmupAudioEngine();
       }
       await _playback.start(muteAudio: state.visualOnlyMode);
     } catch (e) {
@@ -933,7 +952,13 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     _countdownTimer?.cancel();
     _countdownTimer = null;
     _scoringSession = null;
-    state = state.copyWith(stage: SightSingingStage.ready, countdownSeconds: 0);
+    state = state.copyWith(
+      stage: SightSingingStage.ready,
+      countdownSeconds: 0,
+      userPoints: const <UserPitchPoint>[],
+      currentUserMidi: -1,
+      currentUserAmplitude: 0,
+    );
     unawaited(_stopCaptureSilently());
   }
 
@@ -954,6 +979,9 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       scoredCount: tick?.scoredCount ?? state.scoredCount,
       combo: tick?.combo ?? state.combo,
       completedNoteScores: reset ? const <KtvNoteScore>[] : completedScores,
+      userPoints: reset ? const <UserPitchPoint>[] : state.userPoints,
+      currentUserMidi: reset ? -1 : state.currentUserMidi,
+      currentUserAmplitude: reset ? 0 : state.currentUserAmplitude,
     );
     try {
       // 必须先淡出伴奏，再停麦/切会话；否则 playAndRecord→playback 时

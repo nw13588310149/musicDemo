@@ -143,12 +143,8 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
     if (kIsWeb || _playbackSessionPrimed) {
       return;
     }
-    await PageAudioLifecycle.enterPlaybackPianoNative(
-      prepareEngine: () async {
-        await _audioEngine.reclaimNativeEngineAfterSessionChange();
-        await _audioEngine.ensureInitialized();
-      },
-    );
+    await _audioEngine.reclaimNativeEngineAfterSessionChange();
+    await _audioEngine.ensureInitialized();
     _playbackSessionPrimed = true;
   }
 
@@ -664,6 +660,9 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
     bool fromUserGesture = false,
   }) async {
     try {
+      if (!kIsWeb) {
+        await _audioEngine.reclaimNativeEngineAfterSessionChange();
+      }
       await _primePlaybackSessionOnce();
       if (!state.audioReady) {
         state = state.copyWith(audioLoading: true, clearErrorMessage: true);

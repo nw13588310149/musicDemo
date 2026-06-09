@@ -28,7 +28,8 @@ class SightSingingImageActionButton extends StatelessWidget {
   /// 就绪态右侧按钮区固定宽度，避免切到「取消/停止」单按钮时挤压进度条。
   static double readyControlsSlotWidth(double Function(double) ui) {
     final buttonWidth = ui(designHeight * designAspectRatio);
-    return buttonWidth * 2 + ui(readyControlsGap);
+    // 略留余量，避免切图实际宽高比与设计稿 276×108 偏差导致 Row 溢出。
+    return buttonWidth * 2 + ui(readyControlsGap) + ui(4);
   }
 
   @override
@@ -155,17 +156,22 @@ class SightSingingGradientActionButton extends StatelessWidget {
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(icon, color: Colors.white, size: ui(19)),
-                SizedBox(width: ui(6)),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: ui(12),
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w500,
-                    height: 1,
+                SizedBox(width: ui(4)),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: ui(12),
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w500,
+                      height: 1,
+                    ),
                   ),
                 ),
               ],

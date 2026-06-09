@@ -123,13 +123,16 @@ abstract final class MusicXmlSightSingingService {
     final baseTotalMs =
         pitchedShifted.map((n) => n.endMs).reduce(math.max) +
         SmartSightSingingMidiConfig.playbackTailMs;
-    // 播放时间轴含预备拍；进度条总时长仅反映旋律部分。
-    final playbackTotalMs = baseTotalMs + leadInMs;
+    // shiftedNotes 时间戳已含预备段偏移；调度器总长 = baseTotalMs。
+    // 进度条分母仅用旋律段（扣除 leadInMs）。
+    final playbackTotalMs = baseTotalMs;
+    final melodyTotalMs =
+        leadInMs > 0 ? math.max(0, baseTotalMs - leadInMs) : baseTotalMs;
 
     final track = PitchTrack(
       frames: const <PitchFrame>[],
       notes: shiftedNotes,
-      totalMs: baseTotalMs,
+      totalMs: melodyTotalMs,
       frameStepMs: SmartSightSingingMidiConfig.referenceFrameStepMs,
       minMidi: range.minMidi,
       maxMidi: range.maxMidi,

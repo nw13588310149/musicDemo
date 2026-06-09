@@ -72,6 +72,8 @@ abstract final class PageAudioLifecycle {
     if (kIsWeb) return;
     await NativeAudioBootstrap.reactivatePlaybackSession();
     NativePlaybackAudioSession.invalidatePlaybackCache();
+    await AppAudioService.reconcilePlaybackSession();
+    await AppAudioService.sharedNativePlayer.pingEngine();
   }
 
   static Future<void> enterSightSingingCapture({bool soft = false}) {
