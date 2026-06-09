@@ -51,8 +51,8 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
@@ -62,6 +62,7 @@ import '../../../app/router/route_paths.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/network/chat_socket_service.dart';
 import '../../../core/network/chat_sync_payload.dart';
+import '../../../core/network/snowflake_id.dart';
 import '../../../core/widgets/app_asset_graphic.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/image_gallery_viewer.dart';
@@ -169,6 +170,9 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
   /// sync 进行中又收到 WS 推送时，结束后补跑一轮。
   bool _syncPending = false;
 
+  /// iOS / Android：WS 易被系统挂起，群聊页可见时轻量 syncMsg 兜底（Web 已验证 WS 足够）。
+  Timer? _nativeSyncPollTimer;
+
   /// 全局长连接订阅：收到 `chatNewMessage` / `chatMessageDeleted`
   /// / `chatAnnouncementUpdated` 时触发刷新或局部更新。
   StreamSubscription<ChatSocketEvent>? _wsSubscription;
@@ -239,8 +243,13 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
     // 订阅全局 WS：服务端推群聊新消息 / 撤回 / 公告变更时实时刷新。
     final socket = ref.read(chatSocketServiceProvider);
     _wsSubscription = socket.events.listen(_handleSocketEvent);
-    // 确保连接可用（幂等：已连上则什么也不做）。
-    socket.connect();
+    // 先进群聊再 reconnect，避免 App 冷启动时 connected/推送在订阅前被漏掉。
+    socket.reconnect();
+    if (!kIsWeb) {
+      _nativeSyncPollTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+        if (mounted) unawaited(_syncMessages());
+      });
+    }
     // 进入页面后立即拉群聊列表；接着会触发一次 syncMsg 把离线消息补齐。
     Future.microtask(() async {
       await _loadConversations();
@@ -251,6 +260,8 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
 
   @override
   void dispose() {
+    _nativeSyncPollTimer?.cancel();
+    _nativeSyncPollTimer = null;
     unawaited(_wsSubscription?.cancel());
     _wsSubscription = null;
     _inputController.dispose();
@@ -323,6 +334,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
     // 切回前台时按 swagger 描述："登录 / 重连 / 切回前台时调用一次同步"，
     // 不做轮询。
     if (state == AppLifecycleState.resumed) {
+      ref.read(chatSocketServiceProvider).reconnect();
       unawaited(_syncMessages());
     }
   }
@@ -537,10 +549,10 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
       for (final item in list) {
         if (item is! Map) continue;
         final m = item.map((k, v) => MapEntry(k.toString(), v));
-        final classId = (m['classId'] ?? m['cId'] ?? '').toString();
+        final classId = _readClassIdFromRaw(m);
         if (classId.isEmpty) continue;
         bucket.putIfAbsent(classId, () => []).add(m);
-        final id = (m['id'] ?? m['msgId'] ?? '').toString();
+        final id = _readMsgIdFromRaw(m);
         if (id.isNotEmpty && _compareSnowflakeIds(id, maxMsgId) > 0) {
           maxMsgId = id;
         }
@@ -594,15 +606,10 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
   /// syncMsg 往返才看到新消息。
   void _applyRealtimeChatPayload(Map<String, dynamic> payload) {
     final normalized = ChatSyncPayload.normalizePush(payload);
-    final classId =
-        (normalized['classId'] ?? normalized['cId'] ?? '').toString();
+    final classId = _readClassIdFromRaw(normalized);
     if (classId.isEmpty) return;
 
-    final msgId = (normalized['id'] ??
-            normalized['msgId'] ??
-            normalized['messageId'] ??
-            '')
-        .toString();
+    final msgId = _readMsgIdFromRaw(normalized);
     if (msgId.isNotEmpty && _compareSnowflakeIds(msgId, _syncOffsetMsgId) > 0) {
       _syncOffsetMsgId = msgId;
     }
@@ -656,6 +663,17 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
         _syncOffsetMsgId = message.id;
       }
     }
+  }
+
+  String _readClassIdFromRaw(Map<String, dynamic> raw) {
+    return readSnowflakeId(raw['classId']) ?? readSnowflakeId(raw['cId']) ?? '';
+  }
+
+  String _readMsgIdFromRaw(Map<String, dynamic> raw) {
+    return readSnowflakeId(raw['id']) ??
+        readSnowflakeId(raw['msgId']) ??
+        readSnowflakeId(raw['messageId']) ??
+        '';
   }
 
   /// 把 sync 拉到的一组 raw 消息 reflect 到会话列表 cell（最近一条摘要 +

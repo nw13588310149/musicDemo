@@ -7,7 +7,10 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../constants/app_constants.dart';
 import '../providers/app_providers.dart';
 import '../storage/app_storage.dart';
+import 'big_int_safe_transformer.dart';
 import 'chat_sync_payload.dart';
+import 'chat_websocket_connect.dart';
+import 'snowflake_id.dart';
 
 /// 全局长连接服务。承担三类下行事件：
 ///
@@ -135,7 +138,7 @@ class ChatSocketService {
       // _wsUri() 含 Uri.parse —— apiBaseUrl 异常 / 网络栈异常都不能让启动
       // 期同步抛出，全部捕获后走重连兜底。
       final uri = _wsUri();
-      final channel = WebSocketChannel.connect(uri);
+      final channel = connectChatWebSocket(uri);
       _channel = channel;
       _subscription = channel.stream.listen(
         _handleRawMessage,
@@ -152,6 +155,7 @@ class ChatSocketService {
         // onError 关闭，不影响后续重连。
       }
       _startHeartbeat();
+      // 握手帧发出后通知业务侧 syncMsg；群聊页若尚未挂载，会在进页时 reconnect。
       _emit(ChatSocketEventType.connected, const {});
     } catch (_) {
       _scheduleReconnect();
@@ -215,7 +219,7 @@ class ChatSocketService {
       return;
     }
     try {
-      final decoded = jsonDecode(text);
+      final decoded = decodeBigIntSafeJson(text);
       final map = _toMap(decoded);
       if (map == null) {
         return;
@@ -364,7 +368,7 @@ class ChatSocketService {
 
   /// 群聊帧语义判定：带 classId 且具备消息字段。
   bool _looksLikeChatPayload(Map<String, dynamic> json, int? type) {
-    final classId = json['classId'] ?? json['cId'];
+    final classId = readSnowflakeId(json['classId']) ?? readSnowflakeId(json['cId']);
     if (classId == null) return false;
 
     if (_isChatPushType(type, 2001) ||
@@ -374,10 +378,10 @@ class ChatSocketService {
     }
 
     final hasChatIdentity =
-        json['fromUserId'] != null ||
-        json['msgId'] != null ||
-        json['id'] != null ||
-        json['messageId'] != null;
+        readSnowflakeId(json['fromUserId']) != null ||
+        readSnowflakeId(json['msgId']) != null ||
+        readSnowflakeId(json['id']) != null ||
+        readSnowflakeId(json['messageId']) != null;
     final hasChatMsgType =
         type != null && ((type >= 0 && type <= 3) || type == 100);
     if (hasChatIdentity || hasChatMsgType) {

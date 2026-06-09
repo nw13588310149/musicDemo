@@ -1,3 +1,5 @@
+import 'snowflake_id.dart';
+
 /// 群聊 syncMsg / WS 推送 payload 解析辅助。
 abstract final class ChatSyncPayload {
   /// syncMsg / msgList 等接口返回的消息数组。
@@ -28,7 +30,8 @@ abstract final class ChatSyncPayload {
       final nested = payload[key];
       if (nested is Map) {
         final map = nested.map((k, v) => MapEntry(k.toString(), v));
-        if (map['classId'] != null || map['cId'] != null) {
+        if (readSnowflakeId(map['classId']) != null ||
+            readSnowflakeId(map['cId']) != null) {
           if (map['type'] == null && payload['type'] != null) {
             return {...map, 'type': payload['type']};
           }
@@ -40,11 +43,11 @@ abstract final class ChatSyncPayload {
   }
 
   static bool hasChatIdentity(Map<String, dynamic> json) {
-    return json['classId'] != null ||
-        json['cId'] != null ||
-        json['fromUserId'] != null ||
-        json['msgId'] != null ||
-        json['id'] != null ||
-        json['messageId'] != null;
+    return readSnowflakeId(json['classId']) != null ||
+        readSnowflakeId(json['cId']) != null ||
+        readSnowflakeId(json['fromUserId']) != null ||
+        readSnowflakeId(json['msgId']) != null ||
+        readSnowflakeId(json['id']) != null ||
+        readSnowflakeId(json['messageId']) != null;
   }
 }
