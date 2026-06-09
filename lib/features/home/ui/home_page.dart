@@ -360,7 +360,7 @@ class _HomePageViewState extends ConsumerState<_HomePageView> {
                     physics: const ClampingScrollPhysics(),
                     itemCount: notices.length,
                     separatorBuilder: (context, index) =>
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 11),
                     itemBuilder: (context, index) {
                       return GestureDetector(
                         onTap: _openMySchedule,

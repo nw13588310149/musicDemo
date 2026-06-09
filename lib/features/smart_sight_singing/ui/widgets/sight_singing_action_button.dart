@@ -22,6 +22,15 @@ class SightSingingImageActionButton extends StatelessWidget {
   /// 与 `assets/images/sightsing/3.png` 一致的设计稿宽高比（276×108）。
   static const double designAspectRatio = 276 / 108;
 
+  /// 就绪态双按钮（试听 + 开始跟唱）之间的设计稿间距。
+  static const double readyControlsGap = 12;
+
+  /// 就绪态右侧按钮区固定宽度，避免切到「取消/停止」单按钮时挤压进度条。
+  static double readyControlsSlotWidth(double Function(double) ui) {
+    final buttonWidth = ui(designHeight * designAspectRatio);
+    return buttonWidth * 2 + ui(readyControlsGap);
+  }
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
@@ -39,6 +48,65 @@ class SightSingingImageActionButton extends StatelessWidget {
             height: height,
             fit: BoxFit.fitHeight,
             filterQuality: FilterQuality.medium,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 双态整图按钮：播放/暂停等同尺寸切图叠放，避免首次切图时整按钮闪烁。
+class SightSingingToggleImageActionButton extends StatelessWidget {
+  const SightSingingToggleImageActionButton({
+    required this.primaryAsset,
+    required this.alternateAsset,
+    required this.showAlternate,
+    required this.onTap,
+    super.key,
+  });
+
+  final String primaryAsset;
+  final String alternateAsset;
+  final bool showAlternate;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final disabled = onTap == null;
+    final height = ui(SightSingingImageActionButton.designHeight);
+    return GestureDetector(
+      onTap: disabled ? null : onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Opacity(
+        opacity: disabled ? 0.45 : 1,
+        child: SizedBox(
+          height: height,
+          child: Stack(
+            alignment: Alignment.center,
+            fit: StackFit.passthrough,
+            children: [
+              Opacity(
+                opacity: showAlternate ? 0 : 1,
+                child: Image.asset(
+                  primaryAsset,
+                  height: height,
+                  fit: BoxFit.fitHeight,
+                  filterQuality: FilterQuality.medium,
+                  gaplessPlayback: true,
+                ),
+              ),
+              Opacity(
+                opacity: showAlternate ? 1 : 0,
+                child: Image.asset(
+                  alternateAsset,
+                  height: height,
+                  fit: BoxFit.fitHeight,
+                  filterQuality: FilterQuality.medium,
+                  gaplessPlayback: true,
+                ),
+              ),
+            ],
           ),
         ),
       ),

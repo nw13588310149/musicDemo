@@ -33,6 +33,8 @@ class SmartSightSingingPage extends ConsumerStatefulWidget {
 }
 
 class _SmartSightSingingPageState extends ConsumerState<SmartSightSingingPage> {
+  var _precachedActionImages = false;
+
   @override
   void initState() {
     super.initState();
@@ -54,6 +56,22 @@ class _SmartSightSingingPageState extends ConsumerState<SmartSightSingingPage> {
       return int.tryParse(raw['id']?.toString() ?? '');
     }
     return null;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_precachedActionImages) return;
+    _precachedActionImages = true;
+    for (final asset in const <String>[
+      AppAssets.smartSightSingingPreviewBtn,
+      AppAssets.smartSightSingingPreviewPauseBtn,
+      AppAssets.smartSightSingingStartBtn,
+      AppAssets.smartSightSingingStopBtn,
+      AppAssets.smartSightSingingCancelBtn,
+    ]) {
+      precacheImage(AssetImage(asset), context);
+    }
   }
 
   Future<void> _handleBack(BuildContext context) async {
@@ -1454,7 +1472,12 @@ class _Controls extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     final track = state.track;
     final totalMs = track?.totalMs ?? 0;
-    final currentMs = (state.playbackMs - state.playbackLeadInMs).clamp(
+    final preparingOrCountdown =
+        state.stage == SightSingingStage.preparing ||
+        state.stage == SightSingingStage.countdown;
+    final progressPlaybackMs =
+        preparingOrCountdown ? 0 : state.playbackMs;
+    final currentMs = (progressPlaybackMs - state.playbackLeadInMs).clamp(
       0,
       totalMs == 0 ? 0 : totalMs,
     );
@@ -1544,7 +1567,10 @@ class _Controls extends StatelessWidget {
             ),
           ),
           SizedBox(width: ui(16)),
-          _ControlButtons(state: state, controller: controller),
+          SizedBox(
+            width: SightSingingImageActionButton.readyControlsSlotWidth(ui),
+            child: _ControlButtons(state: state, controller: controller),
+          ),
         ],
       ),
     );
@@ -1566,26 +1592,31 @@ class _ControlButtons extends StatelessWidget {
         state.stage == SightSingingStage.preparing ||
         state.stage == SightSingingStage.countdown;
 
+    Widget buttons;
     if (cancelable) {
-      return SightSingingImageActionButton(
+      buttons = SightSingingImageActionButton(
         asset: AppAssets.smartSightSingingCancelBtn,
         onTap: () => controller.cancelPreparingOrCountdown(),
       );
-    }
-    if (singing) {
-      return SightSingingImageActionButton(
+    } else if (singing) {
+      buttons = SightSingingImageActionButton(
         asset: AppAssets.smartSightSingingStopBtn,
         onTap: state.isStoppingSinging ? null : () => controller.stopSinging(),
       );
+    } else {
+      buttons = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _PreviewMelodyButton(controller: controller),
+          SizedBox(width: ui(SightSingingImageActionButton.readyControlsGap)),
+          _StartSingingButton(controller: controller),
+        ],
+      );
     }
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _PreviewMelodyButton(controller: controller),
-        SizedBox(width: ui(12)),
-        _StartSingingButton(controller: controller),
-      ],
+    return Align(
+      alignment: Alignment.centerRight,
+      child: buttons,
     );
   }
 }
@@ -1604,10 +1635,10 @@ class _PreviewMelodyButton extends ConsumerWidget {
       ),
     );
     final locked = preview.$2;
-    return SightSingingImageActionButton(
-      asset: preview.$1
-          ? AppAssets.smartSightSingingPreviewPauseBtn
-          : AppAssets.smartSightSingingPreviewBtn,
+    return SightSingingToggleImageActionButton(
+      primaryAsset: AppAssets.smartSightSingingPreviewBtn,
+      alternateAsset: AppAssets.smartSightSingingPreviewPauseBtn,
+      showAlternate: preview.$1,
       onTap: locked ? null : () => controller.previewMelody(),
     );
   }

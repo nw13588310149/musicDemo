@@ -776,6 +776,7 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       errorMessage: null,
       isPreviewPlaying: false,
       isPreviewLoading: false,
+      playbackMs: 0,
     );
     unawaited(_runStartSinging(generation));
   }

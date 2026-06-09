@@ -193,9 +193,6 @@ flutter:
     - assets/audio/demo.mp3
     - assets/audio/demo_analysis.wav
     - assets/audio/music_companion/metronome/
-    - assets/audio/music_companion/metronome/beat0/
-    - assets/audio/music_companion/metronome/beat2/
-    - assets/audio/music_companion/metronome/beat3/
     - assets/audio/smart_dictation/piano/
     - assets/smart_sight_singing/opensheetmusicdisplay.min.js
 

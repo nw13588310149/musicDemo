@@ -99,6 +99,11 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   static const Duration _kSeekStaleWindow = Duration(milliseconds: 350);
   static const int _kSeekStaleDiffMs = 500;
 
+  /// 原调 ↔ 升降调切换时会重建播放器；open 初期 position/duration 会先回到 0。
+  /// 在 seek 收敛前锁住 UI，避免进度条「先到 0 再回到当前」。
+  Duration? _heldPositionDuringPitchTransition;
+  Duration? _heldDurationDuringPitchTransition;
+
   /// 用户点击播放/暂停后，在淡出/恢复完成前忽略 [Player.stream.playing]，
   /// 避免按钮要等音频实际停播才切换图标。
   int _playbackToggleInFlight = 0;
@@ -1069,7 +1074,16 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     }
 
     final resumePosition = state.position;
+    final resumeDuration = state.duration;
     final resumePlaying = oldPlayer.state.playing || state.isPlaying;
+    _heldPositionDuringPitchTransition = resumePosition;
+    _heldDurationDuringPitchTransition = resumeDuration;
+    if (mounted) {
+      state = state.copyWith(
+        position: resumePosition,
+        duration: resumeDuration,
+      );
+    }
     _openTicket++;
     _endScrubUiHold(immediate: true);
     _positionSub?.cancel();
@@ -1078,42 +1092,57 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     _completedSub?.cancel();
     _player = null;
 
-    if (_usesMpvOnIos(oldPlayer)) {
-      await _pausePlayerSmoothIos(oldPlayer);
-    } else {
-      try {
-        await oldPlayer.pause();
-      } catch (_) {}
-    }
-    await _releaseMediaKitPlayer(oldPlayer);
-    if (_disposed || !mounted) {
-      return;
-    }
-
-    await _openActiveTrack(play: false);
-    if (_disposed || !mounted) {
-      return;
-    }
-    final nextPlayer = _player;
-    if (nextPlayer == null) {
-      return;
-    }
     try {
-      if (nextPlayer.usesPitchTransport) {
-        await nextPlayer.ensureOutputMuted();
-        await nextPlayer.seek(resumePosition, restoreAudible: false);
-        await _applyPitchToPlayer(nextPlayer, muteGuard: false);
-      } else if (_usesMpvOnIos(nextPlayer)) {
-        await _setPlayerVolumeSafe(nextPlayer, 0);
-        await nextPlayer.seek(resumePosition);
-        await _applyPitchToPlayer(nextPlayer, muteGuard: false);
+      if (_usesMpvOnIos(oldPlayer)) {
+        await _pausePlayerSmoothIos(oldPlayer);
       } else {
-        await nextPlayer.seek(resumePosition);
-        await _applyPitchToPlayer(nextPlayer, muteGuard: false);
+        try {
+          await oldPlayer.pause();
+        } catch (_) {}
       }
-    } catch (_) {}
-    if (resumePlaying) {
-      await _resumePlayer(nextPlayer);
+      await _releaseMediaKitPlayer(oldPlayer);
+      if (_disposed || !mounted) {
+        return;
+      }
+
+      await _openActiveTrack(play: false);
+      if (_disposed || !mounted) {
+        return;
+      }
+      final nextPlayer = _player;
+      if (nextPlayer == null) {
+        return;
+      }
+      try {
+        if (nextPlayer.usesPitchTransport) {
+          await nextPlayer.ensureOutputMuted();
+          await nextPlayer.seek(resumePosition, restoreAudible: false);
+          await _applyPitchToPlayer(nextPlayer, muteGuard: false);
+        } else if (_usesMpvOnIos(nextPlayer)) {
+          await _setPlayerVolumeSafe(nextPlayer, 0);
+          await nextPlayer.seek(resumePosition);
+          await _applyPitchToPlayer(nextPlayer, muteGuard: false);
+        } else {
+          await nextPlayer.seek(resumePosition);
+          await _applyPitchToPlayer(nextPlayer, muteGuard: false);
+        }
+      } catch (_) {}
+      if (resumePlaying) {
+        await _resumePlayer(nextPlayer);
+      }
+    } finally {
+      _heldPositionDuringPitchTransition = null;
+      _heldDurationDuringPitchTransition = null;
+      _lastSeekTarget = resumePosition;
+      _seekFilterUntil = DateTime.now().add(_kSeekStaleWindow);
+      if (mounted) {
+        state = state.copyWith(
+          position: resumePosition,
+          duration: resumeDuration != Duration.zero
+              ? resumeDuration
+              : state.duration,
+        );
+      }
     }
   }
 
@@ -1316,6 +1345,9 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       if (!mounted) {
         return;
       }
+      if (_heldPositionDuringPitchTransition != null) {
+        return;
+      }
       // seek 触发后短暂窗口（350ms）内，mpv 仍可能把"还没跳到目标"前的
       // 旧位置流回来。如果直接 copy 进 state，UI thumb 会看到"先回弹
       // 再前进"。这里把距离目标超过 500ms 的事件丢弃；一旦看到接近
@@ -1337,9 +1369,13 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       state = state.copyWith(position: position);
     });
     _durationSub = player.stream.duration.listen((duration) {
-      if (mounted) {
-        state = state.copyWith(duration: duration);
+      if (!mounted) {
+        return;
       }
+      if (_heldDurationDuringPitchTransition != null) {
+        return;
+      }
+      state = state.copyWith(duration: duration);
     });
     _playingSub = player.stream.playing.listen((playing) {
       if (!mounted) {
