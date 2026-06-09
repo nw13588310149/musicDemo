@@ -9,7 +9,6 @@ import '../../music_companion/audio/music_companion_audio_catalog.dart';
 import '../config/smart_sight_singing_config.dart';
 import 'ktv_pitch_guide.dart';
 import 'midi_sight_singing_service.dart';
-import 'music_xml_repeat_expander.dart';
 import 'pitch_track.dart';
 
 /// MusicXML 解析预览（尚未选定声部）。
@@ -106,11 +105,8 @@ abstract final class MusicXmlSightSingingService {
     }
 
     final part = document.score.parts[partIndex - 1];
-    final measureOrder = MusicXmlRepeatExpander.expandMeasureOrder(
-      rawXml: rawXml,
-      partIndex: partIndex,
-      measureCount: part.measures.length,
-    );
+    // 产品约定：不展开反复/跳房子/D.S.，按谱面顺序唱一遍即可。
+    final measureOrder = _linearMeasureOrder(part.measures.length);
     final leadIn = _resolveLeadIn(document, partIndex, rawXml: rawXml);
     final leadInMs = leadIn?.durationMs ?? 0;
     final notes = _collectPartNotes(part, measureOrder, leadInMs: leadInMs);
