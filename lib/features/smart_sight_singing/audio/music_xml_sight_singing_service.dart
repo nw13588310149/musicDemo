@@ -106,21 +106,16 @@ abstract final class MusicXmlSightSingingService {
 
     final part = document.score.parts[partIndex - 1];
     // 产品约定：不展开反复/跳房子/D.S.，按谱面顺序唱一遍即可。
-    final measureOrder = _linearMeasureOrder(part.measures.length);
     final leadIn = _resolveLeadIn(document, partIndex, rawXml: rawXml);
     final leadInMs = leadIn?.durationMs ?? 0;
-    final notes = _collectPartNotes(part, measureOrder, leadInMs: leadInMs);
+    final notes = _collectPartNotes(part, leadInMs: leadInMs);
     final pitchedNotes =
         notes.where((n) => !n.isRest).toList(growable: false);
     if (pitchedNotes.isEmpty) {
       throw MusicXmlSightSingingException('声部 $partIndex 没有可跟唱音符。');
     }
 
-    final cursorOnsetMs = _collectOsmdCursorOnsets(
-      part,
-      measureOrder,
-      leadInMs: leadInMs,
-    );
+    final cursorOnsetMs = _collectOsmdCursorOnsets(part, leadInMs: leadInMs);
 
     final range = KtvPitchGuideBuilder.rangeForNotes(notes);
     final baseTotalMs =
@@ -182,41 +177,23 @@ abstract final class MusicXmlSightSingingService {
     }
   }
 
-  static List<int> _linearMeasureOrder(int measureCount) {
-    return List<int>.generate(measureCount, (index) => index);
-  }
-
   static List<KtvNoteSegment> _collectPartNotes(
-    Part part,
-    List<int> measureOrder, {
+    Part part, {
     int leadInMs = 0,
   }) {
     final notes = <KtvNoteSegment>[];
-    var playbackOffsetSec = 0.0;
-    for (final measureIndex in measureOrder) {
-      if (measureIndex < 0 || measureIndex >= part.measures.length) {
-        continue;
-      }
-      final measure = part.measures[measureIndex];
-      final anchorSec = _measureAnchorSec(measure);
-      final spanSec = _measureSpanSec(measure, anchorSec);
+    for (final measure in part.measures) {
       for (final note in measure.notes) {
         // 延音线后续音头：时长已并入 tie 起点，此处跳过以免 KTV/打分重复或错位。
         if (note.isGraceNote || note.continuesOtherNote || note.isInChord) {
           continue;
         }
 
-        final segment = _segmentFromXmlNote(
-          note,
-          measureAnchorSec: anchorSec,
-          playbackOffsetSec: playbackOffsetSec,
-          leadInMs: leadInMs,
-        );
+        final segment = _segmentFromXmlNote(note, leadInMs: leadInMs);
         if (segment != null) {
           notes.add(segment);
         }
       }
-      playbackOffsetSec += spanSec;
     }
     notes.sort((a, b) => a.startMs.compareTo(b.startMs));
     return notes;
@@ -224,62 +201,26 @@ abstract final class MusicXmlSightSingingService {
 
   /// OSMD 光标与 XML 逐 note 对齐（含 tie stop、休止符），与 [_collectPartNotes] 分离。
   static List<int> _collectOsmdCursorOnsets(
-    Part part,
-    List<int> measureOrder, {
+    Part part, {
     int leadInMs = 0,
   }) {
     final onsets = <int>[];
-    var playbackOffsetSec = 0.0;
-    for (final measureIndex in measureOrder) {
-      if (measureIndex < 0 || measureIndex >= part.measures.length) {
-        continue;
-      }
-      final measure = part.measures[measureIndex];
-      final anchorSec = _measureAnchorSec(measure);
-      final spanSec = _measureSpanSec(measure, anchorSec);
+    for (final measure in part.measures) {
       for (final note in measure.notes) {
         if (note.isGraceNote || note.isInChord) {
           continue;
         }
-        final localSec = note.noteDuration.timePosition - anchorSec;
         final startMs =
-            ((playbackOffsetSec + localSec) * 1000).round() + leadInMs;
+            (note.noteDuration.timePosition * 1000).round() + leadInMs;
         onsets.add(startMs);
       }
-      playbackOffsetSec += spanSec;
     }
     onsets.sort();
     return onsets;
   }
 
-  static double _measureAnchorSec(Measure measure) {
-    var min = double.infinity;
-    for (final note in measure.notes) {
-      if (note.isGraceNote || note.isInChord) continue;
-      min = math.min(min, note.noteDuration.timePosition);
-    }
-    return min.isFinite ? min : 0;
-  }
-
-  static double _measureSpanSec(Measure measure, double anchorSec) {
-    var maxEnd = anchorSec;
-    for (final note in measure.notes) {
-      if (note.isGraceNote || note.isInChord) continue;
-      final tiedDuration = note.noteDurationTied;
-      final durationSec = tiedDuration.seconds > 0
-          ? tiedDuration.seconds
-          : note.noteDuration.seconds;
-      if (durationSec <= 0) continue;
-      final end = note.noteDuration.timePosition + durationSec;
-      if (end > maxEnd) maxEnd = end;
-    }
-    return math.max(0, maxEnd - anchorSec);
-  }
-
   static KtvNoteSegment? _segmentFromXmlNote(
     Note note, {
-    double measureAnchorSec = 0,
-    double playbackOffsetSec = 0,
     int leadInMs = 0,
   }) {
     final tiedDuration = note.noteDurationTied;
@@ -290,8 +231,7 @@ abstract final class MusicXmlSightSingingService {
       return null;
     }
 
-    final localStartSec = tiedDuration.timePosition - measureAnchorSec;
-    final startSec = playbackOffsetSec + localStartSec;
+    final startSec = tiedDuration.timePosition;
     final startMs = (startSec * 1000).round() + leadInMs;
     final endMs = math.max(
       startMs + SmartSightSingingMidiConfig.minMidiNoteMs,
@@ -438,10 +378,7 @@ abstract final class MusicXmlSightSingingService {
     int suggestedPartIndex,
   ) {
     final part = document.score.parts[partIndex];
-    final notes = _collectPartNotes(
-      part,
-      _linearMeasureOrder(part.measures.length),
-    );
+    final notes = _collectPartNotes(part);
 
     final pitched = notes.where((n) => !n.isRest).toList(growable: false);
     if (pitched.isEmpty) {
@@ -471,10 +408,7 @@ abstract final class MusicXmlSightSingingService {
     var bestScore = -1.0;
 
     for (var i = 0; i < document.score.parts.length; i++) {
-      final notes = _collectPartNotes(
-        document.score.parts[i],
-        _linearMeasureOrder(document.score.parts[i].measures.length),
-      );
+      final notes = _collectPartNotes(document.score.parts[i]);
       final pitched = notes.where((n) => !n.isRest).toList();
       if (pitched.isEmpty) {
         continue;
