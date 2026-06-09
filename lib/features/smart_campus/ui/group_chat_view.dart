@@ -165,6 +165,9 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
   /// 防止 sync 与初次 classList / app resume 并发触发自身。
   bool _syncing = false;
 
+  /// sync 进行中又收到 WS 推送时，结束后补跑一轮。
+  bool _syncPending = false;
+
   /// 全局长连接订阅：收到 `chatNewMessage` / `chatMessageDeleted`
   /// / `chatAnnouncementUpdated` 时触发刷新或局部更新。
   StreamSubscription<ChatSocketEvent>? _wsSubscription;
@@ -275,7 +278,11 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
     if (!mounted) return;
     switch (event.type) {
       case ChatSocketEventType.chatNewMessage:
+        _applyRealtimeChatPayload(event.payload);
+        unawaited(_syncMessages());
+        break;
       case ChatSocketEventType.chatMessageDeleted:
+        _applyRealtimeChatPayload(event.payload);
         unawaited(_syncMessages());
         break;
       case ChatSocketEventType.chatAnnouncementUpdated:
@@ -500,7 +507,10 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
   ///     并自动滚到底部；
   ///   - 其它会话 → 更新会话列表的 `lastMessage` / `lastTime` / `unread`。
   Future<void> _syncMessages() async {
-    if (_syncing) return;
+    if (_syncing) {
+      _syncPending = true;
+      return;
+    }
     _syncing = true;
     try {
       final res = await _repo.syncMsg(offsetMsgId: _syncOffsetMsgId, size: 100);
@@ -558,7 +568,62 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
       }
     } finally {
       _syncing = false;
+      if (_syncPending) {
+        _syncPending = false;
+        unawaited(_syncMessages());
+      }
     }
+  }
+
+  /// WS 推送携带完整消息体时，先就地合并到当前会话 / 会话列表，避免等
+  /// syncMsg 往返才看到新消息。
+  void _applyRealtimeChatPayload(Map<String, dynamic> payload) {
+    final classId = (payload['classId'] ?? payload['cId'] ?? '').toString();
+    if (classId.isEmpty) return;
+
+    final msgId = (payload['id'] ??
+            payload['msgId'] ??
+            payload['messageId'] ??
+            '')
+        .toString();
+    if (msgId.isNotEmpty && _compareSnowflakeIds(msgId, _syncOffsetMsgId) > 0) {
+      _syncOffsetMsgId = msgId;
+    }
+
+    final raw = payload.map((k, v) => MapEntry(k.toString(), v));
+    final parser = GroupChatMessageParser(userMap: _memberUserMap());
+    final parsed = parser.parseRaw(raw);
+    if (parsed is! _ChatMessage) return;
+
+    final activeId = _selectedConvId;
+    if (classId == activeId) {
+      if (_messages.any((m) => m.id == parsed.id)) return;
+      setState(() {
+        _messages = [..._messages, parsed]
+          ..sort((a, b) => a.sentAt.compareTo(b.sentAt));
+      });
+      _bumpConversation(classId, [raw], addUnread: false);
+      _scheduleScrollToBottom(animated: true);
+    } else {
+      _bumpConversation(classId, [raw], addUnread: true);
+    }
+  }
+
+  Map<String, _MemberInfo> _memberUserMap() {
+    final map = <String, _MemberInfo>{};
+    void add(_MemberInfo? m) {
+      if (m == null || m.id.isEmpty) return;
+      map[m.id] = m;
+    }
+
+    add(_detailHeadTeacher);
+    for (final m in _detailTeachers) {
+      add(m);
+    }
+    for (final m in _detailStudents) {
+      add(m);
+    }
+    return map;
   }
 
   /// 19 位雪花 id 用字符串语义比较：长度优先，相同长度按字典序。
@@ -4403,22 +4468,38 @@ class _BubbleDispatcher extends StatelessWidget {
 }
 
 // 文本气泡
+bool _isChatEmojiCluster(String cluster) {
+  for (final rune in cluster.runes) {
+    if ((rune >= 0x1F000 && rune <= 0x1FAFF) ||
+        (rune >= 0x2600 && rune <= 0x27BF) ||
+        (rune >= 0xFE00 && rune <= 0xFE0F) ||
+        rune == 0x200D) {
+      return true;
+    }
+  }
+  return false;
+}
+
+List<InlineSpan> _chatTextSpans(
+  String text,
+  TextStyle baseStyle,
+  double Function(double) ui,
+) {
+  return [
+    for (final cluster in text.characters)
+      TextSpan(
+        text: cluster,
+        style: _isChatEmojiCluster(cluster)
+            ? TextStyle(fontSize: ui(20), height: 1.1)
+            : null,
+      ),
+  ];
+}
+
 class _TextBubbleView extends StatelessWidget {
   const _TextBubbleView({required this.text});
 
   final String text;
-
-  static bool _isEmojiCluster(String cluster) {
-    for (final rune in cluster.runes) {
-      if ((rune >= 0x1F000 && rune <= 0x1FAFF) ||
-          (rune >= 0x2600 && rune <= 0x27BF) ||
-          (rune >= 0xFE00 && rune <= 0xFE0F) ||
-          rune == 0x200D) {
-        return true;
-      }
-    }
-    return false;
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -4438,15 +4519,7 @@ class _TextBubbleView extends StatelessWidget {
       ),
       child: Text.rich(
         TextSpan(
-          children: [
-            for (final cluster in text.characters)
-              TextSpan(
-                text: cluster,
-                style: _isEmojiCluster(cluster)
-                    ? TextStyle(fontSize: ui(20), height: 1.1)
-                    : null,
-              ),
-          ],
+          children: _chatTextSpans(text, baseStyle, ui),
         ),
         style: baseStyle,
       ),
@@ -5137,33 +5210,10 @@ class _ChatInputBarState extends State<_ChatInputBar> {
             ),
             SizedBox(width: ui(12)),
             Expanded(
-              child: AppTextField(
+              child: _ChatComposerField(
                 controller: widget.controller,
                 focusNode: _focusNode,
-                cursorColor: const Color(0xFF8741FF),
-                cursorWidth: 1.5,
-                cursorHeight: ui(14 * 1.7),
-                style: TextStyle(
-                  fontSize: ui(14),
-                  color: _kTextDark,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w400,
-                  height: 1.7,
-                ),
-                decoration: InputDecoration(
-                  hintText: '请输入文字',
-                  hintStyle: TextStyle(
-                    fontSize: ui(14),
-                    color: _kTextDivider,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w400,
-                    height: 1.7,
-                  ),
-                  border: InputBorder.none,
-                  isCollapsed: true,
-                  contentPadding: EdgeInsets.symmetric(vertical: ui(8)),
-                ),
-                onSubmitted: (_) => widget.onSend(),
+                onSubmitted: widget.onSend,
               ),
             ),
             SizedBox(width: ui(8)),
@@ -5181,6 +5231,84 @@ class _ChatInputBarState extends State<_ChatInputBar> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// 输入框：文字 14px，emoji 20px —— 与 [_TextBubbleView] 保持一致。
+class _ChatComposerField extends StatelessWidget {
+  const _ChatComposerField({
+    required this.controller,
+    required this.focusNode,
+    required this.onSubmitted,
+  });
+
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final VoidCallback onSubmitted;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final baseStyle = TextStyle(
+      fontSize: ui(14),
+      color: _kTextDark,
+      fontFamily: 'PingFang SC',
+      fontWeight: AppFont.w400,
+      height: 1.7,
+    );
+    final strutStyle = StrutStyle(
+      fontSize: ui(14),
+      height: 1.7,
+      forceStrutHeight: true,
+    );
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: controller,
+      builder: (context, value, _) {
+        final hasText = value.text.isNotEmpty;
+        return Stack(
+          alignment: Alignment.centerLeft,
+          children: [
+            if (hasText)
+              IgnorePointer(
+                child: Text.rich(
+                  TextSpan(
+                    children: _chatTextSpans(value.text, baseStyle, ui),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.visible,
+                  strutStyle: strutStyle,
+                ),
+              ),
+            AppTextField(
+              controller: controller,
+              focusNode: focusNode,
+              maxLines: 1,
+              cursorColor: const Color(0xFF8741FF),
+              cursorWidth: 1.5,
+              cursorHeight: ui(14 * 1.7),
+              style: baseStyle.copyWith(
+                color: hasText ? Colors.transparent : _kTextDark,
+              ),
+              strutStyle: strutStyle,
+              decoration: InputDecoration(
+                hintText: '请输入文字',
+                hintStyle: TextStyle(
+                  fontSize: ui(14),
+                  color: _kTextDivider,
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w400,
+                  height: 1.7,
+                ),
+                border: InputBorder.none,
+                isCollapsed: true,
+                contentPadding: EdgeInsets.symmetric(vertical: ui(8)),
+              ),
+              onSubmitted: (_) => onSubmitted(),
+            ),
+          ],
+        );
+      },
     );
   }
 }

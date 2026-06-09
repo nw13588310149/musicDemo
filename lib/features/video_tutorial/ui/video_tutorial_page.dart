@@ -25,6 +25,7 @@ import '../../../core/widgets/class_share_drawer.dart';
 import '../../../core/widgets/seamless_banner_carousel.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../../smart_campus/navigation/group_chat_return.dart';
+import '../../my_collection/navigation/collection_return.dart';
 import '../data/video_publisher_data.dart';
 import '../state/video_tutorial_controller.dart';
 import '../state/video_tutorial_state.dart';
@@ -166,18 +167,14 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
     if (message != null && message.isNotEmpty) {
       _showToast(message);
       _isDetailOpening = false;
-      if (GroupChatReturnNavigator.isActive(context)) {
-        GroupChatReturnNavigator.pop(context, ref: ref);
-      }
+      _popTransitiveEntryIfNeeded(context, ref: ref);
       return;
     }
 
     final detail = ref.read(videoTutorialControllerProvider(_pageArgs)).detail;
     if (detail == null) {
       _isDetailOpening = false;
-      if (GroupChatReturnNavigator.isActive(context)) {
-        GroupChatReturnNavigator.pop(context, ref: ref);
-      }
+      _popTransitiveEntryIfNeeded(context, ref: ref);
       return;
     }
 
@@ -196,10 +193,17 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
       ref
           .read(videoTutorialControllerProvider(_pageArgs).notifier)
           .closeDetail();
-      if (GroupChatReturnNavigator.isActive(context)) {
-        GroupChatReturnNavigator.pop(context, ref: ref);
-      }
+      _popTransitiveEntryIfNeeded(context, ref: ref);
     }
+  }
+
+  /// 从群聊 / 收藏等「中转 Shell 路由」进入时，详情关闭后一并 pop 掉中转页。
+  void _popTransitiveEntryIfNeeded(BuildContext context, {WidgetRef? ref}) {
+    if (GroupChatReturnNavigator.isActive(context)) {
+      GroupChatReturnNavigator.pop(context, ref: ref);
+      return;
+    }
+    CollectionReturnNavigator.pop(context);
   }
 
   void _showToast(String msg) {

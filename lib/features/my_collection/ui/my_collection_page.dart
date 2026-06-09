@@ -15,6 +15,7 @@ import '../../../core/widgets/course_empty_placeholder.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../../video_tutorial/data/video_publisher_data.dart';
+import '../navigation/collection_return.dart';
 import '../state/my_collection_controller.dart';
 import '../state/my_collection_state.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -137,7 +138,7 @@ class MyCollectionPage extends ConsumerWidget {
         Navigator.pushNamed(
           context,
           RoutePaths.videoTutorial,
-          arguments: <String, dynamic>{'openVideoId': openVideoId},
+          arguments: CollectionReturnNavigator.wrapVideoArgs(openVideoId),
         );
       case 10: // 试题
         // 按"是否带可播放音频"分流：试题项的 `file1` 是 JSON 字符串数组，

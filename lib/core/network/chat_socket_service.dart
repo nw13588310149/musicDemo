@@ -221,6 +221,44 @@ class ChatSocketService {
 
       final normalizedType = _normalizeWsType(map);
 
+      // 系统事件。
+      if (normalizedType == 10003) {
+        _emit(ChatSocketEventType.kicked, map);
+        return;
+      }
+      if (normalizedType == 10000) {
+        _emit(ChatSocketEventType.tokenError, map);
+        return;
+      }
+      if (normalizedType == 10002) {
+        _emit(ChatSocketEventType.loginTimeout, map);
+        return;
+      }
+
+      // 群聊推送 —— 必须在 AI 分支之前判定。
+      //
+      // 群聊消息 type 与 AI 复用 0/1 等编号（文本=1）；若先走 AI 分支，
+      // chatNewMessage 永远触发不了，页面只能切会话后靠 msgList 刷新。
+      //
+      // 约定（推荐让后端就近选用 2001 / 2002 / 2003）：
+      //   2001：新消息
+      //   2002：消息撤回
+      //   2003：公告变更
+      if (_looksLikeChatPayload(map, normalizedType)) {
+        if (_isChatPushType(normalizedType, 2002) ||
+            _looksLikeChatMessageDeleted(map, normalizedType)) {
+          _emit(ChatSocketEventType.chatMessageDeleted, map);
+          return;
+        }
+        if (_isChatPushType(normalizedType, 2003) ||
+            _looksLikeChatAnnouncementChanged(map, normalizedType)) {
+          _emit(ChatSocketEventType.chatAnnouncementUpdated, map);
+          return;
+        }
+        _emit(ChatSocketEventType.chatNewMessage, map);
+        return;
+      }
+
       // AI 助手 —— 流式增量（type=1/10014 在协议里几乎全是 delta，整包只认 10005）。
       if (normalizedType == 0 ||
           normalizedType == 1 ||
@@ -236,45 +274,6 @@ class ChatSocketService {
       if (normalizedType == 10005 ||
           _isAssistantFullPayload(map, normalizedType)) {
         _emit(ChatSocketEventType.full, map);
-        return;
-      }
-
-      // 系统事件。
-      if (normalizedType == 10003) {
-        _emit(ChatSocketEventType.kicked, map);
-        return;
-      }
-      if (normalizedType == 10000) {
-        _emit(ChatSocketEventType.tokenError, map);
-        return;
-      }
-      if (normalizedType == 10002) {
-        _emit(ChatSocketEventType.loginTimeout, map);
-        return;
-      }
-
-      // 群聊推送 —— 后端约定 type 号待最终确认；这里同时容忍语义判定。
-      //
-      // 约定（推荐让后端就近选用 2001 / 2002 / 2003）：
-      //   2001：新消息
-      //   2002：消息撤回
-      //   2003：公告变更
-      //
-      // 兜底语义判定：若帧里带 classId + (content/msgId)，无 type 也按
-      // chatNewMessage 处理。
-      if (_isChatPushType(normalizedType, 2001) ||
-          _looksLikeChatNewMessage(map, normalizedType)) {
-        _emit(ChatSocketEventType.chatNewMessage, map);
-        return;
-      }
-      if (_isChatPushType(normalizedType, 2002) ||
-          _looksLikeChatMessageDeleted(map, normalizedType)) {
-        _emit(ChatSocketEventType.chatMessageDeleted, map);
-        return;
-      }
-      if (_isChatPushType(normalizedType, 2003) ||
-          _looksLikeChatAnnouncementChanged(map, normalizedType)) {
-        _emit(ChatSocketEventType.chatAnnouncementUpdated, map);
         return;
       }
     } catch (_) {
@@ -352,12 +351,38 @@ class ChatSocketService {
   bool _isChatPushType(int? actualType, int expectedType) =>
       actualType != null && actualType == expectedType;
 
+  /// 群聊帧语义判定：带 classId 且具备消息字段。
+  bool _looksLikeChatPayload(Map<String, dynamic> json, int? type) {
+    final classId = json['classId'] ?? json['cId'];
+    if (classId == null) return false;
+
+    if (_isChatPushType(type, 2001) ||
+        _isChatPushType(type, 2002) ||
+        _isChatPushType(type, 2003)) {
+      return true;
+    }
+
+    final hasChatIdentity =
+        json['fromUserId'] != null ||
+        json['msgId'] != null ||
+        json['id'] != null ||
+        json['messageId'] != null;
+    final hasChatMsgType =
+        type != null && ((type >= 0 && type <= 3) || type == 100);
+    if (hasChatIdentity || hasChatMsgType) {
+      if ((json['sessionId'] != null || json['chatSessionId'] != null) &&
+          !hasChatIdentity &&
+          (json['role'] == 'assistant' || json['role'] == 'ai')) {
+        return false;
+      }
+      return true;
+    }
+
+    return _looksLikeChatNewMessage(json, type);
+  }
+
   /// 兜底：若服务端只下发 classId + 内容字段而无明确 type，按新消息处理。
   bool _looksLikeChatNewMessage(Map<String, dynamic> json, int? type) {
-    if (type != null && type < 2000) {
-      // 已经被其它分支处理过。
-      return false;
-    }
     final hasClass = json['classId'] != null || json['cId'] != null;
     if (!hasClass) return false;
     final hasContent =

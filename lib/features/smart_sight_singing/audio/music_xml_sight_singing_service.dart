@@ -9,6 +9,7 @@ import '../../music_companion/audio/music_companion_audio_catalog.dart';
 import '../config/smart_sight_singing_config.dart';
 import 'ktv_pitch_guide.dart';
 import 'midi_sight_singing_service.dart';
+import 'music_xml_repeat_expander.dart';
 import 'pitch_track.dart';
 
 /// MusicXML 解析预览（尚未选定声部）。
@@ -105,25 +106,31 @@ abstract final class MusicXmlSightSingingService {
     }
 
     final part = document.score.parts[partIndex - 1];
-    final notes = _collectPartNotes(part);
+    final measureOrder = MusicXmlRepeatExpander.expandMeasureOrder(
+      rawXml: rawXml,
+      partIndex: partIndex,
+      measureCount: part.measures.length,
+    );
+    final leadIn = _resolveLeadIn(document, partIndex, rawXml: rawXml);
+    final leadInMs = leadIn?.durationMs ?? 0;
+    final notes = _collectPartNotes(part, measureOrder, leadInMs: leadInMs);
     final pitchedNotes =
         notes.where((n) => !n.isRest).toList(growable: false);
     if (pitchedNotes.isEmpty) {
       throw MusicXmlSightSingingException('声部 $partIndex 没有可跟唱音符。');
     }
 
-    final leadIn = _resolveLeadIn(document, partIndex, rawXml: rawXml);
-    final leadInMs = leadIn?.durationMs ?? 0;
-    final shiftedNotes = leadInMs > 0 ? _shiftNotes(notes, leadInMs) : notes;
-    final cursorOnsetMs = _collectOsmdCursorOnsets(part, leadInMs: leadInMs);
-    final pitchedShifted =
-        shiftedNotes.where((n) => !n.isRest).toList(growable: false);
+    final cursorOnsetMs = _collectOsmdCursorOnsets(
+      part,
+      measureOrder,
+      leadInMs: leadInMs,
+    );
 
-    final range = KtvPitchGuideBuilder.rangeForNotes(shiftedNotes);
+    final range = KtvPitchGuideBuilder.rangeForNotes(notes);
     final baseTotalMs =
-        pitchedShifted.map((n) => n.endMs).reduce(math.max) +
+        pitchedNotes.map((n) => n.endMs).reduce(math.max) +
         SmartSightSingingMidiConfig.playbackTailMs;
-    // shiftedNotes 时间戳已含预备段偏移；调度器总长 = baseTotalMs。
+    // notes 时间戳已含预备段偏移；调度器总长 = baseTotalMs。
     // 进度条分母仅用旋律段（扣除 leadInMs）。
     final playbackTotalMs = baseTotalMs;
     final melodyTotalMs =
@@ -131,7 +138,7 @@ abstract final class MusicXmlSightSingingService {
 
     final track = PitchTrack(
       frames: const <PitchFrame>[],
-      notes: shiftedNotes,
+      notes: notes,
       totalMs: melodyTotalMs,
       frameStepMs: SmartSightSingingMidiConfig.referenceFrameStepMs,
       minMidi: range.minMidi,
@@ -140,7 +147,7 @@ abstract final class MusicXmlSightSingingService {
 
     final playbackEvents = <MidiPlaybackEvent>[
       if (leadIn != null) ...leadIn.playbackEvents,
-      ...pitchedShifted.map(
+      ...pitchedNotes.map(
         (n) => MidiPlaybackEvent(
           timeMs: n.startMs,
           pitch: n.midi.round(),
@@ -179,20 +186,41 @@ abstract final class MusicXmlSightSingingService {
     }
   }
 
-  static List<KtvNoteSegment> _collectPartNotes(Part part) {
+  static List<int> _linearMeasureOrder(int measureCount) {
+    return List<int>.generate(measureCount, (index) => index);
+  }
+
+  static List<KtvNoteSegment> _collectPartNotes(
+    Part part,
+    List<int> measureOrder, {
+    int leadInMs = 0,
+  }) {
     final notes = <KtvNoteSegment>[];
-    for (final measure in part.measures) {
+    var playbackOffsetSec = 0.0;
+    for (final measureIndex in measureOrder) {
+      if (measureIndex < 0 || measureIndex >= part.measures.length) {
+        continue;
+      }
+      final measure = part.measures[measureIndex];
+      final anchorSec = _measureAnchorSec(measure);
+      final spanSec = _measureSpanSec(measure, anchorSec);
       for (final note in measure.notes) {
         // 延音线后续音头：时长已并入 tie 起点，此处跳过以免 KTV/打分重复或错位。
         if (note.isGraceNote || note.continuesOtherNote || note.isInChord) {
           continue;
         }
 
-        final segment = _segmentFromXmlNote(note);
+        final segment = _segmentFromXmlNote(
+          note,
+          measureAnchorSec: anchorSec,
+          playbackOffsetSec: playbackOffsetSec,
+          leadInMs: leadInMs,
+        );
         if (segment != null) {
           notes.add(segment);
         }
       }
+      playbackOffsetSec += spanSec;
     }
     notes.sort((a, b) => a.startMs.compareTo(b.startMs));
     return notes;
@@ -200,25 +228,64 @@ abstract final class MusicXmlSightSingingService {
 
   /// OSMD 光标与 XML 逐 note 对齐（含 tie stop、休止符），与 [_collectPartNotes] 分离。
   static List<int> _collectOsmdCursorOnsets(
-    Part part, {
+    Part part,
+    List<int> measureOrder, {
     int leadInMs = 0,
   }) {
     final onsets = <int>[];
-    for (final measure in part.measures) {
+    var playbackOffsetSec = 0.0;
+    for (final measureIndex in measureOrder) {
+      if (measureIndex < 0 || measureIndex >= part.measures.length) {
+        continue;
+      }
+      final measure = part.measures[measureIndex];
+      final anchorSec = _measureAnchorSec(measure);
+      final spanSec = _measureSpanSec(measure, anchorSec);
       for (final note in measure.notes) {
         if (note.isGraceNote || note.isInChord) {
           continue;
         }
+        final localSec = note.noteDuration.timePosition - anchorSec;
         final startMs =
-            (note.noteDuration.timePosition * 1000).round() + leadInMs;
+            ((playbackOffsetSec + localSec) * 1000).round() + leadInMs;
         onsets.add(startMs);
       }
+      playbackOffsetSec += spanSec;
     }
     onsets.sort();
     return onsets;
   }
 
-  static KtvNoteSegment? _segmentFromXmlNote(Note note) {
+  static double _measureAnchorSec(Measure measure) {
+    var min = double.infinity;
+    for (final note in measure.notes) {
+      if (note.isGraceNote || note.isInChord) continue;
+      min = math.min(min, note.noteDuration.timePosition);
+    }
+    return min.isFinite ? min : 0;
+  }
+
+  static double _measureSpanSec(Measure measure, double anchorSec) {
+    var maxEnd = anchorSec;
+    for (final note in measure.notes) {
+      if (note.isGraceNote || note.isInChord) continue;
+      final tiedDuration = note.noteDurationTied;
+      final durationSec = tiedDuration.seconds > 0
+          ? tiedDuration.seconds
+          : note.noteDuration.seconds;
+      if (durationSec <= 0) continue;
+      final end = note.noteDuration.timePosition + durationSec;
+      if (end > maxEnd) maxEnd = end;
+    }
+    return math.max(0, maxEnd - anchorSec);
+  }
+
+  static KtvNoteSegment? _segmentFromXmlNote(
+    Note note, {
+    double measureAnchorSec = 0,
+    double playbackOffsetSec = 0,
+    int leadInMs = 0,
+  }) {
     final tiedDuration = note.noteDurationTied;
     final durationSec = tiedDuration.seconds > 0
         ? tiedDuration.seconds
@@ -227,11 +294,12 @@ abstract final class MusicXmlSightSingingService {
       return null;
     }
 
-    final startSec = tiedDuration.timePosition;
-    final startMs = (startSec * 1000).round();
+    final localStartSec = tiedDuration.timePosition - measureAnchorSec;
+    final startSec = playbackOffsetSec + localStartSec;
+    final startMs = (startSec * 1000).round() + leadInMs;
     final endMs = math.max(
       startMs + SmartSightSingingMidiConfig.minMidiNoteMs,
-      ((startSec + durationSec) * 1000).round(),
+      ((startSec + durationSec) * 1000).round() + leadInMs,
     );
     final startBeat = startSec;
     final durationBeats = durationSec;
@@ -259,24 +327,6 @@ abstract final class MusicXmlSightSingingService {
       startBeat: startBeat,
       durationBeats: durationBeats,
     );
-  }
-
-  static List<KtvNoteSegment> _shiftNotes(
-    List<KtvNoteSegment> notes,
-    int offsetMs,
-  ) {
-    return notes
-        .map(
-          (note) => KtvNoteSegment(
-            startMs: note.startMs + offsetMs,
-            endMs: note.endMs + offsetMs,
-            midi: note.midi,
-            startBeat: note.startBeat,
-            durationBeats: note.durationBeats,
-            isRest: note.isRest,
-          ),
-        )
-        .toList(growable: false);
   }
 
   static _MusicXmlLeadIn? _resolveLeadIn(
@@ -392,7 +442,10 @@ abstract final class MusicXmlSightSingingService {
     int suggestedPartIndex,
   ) {
     final part = document.score.parts[partIndex];
-    final notes = _collectPartNotes(part);
+    final notes = _collectPartNotes(
+      part,
+      _linearMeasureOrder(part.measures.length),
+    );
 
     final pitched = notes.where((n) => !n.isRest).toList(growable: false);
     if (pitched.isEmpty) {
@@ -422,7 +475,10 @@ abstract final class MusicXmlSightSingingService {
     var bestScore = -1.0;
 
     for (var i = 0; i < document.score.parts.length; i++) {
-      final notes = _collectPartNotes(document.score.parts[i]);
+      final notes = _collectPartNotes(
+        document.score.parts[i],
+        _linearMeasureOrder(document.score.parts[i].measures.length),
+      );
       final pitched = notes.where((n) => !n.isRest).toList();
       if (pitched.isEmpty) {
         continue;
