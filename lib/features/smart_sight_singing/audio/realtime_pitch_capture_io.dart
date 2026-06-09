@@ -239,7 +239,7 @@ class _IORealtimePitchCapture implements RealtimePitchCapture {
   }
 
   @override
-  Future<void> stop() async {
+  Future<void> stop({bool restorePlaybackSession = true}) async {
     if (!_running) return;
     _running = false;
     await _streamSub?.cancel();
@@ -257,7 +257,9 @@ class _IORealtimePitchCapture implements RealtimePitchCapture {
     _filledBytes = 0;
     _detectInFlight = false;
     _pendingFrame = null;
-    await AppAudioService.reconcilePlaybackSession();
+    if (restorePlaybackSession) {
+      await AppAudioService.reconcilePlaybackSession();
+    }
   }
 }
 

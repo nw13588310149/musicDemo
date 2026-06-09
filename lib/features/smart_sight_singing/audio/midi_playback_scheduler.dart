@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
+import '../../../core/audio/piano_playback_mix.dart';
 import '../../music_companion/audio/music_companion_audio_catalog.dart';
 import '../../music_companion/audio/music_companion_audio_engine.dart';
 import '../config/smart_sight_singing_config.dart';
@@ -126,7 +127,24 @@ class MidiPlaybackScheduler {
     _timer = Timer.periodic(const Duration(milliseconds: 16), _onTick);
   }
 
-  Future<void> stop() async {
+  Future<void> stop({bool awaitNativeFade = false}) async {
+    await _haltPlayback(awaitNativeFade: awaitNativeFade);
+  }
+
+  /// 跟唱中途停止：先淡出短音再返回，避免紧接着切会话时 ao 硬切爆音。
+  Future<void> pauseSmooth() async {
+    await _haltPlayback(awaitNativeFade: true);
+  }
+
+  Future<void> pause() async {
+    await pauseSmooth();
+  }
+
+  Future<void> _haltPlayback({required bool awaitNativeFade}) async {
+    if (!_running && !awaitNativeFade) {
+      _activePlaybackPitch = null;
+      return;
+    }
     _running = false;
     _timer?.cancel();
     _timer = null;
@@ -134,15 +152,13 @@ class MidiPlaybackScheduler {
     _stopwatch = null;
     _activePlaybackPitch = null;
     await _audio.stopAll();
-  }
-
-  Future<void> pause() async {
-    if (!_running) return;
-    _running = false;
-    _timer?.cancel();
-    _timer = null;
-    _stopwatch?.stop();
-    await _audio.stopAll();
+    if (awaitNativeFade &&
+        !kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.iOS) {
+      await Future<void>.delayed(
+        const Duration(milliseconds: PianoPlaybackMix.stopAllFadeMs),
+      );
+    }
   }
 
   void _onTick(Timer timer) {

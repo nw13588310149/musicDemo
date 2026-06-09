@@ -956,8 +956,13 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
       completedNoteScores: reset ? const <KtvNoteScore>[] : completedScores,
     );
     try {
-      await _stopCaptureSilently();
-      await _playback.pause();
+      // 必须先淡出伴奏，再停麦/切会话；否则 playAndRecord→playback 时
+      // 钢琴尾音仍在 ao 里，会产生一次可闻咔哒。
+      await _playback.pauseSmooth();
+      await _stopCaptureSilently(restorePlaybackSession: false);
+      if (!kIsWeb) {
+        await _restorePlaybackSessionForHandoff();
+      }
     } finally {
       if (mounted) {
         state = state.copyWith(isStoppingSinging: false);
@@ -1105,8 +1110,11 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
         ? const <KtvNoteScore>[]
         : session.completedScores;
     _scoringSession = null;
-    await _stopCaptureSilently();
-    await _playback.stop();
+    await _playback.stop(awaitNativeFade: true);
+    await _stopCaptureSilently(restorePlaybackSession: false);
+    if (!kIsWeb) {
+      await _restorePlaybackSessionForHandoff();
+    }
     if (!mounted) return;
     state = state.copyWith(
       stage: SightSingingStage.finished,
@@ -1231,11 +1239,13 @@ class SmartSightSingingController extends StateNotifier<SightSingingState> {
     );
   }
 
-  Future<void> _stopCaptureSilently() async {
+  Future<void> _stopCaptureSilently({
+    bool restorePlaybackSession = true,
+  }) async {
     await _pitchSub?.cancel();
     _pitchSub = null;
     try {
-      await _capture?.stop();
+      await _capture?.stop(restorePlaybackSession: restorePlaybackSession);
     } catch (_) {}
     _capture = null;
   }

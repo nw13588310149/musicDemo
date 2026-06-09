@@ -13,7 +13,10 @@ abstract class RealtimePitchCapture {
   Future<Stream<RealtimePitchEvent>> start();
 
   /// 停止采样、关闭录音、释放资源。
-  Future<void> stop();
+  ///
+  /// [restorePlaybackSession] 为 false 时仅停麦，不立刻切回 playback 会话
+  /// （跟唱停止时应先等伴奏淡出完毕再恢复会话，避免爆音）。
+  Future<void> stop({bool restorePlaybackSession = true});
 
   bool get isRunning;
 }

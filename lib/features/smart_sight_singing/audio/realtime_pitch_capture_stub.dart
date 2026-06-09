@@ -224,7 +224,7 @@ class _WebRealtimePitchCapture implements RealtimePitchCapture {
   }
 
   @override
-  Future<void> stop() async {
+  Future<void> stop({bool restorePlaybackSession = true}) async {
     if (!_running) return;
     _running = false;
     await _streamSub?.cancel();
