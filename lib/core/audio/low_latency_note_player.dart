@@ -18,6 +18,9 @@ abstract interface class LowLatencyNotePlayer {
 
   Future<void> prepare(Map<String, String> assetByKey);
 
+  /// iOS：等待原生侧完成解码后再返回（节拍器初始化专用，避免增量 prepare 早退）。
+  Future<void> prepareEnsuringDecoded(Map<String, String> assetByKey);
+
   bool hasPrepared(String key);
 
   bool tryPlay(String key, {double volume = 1, bool metronome = false});

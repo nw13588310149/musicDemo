@@ -266,6 +266,9 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
     try {
       await AppAudioService.reconcilePlaybackSession();
       await _audioEngine.ensureMetronomeInitialized();
+      if (!kIsWeb) {
+        await AppAudioService.sharedNativePlayer.pingEngine();
+      }
     } catch (error, stack) {
       debugPrint('MusicCompanion _startMetronome init: $error\n$stack');
       if (!mounted) return;
@@ -310,9 +313,7 @@ class MusicCompanionController extends StateNotifier<MusicCompanionState> {
       final vol = MusicCompanionPlaybackVolume.metronomeVolumeForBeat(
         beatIndex,
       );
-      if (!_audioEngine.tryPlayMetronomeCueFromUserGesture(cue, volume: vol)) {
-        unawaited(_audioEngine.playMetronomeCue(cue, volume: vol));
-      }
+      unawaited(_audioEngine.playMetronomeCue(cue, volume: vol));
       _metronomeTickCount += 1;
     }
 

@@ -64,6 +64,8 @@ class MusicCompanionAudioEngine {
       await AppAudioService.reconcilePlaybackSession();
     }
     await _nativePlayer.pingEngine();
+    // 会话切换后强制下次播放前重新 ensure 节拍器采样。
+    _metronomeInitTask = null;
   }
 
   Future<void> _runEnsurePianoInitialized() async {
@@ -115,7 +117,7 @@ class MusicCompanionAudioEngine {
         await _webPlayer.prepare(kMusicCompanionMetronomeAssetByCue.values);
         return;
       }
-      await _nativePlayer.prepare(_metronomeAssetByKey);
+      await _nativePlayer.prepareEnsuringDecoded(_metronomeAssetByKey);
     } catch (error, stack) {
       _metronomeInitTask = null;
       debugPrint(
@@ -243,9 +245,6 @@ class MusicCompanionAudioEngine {
       await ensureMetronomeInitialized();
       if (_disposed) return;
       final key = _metronomeKey(cue);
-      if (_nativePlayer.tryPlay(key, volume: volume, metronome: true)) {
-        return;
-      }
       await _nativePlayer.play(key, volume: volume, metronome: true);
     } catch (error, stack) {
       debugPrint(

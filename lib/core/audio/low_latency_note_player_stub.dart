@@ -31,6 +31,10 @@ class _StubLowLatencyNotePlayer implements LowLatencyNotePlayer {
   }
 
   @override
+  Future<void> prepareEnsuringDecoded(Map<String, String> assetByKey) =>
+      prepare(assetByKey);
+
+  @override
   bool hasPrepared(String key) => _keys.contains(key);
 
   @override

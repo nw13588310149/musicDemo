@@ -135,6 +135,48 @@ class _IoLowLatencyNotePlayer implements LowLatencyNotePlayer {
   }
 
   @override
+  Future<void> prepareEnsuringDecoded(Map<String, String> assetByKey) async {
+    if (_disposed || assetByKey.isEmpty) return;
+    _assetByKey.addAll(assetByKey);
+
+    if (defaultTargetPlatform != TargetPlatform.iOS) {
+      await prepare(assetByKey);
+      return;
+    }
+
+    try {
+      await _channel
+          .invokeMethod<void>('prepare', <String, Object>{
+            'assets': assetByKey,
+          })
+          .timeout(_kPrepareTimeout);
+      _nativeReady = true;
+      _fallbackMode = false;
+      _lastNativeError = null;
+    } on TimeoutException catch (error, stack) {
+      _lastNativeError = 'prepareEnsuringDecoded timed out: $error';
+      debugPrint(
+        'LowLatencyNotePlayer.prepareEnsuringDecoded timed out: '
+        '$error\n$stack',
+      );
+      rethrow;
+    } on MissingPluginException catch (error, stack) {
+      _lastNativeError = 'channel missing: $error';
+      debugPrint(
+        'LowLatencyNotePlayer.prepareEnsuringDecoded channel missing: '
+        '$error\n$stack',
+      );
+      rethrow;
+    } on PlatformException catch (error, stack) {
+      _lastNativeError = 'prepareEnsuringDecoded failed: $error';
+      debugPrint(
+        'LowLatencyNotePlayer.prepareEnsuringDecoded failed: $error\n$stack',
+      );
+      rethrow;
+    }
+  }
+
+  @override
   bool hasPrepared(String key) {
     if (!_assetByKey.containsKey(key)) return false;
     if (_nativeReady) return true;
