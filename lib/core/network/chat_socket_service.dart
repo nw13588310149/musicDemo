@@ -7,6 +7,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../constants/app_constants.dart';
 import '../providers/app_providers.dart';
 import '../storage/app_storage.dart';
+import 'chat_sync_payload.dart';
 
 /// 全局长连接服务。承担三类下行事件：
 ///
@@ -56,6 +57,9 @@ enum ChatSocketEventType {
 
   /// 群公告更新。
   chatAnnouncementUpdated,
+
+  /// WebSocket 连接就绪（含重连成功）。业务侧应触发一次 `syncMsg` 补齐。
+  connected,
 
   /// 被踢下线（type=10003）。
   kicked,
@@ -148,6 +152,7 @@ class ChatSocketService {
         // onError 关闭，不影响后续重连。
       }
       _startHeartbeat();
+      _emit(ChatSocketEventType.connected, const {});
     } catch (_) {
       _scheduleReconnect();
     } finally {
@@ -219,18 +224,20 @@ class ChatSocketService {
       // 始终先以 message 维度广播一次，方便排查 / 调试 / 自定义解析。
       _emit(ChatSocketEventType.message, map);
 
-      final normalizedType = _normalizeWsType(map);
+      final envelope = ChatSyncPayload.normalizePush(map);
+      final normalizedType = _normalizeWsType(envelope);
+      final rootType = _normalizeWsType(map);
 
       // 系统事件。
-      if (normalizedType == 10003) {
+      if (rootType == 10003 || normalizedType == 10003) {
         _emit(ChatSocketEventType.kicked, map);
         return;
       }
-      if (normalizedType == 10000) {
+      if (rootType == 10000 || normalizedType == 10000) {
         _emit(ChatSocketEventType.tokenError, map);
         return;
       }
-      if (normalizedType == 10002) {
+      if (rootType == 10002 || normalizedType == 10002) {
         _emit(ChatSocketEventType.loginTimeout, map);
         return;
       }
@@ -244,35 +251,39 @@ class ChatSocketService {
       //   2001：新消息
       //   2002：消息撤回
       //   2003：公告变更
-      if (_looksLikeChatPayload(map, normalizedType)) {
-        if (_isChatPushType(normalizedType, 2002) ||
-            _looksLikeChatMessageDeleted(map, normalizedType)) {
-          _emit(ChatSocketEventType.chatMessageDeleted, map);
+      final chatType = normalizedType ?? rootType;
+      if (_looksLikeChatPayload(envelope, chatType) ||
+          _looksLikeChatPayload(map, rootType)) {
+        final payload = ChatSyncPayload.hasChatIdentity(envelope)
+            ? envelope
+            : ChatSyncPayload.normalizePush(map);
+        if (_isChatPushType(chatType, 2002) ||
+            _looksLikeChatMessageDeleted(payload, chatType)) {
+          _emit(ChatSocketEventType.chatMessageDeleted, payload);
           return;
         }
-        if (_isChatPushType(normalizedType, 2003) ||
-            _looksLikeChatAnnouncementChanged(map, normalizedType)) {
-          _emit(ChatSocketEventType.chatAnnouncementUpdated, map);
+        if (_isChatPushType(chatType, 2003) ||
+            _looksLikeChatAnnouncementChanged(payload, chatType)) {
+          _emit(ChatSocketEventType.chatAnnouncementUpdated, payload);
           return;
         }
-        _emit(ChatSocketEventType.chatNewMessage, map);
+        _emit(ChatSocketEventType.chatNewMessage, payload);
         return;
       }
 
       // AI 助手 —— 流式增量（type=1/10014 在协议里几乎全是 delta，整包只认 10005）。
-      if (normalizedType == 0 ||
-          normalizedType == 1 ||
-          normalizedType == 10004 ||
-          normalizedType == 10013 ||
-          normalizedType == 10014 ||
-          _isLikelyChatGptStreamChunk(map, normalizedType)) {
+      if (rootType == 0 ||
+          rootType == 1 ||
+          rootType == 10004 ||
+          rootType == 10013 ||
+          rootType == 10014 ||
+          _isLikelyChatGptStreamChunk(map, rootType)) {
         _emit(ChatSocketEventType.stream, map);
         return;
       }
 
       // AI 助手 —— 整包响应（仅 10005 或无 type 的 assistant envelope）。
-      if (normalizedType == 10005 ||
-          _isAssistantFullPayload(map, normalizedType)) {
+      if (rootType == 10005 || _isAssistantFullPayload(map, rootType)) {
         _emit(ChatSocketEventType.full, map);
         return;
       }

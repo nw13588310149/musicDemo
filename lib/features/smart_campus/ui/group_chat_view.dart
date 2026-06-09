@@ -61,6 +61,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/router/route_paths.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/network/chat_socket_service.dart';
+import '../../../core/network/chat_sync_payload.dart';
 import '../../../core/widgets/app_asset_graphic.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/image_gallery_viewer.dart';
@@ -282,8 +283,19 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
         unawaited(_syncMessages());
         break;
       case ChatSocketEventType.chatMessageDeleted:
-        _applyRealtimeChatPayload(event.payload);
         unawaited(_syncMessages());
+        break;
+      case ChatSocketEventType.connected:
+        unawaited(_syncMessages());
+        break;
+      case ChatSocketEventType.message:
+        // 兜底：若 WS 帧未被上层分类为 chatNewMessage，但语义上是群聊推送，
+        // 仍触发一次就地合并 + syncMsg。
+        final normalized = ChatSyncPayload.normalizePush(event.payload);
+        if (ChatSyncPayload.hasChatIdentity(normalized)) {
+          _applyRealtimeChatPayload(normalized);
+          unawaited(_syncMessages());
+        }
         break;
       case ChatSocketEventType.chatAnnouncementUpdated:
         // 公告变更：若刚好是当前会话，重新拉一次群详情；其它会话等用户
@@ -422,6 +434,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
       // 后端按降序返回一页（默认 20）。返回数 < 页面大小说明已无更早消息。
       _hasMoreOlder = pageCount >= _kChatPageSize;
     });
+    _bumpSyncOffsetFromMessages(parsed);
     _scheduleScrollToBottom();
   }
 
@@ -516,9 +529,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
       final res = await _repo.syncMsg(offsetMsgId: _syncOffsetMsgId, size: 100);
       if (!mounted || res.code != 0) return;
       final raw = res.data;
-      final list = raw is List
-          ? raw
-          : (raw is Map ? _asList(raw['records'] ?? raw['list']) : const []);
+      final list = ChatSyncPayload.extractMessageList(raw);
       if (list.isEmpty) return;
       // 按 classId 分桶：每条 sync 出来的消息都带 classId。
       final bucket = <String, List<Map<String, dynamic>>>{};
@@ -540,7 +551,11 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
       final activeId = _selectedConvId;
       var didMergeIntoActive = false;
       if (activeId != null && bucket.containsKey(activeId)) {
-        final newOnes = _parseMessages(bucket[activeId]);
+        final envelope = raw is Map
+            ? Map<String, dynamic>.from(raw)
+            : <String, dynamic>{};
+        envelope['msgList'] = bucket[activeId];
+        final newOnes = _parseMessages(envelope);
         if (newOnes.isNotEmpty) {
           final existing = {for (final m in _messages) m.id};
           final dedup = newOnes.where((m) => !existing.contains(m.id)).toList();
@@ -578,19 +593,21 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
   /// WS 推送携带完整消息体时，先就地合并到当前会话 / 会话列表，避免等
   /// syncMsg 往返才看到新消息。
   void _applyRealtimeChatPayload(Map<String, dynamic> payload) {
-    final classId = (payload['classId'] ?? payload['cId'] ?? '').toString();
+    final normalized = ChatSyncPayload.normalizePush(payload);
+    final classId =
+        (normalized['classId'] ?? normalized['cId'] ?? '').toString();
     if (classId.isEmpty) return;
 
-    final msgId = (payload['id'] ??
-            payload['msgId'] ??
-            payload['messageId'] ??
+    final msgId = (normalized['id'] ??
+            normalized['msgId'] ??
+            normalized['messageId'] ??
             '')
         .toString();
     if (msgId.isNotEmpty && _compareSnowflakeIds(msgId, _syncOffsetMsgId) > 0) {
       _syncOffsetMsgId = msgId;
     }
 
-    final raw = payload.map((k, v) => MapEntry(k.toString(), v));
+    final raw = normalized.map((k, v) => MapEntry(k.toString(), v));
     final parser = GroupChatMessageParser(userMap: _memberUserMap());
     final parsed = parser.parseRaw(raw);
     if (parsed is! _ChatMessage) return;
@@ -631,6 +648,14 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
   int _compareSnowflakeIds(String a, String b) {
     if (a.length != b.length) return a.length.compareTo(b.length);
     return a.compareTo(b);
+  }
+
+  void _bumpSyncOffsetFromMessages(Iterable<_ChatMessage> messages) {
+    for (final message in messages) {
+      if (_compareSnowflakeIds(message.id, _syncOffsetMsgId) > 0) {
+        _syncOffsetMsgId = message.id;
+      }
+    }
   }
 
   /// 把 sync 拉到的一组 raw 消息 reflect 到会话列表 cell（最近一条摘要 +
@@ -833,6 +858,9 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
       setState(() {
         _sending = false;
         if (newId != null) {
+          if (_compareSnowflakeIds(newId, _syncOffsetMsgId) > 0) {
+            _syncOffsetMsgId = newId;
+          }
           _messages = _messages
               .map(
                 (m) => m.id == tempId
@@ -7299,7 +7327,8 @@ _UserChatMessage _replaceUserMessageId(_UserChatMessage src, String newId) {
 List<dynamic> _asList(Object? raw) {
   if (raw is List) return raw;
   if (raw is Map) {
-    final inner = raw['records'] ?? raw['list'] ?? raw['data'];
+    final inner =
+        raw['msgList'] ?? raw['records'] ?? raw['list'] ?? raw['data'];
     if (inner is List) return inner;
   }
   return const [];
