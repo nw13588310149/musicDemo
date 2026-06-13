@@ -39,6 +39,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 
 import '../../../core/widgets/app_toast.dart';
@@ -309,6 +310,8 @@ class _TeacherExamReviewViewState
     final ui = DashboardScaleScope.of(context).ui;
     final active = _all.isEmpty ? null : _all[_activeIdx];
 
+    final initialLoading = _loading && _all.isEmpty;
+
     return Container(
       color: _kPageBg,
       padding: EdgeInsets.symmetric(horizontal: ui(0)),
@@ -322,32 +325,39 @@ class _TeacherExamReviewViewState
               onOpenHistory: _openHistoryDrawer,
             ),
             SizedBox(height: ui(16)),
-            _StatusTabsRow(
-              tabs: _kStatusTabs,
-              activeIdx: _statusTab,
-              onTap: (i) => setState(() => _statusTab = i),
-            ),
-            SizedBox(height: ui(12)),
-            _StatsPanel(
-              stats: _overviewStats,
-              classFilter: _classFilter,
-              onClassChanged: (v) => setState(() => _classFilter = v),
-              rangeIdx: _rangeTab,
-              onRangeChanged: (i) => setState(() => _rangeTab = i),
-            ),
-            SizedBox(height: ui(16)),
-            if (_loading)
-              const Center(child: CircularProgressIndicator())
-            else if (active == null)
-              Center(child: Text(_loadError ?? '暂无可批改的考试'))
-            else
-              _BodyRow(
-                items: _all,
-                activeIdx: _activeIdx,
-                onSelect: (i) => setState(() => _activeIdx = i),
-                active: active,
-                onOpenScore: (s) => _openScoreDrawer(active, s),
+            MainContentLoadingShell(
+              loading: initialLoading,
+              preserveChrome: true,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _StatusTabsRow(
+                    tabs: _kStatusTabs,
+                    activeIdx: _statusTab,
+                    onTap: (i) => setState(() => _statusTab = i),
+                  ),
+                  SizedBox(height: ui(12)),
+                  _StatsPanel(
+                    stats: _overviewStats,
+                    classFilter: _classFilter,
+                    onClassChanged: (v) => setState(() => _classFilter = v),
+                    rangeIdx: _rangeTab,
+                    onRangeChanged: (i) => setState(() => _rangeTab = i),
+                  ),
+                  SizedBox(height: ui(16)),
+                  if (!initialLoading && active == null)
+                    Center(child: Text(_loadError ?? '暂无可批改的考试'))
+                  else if (!initialLoading)
+                    _BodyRow(
+                      items: _all,
+                      activeIdx: _activeIdx,
+                      onSelect: (i) => setState(() => _activeIdx = i),
+                      active: active!,
+                      onOpenScore: (s) => _openScoreDrawer(active, s),
+                    ),
+                ],
               ),
+            ),
           ],
         ),
       ),

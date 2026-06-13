@@ -535,37 +535,41 @@ class _AdminNotificationManagementViewState
               onCreate: _openCreateDrawer,
             ),
             SizedBox(height: ui(16)),
-            _StatsRow(
-              published: _countOf(_NStatus.published),
-              scheduled: _countOf(_NStatus.scheduled),
-              withdrawn: _countOf(_NStatus.withdrawn),
-              total: _records.length,
-            ),
-            SizedBox(height: ui(16)),
-            _ControlBar(
-              typeValue: _typeFilter,
-              statusValue: _statusFilter,
-              onTypeChanged: (v) {
-                setState(() => _typeFilter = v);
-                unawaited(_loadRecords());
-              },
-              onStatusChanged: (v) => setState(() => _statusFilter = v),
-              searchCtrl: _searchCtrl,
-              onSearchChanged: _onSearchChanged,
-            ),
-            SizedBox(height: ui(12)),
-            if (_loading)
-              Padding(
-                padding: EdgeInsets.symmetric(vertical: ui(48)),
-                child: const Center(child: AppLoadingIndicator()),
-              )
-            else
-              _NotificationTable(
-                records: list,
-                onView: _onViewRecord,
-                onEdit: _openEditDrawer,
-                onDelete: _onDeleteRecord,
+            MainContentLoadingShell(
+              loading: _loading && _records.isEmpty,
+              preserveChrome: true,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _StatsRow(
+                    published: _countOf(_NStatus.published),
+                    scheduled: _countOf(_NStatus.scheduled),
+                    withdrawn: _countOf(_NStatus.withdrawn),
+                    total: _records.length,
+                  ),
+                  SizedBox(height: ui(16)),
+                  _ControlBar(
+                    typeValue: _typeFilter,
+                    statusValue: _statusFilter,
+                    onTypeChanged: (v) {
+                      setState(() => _typeFilter = v);
+                      unawaited(_loadRecords());
+                    },
+                    onStatusChanged: (v) => setState(() => _statusFilter = v),
+                    searchCtrl: _searchCtrl,
+                    onSearchChanged: _onSearchChanged,
+                  ),
+                  SizedBox(height: ui(12)),
+                  if (!(_loading && _records.isEmpty))
+                    _NotificationTable(
+                      records: list,
+                      onView: _onViewRecord,
+                      onEdit: _openEditDrawer,
+                      onDelete: _onDeleteRecord,
+                    ),
+                ],
               ),
+            ),
           ],
         ),
       ),

@@ -17,6 +17,8 @@ final class MusicPlayAudioVisualizer: NSObject {
   private var currentFrame: AVAudioFramePosition = 0
   private var isPlaying = false
   private var tapInstalled = false
+  private var lastSyncedPositionMs: Int64 = -1
+  private var lastSyncedPlaying = false
 
   init(messenger: FlutterBinaryMessenger) {
     methodChannel = FlutterMethodChannel(
@@ -43,8 +45,9 @@ final class MusicPlayAudioVisualizer: NSObject {
         return
       }
       queue.async { [weak self] in
-        self?.attach(urlString: url)
-        DispatchQueue.main.async { result(nil) }
+        self?.attach(urlString: url) {
+          DispatchQueue.main.async { result(nil) }
+        }
       }
     case "updateAndroidSession":
       result(nil)
@@ -69,32 +72,37 @@ final class MusicPlayAudioVisualizer: NSObject {
     }
   }
 
-  private func attach(urlString: String) {
+  private func attach(urlString: String, completion: @escaping () -> Void) {
     detachInternal()
     attachedUrl = urlString
-    guard let url = URL(string: urlString) else {
-      emitIdle()
-      return
-    }
-    do {
-      let localUrl: URL
-      if url.isFileURL {
-        localUrl = url
-      } else {
-        let data = try Data(contentsOf: url)
-        let temp = FileManager.default.temporaryDirectory
-          .appendingPathComponent("music_play_visualizer_\(UUID().uuidString).m4a")
-        try data.write(to: temp)
-        localUrl = temp
+    resolveURL(urlString) { [weak self] resolved in
+      guard let self else {
+        completion()
+        return
       }
-      audioFile = try AVAudioFile(forReading: localUrl)
-      try configureGraph()
-    } catch {
-      emitIdle()
+      self.queue.async {
+        switch resolved {
+        case .failure:
+          self.emitIdle()
+        case .success(let localUrl):
+          do {
+            try AppAudioSessionCoordinator.shared.applyPlayback()
+            self.audioFile = try AVAudioFile(forReading: localUrl)
+            try self.configureGraph()
+          } catch {
+            self.emitIdle()
+          }
+        }
+        completion()
+      }
     }
   }
 
   private func configureGraph() throws {
+    if tapInstalled {
+      engine.mainMixerNode.removeTap(onBus: 0)
+      tapInstalled = false
+    }
     engine.stop()
     engine.reset()
     if engine.attachedNodes.contains(player) {
@@ -103,9 +111,19 @@ final class MusicPlayAudioVisualizer: NSObject {
     engine.attach(player)
     let mixer = engine.mainMixerNode
     mixer.outputVolume = 0
-    engine.connect(player, to: mixer, format: audioFile?.processingFormat)
+    guard let format = audioFile?.processingFormat else {
+      throw MusicPlayAudioVisualizerError.missingFormat
+    }
+    engine.connect(player, to: mixer, format: format)
     installTapIfNeeded()
-    try engine.start()
+    try ensureEngineRunning()
+  }
+
+  private func ensureEngineRunning() throws {
+    if !engine.isRunning {
+      engine.prepare()
+      try engine.start()
+    }
   }
 
   private func installTapIfNeeded() {
@@ -125,27 +143,40 @@ final class MusicPlayAudioVisualizer: NSObject {
 
   private func syncTransport(playing: Bool, positionMs: Int64) {
     guard audioFile != nil else { return }
+    let wasPlaying = isPlaying
     isPlaying = playing
     let sampleRate = audioFile?.processingFormat.sampleRate ?? 44100
-    currentFrame = AVAudioFramePosition(Double(positionMs) / 1000.0 * sampleRate)
 
     if playing {
-      scheduleFromCurrentFrame()
-      if !player.isPlaying {
-        player.play()
-      }
-      if !engine.isRunning {
-        try? engine.start()
+      do {
+        try AppAudioSessionCoordinator.shared.applyPlayback()
+        let driftMs = abs(positionMs - lastSyncedPositionMs)
+        let needsReschedule = !wasPlaying || !lastSyncedPlaying || driftMs > 400
+        if needsReschedule {
+          currentFrame = AVAudioFramePosition(Double(positionMs) / 1000.0 * sampleRate)
+          scheduleFromCurrentFrame()
+          lastSyncedPositionMs = positionMs
+        }
+        try ensureEngineRunning()
+        if !player.isPlaying {
+          player.play()
+        }
+      } catch {
+        isPlaying = false
       }
     } else {
       player.pause()
+      lastSyncedPositionMs = positionMs
     }
+    lastSyncedPlaying = playing
   }
 
   private func scheduleFromCurrentFrame() {
     guard let file = audioFile else { return }
     player.stop()
-    let frameCount = AVAudioFrameCount(max(0, file.length - currentFrame))
+    let clamped = max(0, min(currentFrame, file.length))
+    currentFrame = clamped
+    let frameCount = AVAudioFrameCount(max(0, file.length - clamped))
     if frameCount <= 0 {
       emitIdle()
       return
@@ -153,7 +184,7 @@ final class MusicPlayAudioVisualizer: NSObject {
     player.schedule(
       segment: AVAudioSegment(
         file: file,
-        startingFrame: currentFrame,
+        startingFrame: clamped,
         frameCount: frameCount,
         loopCount: 0
       ),
@@ -162,16 +193,18 @@ final class MusicPlayAudioVisualizer: NSObject {
   }
 
   private func process(buffer: AVAudioPCMBuffer) -> [Double] {
-    guard isPlaying,
-          let channel = buffer.floatChannelData?[0] else { return [] }
+    guard isPlaying else { return [] }
     let frames = Int(buffer.frameLength)
     guard frames >= 128 else { return [] }
 
     let n = min(frames, 1024)
     let bands = 46
     let sampleRate = buffer.format.sampleRate
-    var result = [Double](repeating: 0, count: bands)
+    let floatChannel = buffer.floatChannelData?[0]
+    let int16Channel = buffer.int16ChannelData?[0]
+    guard floatChannel != nil || int16Channel != nil else { return [] }
 
+    var result = [Double](repeating: 0, count: bands)
     for b in 0..<bands {
       let k = melBinIndex(b: b, bands: bands, n: n, sampleRate: sampleRate)
       let omega = 2.0 * Double.pi * Double(k) / Double(n)
@@ -180,7 +213,15 @@ final class MusicPlayAudioVisualizer: NSObject {
       var s1 = 0.0
       var s2 = 0.0
       for i in 0..<n {
-        s0 = Double(channel[i]) + coeff * s1 - s2
+        let sample: Double
+        if let floatChannel {
+          sample = Double(floatChannel[i])
+        } else if let int16Channel {
+          sample = Double(int16Channel[i]) / 32768.0
+        } else {
+          sample = 0
+        }
+        s0 = sample + coeff * s1 - s2
         s2 = s1
         s1 = s0
       }
@@ -216,6 +257,8 @@ final class MusicPlayAudioVisualizer: NSObject {
 
   private func detachInternal() {
     isPlaying = false
+    lastSyncedPlaying = false
+    lastSyncedPositionMs = -1
     attachedUrl = nil
     player.stop()
     if tapInstalled {
@@ -232,6 +275,51 @@ final class MusicPlayAudioVisualizer: NSObject {
       self?.eventSink?([])
     }
   }
+
+  private func resolveURL(
+    _ urlString: String,
+    completion: @escaping (Result<URL, Error>) -> Void
+  ) {
+    if let url = URL(string: urlString), url.isFileURL {
+      completion(.success(url))
+      return
+    }
+    if let url = URL(string: urlString),
+       url.scheme == "http" || url.scheme == "https" {
+      let cached = cachedURL(for: url)
+      if FileManager.default.fileExists(atPath: cached.path) {
+        completion(.success(cached))
+        return
+      }
+      URLSession.shared.downloadTask(with: url) { temp, _, error in
+        if let error {
+          completion(.failure(error))
+          return
+        }
+        guard let temp else {
+          completion(.failure(MusicPlayAudioVisualizerError.downloadFailed))
+          return
+        }
+        do {
+          try? FileManager.default.removeItem(at: cached)
+          try FileManager.default.moveItem(at: temp, to: cached)
+          completion(.success(cached))
+        } catch {
+          completion(.failure(error))
+        }
+      }.resume()
+      return
+    }
+    completion(.success(URL(fileURLWithPath: urlString)))
+  }
+
+  private func cachedURL(for url: URL) -> URL {
+    let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+    let ext = url.pathExtension.isEmpty ? "audio" : url.pathExtension
+    let hash = UInt(bitPattern: url.absoluteString.hashValue)
+    let name = "music_play_visualizer_\(hash).\(ext)"
+    return caches.appendingPathComponent(name)
+  }
 }
 
 extension MusicPlayAudioVisualizer: FlutterStreamHandler {
@@ -244,6 +332,11 @@ extension MusicPlayAudioVisualizer: FlutterStreamHandler {
     eventSink = nil
     return nil
   }
+}
+
+private enum MusicPlayAudioVisualizerError: Error {
+  case downloadFailed
+  case missingFormat
 }
 
 private struct AVAudioSegment {

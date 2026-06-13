@@ -190,33 +190,37 @@ class _TeacherHomeSchoolViewState extends ConsumerState<TeacherHomeSchoolView> {
           children: [
             _Banner(onBack: widget.onBack),
             SizedBox(height: ui(16)),
-            _StatsRow(
-              unread: _stat.unreadCount,
-              pending: _stat.waitingReplyCount,
-              total: _stat.totalCount,
-            ),
-            SizedBox(height: ui(16)),
-            _TabsAndSearchRow(
-              current: _tab,
-              query: _query,
-              onTabChanged: _onTabChanged,
-              onQueryChanged: _onQueryChanged,
-            ),
-            SizedBox(height: ui(16)),
-            if (_loading)
-              Padding(
-                padding: EdgeInsets.symmetric(vertical: ui(40)),
-                child: Center(child: AppLoadingIndicator(size: ui(32))),
-              )
-            else if (_loadError != null)
-              _ErrorHint(message: _loadError!, onRetry: _reloadAll)
-            else if (_conversations.isEmpty)
-              _EmptyHint(query: _query, tab: _tab)
-            else
-              _ConversationGrid(
-                items: _conversations,
-                onTap: _openConversation,
+            MainContentLoadingShell(
+              loading: _loading && _conversations.isEmpty,
+              preserveChrome: true,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _StatsRow(
+                    unread: _stat.unreadCount,
+                    pending: _stat.waitingReplyCount,
+                    total: _stat.totalCount,
+                  ),
+                  SizedBox(height: ui(16)),
+                  _TabsAndSearchRow(
+                    current: _tab,
+                    query: _query,
+                    onTabChanged: _onTabChanged,
+                    onQueryChanged: _onQueryChanged,
+                  ),
+                  SizedBox(height: ui(16)),
+                  if (_loadError != null)
+                    _ErrorHint(message: _loadError!, onRetry: _reloadAll)
+                  else if (_conversations.isEmpty)
+                    _EmptyHint(query: _query, tab: _tab)
+                  else
+                    _ConversationGrid(
+                      items: _conversations,
+                      onTap: _openConversation,
+                    ),
+                ],
               ),
+            ),
           ],
         ),
       ),

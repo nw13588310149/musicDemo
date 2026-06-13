@@ -133,20 +133,8 @@ class _StudentMyClassViewState extends ConsumerState<StudentMyClassView> {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    if (_loading) {
-      return SingleChildScrollView(
-        padding: EdgeInsets.only(bottom: ui(24)),
-        child: Column(
-          children: [
-            _MyClassBanner(onBack: widget.onBack),
-            SizedBox(height: ui(120)),
-            const Center(child: AppLoadingIndicator()),
-          ],
-        ),
-      );
-    }
+    final pageLoading = _loading;
 
-    final classInfo = _classInfo;
     return SingleChildScrollView(
       padding: EdgeInsets.only(bottom: ui(24)),
       child: Column(
@@ -154,25 +142,39 @@ class _StudentMyClassViewState extends ConsumerState<StudentMyClassView> {
         children: [
           _MyClassBanner(onBack: widget.onBack),
           SizedBox(height: ui(16)),
-          if (classInfo != null)
-            _ClassInfoCard(data: classInfo)
-          else
-            _EmptyHintCard(message: '暂无班级信息'),
-          SizedBox(height: ui(16)),
-          _AnnouncementSection(
-            notices: _notices,
-            onViewAll: _openNoticeDrawer,
-            onNoticeTap: _showNoticeDetail,
-          ),
-          if (_facultySections.isNotEmpty) ...[
-            SizedBox(height: ui(16)),
-            _FacultySection(sections: _facultySections),
-          ],
-          SizedBox(height: ui(16)),
-          _ClassmateSection(
-            classmates: _classmates,
-            query: _classmateQuery,
-            onQueryChanged: (v) => setState(() => _classmateQuery = v),
+          MainContentLoadingShell(
+            loading: pageLoading,
+            preserveChrome: true,
+            child: Builder(
+              builder: (context) {
+                final classInfo = _classInfo;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (classInfo != null)
+                      _ClassInfoCard(data: classInfo)
+                    else
+                      _EmptyHintCard(message: '暂无班级信息'),
+                    SizedBox(height: ui(16)),
+                    _AnnouncementSection(
+                      notices: _notices,
+                      onViewAll: _openNoticeDrawer,
+                      onNoticeTap: _showNoticeDetail,
+                    ),
+                    if (_facultySections.isNotEmpty) ...[
+                      SizedBox(height: ui(16)),
+                      _FacultySection(sections: _facultySections),
+                    ],
+                    SizedBox(height: ui(16)),
+                    _ClassmateSection(
+                      classmates: _classmates,
+                      query: _classmateQuery,
+                      onQueryChanged: (v) => setState(() => _classmateQuery = v),
+                    ),
+                  ],
+                );
+              },
+            ),
           ),
         ],
       ),
@@ -1160,7 +1162,16 @@ class _ClassNoticeListDrawerState
           _ClassNoticeDrawerHeader(title: '班级通知', onClose: widget.onClose),
           Expanded(
             child: _loading
-                ? const Center(child: AppLoadingIndicator())
+                ? Center(
+                    child: Text(
+                      '加载中…',
+                      style: TextStyle(
+                        fontSize: ui(14),
+                        color: _kTextHint,
+                        fontFamily: 'PingFang SC',
+                      ),
+                    ),
+                  )
                 : _notices.isEmpty
                 ? Center(
                     child: Text(

@@ -340,6 +340,10 @@ class _TeacherClassAttendanceViewState
       );
     }
     final stats = _statsFromSummary(attendance.summary);
+    final overviewLoading =
+        attendance.loadingOverview &&
+        recentRecords.isEmpty &&
+        classes.isEmpty;
     return SingleChildScrollView(
       padding: EdgeInsets.only(bottom: ui(24)),
       child: Column(
@@ -347,44 +351,50 @@ class _TeacherClassAttendanceViewState
         children: [
           _AttendanceBanner(onBack: widget.onBack, onOpenHistory: _openHistory),
           SizedBox(height: ui(16)),
-          _StatsHeaderRow(
-            tabIdx: _selectedTabIdx,
-            onTab: (i) {
-              setState(() => _selectedTabIdx = i);
-              unawaited(
-                ref
-                    .read(teacherAttendanceControllerProvider.notifier)
-                    .selectRange(TeacherAttendanceRange.values[i]),
-              );
-            },
-          ),
-          SizedBox(height: ui(12)),
-          _StatsRow(stats: stats),
-          SizedBox(height: ui(24)),
-          _SectionHeaderRow(
-            title: '最近签课记录',
-            trailingLabel: '查看全部',
-            onTrailingTap: _openHistory,
-          ),
-          SizedBox(height: ui(12)),
-          if (recentRecords.isEmpty)
-            _AttendanceEmptyPanel(
-              loading: attendance.loadingOverview,
-              message: '暂无最近签课记录',
+          if (overviewLoading)
+            Padding(
+              padding: EdgeInsets.symmetric(vertical: ui(80)),
+              child: const Center(child: AppLoadingIndicator()),
             )
-          else
-            _RecentRecordsRow(records: recentRecords),
-          SizedBox(height: ui(28)),
-          // 双列：今日课程 + 签到操作
-          if (classes.isEmpty)
-            _AttendanceEmptyPanel(
-              loading: attendance.loadingOverview,
-              message: attendance.error.isNotEmpty
-                  ? attendance.error
-                  : '今日暂无课程',
-            )
-          else
-            LayoutBuilder(
+          else ...[
+            _StatsHeaderRow(
+              tabIdx: _selectedTabIdx,
+              onTab: (i) {
+                setState(() => _selectedTabIdx = i);
+                unawaited(
+                  ref
+                      .read(teacherAttendanceControllerProvider.notifier)
+                      .selectRange(TeacherAttendanceRange.values[i]),
+                );
+              },
+            ),
+            SizedBox(height: ui(12)),
+            _StatsRow(stats: stats),
+            SizedBox(height: ui(24)),
+            _SectionHeaderRow(
+              title: '最近签课记录',
+              trailingLabel: '查看全部',
+              onTrailingTap: _openHistory,
+            ),
+            SizedBox(height: ui(12)),
+            if (recentRecords.isEmpty)
+              _AttendanceEmptyPanel(
+                loading: false,
+                message: '暂无最近签课记录',
+              )
+            else
+              _RecentRecordsRow(records: recentRecords),
+            SizedBox(height: ui(28)),
+            // 双列：今日课程 + 签到操作
+            if (classes.isEmpty)
+              _AttendanceEmptyPanel(
+                loading: false,
+                message: attendance.error.isNotEmpty
+                    ? attendance.error
+                    : '今日暂无课程',
+              )
+            else
+              LayoutBuilder(
               builder: (context, c) {
                 final isCompact = c.maxWidth < ui(720);
                 if (isCompact) {
@@ -450,6 +460,7 @@ class _TeacherClassAttendanceViewState
                 );
               },
             ),
+          ],
         ],
       ),
     );

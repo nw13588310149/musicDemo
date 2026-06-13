@@ -270,6 +270,7 @@ class _StudentLeaveManagementViewState
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final pageLoading = _loading && _records.isEmpty;
     return Container(
       color: _kPageBg,
       child: SingleChildScrollView(
@@ -279,27 +280,31 @@ class _StudentLeaveManagementViewState
           children: [
             _LeaveBanner(onBack: widget.onBack),
             SizedBox(height: ui(12)),
-            _StatsRow(
-              reviewing: _countOf(_LeaveStatus.reviewing),
-              approved: _countOf(_LeaveStatus.approved),
-              rejected: _countOf(_LeaveStatus.rejected),
+            MainContentLoadingShell(
+              loading: pageLoading,
+              preserveChrome: true,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _StatsRow(
+                    reviewing: _countOf(_LeaveStatus.reviewing),
+                    approved: _countOf(_LeaveStatus.approved),
+                    rejected: _countOf(_LeaveStatus.rejected),
+                  ),
+                  SizedBox(height: ui(12)),
+                  _TabsAndCreateRow(
+                    tab: _tab,
+                    onTab: (t) => setState(() => _tab = t),
+                    onCreate: _submitting ? null : _showApplyDrawer,
+                  ),
+                  SizedBox(height: ui(12)),
+                  if (_loadError != null)
+                    _ErrorState(message: _loadError!, onRetry: _loadList)
+                  else if (!pageLoading)
+                    _LeaveCardsGrid(records: _visible, onTap: _showDetail),
+                ],
+              ),
             ),
-            SizedBox(height: ui(12)),
-            _TabsAndCreateRow(
-              tab: _tab,
-              onTab: (t) => setState(() => _tab = t),
-              onCreate: _submitting ? null : _showApplyDrawer,
-            ),
-            SizedBox(height: ui(12)),
-            if (_loading)
-              Padding(
-                padding: EdgeInsets.symmetric(vertical: ui(48)),
-                child: const Center(child: AppLoadingIndicator()),
-              )
-            else if (_loadError != null)
-              _ErrorState(message: _loadError!, onRetry: _loadList)
-            else
-              _LeaveCardsGrid(records: _visible, onTap: _showDetail),
           ],
         ),
       ),

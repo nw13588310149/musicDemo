@@ -299,39 +299,43 @@ class _DormManagerCheckHistoryViewState
               onFloorChanged: (v) => unawaited(_onFloorChanged(v)),
             ),
             SizedBox(height: ui(16)),
-            _DateStripCard(
-              days: _days,
-              selectedIndex: _selectedDayIndex,
-              dateText: _selectedDateText,
-              statText: '共 ${historyItems.length} 条记录',
-              onTapDay: _onTapDay,
-            ),
-            SizedBox(height: ui(16)),
-            _StatsRow(
-              beds: stat.bedCount,
-              normal: stat.normalCount,
-              lateReturn: stat.lateCount,
-              absent: stat.notCheckedCount,
-            ),
-            SizedBox(height: ui(16)),
-            if (loading)
-              Padding(
-                padding: EdgeInsets.symmetric(vertical: ui(40)),
-                child: const Center(child: AppLoadingIndicator()),
-              )
-            else if (loadError.isNotEmpty)
-              _LoadErrorHint(
-                message: loadError,
-                onRetry: _reloadAll,
-              )
-            else if (historyItems.isEmpty)
-              const _EmptyState()
-            else
-              _HistoryTable(
-                items: historyItems,
-                onHandleException: _handleException,
-                onTapDetail: (item) => unawaited(_showCheckDetail(item)),
+            MainContentLoadingShell(
+              loading: loading && historyItems.isEmpty,
+              preserveChrome: true,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _DateStripCard(
+                    days: _days,
+                    selectedIndex: _selectedDayIndex,
+                    dateText: _selectedDateText,
+                    statText: '共 ${historyItems.length} 条记录',
+                    onTapDay: _onTapDay,
+                  ),
+                  SizedBox(height: ui(16)),
+                  _StatsRow(
+                    beds: stat.bedCount,
+                    normal: stat.normalCount,
+                    lateReturn: stat.lateCount,
+                    absent: stat.notCheckedCount,
+                  ),
+                  SizedBox(height: ui(16)),
+                  if (loadError.isNotEmpty)
+                    _LoadErrorHint(
+                      message: loadError,
+                      onRetry: _reloadAll,
+                    )
+                  else if (historyItems.isEmpty)
+                    const _EmptyState()
+                  else
+                    _HistoryTable(
+                      items: historyItems,
+                      onHandleException: _handleException,
+                      onTapDetail: (item) => unawaited(_showCheckDetail(item)),
+                    ),
+                ],
               ),
+            ),
           ],
         ),
       ),

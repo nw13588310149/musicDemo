@@ -41,6 +41,7 @@ import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dar
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/constants/app_assets.dart';
 import '../../../core/network/api_response.dart';
 import '../../../core/widgets/app_date_time_pickers.dart';
 import '../../../core/widgets/app_toast.dart';
@@ -50,7 +51,9 @@ import '../../school/data/school_repository.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/admin_repository.dart';
 import '../data/schedule_color_palette.dart';
+import '../data/schedule_course_card_builder.dart';
 import 'widgets/schedule_color_swatch_picker.dart';
+import 'widgets/schedule_course_card.dart';
 import 'widgets/schedule_idle_slot.dart';
 import 'widgets/smart_campus_page_banner.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -274,10 +277,14 @@ class _AdminScheduleManagementViewState
     final id = _pickString(raw, ['id'], '');
     if (id.isEmpty) return;
 
+    final location = card.location.isNotEmpty ? card.location : '—';
+    final subline = card.subline.trim();
+    final detail = subline.isEmpty ? '' : '\n$subline';
     final ok = await showConfirmDialog(
       context: context,
       title: '删除课程',
-      content: '确认删除「${card.name}」？删除后该节次课表将清空，操作不可恢复。',
+      content:
+          '确认删除「${card.name}」（$location）？$detail\n删除后该节次课表将清空，操作不可恢复。',
       confirmLabel: '删除',
     );
     if (!ok || !mounted) return;
@@ -292,7 +299,7 @@ class _AdminScheduleManagementViewState
       );
       return;
     }
-    AppToast.show(context, '已删除');
+    AppToast.show(context, '已删除「${card.name}」');
     await _loadSchedule();
   }
 
@@ -779,67 +786,9 @@ class _AdminScheduleManagementViewState
     Map<String, dynamic> json,
     int smallIdxInCell,
   ) {
-    final typeRaw = json['type'];
-    final type = typeRaw is int
-        ? typeRaw
-        : (int.tryParse(typeRaw?.toString() ?? '') ?? 0);
-    final isSmall = type == 1;
-
-    final location = _pickString(json, [
-      'classroomName',
-      'roomName',
-      'classroom',
-    ], '');
-    final name = _pickString(json, [
-      'subjectName',
-      'courseName',
-      'subject',
-      'name',
-    ], '');
-    // 教师名：优先 realname（正式名），其次 nickname；兼容 teacherName 这种
-    // 老接口字段。
-    final teacher = _pickString(json, [
-      'teacherRealname',
-      'teacherName',
-      'realname',
-      'realName',
-      'teacherNickname',
-      'teacher',
-    ], '');
-    final className = _pickString(json, ['className', 'class'], '');
-    final colorOverride =
-        parseScheduleHexColor(_pickString(json, ['color'], ''));
-
     final rawCopy = Map<String, dynamic>.from(json);
-    if (isSmall) {
-      final kind = smallIdxInCell.isEven
-          ? _CardKind.smallOrange
-          : _CardKind.smallBlue;
-      final attendCount = json['attendCount'] ?? json['signCount'];
-      final totalCount =
-          json['totalCount'] ?? json['capacity'] ?? json['classSize'];
-      String? cap;
-      if (attendCount != null && totalCount != null) {
-        cap = '$attendCount/$totalCount人';
-      }
-      return _ScheduleCardData(
-        kind: kind,
-        location: location,
-        name: name,
-        subline: className.isNotEmpty ? className : teacher,
-        capacity: cap,
-        bgColor: colorOverride,
-        raw: rawCopy,
-      );
-    }
     return _ScheduleCardData(
-      kind: _CardKind.bigStandard,
-      location: location,
-      name: name,
-      subline: teacher.isEmpty
-          ? className
-          : (className.isEmpty ? teacher : '$teacher-$className'),
-      bgColor: colorOverride,
+      display: buildScheduleCourseCard(json, smallIdxInCell),
       raw: rawCopy,
     );
   }
@@ -1685,25 +1634,33 @@ class _ScheduleControlBar extends StatelessWidget {
           SizedBox(width: ui(8)),
           _ControlPill(
             onTap: onPickDate,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  weekDateLabel,
-                  style: TextStyle(
-                    fontSize: ui(14),
-                    color: _kTextDark,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w500,
+            child: SizedBox(
+              width: ui(132),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Text(
+                      weekDateLabel,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.clip,
+                      style: TextStyle(
+                        fontSize: ui(14),
+                        color: _kTextDark,
+                        fontFamily: 'PingFang SC',
+                        fontWeight: AppFont.w500,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
                   ),
-                ),
-                SizedBox(width: ui(8)),
-                Icon(
-                  Icons.calendar_today_rounded,
-                  size: ui(14),
-                  color: const Color(0xFF1C274C),
-                ),
-              ],
+                  SizedBox(width: ui(8)),
+                  AppPickerAssetIcon(
+                    AppAssets.homeRili,
+                    imageSize: ui(14),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -2303,7 +2260,9 @@ class _CellContent extends StatelessWidget {
   final Future<void> Function(_ScheduleCardData card) onDeleteCourse;
 
   bool get _hasSmallCard => cards.any(
-    (c) => c.kind == _CardKind.smallOrange || c.kind == _CardKind.smallBlue,
+    (c) =>
+        c.kind == ScheduleCourseCardKind.smallOrange ||
+        c.kind == ScheduleCourseCardKind.smallBlue,
   );
 
   @override
@@ -2401,10 +2360,11 @@ class _CellContent extends StatelessWidget {
   }
 }
 
-bool _isSmallKind(_CardKind k) =>
-    k == _CardKind.smallOrange || k == _CardKind.smallBlue;
+bool _isSmallKind(ScheduleCourseCardKind k) =>
+    k == ScheduleCourseCardKind.smallOrange ||
+    k == ScheduleCourseCardKind.smallBlue;
 
-/// 编辑模式下，大课卡 = `LongPressDraggable`；小课 / 查看模式 = 静态 [_ClassCard]。
+/// 编辑模式下，大课卡 = `LongPressDraggable`；小课 / 查看模式 = 静态 [ScheduleCourseCard]。
 ///
 /// 小课在 admin 端「待任课老师发起请求」，所以始终不可拖动。
 class _DraggableScheduleCard extends StatelessWidget {
@@ -2438,12 +2398,22 @@ class _DraggableScheduleCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final deleteHandler = _deletable ? onDelete : null;
-    final base = _ClassCard(
-      data: card,
+    final cardHeight =
+        card.display.kind == ScheduleCourseCardKind.bigExtended ? 120.0 : 96.0;
+    Widget courseCard = ScheduleCourseCard(
+      data: card.display,
       editable: isEditing || _draggable,
-      onDelete: deleteHandler,
     );
-    if (!_draggable) return base;
+    if (deleteHandler != null) {
+      courseCard = ScheduleCourseSwipeDelete(
+        cardHeight: cardHeight,
+        onDelete: deleteHandler,
+        child: courseCard,
+      );
+    }
+
+    if (!_draggable) return courseCard;
+
     final payload = _DragPayload(
       sourceDay: sourceDay,
       sourceSlot: sourceSlot,
@@ -2464,8 +2434,8 @@ class _DraggableScheduleCard extends StatelessWidget {
         data: scaleData,
         child: _DragFeedback(card: card),
       ),
-      childWhenDragging: Opacity(opacity: 0.32, child: base),
-      child: base,
+      childWhenDragging: Opacity(opacity: 0.32, child: courseCard),
+      child: courseCard,
     );
   }
 }
@@ -2494,7 +2464,7 @@ class _DragFeedback extends StatelessWidget {
             ),
           ],
         ),
-        child: _ClassCard(data: card, editable: true),
+        child: ScheduleCourseCard(data: card.display, editable: true),
       ),
     );
   }
@@ -2555,298 +2525,25 @@ class _ApplySmallLessonButton extends StatelessWidget {
 // 课卡（4 主题）
 // =============================================================================
 
-class _ClassCard extends StatelessWidget {
-  const _ClassCard({
-    required this.data,
-    required this.editable,
-    this.onDelete,
-  });
-
-  final _ScheduleCardData data;
-  final bool editable;
-  final VoidCallback? onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    final theme = _themeFor(data);
-    final cardHeight = data.kind == _CardKind.bigExtended ? 120.0 : 96.0;
-    return MouseRegion(
-      cursor: editable ? SystemMouseCursors.click : SystemMouseCursors.basic,
-      child: Container(
-        width: ui(176),
-        height: ui(cardHeight),
-        decoration: BoxDecoration(
-          color: theme.bg,
-          borderRadius: BorderRadius.circular(ui(8)),
-        ),
-        child: Stack(
-          children: [
-            Positioned(
-              left: ui(16),
-              top: ui(8),
-              child: SizedBox(
-                width: ui(108),
-                child: Text(
-                  data.location,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: ui(12),
-                    color: theme.titleColor,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w600,
-                    height: 16 / 12,
-                  ),
-                ),
-              ),
-            ),
-            if (data.kind != _CardKind.bigExtended)
-              Positioned(
-                left: ui(126),
-                top: ui(6),
-                child: _ClassKindTag(isSmall: theme.isSmall, outlined: false),
-              ),
-            if (onDelete != null)
-              Positioned(
-                right: ui(6),
-                top: ui(6),
-                child: _CourseDeleteButton(onTap: onDelete!),
-              ),
-            Positioned(
-              left: ui(4),
-              top: ui(32),
-              child: Container(
-                width: ui(168),
-                height: ui(data.kind == _CardKind.bigExtended ? 84 : 60),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(ui(6)),
-                ),
-              ),
-            ),
-            Positioned(
-              left: ui(16),
-              top: ui(44),
-              child: SizedBox(
-                width: ui(140),
-                child: Text(
-                  data.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: ui(14),
-                    color: _kTextDark,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w500,
-                    height: 16 / 14,
-                  ),
-                ),
-              ),
-            ),
-            if (data.kind == _CardKind.bigExtended) ...[
-              Positioned(
-                left: ui(16),
-                top: ui(64),
-                child: Text(
-                  data.subline,
-                  style: TextStyle(
-                    fontSize: ui(12),
-                    color: _kTextSecondary,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w400,
-                    height: 16 / 12,
-                  ),
-                ),
-              ),
-              Positioned(
-                left: ui(16),
-                top: ui(86),
-                child: _ClassKindTag(isSmall: false, outlined: true),
-              ),
-            ] else ...[
-              Positioned(
-                left: ui(16),
-                top: ui(64),
-                child: SizedBox(
-                  width: ui(theme.isSmall && data.capacity != null ? 100 : 140),
-                  child: Text(
-                    data.subline,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: ui(12),
-                      color: _kTextSecondary,
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w400,
-                      height: 16 / 12,
-                    ),
-                  ),
-                ),
-              ),
-              if (theme.isSmall && data.capacity != null)
-                Positioned(
-                  right: ui(16),
-                  top: ui(64),
-                  child: Text(
-                    data.capacity!,
-                    style: TextStyle(
-                      fontSize: ui(12),
-                      color: _kTextDivider,
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w400,
-                      height: 16 / 12,
-                    ),
-                  ),
-                ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  _CardTheme _themeFor(_ScheduleCardData data) {
-    final kind = switch (data.kind) {
-      _CardKind.smallOrange => ScheduleCardThemeKind.smallOrange,
-      _CardKind.smallBlue => ScheduleCardThemeKind.smallBlue,
-      _CardKind.bigStandard => ScheduleCardThemeKind.bigStandard,
-      _CardKind.bigExtended => ScheduleCardThemeKind.bigExtended,
-    };
-    final bg = data.bgColor ?? scheduleDefaultBg(kind);
-    return _CardTheme(
-      bg: bg,
-      titleColor: scheduleTitleColorForBackground(bg),
-      isSmall: scheduleIsSmallKind(kind),
-    );
-  }
-}
-
-class _CourseDeleteButton extends StatelessWidget {
-  const _CourseDeleteButton({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        customBorder: const CircleBorder(),
-        child: Container(
-          width: ui(20),
-          height: ui(20),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.94),
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.08),
-                blurRadius: ui(4),
-                offset: Offset(0, ui(1)),
-              ),
-            ],
-          ),
-          alignment: Alignment.center,
-          child: Icon(
-            Icons.delete_outline_rounded,
-            size: ui(12),
-            color: _kRedBadge,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ClassKindTag extends StatelessWidget {
-  const _ClassKindTag({required this.isSmall, required this.outlined});
-
-  final bool isSmall;
-  final bool outlined;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    final dotColor = isSmall ? _kStatusGreen : _kStatusPurple;
-    final label = isSmall ? '小课' : '大课';
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: ui(4), vertical: ui(2)),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(4)),
-        border: outlined ? Border.all(color: _kBorderSoft, width: 1.4) : null,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: ui(6),
-            height: ui(6),
-            decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
-          ),
-          SizedBox(width: ui(4)),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: ui(12),
-              color: _kTextDark,
-              fontFamily: 'PingFang SC',
-              fontWeight: AppFont.w400,
-              height: 15.24 / 12,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CardTheme {
-  const _CardTheme({
-    required this.bg,
-    required this.titleColor,
-    required this.isSmall,
-  });
-
-  final Color bg;
-  final Color titleColor;
-  final bool isSmall;
-}
-
 // =============================================================================
 // 数据模型 - 课表
 // =============================================================================
 
-enum _CardKind { smallOrange, smallBlue, bigStandard, bigExtended }
-
 class _ScheduleCardData {
   const _ScheduleCardData({
-    required this.kind,
-    required this.location,
-    required this.name,
-    required this.subline,
-    this.capacity,
-    this.bgColor,
+    required this.display,
     this.raw,
   });
 
-  final _CardKind kind;
-  final String location;
-  final String name;
-  final String subline;
-  final String? capacity;
-
-  /// API `color` 字段（hex 解析后）覆盖默认主题底色；为空则按 [kind] 走
-  /// 4 套预设主题。
-  final Color? bgColor;
-
-  /// `courseList` 单条原始记录。拖动改课时的「删旧课 + 写新课」需要用
-  /// 这里的 `id / classId / teacherId / classroomId / subjectId / color` 等字段
-  /// 重新拼请求体；DEMO 占位数据可以为 null。
+  final ScheduleCourseCardData display;
   final Map<String, dynamic>? raw;
+
+  ScheduleCourseCardKind get kind => display.kind;
+  String get location => display.location;
+  String get name => display.name;
+  String get subline => display.subline;
+  String? get capacity => display.capacity;
+  Color? get bgColor => display.bgColor;
 }
 
 /// 课表拖拽时随手携带的数据。`sourceDay/sourceSlot/indexInSlot` 用于在

@@ -221,6 +221,7 @@ class _TeacherLeaveApprovalViewState
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final pageLoading = _loading && _requests.isEmpty;
     return Container(
       color: _kPageBg,
       child: SingleChildScrollView(
@@ -230,34 +231,38 @@ class _TeacherLeaveApprovalViewState
           children: [
             _Banner(onBack: widget.onBack),
             SizedBox(height: ui(16)),
-            _StatsRow(
-              pendingCount: _pendingCount,
-              reviewingCount: _reviewingCount,
-              approvedCount: _approvedCount,
-              rejectedCount: _rejectedCount,
-            ),
-            SizedBox(height: ui(16)),
-            _TabsRow(
-              current: _tab,
-              onTap: (t) {
-                if (_tab == t) return;
-                setState(() => _tab = t);
-                unawaited(_loadList());
-              },
-            ),
-            SizedBox(height: ui(16)),
-            if (_loading && _requests.isEmpty)
-              Padding(
-                padding: EdgeInsets.symmetric(vertical: ui(40)),
-                child: const Center(child: AppLoadingIndicator()),
-              )
-            else
-              _CardsGrid(
-                records: _requests,
-                emptyMessage: _loadError ?? '暂无相关申请',
-                onApprove: _onApprove,
-                onReject: _onReject,
+            MainContentLoadingShell(
+              loading: pageLoading,
+              preserveChrome: true,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _StatsRow(
+                    pendingCount: _pendingCount,
+                    reviewingCount: _reviewingCount,
+                    approvedCount: _approvedCount,
+                    rejectedCount: _rejectedCount,
+                  ),
+                  SizedBox(height: ui(16)),
+                  _TabsRow(
+                    current: _tab,
+                    onTap: (t) {
+                      if (_tab == t) return;
+                      setState(() => _tab = t);
+                      unawaited(_loadList());
+                    },
+                  ),
+                  SizedBox(height: ui(16)),
+                  if (!pageLoading)
+                    _CardsGrid(
+                      records: _requests,
+                      emptyMessage: _loadError ?? '暂无相关申请',
+                      onApprove: _onApprove,
+                      onReject: _onReject,
+                    ),
+                ],
               ),
+            ),
           ],
         ),
       ),

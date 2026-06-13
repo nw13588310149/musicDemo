@@ -51,7 +51,9 @@ import '../../shell/state/shell_controller.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/teacher_repository.dart';
 import '../data/schedule_color_palette.dart';
+import '../data/schedule_course_card_builder.dart';
 import 'widgets/schedule_color_swatch_picker.dart';
+import 'widgets/schedule_course_card.dart';
 import 'widgets/schedule_idle_slot.dart';
 import 'widgets/smart_campus_page_banner.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -88,47 +90,25 @@ enum _ScheduleMode { view, edit }
 /// 0 / null 待审核。和 admin schedule 端 `_ApplyStatus` 完全一致。
 enum _ApplyStatus { pending, passed, rejected }
 
-// ---- 数据模型 -----------------------------------------------------------
-
-enum _CardKind { smallOrange, smallBlue, bigStandard, bigExtended }
-
 class _ScheduleCardData {
   const _ScheduleCardData({
-    required this.kind,
-    required this.location,
-    required this.name,
-    required this.subline,
-    this.capacity,
-    this.bgColor,
+    required this.display,
     this.raw,
     this.applyStatus,
     this.apply,
   });
 
-  final _CardKind kind;
-  final String location;
-  final String name;
-  final String subline;
-  final String? capacity;
-
-  /// API `color` 字段（hex 解析后）覆盖默认主题底色；为空则按 [kind] 走预设。
-  final Color? bgColor;
-
-  /// `courseList` 单条原始记录（保留以备后续扩展，例如详情弹窗等）。
+  final ScheduleCourseCardData display;
   final Map<String, dynamic>? raw;
-
-  /// 非空 = 这张卡来自「我的小课申请」(schoolSmallCourseApplyList)，
-  /// 不是已生效的真实课表项。卡片右上角会用对应颜色徽章替换默认的
-  /// 「小课」pill 提示当前审核状态。
-  ///
-  /// 已通过(`passed`) 的申请不会落到这里 —— 后端 `courseList` 会同步
-  /// 返回它作为真实排课，避免双重渲染。
   final _ApplyStatus? applyStatus;
-
-  /// 当 [applyStatus] 非空时一并存这条申请的回看上下文：申请 id、驳回理由、
-  /// 原始 classroomId / subjectId / color / lineNum / date 等 —— 点击卡片时
-  /// 弹详情对话框、以及「重新申请」打开申请抽屉时预填都靠它。
   final _ApplyContext? apply;
+
+  ScheduleCourseCardKind get kind => display.kind;
+  String get location => display.location;
+  String get name => display.name;
+  String get subline => display.subline;
+  String? get capacity => display.capacity;
+  Color? get bgColor => display.bgColor;
 }
 
 /// 「我的小课申请」幽灵卡的回看上下文，封装一条申请的关键参数 + 状态 / 理由。
@@ -832,67 +812,9 @@ class _TeacherLessonScheduleViewState
     _ApplyStatus? applyStatus,
     _ApplyContext? apply,
   }) {
-    final typeRaw = json['type'];
-    final type = typeRaw is int
-        ? typeRaw
-        : (int.tryParse(typeRaw?.toString() ?? '') ?? 0);
-    final isSmall = type == 1;
-
-    final location = _pickString(json, [
-      'classroomName',
-      'roomName',
-      'classroom',
-    ], '');
-    final name = _pickString(json, [
-      'subjectName',
-      'courseName',
-      'subject',
-      'name',
-    ], '');
-    final teacher = _pickString(json, [
-      'teacherRealname',
-      'teacherName',
-      'realname',
-      'realName',
-      'teacherNickname',
-      'teacher',
-    ], '');
-    final className = _pickString(json, ['className', 'class'], '');
-    final colorOverride =
-        parseScheduleHexColor(_pickString(json, ['color'], ''));
-
     final rawCopy = Map<String, dynamic>.from(json);
-    if (isSmall) {
-      final kind = smallIdxInCell.isEven
-          ? _CardKind.smallOrange
-          : _CardKind.smallBlue;
-      final attendCount = json['attendCount'] ?? json['signCount'];
-      final totalCount =
-          json['totalCount'] ?? json['capacity'] ?? json['classSize'];
-      String? cap;
-      if (attendCount != null && totalCount != null) {
-        cap = '$attendCount/$totalCount人';
-      }
-      return _ScheduleCardData(
-        kind: kind,
-        location: location,
-        name: name,
-        subline: className.isNotEmpty ? className : teacher,
-        capacity: cap,
-        bgColor: colorOverride,
-        raw: rawCopy,
-        applyStatus: applyStatus,
-        apply: apply,
-      );
-    }
     return _ScheduleCardData(
-      kind: _CardKind.bigStandard,
-      location: location,
-      name: name,
-      subline: teacher.isEmpty
-          ? className
-          : (className.isEmpty ? teacher : '$teacher-$className'),
-      bgColor: colorOverride,
+      display: buildScheduleCourseCard(json, smallIdxInCell),
       raw: rawCopy,
       applyStatus: applyStatus,
       apply: apply,
@@ -1013,7 +935,7 @@ class _TeacherLessonScheduleViewState
     }
   }
 
-  /// 重新申请：以驳回申请的 classId / classroomId / subjectId / color /
+  /// 重新申请：以驳回申请的 classId / classroomId / subjectId /
   /// lineNum / date 作为初始值打开 [_ApplySmallLessonDrawer]，用户可以
   /// 直接点提交（同一参数），也可以微调日期 / 节次 / 复用方式后再交。
   Future<void> _reapplySmallLesson(_ApplyContext apply) async {
@@ -1041,7 +963,6 @@ class _TeacherLessonScheduleViewState
                 initialClassId: apply.classId,
                 initialClassroomId: apply.classroomId?.toString(),
                 initialSubjectId: apply.subjectId?.toString(),
-                initialColorHex: apply.colorHex,
                 onCancel: () => Navigator.of(ctx).maybePop(),
                 onSubmitted: () => Navigator.of(ctx).pop(true),
               ),
@@ -2056,9 +1977,12 @@ class _CellContent extends StatelessWidget {
         children: [
           for (var i = 0; i < cards.length; i++) ...[
             if (i > 0) SizedBox(height: ui(6)),
-            _ClassCard(
-              data: cards[i],
+            ScheduleCourseCard(
+              data: cards[i].display,
               editable: isEditing && _isSmall(cards[i].kind),
+              topRightBadge: cards[i].applyStatus != null
+                  ? _ApplyStatusBadge(status: cards[i].applyStatus!)
+                  : null,
             ),
           ],
           if (isEditing) ...[
@@ -2070,8 +1994,9 @@ class _CellContent extends StatelessWidget {
     );
   }
 
-  bool _isSmall(_CardKind k) =>
-      k == _CardKind.smallOrange || k == _CardKind.smallBlue;
+  bool _isSmall(ScheduleCourseCardKind k) =>
+      k == ScheduleCourseCardKind.smallOrange ||
+      k == ScheduleCourseCardKind.smallBlue;
 }
 
 class _ApplySmallLessonButton extends StatelessWidget {
@@ -2129,210 +2054,6 @@ class _ApplySmallLessonButton extends StatelessWidget {
 // 课卡（4 主题）
 // =============================================================================
 
-class _ClassCard extends StatelessWidget {
-  const _ClassCard({required this.data, required this.editable});
-
-  final _ScheduleCardData data;
-  final bool editable;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    final theme = _themeFor(data);
-    final cardHeight = data.kind == _CardKind.bigExtended ? 120.0 : 96.0;
-    return MouseRegion(
-      cursor: editable ? SystemMouseCursors.click : SystemMouseCursors.basic,
-      child: Container(
-        width: ui(176),
-        height: ui(cardHeight),
-        decoration: BoxDecoration(
-          color: theme.bg,
-          borderRadius: BorderRadius.circular(ui(8)),
-        ),
-        child: Stack(
-          children: [
-            Positioned(
-              left: ui(16),
-              top: ui(8),
-              child: SizedBox(
-                width: ui(108),
-                child: Text(
-                  data.location,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: ui(12),
-                    color: theme.titleColor,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w600,
-                    height: 16 / 12,
-                  ),
-                ),
-              ),
-            ),
-            if (data.kind != _CardKind.bigExtended)
-              Positioned(
-                left: ui(108),
-                top: ui(6),
-                // 申请态卡片 → 用「待审核 / 已驳回」徽章替换默认小课 pill；
-                // 已通过的申请不会跑到这里（_loadSchedule 已过滤掉），所以
-                // 申请徽章只可能是这两种态。
-                child: data.applyStatus != null
-                    ? _ApplyStatusBadge(status: data.applyStatus!)
-                    : _ClassKindTag(isSmall: theme.isSmall, outlined: false),
-              ),
-            Positioned(
-              left: ui(4),
-              top: ui(32),
-              child: Container(
-                width: ui(168),
-                height: ui(data.kind == _CardKind.bigExtended ? 84 : 60),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(ui(6)),
-                ),
-              ),
-            ),
-            Positioned(
-              left: ui(16),
-              top: ui(44),
-              child: SizedBox(
-                width: ui(140),
-                child: Text(
-                  data.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: ui(14),
-                    color: _kTextDark,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w500,
-                    height: 16 / 14,
-                  ),
-                ),
-              ),
-            ),
-            if (data.kind == _CardKind.bigExtended) ...[
-              Positioned(
-                left: ui(16),
-                top: ui(64),
-                child: Text(
-                  data.subline,
-                  style: TextStyle(
-                    fontSize: ui(12),
-                    color: _kTextSecondary,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w400,
-                    height: 16 / 12,
-                  ),
-                ),
-              ),
-              Positioned(
-                left: ui(16),
-                top: ui(86),
-                child: const _ClassKindTag(isSmall: false, outlined: true),
-              ),
-            ] else ...[
-              Positioned(
-                left: ui(16),
-                top: ui(64),
-                child: SizedBox(
-                  width: ui(theme.isSmall && data.capacity != null ? 100 : 140),
-                  child: Text(
-                    data.subline,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: ui(12),
-                      color: _kTextSecondary,
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w400,
-                      height: 16 / 12,
-                    ),
-                  ),
-                ),
-              ),
-              if (theme.isSmall && data.capacity != null)
-                Positioned(
-                  right: ui(16),
-                  top: ui(64),
-                  child: Text(
-                    data.capacity!,
-                    style: TextStyle(
-                      fontSize: ui(12),
-                      color: _kTextDivider,
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w400,
-                      height: 16 / 12,
-                    ),
-                  ),
-                ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  _CardTheme _themeFor(_ScheduleCardData data) {
-    final kind = switch (data.kind) {
-      _CardKind.smallOrange => ScheduleCardThemeKind.smallOrange,
-      _CardKind.smallBlue => ScheduleCardThemeKind.smallBlue,
-      _CardKind.bigStandard => ScheduleCardThemeKind.bigStandard,
-      _CardKind.bigExtended => ScheduleCardThemeKind.bigExtended,
-    };
-    final bg = data.bgColor ?? scheduleDefaultBg(kind);
-    return _CardTheme(
-      bg: bg,
-      titleColor: scheduleTitleColorForBackground(bg),
-      isSmall: scheduleIsSmallKind(kind),
-    );
-  }
-}
-
-class _ClassKindTag extends StatelessWidget {
-  const _ClassKindTag({required this.isSmall, required this.outlined});
-
-  final bool isSmall;
-  final bool outlined;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    final dotColor = isSmall ? _kStatusGreen : _kStatusPurple;
-    final label = isSmall ? '小课' : '大课';
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: ui(4), vertical: ui(2)),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(4)),
-        border: outlined ? Border.all(color: _kBorderSoft, width: 1.4) : null,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: ui(6),
-            height: ui(6),
-            decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
-          ),
-          SizedBox(width: ui(4)),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: ui(12),
-              color: _kTextDark,
-              fontFamily: 'PingFang SC',
-              fontWeight: AppFont.w400,
-              height: 15.24 / 12,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 /// 「我的小课申请」状态徽章（替换课卡右上角的「小课」pill）。
 /// 颜色与 admin schedule 审核 tab 的 `_ApplyStatusBadge` 一致：
 ///   - 待审核：橙底橙字 (#FFEDD3 / #FF6A00)
@@ -2371,18 +2092,6 @@ class _ApplyStatusBadge extends StatelessWidget {
       ),
     );
   }
-}
-
-class _CardTheme {
-  const _CardTheme({
-    required this.bg,
-    required this.titleColor,
-    required this.isSmall,
-  });
-
-  final Color bg;
-  final Color titleColor;
-  final bool isSmall;
 }
 
 class _DetailLine extends StatelessWidget {
@@ -2955,7 +2664,6 @@ class _ApplySmallLessonDrawer extends ConsumerStatefulWidget {
     this.initialClassId,
     this.initialClassroomId,
     this.initialSubjectId,
-    this.initialColorHex,
   });
 
   /// 抽屉顶部只读"课程时间"展示，例如
@@ -2982,10 +2690,6 @@ class _ApplySmallLessonDrawer extends ConsumerStatefulWidget {
   /// 等 _loadSubjects 拉完后会校验该 id 是否在当前班级科目里。
   final String? initialSubjectId;
 
-  /// 「重新申请」场景下用驳回申请的原颜色（hex，含或不含 #）预选；
-  /// 解析失败 / 为空则走默认 scheduleDefaultPickerColor。
-  final String? initialColorHex;
-
   final VoidCallback onCancel;
   final VoidCallback onSubmitted;
 
@@ -3007,7 +2711,6 @@ class _ApplySmallLessonDrawerState
   bool _loadingSubjects = false;
 
   Color _color = scheduleDefaultPickerColor;
-  bool _customMode = false;
   String _reuse = '不复用';
   bool _submitting = false;
 
@@ -3021,21 +2724,7 @@ class _ApplySmallLessonDrawerState
   @override
   void initState() {
     super.initState();
-    // 「重新申请」入口会把驳回申请的颜色透传过来；在色板中则预选，否则
-    // 保留原色并进入「取色」自定义模式。
-    final initialColor = parseScheduleHexColor(widget.initialColorHex);
-    if (initialColor != null) {
-      final matched = schedulePaletteMatch(initialColor);
-      if (matched != null) {
-        _color = matched;
-      } else {
-        _color = initialColor;
-        _customMode = true;
-      }
-    }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadOptions();
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadOptions());
   }
 
   Future<void> _loadOptions() async {
@@ -3335,28 +3024,8 @@ class _ApplySmallLessonDrawerState
                     ),
                     SizedBox(height: ui(12)),
                     ScheduleColorSwatchPicker(
-                      selected: _customMode ? null : _color,
-                      onSelect: (c) => setState(() {
-                        _color = c;
-                        _customMode = false;
-                      }),
-                    ),
-                    SizedBox(height: ui(12)),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _ColorModeChip(
-                          label: _hexLabel,
-                          selected: !_customMode,
-                          onTap: () => setState(() => _customMode = false),
-                        ),
-                        SizedBox(width: ui(12)),
-                        _ColorModeChip(
-                          label: '取色',
-                          selected: _customMode,
-                          onTap: () => setState(() => _customMode = true),
-                        ),
-                      ],
+                      selected: _color,
+                      onSelect: (c) => setState(() => _color = c),
                     ),
                     SizedBox(height: ui(20)),
                     const _SectionLabel(
@@ -3507,45 +3176,6 @@ class _ReadonlyField extends StatelessWidget {
           fontFamily: 'PingFang SC',
           fontWeight: AppFont.w400,
           height: 20 / 14,
-        ),
-      ),
-    );
-  }
-}
-
-class _ColorModeChip extends StatelessWidget {
-  const _ColorModeChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(ui(8)),
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: ui(48), vertical: ui(12)),
-        decoration: BoxDecoration(
-          color: selected ? const Color(0xFFEFE5FF) : _kInnerGray,
-          borderRadius: BorderRadius.circular(ui(8)),
-          border: selected ? Border.all(color: _kPurple, width: 1) : null,
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: ui(16),
-            color: selected ? _kPurple : Colors.black,
-            fontFamily: 'PingFang SC',
-            fontWeight: AppFont.w600,
-            height: 1,
-          ),
         ),
       ),
     );

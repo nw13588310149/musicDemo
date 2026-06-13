@@ -351,6 +351,7 @@ class _StudentMyHomeworkViewState extends ConsumerState<StudentMyHomeworkView> {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final pageLoading = _initialLoad && _loadingList;
     return Container(
       color: _kPageBg,
       child: AppRefreshIndicator(
@@ -365,45 +366,50 @@ class _StudentMyHomeworkViewState extends ConsumerState<StudentMyHomeworkView> {
             children: [
               _HomeworkBanner(onBack: widget.onBack),
               SizedBox(height: ui(16)),
-              _OverviewStatsRow(),
-              SizedBox(height: ui(16)),
-              _DualPanelRow(
-                chartGroup: _chartGroup,
-                onChartGroupChanged: (g) => setState(() => _chartGroup = g),
-                summary: _summary,
-              ),
-              SizedBox(height: ui(16)),
-              _StatusTabsRow(
-                selected: _selectedTab,
-                onSelected: _onStatusTabChanged,
-              ),
-              SizedBox(height: ui(10)),
-              if (_loadingList && _records.isEmpty)
-                SizedBox(
-                  height: ui(200),
-                  child: const Center(child: AppLoadingIndicator()),
-                )
-              else if (!_loadingList && _records.isEmpty)
-                SizedBox(
-                  height: ui(120),
-                  child: Center(
-                    child: Text(
-                      '暂无作业',
-                      style: TextStyle(
-                        fontSize: ui(14),
-                        color: _kTextHint,
-                        fontFamily: 'PingFang SC',
-                        fontWeight: AppFont.w400,
-                      ),
+              MainContentLoadingShell(
+                loading: pageLoading,
+                preserveChrome: true,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _OverviewStatsRow(),
+                    SizedBox(height: ui(16)),
+                    _DualPanelRow(
+                      chartGroup: _chartGroup,
+                      onChartGroupChanged: (g) =>
+                          setState(() => _chartGroup = g),
+                      summary: _summary,
                     ),
-                  ),
-                )
-              else
-                _HomeworkGrid(
-                  records: _records,
-                  onSubmit: _onSubmit,
-                  onDetail: _onDetail,
+                    SizedBox(height: ui(16)),
+                    _StatusTabsRow(
+                      selected: _selectedTab,
+                      onSelected: _onStatusTabChanged,
+                    ),
+                    SizedBox(height: ui(10)),
+                    if (!_loadingList && _records.isEmpty)
+                      SizedBox(
+                        height: ui(120),
+                        child: Center(
+                          child: Text(
+                            '暂无作业',
+                            style: TextStyle(
+                              fontSize: ui(14),
+                              color: _kTextHint,
+                              fontFamily: 'PingFang SC',
+                              fontWeight: AppFont.w400,
+                            ),
+                          ),
+                        ),
+                      )
+                    else if (!pageLoading)
+                      _HomeworkGrid(
+                        records: _records,
+                        onSubmit: _onSubmit,
+                        onDetail: _onDetail,
+                      ),
+                  ],
                 ),
+              ),
             ],
           ),
         ),

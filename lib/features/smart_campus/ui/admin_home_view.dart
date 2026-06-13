@@ -1130,7 +1130,12 @@ class _SchoolNoticeList extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     if (loading && notices.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return Center(
+        child: Text(
+          '加载中…',
+          style: TextStyle(fontSize: ui(12), color: const Color(0xFFB6B5BB)),
+        ),
+      );
     }
     if (error.isNotEmpty && notices.isEmpty) {
       return Center(

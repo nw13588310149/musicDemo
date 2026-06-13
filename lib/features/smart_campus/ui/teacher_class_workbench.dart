@@ -695,7 +695,15 @@ class _NoticeSectionState extends ConsumerState<_NoticeSection> {
               ? Padding(
                   padding: EdgeInsets.symmetric(vertical: ui(20)),
                   child: Center(
-                    child: AppLoadingIndicator(),
+                    child: Text(
+                      '加载中…',
+                      style: TextStyle(
+                        fontSize: ui(13),
+                        color: _kTextHint,
+                        fontFamily: 'PingFang SC',
+                        fontWeight: AppFont.w400,
+                      ),
+                    ),
                   ),
                 )
               : _notices.isEmpty
@@ -2616,22 +2624,6 @@ class _StudentsTabState extends ConsumerState<_StudentsTab> {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
 
-    if (_loading) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _StudentsHeader(
-            total: 0,
-            onQueryChanged: (v) => setState(() => _query = v),
-          ),
-          SizedBox(height: ui(40)),
-          Center(
-            child: AppLoadingIndicator(),
-          ),
-        ],
-      );
-    }
-
     final filtered = _query.trim().isEmpty
         ? _allStudents
         : _allStudents.where((s) {
@@ -2643,15 +2635,22 @@ class _StudentsTabState extends ConsumerState<_StudentsTab> {
                 s.parentPhone.contains(q);
           }).toList();
 
+    final pageLoading = _loading;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _StudentsHeader(
-          total: _allStudents.length,
+          total: pageLoading ? 0 : _allStudents.length,
           onQueryChanged: (v) => setState(() => _query = v),
         ),
         SizedBox(height: ui(16)),
-        if (filtered.isEmpty)
+        if (pageLoading)
+          Padding(
+            padding: EdgeInsets.only(top: ui(40)),
+            child: const Center(child: AppLoadingIndicator()),
+          )
+        else if (filtered.isEmpty)
           Center(
             child: Padding(
               padding: EdgeInsets.only(top: ui(40)),

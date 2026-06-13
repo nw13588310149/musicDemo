@@ -490,6 +490,7 @@ class _TeacherStudentRosterViewState extends ConsumerState<TeacherStudentRosterV
     final maleCount = list.where((s) => s.isMale).length;
     final femaleCount = list.length - maleCount;
     final totalForStats = _listTotal > 0 ? _listTotal : list.length;
+    final pageLoading = _loadingClasses || (_loadingStudents && list.isEmpty);
 
     return SingleChildScrollView(
       padding: EdgeInsets.only(bottom: ui(24)),
@@ -498,38 +499,44 @@ class _TeacherStudentRosterViewState extends ConsumerState<TeacherStudentRosterV
         children: [
           _RosterBanner(onBack: widget.onBack),
           SizedBox(height: ui(16)),
-          _FilterRow(
-            classOptions: _classOptions,
-            selectedLabel: _selectedClassLabel,
-            onClassPicked: _onClassPicked,
-            query: _query,
-            onQueryChanged: _onQueryChanged,
-          ),
-          SizedBox(height: ui(16)),
-          _StatsRow(total: totalForStats, male: maleCount, female: femaleCount),
-          SizedBox(height: ui(20)),
-          if (_loadingClasses || (_loadingStudents && list.isEmpty))
-            Center(
-              child: Padding(
-                padding: EdgeInsets.only(top: ui(48)),
-                child: AppLoadingIndicator(),
-              ),
-            )
-          else if (!_loadingStudents && list.isEmpty)
-            Center(
-              child: Padding(
-                padding: EdgeInsets.only(top: ui(48)),
-                child: Text(
-                  '暂无学生数据',
-                  style: TextStyle(fontSize: ui(14), color: _kTextHint),
+          MainContentLoadingShell(
+            loading: pageLoading,
+            preserveChrome: true,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _FilterRow(
+                  classOptions: _classOptions,
+                  selectedLabel: _selectedClassLabel,
+                  onClassPicked: _onClassPicked,
+                  query: _query,
+                  onQueryChanged: _onQueryChanged,
                 ),
-              ),
-            )
-          else
-            _StudentCardsGrid(
-              students: list,
-              onTap: _openProfile,
+                SizedBox(height: ui(16)),
+                _StatsRow(
+                  total: totalForStats,
+                  male: maleCount,
+                  female: femaleCount,
+                ),
+                SizedBox(height: ui(20)),
+                if (!_loadingStudents && list.isEmpty)
+                  Center(
+                    child: Padding(
+                      padding: EdgeInsets.only(top: ui(48)),
+                      child: Text(
+                        '暂无学生数据',
+                        style: TextStyle(fontSize: ui(14), color: _kTextHint),
+                      ),
+                    ),
+                  )
+                else if (!pageLoading)
+                  _StudentCardsGrid(
+                    students: list,
+                    onTap: _openProfile,
+                  ),
+              ],
             ),
+          ),
         ],
       ),
     );

@@ -977,12 +977,15 @@ class _AdminFaceLibraryViewState extends ConsumerState<AdminFaceLibraryView> {
                 searchCtrl: _searchCtrl,
               ),
               SizedBox(height: ui(12)),
-              _LibraryTable(
-                records: _libraryRecords,
-                loading: _loadingLibrary,
-                onTapRecord: _showRecordDetail,
-                onApprove: _onApproveRecord,
-                onReject: _onRejectRecord,
+              MainContentLoadingShell(
+                loading: _loadingLibrary && _libraryRecords.isEmpty,
+                child: _LibraryTable(
+                  records: _libraryRecords,
+                  loading: false,
+                  onTapRecord: _showRecordDetail,
+                  onApprove: _onApproveRecord,
+                  onReject: _onRejectRecord,
+                ),
               ),
             ],
           ],

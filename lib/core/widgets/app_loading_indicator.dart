@@ -77,6 +77,45 @@ class AppLoadingIndicator extends StatelessWidget {
   }
 }
 
+/// 主内容区统一 loading：整区只显示一个指示器，避免多个列表/分区各自转圈。
+///
+/// [preserveChrome] 为 true 时 loading 期间仍渲染 [child]（保留 banner/tab 等），
+/// 并在其上覆盖半透明蒙层 + 居中 loading。
+class MainContentLoadingShell extends StatelessWidget {
+  const MainContentLoadingShell({
+    super.key,
+    required this.loading,
+    required this.child,
+    this.preserveChrome = false,
+    this.minHeight,
+  });
+
+  final bool loading;
+  final Widget child;
+  final bool preserveChrome;
+  final double? minHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!loading) {
+      return child;
+    }
+    if (preserveChrome) {
+      return Stack(
+        children: [
+          child,
+          const Positioned.fill(child: AppLoadingOverlay()),
+        ],
+      );
+    }
+    final body = const Center(child: AppLoadingIndicator());
+    if (minHeight != null) {
+      return SizedBox(height: minHeight, child: body);
+    }
+    return body;
+  }
+}
+
 /// 首页同款全屏 loading 蒙层（35% 白 + 居中 GIF）。
 class AppLoadingOverlay extends StatelessWidget {
   const AppLoadingOverlay({

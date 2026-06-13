@@ -268,91 +268,103 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
           Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: state.sessionsLoading && state.sessions.isEmpty
-                  ? const Center(
-                      child: AppLoadingIndicator(),
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: [
+                  // Figma: 历史对话 label  12/500 / line-height 18 / #B6B5BB
+                  Text(
+                    '历史对话',
+                    style: TextStyle(
+                      color: _textHint,
+                      fontSize: 12,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w500,
+                      height: 18 / 12,
+                    ),
+                  ),
+                  // Figma: label → 第一个 tile gap = 6
+                  const SizedBox(height: 6),
+                  if (state.sessionsLoading && state.sessions.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 24),
+                      child: Text(
+                        '加载中…',
+                        style: TextStyle(
+                          color: _textHint,
+                          fontSize: 12,
+                          fontFamily: 'PingFang SC',
+                          fontWeight: AppFont.w400,
+                          height: 18 / 12,
+                        ),
+                      ),
                     )
-                  : ListView(
-                      padding: EdgeInsets.zero,
-                      children: [
-                        // Figma: 历史对话 label  12/500 / line-height 18 / #B6B5BB
-                        Text(
-                          '历史对话',
-                          style: TextStyle(
-                            color: _textHint,
-                            fontSize: 12,
-                            fontFamily: 'PingFang SC',
-                            fontWeight: AppFont.w500,
-                            height: 18 / 12,
+                  else ...[
+                    if (state.isNewConversation) ...[
+                      _historyTile(
+                        title: '新对话',
+                        active: true,
+                        showMore: true,
+                        onTap: () {
+                          controller.startNewChat();
+                          _inputCtrl.clear();
+                          setState(() {});
+                        },
+                      ),
+                      // Figma: tile 之间 gap ≈ 2（sub-group 内紧排）
+                      const SizedBox(height: 2),
+                    ],
+                    for (final group in groups)
+                      if (group.items.isNotEmpty) ...[
+                        // Figma: 上一组结束 → 下一组 group label gap = 6
+                        const SizedBox(height: 6),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: _historyItemHorizontalPadding,
+                          ),
+                          // Figma: 12/500 / line-height 18 / #CECED1
+                          child: Text(
+                            group.label,
+                            style: TextStyle(
+                              color: Color(0xFFCECED1),
+                              fontSize: 12,
+                              fontFamily: 'PingFang SC',
+                              fontWeight: AppFont.w500,
+                              height: 18 / 12,
+                            ),
                           ),
                         ),
-                        // Figma: label → 第一个 tile gap = 6
                         const SizedBox(height: 6),
-                        if (state.isNewConversation) ...[
+                        for (var i = 0; i < group.items.length; i++) ...[
+                          if (i > 0) const SizedBox(height: 2),
                           _historyTile(
-                            title: '新对话',
-                            active: true,
-                            showMore: true,
-                            onTap: () {
-                              controller.startNewChat();
-                              _inputCtrl.clear();
-                              setState(() {});
+                            title: group.items[i].title,
+                            active:
+                                !state.isNewConversation &&
+                                state.activeSessionId == group.items[i].id,
+                            showMore:
+                                !state.isNewConversation &&
+                                state.activeSessionId == group.items[i].id,
+                            onTap: () async {
+                              final error = await controller.selectSession(
+                                group.items[i].id,
+                              );
+                              if (error != null && mounted) {
+                                _showInfo(error);
+                              }
                             },
-                          ),
-                          // Figma: tile 之间 gap ≈ 2（sub-group 内紧排）
-                          const SizedBox(height: 2),
-                        ],
-                        for (final group in groups)
-                          if (group.items.isNotEmpty) ...[
-                            // Figma: 上一组结束 → 下一组 group label gap = 6
-                            const SizedBox(height: 6),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: _historyItemHorizontalPadding,
-                              ),
-                              // Figma: 12/500 / line-height 18 / #CECED1
-                              child: Text(
-                                group.label,
-                                style: TextStyle(
-                                  color: Color(0xFFCECED1),
-                                  fontSize: 12,
-                                  fontFamily: 'PingFang SC',
-                                  fontWeight: AppFont.w500,
-                                  height: 18 / 12,
-                                ),
-                              ),
+                            moreTriggerKey: _moreTriggerKeyFor(
+                              group.items[i].id,
                             ),
-                            const SizedBox(height: 6),
-                            for (var i = 0; i < group.items.length; i++) ...[
-                              if (i > 0) const SizedBox(height: 2),
-                              _historyTile(
-                                title: group.items[i].title,
-                                active:
-                                    !state.isNewConversation &&
-                                    state.activeSessionId == group.items[i].id,
-                                showMore:
-                                    !state.isNewConversation &&
-                                    state.activeSessionId == group.items[i].id,
-                                onTap: () async {
-                                  final error = await controller.selectSession(
-                                    group.items[i].id,
-                                  );
-                                  if (error != null && mounted) {
-                                    _showInfo(error);
-                                  }
-                                },
-                                moreTriggerKey: _moreTriggerKeyFor(
-                                  group.items[i].id,
-                                ),
-                                onMoreTap: () => _showSessionMoreMenu(
-                                  controller,
-                                  group.items[i],
-                                ),
-                              ),
-                            ],
-                          ],
+                            onMoreTap: () => _showSessionMoreMenu(
+                              controller,
+                              group.items[i],
+                            ),
+                          ),
+                        ],
                       ],
-                    ),
+                  ],
+                ],
+              ),
             ),
           ),
           const SizedBox(height: _historyPaneBottomPadding),

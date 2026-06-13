@@ -731,26 +731,24 @@ class _AdminStudentManagementViewState
               },
             ),
             SizedBox(height: ui(20)),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Text(
-                  '当前结果 ${list.length}人',
-                  style: TextStyle(
-                    fontSize: ui(12),
-                    height: 1.2,
-                    color: _kTextPrimary,
-                    fontFamily: 'PingFang SC',
-                  ),
+            if (_loadingStudents && list.isEmpty)
+              SizedBox(
+                height: ui(280),
+                child: const Center(child: AppLoadingIndicator()),
+              )
+            else ...[
+              Text(
+                '当前结果 ${list.length}人',
+                style: TextStyle(
+                  fontSize: ui(12),
+                  height: 1.2,
+                  color: _kTextPrimary,
+                  fontFamily: 'PingFang SC',
                 ),
-                if (_loadingStudents) ...[
-                  SizedBox(width: ui(8)),
-                  const AppLoadingIndicator(),
-                ],
-              ],
-            ),
-            SizedBox(height: ui(12)),
-            _StudentGrid(students: list, onTap: _openProfile),
+              ),
+              SizedBox(height: ui(12)),
+              _StudentGrid(students: list, onTap: _openProfile),
+            ],
           ],
         ),
       ),
@@ -1661,7 +1659,14 @@ class _StudentExamRecordsSection extends StatelessWidget {
             ),
             if (loading) ...[
               SizedBox(width: ui(8)),
-              const AppLoadingIndicator(),
+              Text(
+                '加载中…',
+                style: TextStyle(
+                  fontSize: ui(12),
+                  color: _kTextHint,
+                  fontFamily: 'PingFang SC',
+                ),
+              ),
             ],
           ],
         ),

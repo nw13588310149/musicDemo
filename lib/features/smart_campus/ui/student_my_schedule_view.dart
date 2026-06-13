@@ -34,7 +34,8 @@ import '../../../core/widgets/app_toast.dart';
 import '../../school/data/school_repository.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/student_repository.dart';
-import '../data/schedule_color_palette.dart';
+import '../data/schedule_course_card_builder.dart';
+import 'widgets/schedule_course_card.dart';
 import 'widgets/schedule_idle_slot.dart';
 import 'widgets/smart_campus_page_banner.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -46,13 +47,9 @@ const Color _kInnerGray = Color(0xFFF5F6FA);
 const Color _kBorderSoft = Color(0xFFF3F2F3);
 const Color _kBorderHair = Color(0xFFEFEFEF);
 const Color _kTextDark = Color(0xFF0B081A);
-const Color _kTextSecondary = Color(0xFF6D6B75);
 const Color _kTextHint = Color(0xFFB6B5BB);
 const Color _kTextDivider = Color(0xFFCECED1);
 const Color _kPurple = Color(0xFF8741FF);
-
-const Color _kStatusGreen = Color(0xFF0CAC40);
-const Color _kStatusPurple = Color(0xFFA773FF);
 
 // 列与行尺寸
 const double _kTimeColWidth = 120;
@@ -95,7 +92,7 @@ class _StudentMyScheduleViewState extends ConsumerState<StudentMyScheduleView> {
   static const int _baseWeek = 1;
 
   List<_TimeConfig> _timeConfigs = const [];
-  List<List<List<_ScheduleCardData>>>? _serverCells;
+  List<List<List<ScheduleCourseCardData>>>? _serverCells;
   bool _scheduleLoading = true;
 
   List<_TimeConfig> get _activeTimeConfigs =>
@@ -225,7 +222,7 @@ class _StudentMyScheduleViewState extends ConsumerState<StudentMyScheduleView> {
       }
 
       final cellKey = dayIdx * 1000 + slotIdx;
-      final card = _parseCourseCard(flat, smallSeq[cellKey] ?? 0);
+      final card = buildScheduleCourseCard(flat, smallSeq[cellKey] ?? 0);
       smallSeq[cellKey] = (smallSeq[cellKey] ?? 0) + 1;
       cells[dayIdx][slotIdx].add(card);
     }
@@ -281,7 +278,7 @@ class _StudentMyScheduleViewState extends ConsumerState<StudentMyScheduleView> {
     ];
   }
 
-  List<_TimeSlotData> _buildSlots(List<List<List<_ScheduleCardData>>> cells) {
+  List<_TimeSlotData> _buildSlots(List<List<List<ScheduleCourseCardData>>> cells) {
     final configs = _activeTimeConfigs;
     return [
       for (var i = 0; i < configs.length; i++)
@@ -295,7 +292,7 @@ class _StudentMyScheduleViewState extends ConsumerState<StudentMyScheduleView> {
 
   double _calcSlotHeight(
     int slotIdx,
-    List<List<List<_ScheduleCardData>>> cells,
+    List<List<List<ScheduleCourseCardData>>> cells,
   ) {
     var maxCards = 1;
     for (var d = 0; d < cells.length; d++) {
@@ -307,11 +304,11 @@ class _StudentMyScheduleViewState extends ConsumerState<StudentMyScheduleView> {
     return 120.0 + (maxCards - 1) * 102.0;
   }
 
-  List<List<List<_ScheduleCardData>>> _emptyCells() {
+  List<List<List<ScheduleCourseCardData>>> _emptyCells() {
     final n = _activeTimeConfigs.length;
     return [
       for (var d = 0; d < 7; d++)
-        [for (var s = 0; s < n; s++) <_ScheduleCardData>[]],
+        [for (var s = 0; s < n; s++) <ScheduleCourseCardData>[]],
     ];
   }
 
@@ -474,91 +471,6 @@ List<({String dateKey, Map<String, dynamic> row})> _extractCourseRows(
     }
   }
   return list;
-}
-
-String? _pickCapacityLabel(Map<String, dynamic> json) {
-  final current = _pickString(json, [
-    'studentCount',
-    'currentCount',
-    'selectedCount',
-    'usedCapacity',
-    'actualCount',
-  ]);
-  final total = _pickString(json, [
-    'capacity',
-    'maxCapacity',
-    'totalCount',
-    'studentTotal',
-    'limitCount',
-    'peopleNum',
-  ]);
-  if (current.isNotEmpty && total.isNotEmpty) {
-    return '$current/$total人';
-  }
-  if (total.isNotEmpty) return '$total人';
-  if (current.isNotEmpty) return '$current人';
-  return null;
-}
-
-_ScheduleCardData _parseCourseCard(
-  Map<String, dynamic> json,
-  int smallIdxInCell,
-) {
-  final typeRaw = json['type'];
-  final type = typeRaw is int
-      ? typeRaw
-      : (int.tryParse(typeRaw?.toString() ?? '') ?? 0);
-  final isSmall = type == 1;
-
-  final location = _pickString(json, [
-    'classroomName',
-    'roomName',
-    'classroom',
-  ], '—');
-  final name = _pickString(json, [
-    'subjectName',
-    'courseName',
-    'subject',
-    'name',
-  ], '—');
-  final teacher = _pickString(json, [
-    'teacherRealname',
-    'teacherName',
-    'realname',
-    'realName',
-    'teacherNickname',
-    'teacher',
-  ], '');
-  final className = _pickString(json, ['className', 'class'], '');
-  final colorOverride =
-      parseScheduleHexColor(_pickString(json, ['color'], ''));
-
-  if (isSmall) {
-    final kind = smallIdxInCell.isEven
-        ? _CardKind.smallOrange
-        : _CardKind.smallBlue;
-    return _ScheduleCardData(
-      kind: kind,
-      location: location,
-      name: name,
-      subline: teacher.isNotEmpty
-          ? teacher
-          : (className.isNotEmpty ? className : '—'),
-      capacity: _pickCapacityLabel(json),
-      bgColor: colorOverride,
-    );
-  }
-
-  final subline = teacher.isEmpty
-      ? (className.isEmpty ? '—' : className)
-      : (className.isEmpty ? teacher : '$teacher · $className');
-  return _ScheduleCardData(
-    kind: _CardKind.bigStandard,
-    location: location,
-    name: name,
-    subline: subline,
-    bgColor: colorOverride,
-  );
 }
 
 // =============================================================================
@@ -758,7 +670,7 @@ class _ScheduleGrid extends StatelessWidget {
 
   /// 7 列 × N 行的格子数据。`cells[dayIndex][slotIndex]` 是该格的课卡列表
   /// （0、1 或 2 张；2 张时纵向堆叠，需要对应 slot 的高度足以容纳）。
-  final List<List<List<_ScheduleCardData>>> cells;
+  final List<List<List<ScheduleCourseCardData>>> cells;
   final bool loading;
 
   @override
@@ -960,7 +872,7 @@ class _DaysArea extends StatelessWidget {
 
   final List<_TimeSlotData> slots;
   final List<_DayHeaderData> days;
-  final List<List<List<_ScheduleCardData>>> cells;
+  final List<List<List<ScheduleCourseCardData>>> cells;
 
   @override
   Widget build(BuildContext context) {
@@ -1046,7 +958,7 @@ class _DayBodyRow extends StatelessWidget {
   const _DayBodyRow({required this.height, required this.rowCells});
 
   final double height;
-  final List<List<_ScheduleCardData>> rowCells;
+  final List<List<ScheduleCourseCardData>> rowCells;
 
   @override
   Widget build(BuildContext context) {
@@ -1090,7 +1002,7 @@ class _DayBodyRow extends StatelessWidget {
 class _CellContent extends StatelessWidget {
   const _CellContent({required this.cards});
 
-  final List<_ScheduleCardData> cards;
+  final List<ScheduleCourseCardData> cards;
 
   @override
   Widget build(BuildContext context) {
@@ -1105,262 +1017,17 @@ class _CellContent extends StatelessWidget {
         children: [
           for (var i = 0; i < cards.length; i++) ...[
             if (i > 0) SizedBox(height: ui(6)),
-            _ClassCard(data: cards[i]),
+            ScheduleCourseCard(data: cards[i]),
           ],
         ],
       ),
     );
   }
-}
-
-// =============================================================================
-// 课卡（4 种主题）
-// =============================================================================
-
-class _ClassCard extends StatelessWidget {
-  const _ClassCard({required this.data});
-
-  final _ScheduleCardData data;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    final theme = _themeFor(data);
-    final cardHeight = data.kind == _CardKind.bigExtended ? 120.0 : 96.0;
-    return Container(
-      width: ui(176),
-      height: ui(cardHeight),
-      decoration: BoxDecoration(
-        color: theme.bg,
-        borderRadius: BorderRadius.circular(ui(8)),
-      ),
-      child: Stack(
-        children: [
-          // 顶部地点
-          Positioned(
-            left: ui(16),
-            top: ui(8),
-            child: SizedBox(
-              width: ui(108),
-              child: Text(
-                data.location,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: ui(12),
-                  color: theme.titleColor,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w600,
-                  height: 16 / 12,
-                ),
-              ),
-            ),
-          ),
-          // 右上：状态点 + "小课/大课" 标签（96h 卡片）
-          if (data.kind != _CardKind.bigExtended)
-            Positioned(
-              left: ui(126),
-              top: ui(6),
-              child: _ClassKindTag(isSmall: theme.isSmall, outlined: false),
-            ),
-          // 中部白色面板（容纳课名 + 副信息）
-          Positioned(
-            left: ui(4),
-            top: ui(32),
-            child: Container(
-              width: ui(168),
-              height: ui(data.kind == _CardKind.bigExtended ? 84 : 60),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(ui(6)),
-              ),
-            ),
-          ),
-          // 课名
-          Positioned(
-            left: ui(16),
-            top: ui(44),
-            child: SizedBox(
-              width: ui(140),
-              child: Text(
-                data.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: ui(14),
-                  color: _kTextDark,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w500,
-                  height: 16 / 14,
-                ),
-              ),
-            ),
-          ),
-          // 副信息（小课：班级 + 人数；大课标准：教师·合班；大课加长：年级·合班）
-          if (data.kind == _CardKind.bigExtended) ...[
-            // 加长卡：subline 在更下方（top:64），加长卡的"大课"标签放在底部 left:16, top:86
-            Positioned(
-              left: ui(16),
-              top: ui(64),
-              child: Text(
-                data.subline,
-                style: TextStyle(
-                  fontSize: ui(12),
-                  color: _kTextSecondary,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w400,
-                  height: 16 / 12,
-                ),
-              ),
-            ),
-            Positioned(
-              left: ui(16),
-              top: ui(86),
-              child: _ClassKindTag(isSmall: false, outlined: true),
-            ),
-          ] else ...[
-            // 标准卡（96h）：subline 在 top:62-64，右侧可能有 11/23人
-            Positioned(
-              left: ui(16),
-              top: ui(64),
-              child: SizedBox(
-                width: ui(theme.isSmall && data.capacity != null ? 100 : 140),
-                child: Text(
-                  data.subline,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: ui(12),
-                    color: _kTextSecondary,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w400,
-                    height: 16 / 12,
-                  ),
-                ),
-              ),
-            ),
-            if (theme.isSmall && data.capacity != null)
-              Positioned(
-                right: ui(16),
-                top: ui(64),
-                child: Text(
-                  data.capacity!,
-                  style: TextStyle(
-                    fontSize: ui(12),
-                    color: _kTextDivider,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w400,
-                    height: 16 / 12,
-                  ),
-                ),
-              ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  _CardTheme _themeFor(_ScheduleCardData data) {
-    final kind = switch (data.kind) {
-      _CardKind.smallOrange => ScheduleCardThemeKind.smallOrange,
-      _CardKind.smallBlue => ScheduleCardThemeKind.smallBlue,
-      _CardKind.bigStandard => ScheduleCardThemeKind.bigStandard,
-      _CardKind.bigExtended => ScheduleCardThemeKind.bigExtended,
-    };
-    final bg = data.bgColor ?? scheduleDefaultBg(kind);
-    return _CardTheme(
-      bg: bg,
-      titleColor: scheduleTitleColorForBackground(bg),
-      isSmall: scheduleIsSmallKind(kind),
-    );
-  }
-}
-
-class _ClassKindTag extends StatelessWidget {
-  const _ClassKindTag({required this.isSmall, required this.outlined});
-
-  final bool isSmall;
-  final bool outlined;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    final dotColor = isSmall ? _kStatusGreen : _kStatusPurple;
-    final label = isSmall ? '小课' : '大课';
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: ui(4), vertical: ui(2)),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(4)),
-        border: outlined ? Border.all(color: _kBorderSoft, width: 1.4) : null,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: ui(6),
-            height: ui(6),
-            decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
-          ),
-          SizedBox(width: ui(4)),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: ui(12),
-              color: _kTextDark,
-              fontFamily: 'PingFang SC',
-              fontWeight: AppFont.w400,
-              height: 15.24 / 12,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CardTheme {
-  const _CardTheme({
-    required this.bg,
-    required this.titleColor,
-    required this.isSmall,
-  });
-
-  final Color bg;
-  final Color titleColor;
-  final bool isSmall;
 }
 
 // =============================================================================
 // 数据模型
 // =============================================================================
-
-enum _CardKind { smallOrange, smallBlue, bigStandard, bigExtended }
-
-class _ScheduleCardData {
-  const _ScheduleCardData({
-    required this.kind,
-    required this.location,
-    required this.name,
-    required this.subline,
-    this.capacity,
-    this.bgColor,
-  });
-
-  final _CardKind kind;
-  final String location;
-  final String name;
-
-  /// 副行：小课填班级（如"高三音乐实验班"）；
-  /// 大课标准填教师（如"赵老师-大班合班"）；大课加长填年级（"高三年级-大班合班"）。
-  final String subline;
-
-  /// 仅小课用，右侧"11/23人"。
-  final String? capacity;
-
-  /// API `color` 字段解析后的背景色。
-  final Color? bgColor;
-}
 
 class _TimeSlotData {
   const _TimeSlotData({

@@ -2948,7 +2948,6 @@ class _ClassKindSelector extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: () => onChanged(kind),
         child: Container(
-          width: ui(195),
           height: ui(64),
           padding: EdgeInsets.symmetric(horizontal: ui(20)),
           decoration: BoxDecoration(
@@ -2966,6 +2965,9 @@ class _ClassKindSelector extends StatelessWidget {
               Expanded(
                 child: Text(
                   label,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.fade,
                   style: TextStyle(
                     fontSize: ui(14),
                     height: 24 / 14,
@@ -2983,9 +2985,9 @@ class _ClassKindSelector extends StatelessWidget {
 
     return Row(
       children: [
-        cell(_ClassKind.largeClass, '大班（班主任+教室）'),
+        Expanded(child: cell(_ClassKind.largeClass, '大班（班主任+教室）')),
         SizedBox(width: ui(20)),
-        cell(_ClassKind.smallClass, '小班（任课老师）'),
+        Expanded(child: cell(_ClassKind.smallClass, '小班（任课老师）')),
       ],
     );
   }

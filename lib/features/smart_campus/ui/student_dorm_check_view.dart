@@ -254,33 +254,32 @@ class _StudentDormCheckViewState extends ConsumerState<StudentDormCheckView> {
                   .selectListSection(section),
             ),
             SizedBox(height: ui(16)),
-            if (state.listSection == StudentDormitoryListSection.checkRecords) ...[
+            if (state.loading &&
+                ((state.listSection ==
+                            StudentDormitoryListSection.checkRecords &&
+                        records.isEmpty) ||
+                    (state.listSection !=
+                            StudentDormitoryListSection.checkRecords &&
+                        state.makeupItems.isEmpty)))
+              Padding(
+                padding: EdgeInsets.symmetric(vertical: ui(40)),
+                child: const Center(child: AppLoadingIndicator()),
+              )
+            else if (state.listSection ==
+                StudentDormitoryListSection.checkRecords) ...[
               _SectionHeader(tab: _tab, onTab: (t) => setState(() => _tab = t)),
               SizedBox(height: ui(16)),
-              if (state.loading && records.isEmpty)
-                Padding(
-                  padding: EdgeInsets.symmetric(vertical: ui(40)),
-                  child: const Center(child: AppLoadingIndicator()),
-                )
-              else
-                _DormCardsGrid(
-                  records: visible,
-                  onTap: (record) => unawaited(
-                    _showCheckDetail(record.id, '${record.session} · 查寝详情'),
-                  ),
+              _DormCardsGrid(
+                records: visible,
+                onTap: (record) => unawaited(
+                  _showCheckDetail(record.id, '${record.session} · 查寝详情'),
                 ),
-            ] else ...[
-              if (state.loading && state.makeupItems.isEmpty)
-                Padding(
-                  padding: EdgeInsets.symmetric(vertical: ui(40)),
-                  child: const Center(child: AppLoadingIndicator()),
-                )
-              else
-                _MakeupCardsGrid(
-                  items: state.makeupItems,
-                  onTap: (item) => unawaited(_showMakeupDetail(item)),
-                ),
-            ],
+              ),
+            ] else
+              _MakeupCardsGrid(
+                items: state.makeupItems,
+                onTap: (item) => unawaited(_showMakeupDetail(item)),
+              ),
           ],
         ),
       ),

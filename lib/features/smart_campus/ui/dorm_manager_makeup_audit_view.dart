@@ -82,30 +82,31 @@ class _DormManagerMakeupAuditViewState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _Banner(onBack: widget.onBack),
-            if (state.loadingMakeup)
-              Padding(
-                padding: EdgeInsets.symmetric(vertical: ui(40)),
-                child: const Center(child: AppLoadingIndicator()),
-              )
-            else if (state.error.isNotEmpty)
-              Padding(
-                padding: EdgeInsets.all(ui(12)),
-                child: Text(state.error, style: TextStyle(color: _kRed)),
-              )
-            else if (state.makeupItems.isEmpty)
-              Padding(
-                padding: EdgeInsets.symmetric(vertical: ui(48)),
-                child: Center(
-                  child: Text(
-                    '暂无待审补卡申请',
-                    style: TextStyle(fontSize: ui(14), color: _kTextHint),
-                  ),
-                ),
-              )
-            else
-              Padding(
-                padding: EdgeInsets.only(top: ui(16)),
-                child: LayoutBuilder(
+            MainContentLoadingShell(
+              loading: state.loadingMakeup && state.makeupItems.isEmpty,
+              preserveChrome: true,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (state.error.isNotEmpty)
+                    Padding(
+                      padding: EdgeInsets.all(ui(12)),
+                      child: Text(state.error, style: TextStyle(color: _kRed)),
+                    )
+                  else if (state.makeupItems.isEmpty)
+                    Padding(
+                      padding: EdgeInsets.symmetric(vertical: ui(48)),
+                      child: Center(
+                        child: Text(
+                          '暂无待审补卡申请',
+                          style: TextStyle(fontSize: ui(14), color: _kTextHint),
+                        ),
+                      ),
+                    )
+                  else
+                    Padding(
+                      padding: EdgeInsets.only(top: ui(16)),
+                      child: LayoutBuilder(
                   builder: (context, constraints) {
                     final gap = ui(16);
                     var columns = 3;
@@ -134,7 +135,10 @@ class _DormManagerMakeupAuditViewState
                     );
                   },
                 ),
+                    ),
+                ],
               ),
+            ),
           ],
         ),
       ),

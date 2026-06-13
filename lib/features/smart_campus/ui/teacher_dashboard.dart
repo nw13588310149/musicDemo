@@ -14,7 +14,6 @@ import '../data/student_repository.dart';
 import '../data/teacher_notice_data.dart';
 import '../data/teacher_repository.dart';
 import '../state/smart_campus_state.dart';
-import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'widgets/role_switcher_buttons.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
@@ -460,7 +459,10 @@ class _TeacherMainColumn extends StatelessWidget {
           fillRemaining: fill,
         );
       }
-      return _TeacherScheduleSection(fillRemaining: fill);
+      return _TeacherScheduleSection(
+        fillRemaining: fill,
+        onOpenSchedule: onOpenMySchedule,
+      );
     }
 
     if (fillRemaining) {
@@ -1549,7 +1551,16 @@ class _TeacherNoticePanelState extends ConsumerState<_TeacherNoticePanel> {
   Widget build(BuildContext context) {
     if (_usesNoticeApi) {
       if (_loading) {
-        return const Center(child: AppLoadingIndicator());
+        return Center(
+          child: Text(
+            '加载中…',
+            style: TextStyle(
+              fontSize: 12,
+              color: const Color(0xFFB6B5BB),
+              fontFamily: 'PingFang SC',
+            ),
+          ),
+        );
       }
       return _TeacherNoticeList(
         items: _notices,
@@ -1973,10 +1984,14 @@ const List<_DashboardTimeConfig> _kDefaultDashboardTimeConfigs = [
 enum _LessonSlotPhase { inProgress, upcoming, ended }
 
 class _TeacherScheduleSection extends ConsumerStatefulWidget {
-  const _TeacherScheduleSection({this.fillRemaining = false});
+  const _TeacherScheduleSection({
+    this.fillRemaining = false,
+    this.onOpenSchedule,
+  });
 
   /// true：父级提供有界高度，宽屏下双卡通过 `Expanded(cardsRow)` 撑满剩余高度。
   final bool fillRemaining;
+  final VoidCallback? onOpenSchedule;
 
   @override
   ConsumerState<_TeacherScheduleSection> createState() =>
@@ -2075,13 +2090,26 @@ class _TeacherScheduleSectionState extends ConsumerState<_TeacherScheduleSection
       ),
     );
 
+    Widget tappableSectionTitle(String title) {
+      final child = sectionTitle(title);
+      final onTap = widget.onOpenSchedule;
+      if (onTap == null) return child;
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: child,
+      );
+    }
+
     final currentPanel = _CurrentLessonPanel(
       lesson: _currentLesson,
       fillHeight: widget.fillRemaining,
+      onTap: widget.onOpenSchedule,
     );
     final todayPanel = _TodaySchedulePanel(
       lessons: _todayLessons,
       fillHeight: widget.fillRemaining,
+      onTap: widget.onOpenSchedule,
     );
 
     return LayoutBuilder(
@@ -2096,11 +2124,11 @@ class _TeacherScheduleSectionState extends ConsumerState<_TeacherScheduleSection
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                sectionTitle('当前课程'),
+                tappableSectionTitle('当前课程'),
                 SizedBox(height: ui(20)),
                 currentPanel,
                 SizedBox(height: ui(20)),
-                sectionTitle('今日课表'),
+                tappableSectionTitle('今日课表'),
                 SizedBox(height: ui(20)),
                 todayPanel,
               ],
@@ -2126,9 +2154,9 @@ class _TeacherScheduleSectionState extends ConsumerState<_TeacherScheduleSection
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(child: sectionTitle('当前课程')),
+                  Expanded(child: tappableSectionTitle('当前课程')),
                   SizedBox(width: ui(16)),
-                  Expanded(child: sectionTitle('今日课表')),
+                  Expanded(child: tappableSectionTitle('今日课表')),
                 ],
               ),
               SizedBox(height: ui(20)),
@@ -2557,10 +2585,12 @@ class _CurrentLessonPanel extends StatelessWidget {
   const _CurrentLessonPanel({
     this.lesson,
     this.fillHeight = false,
+    this.onTap,
   });
 
   final _LessonScheduleData? lesson;
   final bool fillHeight;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -2585,7 +2615,14 @@ class _CurrentLessonPanel extends StatelessWidget {
             : _LessonScheduleCard(data: lesson!),
       ),
     );
-    return fillHeight ? SizedBox.expand(child: panel) : panel;
+    final wrapped = onTap == null
+        ? panel
+        : GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onTap,
+            child: panel,
+          );
+    return fillHeight ? SizedBox.expand(child: wrapped) : wrapped;
   }
 }
 
@@ -2593,10 +2630,12 @@ class _TodaySchedulePanel extends StatelessWidget {
   const _TodaySchedulePanel({
     required this.lessons,
     this.fillHeight = false,
+    this.onTap,
   });
 
   final List<_LessonScheduleData> lessons;
   final bool fillHeight;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -2630,7 +2669,14 @@ class _TodaySchedulePanel extends StatelessWidget {
               ),
       ),
     );
-    return fillHeight ? SizedBox.expand(child: panel) : panel;
+    final wrapped = onTap == null
+        ? panel
+        : GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onTap,
+            child: panel,
+          );
+    return fillHeight ? SizedBox.expand(child: wrapped) : wrapped;
   }
 }
 

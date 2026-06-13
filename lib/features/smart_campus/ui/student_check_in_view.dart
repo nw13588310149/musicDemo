@@ -239,22 +239,6 @@ class _StudentCheckInViewState extends ConsumerState<StudentCheckInView> {
     final ui = DashboardScaleScope.of(context).ui;
     final selected = _selectedCourse;
 
-    if (_loading) {
-      return SingleChildScrollView(
-        padding: EdgeInsets.only(bottom: ui(24)),
-        child: Column(
-          children: [
-            _CheckInBanner(
-              onBack: widget.onBack,
-              onOpenHistory: _openHistoryDrawer,
-            ),
-            SizedBox(height: ui(120)),
-            const Center(child: AppLoadingIndicator()),
-          ],
-        ),
-      );
-    }
-
     return SingleChildScrollView(
       padding: EdgeInsets.only(bottom: ui(24)),
       child: Column(
@@ -265,10 +249,16 @@ class _StudentCheckInViewState extends ConsumerState<StudentCheckInView> {
             onOpenHistory: _openHistoryDrawer,
           ),
           SizedBox(height: ui(16)),
-          _StatsRow(stats: _kDemoStats),
-          SizedBox(height: ui(24)),
-          // 双列：今日课程 + 签到操作
-          LayoutBuilder(
+          MainContentLoadingShell(
+            loading: _loading,
+            preserveChrome: true,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _StatsRow(stats: _kDemoStats),
+                SizedBox(height: ui(24)),
+                // 双列：今日课程 + 签到操作
+                LayoutBuilder(
             builder: (context, c) {
               final isCompact = c.maxWidth < ui(720);
               if (isCompact) {
@@ -346,15 +336,18 @@ class _StudentCheckInViewState extends ConsumerState<StudentCheckInView> {
               );
             },
           ),
-          SizedBox(height: ui(28)),
-          _SectionTitle('最近课堂记录'),
-          SizedBox(height: ui(12)),
-          _RecentRecordsGrid(
-            records: _kDemoRecentRecords,
-            onApplyMakeup: () => AppToast.show(
-              context,
-              '补签申请接口暂未开放，请联系班主任处理',
-              type: AppToastType.error,
+                SizedBox(height: ui(28)),
+                _SectionTitle('最近课堂记录'),
+                SizedBox(height: ui(12)),
+                _RecentRecordsGrid(
+                  records: _kDemoRecentRecords,
+                  onApplyMakeup: () => AppToast.show(
+                    context,
+                    '补签申请接口暂未开放，请联系班主任处理',
+                    type: AppToastType.error,
+                  ),
+                ),
+              ],
             ),
           ),
         ],

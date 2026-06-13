@@ -756,6 +756,9 @@ class _TeacherHomeworkReviewViewState
           .map((m) => m['name']?.toString() ?? '')
           .where((s) => s.isNotEmpty),
     ];
+    final initialLoading =
+        (_loadingList && _all.isEmpty) ||
+        (_loadingStats && _stats == null && _loadingList);
 
     return SingleChildScrollView(
       padding: EdgeInsets.only(bottom: ui(24)),
@@ -768,83 +771,93 @@ class _TeacherHomeworkReviewViewState
             onOpenPublish: () => _openPublishDrawer(),
           ),
           SizedBox(height: ui(16)),
-          _StatusTabsRow(
-            tabs: _kStatusTabs,
-            activeIdx: _statusTab,
-            onTap: (i) {
-              setState(() => _statusTab = i);
-              _loadHomeworkList();
-            },
-          ),
-          SizedBox(height: ui(12)),
-          _StatsPanel(
-            classFilter: _classFilter,
-            classOptions: classNames,
-            onClassChanged: (v) {
-              Map? found;
-              for (final m in _classList) {
-                if (m['name']?.toString() == v) {
-                  found = m;
-                  break;
-                }
-              }
-              setState(() {
-                _classFilter = v;
-                _classId = found != null
-                    ? (found['id']?.toString() ??
-                        found['classId']?.toString() ??
-                        '0')
-                    : '0';
-              });
-              _loadHomeworkList();
-              _loadStats();
-            },
-            rangeIdx: _rangeTab,
-            onRangeChanged: (i) {
-              setState(() => _rangeTab = i);
-              _loadStats();
-            },
-            stats: _stats,
-            loadingStats: _loadingStats,
-          ),
-          SizedBox(height: ui(16)),
-          if (_loadingList)
-            Center(
-              child: Padding(
-                padding: EdgeInsets.only(top: ui(60)),
-                child: AppLoadingIndicator(),
-              ),
-            )
-          else if (_all.isEmpty)
-            Center(
-              child: Padding(
-                padding: EdgeInsets.only(top: ui(60)),
-                child: Text(
-                  '暂无作业数据',
-                  style: TextStyle(
-                    color: _kTextHint,
-                    fontSize: ui(14),
-                  ),
+          MainContentLoadingShell(
+            loading: initialLoading,
+            preserveChrome: true,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _StatusTabsRow(
+                  tabs: _kStatusTabs,
+                  activeIdx: _statusTab,
+                  onTap: (i) {
+                    setState(() => _statusTab = i);
+                    _loadHomeworkList();
+                  },
                 ),
-              ),
-            )
-          else
-            _BodyRow(
-              items: _all,
-              activeIdx: _activeHomeworkIdx,
-              onSelect: (i) {
-                setState(() {
-                  _activeHomeworkIdx = i;
-                  _activeDetail = null;
-                });
-                _loadHomeworkDetail(_all[i].id);
-              },
-              active: active!,
-              loadingDetail: _loadingDetail,
-              subjectResolvedFor: (it) => it.resolveSubjectDisplay(_subjectNameById),
-              onOpenReview: (s) => _openReviewDrawer(active, s),
-              onDelete: (item) => _deleteHomework(item),
+                SizedBox(height: ui(12)),
+                _StatsPanel(
+                  classFilter: _classFilter,
+                  classOptions: classNames,
+                  onClassChanged: (v) {
+                    Map? found;
+                    for (final m in _classList) {
+                      if (m['name']?.toString() == v) {
+                        found = m;
+                        break;
+                      }
+                    }
+                    setState(() {
+                      _classFilter = v;
+                      _classId = found != null
+                          ? (found['id']?.toString() ??
+                                found['classId']?.toString() ??
+                                '0')
+                          : '0';
+                    });
+                    _loadHomeworkList();
+                    _loadStats();
+                  },
+                  rangeIdx: _rangeTab,
+                  onRangeChanged: (i) {
+                    setState(() => _rangeTab = i);
+                    _loadStats();
+                  },
+                  stats: _stats,
+                  loadingStats: initialLoading ? false : _loadingStats,
+                ),
+                SizedBox(height: ui(16)),
+                if (_loadingList && !initialLoading)
+                  Center(
+                    child: Padding(
+                      padding: EdgeInsets.only(top: ui(60)),
+                      child: AppLoadingIndicator(),
+                    ),
+                  )
+                else if (_all.isEmpty)
+                  Center(
+                    child: Padding(
+                      padding: EdgeInsets.only(top: ui(60)),
+                      child: Text(
+                        '暂无作业数据',
+                        style: TextStyle(
+                          color: _kTextHint,
+                          fontSize: ui(14),
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  _BodyRow(
+                    items: _all,
+                    activeIdx: _activeHomeworkIdx,
+                    onSelect: (i) {
+                      setState(() {
+                        _activeHomeworkIdx = i;
+                        _activeDetail = null;
+                      });
+                      _loadHomeworkDetail(_all[i].id);
+                    },
+                    active: active!,
+                    loadingDetail: _loadingDetail,
+                    subjectResolvedFor: (it) =>
+                        it.resolveSubjectDisplay(_subjectNameById),
+                    onOpenReview: (s) => _openReviewDrawer(active, s),
+                    onDelete: (item) => _deleteHomework(item),
+                  ),
+              ],
             ),
+          ),
         ],
       ),
     );
