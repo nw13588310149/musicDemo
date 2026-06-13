@@ -166,6 +166,7 @@ class VideoTutorialState {
     this.checkStatusEnabled = false,
     this.busy = false,
     this.errorMessage = '',
+    this.searchKeyword = '',
   });
 
   final bool loading;
@@ -185,6 +186,7 @@ class VideoTutorialState {
   final bool checkStatusEnabled;
   final bool busy;
   final String errorMessage;
+  final String searchKeyword;
 
   VideoMenu? get selectedMenu {
     for (final menu in menus) {
@@ -217,6 +219,7 @@ class VideoTutorialState {
     bool? checkStatusEnabled,
     bool? busy,
     String? errorMessage,
+    String? searchKeyword,
   }) {
     return VideoTutorialState(
       loading: loading ?? this.loading,
@@ -242,6 +245,7 @@ class VideoTutorialState {
       checkStatusEnabled: checkStatusEnabled ?? this.checkStatusEnabled,
       busy: busy ?? this.busy,
       errorMessage: errorMessage ?? this.errorMessage,
+      searchKeyword: searchKeyword ?? this.searchKeyword,
     );
   }
 }

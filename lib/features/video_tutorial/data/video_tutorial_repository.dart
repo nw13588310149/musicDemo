@@ -46,16 +46,19 @@ class VideoTutorialRepository {
     required int size,
     String? firstMenu,
     String? secondMenu,
+    String? keyword,
   }) {
-    return client.post(
-      '/app/user/videoTutorialList',
-      data: <String, dynamic>{
-        'current': current,
-        'size': size,
-        'firstMenu': firstMenu,
-        'secondMenu': secondMenu,
-      },
-    );
+    final data = <String, dynamic>{
+      'current': current,
+      'size': size,
+      'firstMenu': firstMenu,
+      'secondMenu': secondMenu,
+    };
+    final trimmedKeyword = keyword?.trim() ?? '';
+    if (trimmedKeyword.isNotEmpty) {
+      data['keyword'] = trimmedKeyword;
+    }
+    return client.post('/app/user/videoTutorialList', data: data);
   }
 
   Future<ApiResponse> getSchoolVideoList({
@@ -63,16 +66,19 @@ class VideoTutorialRepository {
     required int size,
     String? firstMenu,
     String? secondMenu,
+    String? keyword,
   }) {
-    return client.post(
-      '/app/user/schoolVideoTutorialList',
-      data: <String, dynamic>{
-        'current': current,
-        'size': size,
-        'firstMenu': firstMenu,
-        'secondMenu': secondMenu,
-      },
-    );
+    final data = <String, dynamic>{
+      'current': current,
+      'size': size,
+      'firstMenu': firstMenu,
+      'secondMenu': secondMenu,
+    };
+    final trimmedKeyword = keyword?.trim() ?? '';
+    if (trimmedKeyword.isNotEmpty) {
+      data['keyword'] = trimmedKeyword;
+    }
+    return client.post('/app/user/schoolVideoTutorialList', data: data);
   }
 
   Future<ApiResponse> getVideoDetail(String id) {

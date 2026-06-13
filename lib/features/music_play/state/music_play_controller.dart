@@ -1271,7 +1271,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
         );
       }
       if (!isStale()) {
-        unawaited(_attachVisualizerForTrack(track.url, playing: play));
+        await _attachVisualizerForTrack(track.url, playing: play);
       }
     } catch (error) {
       if (isStale()) return;
@@ -1408,6 +1408,14 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       }
       state = state.copyWith(isPlaying: playing);
       unawaited(_syncVisualizerTransport());
+      if (_isIosNative && playing) {
+        // iOS 主播放器就绪后补一次同步，避免探针引擎先于 just_audio 启动。
+        Future<void>.delayed(const Duration(milliseconds: 120), () {
+          if (!_disposed && mounted && state.isPlaying) {
+            unawaited(_syncVisualizerTransport());
+          }
+        });
+      }
     });
     _completedSub = player.stream.completed.listen((completed) async {
       if (completed && mounted) {

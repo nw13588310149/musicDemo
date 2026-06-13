@@ -99,11 +99,11 @@ final class MusicPlayAudioVisualizer: NSObject {
   }
 
   private func configureGraph() throws {
-    if tapInstalled {
-      engine.mainMixerNode.removeTap(onBus: 0)
-      tapInstalled = false
+    removeTapIfNeeded()
+    player.stop()
+    if engine.isRunning {
+      engine.stop()
     }
-    engine.stop()
     engine.reset()
     if engine.attachedNodes.contains(player) {
       engine.detach(player)
@@ -115,8 +115,8 @@ final class MusicPlayAudioVisualizer: NSObject {
       throw MusicPlayAudioVisualizerError.missingFormat
     }
     engine.connect(player, to: mixer, format: format)
-    installTapIfNeeded()
     try ensureEngineRunning()
+    installTapIfNeeded()
   }
 
   private func ensureEngineRunning() throws {
@@ -127,10 +127,8 @@ final class MusicPlayAudioVisualizer: NSObject {
   }
 
   private func installTapIfNeeded() {
-    guard !tapInstalled else { return }
-    let mixer = engine.mainMixerNode
-    let format = mixer.outputFormat(forBus: 0)
-    mixer.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
+    guard !tapInstalled, let format = audioFile?.processingFormat else { return }
+    player.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
       guard let self, self.isPlaying else { return }
       let bands = self.process(buffer: buffer)
       guard !bands.isEmpty else { return }
@@ -139,6 +137,12 @@ final class MusicPlayAudioVisualizer: NSObject {
       }
     }
     tapInstalled = true
+  }
+
+  private func removeTapIfNeeded() {
+    guard tapInstalled else { return }
+    player.removeTap(onBus: 0)
+    tapInstalled = false
   }
 
   private func syncTransport(playing: Bool, positionMs: Int64) {
@@ -226,7 +230,9 @@ final class MusicPlayAudioVisualizer: NSObject {
         s1 = s0
       }
       let power = s1 * s1 + s2 * s2 - coeff * s1 * s2
-      result[b] = sqrt(max(0, power)) / Double(n)
+      let magnitude = sqrt(max(0, power)) / Double(n)
+      // 对齐 Android Visualizer / Web Analyser 的展示量级。
+      result[b] = min(1.0, magnitude * 96.0)
     }
     return result
   }
@@ -261,11 +267,10 @@ final class MusicPlayAudioVisualizer: NSObject {
     lastSyncedPositionMs = -1
     attachedUrl = nil
     player.stop()
-    if tapInstalled {
-      engine.mainMixerNode.removeTap(onBus: 0)
-      tapInstalled = false
+    removeTapIfNeeded()
+    if engine.isRunning {
+      engine.stop()
     }
-    engine.stop()
     audioFile = nil
     currentFrame = 0
   }

@@ -40,6 +40,7 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
       <String, _VideoListCacheEntry>{};
   final Set<String> _inFlightPageKeys = <String>{};
   final Map<String, VideoDetail> _detailCache = <String, VideoDetail>{};
+  Timer? _searchDebounce;
 
   static const int _pageSize = 20;
   static const List<String> _menuOrder = <String>[
@@ -103,7 +104,11 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
     }
 
     final nextChildId = _resolveSelectedChildId(state.menus, menuId, null);
-    final cached = _listCache[_cacheKey(menuId, nextChildId)];
+    final cached = _listCache[_cacheKey(
+      menuId,
+      nextChildId,
+      state.searchKeyword,
+    )];
     // ⚠️ "全部" tab 的 id 是 null，但 copyWith(selectedMenuId: null) 会被当成
     // "未传"而保留旧值。必须用 clearSelectedMenuId 显式清空，UI 才能切回"全部"。
     state = state.copyWith(
@@ -128,7 +133,11 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
       return;
     }
 
-    final cached = _listCache[_cacheKey(state.selectedMenuId, childId)];
+    final cached = _listCache[_cacheKey(
+      state.selectedMenuId,
+      childId,
+      state.searchKeyword,
+    )];
     state = state.copyWith(
       selectedChildId: childId,
       videoList: cached?.items ?? const [],
@@ -149,6 +158,54 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
       return;
     }
     await _loadVideoList(reset: false);
+  }
+
+  /// 搜索框输入：300ms 防抖后按 keyword 重新拉取列表。
+  void setSearchKeyword(String keyword) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) {
+        return;
+      }
+      unawaited(_applySearchKeyword(keyword.trim()));
+    });
+  }
+
+  /// 回车立即搜索，跳过防抖等待。
+  Future<void> submitSearch(String keyword) async {
+    _searchDebounce?.cancel();
+    await _applySearchKeyword(keyword.trim());
+  }
+
+  Future<void> _applySearchKeyword(String keyword) async {
+    if (keyword == state.searchKeyword) {
+      return;
+    }
+
+    final cached = _listCache[_cacheKey(
+      state.selectedMenuId,
+      state.selectedChildId,
+      keyword,
+    )];
+    state = state.copyWith(
+      searchKeyword: keyword,
+      videoList: cached?.items ?? const [],
+      currentPage: cached?.currentPage ?? 1,
+      hasMore: cached?.hasMore ?? true,
+      loading: cached == null,
+      loadingMore: false,
+      errorMessage: '',
+    );
+
+    if (cached == null) {
+      await _loadVideoList(reset: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    super.dispose();
   }
 
   Future<String?> openDetail(VideoListItem item) async {
@@ -354,7 +411,11 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
   }
 
   Future<void> _loadVideoList({required bool reset}) async {
-    final cacheKey = _cacheKey(state.selectedMenuId, state.selectedChildId);
+    final cacheKey = _cacheKey(
+      state.selectedMenuId,
+      state.selectedChildId,
+      state.searchKeyword,
+    );
     final cached = _listCache[cacheKey];
     final page = reset ? 1 : (cached?.currentPage ?? state.currentPage) + 1;
     final pageKey = '$cacheKey#$page';
@@ -383,12 +444,14 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
             size: _pageSize,
             firstMenu: state.selectedMenuId,
             secondMenu: state.selectedChildId,
+            keyword: state.searchKeyword,
           )
         : _repository.getVideoList(
             current: page,
             size: _pageSize,
             firstMenu: state.selectedMenuId,
             secondMenu: state.selectedChildId,
+            keyword: state.searchKeyword,
           ));
     _inFlightPageKeys.remove(pageKey);
 
@@ -426,8 +489,9 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
     );
   }
 
-  String _cacheKey(String? firstMenu, String? secondMenu) {
-    return '${firstMenu ?? 'all'}|${secondMenu ?? 'all'}';
+  String _cacheKey(String? firstMenu, String? secondMenu, String keyword) {
+    final trimmed = keyword.trim();
+    return '${firstMenu ?? 'all'}|${secondMenu ?? 'all'}|$trimmed';
   }
 
   List<VideoListItem> _mergeUnique(

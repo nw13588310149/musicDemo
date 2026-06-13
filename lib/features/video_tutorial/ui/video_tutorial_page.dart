@@ -21,6 +21,7 @@ import '../../../core/constants/app_assets.dart';
 import '../../../core/network/media_url.dart';
 import '../../../core/widgets/app_asset_graphic.dart';
 import '../../../core/widgets/app_refresh_indicator.dart';
+import '../../../core/widgets/app_text_field.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/class_share_drawer.dart';
 import '../../../core/widgets/seamless_banner_carousel.dart';
@@ -58,6 +59,7 @@ class VideoTutorialV2Page extends ConsumerStatefulWidget {
 class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
   VideoTutorialPageArgs get _pageArgs => widget.args;
   final ScrollController _scrollController = ScrollController();
+  late final TextEditingController _searchController;
   int _bannerIndex = 0;
   bool _isDetailOpening = false;
   // 首次 didChangeDependencies 时消费一次路由参数（如 my_collection 跳转过来
@@ -68,6 +70,8 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
   @override
   void initState() {
     super.initState();
+    _searchController = TextEditingController();
+    _searchController.addListener(_handleSearchChanged);
     MediaKit.ensureInitialized();
     _scrollController.addListener(_handleScroll);
   }
@@ -90,9 +94,27 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
 
   @override
   void dispose() {
+    _searchController
+      ..removeListener(_handleSearchChanged)
+      ..dispose();
     _scrollController.removeListener(_handleScroll);
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _handleSearchChanged() {
+    ref
+        .read(videoTutorialControllerProvider(_pageArgs).notifier)
+        .setSearchKeyword(_searchController.text);
+  }
+
+  Future<void> _submitSearch() async {
+    if (_scrollController.hasClients) {
+      _scrollController.jumpTo(0);
+    }
+    await ref
+        .read(videoTutorialControllerProvider(_pageArgs).notifier)
+        .submitSearch(_searchController.text);
   }
 
   void _handleScroll() {
@@ -239,6 +261,15 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(videoTutorialControllerProvider(_pageArgs));
+    ref.listen<VideoTutorialState>(videoTutorialControllerProvider(_pageArgs), (
+      previous,
+      next,
+    ) {
+      if (previous?.searchKeyword != next.searchKeyword &&
+          _scrollController.hasClients) {
+        _scrollController.jumpTo(0);
+      }
+    });
     final scale = DashboardScaleScope.of(context);
     final ui = scale.ui;
     _preloadImages(state);
@@ -258,6 +289,8 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
               menus: state.menus,
               selectedMenuId: state.selectedMenuId,
               onSelectMenu: _selectMenu,
+              searchController: _searchController,
+              onSearchSubmitted: _submitSearch,
             ),
           ),
           // ── 视频列表区：仅此区域可滚动 ──────────────────────────────────
@@ -3735,12 +3768,16 @@ class _VideoCategoryHeader extends StatelessWidget {
     required this.menus,
     required this.selectedMenuId,
     required this.onSelectMenu,
+    required this.searchController,
+    required this.onSearchSubmitted,
   });
 
   final DashboardScaleData scale;
   final List<VideoMenu> menus;
   final String? selectedMenuId;
   final ValueChanged<String?> onSelectMenu;
+  final TextEditingController searchController;
+  final VoidCallback onSearchSubmitted;
 
   @override
   Widget build(BuildContext context) {
@@ -3833,7 +3870,6 @@ class _VideoCategoryHeader extends StatelessWidget {
               borderRadius: BorderRadius.circular(ui(12)),
               border: Border.all(color: const Color(0xFFF3F2F3), width: 1),
             ),
-            // 仅左右 padding；图标 + 文字由 Row 在 36 高度内垂直居中。
             padding: EdgeInsets.symmetric(horizontal: ui(16)),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
@@ -3846,17 +3882,38 @@ class _VideoCategoryHeader extends StatelessWidget {
                 ),
                 SizedBox(width: ui(6)),
                 Expanded(
-                  child: Text(
-                    searchHint,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  child: AppTextField(
+                    controller: searchController,
+                    textInputAction: TextInputAction.search,
+                    onSubmitted: (_) => onSearchSubmitted(),
+                    cursorColor: const Color(0xFF8741FF),
+                    cursorWidth: 1.5,
+                    cursorHeight: ui(14),
                     style: TextStyle(
                       fontSize: ui(14),
-                      color: const Color(0xFFD1D1D1),
+                      color: const Color(0xFF0B081A),
                       fontFamily: 'PingFang SC',
                       fontWeight: AppFont.w400,
                       height: 1,
                     ).useSystemChineseFont(),
+                    decoration: InputDecoration(
+                      isCollapsed: true,
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      disabledBorder: InputBorder.none,
+                      errorBorder: InputBorder.none,
+                      focusedErrorBorder: InputBorder.none,
+                      hintText: searchHint,
+                      hintStyle: TextStyle(
+                        fontSize: ui(14),
+                        color: const Color(0xFFD1D1D1),
+                        fontFamily: 'PingFang SC',
+                        fontWeight: AppFont.w400,
+                        height: 1,
+                      ).useSystemChineseFont(),
+                      contentPadding: EdgeInsets.zero,
+                    ),
                   ),
                 ),
               ],

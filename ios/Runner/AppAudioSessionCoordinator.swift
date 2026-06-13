@@ -76,16 +76,17 @@ final class AppAudioSessionCoordinator {
       try session.setCategory(
         .playAndRecord,
         mode: .default,
-        options: [.defaultToSpeaker, .allowBluetooth]
+        options: [.defaultToSpeaker, .allowBluetooth, .mixWithOthers]
       )
     case "measurement":
       try session.setCategory(
         .playAndRecord,
         mode: .measurement,
-        options: [.defaultToSpeaker, .allowBluetooth]
+        options: [.defaultToSpeaker, .allowBluetooth, .mixWithOthers]
       )
     default:
-      try session.setCategory(.playback, mode: .default, options: [])
+      // 与 Dart NativePlaybackAudioSession 一致：允许 just_audio 与可视化探针引擎并行。
+      try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
     }
     try session.setPreferredSampleRate(44_100)
     try session.setPreferredIOBufferDuration(0.005)
