@@ -3,7 +3,7 @@ import Flutter
 
 /// 与主播放器并行运行的静音探针引擎：从 PCM tap 提取 46 段 RMS 能量，
 /// 经 EventChannel 推送给 Flutter 可视化条（不接管主输出）。
-final class MusicPlayAudioVisualizer {
+final class MusicPlayAudioVisualizer: NSObject {
   private let methodChannel: FlutterMethodChannel
   private let eventChannel: FlutterEventChannel
   private var eventSink: FlutterEventSink?
@@ -27,6 +27,7 @@ final class MusicPlayAudioVisualizer {
       name: "com.yyzl.music/music_play_visualizer/bands",
       binaryMessenger: messenger
     )
+    super.init()
     methodChannel.setMethodCallHandler { [weak self] call, result in
       self?.handle(call: call, result: result)
     }
