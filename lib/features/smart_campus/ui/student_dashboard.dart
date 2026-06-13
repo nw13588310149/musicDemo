@@ -622,6 +622,7 @@ _BuiltDashboardSchedule _buildStudentDashboardSchedule({
         status: style.label,
         statusColor: style.foreground,
         statusBg: style.background,
+        isPast: phase == _LessonSlotPhase.ended,
         teachers: [
           for (final row in group.rows)
             _lessonRowFromStudentCourse(row, group.start, group.end),

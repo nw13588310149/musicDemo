@@ -89,21 +89,25 @@ class _StudentRecord {
 
   factory _StudentRecord.fromJson(Map<String, dynamic> json) {
     final id = _pickString(json, ['id', 'studentId', 'userId'], '');
-    // 后端实际返回 realname / nickname；保留旧字段名做兜底。
-    final name = _pickString(json, [
-      'realname',
-      'realName',
-      'nickname',
-      'name',
-      'studentName',
-      'userName',
-    ], '');
-    final no = _pickString(json, [
+    final nickname = _pickString(json, ['nickname', 'nickName'], '');
+    final realname = _pickString(json, ['realname', 'realName'], '');
+    final studentNo = _pickString(json, [
       'no',
       'studentNo',
       'studentCode',
       'code',
     ], '');
+    var name = nickname.isNotEmpty
+        ? nickname
+        : (realname.isNotEmpty
+              ? realname
+              : _pickString(json, ['name', 'studentName', 'userName'], ''));
+    if (name.isEmpty && studentNo.isNotEmpty) {
+      name = studentNo;
+    }
+    if (name.isEmpty) {
+      name = '未命名';
+    }
     final major = _pickString(json, [
       'major',
       'majorName',
@@ -126,7 +130,6 @@ class _StudentRecord {
       'photoUrl',
     ], '');
     final avatarUrl = rawAvatar.isEmpty ? '' : MediaUrl.resolve(rawAvatar);
-    final nickname = _pickString(json, ['nickname', 'nickName'], '');
     final gender = _pickString(json, ['gender', 'sex'], '');
     final studentStatus = _pickString(json, [
       'studentStatus',
@@ -143,7 +146,7 @@ class _StudentRecord {
     return _StudentRecord(
       id: id,
       name: name,
-      studentNo: no,
+      studentNo: studentNo,
       avatarUrl: avatarUrl,
       nickname: nickname,
       gender: gender,
@@ -203,11 +206,24 @@ class _TeacherOption {
   factory _TeacherOption.fromJson(Map<String, dynamic> json) {
     final nickname = _pickString(json, ['nickname', 'nickName'], '');
     final realname = _pickString(json, ['realname', 'realName'], '');
-    final name = nickname.isNotEmpty
+    final workNo = _pickString(json, [
+      'no',
+      'workNo',
+      'teacherNo',
+      'jobNo',
+      'code',
+    ], '');
+    var name = nickname.isNotEmpty
         ? nickname
         : (realname.isNotEmpty
               ? realname
               : _pickString(json, ['name', 'teacherName', 'userName'], ''));
+    if (name.isEmpty && workNo.isNotEmpty) {
+      name = workNo;
+    }
+    if (name.isEmpty) {
+      name = '未命名';
+    }
     final rawAvatar = _pickString(json, [
       'headUrl',
       'avatarUrl',
@@ -233,13 +249,7 @@ class _TeacherOption {
     return _TeacherOption(
       id: id,
       name: name,
-      workNo: _pickString(json, [
-        'no',
-        'workNo',
-        'teacherNo',
-        'jobNo',
-        'code',
-      ], ''),
+      workNo: workNo,
       subject: _pickString(json, [
         'subject',
         'subjectName',
@@ -779,7 +789,7 @@ class _AdminClassManagementViewState
   _loadOptionsImpl() async {
     final repo = ref.read(adminRepositoryProvider);
     final results = await Future.wait([
-      repo.teacherList(),
+      repo.teacherList(size: 100000),
       repo.classroomList(),
     ]);
 
@@ -790,7 +800,7 @@ class _AdminClassManagementViewState
     if (teacherResp.isSuccess) {
       for (final m in _extractList(teacherResp)) {
         final t = _TeacherOption.fromJson(m);
-        if (t.name.isNotEmpty) teachers.add(t);
+        if (t.id.isNotEmpty) teachers.add(t);
       }
     }
 
@@ -826,7 +836,7 @@ class _AdminClassManagementViewState
     }
     _poolLoading = true;
     final repo = ref.read(adminRepositoryProvider);
-    final resp = await repo.studentList(size: 500);
+    final resp = await repo.studentList(size: 100000);
     if (!mounted) {
       _poolLoading = false;
       return const [];
@@ -835,7 +845,7 @@ class _AdminClassManagementViewState
     if (resp.isSuccess) {
       for (final m in _extractList(resp)) {
         final s = _StudentRecord.fromJson(m);
-        if (s.name.isNotEmpty) pool.add(s);
+        if (s.id.isNotEmpty) pool.add(s);
       }
     }
     setState(() {
@@ -863,7 +873,7 @@ class _AdminClassManagementViewState
     final cid = entry.id;
     final repo = ref.read(adminRepositoryProvider);
     final resp = cid.isNotEmpty
-        ? await repo.studentList(classId: cid, size: 500)
+        ? await repo.studentList(classId: cid, size: 100000)
         : ApiResponse.failure('班级 id 缺失');
     if (!mounted) return const [];
 
@@ -871,7 +881,7 @@ class _AdminClassManagementViewState
     if (resp.isSuccess) {
       for (final m in _extractList(resp)) {
         final s = _StudentRecord.fromJson(m);
-        if (s.name.isNotEmpty) list.add(s);
+        if (s.id.isNotEmpty) list.add(s);
       }
     }
 
@@ -896,7 +906,7 @@ class _AdminClassManagementViewState
     final cid = entry.id;
     final repo = ref.read(adminRepositoryProvider);
     final resp = cid.isNotEmpty
-        ? await repo.teacherList(classId: cid)
+        ? await repo.teacherList(classId: cid, size: 100000)
         : ApiResponse.failure('班级 id 缺失');
     if (!mounted) return const [];
 
@@ -904,7 +914,7 @@ class _AdminClassManagementViewState
     if (resp.isSuccess) {
       for (final m in _extractList(resp)) {
         final t = _TeacherOption.fromJson(m);
-        if (t.name.isNotEmpty) list.add(t);
+        if (t.id.isNotEmpty) list.add(t);
       }
     }
 

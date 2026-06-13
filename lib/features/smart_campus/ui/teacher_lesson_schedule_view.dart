@@ -52,6 +52,7 @@ import '../../shell/ui/shell_layout.dart';
 import '../data/teacher_repository.dart';
 import '../data/schedule_color_palette.dart';
 import '../data/schedule_course_card_builder.dart';
+import '../data/schedule_slot_time.dart';
 import 'widgets/schedule_color_swatch_picker.dart';
 import 'widgets/schedule_course_card.dart';
 import 'widgets/schedule_idle_slot.dart';
@@ -158,11 +159,13 @@ class _DayHeaderData {
   const _DayHeaderData({
     required this.weekdayLabel,
     required this.dateLabel,
+    required this.date,
     this.today = false,
   });
 
   final String weekdayLabel;
   final String dateLabel;
+  final DateTime date;
   final bool today;
 }
 
@@ -837,6 +840,7 @@ class _TeacherLessonScheduleViewState
             weekdayLabel: labels[i],
             dateLabel:
                 '${d.month.toString().padLeft(2, '0')}/${d.day.toString().padLeft(2, '0')}',
+            date: DateTime(d.year, d.month, d.day),
             today: isToday,
           );
         }(),
@@ -1802,8 +1806,10 @@ class _DaysArea extends StatelessWidget {
         for (var slotIdx = 0; slotIdx < slots.length; slotIdx++)
           _DayBodyRow(
             slotIdx: slotIdx,
+            slotEnd: slots[slotIdx].end,
             height: slots[slotIdx].height,
             mode: mode,
+            days: days,
             rowCells: [
               for (var dayIdx = 0; dayIdx < days.length; dayIdx++)
                 cells[dayIdx][slotIdx],
@@ -1877,15 +1883,19 @@ class _DaysHeaderRow extends StatelessWidget {
 class _DayBodyRow extends StatelessWidget {
   const _DayBodyRow({
     required this.slotIdx,
+    required this.slotEnd,
     required this.height,
     required this.mode,
+    required this.days,
     required this.rowCells,
     required this.onApplySmallLesson,
   });
 
   final int slotIdx;
+  final String slotEnd;
   final double height;
   final _ScheduleMode mode;
+  final List<_DayHeaderData> days;
   final List<List<_ScheduleCardData>> rowCells;
   final void Function(int dayIdx, int slotIdx) onApplySmallLesson;
 
@@ -1905,8 +1915,10 @@ class _DayBodyRow extends StatelessWidget {
                   Positioned.fill(
                     child: _CellContent(
                       slotIdx: slotIdx,
+                      slotEnd: slotEnd,
                       slotHeight: height,
                       mode: mode,
+                      slotDate: days[i].date,
                       cards: rowCells[i],
                       onApplySmallLesson: () => onApplySmallLesson(i, slotIdx),
                     ),
@@ -1940,15 +1952,19 @@ class _DayBodyRow extends StatelessWidget {
 class _CellContent extends StatelessWidget {
   const _CellContent({
     required this.slotIdx,
+    required this.slotEnd,
     required this.slotHeight,
     required this.mode,
+    required this.slotDate,
     required this.cards,
     required this.onApplySmallLesson,
   });
 
   final int slotIdx;
+  final String slotEnd;
   final double slotHeight;
   final _ScheduleMode mode;
+  final DateTime slotDate;
   final List<_ScheduleCardData> cards;
   final VoidCallback onApplySmallLesson;
 
@@ -1970,26 +1986,32 @@ class _CellContent extends StatelessWidget {
       return const ScheduleIdleSlot();
     }
     // 编辑模式：无论本格当前是大课还是小课，都允许在卡片下方继续"申请小课"。
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(12)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (var i = 0; i < cards.length; i++) ...[
-            if (i > 0) SizedBox(height: ui(6)),
-            ScheduleCourseCard(
-              data: cards[i].display,
-              editable: isEditing && _isSmall(cards[i].kind),
-              topRightBadge: cards[i].applyStatus != null
-                  ? _ApplyStatusBadge(status: cards[i].applyStatus!)
-                  : null,
-            ),
+    final isPast = isScheduleSlotPast(slotDate: slotDate, endHm: slotEnd);
+    return Align(
+      alignment: Alignment.topCenter,
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(12)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var i = 0; i < cards.length; i++) ...[
+              if (i > 0) SizedBox(height: ui(6)),
+              ScheduleCourseCard(
+                data: cards[i].display,
+                editable: isEditing && _isSmall(cards[i].kind),
+                isPast: isPast,
+                topRightBadge: cards[i].applyStatus != null
+                    ? _ApplyStatusBadge(status: cards[i].applyStatus!)
+                    : null,
+              ),
+            ],
+            if (isEditing) ...[
+              SizedBox(height: ui(8)),
+              _ApplySmallLessonButton(onTap: onApplySmallLesson),
+            ],
           ],
-          if (isEditing) ...[
-            SizedBox(height: ui(8)),
-            _ApplySmallLessonButton(onTap: onApplySmallLesson),
-          ],
-        ],
+        ),
       ),
     );
   }

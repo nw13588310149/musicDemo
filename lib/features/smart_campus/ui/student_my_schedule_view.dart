@@ -35,6 +35,7 @@ import '../../school/data/school_repository.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/student_repository.dart';
 import '../data/schedule_course_card_builder.dart';
+import '../data/schedule_slot_time.dart';
 import 'widgets/schedule_course_card.dart';
 import 'widgets/schedule_idle_slot.dart';
 import 'widgets/smart_campus_page_banner.dart';
@@ -272,6 +273,7 @@ class _StudentMyScheduleViewState extends ConsumerState<StudentMyScheduleView> {
             weekdayLabel: labels[i],
             dateLabel:
                 '${d.month.toString().padLeft(2, '0')}/${d.day.toString().padLeft(2, '0')}',
+            date: DateTime(d.year, d.month, d.day),
             today: isToday,
           );
         }(),
@@ -881,7 +883,9 @@ class _DaysArea extends StatelessWidget {
         _DaysHeaderRow(days: days),
         for (var slotIdx = 0; slotIdx < slots.length; slotIdx++)
           _DayBodyRow(
+            slotEnd: slots[slotIdx].end,
             height: slots[slotIdx].height,
+            days: days,
             // cells 第一维是 day，第二维是 slot；按行收集 7 列在该 slot 的卡片
             rowCells: [
               for (var dayIdx = 0; dayIdx < days.length; dayIdx++)
@@ -955,9 +959,16 @@ class _DaysHeaderRow extends StatelessWidget {
 }
 
 class _DayBodyRow extends StatelessWidget {
-  const _DayBodyRow({required this.height, required this.rowCells});
+  const _DayBodyRow({
+    required this.slotEnd,
+    required this.height,
+    required this.days,
+    required this.rowCells,
+  });
 
+  final String slotEnd;
   final double height;
+  final List<_DayHeaderData> days;
   final List<List<ScheduleCourseCardData>> rowCells;
 
   @override
@@ -976,7 +987,13 @@ class _DayBodyRow extends StatelessWidget {
               // 等行）时会触发 "BOTTOM OVERFLOWED BY 1.00 PIXELS"。
               child: Stack(
                 children: [
-                  Positioned.fill(child: _CellContent(cards: rowCells[i])),
+                  Positioned.fill(
+                    child: _CellContent(
+                      slotDate: days[i].date,
+                      slotEnd: slotEnd,
+                      cards: rowCells[i],
+                    ),
+                  ),
                   Positioned(
                     left: 0,
                     right: 0,
@@ -1000,8 +1017,14 @@ class _DayBodyRow extends StatelessWidget {
 }
 
 class _CellContent extends StatelessWidget {
-  const _CellContent({required this.cards});
+  const _CellContent({
+    required this.slotDate,
+    required this.slotEnd,
+    required this.cards,
+  });
 
+  final DateTime slotDate;
+  final String slotEnd;
   final List<ScheduleCourseCardData> cards;
 
   @override
@@ -1010,16 +1033,21 @@ class _CellContent extends StatelessWidget {
     if (cards.isEmpty) {
       return const ScheduleIdleSlot();
     }
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(12)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (var i = 0; i < cards.length; i++) ...[
-            if (i > 0) SizedBox(height: ui(6)),
-            ScheduleCourseCard(data: cards[i]),
+    final isPast = isScheduleSlotPast(slotDate: slotDate, endHm: slotEnd);
+    return Align(
+      alignment: Alignment.topCenter,
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(12)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var i = 0; i < cards.length; i++) ...[
+              if (i > 0) SizedBox(height: ui(6)),
+              ScheduleCourseCard(data: cards[i], isPast: isPast),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -1045,10 +1073,12 @@ class _DayHeaderData {
   const _DayHeaderData({
     required this.weekdayLabel,
     required this.dateLabel,
+    required this.date,
     this.today = false,
   });
 
   final String weekdayLabel;
   final String dateLabel;
+  final DateTime date;
   final bool today;
 }

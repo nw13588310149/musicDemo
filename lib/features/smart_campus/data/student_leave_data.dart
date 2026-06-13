@@ -3,6 +3,16 @@ library;
 
 import '../../../core/network/media_url.dart';
 
+/// 家长尚未审批时，班主任同意默认填写的审批意见。
+const String kHeadTeacherLeaveApproveReasonWithoutParent =
+    '已和家长沟通获得允许，故同意请假';
+
+/// 家长已同意后，班主任同意默认填写的审批意见。
+const String kHeadTeacherLeaveApproveReasonDefault = '同意请假';
+
+/// 班主任拒绝默认填写的审批意见。
+const String kHeadTeacherLeaveRejectReasonDefault = '不予批准请假';
+
 /// API `status`：0-待家长审批 / 1-家长同意 / 2-家长拒绝 / 3-老师同意 / 4-老师拒绝
 enum StudentLeaveStatus {
   waitingParent(0, '待家长审批'),
@@ -16,7 +26,9 @@ enum StudentLeaveStatus {
   final int code;
   final String label;
 
-  bool get canTeacherAudit => this == StudentLeaveStatus.waitingTeacher;
+  bool get canTeacherAudit =>
+      this == StudentLeaveStatus.waitingTeacher ||
+      this == StudentLeaveStatus.waitingParent;
 
   static StudentLeaveStatus? fromApi(dynamic raw) {
     final code = int.tryParse(raw?.toString() ?? '');

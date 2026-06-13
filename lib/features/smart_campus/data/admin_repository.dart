@@ -168,11 +168,18 @@ class AdminRepository {
   /// 教师列表。
   ///
   /// `classId` 为空串表示全部班级；具体班级传雪花 id 字符串。
-  Future<ApiResponse> teacherList({String? classId, String? keyword}) {
+  Future<ApiResponse> teacherList({
+    String? classId,
+    int current = 1,
+    int size = 200,
+    String? keyword,
+  }) {
     final body = <String, dynamic>{
       'classId': (classId != null && classId.isNotEmpty)
           ? (readSnowflakeId(classId) ?? classId)
           : '',
+      'current': current,
+      'size': size,
     };
     if (keyword != null && keyword.isNotEmpty) body['keyword'] = keyword;
     return client.post('$_base/teacherList', data: body);

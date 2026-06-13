@@ -61,7 +61,6 @@ enum _StatusTab {
   final String label;
 
   int? get apiStatus => switch (this) {
-    _StatusTab.mine => 1,
     _StatusTab.approved => 3,
     _ => null,
   };
@@ -191,7 +190,7 @@ class _TeacherLeaveApprovalViewState
     return switch (_tab) {
       _StatusTab.all => source,
       _StatusTab.mine => source
-          .where((r) => r.status == StudentLeaveStatus.waitingTeacher)
+          .where((r) => r.status.canTeacherAudit)
           .toList(),
       _StatusTab.reviewing => source
           .where(
@@ -270,10 +269,25 @@ class _TeacherLeaveApprovalViewState
   }
 
   Future<void> _onApprove(StudentLeaveRecord record) async {
+    final defaultReason =
+        record.status == StudentLeaveStatus.waitingParent
+        ? kHeadTeacherLeaveApproveReasonWithoutParent
+        : kHeadTeacherLeaveApproveReasonDefault;
+    final reason = await _showTeacherAuditReasonDialog(
+      context,
+      record: record,
+      title: '通过申请',
+      fieldLabel: '审批意见',
+      initialText: defaultReason,
+    );
+    if (!mounted) return;
+    if (reason == null || reason.trim().isEmpty) return;
+
     final repo = ref.read(teacherRepositoryProvider);
     final resp = await repo.headTeacherStudentLeaveAudit(
       id: record.id,
       status: 3,
+      teacherAuditReason: reason.trim(),
     );
     if (!mounted) return;
     if (!resp.isSuccess) {
@@ -289,7 +303,13 @@ class _TeacherLeaveApprovalViewState
   }
 
   Future<void> _onReject(StudentLeaveRecord record) async {
-    final reason = await _showRejectDialog(context, record: record);
+    final reason = await _showTeacherAuditReasonDialog(
+      context,
+      record: record,
+      title: '驳回申请',
+      fieldLabel: '审批意见',
+      initialText: kHeadTeacherLeaveRejectReasonDefault,
+    );
     if (!mounted) return;
     if (reason == null || reason.trim().isEmpty) return;
 
@@ -1114,20 +1134,23 @@ class _CardActionButton extends StatelessWidget {
   }
 }
 
-// —— 驳回申请弹窗 ——————————————————————————————————————————————————
+// —— 审批意见弹窗（通过 / 驳回共用，默认预填审核理由） ——————————————————
 
-Future<String?> _showRejectDialog(
+Future<String?> _showTeacherAuditReasonDialog(
   BuildContext context, {
   required StudentLeaveRecord record,
+  required String title,
+  required String fieldLabel,
+  required String initialText,
 }) {
-  final controller = TextEditingController();
+  final controller = TextEditingController(text: initialText);
   return showScaledDialog<String>(
     context: context,
     barrierColor: Colors.black.withValues(alpha: 0.80),
     builder: (dialogContext) {
       final ui = DashboardScaleScope.of(dialogContext).ui;
       return GradientHeaderDialog(
-        title: '驳回申请',
+        title: title,
         titlePaddingTop: 40,
         width: 428,
         contentPadding: EdgeInsets.fromLTRB(ui(40), ui(40), ui(40), ui(30)),
@@ -1135,7 +1158,14 @@ Future<String?> _showRejectDialog(
           confirmLabel: '确认',
           cancelLabel: '取消',
           onCancel: () => Navigator.of(dialogContext).pop(),
-          onConfirm: () => Navigator.of(dialogContext).pop(controller.text),
+          onConfirm: () {
+            final text = controller.text.trim();
+            if (text.isEmpty) {
+              AppToast.show(dialogContext, '请填写审批意见');
+              return;
+            }
+            Navigator.of(dialogContext).pop(text);
+          },
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1153,7 +1183,7 @@ Future<String?> _showRejectDialog(
             ),
             SizedBox(height: ui(15)),
             Text(
-              '驳回说明',
+              fieldLabel,
               style: TextStyle(
                 fontSize: ui(14),
                 color: _kTextDark,
@@ -1191,7 +1221,7 @@ Future<String?> _showRejectDialog(
                   height: 20 / 14,
                 ),
                 decoration: InputDecoration(
-                  hintText: '请输入',
+                  hintText: '请输入审批意见',
                   hintStyle: TextStyle(
                     fontSize: ui(14),
                     color: _kTextHintLight,
@@ -1209,5 +1239,5 @@ Future<String?> _showRejectDialog(
         ),
       );
     },
-  );
+  ).whenComplete(controller.dispose);
 }

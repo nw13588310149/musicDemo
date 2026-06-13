@@ -1952,6 +1952,7 @@ class _LessonScheduleData {
     required this.statusColor,
     required this.statusBg,
     required this.teachers,
+    this.isPast = false,
   });
 
   final String time;
@@ -1959,6 +1960,7 @@ class _LessonScheduleData {
   final Color statusColor;
   final Color statusBg;
   final List<_LessonRowData> teachers;
+  final bool isPast;
 }
 
 class _DashboardTimeConfig {
@@ -2224,6 +2226,7 @@ _BuiltDashboardSchedule _buildDashboardSchedule({
         status: style.label,
         statusColor: style.foreground,
         statusBg: style.background,
+        isPast: phase == _LessonSlotPhase.ended,
         teachers: [
           for (final row in group.rows)
             _lessonRowFromCourse(row, group.start, group.end),
@@ -2746,6 +2749,9 @@ class _LessonScheduleCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final radius = ui(12);
+    final cardBg = data.isPast
+        ? const Color(0xFFE6E9F1)
+        : const Color(0xFFF5F6FA);
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -2753,17 +2759,19 @@ class _LessonScheduleCard extends StatelessWidget {
           width: double.infinity,
           padding: EdgeInsets.fromLTRB(ui(16), ui(14), ui(16), ui(16)),
           decoration: BoxDecoration(
-            color: const Color(0xFFF5F6FA),
+            color: cardBg,
             borderRadius: BorderRadius.circular(radius),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text.rich(TextSpan(children: _splitTime(data.time, ui))),
+              Text.rich(
+                TextSpan(children: _splitTime(data.time, ui, muted: data.isPast)),
+              ),
               SizedBox(height: ui(14)),
               for (var i = 0; i < data.teachers.length; i++) ...[
-                _LessonTeacherRow(data: data.teachers[i]),
+                _LessonTeacherRow(data: data.teachers[i], muted: data.isPast),
                 if (i != data.teachers.length - 1) SizedBox(height: ui(14)),
               ],
             ],
@@ -2798,7 +2806,13 @@ class _LessonScheduleCard extends StatelessWidget {
     );
   }
 
-  List<InlineSpan> _splitTime(String time, double Function(double) ui) {
+  List<InlineSpan> _splitTime(
+    String time,
+    double Function(double) ui, {
+    bool muted = false,
+  }) {
+    final primary = muted ? const Color(0xFFB6B5BB) : const Color(0xFF1A1A1A);
+    final secondary = muted ? const Color(0xFFB6B5BB) : const Color(0xFF0B081A);
     final parts = time.split('-');
     if (parts.length != 2) {
       return [
@@ -2806,7 +2820,7 @@ class _LessonScheduleCard extends StatelessWidget {
           text: time,
           style: TextStyle(
             fontSize: ui(18),
-            color: const Color(0xFF1A1A1A),
+            color: primary,
             fontWeight: FontWeight.w600,
             height: 1,
           ),
@@ -2820,7 +2834,7 @@ class _LessonScheduleCard extends StatelessWidget {
         text: '$start ',
         style: TextStyle(
           fontSize: ui(18),
-          color: const Color(0xFF1A1A1A),
+          color: primary,
           fontWeight: FontWeight.w600,
           height: 1,
         ),
@@ -2838,7 +2852,7 @@ class _LessonScheduleCard extends StatelessWidget {
         text: end,
         style: TextStyle(
           fontSize: ui(18),
-          color: const Color(0xFF0B081A),
+          color: secondary,
           fontWeight: FontWeight.w600,
           height: 1,
         ),
@@ -2848,17 +2862,27 @@ class _LessonScheduleCard extends StatelessWidget {
 }
 
 class _LessonTeacherRow extends StatelessWidget {
-  const _LessonTeacherRow({required this.data});
+  const _LessonTeacherRow({required this.data, this.muted = false});
 
   final _LessonRowData data;
+  final bool muted;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    const mutedColor = Color(0xFFB6B5BB);
+    final nameColor = muted ? mutedColor : const Color(0xFF0B081A);
+    final courseColor = muted ? mutedColor : data.courseColor;
+    final courseBg = muted ? const Color(0xFFE6E9F1) : data.courseBg;
+    final tagDotColor = muted ? mutedColor : data.tagDotColor;
+    final tagTextColor = muted ? mutedColor : const Color(0xFF0B081A);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        _LessonSeedAvatar(seed: data.avatarSeed, size: ui(40)),
+        Opacity(
+          opacity: muted ? 0.72 : 1,
+          child: _LessonSeedAvatar(seed: data.avatarSeed, size: ui(40)),
+        ),
         SizedBox(width: ui(8)),
         Expanded(
           child: Column(
@@ -2874,7 +2898,7 @@ class _LessonTeacherRow extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: ui(14),
-                        color: const Color(0xFF0B081A),
+                        color: nameColor,
                         fontWeight: FontWeight.w600,
                         height: 1,
                       ),
@@ -2888,7 +2912,7 @@ class _LessonTeacherRow extends StatelessWidget {
                       vertical: ui(2),
                     ),
                     decoration: BoxDecoration(
-                      color: data.courseBg,
+                      color: courseBg,
                       borderRadius: BorderRadius.circular(ui(4)),
                     ),
                     alignment: Alignment.center,
@@ -2896,7 +2920,7 @@ class _LessonTeacherRow extends StatelessWidget {
                       data.courseName,
                       style: TextStyle(
                         fontSize: ui(11),
-                        color: data.courseColor,
+                        color: courseColor,
                         fontWeight: FontWeight.w400,
                         height: 14 / 11,
                       ),
@@ -2922,7 +2946,7 @@ class _LessonTeacherRow extends StatelessWidget {
                           width: ui(6),
                           height: ui(6),
                           decoration: BoxDecoration(
-                            color: data.tagDotColor,
+                            color: tagDotColor,
                             shape: BoxShape.circle,
                           ),
                         ),
@@ -2931,7 +2955,7 @@ class _LessonTeacherRow extends StatelessWidget {
                           data.tag,
                           style: TextStyle(
                             fontSize: ui(11),
-                            color: const Color(0xFF0B081A),
+                            color: tagTextColor,
                             fontWeight: FontWeight.w400,
                             height: 14 / 11,
                           ),

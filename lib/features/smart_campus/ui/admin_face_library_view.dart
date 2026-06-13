@@ -56,6 +56,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/network/api_response.dart';
 import '../../../core/network/media_url.dart';
+import '../../../core/network/snowflake_id.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/image_gallery_viewer.dart';
 import '../../../core/widgets/popup_selector_field.dart';
@@ -86,8 +87,68 @@ typedef _Option = ({String id, String name});
 
 const _Option _kClassLoading = (id: '', name: '加载中…');
 const _Option _kClassEmpty = (id: '', name: '暂无班级');
-const _Option _kStudentLoading = (id: '', name: '加载中…');
-const _Option _kStudentEmpty = (id: '', name: '暂无学生');
+const _Option _kPersonLoading = (id: '', name: '加载中…');
+
+// —— 录入对象：学生 / 老师 ——————————————————————————————————————————
+enum _EnrollPersonType { student, teacher }
+
+extension _EnrollPersonTypeX on _EnrollPersonType {
+  String get label => this == _EnrollPersonType.student ? '学生' : '老师';
+
+  String get emptyHint =>
+      this == _EnrollPersonType.student ? '暂无学生' : '暂无老师';
+
+  String get searchHint =>
+      this == _EnrollPersonType.student ? '搜索学生姓名' : '搜索老师姓名';
+
+  String get stepLabel => this == _EnrollPersonType.student
+      ? '选择在籍学生'
+      : '选择任课教师';
+
+  String get loadFailPrefix =>
+      this == _EnrollPersonType.student ? '学生加载失败' : '老师加载失败';
+
+  String get selectRequiredHint =>
+      this == _EnrollPersonType.student ? '请先选择学生' : '请先选择老师';
+
+  String get unnamedFallback =>
+      this == _EnrollPersonType.student ? '未命名学生' : '未命名老师';
+}
+
+_Option _personOptionFromJson(
+  Map<String, dynamic> json,
+  int index,
+  _EnrollPersonType type,
+) {
+  if (type == _EnrollPersonType.student) {
+    return (
+      id: _pickString(json, ['userId', 'id', 'studentId'], 'srv-$index'),
+      name: _pickString(json, [
+        'realname',
+        'realName',
+        'nickname',
+        'name',
+        'studentName',
+        'userName',
+      ], type.unnamedFallback),
+    );
+  }
+  final nickname = _pickString(json, ['nickname', 'nickName'], '');
+  final realname = _pickString(json, ['realname', 'realName'], '');
+  final name = nickname.isNotEmpty
+      ? nickname
+      : (realname.isNotEmpty
+            ? realname
+            : _pickString(json, [
+                'name',
+                'teacherName',
+                'userName',
+              ], type.unnamedFallback));
+  final id =
+      readSnowflakeId(json['id'] ?? json['teacherId'] ?? json['userId']) ??
+      _pickString(json, ['id', 'teacherId', 'userId'], 'srv-$index');
+  return (id: id, name: name);
+}
 
 String _pickString(
   Map<String, dynamic> json,
@@ -427,11 +488,12 @@ class _AdminFaceLibraryViewState extends ConsumerState<AdminFaceLibraryView> {
   List<_Option>? _classes;
   _Option? _selectedClass;
 
-  // —— 学生 ——————————————————————————————————————————————————————
-  /// `null` = 尚未拉取（包含切换班级的 inflight 中间态）；空 List = 已拉取且空。
-  List<_Option>? _students;
-  _Option? _selectedStudent;
-  int _studentLoadSeq = 0;
+  // —— 录入对象（学生 / 老师）————————————————————————————————————————
+  _EnrollPersonType _enrollPersonType = _EnrollPersonType.student;
+  /// `null` = 尚未拉取（包含切换班级 / 身份的 inflight 中间态）；空 List = 已拉取且空。
+  List<_Option>? _personOptions;
+  _Option? _selectedPerson;
+  int _personLoadSeq = 0;
 
   // —— 已采集的人脸照片 ————————————————————————————————————————————
   Uint8List? _photoBytes;
@@ -802,7 +864,7 @@ class _AdminFaceLibraryViewState extends ConsumerState<AdminFaceLibraryView> {
         }
       });
       if (_selectedClass != null) {
-        unawaited(_loadStudents(_selectedClass!.id));
+        unawaited(_loadPersonOptions(_selectedClass!.id));
       }
     } catch (e) {
       if (!mounted) return;
@@ -811,44 +873,37 @@ class _AdminFaceLibraryViewState extends ConsumerState<AdminFaceLibraryView> {
     }
   }
 
-  Future<void> _loadStudents(String classId) async {
-    final seq = ++_studentLoadSeq;
+  Future<void> _loadPersonOptions(String classId) async {
+    final seq = ++_personLoadSeq;
+    final type = _enrollPersonType;
     setState(() {
-      _students = null;
-      _selectedStudent = null;
+      _personOptions = null;
+      _selectedPerson = null;
     });
     final repo = ref.read(adminRepositoryProvider);
     try {
-      final resp = await repo.studentList(classId: classId);
-      if (!mounted || seq != _studentLoadSeq) return;
+      final resp = type == _EnrollPersonType.student
+          ? await repo.studentList(classId: classId)
+          : await repo.teacherList(classId: classId);
+      if (!mounted || seq != _personLoadSeq) return;
       if (!resp.isSuccess) {
-        setState(() => _students = const []);
-        AppToast.show(context, '学生加载失败：${resp.msg}');
+        setState(() => _personOptions = const []);
+        AppToast.show(context, '${type.loadFailPrefix}：${resp.msg}');
         return;
       }
       final list = _extractList(resp);
       final options = <_Option>[
         for (var i = 0; i < list.length; i++)
-          (
-            id: _pickString(list[i], ['userId', 'id', 'studentId'], 'srv-$i'),
-            name: _pickString(list[i], [
-              'realname',
-              'realName',
-              'nickname',
-              'name',
-              'studentName',
-              'userName',
-            ], '未命名学生'),
-          ),
+          _personOptionFromJson(list[i], i, type),
       ];
       setState(() {
-        _students = options;
-        _selectedStudent = options.isNotEmpty ? options.first : null;
+        _personOptions = options;
+        _selectedPerson = options.isNotEmpty ? options.first : null;
       });
     } catch (e) {
-      if (!mounted || seq != _studentLoadSeq) return;
-      setState(() => _students = const []);
-      AppToast.show(context, '学生加载失败：$e');
+      if (!mounted || seq != _personLoadSeq) return;
+      setState(() => _personOptions = const []);
+      AppToast.show(context, '${type.loadFailPrefix}：$e');
     }
   }
 
@@ -856,12 +911,26 @@ class _AdminFaceLibraryViewState extends ConsumerState<AdminFaceLibraryView> {
     if (v.id.isEmpty) return;
     if (v.id == _selectedClass?.id) return;
     setState(() => _selectedClass = v);
-    unawaited(_loadStudents(v.id));
+    unawaited(_loadPersonOptions(v.id));
   }
 
-  void _onSelectStudent(_Option v) {
+  void _onSelectPersonType(_EnrollPersonType type) {
+    if (type == _enrollPersonType) return;
+    setState(() => _enrollPersonType = type);
+    final classId = _selectedClass?.id;
+    if (classId != null && classId.isNotEmpty) {
+      unawaited(_loadPersonOptions(classId));
+    } else {
+      setState(() {
+        _personOptions = null;
+        _selectedPerson = null;
+      });
+    }
+  }
+
+  void _onSelectPerson(_Option v) {
     if (v.id.isEmpty) return;
-    setState(() => _selectedStudent = v);
+    setState(() => _selectedPerson = v);
   }
 
   Future<void> _onUploadPhoto() async {
@@ -951,15 +1020,17 @@ class _AdminFaceLibraryViewState extends ConsumerState<AdminFaceLibraryView> {
               _EnrollCard(
                 classOptions: _classes,
                 selectedClass: _selectedClass,
-                studentOptions: _students,
-                selectedStudent: _selectedStudent,
+                personType: _enrollPersonType,
+                personOptions: _personOptions,
+                selectedPerson: _selectedPerson,
                 confirmed: _confirmed,
                 submitting: _submitting,
                 photoBytes: _photoBytes,
                 photoName: _photoName,
                 picking: _picking,
                 onSelectClass: _onSelectClass,
-                onSelectStudent: _onSelectStudent,
+                onSelectPersonType: _onSelectPersonType,
+                onSelectPerson: _onSelectPerson,
                 onToggleConfirm: () =>
                     setState(() => _confirmed = !_confirmed),
                 onUploadPhoto: _onUploadPhoto,
@@ -999,8 +1070,8 @@ class _AdminFaceLibraryViewState extends ConsumerState<AdminFaceLibraryView> {
       AppToast.show(context, '请先选择行政班');
       return;
     }
-    if (_selectedStudent == null || _selectedStudent!.id.isEmpty) {
-      AppToast.show(context, '请先选择学生');
+    if (_selectedPerson == null || _selectedPerson!.id.isEmpty) {
+      AppToast.show(context, _enrollPersonType.selectRequiredHint);
       return;
     }
     if (_photoBytes == null) {
@@ -1026,7 +1097,7 @@ class _AdminFaceLibraryViewState extends ConsumerState<AdminFaceLibraryView> {
       final repo = ref.read(adminRepositoryProvider);
       final resp = await repo.schoolUserFaceSubmit(
         faceImg: faceImg,
-        userId: _selectedStudent!.id,
+        userId: _selectedPerson!.id,
       );
       if (!mounted) return;
       if (!resp.isSuccess) {
@@ -1040,7 +1111,7 @@ class _AdminFaceLibraryViewState extends ConsumerState<AdminFaceLibraryView> {
       });
       AppToast.show(
         context,
-        '已提交「${_selectedStudent!.name}」的人脸录入，进入待审核',
+        '已提交「${_selectedPerson!.name}」的人脸录入，进入待审核',
       );
       await _refreshFacePageData();
     } catch (e) {
@@ -1372,15 +1443,17 @@ class _EnrollCard extends StatelessWidget {
   const _EnrollCard({
     required this.classOptions,
     required this.selectedClass,
-    required this.studentOptions,
-    required this.selectedStudent,
+    required this.personType,
+    required this.personOptions,
+    required this.selectedPerson,
     required this.confirmed,
     required this.submitting,
     required this.photoBytes,
     required this.photoName,
     required this.picking,
     required this.onSelectClass,
-    required this.onSelectStudent,
+    required this.onSelectPersonType,
+    required this.onSelectPerson,
     required this.onToggleConfirm,
     required this.onUploadPhoto,
     required this.onOpenCamera,
@@ -1390,15 +1463,17 @@ class _EnrollCard extends StatelessWidget {
 
   final List<_Option>? classOptions;
   final _Option? selectedClass;
-  final List<_Option>? studentOptions;
-  final _Option? selectedStudent;
+  final _EnrollPersonType personType;
+  final List<_Option>? personOptions;
+  final _Option? selectedPerson;
   final bool confirmed;
   final bool submitting;
   final Uint8List? photoBytes;
   final String? photoName;
   final bool picking;
   final ValueChanged<_Option> onSelectClass;
-  final ValueChanged<_Option> onSelectStudent;
+  final ValueChanged<_EnrollPersonType> onSelectPersonType;
+  final ValueChanged<_Option> onSelectPerson;
   final VoidCallback onToggleConfirm;
   final VoidCallback onUploadPhoto;
   final VoidCallback onOpenCamera;
@@ -1424,15 +1499,17 @@ class _EnrollCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _StepBar(),
+          _StepBar(personType: personType),
           SizedBox(height: ui(8)),
           _PickerRow(
             classOptions: classOptions,
             selectedClass: selectedClass,
-            studentOptions: studentOptions,
-            selectedStudent: selectedStudent,
+            personType: personType,
+            personOptions: personOptions,
+            selectedPerson: selectedPerson,
             onSelectClass: onSelectClass,
-            onSelectStudent: onSelectStudent,
+            onSelectPersonType: onSelectPersonType,
+            onSelectPerson: onSelectPerson,
           ),
           SizedBox(height: ui(8)),
           IntrinsicHeight(
@@ -1470,7 +1547,9 @@ class _EnrollCard extends StatelessWidget {
 // —— 步骤进度条 ————————————————————————————————————————————————————
 
 class _StepBar extends StatelessWidget {
-  const _StepBar();
+  const _StepBar({required this.personType});
+
+  final _EnrollPersonType personType;
 
   @override
   Widget build(BuildContext context) {
@@ -1482,7 +1561,7 @@ class _StepBar extends StatelessWidget {
           Expanded(
             child: _StepCell(
               iconAsset: 'assets/images/face/1.png',
-              label: '选择在籍学生',
+              label: personType.stepLabel,
               isFirst: true,
               isLast: false,
             ),
@@ -1578,24 +1657,28 @@ class _StepCell extends StatelessWidget {
   }
 }
 
-// —— 行政班 / 学生 双下拉 ——————————————————————————————————————————
+// —— 行政班 + 录入对象（学生 / 老师）——————————————————————————————————
 
 class _PickerRow extends StatelessWidget {
   const _PickerRow({
     required this.classOptions,
     required this.selectedClass,
-    required this.studentOptions,
-    required this.selectedStudent,
+    required this.personType,
+    required this.personOptions,
+    required this.selectedPerson,
     required this.onSelectClass,
-    required this.onSelectStudent,
+    required this.onSelectPersonType,
+    required this.onSelectPerson,
   });
 
   final List<_Option>? classOptions;
   final _Option? selectedClass;
-  final List<_Option>? studentOptions;
-  final _Option? selectedStudent;
+  final _EnrollPersonType personType;
+  final List<_Option>? personOptions;
+  final _Option? selectedPerson;
   final ValueChanged<_Option> onSelectClass;
-  final ValueChanged<_Option> onSelectStudent;
+  final ValueChanged<_EnrollPersonType> onSelectPersonType;
+  final ValueChanged<_Option> onSelectPerson;
 
   @override
   Widget build(BuildContext context) {
@@ -1615,19 +1698,48 @@ class _PickerRow extends StatelessWidget {
           ),
         ),
         SizedBox(width: ui(8)),
-        _PickerLabel(text: '学生'),
+        _PickerLabel(text: '身份'),
+        SizedBox(width: ui(8)),
+        Expanded(
+          child: _PersonTypePicker(
+            value: personType,
+            onChanged: onSelectPersonType,
+          ),
+        ),
+        SizedBox(width: ui(8)),
+        _PickerLabel(text: personType.label),
         SizedBox(width: ui(8)),
         Expanded(
           child: _SearchableOptionPicker(
-            options: studentOptions,
-            value: selectedStudent,
-            placeholderLoading: _kStudentLoading,
-            placeholderEmpty: _kStudentEmpty,
-            searchHint: '搜索学生姓名',
-            onChanged: onSelectStudent,
+            options: personOptions,
+            value: selectedPerson,
+            placeholderLoading: _kPersonLoading,
+            placeholderEmpty: (id: '', name: personType.emptyHint),
+            searchHint: personType.searchHint,
+            onChanged: onSelectPerson,
           ),
         ),
       ],
+    );
+  }
+}
+
+class _PersonTypePicker extends StatelessWidget {
+  const _PersonTypePicker({
+    required this.value,
+    required this.onChanged,
+  });
+
+  final _EnrollPersonType value;
+  final ValueChanged<_EnrollPersonType> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupSelectorField<_EnrollPersonType>(
+      value: value,
+      items: _EnrollPersonType.values,
+      itemLabel: (type) => type.label,
+      onChanged: onChanged,
     );
   }
 }

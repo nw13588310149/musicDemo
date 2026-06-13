@@ -12,26 +12,59 @@ const Color _kTextSecondary = Color(0xFF6D6B75);
 const Color _kTextDivider = Color(0xFFCECED1);
 const Color _kStatusGreen = Color(0xFF0CAC40);
 const Color _kStatusPurple = Color(0xFFA773FF);
+const Color _kPastBg = Color(0xFFE6E9F1);
+const Color _kPastText = Color(0xFFB6B5BB);
+const Color _kPastInnerBg = Colors.white;
 
 class _ResolvedCardTheme {
   const _ResolvedCardTheme({
     required this.bg,
     required this.titleColor,
     required this.isSmall,
+    required this.nameColor,
+    required this.sublineColor,
+    required this.capacityColor,
+    required this.innerBg,
+    required this.mutedTag,
   });
 
   final Color bg;
   final Color titleColor;
   final bool isSmall;
+  final Color nameColor;
+  final Color sublineColor;
+  final Color capacityColor;
+  final Color innerBg;
+  final bool mutedTag;
 }
 
-_ResolvedCardTheme _themeFor(ScheduleCourseCardData data) {
+_ResolvedCardTheme _themeFor(ScheduleCourseCardData data, {required bool isPast}) {
+  if (isPast) {
+    final isSmall = scheduleIsSmallKind(
+      scheduleCourseCardThemeKind(data.kind),
+    );
+    return _ResolvedCardTheme(
+      bg: _kPastBg,
+      titleColor: _kPastText,
+      isSmall: isSmall,
+      nameColor: _kPastText,
+      sublineColor: _kPastText,
+      capacityColor: _kPastText,
+      innerBg: _kPastInnerBg,
+      mutedTag: true,
+    );
+  }
   final themeKind = scheduleCourseCardThemeKind(data.kind);
   final bg = data.bgColor ?? scheduleDefaultBg(themeKind);
   return _ResolvedCardTheme(
     bg: bg,
     titleColor: scheduleTitleColorForBackground(bg),
     isSmall: scheduleIsSmallKind(themeKind),
+    nameColor: _kTextDark,
+    sublineColor: _kTextSecondary,
+    capacityColor: _kTextDivider,
+    innerBg: Colors.white,
+    mutedTag: false,
   );
 }
 
@@ -41,150 +74,156 @@ class ScheduleCourseCard extends StatelessWidget {
     super.key,
     required this.data,
     this.editable = false,
+    this.isPast = false,
     this.topRightBadge,
   });
 
   final ScheduleCourseCardData data;
   final bool editable;
+  final bool isPast;
   final Widget? topRightBadge;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final theme = _themeFor(data);
+    final theme = _themeFor(data, isPast: isPast);
     final cardHeight =
         data.kind == ScheduleCourseCardKind.bigExtended ? 120.0 : 96.0;
-    return Container(
+    return SizedBox(
       width: ui(176),
       height: ui(cardHeight),
-      decoration: BoxDecoration(
-        color: theme.bg,
-        borderRadius: BorderRadius.circular(ui(8)),
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            left: ui(16),
-            top: ui(8),
-            child: SizedBox(
-              width: ui(108),
-              child: Text(
-                data.location,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: ui(12),
-                  color: theme.titleColor,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w600,
-                  height: 16 / 12,
-                ),
-              ),
-            ),
-          ),
-          if (data.kind != ScheduleCourseCardKind.bigExtended)
-            Positioned(
-              left: ui(126),
-              top: ui(6),
-              child: topRightBadge ??
-                  ScheduleClassKindTag(
-                    isSmall: theme.isSmall,
-                    outlined: false,
-                  ),
-            ),
-          Positioned(
-            left: ui(4),
-            top: ui(32),
-            child: Container(
-              width: ui(168),
-              height: ui(
-                data.kind == ScheduleCourseCardKind.bigExtended ? 84 : 60,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(ui(6)),
-              ),
-            ),
-          ),
-          Positioned(
-            left: ui(16),
-            top: ui(44),
-            child: SizedBox(
-              width: ui(140),
-              child: Text(
-                data.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: ui(14),
-                  color: _kTextDark,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w500,
-                  height: 16 / 14,
-                ),
-              ),
-            ),
-          ),
-          if (data.kind == ScheduleCourseCardKind.bigExtended) ...[
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: theme.bg,
+          borderRadius: BorderRadius.circular(ui(8)),
+        ),
+        child: Stack(
+          children: [
             Positioned(
               left: ui(16),
-              top: ui(64),
-              child: Text(
-                data.subline,
-                style: TextStyle(
-                  fontSize: ui(12),
-                  color: _kTextSecondary,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w400,
-                  height: 16 / 12,
-                ),
-              ),
-            ),
-            Positioned(
-              left: ui(16),
-              top: ui(86),
-              child: const ScheduleClassKindTag(
-                isSmall: false,
-                outlined: true,
-              ),
-            ),
-          ] else ...[
-            Positioned(
-              left: ui(16),
-              top: ui(64),
+              top: ui(8),
               child: SizedBox(
-                width: ui(theme.isSmall && data.capacity != null ? 100 : 140),
+                width: ui(108),
                 child: Text(
-                  data.subline,
+                  data.location,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: ui(12),
-                    color: _kTextSecondary,
+                    color: theme.titleColor,
                     fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w400,
+                    fontWeight: AppFont.w600,
                     height: 16 / 12,
                   ),
                 ),
               ),
             ),
-            if (theme.isSmall && data.capacity != null)
+            if (data.kind != ScheduleCourseCardKind.bigExtended)
               Positioned(
-                right: ui(16),
+                left: ui(126),
+                top: ui(6),
+                child: topRightBadge ??
+                    ScheduleClassKindTag(
+                      isSmall: theme.isSmall,
+                      outlined: false,
+                      muted: theme.mutedTag,
+                    ),
+              ),
+            Positioned(
+              left: ui(4),
+              top: ui(32),
+              child: Container(
+                width: ui(168),
+                height: ui(
+                  data.kind == ScheduleCourseCardKind.bigExtended ? 84 : 60,
+                ),
+                decoration: BoxDecoration(
+                  color: theme.innerBg,
+                  borderRadius: BorderRadius.circular(ui(6)),
+                ),
+              ),
+            ),
+            Positioned(
+              left: ui(16),
+              top: ui(44),
+              child: SizedBox(
+                width: ui(140),
+                child: Text(
+                  data.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: ui(14),
+                    color: theme.nameColor,
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w500,
+                    height: 16 / 14,
+                  ),
+                ),
+              ),
+            ),
+            if (data.kind == ScheduleCourseCardKind.bigExtended) ...[
+              Positioned(
+                left: ui(16),
                 top: ui(64),
                 child: Text(
-                  data.capacity!,
+                  data.subline,
                   style: TextStyle(
                     fontSize: ui(12),
-                    color: _kTextDivider,
+                    color: theme.sublineColor,
                     fontFamily: 'PingFang SC',
                     fontWeight: AppFont.w400,
                     height: 16 / 12,
                   ),
                 ),
               ),
+              Positioned(
+                left: ui(16),
+                top: ui(86),
+                child: ScheduleClassKindTag(
+                  isSmall: false,
+                  outlined: true,
+                  muted: theme.mutedTag,
+                ),
+              ),
+            ] else ...[
+              Positioned(
+                left: ui(16),
+                top: ui(64),
+                child: SizedBox(
+                  width: ui(theme.isSmall && data.capacity != null ? 100 : 140),
+                  child: Text(
+                    data.subline,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: ui(12),
+                      color: theme.sublineColor,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w400,
+                      height: 16 / 12,
+                    ),
+                  ),
+                ),
+              ),
+              if (theme.isSmall && data.capacity != null)
+                Positioned(
+                  right: ui(16),
+                  top: ui(64),
+                  child: Text(
+                    data.capacity!,
+                    style: TextStyle(
+                      fontSize: ui(12),
+                      color: theme.capacityColor,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w400,
+                      height: 16 / 12,
+                    ),
+                  ),
+                ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -281,16 +320,21 @@ class ScheduleClassKindTag extends StatelessWidget {
     super.key,
     required this.isSmall,
     required this.outlined,
+    this.muted = false,
   });
 
   final bool isSmall;
   final bool outlined;
+  final bool muted;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final dotColor = isSmall ? _kStatusGreen : _kStatusPurple;
+    final dotColor = muted
+        ? _kPastText
+        : (isSmall ? _kStatusGreen : _kStatusPurple);
     final label = isSmall ? '小课' : '大课';
+    final textColor = muted ? _kPastText : _kTextDark;
     return Container(
       padding: EdgeInsets.symmetric(horizontal: ui(4), vertical: ui(2)),
       decoration: BoxDecoration(
@@ -311,7 +355,7 @@ class ScheduleClassKindTag extends StatelessWidget {
             label,
             style: TextStyle(
               fontSize: ui(12),
-              color: _kTextDark,
+              color: textColor,
               fontFamily: 'PingFang SC',
               fontWeight: AppFont.w400,
               height: 15.24 / 12,

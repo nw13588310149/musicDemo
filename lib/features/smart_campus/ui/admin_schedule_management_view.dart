@@ -52,7 +52,7 @@ import '../../shell/ui/shell_layout.dart';
 import '../data/admin_repository.dart';
 import '../data/schedule_color_palette.dart';
 import '../data/schedule_course_card_builder.dart';
-import 'widgets/schedule_color_swatch_picker.dart';
+import '../data/schedule_slot_time.dart';
 import 'widgets/schedule_course_card.dart';
 import 'widgets/schedule_idle_slot.dart';
 import 'widgets/smart_campus_page_banner.dart';
@@ -809,6 +809,7 @@ class _AdminScheduleManagementViewState
             weekdayLabel: labels[i],
             dateLabel:
                 '${d.month.toString().padLeft(2, '0')}/${d.day.toString().padLeft(2, '0')}',
+            date: DateTime(d.year, d.month, d.day),
             today: isToday,
           );
         }(),
@@ -2084,8 +2085,10 @@ class _DaysArea extends StatelessWidget {
         for (var slotIdx = 0; slotIdx < slots.length; slotIdx++)
           _DayBodyRow(
             slotIdx: slotIdx,
+            slotEnd: slots[slotIdx].end,
             height: slots[slotIdx].height,
             mode: mode,
+            days: days,
             rowCells: [
               for (var dayIdx = 0; dayIdx < days.length; dayIdx++)
                 cells[dayIdx][slotIdx],
@@ -2161,8 +2164,10 @@ class _DaysHeaderRow extends StatelessWidget {
 class _DayBodyRow extends StatelessWidget {
   const _DayBodyRow({
     required this.slotIdx,
+    required this.slotEnd,
     required this.height,
     required this.mode,
+    required this.days,
     required this.rowCells,
     required this.onApplySmallLesson,
     required this.onDropCard,
@@ -2170,8 +2175,10 @@ class _DayBodyRow extends StatelessWidget {
   });
 
   final int slotIdx;
+  final String slotEnd;
   final double height;
   final _ScheduleMode mode;
+  final List<_DayHeaderData> days;
   final List<List<_ScheduleCardData>> rowCells;
   final void Function(int dayIdx, int slotIdx) onApplySmallLesson;
   final Future<void> Function(
@@ -2199,8 +2206,10 @@ class _DayBodyRow extends StatelessWidget {
                     child: _CellContent(
                       dayIdx: i,
                       slotIdx: slotIdx,
+                      slotEnd: slotEnd,
                       slotHeight: height,
                       mode: mode,
+                      slotDate: days[i].date,
                       cards: rowCells[i],
                       onApplySmallLesson: () => onApplySmallLesson(i, slotIdx),
                       onDropCard: onDropCard,
@@ -2237,8 +2246,10 @@ class _CellContent extends StatelessWidget {
   const _CellContent({
     required this.dayIdx,
     required this.slotIdx,
+    required this.slotEnd,
     required this.slotHeight,
     required this.mode,
+    required this.slotDate,
     required this.cards,
     required this.onApplySmallLesson,
     required this.onDropCard,
@@ -2247,8 +2258,10 @@ class _CellContent extends StatelessWidget {
 
   final int dayIdx;
   final int slotIdx;
+  final String slotEnd;
   final double slotHeight;
   final _ScheduleMode mode;
+  final DateTime slotDate;
   final List<_ScheduleCardData> cards;
   final VoidCallback onApplySmallLesson;
   final Future<void> Function(
@@ -2332,28 +2345,34 @@ class _CellContent extends StatelessWidget {
     }
     final shouldAppendApply =
         isEditing && slotIdx == 0 && _hasSmallCard && slotHeight >= 168;
+    final isPast = isScheduleSlotPast(slotDate: slotDate, endHm: slotEnd);
     return wrapHover(
-      Padding(
-        padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(12)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (var i = 0; i < cards.length; i++) ...[
-              if (i > 0) SizedBox(height: ui(6)),
-              _DraggableScheduleCard(
-                card: cards[i],
-                isEditing: isEditing,
-                sourceDay: dayIdx,
-                sourceSlot: slotIdx,
-                indexInSlot: i,
-                onDelete: isEditing ? () => onDeleteCourse(cards[i]) : null,
-              ),
+      Align(
+        alignment: Alignment.topCenter,
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(12)),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var i = 0; i < cards.length; i++) ...[
+                if (i > 0) SizedBox(height: ui(6)),
+                _DraggableScheduleCard(
+                  card: cards[i],
+                  isEditing: isEditing,
+                  isPast: isPast,
+                  sourceDay: dayIdx,
+                  sourceSlot: slotIdx,
+                  indexInSlot: i,
+                  onDelete: isEditing ? () => onDeleteCourse(cards[i]) : null,
+                ),
+              ],
+              if (shouldAppendApply) ...[
+                SizedBox(height: ui(8)),
+                _ApplySmallLessonButton(onTap: onApplySmallLesson),
+              ],
             ],
-            if (shouldAppendApply) ...[
-              SizedBox(height: ui(8)),
-              _ApplySmallLessonButton(onTap: onApplySmallLesson),
-            ],
-          ],
+          ),
         ),
       ),
     );
@@ -2371,6 +2390,7 @@ class _DraggableScheduleCard extends StatelessWidget {
   const _DraggableScheduleCard({
     required this.card,
     required this.isEditing,
+    required this.isPast,
     required this.sourceDay,
     required this.sourceSlot,
     required this.indexInSlot,
@@ -2379,6 +2399,7 @@ class _DraggableScheduleCard extends StatelessWidget {
 
   final _ScheduleCardData card;
   final bool isEditing;
+  final bool isPast;
   final int sourceDay;
   final int sourceSlot;
   final int indexInSlot;
@@ -2403,6 +2424,7 @@ class _DraggableScheduleCard extends StatelessWidget {
     Widget courseCard = ScheduleCourseCard(
       data: card.display,
       editable: isEditing || _draggable,
+      isPast: isPast,
     );
     if (deleteHandler != null) {
       courseCard = ScheduleCourseSwipeDelete(
@@ -2578,11 +2600,13 @@ class _DayHeaderData {
   const _DayHeaderData({
     required this.weekdayLabel,
     required this.dateLabel,
+    required this.date,
     this.today = false,
   });
 
   final String weekdayLabel;
   final String dateLabel;
+  final DateTime date;
   final bool today;
 }
 
@@ -2609,8 +2633,8 @@ const List<_TimeConfig> _kDefaultTimeConfigs = [
 ];
 
 // =============================================================================
-// 排课编辑右侧抽屉（管理员）：课程时间只读 + 班级 / 教室 / 颜色 / 复用，
-// 提交时调 `courseBatchSave`。
+// 排课编辑右侧抽屉（管理员）：课程时间只读 + 班级 / 教室 / 复用，
+// 提交时调 `courseBatchSave`（大课颜色固定为色板首色紫色）。
 // =============================================================================
 
 class _AdminEditCourseDrawer extends ConsumerStatefulWidget {
@@ -2665,7 +2689,6 @@ class _AdminEditCourseDrawerState
   String? _subjectId;
   bool _loadingSubjects = false;
 
-  Color _color = scheduleDefaultPickerColor;
   String _reuse = '不复用';
   bool _submitting = false;
 
@@ -2770,7 +2793,8 @@ class _AdminEditCourseDrawerState
     ];
   }
 
-  String get _hexLabel => scheduleColorToHex(_color);
+  String get _defaultBigCourseColorHex =>
+      scheduleColorToHex(scheduleDefaultPickerColor);
 
   Future<void> _submit() async {
     if (_submitting) return;
@@ -2795,7 +2819,7 @@ class _AdminEditCourseDrawerState
         <String, dynamic>{
           'classId': _classId,
           'classroomId': classroomNum ?? _classroomId,
-          'color': _hexLabel,
+          'color': _defaultBigCourseColorHex,
           'date': _formatIsoDate(d),
           'lineNum': widget.lineNum,
           'subjectId': subjectNum ?? _subjectId,
@@ -2963,16 +2987,6 @@ class _AdminEditCourseDrawerState
                             .name;
                       },
                       onChanged: (v) => setState(() => _classroomId = v),
-                    ),
-                    SizedBox(height: ui(20)),
-                    const _SectionLabel(
-                      icon: Icons.palette_outlined,
-                      label: '颜色',
-                    ),
-                    SizedBox(height: ui(12)),
-                    ScheduleColorSwatchPicker(
-                      selected: _color,
-                      onSelect: (c) => setState(() => _color = c),
                     ),
                     SizedBox(height: ui(20)),
                     const _SectionLabel(
