@@ -625,6 +625,14 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
     );
   }
 
+  /// 宿管端「补卡审核」入口。
+  void openDormMakeupAudit() {
+    if (state.mainView == SmartCampusMainView.dormMakeupAudit) {
+      return;
+    }
+    state = state.copyWith(mainView: SmartCampusMainView.dormMakeupAudit);
+  }
+
   /// 管理员端「签课管理」入口：查看大课 / 小课的签到状态，处理补签审核。
   ///
   /// 视图（两个 tab）：

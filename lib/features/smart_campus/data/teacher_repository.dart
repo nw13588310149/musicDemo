@@ -12,6 +12,7 @@ import '../../../core/providers/app_providers.dart';
 /// 头部 `app-token` / `schoolId` 由 [ApiClient] 注入。
 ///
 /// 与教师视图相关的几个核心接口：
+///   - [headTeacherIndex]                班主任班级工作台首页聚合
 ///   - [classList]                       我教的班级列表（可按 type 过滤）
 ///   - [classroomList]                   教室下拉列表
 ///   - [courseList]                      我的课表（按 begin/end 日期过滤）
@@ -57,6 +58,135 @@ class TeacherRepository {
     return client.post('$_base/teacherRole');
   }
 
+  // ============== 班主任 · 班级工作台首页 ==============
+
+  /// 班主任班级工作台首页聚合数据。
+  ///
+  /// 返回 `HeadTeacherIndexRes`：家校未读/待回复、管辖班级列表、待审批假条/
+  /// 补卡数、今日宿舍异常数等。
+  Future<ApiResponse> headTeacherIndex() {
+    return client.post('$_base/headTeacherIndex');
+  }
+
+  /// 班主任班级工作台综合统计。
+  Future<ApiResponse> headTeacherClassOverview({required String classId}) {
+    return client.post(
+      '$_base/headTeacherClassOverview',
+      data: <String, dynamic>{'classId': readSnowflakeId(classId) ?? classId},
+    );
+  }
+
+  // ============== 班主任 · 宿舍动态 / 历史 ==============
+
+  /// 班级学生最新查寝状态。
+  Future<ApiResponse> classDormitoryDynamicList({
+    required String classId,
+    String? status,
+    int current = 1,
+    int size = 200,
+  }) {
+    return client.post(
+      '$_base/classDormitoryDynamicList',
+      data: <String, dynamic>{
+        'classId': readSnowflakeId(classId) ?? classId,
+        'current': current,
+        'size': size,
+        if (status != null && status.isNotEmpty) 'status': status,
+      },
+    );
+  }
+
+  /// 班级历史查寝记录。
+  Future<ApiResponse> classDormitoryCheckHistory({
+    required String classId,
+    String? beginDate,
+    String? endDate,
+    String? status,
+    String? studentId,
+    int current = 1,
+    int size = 200,
+  }) {
+    return client.post(
+      '$_base/classDormitoryCheckHistory',
+      data: <String, dynamic>{
+        'classId': readSnowflakeId(classId) ?? classId,
+        'current': current,
+        'size': size,
+        if (beginDate != null && beginDate.isNotEmpty) 'beginDate': beginDate,
+        if (endDate != null && endDate.isNotEmpty) 'endDate': endDate,
+        if (status != null && status.isNotEmpty) 'status': status,
+        if (studentId != null && studentId.isNotEmpty)
+          'studentId': readSnowflakeId(studentId) ?? studentId,
+      },
+    );
+  }
+
+  /// 班级查寝统计。
+  Future<ApiResponse> classDormitoryCheckStat({
+    required String classId,
+    String? beginDate,
+    String? endDate,
+  }) {
+    return client.post(
+      '$_base/classDormitoryCheckStat',
+      data: <String, dynamic>{
+        'classId': readSnowflakeId(classId) ?? classId,
+        if (beginDate != null && beginDate.isNotEmpty) 'beginDate': beginDate,
+        if (endDate != null && endDate.isNotEmpty) 'endDate': endDate,
+      },
+    );
+  }
+
+  /// 单次查寝详情。
+  Future<ApiResponse> classDormitoryCheckDetail({required String id}) {
+    return client.post(
+      '$_base/classDormitoryCheckDetail',
+      data: <String, dynamic>{'id': readSnowflakeId(id) ?? id},
+    );
+  }
+
+  /// 班级补卡申请列表。
+  Future<ApiResponse> classDormitoryMakeupList({
+    required String classId,
+    int? status,
+    int current = 1,
+    int size = 200,
+  }) {
+    return client.post(
+      '$_base/classDormitoryMakeupList',
+      data: <String, dynamic>{
+        'classId': readSnowflakeId(classId) ?? classId,
+        'current': current,
+        'size': size,
+        'status': ?status,
+      },
+    );
+  }
+
+  /// 补卡申请详情。
+  Future<ApiResponse> classDormitoryMakeupDetail({required String id}) {
+    return client.post(
+      '$_base/classDormitoryMakeupDetail',
+      data: <String, dynamic>{'id': readSnowflakeId(id) ?? id},
+    );
+  }
+
+  /// 审批补卡申请。`status`: 1-通过 / 2-拒绝。
+  Future<ApiResponse> classDormitoryMakeupAudit({
+    required String id,
+    required int status,
+    String auditReason = '',
+  }) {
+    return client.post(
+      '$_base/classDormitoryMakeupAudit',
+      data: <String, dynamic>{
+        'id': readSnowflakeId(id) ?? id,
+        'status': status,
+        if (auditReason.isNotEmpty) 'auditReason': auditReason,
+      },
+    );
+  }
+
   // ============== 班级 / 课表 ==============
 
   /// 任课老师"我教的班级"列表。后端基于 token 自动过滤为当前老师任教
@@ -94,11 +224,136 @@ class TeacherRepository {
     return client.post('$_base/courseList', data: body);
   }
 
+  /// 任课老师首页工作台聚合数据。
+  Future<ApiResponse> courseTeacherIndex() {
+    return client.post('$_base/courseTeacherIndex');
+  }
+
+  /// 课堂考勤统计。任课老师一般传 [courseId]，班主任可传 [classId]。
+  Future<ApiResponse> courseAttendanceStat({
+    String? classId,
+    String? courseId,
+    String? beginDate,
+    String? endDate,
+  }) {
+    return client.post(
+      '$_base/courseAttendanceStat',
+      data: <String, dynamic>{
+        if (classId != null && classId.isNotEmpty) 'classId': classId,
+        if (courseId != null && courseId.isNotEmpty) 'courseId': courseId,
+        if (beginDate != null && beginDate.isNotEmpty) 'beginDate': beginDate,
+        if (endDate != null && endDate.isNotEmpty) 'endDate': endDate,
+      },
+    );
+  }
+
+  /// 课堂考勤最近记录，最多返回 50 条。
+  Future<ApiResponse> courseAttendanceRecentList({
+    String? classId,
+    String? courseId,
+    int size = 10,
+  }) {
+    return client.post(
+      '$_base/courseAttendanceRecentList',
+      data: <String, dynamic>{
+        if (classId != null && classId.isNotEmpty) 'classId': classId,
+        if (courseId != null && courseId.isNotEmpty) 'courseId': courseId,
+        'size': size.clamp(1, 50),
+      },
+    );
+  }
+
+  /// 课堂考勤历史记录。
+  Future<ApiResponse> courseAttendanceHistory({
+    String? classId,
+    String? courseId,
+    String? beginDate,
+    String? endDate,
+    int? status,
+    int current = 1,
+    int size = 20,
+  }) {
+    return client.post(
+      '$_base/courseAttendanceHistory',
+      data: <String, dynamic>{
+        if (classId != null && classId.isNotEmpty) 'classId': classId,
+        if (courseId != null && courseId.isNotEmpty) 'courseId': courseId,
+        if (beginDate != null && beginDate.isNotEmpty) 'beginDate': beginDate,
+        if (endDate != null && endDate.isNotEmpty) 'endDate': endDate,
+        'status': ?status,
+        'current': current,
+        'size': size,
+      },
+    );
+  }
+
+  /// 大班课签到详情，包含学生名单与当前签到状态。
+  Future<ApiResponse> courseClassSignDetail({required String courseId}) {
+    return client.post(
+      '$_base/courseClassSignDetail',
+      data: <String, dynamic>{
+        'courseId': readSnowflakeId(courseId) ?? courseId,
+      },
+    );
+  }
+
+  /// 大班课全班一键签到。每名学生可分别指定 0-出勤 / 1-缺勤 / 2-迟到 / 3-请假。
+  Future<ApiResponse> courseClassSignAll({
+    required String courseId,
+    required List<Map<String, dynamic>> students,
+  }) {
+    return client.post(
+      '$_base/courseClassSignAll',
+      data: <String, dynamic>{
+        'courseId': readSnowflakeId(courseId) ?? courseId,
+        'students': students,
+      },
+    );
+  }
+
+  /// 修改单个学生的大班课签到状态。
+  Future<ApiResponse> courseClassStudentSignUpdate({
+    required String courseId,
+    required String studentId,
+    required int signStatus,
+    String remark = '',
+  }) {
+    return client.post(
+      '$_base/courseClassStudentSignUpdate',
+      data: <String, dynamic>{
+        'courseId': readSnowflakeId(courseId) ?? courseId,
+        'studentId': readSnowflakeId(studentId) ?? studentId,
+        'signStatus': signStatus,
+        if (remark.isNotEmpty) 'remark': remark,
+      },
+    );
+  }
+
+  /// 教师签课历史列表。
+  Future<ApiResponse> courseTeacherSignHistory({
+    String? beginDate,
+    String? endDate,
+    int current = 1,
+    int size = 20,
+  }) {
+    return client.post(
+      '$_base/courseTeacherSignHistory',
+      data: <String, dynamic>{
+        if (beginDate != null && beginDate.isNotEmpty) 'beginDate': beginDate,
+        if (endDate != null && endDate.isNotEmpty) 'endDate': endDate,
+        'current': current,
+        'size': size,
+      },
+    );
+  }
+
   /// 教师上课签到。`courseId` 为课表记录 id。
   Future<ApiResponse> courseTeacherSignIn({required String courseId}) {
     return client.post(
       '$_base/courseTeacherSignIn',
-      data: <String, dynamic>{'courseId': readSnowflakeId(courseId) ?? courseId},
+      data: <String, dynamic>{
+        'courseId': readSnowflakeId(courseId) ?? courseId,
+      },
     );
   }
 
@@ -106,7 +361,9 @@ class TeacherRepository {
   Future<ApiResponse> courseTeacherSignOut({required String courseId}) {
     return client.post(
       '$_base/courseTeacherSignOut',
-      data: <String, dynamic>{'courseId': readSnowflakeId(courseId) ?? courseId},
+      data: <String, dynamic>{
+        'courseId': readSnowflakeId(courseId) ?? courseId,
+      },
     );
   }
 
@@ -216,10 +473,7 @@ class TeacherRepository {
   }
 
   /// 班主任首页通知列表。
-  Future<ApiResponse> headTeacherNoticeList({
-    int current = 1,
-    int size = 20,
-  }) {
+  Future<ApiResponse> headTeacherNoticeList({int current = 1, int size = 20}) {
     return client.post(
       '$_base/headTeacherNoticeList',
       data: <String, dynamic>{'current': current, 'size': size},
@@ -402,6 +656,24 @@ class TeacherRepository {
     );
   }
 
+  /// 向尚未提交考试的学生发送催交提醒。
+  Future<ApiResponse> examStudentRemind({
+    required String examId,
+    required int subjectId,
+    required List<String> studentIds,
+  }) {
+    return client.post(
+      '$_base/examStudentRemind',
+      data: <String, dynamic>{
+        'examId': readSnowflakeId(examId) ?? examId,
+        'subjectId': subjectId,
+        'studentIds': studentIds
+            .map((id) => readSnowflakeId(id) ?? id)
+            .toList(growable: false),
+      },
+    );
+  }
+
   // ============== 作业管理（任课老师端） ==============
 
   /// 作业数据汇总。返回待批改人次、发布数、均分、最高/最低分等聚合指标。
@@ -526,10 +798,7 @@ class TeacherRepository {
     int size = 200,
     int? status,
   }) {
-    final body = <String, dynamic>{
-      'current': current,
-      'size': size,
-    };
+    final body = <String, dynamic>{'current': current, 'size': size};
     if (status != null) body['status'] = status;
     return client.post('$_base/headTeacherStudentLeaveList', data: body);
   }
@@ -578,10 +847,7 @@ class TeacherRepository {
     int size = 200,
     int? status,
   }) {
-    final body = <String, dynamic>{
-      'current': current,
-      'size': size,
-    };
+    final body = <String, dynamic>{'current': current, 'size': size};
     if (status != null) body['status'] = status;
     return client.post('$_base/teacherLeaveList', data: body);
   }

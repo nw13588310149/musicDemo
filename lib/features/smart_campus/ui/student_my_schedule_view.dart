@@ -29,13 +29,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 
-import '../../../core/constants/app_assets.dart';
 import '../../../core/network/api_response.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../school/data/school_repository.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/student_repository.dart';
 import 'widgets/schedule_idle_slot.dart';
+import 'widgets/smart_campus_page_banner.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // ---- 通用配色 ---------------------------------------------------------------
@@ -344,35 +344,23 @@ class _StudentMyScheduleViewState extends ConsumerState<StudentMyScheduleView> {
     final slots = _buildSlots(cells);
     final days = _buildDayHeaders();
 
-    return SingleChildScrollView(
-      padding: EdgeInsets.only(bottom: ui(20)),
-      child: Container(
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: _kCardBg,
-          borderRadius: BorderRadius.circular(ui(16)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _ScheduleBanner(
-              week: _currentWeek,
-              dateRange: _dateRangeLabel,
-              onBack: widget.onBack,
-              onPrevWeek: _gotoPrev,
-              onNextWeek: _gotoNext,
-              onGotoCurrent: _gotoCurrent,
-            ),
-            Padding(
-              padding: EdgeInsets.fromLTRB(ui(20), ui(11), ui(20), ui(20)),
-              child: _ScheduleGrid(
-                slots: slots,
-                days: days,
-                cells: cells,
-                loading: _scheduleLoading,
-              ),
-            ),
-          ],
+    return SmartCampusSchedulePageShell(
+      backgroundColor: _kCardBg,
+      header: _ScheduleBanner(
+        week: _currentWeek,
+        dateRange: _dateRangeLabel,
+        onBack: widget.onBack,
+        onPrevWeek: _gotoPrev,
+        onNextWeek: _gotoNext,
+        onGotoCurrent: _gotoCurrent,
+      ),
+      body: Padding(
+        padding: EdgeInsets.fromLTRB(ui(20), ui(11), ui(20), ui(20)),
+        child: _ScheduleGrid(
+          slots: slots,
+          days: days,
+          cells: cells,
+          loading: _scheduleLoading,
         ),
       ),
     );
@@ -528,7 +516,7 @@ _ScheduleCardData _parseCourseCard(
   final type = typeRaw is int
       ? typeRaw
       : (int.tryParse(typeRaw?.toString() ?? '') ?? 0);
-  final isSmall = type == 1 || type == 2;
+  final isSmall = type == 1;
 
   final location = _pickString(json, [
     'classroomName',
@@ -601,24 +589,12 @@ class _ScheduleBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return AspectRatio(
-      aspectRatio: AppAssets.smartCampusBgAspectRatio,
-      child: ClipRRect(
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(ui(16)),
-          topRight: Radius.circular(ui(16)),
-        ),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Image.asset(
-              AppAssets.smartCampusBg,
-              width: double.infinity,
-              fit: BoxFit.fitWidth,
-              alignment: Alignment.topCenter,
-            ),
-            // 返回按钮
-            Positioned(
+    return SmartCampusScheduleTopBar(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // 返回按钮
+          Positioned(
               left: ui(20),
               top: ui(20),
               child: InkWell(
@@ -690,7 +666,6 @@ class _ScheduleBanner extends StatelessWidget {
             ),
           ],
         ),
-      ),
     );
   }
 }

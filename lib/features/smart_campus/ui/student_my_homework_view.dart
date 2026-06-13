@@ -60,6 +60,7 @@ import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 import '../data/student_repository.dart';
 import '../data/student_academic_data.dart';
+import 'widgets/smart_campus_page_banner.dart';
 
 const Color _kCardBg = Colors.white;
 const Color _kPageBg = Color(0xFFEFF3FC);
@@ -426,14 +427,8 @@ class _HomeworkBanner extends StatelessWidget {
     return Container(
       width: double.infinity,
       height: ui(62),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(ui(12)),
-        gradient: const LinearGradient(
-          begin: Alignment.bottomLeft,
-          end: Alignment.topRight,
-          colors: [Colors.white, Color(0xFFF9EDFF)],
-        ),
-      ),
+      clipBehavior: Clip.antiAlias,
+      decoration: smartCampusPageBannerDecoration(ui, borderRadius: 12),
       child: Stack(
         children: [
           Positioned(

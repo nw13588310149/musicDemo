@@ -9,6 +9,7 @@ import 'dart:math' as math;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:chinese_font_library/chinese_font_library.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -269,7 +270,7 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
                 key: const PageStorageKey<String>('video_tutorial_scroll'),
                 controller: _scrollController,
                 physics: const AlwaysScrollableScrollPhysics(),
-                cacheExtent: ui(420),
+                scrollCacheExtent: ScrollCacheExtent.pixels(ui(420)),
                 slivers: [
                   // Banner + 最新视频：并入滚动区域
                   SliverToBoxAdapter(
@@ -1186,7 +1187,10 @@ class _ProfessionalPlayerState extends State<_ProfessionalPlayer> {
               ? _duration
               : target);
     unawaited(
-      _smoothOps.seek(clamped, isPlaying: _isPlaying || widget.player.state.playing),
+      _smoothOps.seek(
+        clamped,
+        isPlaying: _isPlaying || widget.player.state.playing,
+      ),
     );
     setState(() => _tapSeekHint = isLeft ? '← -10s' : '+10s →');
     _tapSeekHintTimer?.cancel();
@@ -2455,7 +2459,10 @@ class _FullscreenPageState extends State<_FullscreenPage> {
               ? _duration
               : target);
     unawaited(
-      _smoothOps.seek(clamped, isPlaying: _isPlaying || widget.player.state.playing),
+      _smoothOps.seek(
+        clamped,
+        isPlaying: _isPlaying || widget.player.state.playing,
+      ),
     );
     setState(() => _tapSeekHint = isLeft ? '← -10s' : '+10s →');
     _tapSeekHintTimer?.cancel();
@@ -2800,7 +2807,8 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                       onChangeEnd: (v) async {
                                         await _smoothOps.seek(
                                           Duration(milliseconds: v.toInt()),
-                                          isPlaying: _isPlaying ||
+                                          isPlaying:
+                                              _isPlaying ||
                                               widget.player.state.playing,
                                         );
                                         if (!mounted) return;
@@ -2826,10 +2834,9 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                               const Duration(seconds: 15);
                                           unawaited(
                                             _smoothOps.seek(
-                                              t.isNegative
-                                                  ? Duration.zero
-                                                  : t,
-                                              isPlaying: _isPlaying ||
+                                              t.isNegative ? Duration.zero : t,
+                                              isPlaying:
+                                                  _isPlaying ||
                                                   widget.player.state.playing,
                                             ),
                                           );
@@ -2890,7 +2897,8 @@ class _FullscreenPageState extends State<_FullscreenPage> {
                                                       t > _duration
                                                   ? _duration
                                                   : t,
-                                              isPlaying: _isPlaying ||
+                                              isPlaying:
+                                                  _isPlaying ||
                                                   widget.player.state.playing,
                                             ),
                                           );
@@ -3223,9 +3231,7 @@ class _PlayerPlaceholder extends StatelessWidget {
         ),
         if (loading)
           const Positioned.fill(
-            child: Center(
-              child: AppLoadingIndicator(color: Colors.white),
-            ),
+            child: Center(child: AppLoadingIndicator(color: Colors.white)),
           ),
       ],
     );

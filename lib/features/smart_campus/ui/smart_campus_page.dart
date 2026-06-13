@@ -18,6 +18,7 @@ import 'admin_teacher_management_view.dart';
 import 'dorm_manager_check_by_room_view.dart';
 import 'dorm_manager_check_history_view.dart';
 import 'dorm_manager_home_view.dart';
+import 'dorm_manager_makeup_audit_view.dart';
 import 'group_chat_view.dart';
 import 'principal_mailbox_view.dart';
 import 'student_check_in_view.dart';
@@ -422,6 +423,11 @@ class SmartCampusPage extends ConsumerWidget {
           onBack: controller.backToDashboard,
         );
       }
+      if (state.mainView == SmartCampusMainView.dormMakeupAudit) {
+        return DormManagerMakeupAuditView(
+          onBack: controller.backToDashboard,
+        );
+      }
       if (state.mainView == SmartCampusMainView.myTeacherLeave) {
         return TeacherMyLeaveView(onBack: controller.backToDashboard);
       }
@@ -438,6 +444,7 @@ class SmartCampusPage extends ConsumerWidget {
           onOpenDormCheckByRoom: controller.openDormCheckByRoom,
           onOpenDormCheckHistory: controller.openDormHistory,
           onOpenDormManagerLeave: controller.openMyTeacherLeave,
+          onOpenDormMakeupAudit: controller.openDormMakeupAudit,
         );
       }
     }
@@ -594,6 +601,8 @@ class _SmartCampusPlaceholder extends StatelessWidget {
         return '按宿舍查寝';
       case SmartCampusMainView.dormCheckInManagement:
         return '打卡管理';
+      case SmartCampusMainView.dormMakeupAudit:
+        return '补卡审核';
       case SmartCampusMainView.homeSchool:
         return '家校沟通';
       case SmartCampusMainView.classAttendance:

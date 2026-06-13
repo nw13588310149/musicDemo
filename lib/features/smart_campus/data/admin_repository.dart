@@ -80,6 +80,19 @@ class AdminRepository {
     return client.post('$_base/classList', data: body);
   }
 
+  /// 班级总览统计：大班、小班、学生、教师及未分配学生数量。
+  Future<ApiResponse> classSum() {
+    return client.post('$_base/classSum');
+  }
+
+  /// 群聊 / 班级详情。
+  Future<ApiResponse> classDetail({required String classId}) {
+    return client.post(
+      '$_base/classDetail',
+      data: <String, dynamic>{'classId': readSnowflakeId(classId) ?? classId},
+    );
+  }
+
   /// 教室下拉列表。
   Future<ApiResponse> classroomList({int? campusId}) {
     final body = <String, dynamic>{};
@@ -121,6 +134,16 @@ class AdminRepository {
     return client.post(
       '$_base/studentDetail',
       data: <String, dynamic>{'id': readSnowflakeId(id) ?? id},
+    );
+  }
+
+  /// 学生考试成绩详情。
+  Future<ApiResponse> studentExamRecordList({required String studentId}) {
+    return client.post(
+      '$_base/studentExamRecordList',
+      data: <String, dynamic>{
+        'studentId': readSnowflakeId(studentId) ?? studentId,
+      },
     );
   }
 
@@ -466,6 +489,32 @@ class AdminRepository {
         'courseId': courseId,
         'studentId': studentId,
         'status': status,
+      },
+    );
+  }
+
+  /// 小班课查看学生评价。
+  Future<ApiResponse> courseCommentList({required String courseId}) {
+    return client.post(
+      '$_base/courseCommentList',
+      data: <String, dynamic>{
+        'courseId': readSnowflakeId(courseId) ?? courseId,
+      },
+    );
+  }
+
+  /// 小班课管理员确认完成。`signStatus`: 6-确认 / 7-驳回。
+  Future<ApiResponse> courseSignConfirm({
+    required String courseId,
+    int signStatus = 6,
+    String remark = '',
+  }) {
+    return client.post(
+      '$_base/courseSignConfirm',
+      data: <String, dynamic>{
+        'courseId': readSnowflakeId(courseId) ?? courseId,
+        'signStatus': signStatus,
+        if (remark.isNotEmpty) 'remark': remark,
       },
     );
   }

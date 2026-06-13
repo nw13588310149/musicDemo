@@ -45,6 +45,7 @@ import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/popup_selector_field.dart';
 import '../data/teacher_repository.dart';
 import '../../shell/ui/shell_layout.dart';
+import 'widgets/smart_campus_page_banner.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // ---- 配色 -------------------------------------------------------------------
@@ -432,14 +433,8 @@ class _ExamBanner extends StatelessWidget {
     return Container(
       width: double.infinity,
       height: ui(62),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(ui(16)),
-        gradient: const LinearGradient(
-          begin: Alignment.bottomLeft,
-          end: Alignment.topRight,
-          colors: [Colors.white, Color(0xFFF9EDFF)],
-        ),
-      ),
+      clipBehavior: Clip.antiAlias,
+      decoration: smartCampusPageBannerDecoration(ui),
       child: Stack(
         children: [
           Positioned(

@@ -41,7 +41,6 @@ import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dar
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/constants/app_assets.dart';
 import '../../../core/network/api_response.dart';
 import '../../../core/widgets/app_date_time_pickers.dart';
 import '../../../core/widgets/app_toast.dart';
@@ -51,6 +50,7 @@ import '../../school/data/school_repository.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/admin_repository.dart';
 import 'widgets/schedule_idle_slot.dart';
+import 'widgets/smart_campus_page_banner.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // ---- 通用配色 -----------------------------------------------------------
@@ -751,7 +751,7 @@ class _AdminScheduleManagementViewState
   /// }
   /// ```
   ///
-  /// `type == 2` → 小课（同一格里第 0 张橙、第 1 张蓝循环）；其它值 → 大课。
+  /// `type == 1` → 小课（同一格里第 0 张橙、第 1 张蓝循环）；`type == 0` → 大课。
   /// `color` 是 hex（含 `#`），存到卡片做背景覆盖；标题色按背景亮度自适应。
   _ScheduleCardData _parseCourseCard(
     Map<String, dynamic> json,
@@ -761,7 +761,7 @@ class _AdminScheduleManagementViewState
     final type = typeRaw is int
         ? typeRaw
         : (int.tryParse(typeRaw?.toString() ?? '') ?? 0);
-    final isSmall = type == 2;
+    final isSmall = type == 1;
 
     final location = _pickString(json, [
       'classroomName',
@@ -1075,36 +1075,23 @@ class _AdminScheduleManagementViewState
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return SingleChildScrollView(
-      padding: EdgeInsets.only(bottom: ui(20)),
-      child: Container(
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: _kCardBg,
-          borderRadius: BorderRadius.circular(ui(16)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _AdminScheduleHeader(
-              onBack: widget.onBack,
-              tab: _tab,
-              applyPendingCount: _pendingApplyCount,
-              onTabChanged: (t) {
-                setState(() => _tab = t);
-                if (t == _AdminScheduleTab.applyAudit) {
-                  _loadApplies();
-                  unawaited(_loadPendingApplyCount());
-                }
-              },
-            ),
-            if (_tab == _AdminScheduleTab.schedule)
-              _buildScheduleTab(ui)
-            else
-              _buildApplyTab(ui),
-          ],
-        ),
+    return SmartCampusSchedulePageShell(
+      backgroundColor: _kCardBg,
+      header: _AdminScheduleHeader(
+        onBack: widget.onBack,
+        tab: _tab,
+        applyPendingCount: _pendingApplyCount,
+        onTabChanged: (t) {
+          setState(() => _tab = t);
+          if (t == _AdminScheduleTab.applyAudit) {
+            _loadApplies();
+            unawaited(_loadPendingApplyCount());
+          }
+        },
       ),
+      body: _tab == _AdminScheduleTab.schedule
+          ? _buildScheduleTab(ui)
+          : _buildApplyTab(ui),
     );
   }
 
@@ -1249,20 +1236,7 @@ class _AdminScheduleHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      width: double.infinity,
-      height: ui(68),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(ui(16)),
-          topRight: Radius.circular(ui(16)),
-        ),
-        image: DecorationImage(
-          image: AssetImage(AppAssets.xiaoquanHeaderBg),
-          fit: BoxFit.cover,
-          alignment: Alignment.centerRight,
-        ),
-      ),
+    return SmartCampusScheduleTopBar(
       child: Stack(
         children: [
           Positioned(

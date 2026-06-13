@@ -297,7 +297,7 @@ bool _isSmallCourse(Map<String, dynamic> json) {
   final type = typeRaw is int
       ? typeRaw
       : (int.tryParse(typeRaw?.toString() ?? '') ?? 0);
-  return type == 1 || type == 2;
+  return type == 1;
 }
 
 StudentCourseSlotPhase _slotPhase(DateTime now, String startHm, String endHm) {

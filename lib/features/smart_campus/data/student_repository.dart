@@ -202,6 +202,105 @@ class StudentRepository {
     );
   }
 
+  // ============== 学生 · 查寝 / 补卡 ==============
+
+  /// 当前学生宿舍信息。
+  Future<ApiResponse> myDormitoryInfo() {
+    return client.post('$_base/myDormitoryInfo');
+  }
+
+  /// 学生查寝统计。
+  Future<ApiResponse> dormitoryCheckStat({
+    String? beginDate,
+    String? endDate,
+  }) {
+    return client.post(
+      '$_base/dormitoryCheckStat',
+      data: <String, dynamic>{
+        if (beginDate != null && beginDate.isNotEmpty) 'beginDate': beginDate,
+        if (endDate != null && endDate.isNotEmpty) 'endDate': endDate,
+      },
+    );
+  }
+
+  /// 学生历史查寝记录。
+  Future<ApiResponse> dormitoryCheckHistory({
+    String? beginDate,
+    String? endDate,
+    String? status,
+    int current = 1,
+    int size = 200,
+  }) {
+    return client.post(
+      '$_base/dormitoryCheckHistory',
+      data: <String, dynamic>{
+        'current': current,
+        'size': size,
+        if (beginDate != null && beginDate.isNotEmpty) 'beginDate': beginDate,
+        if (endDate != null && endDate.isNotEmpty) 'endDate': endDate,
+        if (status != null && status.isNotEmpty) 'status': status,
+      },
+    );
+  }
+
+  /// 单次查寝详情。
+  Future<ApiResponse> dormitoryCheckDetail({required String id}) {
+    return client.post(
+      '$_base/dormitoryCheckDetail',
+      data: <String, dynamic>{'id': readSnowflakeId(id) ?? id},
+    );
+  }
+
+  /// 提交查寝补卡申请。
+  Future<ApiResponse> dormitoryMakeupSave({
+    required String date,
+    required String scene,
+    required String reason,
+    String attachment = '',
+  }) {
+    return client.post(
+      '$_base/dormitoryMakeupSave',
+      data: <String, dynamic>{
+        'date': date,
+        'scene': scene,
+        'reason': reason,
+        if (attachment.isNotEmpty) 'attachment': attachment,
+      },
+    );
+  }
+
+  /// 本人补卡申请列表。
+  Future<ApiResponse> dormitoryMakeupList({
+    int? status,
+    int current = 1,
+    int size = 200,
+  }) {
+    return client.post(
+      '$_base/dormitoryMakeupList',
+      data: <String, dynamic>{
+        'current': current,
+        'size': size,
+        if (status != null) 'status': status,
+      },
+    );
+  }
+
+  /// 补卡申请详情。
+  Future<ApiResponse> dormitoryMakeupDetail({required String id}) {
+    return client.post(
+      '$_base/dormitoryMakeupDetail',
+      data: <String, dynamic>{'id': readSnowflakeId(id) ?? id},
+    );
+  }
+
+  /// 撤销待审批补卡申请。
+  Future<ApiResponse> dormitoryMakeupCancel({required String id}) {
+    return client.post(
+      '$_base/dormitoryMakeupCancel',
+      data: <String, dynamic>{'id': readSnowflakeId(id) ?? id},
+    );
+  }
+
   /// 学生发起请假。
   Future<ApiResponse> studentLeaveSave({
     required DateTime startTime,

@@ -16,6 +16,7 @@ import '../../shell/ui/shell_layout.dart';
 import '../../smart_campus/navigation/group_chat_return.dart';
 import '../state/music_play_controller.dart';
 import '../state/music_play_state.dart';
+import '../audio/music_play_frequency_utils.dart';
 import 'music_play_html_utils.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
@@ -1496,7 +1497,9 @@ class _LongTextPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final trimmed = musicPlayHtmlForcePingFangSc(htmlText.trim());
+    final trimmed = musicPlayHtmlForceBoldTags(
+      musicPlayHtmlForcePingFangSc(htmlText.trim()),
+    );
     final baseStyle = TextStyle(
       color: Colors.white.withValues(alpha: 0.9),
       fontSize: ui(14),
@@ -1534,7 +1537,9 @@ class _DescriptionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final trimmed = musicPlayHtmlStripInlineTypography(htmlText.trim());
+    final trimmed = musicPlayHtmlForceBoldTags(
+      musicPlayHtmlStripInlineTypography(htmlText.trim()),
+    );
     final baseStyle = musicPlayAiBodyTextStyle(
       fontSize: ui(kMusicPlayAiBodyFontSize),
     );
@@ -2872,68 +2877,19 @@ class _FrequencyVisualizer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (frequencyBands.isNotEmpty || !playing) {
-      return SizedBox(
-        height: height,
-        width: double.infinity,
-        child: CustomPaint(
-          painter: _FrequencyVisualizerPainter(
-            frequencyBands: frequencyBands,
-            time: 0,
-            playing: playing,
-          ),
-        ),
-      );
-    }
-    return _AnimatedFrequencyFallback(height: height);
-  }
-}
-
-class _AnimatedFrequencyFallback extends StatefulWidget {
-  const _AnimatedFrequencyFallback({required this.height});
-
-  final double height;
-
-  @override
-  State<_AnimatedFrequencyFallback> createState() =>
-      _AnimatedFrequencyFallbackState();
-}
-
-class _AnimatedFrequencyFallbackState extends State<_AnimatedFrequencyFallback>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1200),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
+    final bands = playing
+        ? frequencyBands
+        : (frequencyBands.isNotEmpty
+              ? frequencyBands
+              : buildMusicPlayVisualizerRestBands());
     return SizedBox(
-      height: widget.height,
+      height: height,
       width: double.infinity,
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, _) {
-          return CustomPaint(
-            painter: _FrequencyVisualizerPainter(
-              frequencyBands: const <double>[],
-              time: _controller.value,
-              playing: true,
-            ),
-          );
-        },
+      child: CustomPaint(
+        painter: _FrequencyVisualizerPainter(
+          frequencyBands: bands,
+          playing: playing,
+        ),
       ),
     );
   }
@@ -2942,63 +2898,78 @@ class _AnimatedFrequencyFallbackState extends State<_AnimatedFrequencyFallback>
 class _FrequencyVisualizerPainter extends CustomPainter {
   const _FrequencyVisualizerPainter({
     required this.frequencyBands,
-    required this.time,
     required this.playing,
   });
 
   final List<double> frequencyBands;
-  final double time;
   final bool playing;
+
+  static const int _bandCount = 46;
 
   @override
   void paint(Canvas canvas, Size size) {
     if (size.width <= 0 || size.height <= 0) {
       return;
     }
-    final count = frequencyBands.isEmpty ? 46 : frequencyBands.length;
-    const gap = 3.0;
+    const count = _bandCount;
+    const gap = 2.5;
     final barWidth = math.max(1.2, (size.width - gap * (count - 1)) / count);
-    final centerY = size.height * 0.62;
-    final maxUp = size.height * 0.58;
-    final maxDown = size.height * 0.30;
+    final centerY = size.height * 0.58;
+    final maxBarPercent = playing ? 0.56 : 0.42;
+    final mirrorBarPercent = playing ? 0.20 : 0.0;
     final radius = Radius.circular(barWidth / 2);
     final idlePaint = Paint()..color = const Color(0xFFE4E1EC);
 
     for (var i = 0; i < count; i++) {
-      final raw = frequencyBands.isEmpty
-          ? (playing ? _fallbackLevel(i, count, time) : 0.0)
-          : frequencyBands[i];
-      final level = raw.clamp(0.0, 1.0);
+      final percent = i < frequencyBands.length
+          ? frequencyBands[i].clamp(0.0, 1.0)
+          : 0.0;
+      if (percent <= 0.001) {
+        continue;
+      }
       final x = i * (barWidth + gap);
-      final up = math.max(size.height * 0.08, maxUp * level);
-      final down = math.max(size.height * 0.03, maxDown * level);
-      final active = level > 0.015;
+      final up = size.height * maxBarPercent * percent;
+      final down = size.height * mirrorBarPercent * percent;
 
       final topRect = Rect.fromLTRB(x, centerY - up, x + barWidth, centerY);
-      final topPaint = active
-          ? (Paint()
-              ..shader = const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: <Color>[Color(0xFF8741FF), Color(0xFFC8AEFF)],
-              ).createShader(topRect))
-          : idlePaint;
+      if (!playing) {
+        canvas.drawRRect(RRect.fromRectAndRadius(topRect, radius), idlePaint);
+        continue;
+      }
+
+      final topPaint = Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: <Color>[
+            Color.lerp(
+              const Color(0xFF7A35F5),
+              const Color(0xFFB89AFF),
+              1 - percent,
+            )!,
+            const Color(0xFFD4C2FF),
+          ],
+        ).createShader(topRect);
       canvas.drawRRect(RRect.fromRectAndRadius(topRect, radius), topPaint);
 
+      if (mirrorBarPercent <= 0) {
+        continue;
+      }
       final bottomRect = Rect.fromLTRB(
         x,
         centerY,
         x + barWidth,
         centerY + down,
       );
-      final bottomPaint = active
-          ? (Paint()
-              ..shader = const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: <Color>[Color(0x668741FF), Color(0x00C8AEFF)],
-              ).createShader(bottomRect))
-          : idlePaint;
+      final bottomPaint = Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: <Color>[
+            Color(0x667A35F5).withValues(alpha: 0.28 + percent * 0.32),
+            const Color(0x00D4C2FF),
+          ],
+        ).createShader(bottomRect);
       canvas.drawRRect(
         RRect.fromRectAndRadius(bottomRect, radius),
         bottomPaint,
@@ -3006,21 +2977,9 @@ class _FrequencyVisualizerPainter extends CustomPainter {
     }
   }
 
-  double _fallbackLevel(int index, int count, double t) {
-    final phase = t * math.pi * 2;
-    final waveA = math.sin(phase * 1.4 + index * 0.52);
-    final waveB = math.sin(phase * 2.1 + index * 0.21);
-    final envelope = math.sin(index / (count - 1) * math.pi);
-    return (0.18 + (waveA * 0.18 + waveB * 0.12 + 0.30) * envelope).clamp(
-      0.04,
-      0.88,
-    );
-  }
-
   @override
   bool shouldRepaint(covariant _FrequencyVisualizerPainter oldDelegate) {
     return oldDelegate.frequencyBands != frequencyBands ||
-        oldDelegate.time != time ||
         oldDelegate.playing != playing;
   }
 }

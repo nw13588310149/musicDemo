@@ -34,6 +34,7 @@ import '../../../core/widgets/app_toast.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../services/geo_locator.dart';
 import 'widgets/baidu_map_view.dart';
+import 'widgets/smart_campus_page_banner.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // —— 颜色 ————————————————————————————————————————————————————————
@@ -342,14 +343,7 @@ class _Banner extends StatelessWidget {
       width: double.infinity,
       height: ui(62),
       clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.bottomCenter,
-          end: Alignment.topCenter,
-          colors: [Colors.white, Color(0xFFF9EDFF)],
-        ),
-        borderRadius: BorderRadius.circular(ui(16)),
-      ),
+      decoration: smartCampusPageBannerDecoration(ui),
       child: Stack(
         children: [
           Positioned(

@@ -5534,7 +5534,8 @@ class _EmojiPanelState extends State<_EmojiPanel> {
               children: [
                 for (var i = 0; i < _kEmojiCategories.length; i++)
                   _EmojiCategoryTab(
-                    icon: _kEmojiCategories[i].icon,
+                    iconPath: _kEmojiCategories[i].tabIconPath,
+                    activeIconPath: _kEmojiCategories[i].tabIconActivePath,
                     label: _kEmojiCategories[i].label,
                     active: i == _categoryIndex,
                     onTap: () => setState(() => _categoryIndex = i),
@@ -5557,13 +5558,17 @@ class _EmojiPanelState extends State<_EmojiPanel> {
 
 class _EmojiCategoryTab extends StatelessWidget {
   const _EmojiCategoryTab({
-    required this.icon,
+    this.icon,
+    this.iconPath,
+    this.activeIconPath,
     required this.label,
     required this.active,
     required this.onTap,
-  });
+  }) : assert(icon != null || iconPath != null);
 
-  final IconData icon;
+  final IconData? icon;
+  final String? iconPath;
+  final String? activeIconPath;
   final String label;
   final bool active;
   final VoidCallback onTap;
@@ -5584,11 +5589,18 @@ class _EmojiCategoryTab extends StatelessWidget {
             color: active ? Colors.white : Colors.transparent,
             borderRadius: BorderRadius.circular(ui(6)),
           ),
-          child: Icon(
-            icon,
-            size: ui(18),
-            color: active ? _kPurple : const Color(0xFF6D6B75),
-          ),
+          child: icon != null
+              ? Icon(
+                  icon,
+                  size: ui(18),
+                  color: active ? _kPurple : const Color(0xFF6D6B75),
+                )
+              : Image.asset(
+                  active ? activeIconPath! : iconPath!,
+                  width: ui(18),
+                  height: ui(18),
+                  fit: BoxFit.contain,
+                ),
         ),
       ),
     );
@@ -5598,19 +5610,22 @@ class _EmojiCategoryTab extends StatelessWidget {
 class _EmojiCategory {
   const _EmojiCategory({
     required this.label,
-    required this.icon,
+    required this.tabIconPath,
+    required this.tabIconActivePath,
     required this.emojis,
   });
 
   final String label;
-  final IconData icon;
+  final String tabIconPath;
+  final String tabIconActivePath;
   final List<String> emojis;
 }
 
 const List<_EmojiCategory> _kEmojiCategories = [
   _EmojiCategory(
     label: '表情',
-    icon: Icons.emoji_emotions_outlined,
+    tabIconPath: AppAssets.groupChatEmojiTab1,
+    tabIconActivePath: AppAssets.groupChatEmojiTab1Active,
     emojis: [
       '😀',
       '😃',
@@ -5730,7 +5745,8 @@ const List<_EmojiCategory> _kEmojiCategories = [
   ),
   _EmojiCategory(
     label: '手势',
-    icon: Icons.thumb_up_alt_outlined,
+    tabIconPath: AppAssets.groupChatEmojiTab2,
+    tabIconActivePath: AppAssets.groupChatEmojiTab2Active,
     emojis: [
       '👋',
       '🤚',
@@ -5788,7 +5804,8 @@ const List<_EmojiCategory> _kEmojiCategories = [
   ),
   _EmojiCategory(
     label: '心心',
-    icon: Icons.favorite_border_rounded,
+    tabIconPath: AppAssets.groupChatEmojiTab3,
+    tabIconActivePath: AppAssets.groupChatEmojiTab3Active,
     emojis: [
       '❤️',
       '🧡',
@@ -5842,7 +5859,8 @@ const List<_EmojiCategory> _kEmojiCategories = [
   ),
   _EmojiCategory(
     label: '动物',
-    icon: Icons.pets_outlined,
+    tabIconPath: AppAssets.groupChatEmojiTab4,
+    tabIconActivePath: AppAssets.groupChatEmojiTab4Active,
     emojis: [
       '🐶',
       '🐱',
@@ -5937,7 +5955,8 @@ const List<_EmojiCategory> _kEmojiCategories = [
   ),
   _EmojiCategory(
     label: '食物',
-    icon: Icons.fastfood_outlined,
+    tabIconPath: AppAssets.groupChatEmojiTab5,
+    tabIconActivePath: AppAssets.groupChatEmojiTab5Active,
     emojis: [
       '🍎',
       '🍐',
@@ -6046,7 +6065,8 @@ const List<_EmojiCategory> _kEmojiCategories = [
   ),
   _EmojiCategory(
     label: '物品',
-    icon: Icons.lightbulb_outline,
+    tabIconPath: AppAssets.groupChatEmojiTab6,
+    tabIconActivePath: AppAssets.groupChatEmojiTab6Active,
     emojis: [
       '⚽',
       '🏀',

@@ -930,14 +930,14 @@ class _NewsCard extends StatelessWidget {
               right: 16,
               height: 18,
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   for (int i = 0; i < tags.length; i++) ...[
                     if (i > 0) const SizedBox(width: 4),
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 3,
-                      ),
+                      height: 18,
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: const Color(0xFFF4F4FF),
                         borderRadius: BorderRadius.circular(4),
@@ -948,7 +948,7 @@ class _NewsCard extends StatelessWidget {
                           fontSize: 9.52,
                           color: Color(0xFF6D6B75),
                           fontWeight: AppFont.w400,
-                          height: 11.43 / 9.52,
+                          height: 1,
                           fontFamily: 'PingFang SC',
                         ),
                       ),

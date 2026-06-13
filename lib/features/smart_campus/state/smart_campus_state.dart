@@ -22,6 +22,7 @@ enum SmartCampusMainView {
   // 宿管端「打卡管理」：banner + 大圆形上/下班打卡按钮 + 责任区/定位状态 +
   // 「我的打卡记录」2 列卡片网格（紫白渐变 + 状态徽章 + 打卡时间/位置）。
   dormCheckInManagement,
+  dormMakeupAudit,
   homeSchool,
   classAttendance,
   studentRoster,

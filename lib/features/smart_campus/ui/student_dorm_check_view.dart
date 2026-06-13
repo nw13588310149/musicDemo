@@ -31,13 +31,22 @@
 //   字体 PingFang SC，数字 32 用 Barlow（与 Figma 一致）。
 // =============================================================================
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 
 import '../../../core/widgets/app_date_time_pickers.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
+import '../data/student_dormitory_data.dart';
+import '../state/student_dormitory_controller.dart';
+import '../state/student_dormitory_state.dart';
+import 'widgets/dormitory_detail_dialog.dart';
+import 'widgets/smart_campus_page_banner.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // —— 颜色 ————————————————————————————————————————————————————————
@@ -55,55 +64,54 @@ const Color _kBlue = Color(0xFF325BFF);
 
 // —— 顶级视图 ——————————————————————————————————————————————————————
 
-class StudentDormCheckView extends StatefulWidget {
+class StudentDormCheckView extends ConsumerStatefulWidget {
   const StudentDormCheckView({
     super.key,
     required this.onBack,
-    this.studentName = '苏音桐',
-    this.dorm = '女生宿舍3号楼 612',
+    this.studentName = '',
   });
 
   final VoidCallback onBack;
   final String studentName;
-  final String dorm;
 
   @override
-  State<StudentDormCheckView> createState() => _StudentDormCheckViewState();
+  ConsumerState<StudentDormCheckView> createState() =>
+      _StudentDormCheckViewState();
 }
 
-class _StudentDormCheckViewState extends State<StudentDormCheckView> {
+class _StudentDormCheckViewState extends ConsumerState<StudentDormCheckView> {
   _DormTab _tab = _DormTab.all;
-  late List<_DormCheckRecord> _records;
-  int _pendingResubmits = 1;
 
   @override
   void initState() {
     super.initState();
-    _records = List<_DormCheckRecord>.from(_kDemoDormRecords);
+    Future.microtask(
+      () => ref.read(studentDormitoryControllerProvider.notifier).initialize(),
+    );
   }
 
-  int _countOf(_DormStatus s) => _records.where((r) => r.status == s).length;
+  List<_DormCheckRecord> _recordsFromState(List<StudentDormitoryCheckItem> items) {
+    return [
+      for (final item in items)
+        _DormCheckRecord(
+          id: item.id,
+          session: item.checkType,
+          status: _mapStatus(item.status),
+          dorm: item.dormName.isEmpty ? '—' : item.dormName,
+          date: item.checkDate,
+          requiredTime: item.deadline.isEmpty ? '—' : item.deadline,
+          stampedTime: item.checkTime == '—' ? null : item.checkTime,
+          note: item.remark,
+        ),
+    ];
+  }
 
-  int get _normalCount => _countOf(_DormStatus.normal);
-  int get _abnormalCount => _records
-      .where(
-        (r) => r.status == _DormStatus.missed || r.status == _DormStatus.late,
-      )
-      .length;
-
-  List<_DormCheckRecord> get _visible {
-    switch (_tab) {
-      case _DormTab.all:
-        return _records;
-      case _DormTab.abnormal:
-        return _records
-            .where(
-              (r) =>
-                  r.status == _DormStatus.missed ||
-                  r.status == _DormStatus.late,
-            )
-            .toList();
-    }
+  _DormStatus _mapStatus(StudentDormitoryCheckStatus status) {
+    return switch (status) {
+      StudentDormitoryCheckStatus.normal => _DormStatus.normal,
+      StudentDormitoryCheckStatus.late => _DormStatus.late,
+      StudentDormitoryCheckStatus.absent => _DormStatus.missed,
+    };
   }
 
   Future<void> _openApplyDialog() async {
@@ -113,13 +121,103 @@ class _StudentDormCheckViewState extends State<StudentDormCheckView> {
       builder: (ctx) => const _DormResubmitDialog(),
     );
     if (!mounted || result == null) return;
-    setState(() => _pendingResubmits += 1);
-    AppToast.show(context, '已提交补卡申请：${result.dateLabel} · ${result.scene}');
+    final response = await ref
+        .read(studentDormitoryControllerProvider.notifier)
+        .submitMakeup(
+          date: result.date,
+          sceneLabel: result.scene,
+          reason: result.note,
+        );
+    if (!mounted) return;
+    if (response.isSuccess) {
+      AppToast.show(context, '已提交补卡申请：${result.dateLabel} · ${result.scene}');
+    } else {
+      AppToast.show(context, response.displayMsg);
+    }
+  }
+
+  List<_DormCheckRecord> _visibleRecords(List<_DormCheckRecord> records) {
+    switch (_tab) {
+      case _DormTab.all:
+        return records;
+      case _DormTab.abnormal:
+        return records
+            .where(
+              (r) =>
+                  r.status == _DormStatus.missed ||
+                  r.status == _DormStatus.late,
+            )
+            .toList();
+    }
+  }
+
+  Future<void> _showCheckDetail(String id, String title) async {
+    if (id.isEmpty) return;
+    final fields = await ref
+        .read(studentDormitoryControllerProvider.notifier)
+        .loadCheckDetail(id);
+    if (!mounted) return;
+    if (fields.isEmpty) {
+      AppToast.show(context, '未获取到查寝详情');
+      return;
+    }
+    await showDormitoryDetailDialog(
+      context,
+      title: title,
+      fields: fields,
+    );
+  }
+
+  Future<void> _showMakeupDetail(StudentDormitoryMakeupItem item) async {
+    final fields = await ref
+        .read(studentDormitoryControllerProvider.notifier)
+        .loadMakeupDetail(item.id);
+    if (!mounted) return;
+    if (fields.isEmpty) {
+      AppToast.show(context, '未获取到补卡详情');
+      return;
+    }
+    final cancelling = ref.read(studentDormitoryControllerProvider).cancellingMakeupId == item.id;
+    await showDormitoryDetailDialog(
+      context,
+      title: '补卡申请 · ${item.checkType}',
+      fields: fields,
+      actions: item.canCancel
+          ? [
+              OutlinedButton(
+                onPressed: cancelling
+                    ? null
+                    : () async {
+                        Navigator.of(context).pop();
+                        final response = await ref
+                            .read(studentDormitoryControllerProvider.notifier)
+                            .cancelMakeup(item.id);
+                        if (!mounted) return;
+                        AppToast.show(
+                          context,
+                          response.isSuccess ? '已撤销补卡申请' : response.displayMsg,
+                        );
+                      },
+                child: Text('撤销申请', style: TextStyle(color: _kRed)),
+              ),
+            ]
+          : null,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final state = ref.watch(studentDormitoryControllerProvider);
+    final records = _recordsFromState(state.records);
+    final visible = _visibleRecords(records);
+    final dormLabel = state.dormInfo.displayLabel;
+    final normalCount = state.stat.normalCount;
+    final abnormalCount = state.stat.lateCount + state.stat.absentCount;
+    final pendingMakeups = state.pendingMakeupCount > 0
+        ? state.pendingMakeupCount
+        : state.stat.pendingMakeupCount;
+    final displayName = widget.studentName.isEmpty ? '我' : widget.studentName;
     return Container(
       color: _kPageBg,
       child: SingleChildScrollView(
@@ -129,20 +227,60 @@ class _StudentDormCheckViewState extends State<StudentDormCheckView> {
           children: [
             _DormBanner(
               onBack: widget.onBack,
-              studentName: widget.studentName,
-              onApplyResubmit: _openApplyDialog,
+              studentName: displayName,
+              onApplyResubmit: state.submittingMakeup ? null : _openApplyDialog,
             ),
+            if (state.loading) const LinearProgressIndicator(minHeight: 2),
+            if (state.error.isNotEmpty)
+              Padding(
+                padding: EdgeInsets.only(top: ui(8)),
+                child: Text(
+                  state.error,
+                  style: TextStyle(fontSize: ui(12), color: _kRed),
+                ),
+              ),
             SizedBox(height: ui(16)),
             _DormStatsRow(
-              dorm: widget.dorm,
-              normal: _normalCount,
-              abnormal: _abnormalCount,
-              pendingResubmits: _pendingResubmits,
+              dorm: dormLabel,
+              normal: normalCount,
+              abnormal: abnormalCount,
+              pendingResubmits: pendingMakeups,
             ),
             SizedBox(height: ui(28)),
-            _SectionHeader(tab: _tab, onTab: (t) => setState(() => _tab = t)),
+            _MainSectionHeader(
+              section: state.listSection,
+              onSection: (section) => ref
+                  .read(studentDormitoryControllerProvider.notifier)
+                  .selectListSection(section),
+            ),
             SizedBox(height: ui(16)),
-            _DormCardsGrid(records: _visible),
+            if (state.listSection == StudentDormitoryListSection.checkRecords) ...[
+              _SectionHeader(tab: _tab, onTab: (t) => setState(() => _tab = t)),
+              SizedBox(height: ui(16)),
+              if (state.loading && records.isEmpty)
+                Padding(
+                  padding: EdgeInsets.symmetric(vertical: ui(40)),
+                  child: const Center(child: AppLoadingIndicator()),
+                )
+              else
+                _DormCardsGrid(
+                  records: visible,
+                  onTap: (record) => unawaited(
+                    _showCheckDetail(record.id, '${record.session} · 查寝详情'),
+                  ),
+                ),
+            ] else ...[
+              if (state.loading && state.makeupItems.isEmpty)
+                Padding(
+                  padding: EdgeInsets.symmetric(vertical: ui(40)),
+                  child: const Center(child: AppLoadingIndicator()),
+                )
+              else
+                _MakeupCardsGrid(
+                  items: state.makeupItems,
+                  onTap: (item) => unawaited(_showMakeupDetail(item)),
+                ),
+            ],
           ],
         ),
       ),
@@ -163,7 +301,7 @@ class _DormBanner extends StatelessWidget {
 
   final VoidCallback onBack;
   final String studentName;
-  final VoidCallback onApplyResubmit;
+  final VoidCallback? onApplyResubmit;
 
   @override
   Widget build(BuildContext context) {
@@ -171,15 +309,9 @@ class _DormBanner extends StatelessWidget {
     return Container(
       width: double.infinity,
       height: ui(62),
+      clipBehavior: Clip.antiAlias,
       padding: EdgeInsets.symmetric(horizontal: ui(12)),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(ui(16)),
-        gradient: const LinearGradient(
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-          colors: [Colors.white, Color(0xFFF9EEFF)],
-        ),
-      ),
+      decoration: smartCampusPageBannerDecoration(ui),
       child: Row(
         children: [
           _BackButton(onTap: onBack),
@@ -266,7 +398,7 @@ class _BackButton extends StatelessWidget {
 class _ApplyResubmitButton extends StatelessWidget {
   const _ApplyResubmitButton({required this.onTap});
 
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -508,6 +640,50 @@ class _DormStatCard extends StatelessWidget {
 
 enum _DormTab { all, abnormal }
 
+class _MainSectionHeader extends StatelessWidget {
+  const _MainSectionHeader({
+    required this.section,
+    required this.onSection,
+  });
+
+  final StudentDormitoryListSection section;
+  final ValueChanged<StudentDormitoryListSection> onSection;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      height: ui(44),
+      padding: EdgeInsets.all(ui(4)),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(ui(8)),
+        border: Border.all(color: _kBorderSoft),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _TabPill(
+              label: '查寝记录',
+              active: section == StudentDormitoryListSection.checkRecords,
+              onTap: () => onSection(StudentDormitoryListSection.checkRecords),
+            ),
+          ),
+          SizedBox(width: ui(4)),
+          Expanded(
+            child: _TabPill(
+              label: '补卡申请',
+              active: section == StudentDormitoryListSection.makeupApplications,
+              onTap: () =>
+                  onSection(StudentDormitoryListSection.makeupApplications),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader({required this.tab, required this.onTab});
 
@@ -605,9 +781,10 @@ class _TabPill extends StatelessWidget {
 // =============================================================================
 
 class _DormCardsGrid extends StatelessWidget {
-  const _DormCardsGrid({required this.records});
+  const _DormCardsGrid({required this.records, this.onTap});
 
   final List<_DormCheckRecord> records;
+  final ValueChanged<_DormCheckRecord>? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -653,7 +830,7 @@ class _DormCardsGrid extends StatelessWidget {
             for (final r in records)
               SizedBox(
                 width: cardWidth,
-                child: _DormCard(record: r),
+                child: _DormCard(record: r, onTap: onTap == null ? null : () => onTap!(r)),
               ),
           ],
         );
@@ -663,14 +840,18 @@ class _DormCardsGrid extends StatelessWidget {
 }
 
 class _DormCard extends StatelessWidget {
-  const _DormCard({required this.record});
+  const _DormCard({required this.record, this.onTap});
 
   final _DormCheckRecord record;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(ui(16)),
+      child: Container(
       padding: EdgeInsets.all(ui(12)),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
@@ -750,6 +931,133 @@ class _DormCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+      ),
+    );
+  }
+}
+
+class _MakeupCardsGrid extends StatelessWidget {
+  const _MakeupCardsGrid({required this.items, required this.onTap});
+
+  final List<StudentDormitoryMakeupItem> items;
+  final ValueChanged<StudentDormitoryMakeupItem> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    if (items.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: EdgeInsets.symmetric(vertical: ui(48)),
+        alignment: Alignment.center,
+        child: Text(
+          '暂无补卡申请',
+          style: TextStyle(fontSize: ui(14), color: _kTextHint),
+        ),
+      );
+    }
+    return LayoutBuilder(
+      builder: (context, c) {
+        final gap = ui(16);
+        final cols = c.maxWidth >= ui(960)
+            ? 3
+            : c.maxWidth >= ui(640)
+            ? 2
+            : 1;
+        final cardWidth = (c.maxWidth - gap * (cols - 1)) / cols;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final item in items)
+              SizedBox(
+                width: cardWidth,
+                child: _MakeupCard(
+                  item: item,
+                  onTap: () => onTap(item),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _MakeupCard extends StatelessWidget {
+  const _MakeupCard({required this.item, required this.onTap});
+
+  final StudentDormitoryMakeupItem item;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final (Color bg, Color fg, String label) = switch (item.status) {
+      0 => (const Color(0xFFFFF3E0), const Color(0xFFFF9800), '待审核'),
+      1 => (const Color(0xFFE8F5E9), const Color(0xFF1CD097), '已通过'),
+      2 => (const Color(0xFFFEE4E8), _kRed, '已驳回'),
+      _ => (const Color(0xFFF5F6FA), _kTextSecondary, item.statusText.isEmpty ? '未知' : item.statusText),
+    };
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(ui(16)),
+      child: Container(
+        padding: EdgeInsets.all(ui(12)),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topRight,
+            end: Alignment.bottomLeft,
+            colors: [Color(0xFFFAF0FF), Colors.white],
+          ),
+          borderRadius: BorderRadius.circular(ui(16)),
+          border: Border.all(color: Colors.white),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    item.checkType,
+                    style: TextStyle(
+                      fontSize: ui(18),
+                      color: _kTextSection,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w600,
+                      height: 1.1,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: ui(6), vertical: ui(2)),
+                  decoration: BoxDecoration(
+                    color: bg,
+                    borderRadius: BorderRadius.circular(ui(4)),
+                  ),
+                  child: Text(
+                    label,
+                    style: TextStyle(fontSize: ui(12), color: fg),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: ui(4)),
+            Text(
+              item.checkDate,
+              style: TextStyle(fontSize: ui(12), color: _kTextHint),
+            ),
+            SizedBox(height: ui(10)),
+            Text(
+              item.reason,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: ui(12), color: _kTextSecondary),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -883,11 +1191,13 @@ class _TimeCell extends StatelessWidget {
 
 class _DormResubmitFormResult {
   const _DormResubmitFormResult({
+    required this.date,
     required this.dateLabel,
     required this.scene,
     required this.note,
   });
 
+  final DateTime date;
   final String dateLabel;
   final String scene;
   final String note;
@@ -950,9 +1260,10 @@ class _DormResubmitDialogState extends State<_DormResubmitDialog> {
   }
 
   void _submit() {
-    if (!_canConfirm) return;
+    if (!_canConfirm || _date == null) return;
     Navigator.of(context).pop(
       _DormResubmitFormResult(
+        date: _date!,
         dateLabel: _dateText(),
         scene: _scene.label,
         note: _noteCtrl.text.trim(),
@@ -1166,13 +1477,14 @@ class _NoteField extends StatelessWidget {
 }
 
 // =============================================================================
-// 数据模型 + Demo 数据
+// 数据模型
 // =============================================================================
 
 enum _DormStatus { normal, missed, late }
 
 class _DormCheckRecord {
   const _DormCheckRecord({
+    required this.id,
     required this.session,
     required this.status,
     required this.dorm,
@@ -1182,7 +1494,8 @@ class _DormCheckRecord {
     required this.note,
   });
 
-  final String session; // 晨查寝 / 晚查寝
+  final String id;
+  final String session;
   final _DormStatus status;
   final String dorm;
   final String date;
@@ -1190,60 +1503,3 @@ class _DormCheckRecord {
   final String? stampedTime;
   final String note;
 }
-
-const List<_DormCheckRecord> _kDemoDormRecords = [
-  _DormCheckRecord(
-    session: '晨查寝',
-    status: _DormStatus.normal,
-    dorm: '女生宿舍3号楼 612',
-    date: '2026-04-02',
-    requiredTime: '07:20前',
-    stampedTime: '07:18',
-    note: '无',
-  ),
-  _DormCheckRecord(
-    session: '晨查寝',
-    status: _DormStatus.missed,
-    dorm: '女生宿舍3号楼 612',
-    date: '2026-04-02',
-    requiredTime: '07:20前',
-    stampedTime: null,
-    note: '无',
-  ),
-  _DormCheckRecord(
-    session: '晚查寝',
-    status: _DormStatus.late,
-    dorm: '女生宿舍3号楼 612',
-    date: '2026-04-02',
-    requiredTime: '21:20前',
-    stampedTime: '21:23',
-    note: '教师拖堂',
-  ),
-  _DormCheckRecord(
-    session: '晨查寝',
-    status: _DormStatus.normal,
-    dorm: '女生宿舍3号楼 612',
-    date: '2026-04-01',
-    requiredTime: '07:20前',
-    stampedTime: '07:18',
-    note: '无',
-  ),
-  _DormCheckRecord(
-    session: '晨查寝',
-    status: _DormStatus.missed,
-    dorm: '女生宿舍3号楼 612',
-    date: '2026-04-01',
-    requiredTime: '07:20前',
-    stampedTime: null,
-    note: '无',
-  ),
-  _DormCheckRecord(
-    session: '晚查寝',
-    status: _DormStatus.late,
-    dorm: '女生宿舍3号楼 612',
-    date: '2026-04-01',
-    requiredTime: '21:20前',
-    stampedTime: '21:23',
-    note: '教师拖堂',
-  ),
-];

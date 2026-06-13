@@ -451,6 +451,8 @@ abstract final class AppAssets {
 
   /// 校圈（社区动态）
   static const xiaoquanHeaderBg = 'assets/images/xiaoquan/bg.png';
+  /// 课表页顶栏背景（auth 模块 bgtop，白→淡紫渐变 + 顶圆角）
+  static const authBgTop = 'assets/images/auth/bgtop.png';
   static const schoolIconPin = 'assets/images/school/1.png';
   static const schoolIconHot = 'assets/images/school/2.png';
   static const schoolIconLiked = 'assets/images/school/3.png';
@@ -556,4 +558,16 @@ abstract final class AppAssets {
   static const groupChatPlay = 'assets/images/groupChat/play.png';
   static const groupChatStop = 'assets/images/groupChat/stop.png';
   static const groupChatKj = 'assets/images/groupChat/kj.png';
+  static const groupChatEmojiTab1 = 'assets/images/groupChat/face1.png';
+  static const groupChatEmojiTab1Active = 'assets/images/groupChat/face1A.png';
+  static const groupChatEmojiTab2 = 'assets/images/groupChat/face2.png';
+  static const groupChatEmojiTab2Active = 'assets/images/groupChat/face2A.png';
+  static const groupChatEmojiTab3 = 'assets/images/groupChat/face3.png';
+  static const groupChatEmojiTab3Active = 'assets/images/groupChat/face3A.png';
+  static const groupChatEmojiTab4 = 'assets/images/groupChat/face4.png';
+  static const groupChatEmojiTab4Active = 'assets/images/groupChat/face4A.png';
+  static const groupChatEmojiTab5 = 'assets/images/groupChat/face5.png';
+  static const groupChatEmojiTab5Active = 'assets/images/groupChat/face5A.png';
+  static const groupChatEmojiTab6 = 'assets/images/groupChat/face6.png';
+  static const groupChatEmojiTab6Active = 'assets/images/groupChat/face6A.png';
 }

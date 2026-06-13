@@ -882,7 +882,8 @@ class _PianoWhiteKeyLabel extends StatelessWidget {
   /// 白键在键盘中的下标（0..34）。
   final int index;
 
-  static double _capsuleHeight(double Function(double) ui) => ui(18);
+  // 需容纳 g/p/y 等带下伸部的字母；过小会把 descender 裁进胶囊色块里。
+  static double _capsuleHeight(double Function(double) ui) => ui(26);
   static double _gapHeight(double Function(double) ui) => ui(3);
   static double _dotSlotHeight(double Function(double) ui) => ui(10);
   static double _numberHeight(double Function(double) ui) => ui(15);
@@ -897,8 +898,9 @@ class _PianoWhiteKeyLabel extends StatelessWidget {
       fontSize: fontSize,
       fontFamily: 'Manrope',
       fontWeight: fontWeight,
-      height: 1.15,
-      leadingDistribution: TextLeadingDistribution.even,
+      // proportional 把 leading 留给基线下方，避免 even 分配裁切 descender。
+      height: 1.2,
+      leadingDistribution: TextLeadingDistribution.proportional,
     );
   }
 
@@ -939,7 +941,7 @@ class _PianoWhiteKeyLabel extends StatelessWidget {
       color: textColor,
       fontSize: ui(8),
       fontWeight: FontWeight.w700,
-    );
+    ).copyWith(height: 1);
     final solfegeStyle = TextStyle(
       color: const Color(0xFF1A1A1A),
       fontSize: ui(13),
@@ -958,26 +960,35 @@ class _PianoWhiteKeyLabel extends StatelessWidget {
           height: _capsuleHeight(ui),
           child: Center(
             child: Container(
-              padding: EdgeInsets.symmetric(horizontal: ui(4), vertical: ui(2.5)),
+              padding: EdgeInsets.fromLTRB(
+                ui(4),
+                ui(2),
+                ui(4),
+                ui(3.5),
+              ),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(ui(3)),
                 color: bgColor,
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: <Widget>[
-                  Text(mainText, style: nameStyle),
-                  if (superscript.isNotEmpty) ...<Widget>[
-                    SizedBox(width: ui(0.5)),
-                    Transform.translate(
-                      offset: Offset(0, -ui(2.5)),
-                      child: Text(superscript, style: superscriptStyle),
+              child: superscript.isEmpty
+                  ? Text(mainText, style: nameStyle)
+                  : Stack(
+                      clipBehavior: Clip.none,
+                      children: <Widget>[
+                        Padding(
+                          padding: EdgeInsets.only(
+                            top: ui(4),
+                            right: ui(6),
+                          ),
+                          child: Text(mainText, style: nameStyle),
+                        ),
+                        Positioned(
+                          top: 0,
+                          right: 0,
+                          child: Text(superscript, style: superscriptStyle),
+                        ),
+                      ],
                     ),
-                  ],
-                ],
-              ),
             ),
           ),
         ),

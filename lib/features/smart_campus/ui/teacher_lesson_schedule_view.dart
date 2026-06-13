@@ -51,6 +51,7 @@ import '../../shell/state/shell_controller.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/teacher_repository.dart';
 import 'widgets/schedule_idle_slot.dart';
+import 'widgets/smart_campus_page_banner.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // ---- 通用配色（与学生 / 管理员端 schedule 保持一致）----------------------
@@ -659,11 +660,11 @@ class _TeacherLessonScheduleViewState
         }
 
         // 合并外层（顶层 apply）+ 内层 child：内层 date/lineNum/classId 优先。
-        // 同时强制 type=2 → 走小课卡解析分支，保证视觉是小课色 + 小课形状。
+        // 同时强制 type=1 → 走小课卡解析分支，保证视觉是小课色 + 小课形状。
         final merged = <String, dynamic>{
           ...apply,
           ...cm,
-          'type': 2,
+          'type': 1,
         };
 
         // 用字典补齐展示字段：申请记录仅含 id，没有名称，需要按
@@ -826,7 +827,7 @@ class _TeacherLessonScheduleViewState
 
   /// 把 courseList 单条记录翻译成 [_ScheduleCardData]。
   ///
-  /// `type == 2` → 小课（同一格里第 0 张橙、第 1 张蓝循环）；其它值 → 大课。
+  /// `type == 1` → 小课（同一格里第 0 张橙、第 1 张蓝循环）；`type == 0` → 大课。
   /// `color` 是 hex（含 `#`），存到卡片做背景覆盖；标题色按 kind 走语义色。
   ///
   /// 当 [applyStatus] 非空时，表示这条来自「我的小课申请」列表，会被透传
@@ -842,7 +843,7 @@ class _TeacherLessonScheduleViewState
     final type = typeRaw is int
         ? typeRaw
         : (int.tryParse(typeRaw?.toString() ?? '') ?? 0);
-    final isSmall = type == 2;
+    final isSmall = type == 1;
 
     final location = _pickString(json, [
       'classroomName',
@@ -1141,63 +1142,56 @@ class _TeacherLessonScheduleViewState
     final slots = _buildSlots(cells);
     final days = _buildDayHeaders();
 
-    return SingleChildScrollView(
-      padding: EdgeInsets.only(bottom: ui(20)),
-      child: Container(
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: _kCardBg,
-          borderRadius: BorderRadius.circular(ui(16)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _TeacherScheduleHeader(
-              onBack: widget.onBack,
-              mode: _mode,
-              onModeChanged: (m) => setState(() => _mode = m),
-              onOpenApplyRecords: _openApplyRecords,
+    return SmartCampusSchedulePageShell(
+      backgroundColor: _kCardBg,
+      header: _TeacherScheduleHeader(
+        onBack: widget.onBack,
+        mode: _mode,
+        onModeChanged: (m) => setState(() => _mode = m),
+        onOpenApplyRecords: _openApplyRecords,
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: EdgeInsets.fromLTRB(ui(20), ui(0), ui(20), ui(12)),
+            child: _TeacherScheduleControlBar(
+              week: _currentWeek,
+              weekDateLabel: _fmtDate(_weekStart),
+              onPrev: _gotoPrev,
+              onCurrent: _gotoCurrent,
+              onNext: _gotoNext,
+              onPickDate: _pickDate,
             ),
-            Padding(
-              padding: EdgeInsets.fromLTRB(ui(20), ui(0), ui(20), ui(12)),
-              child: _TeacherScheduleControlBar(
-                week: _currentWeek,
-                weekDateLabel: _fmtDate(_weekStart),
-                onPrev: _gotoPrev,
-                onCurrent: _gotoCurrent,
-                onNext: _gotoNext,
-                onPickDate: _pickDate,
-              ),
-            ),
-            Padding(
-              padding: EdgeInsets.fromLTRB(ui(20), ui(0), ui(20), ui(20)),
-              child: Stack(
-                children: [
-                  _ScheduleGrid(
-                    mode: _mode,
-                    slots: slots,
-                    days: days,
-                    cells: cells,
-                    onApplySmallLesson: _onApplySmallLesson,
-                  ),
-                  if (_scheduleLoading)
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.55),
-                            borderRadius: BorderRadius.circular(ui(12)),
-                          ),
-                          alignment: Alignment.center,
-                          child: const AppLoadingIndicator(),
+          ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(ui(20), ui(0), ui(20), ui(20)),
+            child: Stack(
+              children: [
+                _ScheduleGrid(
+                  mode: _mode,
+                  slots: slots,
+                  days: days,
+                  cells: cells,
+                  onApplySmallLesson: _onApplySmallLesson,
+                ),
+                if (_scheduleLoading)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.55),
+                          borderRadius: BorderRadius.circular(ui(12)),
                         ),
+                        alignment: Alignment.center,
+                        child: const AppLoadingIndicator(),
                       ),
                     ),
-                ],
-              ),
+                  ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -1226,23 +1220,11 @@ class _TeacherScheduleHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return AspectRatio(
-      aspectRatio: AppAssets.smartCampusBgAspectRatio,
-      child: ClipRRect(
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(ui(16)),
-          topRight: Radius.circular(ui(16)),
-        ),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Image.asset(
-              AppAssets.smartCampusBg,
-              width: double.infinity,
-              fit: BoxFit.fitWidth,
-              alignment: Alignment.topCenter,
-            ),
-            Positioned(
+    return SmartCampusScheduleTopBar(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Positioned(
               left: ui(20),
               top: ui(20),
               child: InkWell(
@@ -1292,7 +1274,6 @@ class _TeacherScheduleHeader extends StatelessWidget {
             ),
           ],
         ),
-      ),
     );
   }
 }

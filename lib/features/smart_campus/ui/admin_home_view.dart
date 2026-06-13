@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shell/ui/shell_layout.dart';
-import '../data/admin_repository.dart';
+import '../data/admin_home_data.dart';
+import '../state/admin_home_controller.dart';
 import '../state/smart_campus_state.dart';
 import 'widgets/role_switcher_buttons.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -107,67 +108,32 @@ class AdminHomeView extends ConsumerStatefulWidget {
 }
 
 class _AdminHomeViewState extends ConsumerState<AdminHomeView> {
-  /// `indexSum` 接口返回的 8 项统计；`-1` 表示尚未拉到 / 失败 → 显示 0。
-  int _studentCount = -1;
-  int _teacherCount = -1;
-  int _classCount = -1;
-  int _toDoTodayCount = -1;
-  int _leaveStatus0Count = -1;
-  int _smallCourseSignStatus5Count = -1;
-  int _userFaceNotRecordedCount = -1;
-  int _postStatus0Count = -1;
-
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadIndexSum());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => ref.read(adminHomeControllerProvider.notifier).initialize(),
+    );
   }
 
-  Future<void> _loadIndexSum() async {
-    final repo = ref.read(adminRepositoryProvider);
-    final resp = await repo.indexSum();
-    if (!mounted) return;
-
-    if (!resp.isSuccess || resp.data is! Map) return;
-    final m = (resp.data as Map).cast<String, dynamic>();
-    int n(dynamic v) {
-      if (v == null) return 0;
-      if (v is int) return v;
-      if (v is num) return v.toInt();
-      return int.tryParse(v.toString()) ?? 0;
-    }
-
-    setState(() {
-      _studentCount = n(m['studentCount']);
-      _teacherCount = n(m['teacherCount']);
-      _classCount = n(m['classCount']);
-      _toDoTodayCount = n(m['toDoTodayCount']);
-      _leaveStatus0Count = n(m['leaveStatus0Count']);
-      _smallCourseSignStatus5Count = n(m['smallCourseSignStatus5Count']);
-      _userFaceNotRecordedCount = n(m['userFaceNotRecordedCount']);
-      _postStatus0Count = n(m['postStatus0Count']);
-    });
-  }
-
-  int _display(int value) => value < 0 ? 0 : value;
-
-  List<_StatItem> get _statsRow1 => [
-    _StatItem('${_display(_studentCount)}', '在籍学生'),
-    _StatItem('${_display(_teacherCount)}', '任课老师'),
-    _StatItem('${_display(_classCount)}', '本学期班级'),
-    _StatItem('${_display(_toDoTodayCount)}', '今日待办', highlight: true),
+  List<_StatItem> _statsRow1(AdminHomeSummary summary) => [
+    _StatItem('${summary.studentCount}', '在籍学生'),
+    _StatItem('${summary.teacherCount}', '任课老师'),
+    _StatItem('${summary.classCount}', '本学期班级'),
+    _StatItem('${summary.toDoTodayCount}', '今日待办', highlight: true),
   ];
 
-  List<_StatItem> get _statsRow2 => [
-    _StatItem('${_display(_leaveStatus0Count)}', '教职工待审批请假'),
-    _StatItem('${_display(_smallCourseSignStatus5Count)}', '小班课待审核'),
-    _StatItem('${_display(_userFaceNotRecordedCount)}', '人脸待补录'),
-    _StatItem('${_display(_postStatus0Count)}', '今日校圈'),
+  List<_StatItem> _statsRow2(AdminHomeSummary summary) => [
+    _StatItem('${summary.leaveStatus0Count}', '教职工待审批请假'),
+    _StatItem('${summary.smallCourseSignStatus5Count}', '小班课待审核'),
+    _StatItem('${summary.userFaceNotRecordedCount}', '人脸待补录'),
+    _StatItem('${summary.postStatus0Count}', '今日校圈'),
   ];
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final homeState = ref.watch(adminHomeControllerProvider);
 
     return SingleChildScrollView(
       padding: EdgeInsets.symmetric(vertical: ui(16)),
@@ -178,9 +144,9 @@ class _AdminHomeViewState extends ConsumerState<AdminHomeView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _StatsRow(stats: _statsRow1),
+                _StatsRow(stats: _statsRow1(homeState.summary)),
                 SizedBox(height: ui(12)),
-                _StatsRow(stats: _statsRow2),
+                _StatsRow(stats: _statsRow2(homeState.summary)),
                 SizedBox(height: ui(16)),
                 _QuickActionsCard(
                   onOpenGroupChat: widget.onOpenGroupChat,
@@ -238,6 +204,13 @@ class _AdminHomeViewState extends ConsumerState<AdminHomeView> {
               availableRoles: widget.availableRoles,
               selectedRole: widget.selectedRole,
               onSelectRole: widget.onSelectRole,
+              notices: homeState.notices,
+              noticesLoading: homeState.loading,
+              noticeError: homeState.noticeError,
+              onRefreshNotices: ref
+                  .read(adminHomeControllerProvider.notifier)
+                  .refresh,
+              onOpenNotices: widget.onOpenNotificationManagement,
             ),
           ),
         ],
@@ -286,59 +259,6 @@ const _quickActions = <_QuickAction>[
   _QuickAction('群聊', 'assets/images/adminHome/8.png'),
   _QuickAction('校长信箱', 'assets/images/adminHome/9.png'),
   _QuickAction('校圈治理', 'assets/images/adminHome/10.png'),
-];
-
-class _NoticeItem {
-  const _NoticeItem({
-    required this.tag,
-    required this.text,
-    required this.time,
-    required this.unread,
-  });
-
-  final String tag;
-  final String text;
-  final String time;
-  final bool unread;
-}
-
-const _schoolNotices = <_NoticeItem>[
-  _NoticeItem(
-    tag: '教研室',
-    text: '笔试与面试场次确认截止本周五 17:00，逾期将影响准考证打印。',
-    time: '09:10',
-    unread: true,
-  ),
-  _NoticeItem(
-    tag: '场地',
-    text: '断电提醒教学楼夜间 21:00 后静音巡查，22:00 断电，请提前保存练习视频。',
-    time: '周一',
-    unread: true,
-  ),
-  _NoticeItem(
-    tag: '大师课',
-    text: '本周六上午 10:00 邀请上海音乐学院教授开设大师课，请相关学生准时到场。',
-    time: '周一',
-    unread: false,
-  ),
-  _NoticeItem(
-    tag: '大师课',
-    text: '高三汇报演出排练时间调整为周三下午 16:30，地点不变。',
-    time: '周一',
-    unread: false,
-  ),
-  _NoticeItem(
-    tag: '场地',
-    text: '小琴房本周五 13:00-17:00 维护暂停使用，请合理安排练琴时间。',
-    time: '周一',
-    unread: true,
-  ),
-  _NoticeItem(
-    tag: '大师课',
-    text: '声乐组本月专题课报名截止时间延期至下周一 12:00。',
-    time: '周一',
-    unread: false,
-  ),
 ];
 
 class _WorkReminder {
@@ -1084,6 +1004,11 @@ class _AdminSidePanel extends StatelessWidget {
     required this.availableRoles,
     required this.selectedRole,
     required this.onSelectRole,
+    required this.notices,
+    required this.noticesLoading,
+    required this.noticeError,
+    required this.onRefreshNotices,
+    required this.onOpenNotices,
   });
 
   final String displayName;
@@ -1091,6 +1016,11 @@ class _AdminSidePanel extends StatelessWidget {
   final List<SmartCampusRole> availableRoles;
   final SmartCampusRole selectedRole;
   final ValueChanged<SmartCampusRole>? onSelectRole;
+  final List<AdminHomeNotice> notices;
+  final bool noticesLoading;
+  final String noticeError;
+  final VoidCallback onRefreshNotices;
+  final VoidCallback? onOpenNotices;
 
   @override
   Widget build(BuildContext context) {
@@ -1132,28 +1062,97 @@ class _AdminSidePanel extends StatelessWidget {
             ),
           ],
           SizedBox(height: ui(24)),
-          Text(
-            '校级通知',
-            style: TextStyle(
-              fontSize: ui(16),
-              height: 1.2,
-              fontWeight: AppFont.w500,
-              color: const Color(0xFF1A1A1A),
-              fontFamily: 'PingFang SC',
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '校级通知',
+                  style: TextStyle(
+                    fontSize: ui(16),
+                    height: 1.2,
+                    fontWeight: AppFont.w500,
+                    color: const Color(0xFF1A1A1A),
+                    fontFamily: 'PingFang SC',
+                  ),
+                ),
+              ),
+              if (onOpenNotices != null)
+                TextButton(
+                  onPressed: onOpenNotices,
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFF6D6B75),
+                    padding: EdgeInsets.zero,
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: Text(
+                    '查看全部',
+                    style: TextStyle(
+                      fontSize: ui(11),
+                      color: const Color(0xFF6D6B75),
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w400,
+                    ),
+                  ),
+                ),
+            ],
           ),
           SizedBox(height: ui(12)),
           SizedBox(
             height: ui(620),
-            child: ListView.separated(
-              padding: EdgeInsets.zero,
-              itemCount: _schoolNotices.length,
-              separatorBuilder: (_, _) => SizedBox(height: ui(8)),
-              itemBuilder: (_, i) => _SchoolNoticeCard(item: _schoolNotices[i]),
+            child: _SchoolNoticeList(
+              notices: notices,
+              loading: noticesLoading,
+              error: noticeError,
+              onRefresh: onRefreshNotices,
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _SchoolNoticeList extends StatelessWidget {
+  const _SchoolNoticeList({
+    required this.notices,
+    required this.loading,
+    required this.error,
+    required this.onRefresh,
+  });
+
+  final List<AdminHomeNotice> notices;
+  final bool loading;
+  final String error;
+  final VoidCallback onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    if (loading && notices.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (error.isNotEmpty && notices.isEmpty) {
+      return Center(
+        child: TextButton(
+          onPressed: onRefresh,
+          child: Text('通知加载失败，点击重试', style: TextStyle(fontSize: ui(12))),
+        ),
+      );
+    }
+    if (notices.isEmpty) {
+      return Center(
+        child: Text(
+          '暂无已发布通知',
+          style: TextStyle(fontSize: ui(12), color: const Color(0xFFB6B5BB)),
+        ),
+      );
+    }
+    return ListView.separated(
+      padding: EdgeInsets.zero,
+      itemCount: notices.length,
+      separatorBuilder: (_, _) => SizedBox(height: ui(8)),
+      itemBuilder: (_, i) => _SchoolNoticeCard(item: notices[i]),
     );
   }
 }
@@ -1355,7 +1354,7 @@ class _InfoLine extends StatelessWidget {
 class _SchoolNoticeCard extends StatelessWidget {
   const _SchoolNoticeCard({required this.item});
 
-  final _NoticeItem item;
+  final AdminHomeNotice item;
 
   @override
   Widget build(BuildContext context) {
@@ -1430,7 +1429,7 @@ class _SchoolNoticeCard extends StatelessWidget {
               width: ui(6),
               height: ui(6),
               decoration: BoxDecoration(
-                color: item.unread
+                color: item.highlighted
                     ? const Color(0xFFFF323C)
                     : const Color(0xFFCECED1),
                 shape: BoxShape.circle,

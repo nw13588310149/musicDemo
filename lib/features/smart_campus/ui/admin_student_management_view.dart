@@ -1,4 +1,4 @@
-﻿// 学生模型上的「专业 / 方向 / 行政班 / 住宿 / 电话 / 备注」均为带默认值的
+// 学生模型上的「专业 / 方向 / 行政班 / 住宿 / 电话 / 备注」均为带默认值的
 // 命名参数，部分条目沿用默认值；analyzer 误报为 unused_element_parameter，整体忽略。
 // ignore_for_file: unused_element_parameter
 
@@ -16,6 +16,7 @@ import '../../../core/widgets/popup_selector_field.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/admin_repository.dart';
+import '../data/admin_student_exam_data.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // ============================================================================
@@ -170,7 +171,11 @@ class _Student {
               ? realname
               : _pickString(json, ['name', 'stuName', 'studentName'], '未命名'));
 
-    final headUrlRaw = _pickString(json, ['headUrl', 'avatar', 'avatarUrl'], '');
+    final headUrlRaw = _pickString(json, [
+      'headUrl',
+      'avatar',
+      'avatarUrl',
+    ], '');
     final avatarUrl = headUrlRaw.isNotEmpty ? MediaUrl.resolve(headUrlRaw) : '';
 
     final studentNo = _pickString(json, [
@@ -186,11 +191,12 @@ class _Student {
     var className = '';
     final bigClass = json['bigClass'];
     if (bigClass is Map) {
-      className = _pickString(
-        Map<String, dynamic>.from(bigClass),
-        ['name', 'className', 'groupName', 'fullName'],
-        '',
-      );
+      className = _pickString(Map<String, dynamic>.from(bigClass), [
+        'name',
+        'className',
+        'groupName',
+        'fullName',
+      ], '');
     }
     if (className.isEmpty) {
       className = _pickString(json, [
@@ -216,18 +222,21 @@ class _Student {
 
     final bedInfo = _pickString(json, ['bedInfo'], '');
     final bedIdRaw = json['bedId'];
-    final hasBedId = bedIdRaw != null &&
+    final hasBedId =
+        bedIdRaw != null &&
         '$bedIdRaw'.trim().isNotEmpty &&
         '$bedIdRaw' != '0' &&
         bedIdRaw != 0;
     final isLiving = hasBedId || bedInfo.isNotEmpty;
-    final dormName = bedInfo.isNotEmpty ? bedInfo : _pickString(json, [
-      'dorm',
-      'dormName',
-      'roomName',
-      'apartment',
-      'dormitory',
-    ], '');
+    final dormName = bedInfo.isNotEmpty
+        ? bedInfo
+        : _pickString(json, [
+            'dorm',
+            'dormName',
+            'roomName',
+            'apartment',
+            'dormitory',
+          ], '');
 
     final phone = _pickString(json, [
       'phone',
@@ -259,7 +268,8 @@ class _Student {
         : '走读';
 
     // 后端主键（雪花 long）→ 只接受 String，禁止 num.toString() 污染精度。
-    final userId = readSnowflakeId(json['id'] ?? json['userId'] ?? json['stuId']) ?? '';
+    final userId =
+        readSnowflakeId(json['id'] ?? json['userId'] ?? json['stuId']) ?? '';
 
     return _Student(
       userId: userId,
@@ -302,7 +312,11 @@ class _Student {
         ? nickname
         : (realname.isNotEmpty ? realname : '未命名');
 
-    final headUrlRaw = _pickString(user, ['headUrl', 'avatar', 'avatarUrl'], '');
+    final headUrlRaw = _pickString(user, [
+      'headUrl',
+      'avatar',
+      'avatarUrl',
+    ], '');
     final avatarUrl = headUrlRaw.isNotEmpty ? MediaUrl.resolve(headUrlRaw) : '';
 
     final userId = readSnowflakeId(user['id'] ?? user['userId']) ?? '';
@@ -317,9 +331,7 @@ class _Student {
     final bedInfo = _pickString(dormitoryUser, ['bedInfo'], '');
     final bedId = _pickString(dormitoryUser, ['bedId'], '');
     final isLiving = bedInfo.isNotEmpty || (bedId.isNotEmpty && bedId != '0');
-    final dormInfo = isLiving
-        ? (bedInfo.isEmpty ? '宿舍' : '宿舍·$bedInfo')
-        : '走读';
+    final dormInfo = isLiving ? (bedInfo.isEmpty ? '宿舍' : '宿舍·$bedInfo') : '走读';
     final dorm = isLiving ? (bedInfo.isEmpty ? '宿舍' : bedInfo) : '走读';
 
     final phone = _pickString(user, ['mobile', 'phone'], '');
@@ -449,7 +461,8 @@ List<_ClassFilterOption> _buildClassFilterOptions(List<dynamic> list) {
   for (final item in list) {
     if (item is! Map) continue;
     final m = Map<String, dynamic>.from(item);
-    final id = pickFirstSnowflakeId(m, ['id', 'classId', 'cId']) ??
+    final id =
+        pickFirstSnowflakeId(m, ['id', 'classId', 'cId']) ??
         _pickString(m, ['id', 'classId', 'cId'], '');
     if (id.isEmpty || id == '0') continue;
     final label = _classListItemLabel(m);
@@ -531,6 +544,7 @@ class _AdminStudentManagementViewState
     extends ConsumerState<AdminStudentManagementView> {
   /// `null` = 全部状态
   _StudentStatus? _statusFilter;
+
   /// `null` = 全部班级（请求 studentList 时传 classId: ""）。
   String? _selectedClassId;
   List<_ClassFilterOption> _classOptions = _kFallbackClassOptions;
@@ -1466,17 +1480,19 @@ class _StudentProfileDialog extends ConsumerStatefulWidget {
       _StudentProfileDialogState();
 }
 
-class _StudentProfileDialogState
-    extends ConsumerState<_StudentProfileDialog> {
+class _StudentProfileDialogState extends ConsumerState<_StudentProfileDialog> {
   /// 详情接口返回的覆盖字段；null = 尚未返回 / 接口失败。
   _Student? _detail;
   bool _loadingDetail = false;
+  bool _loadingExamRecords = false;
+  List<AdminStudentExamRecord> _examRecords = const [];
 
   @override
   void initState() {
     super.initState();
     if (widget.student.userId.isNotEmpty) {
       _fetchDetail();
+      _fetchExamRecords();
     }
   }
 
@@ -1497,6 +1513,20 @@ class _StudentProfileDialogState
       } catch (_) {}
     }
     if (mounted) setState(() => _loadingDetail = false);
+  }
+
+  Future<void> _fetchExamRecords() async {
+    setState(() => _loadingExamRecords = true);
+    final response = await ref
+        .read(adminRepositoryProvider)
+        .studentExamRecordList(studentId: widget.student.userId);
+    if (!mounted) return;
+    setState(() {
+      _examRecords = response.isSuccess
+          ? parseAdminStudentExamRecords(response.data)
+          : const [];
+      _loadingExamRecords = false;
+    });
   }
 
   @override
@@ -1542,8 +1572,7 @@ class _StudentProfileDialogState
                                   ),
                                 ),
                               ),
-                              if (_loadingDetail)
-                                const AppLoadingIndicator(),
+                              if (_loadingDetail) const AppLoadingIndicator(),
                             ],
                           ),
                           SizedBox(height: ui(4)),
@@ -1582,10 +1611,7 @@ class _StudentProfileDialogState
           ),
           SizedBox(height: ui(20)),
           _ProfileRow(label: '行政班：', value: s.adminClass),
-          _ProfileRow(
-            label: '性别：',
-            value: s.gender.isEmpty ? '—' : s.gender,
-          ),
+          _ProfileRow(label: '性别：', value: s.gender.isEmpty ? '—' : s.gender),
           _ProfileRow(
             label: '专业方向：',
             value: s.direction != '—' ? s.direction : '—',
@@ -1597,6 +1623,143 @@ class _StudentProfileDialogState
           _ProfileRow(label: '备注：', value: s.remark, multiline: true),
           SizedBox(height: ui(8)),
           _StudentTagsSection(tags: s.tags),
+          SizedBox(height: ui(16)),
+          _StudentExamRecordsSection(
+            records: _examRecords,
+            loading: _loadingExamRecords,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StudentExamRecordsSection extends StatelessWidget {
+  const _StudentExamRecordsSection({
+    required this.records,
+    required this.loading,
+  });
+
+  final List<AdminStudentExamRecord> records;
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              '考试记录',
+              style: TextStyle(
+                fontSize: ui(14),
+                color: _kTextHint,
+                fontFamily: 'PingFang SC',
+              ),
+            ),
+            if (loading) ...[
+              SizedBox(width: ui(8)),
+              const AppLoadingIndicator(),
+            ],
+          ],
+        ),
+        SizedBox(height: ui(8)),
+        if (!loading && records.isEmpty)
+          Text(
+            '暂无考试成绩',
+            style: TextStyle(
+              fontSize: ui(13),
+              color: _kTextHint,
+              fontFamily: 'PingFang SC',
+            ),
+          )
+        else
+          ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: ui(220)),
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  for (var i = 0; i < records.length; i++) ...[
+                    if (i > 0) SizedBox(height: ui(8)),
+                    _StudentExamRecordCard(record: records[i]),
+                  ],
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _StudentExamRecordCard extends StatelessWidget {
+  const _StudentExamRecordCard({required this.record});
+
+  final AdminStudentExamRecord record;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final subjects = record.subjectScores
+        .map((item) => '${item.subjectName} ${item.score?.toString() ?? '--'}')
+        .join(' · ');
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(ui(10)),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7F4FF),
+        borderRadius: BorderRadius.circular(ui(8)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  record.examName,
+                  style: TextStyle(
+                    fontSize: ui(13),
+                    color: _kTextPrimary,
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w500,
+                  ),
+                ),
+              ),
+              Text(
+                record.totalScore?.toString() ?? '--',
+                style: TextStyle(
+                  fontSize: ui(16),
+                  color: _kPurple,
+                  fontWeight: AppFont.w600,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: ui(5)),
+          Text(
+            '${record.examDate.isEmpty ? '--' : record.examDate} · '
+            '班级第 ${record.classRank == 0 ? '--' : record.classRank} · '
+            '年级第 ${record.schoolRank == 0 ? '--' : record.schoolRank}',
+            style: TextStyle(
+              fontSize: ui(11),
+              color: _kTextSub,
+              fontFamily: 'PingFang SC',
+            ),
+          ),
+          if (subjects.isNotEmpty) ...[
+            SizedBox(height: ui(5)),
+            Text(
+              subjects,
+              style: TextStyle(
+                fontSize: ui(11),
+                color: _kTextSub,
+                fontFamily: 'PingFang SC',
+              ),
+            ),
+          ],
         ],
       ),
     );

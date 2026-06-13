@@ -3,6 +3,79 @@
 /// 考勤状态与后端一致：`0` 出勤 / `1` 缺勤 / `2` 迟到 / `3` 请假。
 library;
 
+import '../../../core/network/snowflake_id.dart';
+
+/// 课程 `type` 约定：0 = 大课，1 = 小课（课表、签课、班级等接口统一）。
+bool isSmallCourseType(int type) => type == 1;
+
+bool isBigCourseType(int type) => type == 0;
+
+/// 小课 / 签课流程 `signStatus`：0 未签到 … 7 管理员驳回。
+enum CourseSignFlowStatus {
+  notSigned(0, '未签到'),
+  teacherStart(1, '老师上课签到'),
+  studentStart(2, '学生上课签到'),
+  teacherEnd(3, '老师下课签到'),
+  studentEnd(4, '学生下课签到'),
+  studentEval(5, '学生评价'),
+  adminConfirm(6, '管理员确认'),
+  adminReject(7, '管理员驳回');
+
+  const CourseSignFlowStatus(this.code, this.label);
+
+  final int code;
+  final String label;
+
+  static CourseSignFlowStatus? fromApi(dynamic raw) {
+    if (raw == null) return null;
+    final code = int.tryParse(raw.toString());
+    if (code == null) return null;
+    for (final status in CourseSignFlowStatus.values) {
+      if (status.code == code) return status;
+    }
+    return null;
+  }
+
+  static String labelFor(dynamic raw, {String fallback = '未签到'}) {
+    return fromApi(raw)?.label ?? fallback;
+  }
+}
+
+/// 从课表时间字段提取 `HH:mm`（支持 `yyyy-MM-dd HH:mm:ss` / ISO / 纯时分）。
+String? pickCourseClock(String? raw) {
+  if (raw == null) return null;
+  final trimmed = raw.trim();
+  if (trimmed.isEmpty || trimmed == 'null') return null;
+  final match = RegExp(r'(\d{1,2}):(\d{2})').firstMatch(trimmed);
+  if (match == null) return null;
+  return '${match.group(1)!.padLeft(2, '0')}:${match.group(2)}';
+}
+
+/// 解析课表时间点；纯时分串会落到 [reference] 当天（默认今天）。
+DateTime? parseCourseDateTime(String? raw, {DateTime? reference}) {
+  if (raw == null) return null;
+  final trimmed = raw.trim();
+  if (trimmed.isEmpty || trimmed == 'null') return null;
+
+  final direct = DateTime.tryParse(trimmed);
+  if (direct != null) return direct;
+
+  final normalized = trimmed.contains(' ') && !trimmed.contains('T')
+      ? trimmed.replaceFirst(' ', 'T')
+      : trimmed;
+  final parsed = DateTime.tryParse(normalized);
+  if (parsed != null) return parsed;
+
+  final clock = pickCourseClock(trimmed);
+  if (clock == null) return null;
+  final parts = clock.split(':');
+  final hour = int.tryParse(parts[0]);
+  final minute = int.tryParse(parts[1]);
+  if (hour == null || minute == null) return null;
+  final base = reference ?? DateTime.now();
+  return DateTime(base.year, base.month, base.day, hour, minute);
+}
+
 /// 后端 `status` 字段：0-出勤 1-缺勤 2-迟到 3-请假；null 表示尚未签到。
 enum CourseSignStatus {
   present(0, '出勤'),
@@ -129,21 +202,13 @@ class CourseSignStats {
         'makeupCount',
         'applyCount',
       ]),
-      inProgressCount: pick([
-        'inProgressCount',
-        'doingCount',
-        'progressCount',
-      ]),
+      inProgressCount: pick(['inProgressCount', 'doingCount', 'progressCount']),
       pendingAdminCount: pick([
         'pendingAdminCount',
         'waitAdminCount',
         'adminConfirmCount',
       ]),
-      completedCount: pick([
-        'completedCount',
-        'finishCount',
-        'doneCount',
-      ]),
+      completedCount: pick(['completedCount', 'finishCount', 'doneCount']),
     );
   }
 }
@@ -159,6 +224,7 @@ class CourseSignStudent {
     this.evaluationRating,
     this.evaluationMastery,
     this.evaluationNote,
+    this.remark = '',
   });
 
   final String studentId;
@@ -170,6 +236,26 @@ class CourseSignStudent {
   double? evaluationRating;
   String? evaluationMastery;
   String? evaluationNote;
+  final String remark;
+
+  CourseSignStudent copyWith({
+    CourseSignStatus? status,
+    bool clearStatus = false,
+    String? remark,
+  }) {
+    return CourseSignStudent(
+      studentId: studentId,
+      name: name,
+      studentNo: studentNo,
+      status: clearStatus ? null : status ?? this.status,
+      checkInTime: checkInTime,
+      checkOutTime: checkOutTime,
+      evaluationRating: evaluationRating,
+      evaluationMastery: evaluationMastery,
+      evaluationNote: evaluationNote,
+      remark: remark ?? this.remark,
+    );
+  }
 
   factory CourseSignStudent.fromJson(Map<String, dynamic> json) {
     final studentId = _pickString(json, [
@@ -228,6 +314,7 @@ class CourseSignStudent {
         'remark',
         'note',
       ]),
+      remark: _pickString(json, ['remark', 'teacherRemark'], ''),
     );
   }
 }
@@ -245,7 +332,11 @@ class CourseSignSession {
     this.teacherCheckOutTime,
     this.adminConfirmed = false,
     this.signStep,
+    this.signStatus = 0,
+    this.courseStartTime = '',
+    this.courseEndTime = '',
     this.courseType = 0,
+    this.lineNum = 0,
   });
 
   final String courseId;
@@ -260,18 +351,39 @@ class CourseSignSession {
 
   /// 小课流程步骤（0–5），后端若下发 `signStep` / `step` 则直接使用。
   final int? signStep;
+
+  /// 签课流程状态：0 未签到 … 7 管理员驳回。
+  final int signStatus;
+  final String courseStartTime;
+  final String courseEndTime;
   final int courseType;
+  final int lineNum;
 
   factory CourseSignSession.fromJson(Map<String, dynamic> json) {
-    final courseId = _pickString(json, ['courseId', 'id', 'cId'], '');
+    final courseId =
+        pickFirstSnowflakeId(json, ['courseId', 'id', 'cId']) ?? '';
+    final subjectMap = _asMap(json['subject']);
+    final subjectName = subjectMap == null
+        ? ''
+        : _pickString(subjectMap, ['name', 'subjectName'], '');
     final courseName = _pickString(json, [
       'courseName',
       'subjectName',
       'name',
       'title',
-    ], '未命名课程');
-    final begin = _pickString(json, ['beginTime', 'startTime', 'classBeginTime'], '');
-    final end = _pickString(json, ['endTime', 'finishTime', 'classEndTime'], '');
+    ], subjectName.isEmpty ? '未命名课程' : subjectName);
+    final begin = _pickString(json, [
+      'timeBegin',
+      'beginTime',
+      'startTime',
+      'classBeginTime',
+    ], '');
+    final end = _pickString(json, [
+      'timeEnd',
+      'endTime',
+      'finishTime',
+      'classEndTime',
+    ], '');
     final date = _pickString(json, ['date', 'courseDate'], '');
     var timeRange = _pickString(json, ['timeRange', 'time', 'period'], '');
     if (timeRange.isEmpty && begin.isNotEmpty) {
@@ -291,21 +403,41 @@ class CourseSignSession {
         ? _pickString(teacherMap, ['realname', 'realName', 'name'], '')
         : _pickString(json, ['teacherName', 'teacherRealname'], '');
 
-    final studentsRaw = json['studentList'] ??
+    final studentsRaw =
+        json['studentList'] ??
         json['students'] ??
         json['signStudentList'] ??
         json['studentSignList'] ??
         json['list'];
     final students = _parseStudentList(studentsRaw);
 
-    final stepRaw = json['signStep'] ?? json['step'] ?? json['flowStep'];
-    final step = int.tryParse(stepRaw?.toString() ?? '');
+    final signStatusRaw =
+        json['signStatus'] ?? json['signStep'] ?? json['step'] ?? json['flowStep'];
+    final signStatus = int.tryParse(signStatusRaw?.toString() ?? '') ?? 0;
+    final step = int.tryParse(signStatusRaw?.toString() ?? '');
+
+    final courseStartTime = _pickString(json, [
+      'courseStartTime',
+      'startTime',
+      'classBeginTime',
+      'timeBegin',
+      'beginTime',
+    ], begin);
+    final courseEndTime = _pickString(json, [
+      'courseEndTime',
+      'endTime',
+      'classEndTime',
+      'timeEnd',
+      'finishTime',
+    ], end);
 
     final adminConfirmedRaw =
         json['adminConfirm'] ?? json['adminConfirmed'] ?? json['confirmStatus'];
-    final adminConfirmed = adminConfirmedRaw == true ||
+    final adminConfirmed =
+        adminConfirmedRaw == true ||
         adminConfirmedRaw == 1 ||
-        adminConfirmedRaw?.toString() == '1';
+        adminConfirmedRaw?.toString() == '1' ||
+        signStatus == CourseSignFlowStatus.adminConfirm.code;
 
     return CourseSignSession(
       courseId: courseId,
@@ -324,28 +456,200 @@ class CourseSignSession {
       ]),
       adminConfirmed: adminConfirmed,
       signStep: step,
+      signStatus: signStatus,
+      courseStartTime: courseStartTime,
+      courseEndTime: courseEndTime,
       courseType:
           int.tryParse((json['type'] ?? json['classType'] ?? 0).toString()) ??
           0,
+      lineNum:
+          int.tryParse(
+            (json['lineNum'] ?? json['periodIndex'] ?? json['sectionNum'] ?? 0)
+                .toString(),
+          ) ??
+          0,
     );
   }
+
+  CourseSignSession copyWith({
+    List<CourseSignStudent>? students,
+    int? signStep,
+    int? signStatus,
+    bool? adminConfirmed,
+    String? courseStartTime,
+    String? courseEndTime,
+    String? teacherCheckInTime,
+    String? teacherCheckOutTime,
+  }) {
+    return CourseSignSession(
+      courseId: courseId,
+      courseName: courseName,
+      timeRange: timeRange,
+      classroom: classroom,
+      students: students ?? this.students,
+      teacherName: teacherName,
+      teacherCheckInTime: teacherCheckInTime ?? this.teacherCheckInTime,
+      teacherCheckOutTime: teacherCheckOutTime ?? this.teacherCheckOutTime,
+      adminConfirmed: adminConfirmed ?? this.adminConfirmed,
+      signStep: signStep ?? this.signStep,
+      signStatus: signStatus ?? this.signStatus,
+      courseStartTime: courseStartTime ?? this.courseStartTime,
+      courseEndTime: courseEndTime ?? this.courseEndTime,
+      courseType: courseType,
+      lineNum: lineNum,
+    );
+  }
+}
+
+List<CourseSignStudent> parseCourseCommentList(dynamic raw) {
+  if (raw == null) return const [];
+  final rows = _unwrapRows(raw);
+  return rows
+      .map((row) {
+        final user = _asMap(
+          row['student'] ?? row['user'] ?? row['schoolStudent'],
+        );
+        final merged = <String, dynamic>{
+          ...?user,
+          ...row,
+          'evaluation': row['comment'] ?? row['evaluation'] ?? row['remark'],
+          'score': row['score'] ?? row['rating'] ?? row['star'],
+        };
+        return CourseSignStudent.fromJson(merged);
+      })
+      .toList(growable: false);
 }
 
 List<CourseSignSession> parseCourseSignSessionList(dynamic raw) {
   if (raw == null) return const [];
   if (raw is List) {
-    return raw
-        .map((e) => CourseSignSession.fromJson(_asMap(e) ?? {}))
-        .where((s) => s.courseId.isNotEmpty || s.courseName.isNotEmpty)
-        .toList(growable: false);
+    return _parseCourseSessionRows(raw);
   }
   final map = _asMap(raw);
   if (map == null) return const [];
+
   for (final key in ['records', 'list', 'rows', 'data']) {
+    if (!map.containsKey(key)) continue;
     final inner = map[key];
-    if (inner is List) return parseCourseSignSessionList(inner);
+    if (inner is List) {
+      return _parseCourseSessionRows(inner);
+    }
+    final nested = parseCourseSignSessionList(inner);
+    if (nested.isNotEmpty) return nested;
   }
+
+  // teacher/student `courseList` 新格式：按日期分组
+  // `{"2026-05-11": [{...}, ...], "2026-05-12": [...]}`。
+  final fromDates = _parseDateGroupedCourseMap(map);
+  if (fromDates.isNotEmpty) return fromDates;
+
   return const [];
+}
+
+List<CourseSignSession> _parseCourseSessionRows(List<dynamic> raw) {
+  return raw
+      .map(
+        (e) =>
+            CourseSignSession.fromJson(_flattenCourseSessionRow(_asMap(e) ?? {})),
+      )
+      .where((s) => s.courseId.isNotEmpty || s.courseName.isNotEmpty)
+      .toList(growable: false);
+}
+
+List<CourseSignSession> _parseDateGroupedCourseMap(Map<String, dynamic> map) {
+  final sessions = <CourseSignSession>[];
+  for (final entry in map.entries) {
+    if (_isCourseListWrapperKey(entry.key)) continue;
+    final value = entry.value;
+    if (value is! List) continue;
+    final dateKey = _parseDateKey(entry.key);
+    for (final item in value) {
+      final row = _asMap(item);
+      if (row == null) continue;
+      final flat = _flattenCourseSessionRow(row);
+      if (dateKey != null &&
+          (flat['date'] == null || flat['date'].toString().trim().isEmpty)) {
+        flat['date'] = dateKey;
+      }
+      final session = CourseSignSession.fromJson(flat);
+      if (session.courseId.isNotEmpty || session.courseName.isNotEmpty) {
+        sessions.add(session);
+      }
+    }
+  }
+  return sessions;
+}
+
+bool _isCourseListWrapperKey(String key) {
+  return const {
+    'records',
+    'list',
+    'rows',
+    'data',
+    'total',
+    'current',
+    'size',
+    'pages',
+    'page',
+    'pageSize',
+  }.contains(key);
+}
+
+String? _parseDateKey(String key) {
+  final trimmed = key.trim().split('T').first;
+  if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(trimmed)) return null;
+  return DateTime.tryParse(trimmed) != null ? trimmed : null;
+}
+
+Map<String, dynamic> _flattenCourseSessionRow(Map<String, dynamic> row) {
+  final flat = Map<String, dynamic>.from(row);
+
+  void mergeNested(String key, List<MapEntry<String, String>> fieldMap) {
+    final nested = row[key];
+    if (nested is! Map) return;
+    final m = Map<String, dynamic>.from(nested);
+    for (final entry in fieldMap) {
+      final v = m[entry.key];
+      if (v == null) continue;
+      final s = v.toString().trim();
+      if (s.isEmpty || s == 'null') continue;
+      flat.putIfAbsent(entry.value, () => v);
+    }
+  }
+
+  mergeNested('teacher', [
+    const MapEntry('realname', 'teacherRealname'),
+    const MapEntry('realName', 'teacherRealname'),
+    const MapEntry('nickname', 'teacherNickname'),
+    const MapEntry('name', 'teacherName'),
+  ]);
+  mergeNested('headTeacher', [
+    const MapEntry('realname', 'teacherRealname'),
+    const MapEntry('realName', 'teacherRealname'),
+    const MapEntry('nickname', 'teacherNickname'),
+    const MapEntry('name', 'teacherName'),
+  ]);
+  mergeNested('subject', [
+    const MapEntry('name', 'subjectName'),
+    const MapEntry('subjectName', 'subjectName'),
+  ]);
+  mergeNested('schoolClass', [
+    const MapEntry('name', 'className'),
+    const MapEntry('className', 'className'),
+    const MapEntry('id', 'classId'),
+  ]);
+  mergeNested('schoolClassroom', [
+    const MapEntry('name', 'classroomName'),
+    const MapEntry('roomName', 'classroomName'),
+    const MapEntry('classroomName', 'classroomName'),
+  ]);
+  mergeNested('classroom', [
+    const MapEntry('name', 'classroomName'),
+    const MapEntry('roomName', 'classroomName'),
+    const MapEntry('classroomName', 'classroomName'),
+  ]);
+
+  return flat;
 }
 
 List<CourseSignStudent> _parseStudentList(dynamic raw) {
@@ -353,6 +657,27 @@ List<CourseSignStudent> _parseStudentList(dynamic raw) {
   return raw
       .map((e) => CourseSignStudent.fromJson(_asMap(e) ?? {}))
       .toList(growable: false);
+}
+
+List<Map<String, dynamic>> _unwrapRows(dynamic raw) {
+  if (raw is List) {
+    return raw.map(_asMap).whereType<Map<String, dynamic>>().toList();
+  }
+  final map = _asMap(raw);
+  if (map == null) return const [];
+  for (final key in ['records', 'list', 'rows', 'data']) {
+    final value = map[key];
+    if (value is List) return _unwrapRows(value);
+    if (value is Map) {
+      final nested = _unwrapRows(value);
+      if (nested.isNotEmpty) return nested;
+    }
+  }
+  return const [];
+}
+
+List<CourseSignStudent> parseCourseSignStudentList(dynamic raw) {
+  return _parseStudentList(raw);
 }
 
 List<CourseSignClassOption> parseCourseSignClassList(dynamic raw) {

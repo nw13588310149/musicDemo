@@ -40,6 +40,7 @@ import '../../courseware/state/cloud_drive_controller.dart';
 import '../../courseware/ui/courseware_file_picker.dart';
 import '../../courseware/ui/courseware_url_opener.dart';
 import '../../shell/ui/shell_layout.dart';
+import '../../../core/constants/app_assets.dart';
 import '../data/principal_mailbox_repository.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
@@ -444,14 +445,10 @@ class _HeaderGradientBar extends StatelessWidget {
       child: Stack(
         children: [
           Positioned.fill(
-            child: DecoratedBox(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.bottomLeft,
-                  end: Alignment.topRight,
-                  colors: [Colors.white, Color(0xFFF9EDFF)],
-                ),
-              ),
+            child: Image.asset(
+              AppAssets.xiaoquanHeaderBg,
+              fit: BoxFit.cover,
+              alignment: Alignment.centerRight,
             ),
           ),
           Positioned(

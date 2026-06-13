@@ -674,7 +674,7 @@ _LessonRowData _lessonRowFromStudentCourse(
   final type = typeRaw is int
       ? typeRaw
       : (int.tryParse(typeRaw?.toString() ?? '') ?? 0);
-  final isSmall = type == 1 || type == 2;
+  final isSmall = type == 1;
 
   final className = _schedulePickString(flat, ['className', 'class'], '');
   final teacher = _schedulePickString(flat, [

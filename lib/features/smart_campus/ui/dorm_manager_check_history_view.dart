@@ -24,7 +24,7 @@
 //      tab 切换，直接横铺更高效）
 //   3. 当日无记录时显示空状态卡片
 //
-// 数据流：按日期、宿舍楼和楼层调用宿舍端查寝统计与房间列表接口。
+// 数据流：按日期、宿舍楼和楼层调用 dormitoryCheckHistory + dormitoryCheckStat。
 // =============================================================================
 
 import 'dart:async';
@@ -34,10 +34,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 
 import '../../../core/constants/app_assets.dart';
+import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/popup_selector_field.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/dormitory_check_data.dart';
 import '../data/dormitory_repository.dart';
+import '../state/dormitory_manager_controller.dart';
+import 'widgets/dormitory_detail_dialog.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // —— 颜色 ————————————————————————————————————————————————————————
@@ -73,13 +76,6 @@ enum _HistoryStatus {
       DormitoryStudentCheckStatus.unchecked => _HistoryStatus.absent,
     };
   }
-}
-
-class _HistoryStudent {
-  const _HistoryStudent({required this.name, required this.status});
-
-  final String name;
-  final _HistoryStatus status;
 }
 
 class _CalendarDay {
@@ -118,8 +114,6 @@ class _DormManagerCheckHistoryViewState
   late List<_CalendarDay> _days;
   late int _selectedDayIndex;
 
-  DormitoryCheckStat _stat = DormitoryCheckStat.zero;
-  List<DormitoryRoomCheck> _rooms = const [];
   List<DormitoryBuildingOption> _buildingOptions = const [
     DormitoryBuildingOption.all,
   ];
@@ -129,9 +123,7 @@ class _DormManagerCheckHistoryViewState
   DormitoryBuildingOption _selectedBuilding = DormitoryBuildingOption.all;
   DormitoryFloorOption _selectedFloor = DormitoryFloorOption.all;
 
-  bool _loading = false;
   bool _loadingFloors = false;
-  String? _loadError;
   int _loadToken = 0;
 
   @override
@@ -187,48 +179,75 @@ class _DormManagerCheckHistoryViewState
 
   Future<void> _reloadAll() async {
     final token = ++_loadToken;
-    setState(() {
-      _loading = true;
-      _loadError = null;
-    });
-    final repo = ref.read(dormitoryRepositoryProvider);
     final buildingId =
         _selectedBuilding.id.isEmpty ? null : _selectedBuilding.id;
     final floorId = _selectedFloor.id.isEmpty ? null : _selectedFloor.id;
-    final results = await Future.wait([
-      repo.dormitoryCheckStat(
-        buildingId: buildingId,
-        floorId: floorId,
-        date: _selectedDateText,
-      ),
-      repo.dormitoryCheckRoomList(
-        buildingId: buildingId,
-        floorId: floorId,
-        date: _selectedDateText,
-      ),
-    ]);
+    await ref.read(dormitoryManagerControllerProvider.notifier).loadHistory(
+      buildingId: buildingId,
+      floorId: floorId,
+      date: _selectedDateText,
+    );
     if (!mounted || token != _loadToken) return;
+  }
 
-    final statResp = results[0];
-    final roomResp = results[1];
-    if (!statResp.isSuccess || !roomResp.isSuccess) {
-      setState(() {
-        _stat = DormitoryCheckStat.zero;
-        _rooms = const [];
-        _loading = false;
-        _loadError = !statResp.isSuccess
-            ? statResp.displayMsg
-            : roomResp.displayMsg;
-      });
+  Future<void> _exportHistory() async {
+    final buildingId =
+        _selectedBuilding.id.isEmpty ? null : _selectedBuilding.id;
+    final floorId = _selectedFloor.id.isEmpty ? null : _selectedFloor.id;
+    final response = await ref
+        .read(dormitoryManagerControllerProvider.notifier)
+        .exportHistory(
+          buildingId: buildingId,
+          floorId: floorId,
+          date: _selectedDateText,
+        );
+    if (!mounted) return;
+    if (response.isSuccess) {
+      final url = parseDormitoryCheckExportUrl(response.data);
+      AppToast.show(
+        context,
+        url == null || url.isEmpty ? '导出任务已提交' : '导出地址：$url',
+      );
+    } else {
+      AppToast.show(context, response.displayMsg);
+    }
+  }
+
+  Future<void> _showCheckDetail(DormitoryCheckHistoryItem item) async {
+    if (item.id.isEmpty) return;
+    final fields = await ref
+        .read(dormitoryManagerControllerProvider.notifier)
+        .loadCheckDetail(item.id);
+    if (!mounted) return;
+    if (fields.isEmpty) {
+      AppToast.show(context, '未获取到查寝详情');
       return;
     }
+    await showDormitoryDetailDialog(
+      context,
+      title: '${item.studentName} · ${item.checkType}',
+      fields: fields,
+    );
+  }
 
-    setState(() {
-      _stat = parseDormitoryCheckStat(statResp.data);
-      _rooms = parseDormitoryCheckRoomList(roomResp.data);
-      _loading = false;
-      _loadError = null;
-    });
+  Future<void> _handleException(DormitoryCheckHistoryItem item) async {
+    final remark = await showDialog<String>(
+      context: context,
+      builder: (ctx) => _ExceptionHandleDialog(studentName: item.studentName),
+    );
+    if (!mounted || remark == null) return;
+    final response = await ref
+        .read(dormitoryManagerControllerProvider.notifier)
+        .handleException(
+          item: item,
+          handleStatus: 1,
+          remark: remark,
+        );
+    if (!mounted) return;
+    AppToast.show(
+      context,
+      response.isSuccess ? '异常已处理' : response.displayMsg,
+    );
   }
 
   Future<void> _onBuildingChanged(DormitoryBuildingOption option) async {
@@ -250,26 +269,14 @@ class _DormManagerCheckHistoryViewState
     unawaited(_reloadAll());
   }
 
-  List<_HistoryStudent> _studentsOf(DormitoryRoomCheck room) {
-    return [
-      for (final s in room.students)
-        _HistoryStudent(
-          name: s.name,
-          status: _HistoryStatus.fromCheckStatus(s.status),
-        ),
-    ];
-  }
-
-  String _roomTitle(DormitoryRoomCheck room) {
-    if (room.buildingDesc.isEmpty || room.buildingDesc == '—') {
-      return room.roomName;
-    }
-    return '${room.buildingDesc} ${room.roomName}';
-  }
-
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final managerState = ref.watch(dormitoryManagerControllerProvider);
+    final stat = managerState.historyStat;
+    final historyItems = managerState.historyItems;
+    final loading = managerState.loadingHistory;
+    final loadError = managerState.error;
     return Container(
       color: _kPageBg,
       child: SingleChildScrollView(
@@ -277,7 +284,10 @@ class _DormManagerCheckHistoryViewState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _Banner(onBack: widget.onBack),
+            _Banner(
+              onBack: widget.onBack,
+              onExport: managerState.exporting ? null : _exportHistory,
+            ),
             SizedBox(height: ui(16)),
             _FilterRow(
               buildingOptions: _buildingOptions,
@@ -293,34 +303,34 @@ class _DormManagerCheckHistoryViewState
               days: _days,
               selectedIndex: _selectedDayIndex,
               dateText: _selectedDateText,
-              statText: '共 ${_rooms.length} 个寝室',
+              statText: '共 ${historyItems.length} 条记录',
               onTapDay: _onTapDay,
             ),
             SizedBox(height: ui(16)),
             _StatsRow(
-              beds: _stat.bedCount,
-              normal: _stat.normalCount,
-              lateReturn: _stat.lateCount,
-              absent: _stat.notCheckedCount,
+              beds: stat.bedCount,
+              normal: stat.normalCount,
+              lateReturn: stat.lateCount,
+              absent: stat.notCheckedCount,
             ),
             SizedBox(height: ui(16)),
-            if (_loading)
+            if (loading)
               Padding(
                 padding: EdgeInsets.symmetric(vertical: ui(40)),
                 child: const Center(child: AppLoadingIndicator()),
               )
-            else if (_loadError != null)
+            else if (loadError.isNotEmpty)
               _LoadErrorHint(
-                message: _loadError!,
+                message: loadError,
                 onRetry: _reloadAll,
               )
-            else if (_rooms.isEmpty)
+            else if (historyItems.isEmpty)
               const _EmptyState()
             else
-              _HistoryList(
-                rooms: _rooms,
-                roomTitle: _roomTitle,
-                studentsOf: _studentsOf,
+              _HistoryTable(
+                items: historyItems,
+                onHandleException: _handleException,
+                onTapDetail: (item) => unawaited(_showCheckDetail(item)),
               ),
           ],
         ),
@@ -334,9 +344,10 @@ class _DormManagerCheckHistoryViewState
 // =============================================================================
 
 class _Banner extends StatelessWidget {
-  const _Banner({required this.onBack});
+  const _Banner({required this.onBack, this.onExport});
 
   final VoidCallback onBack;
+  final VoidCallback? onExport;
 
   @override
   Widget build(BuildContext context) {
@@ -398,6 +409,37 @@ class _Banner extends StatelessWidget {
               ),
             ),
           ),
+          if (onExport != null)
+            Positioned(
+              right: ui(12),
+              top: 0,
+              bottom: 0,
+              child: Center(
+                child: InkWell(
+                  onTap: onExport,
+                  borderRadius: BorderRadius.circular(ui(8)),
+                  child: Container(
+                    height: ui(32),
+                    padding: EdgeInsets.symmetric(horizontal: ui(12)),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(ui(8)),
+                      border: Border.all(color: _kBorderSoft),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      '导出',
+                      style: TextStyle(
+                        fontSize: ui(12),
+                        color: _kPurple,
+                        fontFamily: 'PingFang SC',
+                        fontWeight: AppFont.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -925,47 +967,58 @@ class _StatCard extends StatelessWidget {
 }
 
 // =============================================================================
-// 历史记录表格列表（白底圆角 + 表头 + 寝室行 + 学生 chip）
-//
-// 列：宿舍（固定 240）| 学生状态（Expanded，wrap 多个 chip）
-// 每个 chip 显示「[状态色点] 学生姓名 · 状态」，可一眼看清该宿舍各成员的
-// 当日打卡情况；行高随学生数量自适应（Wrap），保证 4–8 人都能完整展示。
+// 历史记录表格：场次 | 宿舍 | 学生 | 状态 | 规定时间 | 打卡时间 | 备注
 // =============================================================================
 
-class _HistoryList extends StatelessWidget {
-  const _HistoryList({
-    required this.rooms,
-    required this.roomTitle,
-    required this.studentsOf,
+class _HistoryTable extends StatelessWidget {
+  const _HistoryTable({
+    required this.items,
+    required this.onHandleException,
+    required this.onTapDetail,
   });
 
-  final List<DormitoryRoomCheck> rooms;
-  final String Function(DormitoryRoomCheck room) roomTitle;
-  final List<_HistoryStudent> Function(DormitoryRoomCheck room) studentsOf;
+  final List<DormitoryCheckHistoryItem> items;
+  final ValueChanged<DormitoryCheckHistoryItem> onHandleException;
+  final ValueChanged<DormitoryCheckHistoryItem> onTapDetail;
 
   @override
   Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
     return Container(
       width: double.infinity,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(ui(16)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          const _HistoryListHeader(),
-          for (var i = 0; i < rooms.length; i++) ...[
+          Container(
+            height: ui(40),
+            padding: EdgeInsets.symmetric(horizontal: ui(16)),
+            decoration: const BoxDecoration(color: _kCardGreyBg),
+            child: Row(
+              children: [
+                SizedBox(width: ui(72), child: const _HeaderText('场次')),
+                SizedBox(width: ui(160), child: const _HeaderText('宿舍')),
+                SizedBox(width: ui(88), child: const _HeaderText('学生')),
+                SizedBox(width: ui(72), child: const _HeaderText('状态')),
+                SizedBox(width: ui(96), child: const _HeaderText('规定时间')),
+                SizedBox(width: ui(88), child: const _HeaderText('打卡时间')),
+                const Expanded(child: _HeaderText('备注 / 操作')),
+              ],
+            ),
+          ),
+          for (var i = 0; i < items.length; i++) ...[
             if (i != 0)
               const Divider(height: 1, thickness: 1, color: _kBorderSoft),
-            _HistoryListRow(
-              title: roomTitle(rooms[i]),
-              session: rooms[i].session,
-              deadline: rooms[i].deadline,
-              students: studentsOf(rooms[i]),
+            _HistoryTableRow(
+              item: items[i],
               zebra: i.isOdd,
+              onHandleException: onHandleException,
+              onTapDetail: onTapDetail,
             ),
           ],
         ],
@@ -974,22 +1027,121 @@ class _HistoryList extends StatelessWidget {
   }
 }
 
-class _HistoryListHeader extends StatelessWidget {
-  const _HistoryListHeader();
+class _HistoryTableRow extends StatelessWidget {
+  const _HistoryTableRow({
+    required this.item,
+    required this.zebra,
+    required this.onHandleException,
+    required this.onTapDetail,
+  });
+
+  final DormitoryCheckHistoryItem item;
+  final bool zebra;
+  final ValueChanged<DormitoryCheckHistoryItem> onHandleException;
+  final ValueChanged<DormitoryCheckHistoryItem> onTapDetail;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      height: ui(40),
-      padding: EdgeInsets.symmetric(horizontal: ui(16)),
-      decoration: const BoxDecoration(color: _kCardGreyBg),
+    final status = _HistoryStatus.fromCheckStatus(item.status);
+    return Material(
+      color: zebra ? const Color(0xFFFAFAFC) : Colors.white,
+      child: InkWell(
+        onTap: item.id.isEmpty ? null : () => onTapDetail(item),
+        child: Padding(
+      padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(12)),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: ui(240), child: const _HeaderText('宿舍')),
-          const Expanded(child: _HeaderText('学生状态')),
+          SizedBox(
+            width: ui(72),
+            child: Text(
+              item.checkType,
+              style: TextStyle(fontSize: ui(12), color: _kTextDark),
+            ),
+          ),
+          SizedBox(
+            width: ui(160),
+            child: Text(
+              item.dormName.isEmpty ? '—' : item.dormName,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: ui(12), color: _kTextDark),
+            ),
+          ),
+          SizedBox(
+            width: ui(88),
+            child: Text(
+              item.studentName,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: ui(12), color: _kTextDark),
+            ),
+          ),
+          SizedBox(
+            width: ui(72),
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: ui(6), vertical: ui(2)),
+              decoration: BoxDecoration(
+                color: status.bg,
+                borderRadius: BorderRadius.circular(ui(4)),
+              ),
+              child: Text(
+                status.label,
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: ui(11), color: Colors.white),
+              ),
+            ),
+          ),
+          SizedBox(
+            width: ui(96),
+            child: Text(
+              item.deadline,
+              style: TextStyle(fontSize: ui(12), color: _kTextSecondary),
+            ),
+          ),
+          SizedBox(
+            width: ui(88),
+            child: Text(
+              item.checkTime,
+              style: TextStyle(
+                fontSize: ui(12),
+                color: item.status == DormitoryStudentCheckStatus.lateReturn
+                    ? _kRed
+                    : _kTextDark,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    item.remark,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: ui(12), color: _kTextHint),
+                  ),
+                ),
+                if (item.needsExceptionHandle)
+                  TextButton(
+                    onPressed: () => onHandleException(item),
+                    child: Text(
+                      '处理',
+                      style: TextStyle(fontSize: ui(12), color: _kPurple),
+                    ),
+                  )
+                else if (item.handleStatus > 0)
+                  Text(
+                    '已处理',
+                    style: TextStyle(fontSize: ui(11), color: _kGreen),
+                  ),
+              ],
+            ),
+          ),
         ],
+      ),
+        ),
       ),
     );
   }
@@ -1018,133 +1170,46 @@ class _HeaderText extends StatelessWidget {
   }
 }
 
-class _HistoryListRow extends StatelessWidget {
-  const _HistoryListRow({
-    required this.title,
-    required this.session,
-    required this.deadline,
-    required this.students,
-    required this.zebra,
-  });
+class _ExceptionHandleDialog extends StatefulWidget {
+  const _ExceptionHandleDialog({required this.studentName});
 
-  final String title;
-  final String session;
-  final String deadline;
-  final List<_HistoryStudent> students;
-  final bool zebra;
+  final String studentName;
 
   @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(12)),
-      color: zebra ? const Color(0xFFFAFAFC) : Colors.white,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: ui(240),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: ui(13),
-                    color: _kTextDark,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w500,
-                    height: 1.4,
-                  ),
-                ),
-                SizedBox(height: ui(2)),
-                Text(
-                  '${students.length} 名在校学生 · $session · $deadline',
-                  style: TextStyle(
-                    fontSize: ui(12),
-                    color: _kTextHint,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w400,
-                    height: 1.2,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: Wrap(
-              spacing: ui(8),
-              runSpacing: ui(8),
-              children: [
-                for (final s in students) _StudentChip(student: s),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  State<_ExceptionHandleDialog> createState() => _ExceptionHandleDialogState();
 }
 
-/// 学生 chip：圆角矩形 + 左侧状态色点 + 名字 + 状态文字。
-///
-/// 背景使用状态颜色的浅色版（10% 透明度），文字用纯色 + 深色名字，保证多
-/// chip 横排时视觉上每个学生的状态色一眼可辨，但又不会过于花哨。
-class _StudentChip extends StatelessWidget {
-  const _StudentChip({required this.student});
+class _ExceptionHandleDialogState extends State<_ExceptionHandleDialog> {
+  final _remarkCtrl = TextEditingController();
 
-  final _HistoryStudent student;
+  @override
+  void dispose() {
+    _remarkCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    final statusColor = student.status.bg;
-    final bg = statusColor.withValues(alpha: 0.10);
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: ui(10), vertical: ui(5)),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(ui(999)),
-        border: Border.all(color: statusColor.withValues(alpha: 0.25)),
+    return AlertDialog(
+      title: Text('异常处理 · ${widget.studentName}'),
+      content: TextField(
+        controller: _remarkCtrl,
+        maxLines: 3,
+        decoration: const InputDecoration(
+          hintText: '填写处理说明',
+          border: OutlineInputBorder(),
+        ),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: ui(6),
-            height: ui(6),
-            decoration: BoxDecoration(
-              color: statusColor,
-              shape: BoxShape.circle,
-            ),
-          ),
-          SizedBox(width: ui(6)),
-          Text(
-            student.name,
-            style: TextStyle(
-              fontSize: ui(12),
-              color: _kTextDark,
-              fontFamily: 'PingFang SC',
-              fontWeight: AppFont.w500,
-              height: 1.2,
-            ),
-          ),
-          SizedBox(width: ui(4)),
-          Text(
-            '· ${student.status.label}',
-            style: TextStyle(
-              fontSize: ui(12),
-              color: statusColor,
-              fontFamily: 'PingFang SC',
-              fontWeight: AppFont.w500,
-              height: 1.2,
-            ),
-          ),
-        ],
-      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(_remarkCtrl.text.trim()),
+          child: const Text('确认处理'),
+        ),
+      ],
     );
   }
 }

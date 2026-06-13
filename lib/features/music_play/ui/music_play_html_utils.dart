@@ -73,6 +73,23 @@ String _musicPlayHtmlStripInlineProps(String html, {required List<String> props}
   return result;
 }
 
+/// 将 `<strong>` / `<b>` 强制替换为带粗体内联样式的 `<span>`，
+/// 避免 [HtmlWidget] 未正确识别语义标签导致不加粗。
+String musicPlayHtmlForceBoldTags(String html) {
+  if (html.isEmpty) return html;
+
+  const boldOpen = '<span style="font-weight: 600 !important;">';
+  var result = html.replaceAllMapped(
+    RegExp(r'<\s*(strong|b)\b[^>]*>', caseSensitive: false),
+    (_) => boldOpen,
+  );
+  result = result.replaceAllMapped(
+    RegExp(r'<\s*/\s*(strong|b)\s*>', caseSensitive: false),
+    (_) => '</span>',
+  );
+  return result;
+}
+
 const Set<String> _musicPlayHtmlTextTags = <String>{
   'p',
   'span',
@@ -116,6 +133,9 @@ Map<String, String>? musicPlayHtmlCustomStyles(dynamic element) {
     return null;
   }
   final styles = <String, String>{'font-family': 'PingFang SC'};
+  if (_musicPlayHtmlBoldTags.contains(tag)) {
+    styles['font-weight'] = '600';
+  }
   if (tag == 'p') {
     styles['margin'] = '0';
     styles['padding'] = '0';

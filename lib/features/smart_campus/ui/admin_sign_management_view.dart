@@ -1,4 +1,4 @@
-﻿// =============================================================================
+// =============================================================================
 // 管理员「签课管理」独立页面
 //
 // 入口：管理员首页快捷区「签课管理」→ controller.openSignManagement()
@@ -140,7 +140,7 @@ class _AdminSignManagementViewState extends State<AdminSignManagementView> {
             child: Material(
               color: Colors.transparent,
               child: _MakeupAuditDrawer(
-                records: _kDemoMakeupRecords,
+                records: const [],
                 onClose: () => Navigator.of(ctx).maybePop(),
                 onAuditDone: (remaining) {
                   setState(() => _pendingMakeupCount = remaining);
@@ -152,10 +152,10 @@ class _AdminSignManagementViewState extends State<AdminSignManagementView> {
       },
       transitionBuilder: (ctx, anim, _, child) {
         return SlideTransition(
-          position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
-              .animate(
-                CurvedAnimation(parent: anim, curve: Curves.easeOutCubic),
-              ),
+          position: Tween<Offset>(
+            begin: const Offset(1, 0),
+            end: Offset.zero,
+          ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
           child: child,
         );
       },
@@ -256,10 +256,7 @@ class _SignBanner extends StatelessWidget {
             ],
           ),
           // 大课 / 小课切换：相对 banner 宽度居中
-          _SegmentControl(
-            selected: selectedTab,
-            onSelect: onSelectTab,
-          ),
+          _SegmentControl(selected: selectedTab, onSelect: onSelectTab),
         ],
       ),
     );
@@ -490,11 +487,7 @@ class _LargeClassTabState extends ConsumerState<_LargeClassTab> {
     final repo = ref.read(adminRepositoryProvider);
     final results = await Future.wait([
       repo.courseSignSum0(classId: classId, date: _selectedDate),
-      repo.courseSignManager(
-        classId: classId,
-        date: _selectedDate,
-        type: 0,
-      ),
+      repo.courseSignManager(classId: classId, date: _selectedDate, type: 0),
     ]);
     if (!mounted) return;
 
@@ -690,14 +683,12 @@ class _LargeClassSessionCard extends StatelessWidget {
   final bool expanded;
   final VoidCallback onToggle;
   final void Function(int studentIdx, CourseSignStatus status)
-      onChangeStudentStatus;
+  onChangeStudentStatus;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final signedCount = session.students
-        .where((s) => s.status != null)
-        .length;
+    final signedCount = session.students.where((s) => s.status != null).length;
     final total = session.students.length;
     return Container(
       decoration: BoxDecoration(
@@ -713,10 +704,8 @@ class _LargeClassSessionCard extends StatelessWidget {
             borderRadius: BorderRadius.only(
               topLeft: Radius.circular(ui(12)),
               topRight: Radius.circular(ui(12)),
-              bottomLeft:
-                  expanded ? Radius.zero : Radius.circular(ui(12)),
-              bottomRight:
-                  expanded ? Radius.zero : Radius.circular(ui(12)),
+              bottomLeft: expanded ? Radius.zero : Radius.circular(ui(12)),
+              bottomRight: expanded ? Radius.zero : Radius.circular(ui(12)),
             ),
             child: Padding(
               padding: EdgeInsets.symmetric(
@@ -762,10 +751,7 @@ class _LargeClassSessionCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  _SignProgressPill(
-                    signed: signedCount,
-                    total: total,
-                  ),
+                  _SignProgressPill(signed: signedCount, total: total),
                   SizedBox(width: ui(10)),
                   Icon(
                     expanded
@@ -809,10 +795,7 @@ class _LargeClassSessionCard extends StatelessWidget {
 }
 
 class _StudentSignRow extends StatelessWidget {
-  const _StudentSignRow({
-    required this.student,
-    required this.onChangeStatus,
-  });
+  const _StudentSignRow({required this.student, required this.onChangeStatus});
 
   final CourseSignStudent student;
   final ValueChanged<CourseSignStatus> onChangeStatus;
@@ -947,19 +930,18 @@ _SmallClassStep _deriveSmallClassStep(
   if (session.teacherCheckInTime == null) {
     return _SmallClassStep.notStarted;
   }
-  final allStudentsIn = session.students.isNotEmpty &&
+  final allStudentsIn =
+      session.students.isNotEmpty &&
       session.students.every((s) => s.checkInTime != null);
   if (!allStudentsIn) return _SmallClassStep.studentCheckedIn;
   if (session.teacherCheckOutTime == null) {
     return _SmallClassStep.teacherCheckedOut;
   }
-  final allStudentsOut =
-      session.students.every((s) => s.checkOutTime != null);
+  final allStudentsOut = session.students.every((s) => s.checkOutTime != null);
   if (!allStudentsOut) return _SmallClassStep.studentCheckedOut;
   final allEvaluated = session.students.every(
     (s) =>
-        s.evaluationRating != null ||
-        (s.evaluationNote?.isNotEmpty ?? false),
+        s.evaluationRating != null || (s.evaluationNote?.isNotEmpty ?? false),
   );
   if (!allEvaluated) return _SmallClassStep.studentCheckedOut;
   return _SmallClassStep.studentEvaluated;
@@ -987,6 +969,7 @@ class _SmallClassTabState extends ConsumerState<_SmallClassTab> {
   List<CourseSignSession> _sessions = const [];
   CourseSignStats _stats = const CourseSignStats();
   final Set<String> _locallyConfirmedCourseIds = {};
+  final Set<String> _submittingCourseIds = {};
   bool _loadingClasses = true;
   bool _loadingData = false;
 
@@ -1022,11 +1005,7 @@ class _SmallClassTabState extends ConsumerState<_SmallClassTab> {
     final repo = ref.read(adminRepositoryProvider);
     final results = await Future.wait([
       repo.courseSignSum1(classId: classId, date: _selectedDate),
-      repo.courseSignManager(
-        classId: classId,
-        date: _selectedDate,
-        type: 1,
-      ),
+      repo.courseSignManager(classId: classId, date: _selectedDate, type: 1),
     ]);
     if (!mounted) return;
 
@@ -1103,17 +1082,15 @@ class _SmallClassTabState extends ConsumerState<_SmallClassTab> {
                       session: session,
                       step: _deriveSmallClassStep(
                         session,
-                        locallyConfirmed: _locallyConfirmedCourseIds
-                            .contains(session.courseId),
+                        locallyConfirmed: _locallyConfirmedCourseIds.contains(
+                          session.courseId,
+                        ),
                       ),
                       onConfirm: () {
-                        setState(
-                          () => _locallyConfirmedCourseIds
-                              .add(session.courseId),
-                        );
+                        unawaited(_confirmCourse(session));
                       },
                       onViewEvaluation: () =>
-                          _showEvaluationDialog(context, session),
+                          unawaited(_loadAndShowEvaluation(session)),
                     ),
                   ),
               ],
@@ -1125,6 +1102,50 @@ class _SmallClassTabState extends ConsumerState<_SmallClassTab> {
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _confirmCourse(CourseSignSession session) async {
+    if (session.courseId.isEmpty ||
+        _submittingCourseIds.contains(session.courseId)) {
+      return;
+    }
+    setState(() => _submittingCourseIds.add(session.courseId));
+    final response = await ref
+        .read(adminRepositoryProvider)
+        .courseSignConfirm(courseId: session.courseId);
+    if (!mounted) return;
+    setState(() => _submittingCourseIds.remove(session.courseId));
+    if (!response.isSuccess) {
+      AppToast.show(
+        context,
+        response.displayMsg.isEmpty ? '确认失败' : response.displayMsg,
+        type: AppToastType.error,
+      );
+      return;
+    }
+    setState(() => _locallyConfirmedCourseIds.add(session.courseId));
+    AppToast.show(context, '课程已确认完成', type: AppToastType.success);
+    await _loadSignData();
+  }
+
+  Future<void> _loadAndShowEvaluation(CourseSignSession session) async {
+    final response = await ref
+        .read(adminRepositoryProvider)
+        .courseCommentList(courseId: session.courseId);
+    if (!mounted) return;
+    if (!response.isSuccess) {
+      AppToast.show(
+        context,
+        response.displayMsg.isEmpty ? '评价加载失败' : response.displayMsg,
+        type: AppToastType.error,
+      );
+      return;
+    }
+    final comments = parseCourseCommentList(response.data);
+    _showEvaluationDialog(
+      context,
+      comments.isEmpty ? session : session.copyWith(students: comments),
     );
   }
 
@@ -1246,14 +1267,7 @@ class _SmallClassFlowHint extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    const steps = [
-      '师上课签',
-      '生上课签',
-      '师下课签',
-      '生下课签',
-      '生评价',
-      '管理员确认',
-    ];
+    const steps = ['师上课签', '生上课签', '师下课签', '生下课签', '生评价', '管理员确认'];
     return Container(
       padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(10)),
       decoration: BoxDecoration(
@@ -1265,7 +1279,11 @@ class _SmallClassFlowHint extends StatelessWidget {
         children: [
           for (var i = 0; i < steps.length; i++) ...[
             if (i > 0)
-              Icon(Icons.arrow_forward_ios_rounded, size: ui(10), color: _kPurpleLight),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: ui(10),
+                color: _kPurpleLight,
+              ),
             Text(
               steps[i],
               style: TextStyle(
@@ -1394,7 +1412,11 @@ class _SmallClassSessionCard extends StatelessWidget {
                 // 表头
                 Row(
                   children: [
-                    Icon(Icons.group_rounded, size: ui(13), color: _kTextSecondary),
+                    Icon(
+                      Icons.group_rounded,
+                      size: ui(13),
+                      color: _kTextSecondary,
+                    ),
                     SizedBox(width: ui(5)),
                     Text(
                       '学生（${session.students.length}人）',
@@ -1416,7 +1438,11 @@ class _SmallClassSessionCard extends StatelessWidget {
                 // 学生行
                 for (var i = 0; i < session.students.length; i++) ...[
                   if (i > 0)
-                    Divider(height: ui(12), thickness: 0.5, color: _kBorderSoft),
+                    Divider(
+                      height: ui(12),
+                      thickness: 0.5,
+                      color: _kBorderSoft,
+                    ),
                   _StudentTimeRow(student: session.students[i]),
                 ],
               ],
@@ -1434,7 +1460,10 @@ class _SmallClassSessionCard extends StatelessWidget {
                       icon: Icon(Icons.star_outline_rounded, size: ui(14)),
                       label: Text(
                         '查看评价',
-                        style: TextStyle(fontSize: ui(12), fontFamily: 'PingFang SC'),
+                        style: TextStyle(
+                          fontSize: ui(12),
+                          fontFamily: 'PingFang SC',
+                        ),
                       ),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: _kPurple,
@@ -1452,10 +1481,16 @@ class _SmallClassSessionCard extends StatelessWidget {
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: onConfirm,
-                      icon: Icon(Icons.check_circle_outline_rounded, size: ui(14)),
+                      icon: Icon(
+                        Icons.check_circle_outline_rounded,
+                        size: ui(14),
+                      ),
                       label: Text(
                         '确认完成',
-                        style: TextStyle(fontSize: ui(12), fontFamily: 'PingFang SC'),
+                        style: TextStyle(
+                          fontSize: ui(12),
+                          fontFamily: 'PingFang SC',
+                        ),
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _kPurple,
@@ -1480,7 +1515,11 @@ class _SmallClassSessionCard extends StatelessWidget {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.check_rounded, size: ui(14), color: _kGreen),
+                          Icon(
+                            Icons.check_rounded,
+                            size: ui(14),
+                            color: _kGreen,
+                          ),
                           SizedBox(width: ui(4)),
                           Text(
                             '已确认完成',
@@ -1552,7 +1591,11 @@ class _TimelineSection extends StatelessWidget {
                   children: [
                     for (var row in rows) ...[
                       if (rows.indexOf(row) > 0) SizedBox(width: ui(16)),
-                      _TimestampChip(label: row.label, time: row.time, done: row.done),
+                      _TimestampChip(
+                        label: row.label,
+                        time: row.time,
+                        done: row.done,
+                      ),
                     ],
                   ],
                 ),
@@ -1566,14 +1609,22 @@ class _TimelineSection extends StatelessWidget {
 }
 
 class _TimelineRow {
-  const _TimelineRow({required this.label, required this.time, required this.done});
+  const _TimelineRow({
+    required this.label,
+    required this.time,
+    required this.done,
+  });
   final String label;
   final String? time;
   final bool done;
 }
 
 class _TimestampChip extends StatelessWidget {
-  const _TimestampChip({required this.label, required this.time, required this.done});
+  const _TimestampChip({
+    required this.label,
+    required this.time,
+    required this.done,
+  });
 
   final String label;
   final String? time;
@@ -1760,7 +1811,11 @@ class _SmallClassStepper extends StatelessWidget {
 }
 
 class _StepDot extends StatelessWidget {
-  const _StepDot({required this.label, required this.isDone, required this.isCurrent});
+  const _StepDot({
+    required this.label,
+    required this.isDone,
+    required this.isCurrent,
+  });
 
   final String label;
   final bool isDone;
@@ -1982,7 +2037,8 @@ class _MakeupAuditDrawerState extends State<_MakeupAuditDrawer> {
             child: _records.isEmpty
                 ? Center(
                     child: Text(
-                      '暂无补签申请',
+                      '当前接口仅返回待处理数量，管理员补签审核明细与审批接口暂未开放',
+                      textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: ui(13),
                         color: _kTextHint,
@@ -1991,13 +2047,20 @@ class _MakeupAuditDrawerState extends State<_MakeupAuditDrawer> {
                     ),
                   )
                 : ListView.separated(
-                    padding: EdgeInsets.fromLTRB(ui(16), ui(16), ui(16), ui(20)),
+                    padding: EdgeInsets.fromLTRB(
+                      ui(16),
+                      ui(16),
+                      ui(16),
+                      ui(20),
+                    ),
                     itemCount: _records.length,
                     separatorBuilder: (_, _) => SizedBox(height: ui(12)),
                     itemBuilder: (ctx, i) => _MakeupAuditCard(
                       record: _records[i],
                       onApprove: () {
-                        setState(() => _records[i].status = _MakeupStatus.approved);
+                        setState(
+                          () => _records[i].status = _MakeupStatus.approved,
+                        );
                         final remaining = _records
                             .where((r) => r.status == _MakeupStatus.pending)
                             .length;
@@ -2044,9 +2107,7 @@ class _MakeupAuditCard extends StatelessWidget {
         color: _kCardBg,
         borderRadius: BorderRadius.circular(ui(12)),
         border: Border.all(
-          color: isPending
-              ? _kOrange.withValues(alpha: 0.4)
-              : _kBorderSoft,
+          color: isPending ? _kOrange.withValues(alpha: 0.4) : _kBorderSoft,
         ),
       ),
       child: Column(
@@ -2128,7 +2189,8 @@ class _MakeupAuditCard extends StatelessWidget {
               ],
             ),
           ),
-          if (record.rejectReason != null && record.rejectReason!.isNotEmpty) ...[
+          if (record.rejectReason != null &&
+              record.rejectReason!.isNotEmpty) ...[
             SizedBox(height: ui(8)),
             Container(
               width: double.infinity,
@@ -2264,7 +2326,10 @@ class _MakeupAuditCard extends StatelessWidget {
             onPressed: () => Navigator.of(ctx).pop(),
             child: Text(
               '取消',
-              style: TextStyle(color: _kTextSecondary, fontFamily: 'PingFang SC'),
+              style: TextStyle(
+                color: _kTextSecondary,
+                fontFamily: 'PingFang SC',
+              ),
             ),
           ),
           ElevatedButton(
@@ -2282,10 +2347,7 @@ class _MakeupAuditCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(ui(8)),
               ),
             ),
-            child: Text(
-              '确认驳回',
-              style: TextStyle(fontFamily: 'PingFang SC'),
-            ),
+            child: Text('确认驳回', style: TextStyle(fontFamily: 'PingFang SC')),
           ),
         ],
       ),
@@ -2492,8 +2554,7 @@ class _FilterBar extends StatelessWidget {
           onTap: () async {
             final picked = await showAppDatePicker(
               context: context,
-              initialDate:
-                  DateTime.tryParse(selectedDate) ?? DateTime.now(),
+              initialDate: DateTime.tryParse(selectedDate) ?? DateTime.now(),
               firstDate: DateTime(2024),
               lastDate: DateTime(2030),
               helpText: '选择日期',
@@ -2778,7 +2839,8 @@ class _StudentEvalBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final rating = student.evaluationRating;
-    final hasEval = rating != null ||
+    final hasEval =
+        rating != null ||
         (student.evaluationNote?.isNotEmpty ?? false) ||
         (student.evaluationMastery?.isNotEmpty ?? false);
     return Column(
@@ -2864,17 +2926,11 @@ class _StudentEvalBlock extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (student.evaluationMastery?.isNotEmpty == true)
-                  _EvalRow(
-                    label: '掌握程度',
-                    value: student.evaluationMastery!,
-                  ),
+                  _EvalRow(label: '掌握程度', value: student.evaluationMastery!),
                 if (student.evaluationNote?.isNotEmpty == true) ...[
                   if (student.evaluationMastery?.isNotEmpty == true)
                     SizedBox(height: ui(6)),
-                  _EvalRow(
-                    label: '评价备注',
-                    value: student.evaluationNote!,
-                  ),
+                  _EvalRow(label: '评价备注', value: student.evaluationNote!),
                 ],
               ],
             ),
@@ -2925,7 +2981,7 @@ class _EvalRow extends StatelessWidget {
 }
 
 // =============================================================================
-// 数据模型（补签审核仍用本地占位数据，待后续接口接入）
+// 数据模型（管理员补签审核接口开放后可直接复用）
 // =============================================================================
 
 enum _SmallClassStep {
@@ -2938,7 +2994,13 @@ enum _SmallClassStep {
   adminConfirmed,
 }
 
-enum _ClassType { large, small }
+enum _ClassType {
+  large,
+
+  // Kept for parsing once the manager makeup-audit API is exposed.
+  // ignore: unused_field
+  small,
+}
 
 enum _MakeupStatus { pending, approved, rejected }
 
@@ -2966,36 +3028,3 @@ class _MakeupRecord {
   _MakeupStatus status;
   String? rejectReason;
 }
-
-final _kDemoMakeupRecords = <_MakeupRecord>[
-  _MakeupRecord(
-    applicantName: '郝江',
-    applicantRole: '学生 · 音乐一班',
-    courseName: '乐理基础',
-    lessonDate: '2026-05-14  08:00-08:45',
-    reason: '当日发烧请假，已提交请假条',
-    classType: _ClassType.large,
-    applyTime: '2026-05-15 10:22',
-    status: _MakeupStatus.pending,
-  ),
-  _MakeupRecord(
-    applicantName: '宁为',
-    applicantRole: '教师 · 古筝课',
-    courseName: '古筝一对一',
-    lessonDate: '2026-05-10  14:00-14:45',
-    reason: '课堂签到系统故障导致下课签未记录',
-    classType: _ClassType.small,
-    applyTime: '2026-05-11 09:05',
-    status: _MakeupStatus.pending,
-  ),
-  _MakeupRecord(
-    applicantName: '陈江凯',
-    applicantRole: '学生 · 乐理一班',
-    courseName: '视唱练耳',
-    lessonDate: '2026-05-08  10:10-10:55',
-    reason: '网络问题导致上课签到失败',
-    classType: _ClassType.large,
-    applyTime: '2026-05-09 14:30',
-    status: _MakeupStatus.approved,
-  ),
-];

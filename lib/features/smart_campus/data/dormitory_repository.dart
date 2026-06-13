@@ -112,6 +112,136 @@ class DormitoryRepository {
     return client.post('$_base/dormitoryCheckUserUpdate', data: body);
   }
 
+  // ============== 宿管首页 / 历史 / 异常 / 补卡 ==============
+
+  /// 宿管首页工作台汇总。
+  Future<ApiResponse> index() {
+    return client.post('$_base/index');
+  }
+
+  /// 查寝历史记录。
+  Future<ApiResponse> dormitoryCheckHistory({
+    String? buildingId,
+    String? floorId,
+    String? roomId,
+    String? beginDate,
+    String? endDate,
+    String? status,
+    int current = 1,
+    int size = 200,
+  }) {
+    return client.post(
+      '$_base/dormitoryCheckHistory',
+      data: <String, dynamic>{
+        'current': current,
+        'size': size,
+        if (buildingId != null && buildingId.isNotEmpty)
+          'buildingId': readSnowflakeId(buildingId) ?? buildingId,
+        if (floorId != null && floorId.isNotEmpty)
+          'floorId': readSnowflakeId(floorId) ?? floorId,
+        if (roomId != null && roomId.isNotEmpty)
+          'roomId': readSnowflakeId(roomId) ?? roomId,
+        if (beginDate != null && beginDate.isNotEmpty) 'beginDate': beginDate,
+        if (endDate != null && endDate.isNotEmpty) 'endDate': endDate,
+        if (status != null && status.isNotEmpty) 'status': status,
+      },
+    );
+  }
+
+  /// 单次查寝详情。
+  Future<ApiResponse> dormitoryCheckDetail({required String id}) {
+    return client.post(
+      '$_base/dormitoryCheckDetail',
+      data: <String, dynamic>{'id': readSnowflakeId(id) ?? id},
+    );
+  }
+
+  /// 查寝异常处理。
+  Future<ApiResponse> dormitoryCheckExceptionHandle({
+    required String checkId,
+    required String studentId,
+    required int handleStatus,
+    String remark = '',
+  }) {
+    return client.post(
+      '$_base/dormitoryCheckExceptionHandle',
+      data: <String, dynamic>{
+        'checkId': readSnowflakeId(checkId) ?? checkId,
+        'studentId': readSnowflakeId(studentId) ?? studentId,
+        'handleStatus': handleStatus,
+        if (remark.isNotEmpty) 'remark': remark,
+      },
+    );
+  }
+
+  /// 导出查寝记录。
+  Future<ApiResponse> dormitoryCheckExport({
+    String? buildingId,
+    String? floorId,
+    String? roomId,
+    String? beginDate,
+    String? endDate,
+    String? status,
+  }) {
+    return client.post(
+      '$_base/dormitoryCheckExport',
+      data: <String, dynamic>{
+        if (buildingId != null && buildingId.isNotEmpty)
+          'buildingId': readSnowflakeId(buildingId) ?? buildingId,
+        if (floorId != null && floorId.isNotEmpty)
+          'floorId': readSnowflakeId(floorId) ?? floorId,
+        if (roomId != null && roomId.isNotEmpty)
+          'roomId': readSnowflakeId(roomId) ?? roomId,
+        if (beginDate != null && beginDate.isNotEmpty) 'beginDate': beginDate,
+        if (endDate != null && endDate.isNotEmpty) 'endDate': endDate,
+        if (status != null && status.isNotEmpty) 'status': status,
+      },
+    );
+  }
+
+  /// 宿管端补卡申请列表。
+  Future<ApiResponse> dormitoryMakeupList({
+    String? buildingId,
+    int? status,
+    int current = 1,
+    int size = 200,
+  }) {
+    return client.post(
+      '$_base/dormitoryMakeupList',
+      data: <String, dynamic>{
+        'current': current,
+        'size': size,
+        if (buildingId != null && buildingId.isNotEmpty)
+          'buildingId': readSnowflakeId(buildingId) ?? buildingId,
+        if (status != null) 'status': status,
+      },
+    );
+  }
+
+  /// 补卡申请详情。
+  Future<ApiResponse> dormitoryMakeupDetail({required String id}) {
+    return client.post(
+      '$_base/dormitoryMakeupDetail',
+      data: <String, dynamic>{'id': readSnowflakeId(id) ?? id},
+    );
+  }
+
+  /// 审批补卡申请。`status`: 1-通过 / 2-拒绝。
+  Future<ApiResponse> dormitoryMakeupAudit({
+    required String id,
+    required int status,
+    String auditReason = '',
+  }) {
+    return client.post(
+      '$_base/dormitoryMakeupAudit',
+      data: <String, dynamic>{
+        'id': readSnowflakeId(id) ?? id,
+        'status': status,
+        if (auditReason.isNotEmpty) 'auditReason': auditReason,
+      },
+    );
+  }
+
   Map<String, dynamic> _checkFilterBody({
     String? buildingId,
     String? floorId,

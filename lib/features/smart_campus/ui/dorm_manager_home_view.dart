@@ -9,6 +9,7 @@ import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/dormitory_check_data.dart';
 import '../data/dormitory_repository.dart';
+import '../state/dormitory_manager_controller.dart';
 import '../data/teacher_notice_data.dart';
 import '../state/smart_campus_state.dart';
 import 'widgets/role_switcher_buttons.dart';
@@ -53,6 +54,7 @@ class DormManagerHomeView extends ConsumerStatefulWidget {
     this.onOpenDormCheckByRoom,
     this.onOpenDormCheckHistory,
     this.onOpenDormManagerLeave,
+    this.onOpenDormMakeupAudit,
   });
 
   final String shellDisplayName;
@@ -80,6 +82,7 @@ class DormManagerHomeView extends ConsumerStatefulWidget {
   final VoidCallback? onOpenDormCheckByRoom;
   final VoidCallback? onOpenDormCheckHistory;
   final VoidCallback? onOpenDormManagerLeave;
+  final VoidCallback? onOpenDormMakeupAudit;
 
   @override
   ConsumerState<DormManagerHomeView> createState() =>
@@ -87,25 +90,19 @@ class DormManagerHomeView extends ConsumerStatefulWidget {
 }
 
 class _DormManagerHomeViewState extends ConsumerState<DormManagerHomeView> {
-  DormitoryCheckStat _stat = DormitoryCheckStat.zero;
-
   @override
   void initState() {
     super.initState();
-    unawaited(_loadStat());
-  }
-
-  Future<void> _loadStat() async {
-    final response = await ref
-        .read(dormitoryRepositoryProvider)
-        .dormitoryCheckStat(date: dormitoryCheckDateParam());
-    if (!mounted || !response.isSuccess) return;
-    setState(() => _stat = parseDormitoryCheckStat(response.data));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(ref.read(dormitoryManagerControllerProvider.notifier).loadHome());
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final managerState = ref.watch(dormitoryManagerControllerProvider);
+    final index = managerState.index;
 
     return SingleChildScrollView(
       padding: EdgeInsets.symmetric(vertical: ui(16)),
@@ -116,7 +113,12 @@ class _DormManagerHomeViewState extends ConsumerState<DormManagerHomeView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _DormStatsRow(stat: _stat),
+                if (managerState.loadingHome)
+                  const LinearProgressIndicator(minHeight: 2),
+                _DormStatsRow(
+                  index: index,
+                  onOpenPending: widget.onOpenDormMakeupAudit,
+                ),
                 SizedBox(height: ui(16)),
                 _DormQuickActionsCard(
                   onOpenGroupChat: widget.onOpenGroupChat,
@@ -133,10 +135,10 @@ class _DormManagerHomeViewState extends ConsumerState<DormManagerHomeView> {
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          _SectionTitle(title: '当前事项'),
-                          SizedBox(height: 12),
-                          _CurrentTaskCard(),
+                        children: [
+                          const _SectionTitle(title: '当前事项'),
+                          SizedBox(height: ui(12)),
+                          _CurrentTaskCard(task: index.currentTask),
                         ],
                       ),
                     ),
@@ -149,7 +151,7 @@ class _DormManagerHomeViewState extends ConsumerState<DormManagerHomeView> {
                             onOpenDormCheckByRoom: widget.onOpenDormCheckByRoom,
                           ),
                           SizedBox(height: ui(12)),
-                          const _TodayDutyCard(),
+                          _TodayDutyCard(tasks: index.todayDutyTasks),
                         ],
                       ),
                     ),
@@ -167,6 +169,7 @@ class _DormManagerHomeViewState extends ConsumerState<DormManagerHomeView> {
               availableRoles: widget.availableRoles,
               selectedRole: widget.selectedRole,
               onSelectRole: widget.onSelectRole,
+              managedAreas: index.managedAreas,
             ),
           ),
         ],
@@ -219,18 +222,12 @@ class _DutyTask {
   final String timeTo;
 }
 
-const _todayDutyTasks = <_DutyTask>[
+const _fallbackDutyTasks = <_DutyTask>[
   _DutyTask(
     tag: '晨检',
     title: '晨检开门 离检统计同步',
     timeFrom: '06:30',
     timeTo: '07:15',
-  ),
-  _DutyTask(
-    tag: '晨检',
-    title: '晨检开门 离检统计同步',
-    timeFrom: '07:30',
-    timeTo: '08:00',
   ),
   _DutyTask(
     tag: '晚查',
@@ -239,6 +236,15 @@ const _todayDutyTasks = <_DutyTask>[
     timeTo: '20:00',
   ),
 ];
+
+_DutyTask _mapDutyTask(DormitoryDutyTask task) {
+  return _DutyTask(
+    tag: task.tag,
+    title: task.title,
+    timeFrom: task.timeFrom,
+    timeTo: task.timeTo,
+  );
+}
 
 // ============================================================================
 // 通用：Section Title
@@ -270,21 +276,23 @@ class _SectionTitle extends StatelessWidget {
 // ============================================================================
 
 class _DormStatsRow extends StatelessWidget {
-  const _DormStatsRow({required this.stat});
+  const _DormStatsRow({required this.index, this.onOpenPending});
 
-  final DormitoryCheckStat stat;
+  final DormitoryIndexOverview index;
+  final VoidCallback? onOpenPending;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final rate = stat.bedCount == 0
+    final rate = index.bedCount == 0
         ? '—'
-        : '${(stat.normalCount * 100 / stat.bedCount).round()}%';
+        : '${(index.todayNormalCount * 100 / index.bedCount).round()}%';
     final items = <_StatItem>[
-      _StatItem('${stat.bedCount}', '在册床位'),
-      _StatItem('${stat.normalCount}', '正常在寝'),
-      _StatItem('${stat.lateCount}', '晚归登记'),
-      _StatItem('${stat.notCheckedCount}', '未打卡'),
+      _StatItem('${index.managedBuildingCount}', '管辖楼数'),
+      _StatItem('${index.bedCount}', '在册床位'),
+      _StatItem('${index.todayNormalCount}', '今日正常'),
+      _StatItem('${index.todayLateCount}', '晚归登记'),
+      _StatItem('${index.todayAbsentCount}', '未打卡'),
       _StatItem(rate, '在寝率', bigValue: false),
     ];
     // 用 IntrinsicHeight 让 Row 取「最高子卡」的内在高度作为有界纵向约束，
@@ -301,8 +309,9 @@ class _DormStatsRow extends StatelessWidget {
           SizedBox(
             width: ui(123),
             child: _PendingCard(
-              value: '${stat.notCheckedCount}',
-              label: '待处理',
+              value: '${index.pendingMakeupCount}',
+              label: '待审补卡',
+              onTap: onOpenPending,
             ),
           ),
         ],
@@ -358,46 +367,55 @@ class _StatCard extends StatelessWidget {
 
 /// 「待处理」紫高亮卡：24/500 紫色数值 + 12 灰色文案，居中布局。
 class _PendingCard extends StatelessWidget {
-  const _PendingCard({required this.value, required this.label});
+  const _PendingCard({
+    required this.value,
+    required this.label,
+    this.onTap,
+  });
 
   final String value;
   final String label;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(16)),
-      ),
-      padding: EdgeInsets.symmetric(horizontal: ui(8), vertical: ui(10)),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            value,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: ui(24),
-              height: 1.2,
-              fontWeight: AppFont.w500,
-              color: const Color(0xFF8741FF),
-              fontFamily: 'PingFang SC',
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(ui(16)),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(ui(16)),
+        ),
+        padding: EdgeInsets.symmetric(horizontal: ui(8), vertical: ui(10)),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              value,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: ui(24),
+                height: 1.2,
+                fontWeight: AppFont.w500,
+                color: const Color(0xFF8741FF),
+                fontFamily: 'PingFang SC',
+              ),
             ),
-          ),
-          SizedBox(height: ui(4)),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: ui(12),
-              height: 1.2,
-              color: const Color(0xFF6D6B75),
-              fontFamily: 'PingFang SC',
+            SizedBox(height: ui(4)),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: ui(12),
+                height: 1.2,
+                color: const Color(0xFF6D6B75),
+                fontFamily: 'PingFang SC',
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -548,11 +566,21 @@ class _QuickActionCell extends StatelessWidget {
 // ============================================================================
 
 class _CurrentTaskCard extends StatelessWidget {
-  const _CurrentTaskCard();
+  const _CurrentTaskCard({this.task});
+
+  final DormitoryDutyTask? task;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final duty = task == null
+        ? const _DutyTask(
+            tag: '查寝',
+            title: '暂无当前事项',
+            timeFrom: '--',
+            timeTo: '--',
+          )
+        : _mapDutyTask(task!);
     return Container(
       height: ui(340),
       padding: EdgeInsets.all(ui(12)),
@@ -560,14 +588,7 @@ class _CurrentTaskCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(ui(16)),
       ),
-      child: const _DutyTaskTile(
-        task: _DutyTask(
-          tag: '晚查',
-          title: '晚查寝预备·设备与名单核对',
-          timeFrom: '21:50',
-          timeTo: '22:25',
-        ),
-      ),
+      child: _DutyTaskTile(task: duty),
     );
   }
 }
@@ -618,11 +639,16 @@ class _TodayDutyHeader extends StatelessWidget {
 }
 
 class _TodayDutyCard extends StatelessWidget {
-  const _TodayDutyCard();
+  const _TodayDutyCard({required this.tasks});
+
+  final List<DormitoryDutyTask> tasks;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final dutyTasks = tasks.isEmpty
+        ? _fallbackDutyTasks
+        : tasks.map(_mapDutyTask).toList(growable: false);
     return Container(
       height: ui(340),
       padding: EdgeInsets.all(ui(12)),
@@ -632,9 +658,9 @@ class _TodayDutyCard extends StatelessWidget {
       ),
       child: ListView.separated(
         padding: EdgeInsets.zero,
-        itemCount: _todayDutyTasks.length,
+        itemCount: dutyTasks.length,
         separatorBuilder: (_, _) => SizedBox(height: ui(12)),
-        itemBuilder: (_, i) => _DutyTaskTile(task: _todayDutyTasks[i]),
+        itemBuilder: (_, i) => _DutyTaskTile(task: dutyTasks[i]),
       ),
     );
   }
@@ -734,6 +760,7 @@ class _DormManagerSidePanel extends StatelessWidget {
     required this.availableRoles,
     required this.selectedRole,
     required this.onSelectRole,
+    this.managedAreas = const [],
   });
 
   final String displayName;
@@ -741,6 +768,7 @@ class _DormManagerSidePanel extends StatelessWidget {
   final List<SmartCampusRole> availableRoles;
   final SmartCampusRole selectedRole;
   final ValueChanged<SmartCampusRole>? onSelectRole;
+  final List<String> managedAreas;
 
   @override
   Widget build(BuildContext context) {
@@ -759,7 +787,7 @@ class _DormManagerSidePanel extends StatelessWidget {
         children: [
           _ProfileHeader(displayName: displayName, avatarUrl: avatarUrl),
           SizedBox(height: ui(16)),
-          const _ProfileAreaRows(),
+          _ProfileAreaRows(areas: managedAreas),
           if (showRoleSwitcher) ...[
             SizedBox(height: ui(20)),
             Text(
@@ -952,16 +980,22 @@ class _ProfileHeader extends StatelessWidget {
 }
 
 class _ProfileAreaRows extends StatelessWidget {
-  const _ProfileAreaRows();
+  const _ProfileAreaRows({this.areas = const []});
+
+  final List<String> areas;
 
   @override
   Widget build(BuildContext context) {
-    return const Column(
+    final rows = areas.isEmpty
+        ? const ['暂无管辖区域']
+        : areas;
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _AreaLine(label: '区域：', value: '男生公寓1-3号楼'),
-        SizedBox(height: 4),
-        _AreaLine(label: '区域：', value: '女生公寓A区'),
+        for (var i = 0; i < rows.length; i++) ...[
+          if (i > 0) const SizedBox(height: 4),
+          _AreaLine(label: '区域：', value: rows[i]),
+        ],
       ],
     );
   }

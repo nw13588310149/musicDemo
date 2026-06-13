@@ -1,4 +1,4 @@
-﻿// =============================================================================
+// =============================================================================
 // 任课老师 / 班主任端「签课管理」独立页面
 //
 // 入口：教师 dashboard 快捷区「签课管理」按钮 → controller.openClassAttendance()
@@ -23,8 +23,8 @@
 //      · 右 614 宽 "签到操作" 面板：根据 active class 类型渲染：
 //          - 大课：614×465 白底 16 圆角，顶部"第N节·HH:MM-HH:MM"（时间紫
 //            色）+ 教师 + 课名 + 课时·教室；中部 #F5F6FA 灰底"班级学生"
-//            块（6 状态 chip + 8 列 × 2 行学生网格，点击头像循环切换状态
-//            present→late→leave→absent→missing→present）；下方 #F0E8FC
+//            块（6 状态 chip + 8 列 × 2 行学生网格，点击头像弹窗选择状态）；
+//            下方 #F0E8FC
 //            提示带（"待完成大班一键签到" + 说明文案）；最底紫色渐变
 //            "一键完成全班签到" CTA 按钮。
 //          - 小课：参考学生端 [StudentCheckInView] 的 _CheckInActionPanel
@@ -44,8 +44,12 @@ import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 
 import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/app_loading_indicator.dart';
 import '../data/course_sign_data.dart';
+import '../data/teacher_attendance_data.dart';
 import '../data/teacher_repository.dart';
+import '../state/teacher_attendance_controller.dart';
+import 'widgets/course_sign_status_picker.dart';
 import '../../shell/ui/shell_layout.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
@@ -81,15 +85,23 @@ enum _ClassKind { big, small }
 /// 角标文本（已结束 / 进行中 / 待开始）。
 enum _ClassRunState { ended, inProgress, upcoming }
 
-/// 学生考勤状态。点击头像循环切换：
-/// present(实到/绿) → late(迟到/红) → leave(请假/蓝) → absent(缺课/红) →
-/// missing(未到/红) → present。
+/// 学生考勤状态（UI 展示用）；点击头像弹窗选择，不循环切换。
 enum _AttendStatus { present, late, leave, absent, missing }
 
 class _StudentAttend {
-  _StudentAttend({required this.name, required this.status});
+  _StudentAttend({
+    this.studentId = '',
+    required this.name,
+    this.studentNo = '--',
+    required this.status,
+    this.remark = '',
+  });
+
+  final String studentId;
   final String name;
+  final String studentNo;
   _AttendStatus status;
+  final String remark;
 }
 
 class _AttendClass {
@@ -104,7 +116,11 @@ class _AttendClass {
     required this.location,
     required this.kind,
     required this.runState,
+    required this.signStatus,
+    required this.signStatusLabel,
     required this.students,
+    this.teacherCheckInTime,
+    this.teacherCheckOutTime,
     this.singleStudent,
   });
 
@@ -118,6 +134,10 @@ class _AttendClass {
   final String location;
   final _ClassKind kind;
   final _ClassRunState runState;
+  final int signStatus;
+  final String signStatusLabel;
+  final String? teacherCheckInTime;
+  final String? teacherCheckOutTime;
 
   /// 班级学生名单（大课用）。小课时通常仅 1 项，但保持同字段方便共享。
   final List<_StudentAttend> students;
@@ -157,6 +177,30 @@ class _RecentRecord {
   final String method;
 }
 
+List<_StatItem> _statsFromSummary(TeacherAttendanceSummary summary) {
+  return [
+    _StatItem(value: '${summary.signedCourseCount}', label: '签课节次数'),
+    _StatItem(value: '${summary.bigClassSignCount}', label: '大班一键签到'),
+    _StatItem(value: '${summary.smallClassCompleteCount}', label: '小班签课完成'),
+    _StatItem(value: '${summary.lateCount}', label: '学生迟到'),
+    _StatItem(value: '${summary.absentCount}', label: '缺勤人次'),
+  ];
+}
+
+_RecentRecord _recentRecordFromHistory(TeacherSignHistoryItem item) {
+  return _RecentRecord(
+    time: item.time.isEmpty ? '--:--' : item.time,
+    date: _dateOnly(item.date),
+    courseName: item.courseName,
+    kind: isSmallCourseType(item.courseType) ? _ClassKind.small : _ClassKind.big,
+    periodLabel: item.lineNum > 0 ? '第${item.lineNum}节' : '签课记录',
+    teacherName: item.teacherName,
+    expected: item.shouldCount,
+    present: item.presentCount,
+    method: item.method,
+  );
+}
+
 // =============================================================================
 // 入口 widget
 // =============================================================================
@@ -173,13 +217,11 @@ class TeacherClassAttendanceView extends ConsumerStatefulWidget {
 
 class _TeacherClassAttendanceViewState
     extends ConsumerState<TeacherClassAttendanceView> {
-  /// 0 = 总数据 / 1 = 本学期 / 2 = 本月。仅切换 stat 卡数值，不调接口（demo）。
+  /// 0 = 总数据 / 1 = 本学期 / 2 = 本月。切换后重新拉取对应时间范围统计。
   int _selectedTabIdx = 0;
 
   /// 双列右侧 active class 索引；默认指向"进行中"那节课。
-  late int _activeClassIdx;
-
-  late List<_AttendClass> _classes;
+  int _activeClassIdx = 0;
 
   /// 是否切到「历史记录」子页面（banner 右上"历史记录"按钮 / "查看全部"
   /// 链接触发）。子页面 banner 的返回按钮把它置回 false，回到本主页。
@@ -191,63 +233,80 @@ class _TeacherClassAttendanceViewState
   /// 历史记录子页面的搜索文本（课程、节次、教室）。
   String _historyQuery = '';
 
+  Timer? _runStateTimer;
+
   @override
   void initState() {
     super.initState();
-    _classes = _buildInitialClasses();
-    // 进行中的课优先展示；否则取第一节。
-    final inProgress = _classes.indexWhere(
-      (c) => c.runState == _ClassRunState.inProgress,
-    );
-    _activeClassIdx = inProgress >= 0 ? inProgress : 0;
-    unawaited(_loadTodayClasses());
-  }
-
-  Future<void> _loadTodayClasses() async {
-    final today = todayIsoDate();
-    final response = await ref
-        .read(teacherRepositoryProvider)
-        .courseList(beginDate: today, endDate: today);
-    if (!mounted || !response.isSuccess) return;
-    final sessions = parseCourseSignSessionList(response.data);
-    if (sessions.isEmpty) return;
-    final classes = sessions.map(_attendClassFromSession).toList();
-    final inProgress = classes.indexWhere(
-      (item) => item.runState == _ClassRunState.inProgress,
-    );
-    setState(() {
-      _classes = classes;
-      _activeClassIdx = inProgress >= 0 ? inProgress : 0;
+    _runStateTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(teacherAttendanceControllerProvider.notifier).initialize();
     });
   }
 
-  void _selectClass(int idx) {
+  @override
+  void dispose() {
+    _runStateTimer?.cancel();
+    super.dispose();
+  }
+
+  void _selectClass(int idx, List<_AttendClass> classes) {
     if (_activeClassIdx == idx) return;
     setState(() => _activeClassIdx = idx);
+    final course = classes[idx];
+    if (course.kind == _ClassKind.big && course.courseId.isNotEmpty) {
+      unawaited(
+        ref
+            .read(teacherAttendanceControllerProvider.notifier)
+            .loadCourseDetail(course.courseId),
+      );
+    }
   }
 
-  void _cycleStudentStatus(int studentIdx) {
-    setState(() {
-      final s = _classes[_activeClassIdx].students[studentIdx];
-      const order = _AttendStatus.values;
-      s.status = order[(s.status.index + 1) % order.length];
-    });
+  Future<void> _pickStudentStatus(_AttendClass course, int studentIdx) async {
+    final student = course.students[studentIdx];
+    final picked = await showCourseSignStatusPicker(
+      context,
+      studentName: student.name,
+      studentNo: student.studentNo,
+      current: _courseSignStatusOf(student.status),
+    );
+    if (picked == null || !mounted) return;
+    final response = await ref
+        .read(teacherAttendanceControllerProvider.notifier)
+        .updateStudentStatus(
+          courseId: course.courseId,
+          studentId: student.studentId,
+          status: picked,
+        );
+    if (!mounted) return;
+    AppToast.show(
+      context,
+      response.isSuccess ? '签到状态已更新' : response.displayMsg,
+      type: response.isSuccess ? AppToastType.success : AppToastType.error,
+    );
   }
 
-  void _bulkSign() {
-    setState(() {
-      for (final s in _classes[_activeClassIdx].students) {
-        if (s.status == _AttendStatus.missing) {
-          s.status = _AttendStatus.present;
-        }
-      }
-    });
-    AppToast.show(context, '已完成全班签到');
+  Future<void> _bulkSign(_AttendClass course) async {
+    final response = await ref
+        .read(teacherAttendanceControllerProvider.notifier)
+        .bulkSign(course.courseId);
+    if (!mounted) return;
+    AppToast.show(
+      context,
+      response.isSuccess ? '已完成全班签到' : response.displayMsg,
+      type: response.isSuccess ? AppToastType.success : AppToastType.error,
+    );
   }
 
   void _openHistory() {
     if (_showHistory) return;
     setState(() => _showHistory = true);
+    unawaited(
+      ref.read(teacherAttendanceControllerProvider.notifier).loadHistory(),
+    );
   }
 
   void _closeHistory() {
@@ -258,6 +317,16 @@ class _TeacherClassAttendanceViewState
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final attendance = ref.watch(teacherAttendanceControllerProvider);
+    final classes = attendance.todayCourses
+        .map(_attendClassFromSession)
+        .toList();
+    final activeIdx = classes.isEmpty
+        ? 0
+        : _activeClassIdx.clamp(0, classes.length - 1);
+    final recentRecords = attendance.recentRecords
+        .map(_recentRecordFromHistory)
+        .toList(growable: false);
     if (_showHistory) {
       return _HistoryView(
         onBack: _closeHistory,
@@ -265,9 +334,12 @@ class _TeacherClassAttendanceViewState
         onFilter: (i) => setState(() => _historyFilterIdx = i),
         query: _historyQuery,
         onQueryChanged: (v) => setState(() => _historyQuery = v),
+        records: attendance.historyRecords,
+        loading: attendance.loadingHistory,
+        error: attendance.historyError,
       );
     }
-    final stats = _statsForTab(_selectedTabIdx);
+    final stats = _statsFromSummary(attendance.summary);
     return SingleChildScrollView(
       padding: EdgeInsets.only(bottom: ui(24)),
       child: Column(
@@ -277,7 +349,14 @@ class _TeacherClassAttendanceViewState
           SizedBox(height: ui(16)),
           _StatsHeaderRow(
             tabIdx: _selectedTabIdx,
-            onTab: (i) => setState(() => _selectedTabIdx = i),
+            onTab: (i) {
+              setState(() => _selectedTabIdx = i);
+              unawaited(
+                ref
+                    .read(teacherAttendanceControllerProvider.notifier)
+                    .selectRange(TeacherAttendanceRange.values[i]),
+              );
+            },
           ),
           SizedBox(height: ui(12)),
           _StatsRow(stats: stats),
@@ -288,73 +367,89 @@ class _TeacherClassAttendanceViewState
             onTrailingTap: _openHistory,
           ),
           SizedBox(height: ui(12)),
-          _RecentRecordsRow(records: _kDemoRecentRecords),
+          if (recentRecords.isEmpty)
+            _AttendanceEmptyPanel(
+              loading: attendance.loadingOverview,
+              message: '暂无最近签课记录',
+            )
+          else
+            _RecentRecordsRow(records: recentRecords),
           SizedBox(height: ui(28)),
           // 双列：今日课程 + 签到操作
-          LayoutBuilder(
-            builder: (context, c) {
-              final isCompact = c.maxWidth < ui(720);
-              if (isCompact) {
-                return Column(
+          if (classes.isEmpty)
+            _AttendanceEmptyPanel(
+              loading: attendance.loadingOverview,
+              message: attendance.error.isNotEmpty
+                  ? attendance.error
+                  : '今日暂无课程',
+            )
+          else
+            LayoutBuilder(
+              builder: (context, c) {
+                final isCompact = c.maxWidth < ui(720);
+                if (isCompact) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _SectionTitle('今日课程'),
+                      SizedBox(height: ui(12)),
+                      _TodayClassesPanel(
+                        title: _todayPanelTitle(),
+                        classes: classes,
+                        activeIdx: activeIdx,
+                        onSelect: (idx) => _selectClass(idx, classes),
+                      ),
+                      SizedBox(height: ui(20)),
+                      _SectionTitle('签到操作'),
+                      SizedBox(height: ui(12)),
+                      _ActionPanelSwitcher(
+                        data: classes[activeIdx],
+                        onPickStudentStatus: (idx) =>
+                            _pickStudentStatus(classes[activeIdx], idx),
+                        onBulkSign: () => _bulkSign(classes[activeIdx]),
+                      ),
+                    ],
+                  );
+                }
+                return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _SectionTitle('今日课程'),
-                    SizedBox(height: ui(12)),
-                    _TodayClassesPanel(
-                      title: _todayPanelTitle(),
-                      classes: _classes,
-                      activeIdx: _activeClassIdx,
-                      onSelect: _selectClass,
+                    SizedBox(
+                      width: ui(340),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _SectionTitle('今日课程'),
+                          SizedBox(height: ui(12)),
+                          _TodayClassesPanel(
+                            title: _todayPanelTitle(),
+                            classes: classes,
+                            activeIdx: activeIdx,
+                            onSelect: (idx) => _selectClass(idx, classes),
+                          ),
+                        ],
+                      ),
                     ),
-                    SizedBox(height: ui(20)),
-                    _SectionTitle('签到操作'),
-                    SizedBox(height: ui(12)),
-                    _ActionPanelSwitcher(
-                      data: _classes[_activeClassIdx],
-                      onCycleStudent: _cycleStudentStatus,
-                      onBulkSign: _bulkSign,
+                    SizedBox(width: ui(16)),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _SectionTitle('签到操作'),
+                          SizedBox(height: ui(12)),
+                          _ActionPanelSwitcher(
+                            data: classes[activeIdx],
+                            onPickStudentStatus: (idx) =>
+                                _pickStudentStatus(classes[activeIdx], idx),
+                            onBulkSign: () => _bulkSign(classes[activeIdx]),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 );
-              }
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: ui(340),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _SectionTitle('今日课程'),
-                        SizedBox(height: ui(12)),
-                        _TodayClassesPanel(
-                          title: _todayPanelTitle(),
-                          classes: _classes,
-                          activeIdx: _activeClassIdx,
-                          onSelect: _selectClass,
-                        ),
-                      ],
-                    ),
-                  ),
-                  SizedBox(width: ui(16)),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _SectionTitle('签到操作'),
-                        SizedBox(height: ui(12)),
-                        _ActionPanelSwitcher(
-                          data: _classes[_activeClassIdx],
-                          onCycleStudent: _cycleStudentStatus,
-                          onBulkSign: _bulkSign,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
+              },
+            ),
         ],
       ),
     );
@@ -364,36 +459,6 @@ class _TeacherClassAttendanceViewState
     final now = DateTime.now();
     const weeks = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
     return '${now.year}年${now.month}月${now.day}日 ${weeks[now.weekday - 1]}';
-  }
-
-  List<_StatItem> _statsForTab(int idx) {
-    switch (idx) {
-      case 1:
-        return const [
-          _StatItem(value: '128', label: '签课节次数'),
-          _StatItem(value: '4', label: '大班一键签到'),
-          _StatItem(value: '6', label: '小班签课完成'),
-          _StatItem(value: '12', label: '学生迟到'),
-          _StatItem(value: '3', label: '缺勤人次'),
-        ];
-      case 2:
-        return const [
-          _StatItem(value: '32', label: '签课节次数'),
-          _StatItem(value: '1', label: '大班一键签到'),
-          _StatItem(value: '2', label: '小班签课完成'),
-          _StatItem(value: '4', label: '学生迟到'),
-          _StatItem(value: '0', label: '缺勤人次'),
-        ];
-      case 0:
-      default:
-        return const [
-          _StatItem(value: '187', label: '签课节次数'),
-          _StatItem(value: '2', label: '大班一键签到'),
-          _StatItem(value: '2', label: '小班签课完成'),
-          _StatItem(value: '24', label: '学生迟到'),
-          _StatItem(value: '1', label: '缺勤人次'),
-        ];
-    }
   }
 }
 
@@ -822,6 +887,39 @@ class _RecentRecordsRow extends StatelessWidget {
   }
 }
 
+class _AttendanceEmptyPanel extends StatelessWidget {
+  const _AttendanceEmptyPanel({required this.loading, required this.message});
+
+  final bool loading;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(vertical: ui(28)),
+      decoration: BoxDecoration(
+        color: _kCardBg,
+        borderRadius: BorderRadius.circular(ui(16)),
+      ),
+      alignment: Alignment.center,
+      child: loading
+          ? const AppLoadingIndicator()
+          : Text(
+              message.isEmpty ? '暂无数据' : message,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: ui(13),
+                color: _kTextHint,
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w400,
+              ),
+            ),
+    );
+  }
+}
+
 class _RecentRecordCard extends StatelessWidget {
   const _RecentRecordCard({required this.record});
 
@@ -995,9 +1093,9 @@ class _ClassKindTag extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final isSmall = kind == _ClassKind.small;
+    // 不写死 height —— 11px 字形 + vertical padding 会超出 16，导致下半截被裁切。
     return Container(
-      height: ui(16),
-      padding: EdgeInsets.symmetric(horizontal: ui(4), vertical: ui(2)),
+      padding: EdgeInsets.symmetric(horizontal: ui(4), vertical: ui(3)),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(ui(4)),
@@ -1005,6 +1103,7 @@ class _ClassKindTag extends StatelessWidget {
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Container(
             width: ui(6),
@@ -1022,7 +1121,7 @@ class _ClassKindTag extends StatelessWidget {
               color: _kTextDark,
               fontFamily: 'PingFang SC',
               fontWeight: AppFont.w400,
-              height: 14 / 11,
+              height: 1.2,
             ),
           ),
         ],
@@ -1040,21 +1139,21 @@ class _CourseGreenTag extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
-      height: ui(16),
-      padding: EdgeInsets.symmetric(horizontal: ui(4), vertical: ui(2)),
+      padding: EdgeInsets.symmetric(horizontal: ui(4), vertical: ui(3)),
       decoration: BoxDecoration(
         color: _kCourseTagBg,
         borderRadius: BorderRadius.circular(ui(4)),
       ),
-      alignment: Alignment.center,
       child: Text(
         courseName,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontSize: ui(11),
           color: _kCourseTagFg,
           fontFamily: 'PingFang SC',
           fontWeight: AppFont.w400,
-          height: 14 / 11,
+          height: 1.2,
         ),
       ),
     );
@@ -1111,6 +1210,39 @@ class _TodayClassesPanel extends StatelessWidget {
               onTap: () => onSelect(i),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _CourseTimeLabel extends StatelessWidget {
+  const _CourseTimeLabel({required this.startTime, required this.endTime});
+
+  final String startTime;
+  final String endTime;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final hasEnd = endTime.isNotEmpty && endTime != '--:--';
+    final baseStyle = TextStyle(
+      fontSize: ui(18),
+      fontFamily: 'Barlow',
+      fontWeight: FontWeight.w600,
+      height: 1.2,
+      color: _kTextSection,
+    );
+    if (!hasEnd) {
+      return Text(startTime, style: baseStyle);
+    }
+    return RichText(
+      text: TextSpan(
+        style: baseStyle,
+        children: [
+          TextSpan(text: '$startTime '),
+          const TextSpan(text: '- ', style: TextStyle(color: _kTextHint)),
+          TextSpan(text: endTime),
         ],
       ),
     );
@@ -1188,33 +1320,13 @@ class _TodayClassCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                // 时间段
+                // 开始时间（courseStartTime → HH:mm）
                 Positioned(
                   left: ui(16),
                   top: ui(12),
-                  child: RichText(
-                    text: TextSpan(
-                      style: TextStyle(
-                        fontSize: ui(18),
-                        fontFamily: 'Barlow',
-                        fontWeight: FontWeight.w600,
-                        height: 1.2,
-                      ),
-                      children: [
-                        TextSpan(
-                          text: '${data.startTime} ',
-                          style: const TextStyle(color: _kTextSection),
-                        ),
-                        const TextSpan(
-                          text: '- ',
-                          style: TextStyle(color: _kTextHint),
-                        ),
-                        TextSpan(
-                          text: data.endTime,
-                          style: const TextStyle(color: _kTextSection),
-                        ),
-                      ],
-                    ),
+                  child: _CourseTimeLabel(
+                    startTime: data.startTime,
+                    endTime: data.endTime,
                   ),
                 ),
                 // 头像
@@ -1253,7 +1365,7 @@ class _TodayClassCard extends StatelessWidget {
                       ),
                       SizedBox(height: ui(4)),
                       Text(
-                        '${data.duration}·${data.location}',
+                        '${data.signStatusLabel}·${data.location}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -1283,12 +1395,12 @@ class _TodayClassCard extends StatelessWidget {
 class _ActionPanelSwitcher extends StatelessWidget {
   const _ActionPanelSwitcher({
     required this.data,
-    required this.onCycleStudent,
+    required this.onPickStudentStatus,
     required this.onBulkSign,
   });
 
   final _AttendClass data;
-  final ValueChanged<int> onCycleStudent;
+  final ValueChanged<int> onPickStudentStatus;
   final VoidCallback onBulkSign;
 
   @override
@@ -1296,7 +1408,7 @@ class _ActionPanelSwitcher extends StatelessWidget {
     if (data.kind == _ClassKind.big) {
       return _BigClassActionPanel(
         data: data,
-        onCycleStudent: onCycleStudent,
+        onPickStudentStatus: onPickStudentStatus,
         onBulkSign: onBulkSign,
       );
     }
@@ -1311,12 +1423,12 @@ class _ActionPanelSwitcher extends StatelessWidget {
 class _BigClassActionPanel extends StatelessWidget {
   const _BigClassActionPanel({
     required this.data,
-    required this.onCycleStudent,
+    required this.onPickStudentStatus,
     required this.onBulkSign,
   });
 
   final _AttendClass data;
-  final ValueChanged<int> onCycleStudent;
+  final ValueChanged<int> onPickStudentStatus;
   final VoidCallback onBulkSign;
 
   int _countOf(_AttendStatus s) =>
@@ -1425,7 +1537,7 @@ class _BigClassActionPanel extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      '点击头像可更改状态',
+                      '点击头像选择签到状态',
                       style: TextStyle(
                         fontSize: ui(12),
                         color: _kTextHint,
@@ -1478,7 +1590,7 @@ class _BigClassActionPanel extends StatelessWidget {
                 // 学生网格：8 列，自动分行
                 _StudentAttendGrid(
                   students: data.students,
-                  onTapStudent: onCycleStudent,
+                  onTapStudent: onPickStudentStatus,
                 ),
               ],
             ),
@@ -1790,6 +1902,11 @@ class _SmallClassActionPanelState
       _signingStart = false;
       if (response.isSuccess) _signedStartTime = _now();
     });
+    if (response.isSuccess) {
+      unawaited(
+        ref.read(teacherAttendanceControllerProvider.notifier).refresh(),
+      );
+    }
     AppToast.show(
       context,
       response.isSuccess ? '上课签到成功' : response.displayMsg,
@@ -1812,6 +1929,11 @@ class _SmallClassActionPanelState
       _signingEnd = false;
       if (response.isSuccess) _signedEndTime = _now();
     });
+    if (response.isSuccess) {
+      unawaited(
+        ref.read(teacherAttendanceControllerProvider.notifier).refresh(),
+      );
+    }
     AppToast.show(
       context,
       response.isSuccess ? '下课签到成功' : response.displayMsg,
@@ -1823,6 +1945,18 @@ class _SmallClassActionPanelState
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final data = widget.data;
+    final teacherStartSigned =
+        _signedStartTime ??
+        pickCourseClock(data.teacherCheckInTime) ??
+        (data.signStatus >= CourseSignFlowStatus.teacherStart.code
+            ? '--:--'
+            : null);
+    final teacherEndSigned =
+        _signedEndTime ??
+        pickCourseClock(data.teacherCheckOutTime) ??
+        (data.signStatus >= CourseSignFlowStatus.teacherEnd.code
+            ? '--:--'
+            : null);
     final mainStudent =
         data.singleStudent ??
         (data.students.isNotEmpty ? data.students.first.name : '学生');
@@ -1944,20 +2078,27 @@ class _SmallClassActionPanelState
                     Expanded(
                       child: _TeacherSignSlot(
                         title: '教师上课签',
-                        signedTime: _signedStartTime,
+                        signedTime: teacherStartSigned,
                         onSign: () => _onSignStart(),
                         actionLabel: '上课签',
-                        enabled: !_signingStart,
+                        enabled:
+                            data.signStatus <
+                                CourseSignFlowStatus.teacherStart.code &&
+                            !_signingStart,
                       ),
                     ),
                     Expanded(
                       child: _TeacherSignSlot(
                         title: '教师下课签',
-                        signedTime: _signedEndTime,
+                        signedTime: teacherEndSigned,
                         onSign: () => _onSignEnd(),
                         actionLabel: '下课签',
-                        // 必须先签上课，才能签下课
-                        enabled: _signedStartTime != null && !_signingEnd,
+                        enabled:
+                            data.signStatus >=
+                                CourseSignFlowStatus.teacherStart.code &&
+                            data.signStatus <
+                                CourseSignFlowStatus.teacherEnd.code &&
+                            !_signingEnd,
                       ),
                     ),
                   ],
@@ -2153,24 +2294,24 @@ class _Avatar extends StatelessWidget {
 // =============================================================================
 
 _AttendClass _attendClassFromSession(CourseSignSession session) {
-  final parts = session.timeRange.split(RegExp(r'\s*-\s*'));
-  final start = parts.isEmpty ? '--:--' : _clockPart(parts.first);
-  final end = parts.length < 2 ? '--:--' : _clockPart(parts.last);
-  final now = TimeOfDay.now();
+  final rangeParts = session.timeRange.split(RegExp(r'\s*-\s*'));
+  final startRaw = session.courseStartTime.isNotEmpty
+      ? session.courseStartTime
+      : (rangeParts.isNotEmpty ? rangeParts.first : '');
+  final endRaw = session.courseEndTime.isNotEmpty
+      ? session.courseEndTime
+      : (rangeParts.length > 1 ? rangeParts.last : '');
+  final start = _displayCourseClock(startRaw);
+  final end = _displayCourseClock(endRaw);
+  final runState = _runStateFromCourseTimes(startRaw, endRaw, start, end);
   final startMinutes = _minutesOf(start);
   final endMinutes = _minutesOf(end);
-  final nowMinutes = now.hour * 60 + now.minute;
-  final runState = startMinutes == null || endMinutes == null
-      ? _ClassRunState.upcoming
-      : nowMinutes > endMinutes
-      ? _ClassRunState.ended
-      : nowMinutes >= startMinutes
-      ? _ClassRunState.inProgress
-      : _ClassRunState.upcoming;
   final students = session.students
       .map(
         (student) => _StudentAttend(
+          studentId: student.studentId,
           name: student.name,
+          studentNo: student.studentNo,
           status: switch (student.status) {
             CourseSignStatus.present => _AttendStatus.present,
             CourseSignStatus.late => _AttendStatus.late,
@@ -2178,30 +2319,83 @@ _AttendClass _attendClassFromSession(CourseSignSession session) {
             CourseSignStatus.absent => _AttendStatus.absent,
             null => _AttendStatus.missing,
           },
+          remark: student.remark,
         ),
       )
       .toList();
   return _AttendClass(
     courseId: session.courseId,
-    periodIndex: 1,
+    periodIndex: session.lineNum > 0 ? session.lineNum : 1,
     startTime: start,
     endTime: end,
     teacherName: session.teacherName,
     courseName: session.courseName,
     duration: _durationLabel(startMinutes, endMinutes),
     location: session.classroom,
-    kind: session.courseType == 1 ? _ClassKind.small : _ClassKind.big,
+    kind: isSmallCourseType(session.courseType)
+        ? _ClassKind.small
+        : _ClassKind.big,
     runState: runState,
+    signStatus: session.signStatus,
+    signStatusLabel: CourseSignFlowStatus.labelFor(session.signStatus),
+    teacherCheckInTime: session.teacherCheckInTime,
+    teacherCheckOutTime: session.teacherCheckOutTime,
     students: students,
-    singleStudent: session.courseType == 1 && students.isNotEmpty
+    singleStudent: isSmallCourseType(session.courseType) && students.isNotEmpty
         ? students.first.name
         : null,
   );
 }
 
+_ClassRunState _runStateFromCourseTimes(
+  String startRaw,
+  String endRaw,
+  String startClock,
+  String endClock,
+) {
+  final now = DateTime.now();
+  final startDt = parseCourseDateTime(startRaw);
+  final endDt = parseCourseDateTime(endRaw);
+  if (startDt != null && endDt != null) {
+    if (now.isBefore(startDt)) return _ClassRunState.upcoming;
+    if (now.isAfter(endDt)) return _ClassRunState.ended;
+    return _ClassRunState.inProgress;
+  }
+  if (startDt != null) {
+    if (now.isBefore(startDt)) return _ClassRunState.upcoming;
+    return _ClassRunState.inProgress;
+  }
+
+  final startMinutes = _minutesOf(startClock);
+  final endMinutes = _minutesOf(endClock);
+  if (startMinutes == null) return _ClassRunState.upcoming;
+  final nowMinutes = now.hour * 60 + now.minute;
+  if (endMinutes != null) {
+    if (nowMinutes > endMinutes) return _ClassRunState.ended;
+    if (nowMinutes >= startMinutes) return _ClassRunState.inProgress;
+    return _ClassRunState.upcoming;
+  }
+  if (nowMinutes >= startMinutes) return _ClassRunState.inProgress;
+  return _ClassRunState.upcoming;
+}
+
+CourseSignStatus? _courseSignStatusOf(_AttendStatus status) {
+  return switch (status) {
+    _AttendStatus.present => CourseSignStatus.present,
+    _AttendStatus.late => CourseSignStatus.late,
+    _AttendStatus.leave => CourseSignStatus.leave,
+    _AttendStatus.absent => CourseSignStatus.absent,
+    _AttendStatus.missing => null,
+  };
+}
+
+String _displayCourseClock(String raw) => pickCourseClock(raw) ?? _clockPart(raw);
+
 String _clockPart(String value) {
-  final match = RegExp(r'(\d{1,2}):(\d{2})').firstMatch(value);
-  if (match == null) return value.trim();
+  final trimmed = value.trim();
+  if (trimmed.isEmpty) return '--:--';
+  final match = RegExp(r'(\d{1,2}):(\d{2})').firstMatch(trimmed);
+  if (match == null) return '--:--';
   return '${match.group(1)!.padLeft(2, '0')}:${match.group(2)}';
 }
 
@@ -2217,115 +2411,6 @@ int? _minutesOf(String value) {
 String _durationLabel(int? start, int? end) {
   if (start == null || end == null || end <= start) return '课表课程';
   return '${end - start}分钟';
-}
-
-const List<_RecentRecord> _kDemoRecentRecords = [
-  _RecentRecord(
-    time: '08:54',
-    date: '2026-04-01',
-    courseName: '钢琴副项',
-    kind: _ClassKind.small,
-    periodLabel: '第三节',
-    teacherName: '郝江',
-    expected: 60,
-    present: 58,
-    method: '教师一键签到',
-  ),
-  _RecentRecord(
-    time: '08:54',
-    date: '2026-04-01',
-    courseName: '视唱练耳',
-    kind: _ClassKind.big,
-    periodLabel: '第三节',
-    teacherName: '陈老师',
-    expected: 60,
-    present: 58,
-    method: '扫码签到',
-  ),
-  _RecentRecord(
-    time: '08:54',
-    date: '2026-04-01',
-    courseName: '钢琴副项',
-    kind: _ClassKind.big,
-    periodLabel: '第三节',
-    teacherName: '郝江',
-    expected: 60,
-    present: 58,
-    method: '教师一键签到',
-  ),
-];
-
-List<_AttendClass> _buildInitialClasses() {
-  return [
-    _AttendClass(
-      courseId: '',
-      periodIndex: 1,
-      startTime: '07:00',
-      endTime: '07:45',
-      teacherName: '陈江凯',
-      courseName: '古筝课',
-      duration: '45分钟',
-      location: '艺术楼 报告厅',
-      kind: _ClassKind.small,
-      runState: _ClassRunState.ended,
-      students: [_StudentAttend(name: '陈江凯', status: _AttendStatus.present)],
-      singleStudent: '陈江凯',
-    ),
-    _AttendClass(
-      courseId: '',
-      periodIndex: 2,
-      startTime: '08:35',
-      endTime: '09:25',
-      teacherName: '郝江',
-      courseName: '古筝课',
-      duration: '45分钟',
-      location: '艺术楼 报告厅',
-      kind: _ClassKind.small,
-      runState: _ClassRunState.ended,
-      students: [_StudentAttend(name: '郝江', status: _AttendStatus.present)],
-      singleStudent: '郝江',
-    ),
-    _AttendClass(
-      courseId: '',
-      periodIndex: 3,
-      startTime: '10:00',
-      endTime: '10:45',
-      teacherName: '郝江',
-      courseName: '视唱练耳',
-      duration: '45分钟',
-      location: '艺术楼 报告厅',
-      kind: _ClassKind.big,
-      runState: _ClassRunState.inProgress,
-      students: [
-        _StudentAttend(name: '赵子峰', status: _AttendStatus.present),
-        _StudentAttend(name: '周兆贤', status: _AttendStatus.present),
-        _StudentAttend(name: '冯俊', status: _AttendStatus.present),
-        _StudentAttend(name: '王本强', status: _AttendStatus.present),
-        _StudentAttend(name: '钱亮', status: _AttendStatus.present),
-        _StudentAttend(name: '周蓓蓓', status: _AttendStatus.present),
-        _StudentAttend(name: '李俊卓', status: _AttendStatus.present),
-        _StudentAttend(name: '吴洁莉', status: _AttendStatus.absent),
-        _StudentAttend(name: '孙正芸', status: _AttendStatus.leave),
-        _StudentAttend(name: '赵小瑞', status: _AttendStatus.late),
-        _StudentAttend(name: '孙杰', status: _AttendStatus.leave),
-        _StudentAttend(name: '王琴', status: _AttendStatus.missing),
-      ],
-    ),
-    _AttendClass(
-      courseId: '',
-      periodIndex: 4,
-      startTime: '14:00',
-      endTime: '14:45',
-      teacherName: '陈江凯',
-      courseName: '钢琴副项',
-      duration: '45分钟',
-      location: '艺术楼 301',
-      kind: _ClassKind.small,
-      runState: _ClassRunState.upcoming,
-      students: [_StudentAttend(name: '陈江凯', status: _AttendStatus.missing)],
-      singleStudent: '陈江凯',
-    ),
-  ];
 }
 
 // =============================================================================
@@ -2374,6 +2459,9 @@ class _HistoryView extends StatelessWidget {
     required this.onFilter,
     required this.query,
     required this.onQueryChanged,
+    required this.records,
+    required this.loading,
+    required this.error,
   });
 
   final VoidCallback onBack;
@@ -2381,6 +2469,9 @@ class _HistoryView extends StatelessWidget {
   final ValueChanged<int> onFilter;
   final String query;
   final ValueChanged<String> onQueryChanged;
+  final List<TeacherSignHistoryItem> records;
+  final bool loading;
+  final String error;
 
   bool _matchKind(_ClassKind k) {
     switch (filterIdx) {
@@ -2408,7 +2499,7 @@ class _HistoryView extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final filteredDays = <_HistoryDay>[];
-    for (final day in _kDemoHistoryDays) {
+    for (final day in _historyDaysFromRecords(records)) {
       final keep = day.records
           .where((r) => _matchKind(r.kind) && _matchQuery(r))
           .toList();
@@ -2430,7 +2521,11 @@ class _HistoryView extends StatelessWidget {
             onQueryChanged: onQueryChanged,
           ),
           SizedBox(height: ui(24)),
-          if (filteredDays.isEmpty)
+          if (loading)
+            const AppLoadingIndicator()
+          else if (error.isNotEmpty)
+            _AttendanceEmptyPanel(loading: false, message: error)
+          else if (filteredDays.isEmpty)
             _HistoryEmptyState(query: query)
           else
             for (var i = 0; i < filteredDays.length; i++) ...[
@@ -2441,6 +2536,40 @@ class _HistoryView extends StatelessWidget {
       ),
     );
   }
+}
+
+List<_HistoryDay> _historyDaysFromRecords(
+  List<TeacherSignHistoryItem> records,
+) {
+  final grouped = <String, List<_HistoryRecord>>{};
+  for (final item in records) {
+    final date = _dateOnly(item.date);
+    grouped
+        .putIfAbsent(date.isEmpty ? '日期未知' : date, () => [])
+        .add(
+          _HistoryRecord(
+            time: item.time.isEmpty ? '--:--' : item.time,
+            periodLabel: item.lineNum > 0 ? '第${item.lineNum}节' : '签课记录',
+            courseName: item.courseName,
+            kind: isSmallCourseType(item.courseType) ? _ClassKind.small : _ClassKind.big,
+            location: item.classroom,
+            teacherName: item.teacherName,
+            expected: item.shouldCount,
+            present: item.presentCount,
+            method: item.method,
+          ),
+        );
+  }
+  return [
+    for (final entry in grouped.entries)
+      _HistoryDay(date: entry.key, records: entry.value),
+  ];
+}
+
+String _dateOnly(String value) {
+  final trimmed = value.trim();
+  if (trimmed.length >= 10) return trimmed.substring(0, 10);
+  return trimmed;
 }
 
 class _HistoryBanner extends StatelessWidget {
@@ -2824,152 +2953,3 @@ class _HistoryEmptyState extends StatelessWidget {
     );
   }
 }
-
-const List<_HistoryDay> _kDemoHistoryDays = [
-  _HistoryDay(
-    date: '2026年4月2日 周四',
-    records: [
-      _HistoryRecord(
-        time: '08:54',
-        periodLabel: '第三节',
-        courseName: '钢琴副项',
-        kind: _ClassKind.small,
-        location: '艺术楼',
-        teacherName: '郝江',
-        expected: 60,
-        present: 58,
-        method: '教师一键签到',
-      ),
-      _HistoryRecord(
-        time: '10:20',
-        periodLabel: '第四节',
-        courseName: '视唱练耳',
-        kind: _ClassKind.big,
-        location: '艺术楼',
-        teacherName: '陈老师',
-        expected: 60,
-        present: 58,
-        method: '扫码签到',
-      ),
-      _HistoryRecord(
-        time: '14:00',
-        periodLabel: '第六节',
-        courseName: '钢琴副项',
-        kind: _ClassKind.big,
-        location: '艺术楼',
-        teacherName: '郝江',
-        expected: 60,
-        present: 58,
-        method: '教师一键签到',
-      ),
-    ],
-  ),
-  _HistoryDay(
-    date: '2026年4月1日 周三',
-    records: [
-      _HistoryRecord(
-        time: '08:54',
-        periodLabel: '第三节',
-        courseName: '钢琴副项',
-        kind: _ClassKind.small,
-        location: '艺术楼',
-        teacherName: '郝江',
-        expected: 60,
-        present: 58,
-        method: '教师一键签到',
-      ),
-      _HistoryRecord(
-        time: '10:20',
-        periodLabel: '第四节',
-        courseName: '视唱练耳',
-        kind: _ClassKind.big,
-        location: '艺术楼',
-        teacherName: '陈老师',
-        expected: 60,
-        present: 58,
-        method: '扫码签到',
-      ),
-    ],
-  ),
-  _HistoryDay(
-    date: '2026年3月31日 周二',
-    records: [
-      _HistoryRecord(
-        time: '08:54',
-        periodLabel: '第三节',
-        courseName: '钢琴副项',
-        kind: _ClassKind.small,
-        location: '艺术楼',
-        teacherName: '郝江',
-        expected: 60,
-        present: 58,
-        method: '教师一键签到',
-      ),
-    ],
-  ),
-  _HistoryDay(
-    date: '2026年3月30日 周一',
-    records: [
-      _HistoryRecord(
-        time: '08:54',
-        periodLabel: '第三节',
-        courseName: '钢琴副项',
-        kind: _ClassKind.small,
-        location: '艺术楼',
-        teacherName: '郝江',
-        expected: 60,
-        present: 58,
-        method: '教师一键签到',
-      ),
-      _HistoryRecord(
-        time: '10:20',
-        periodLabel: '第四节',
-        courseName: '视唱练耳',
-        kind: _ClassKind.big,
-        location: '艺术楼',
-        teacherName: '陈老师',
-        expected: 60,
-        present: 58,
-        method: '扫码签到',
-      ),
-      _HistoryRecord(
-        time: '14:00',
-        periodLabel: '第六节',
-        courseName: '钢琴副项',
-        kind: _ClassKind.big,
-        location: '艺术楼',
-        teacherName: '郝江',
-        expected: 60,
-        present: 58,
-        method: '教师一键签到',
-      ),
-    ],
-  ),
-  _HistoryDay(
-    date: '2026年3月27日 周五',
-    records: [
-      _HistoryRecord(
-        time: '08:54',
-        periodLabel: '第二节',
-        courseName: '钢琴副项',
-        kind: _ClassKind.small,
-        location: '艺术楼',
-        teacherName: '郝江',
-        expected: 60,
-        present: 58,
-        method: '教师一键签到',
-      ),
-      _HistoryRecord(
-        time: '10:20',
-        periodLabel: '第四节',
-        courseName: '视唱练耳',
-        kind: _ClassKind.big,
-        location: '艺术楼',
-        teacherName: '陈老师',
-        expected: 60,
-        present: 58,
-        method: '扫码签到',
-      ),
-    ],
-  ),
-];

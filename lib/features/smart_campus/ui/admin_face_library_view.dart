@@ -2505,9 +2505,7 @@ class _SubmitButton extends StatelessWidget {
 //        · 操作：左 "通过" 紫色 #8741FF / 右 "驳回" 红色 #FF323C，13/400。
 //      - 空集时显示居中提示。
 //
-// 数据：当前版本走本地 demo 数据。`/app/school/v2/manager/faceList` 接入后
-// 改为 ConsumerState 内调用 `adminRepository.faceList(...)` 即可（参考
-// `_loadStudents` 模式）。
+// 数据：底库列表、统计、详情和审核均使用管理员端 `schoolUserFace*` 接口。
 
 class _LibraryControlBar extends StatelessWidget {
   const _LibraryControlBar({

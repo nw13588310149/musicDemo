@@ -49,6 +49,7 @@ import '../../shell/ui/shell_layout.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 import '../data/student_academic_data.dart';
 import '../data/student_repository.dart';
+import 'widgets/smart_campus_page_banner.dart';
 
 const Color _kCardBg = Colors.white;
 const Color _kPageBg = Color(0xFFEFF3FC);
@@ -168,15 +169,9 @@ class _GradesBanner extends StatelessWidget {
     return Container(
       width: double.infinity,
       height: ui(62),
+      clipBehavior: Clip.antiAlias,
       padding: EdgeInsets.symmetric(horizontal: ui(12)),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(ui(16)),
-        gradient: const LinearGradient(
-          begin: Alignment.bottomLeft,
-          end: Alignment.topRight,
-          colors: [Colors.white, Color(0xFFF9EDFF)],
-        ),
-      ),
+      decoration: smartCampusPageBannerDecoration(ui),
       child: Row(
         children: [
           _BackButton(onTap: onBack),

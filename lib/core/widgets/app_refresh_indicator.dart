@@ -113,10 +113,11 @@ class _AppRefreshIndicatorState extends State<AppRefreshIndicator>
       setState(() => _status = RefreshIndicatorStatus.drag);
       return false;
     }
-    final bool? indicatorAtTopNow = switch (notification.metrics.axisDirection) {
-      AxisDirection.down || AxisDirection.up => true,
-      AxisDirection.left || AxisDirection.right => null,
-    };
+    final bool? indicatorAtTopNow =
+        switch (notification.metrics.axisDirection) {
+          AxisDirection.down || AxisDirection.up => true,
+          AxisDirection.left || AxisDirection.right => null,
+        };
     if (indicatorAtTopNow != _isIndicatorAtTop) {
       if (_status == RefreshIndicatorStatus.drag ||
           _status == RefreshIndicatorStatus.armed) {
@@ -167,7 +168,9 @@ class _AppRefreshIndicatorState extends State<AppRefreshIndicator>
     return false;
   }
 
-  bool _handleIndicatorNotification(OverscrollIndicatorNotification notification) {
+  bool _handleIndicatorNotification(
+    OverscrollIndicatorNotification notification,
+  ) {
     if (notification.depth != 0 || !notification.leading) {
       return false;
     }
@@ -195,7 +198,8 @@ class _AppRefreshIndicatorState extends State<AppRefreshIndicator>
   }
 
   void _checkDragOffset(double containerExtent) {
-    double newValue = _dragOffset! / (containerExtent * _kDragContainerExtentPercentage);
+    double newValue =
+        _dragOffset! / (containerExtent * _kDragContainerExtentPercentage);
     if (_status == RefreshIndicatorStatus.armed) {
       newValue = math.max(newValue, 1.0 / _kDragSizeFactorLimit);
     }
@@ -235,7 +239,10 @@ class _AppRefreshIndicatorState extends State<AppRefreshIndicator>
   void _show() {
     _status = RefreshIndicatorStatus.snap;
     _positionController
-        .animateTo(1.0 / _kDragSizeFactorLimit, duration: _kIndicatorSnapDuration)
+        .animateTo(
+          1.0 / _kDragSizeFactorLimit,
+          duration: _kIndicatorSnapDuration,
+        )
         .then<void>((void value) {
           if (mounted && _status == RefreshIndicatorStatus.snap) {
             setState(() => _status = RefreshIndicatorStatus.refresh);
@@ -272,7 +279,10 @@ class _AppRefreshIndicatorState extends State<AppRefreshIndicator>
             left: 0,
             right: 0,
             child: SizeTransition(
-              axisAlignment: _isIndicatorAtTop! ? 1.0 : -1.0,
+              alignment: AlignmentDirectional(
+                -1.0,
+                _isIndicatorAtTop! ? 1.0 : -1.0,
+              ),
               sizeFactor: _positionFactor,
               child: Padding(
                 padding: _isIndicatorAtTop!
@@ -294,7 +304,9 @@ class _AppRefreshIndicatorState extends State<AppRefreshIndicator>
                                 context,
                               ).refreshIndicatorSemanticLabel,
                           semanticsValue: widget.semanticsValue,
-                          opacity: showIndeterminateIndicator ? 1 : _opacity.value,
+                          opacity: showIndeterminateIndicator
+                              ? 1
+                              : _opacity.value,
                         );
                       },
                     ),

@@ -109,6 +109,21 @@ class MusicPlayAudioPlayer {
   bool get usesPitchTransport =>
       _usesMpvPitchTransport || _usesNativeIosPitchPlayback;
 
+  /// Android `just_audio` 路径下可用于绑定 [Visualizer]；其它后端返回 null。
+  Stream<int?>? get androidAudioSessionIdStream {
+    if (_usesNativeIosPlayback) {
+      return _justAudio!.androidAudioSessionIdStream;
+    }
+    return null;
+  }
+
+  int? get androidAudioSessionId {
+    if (_usesNativeIosPlayback) {
+      return _justAudio!.androidAudioSessionId;
+    }
+    return null;
+  }
+
   MusicPlayAudioPlayerState get state => MusicPlayAudioPlayerState(
     playing: _usesNativeIosPlayback
         ? (_justAudio?.playing ?? false)

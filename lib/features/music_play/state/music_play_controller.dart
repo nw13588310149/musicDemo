@@ -12,6 +12,8 @@ import '../../music_companion/audio/music_companion_audio_engine.dart';
 import '../../music_companion/audio/page_audio_lifecycle.dart';
 import '../../smart_campus/data/chat_share_payload.dart';
 import '../audio/music_play_audio_player.dart';
+import '../audio/music_play_audio_visualizer.dart';
+import '../audio/music_play_frequency_utils.dart';
 import '../data/music_play_repository.dart';
 import 'music_play_state.dart';
 
@@ -46,6 +48,10 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
   /// - [Player.setPitch] —— 独立的半音变调（speed 不动）。
   /// 钢琴弹奏仍然走 [MusicCompanionAudioEngine]（基于 SoLoud），与此处互不影响。
   MusicPlayAudioPlayer? _player;
+  MusicPlayAudioVisualizer? _visualizer;
+  StreamSubscription<List<double>>? _bandsSub;
+  StreamSubscription<int?>? _androidSessionSub;
+  DateTime? _lastVisualizerSync;
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<Duration>? _durationSub;
   StreamSubscription<bool>? _playingSub;
@@ -354,6 +360,9 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
 
     _recordSaved = false;
     await _openActiveTrack(play: false);
+    if (!state.isPlaying) {
+      _setVisualizerPausedState();
+    }
   }
 
   Future<void> togglePlay() async {
@@ -386,6 +395,10 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       }
     } catch (_) {}
     _playbackToggleInFlight--;
+    unawaited(_syncVisualizerTransport());
+    if (!wantPlaying) {
+      _setVisualizerPausedState();
+    }
     if (_disposed || !mounted || _playbackToggleInFlight > 0) {
       return;
     }
@@ -860,6 +873,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
       if (player != null && mounted) {
         state = state.copyWith(isPlaying: player.state.playing);
       }
+      unawaited(_syncVisualizerTransport());
     }
   }
 
@@ -1256,6 +1270,9 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
           stepDelay: _kIosClickFadeStepDelay,
         );
       }
+      if (!isStale()) {
+        unawaited(_attachVisualizerForTrack(track.url, playing: play));
+      }
     } catch (error) {
       if (isStale()) return;
       debugPrint('MusicPlay audio load failed: $error');
@@ -1367,6 +1384,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
         }
       }
       state = state.copyWith(position: position);
+      _maybeSyncVisualizerPosition(position);
     });
     _durationSub = player.stream.duration.listen((duration) {
       if (!mounted) {
@@ -1389,6 +1407,7 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
         return;
       }
       state = state.copyWith(isPlaying: playing);
+      unawaited(_syncVisualizerTransport());
     });
     _completedSub = player.stream.completed.listen((completed) async {
       if (completed && mounted) {
@@ -1774,6 +1793,97 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     return detail.answerImages.isNotEmpty;
   }
 
+  void _ensureVisualizerListener() {
+    _visualizer ??= MusicPlayAudioVisualizer();
+    _bandsSub ??= _visualizer!.bands.listen((bands) {
+      if (!mounted || _disposed || !state.isPlaying) {
+        return;
+      }
+      if (bands.isEmpty) {
+        return;
+      }
+      state = state.copyWith(frequencyBands: bands);
+    });
+  }
+
+  void _setVisualizerPausedState() {
+    if (!mounted || _disposed) {
+      return;
+    }
+    state = state.copyWith(
+      frequencyBands: buildMusicPlayVisualizerRestBands(),
+    );
+  }
+
+  Future<void> _attachVisualizerForTrack(
+    String url, {
+    required bool playing,
+  }) async {
+    if (_disposed || url.isEmpty) {
+      return;
+    }
+    _ensureVisualizerListener();
+    final player = _player;
+    try {
+      await _visualizer!.attach(
+        url: url,
+        androidAudioSessionId: player?.androidAudioSessionId,
+      );
+      _bindAndroidSessionStream(player);
+      await _visualizer!.syncTransport(
+        playing: playing,
+        positionMs: state.position.inMilliseconds,
+      );
+      if (!playing) {
+        _setVisualizerPausedState();
+      }
+    } catch (error) {
+      debugPrint('MusicPlay visualizer attach failed: $error');
+    }
+  }
+
+  void _bindAndroidSessionStream(MusicPlayAudioPlayer? player) {
+    _androidSessionSub?.cancel();
+    _androidSessionSub = null;
+    final stream = player?.androidAudioSessionIdStream;
+    if (stream == null) {
+      return;
+    }
+    _androidSessionSub = stream.listen((sessionId) {
+      if (sessionId == null) {
+        return;
+      }
+      unawaited(_visualizer?.updateAndroidSession(sessionId));
+    });
+  }
+
+  Future<void> _syncVisualizerTransport() async {
+    final visualizer = _visualizer;
+    if (visualizer == null || _disposed) {
+      return;
+    }
+    try {
+      await visualizer.syncTransport(
+        playing: state.isPlaying,
+        positionMs: state.position.inMilliseconds,
+      );
+    } catch (_) {}
+  }
+
+  void _maybeSyncVisualizerPosition(Duration position) {
+    if (!state.isPlaying) {
+      return;
+    }
+    final now = DateTime.now();
+    if (_lastVisualizerSync != null &&
+        now.difference(_lastVisualizerSync!) <
+            const Duration(milliseconds: 900)) {
+      return;
+    }
+    _lastVisualizerSync = now;
+    unawaited(_syncVisualizerTransport());
+  }
+
   @override
   void dispose() {
     // 关键：_disposed + _openTicket 让 in-flight 的 open 在 await 后不再碰 mpv；
@@ -1786,6 +1896,13 @@ class MusicPlayController extends StateNotifier<MusicPlayState> {
     _durationSub?.cancel();
     _playingSub?.cancel();
     _completedSub?.cancel();
+    _bandsSub?.cancel();
+    _bandsSub = null;
+    _androidSessionSub?.cancel();
+    _androidSessionSub = null;
+    final visualizer = _visualizer;
+    _visualizer = null;
+    unawaited(visualizer?.dispose());
 
     final openChain = _openTrackChain;
     final player = _player;

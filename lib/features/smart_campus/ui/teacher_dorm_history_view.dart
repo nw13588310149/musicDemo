@@ -34,9 +34,17 @@
 //        H50 居中两列：规定时间 / 打卡时间；底部 备注。
 // =============================================================================
 
-import 'package:flutter/material.dart';
+import 'dart:async';
 
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/widgets/app_toast.dart';
 import '../../shell/ui/shell_layout.dart';
+import '../data/teacher_dormitory_data.dart';
+import '../state/teacher_dormitory_controller.dart';
+import 'widgets/dormitory_detail_dialog.dart';
+import 'widgets/smart_campus_page_banner.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // —— 颜色 ————————————————————————————————————————————————————————
@@ -113,6 +121,7 @@ class _DormRecord {
 
 class _StudentRecord {
   const _StudentRecord({
+    required this.id,
     required this.session,
     required this.studentName,
     required this.studentNo,
@@ -124,6 +133,7 @@ class _StudentRecord {
     required this.note,
   });
 
+  final String id;
   final _Session session;
   final String studentName;
   final String studentNo;
@@ -138,11 +148,13 @@ class _StudentRecord {
 // —— 日历日 ————————————————————————————————————————————————————
 class _CalendarDay {
   const _CalendarDay({
+    required this.date,
     required this.weekdayLabel,
     required this.dayLabel,
     this.isToday = false,
   });
 
+  final DateTime date;
   final String weekdayLabel;
   final String dayLabel;
   final bool isToday;
@@ -150,33 +162,61 @@ class _CalendarDay {
 
 // —— 顶级视图 ——————————————————————————————————————————————————
 
-class TeacherDormHistoryView extends StatefulWidget {
+class TeacherDormHistoryView extends ConsumerStatefulWidget {
   const TeacherDormHistoryView({super.key, required this.onBack});
 
   final VoidCallback onBack;
 
   @override
-  State<TeacherDormHistoryView> createState() => _TeacherDormHistoryViewState();
+  ConsumerState<TeacherDormHistoryView> createState() =>
+      _TeacherDormHistoryViewState();
 }
 
-class _TeacherDormHistoryViewState extends State<TeacherDormHistoryView> {
+class _TeacherDormHistoryViewState
+    extends ConsumerState<TeacherDormHistoryView> {
   _SessionTab _tab = _SessionTab.evening;
-  int _selectedDayIndex = 6; // 第 7 个 "今"
-  late final List<_CalendarDay> _days;
-  late final List<_DormRecord> _dormRecords;
-  late final List<_StudentRecord> _students;
 
   @override
   void initState() {
     super.initState();
-    _days = _demoDays();
-    _dormRecords = _demoDormRecords();
-    _students = _demoStudents();
+    Future.microtask(
+      () => ref.read(teacherDormitoryControllerProvider.notifier).initialize(),
+    );
+  }
+
+  Future<void> _showCheckDetail(_StudentRecord record) async {
+    if (record.id.isEmpty) return;
+    final fields = await ref
+        .read(teacherDormitoryControllerProvider.notifier)
+        .loadCheckDetail(record.id);
+    if (!mounted) return;
+    if (fields.isEmpty) {
+      AppToast.show(context, '未获取到查寝详情');
+      return;
+    }
+    await showDormitoryDetailDialog(
+      context,
+      title: '${record.studentName} · 查寝详情',
+      fields: fields,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final state = ref.watch(teacherDormitoryControllerProvider);
+    final days = _historyCalendarDays(DateTime.now());
+    final selectedDayIndex = days.indexWhere(
+      (day) => teacherDormitoryIsoDate(day.date) == state.selectedDate,
+    );
+    final students = _historyStudentRecords(state.historyItems);
+    final activeSession = _tab == _SessionTab.evening
+        ? _Session.evening
+        : _Session.morning;
+    final filteredStudents = students
+        .where((record) => record.session == activeSession)
+        .toList(growable: false);
+    final exceptionCount = state.stat.lateCount + state.stat.absentCount;
     return Container(
       color: _kPageBg,
       child: SingleChildScrollView(
@@ -185,6 +225,8 @@ class _TeacherDormHistoryViewState extends State<TeacherDormHistoryView> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _Banner(onBack: widget.onBack),
+            if (state.loading || state.loadingHistory)
+              const LinearProgressIndicator(minHeight: 2),
             SizedBox(height: ui(10)),
             Padding(
               padding: EdgeInsets.only(left: ui(8)),
@@ -199,42 +241,84 @@ class _TeacherDormHistoryViewState extends State<TeacherDormHistoryView> {
                 ),
               ),
             ),
+            if (state.error.isNotEmpty)
+              Padding(
+                padding: EdgeInsets.only(left: ui(8), top: ui(6)),
+                child: Text(
+                  state.error,
+                  style: TextStyle(fontSize: ui(12), color: _kRed),
+                ),
+              ),
             SizedBox(height: ui(12)),
             _DateStripCard(
-              days: _days,
-              selectedIndex: _selectedDayIndex,
-              dateText: '2026-04-17',
-              statText: '晚查寝应统计12人，当日流水20条。',
-              onTapDay: (i) => setState(() => _selectedDayIndex = i),
+              days: days,
+              selectedIndex: selectedDayIndex < 0 ? 6 : selectedDayIndex,
+              dateText: state.selectedDate,
+              statText:
+                  '应统计 ${state.stat.studentCount} 人，当日流水 ${state.historyItems.length} 条。',
+              onTapDay: (i) => ref
+                  .read(teacherDormitoryControllerProvider.notifier)
+                  .selectHistoryDate(days[i].date),
             ),
             SizedBox(height: ui(16)),
-            const _StatsRow(
-              eveningReturned: 10,
-              eveningWatch: 2,
-              morningArrived: 2,
-              morningWatch: 1,
+            _StatsRow(
+              eveningReturned: state.stat.normalCount,
+              eveningWatch: exceptionCount,
+              morningArrived: state.stat.normalCount,
+              morningWatch: exceptionCount,
             ),
             SizedBox(height: ui(16)),
             _TabsRow(current: _tab, onTap: (t) => setState(() => _tab = t)),
             SizedBox(height: ui(16)),
             _CardsGrid(
-              dormRecords: _filteredDormRecords(),
-              students: _filteredStudents(),
+              dormRecords: const [],
+              students: filteredStudents,
+              onStudentTap: (record) => unawaited(_showCheckDetail(record)),
             ),
           ],
         ),
       ),
     );
   }
+}
 
-  _Session get _activeSession =>
-      _tab == _SessionTab.evening ? _Session.evening : _Session.morning;
+List<_CalendarDay> _historyCalendarDays(DateTime now) {
+  const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
+  final today = DateTime(now.year, now.month, now.day);
+  return [
+    for (var offset = -6; offset <= 7; offset++)
+      () {
+        final date = today.add(Duration(days: offset));
+        return _CalendarDay(
+          date: date,
+          weekdayLabel: weekdays[date.weekday - 1],
+          dayLabel: offset == 0 ? '今' : date.day.toString(),
+          isToday: offset == 0,
+        );
+      }(),
+  ];
+}
 
-  List<_DormRecord> _filteredDormRecords() =>
-      _dormRecords.where((r) => r.session == _activeSession).toList();
-
-  List<_StudentRecord> _filteredStudents() =>
-      _students.where((r) => r.session == _activeSession).toList();
+List<_StudentRecord> _historyStudentRecords(
+  List<TeacherDormitoryHistoryItem> items,
+) {
+  return [
+    for (final item in items)
+      _StudentRecord(
+        id: item.id,
+        session: item.isMorning ? _Session.morning : _Session.evening,
+        studentName: item.studentName,
+        studentNo: item.studentNo,
+        status: item.status == TeacherDormitoryStatus.normal
+            ? _StudentStatus.normal
+            : _StudentStatus.absent,
+        dormName: item.dormName.isEmpty ? '未分配宿舍' : item.dormName,
+        date: item.checkDate,
+        requiredTime: '--',
+        punchTime: item.checkTime,
+        note: item.status == TeacherDormitoryStatus.late ? '晚归' : '无',
+      ),
+  ];
 }
 
 // —— Banner ————————————————————————————————————————————————————————
@@ -251,14 +335,7 @@ class _Banner extends StatelessWidget {
       width: double.infinity,
       height: ui(62),
       clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.bottomCenter,
-          end: Alignment.topCenter,
-          colors: [Colors.white, Color(0xFFF9EDFF)],
-        ),
-        borderRadius: BorderRadius.circular(ui(16)),
-      ),
+      decoration: smartCampusPageBannerDecoration(ui),
       child: Stack(
         children: [
           Positioned(
@@ -712,14 +789,35 @@ class _TabPill extends StatelessWidget {
 // —— 卡片网格 ——————————————————————————————————————————————————
 
 class _CardsGrid extends StatelessWidget {
-  const _CardsGrid({required this.dormRecords, required this.students});
+  const _CardsGrid({
+    required this.dormRecords,
+    required this.students,
+    this.onStudentTap,
+  });
 
   final List<_DormRecord> dormRecords;
   final List<_StudentRecord> students;
+  final ValueChanged<_StudentRecord>? onStudentTap;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    if (dormRecords.isEmpty && students.isEmpty) {
+      return Padding(
+        padding: EdgeInsets.symmetric(vertical: ui(40)),
+        child: Center(
+          child: Text(
+            '所选日期暂无查寝记录',
+            style: TextStyle(
+              fontSize: ui(14),
+              color: _kTextHint,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w400,
+            ),
+          ),
+        ),
+      );
+    }
     return LayoutBuilder(
       builder: (context, constraints) {
         const columns = 3;
@@ -743,7 +841,12 @@ class _CardsGrid extends StatelessWidget {
           widgets.add(
             SizedBox(
               width: cardWidth,
-              child: _StudentCard(record: r),
+              child: _StudentCard(
+                record: r,
+                onTap: onStudentTap == null || r.id.isEmpty
+                    ? null
+                    : () => onStudentTap!(r),
+              ),
             ),
           );
         }
@@ -878,14 +981,18 @@ class _DormStatusBadge extends StatelessWidget {
 // —— 学生口径卡 ————————————————————————————————————————————————
 
 class _StudentCard extends StatelessWidget {
-  const _StudentCard({required this.record});
+  const _StudentCard({required this.record, this.onTap});
 
   final _StudentRecord record;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(ui(16)),
+      child: Container(
       padding: EdgeInsets.all(ui(12)),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
@@ -1020,6 +1127,7 @@ class _StudentCard extends StatelessWidget {
           ),
         ],
       ),
+      ),
     );
   }
 }
@@ -1123,23 +1231,7 @@ class _TimeColumn extends StatelessWidget {
 
 // —— 演示数据 ——————————————————————————————————————————————————
 
-List<_CalendarDay> _demoDays() => const [
-  _CalendarDay(weekdayLabel: '一', dayLabel: '11'),
-  _CalendarDay(weekdayLabel: '二', dayLabel: '12'),
-  _CalendarDay(weekdayLabel: '三', dayLabel: '13'),
-  _CalendarDay(weekdayLabel: '四', dayLabel: '14'),
-  _CalendarDay(weekdayLabel: '五', dayLabel: '15'),
-  _CalendarDay(weekdayLabel: '六', dayLabel: '16'),
-  _CalendarDay(weekdayLabel: '日', dayLabel: '今', isToday: true),
-  _CalendarDay(weekdayLabel: '一', dayLabel: '18'),
-  _CalendarDay(weekdayLabel: '二', dayLabel: '19'),
-  _CalendarDay(weekdayLabel: '三', dayLabel: '20'),
-  _CalendarDay(weekdayLabel: '四', dayLabel: '21'),
-  _CalendarDay(weekdayLabel: '五', dayLabel: '22'),
-  _CalendarDay(weekdayLabel: '六', dayLabel: '23'),
-  _CalendarDay(weekdayLabel: '日', dayLabel: '24'),
-];
-
+// ignore: unused_element
 List<_DormRecord> _demoDormRecords() => const [
   // 晨查寝 · 正常（女生宿舍3号楼 612）
   _DormRecord(
@@ -1174,8 +1266,10 @@ List<_DormRecord> _demoDormRecords() => const [
 ];
 
 // 学生口径示例：晚查寝 / 晨查寝 各 6 张（演示分布）。
+// ignore: unused_element
 List<_StudentRecord> _demoStudents() => const [
   _StudentRecord(
+    id: '',
     session: _Session.evening,
     studentName: '王晴',
     studentNo: 'G3030201',
@@ -1187,6 +1281,7 @@ List<_StudentRecord> _demoStudents() => const [
     note: '无',
   ),
   _StudentRecord(
+    id: '',
     session: _Session.evening,
     studentName: '王晴',
     studentNo: 'G3030201',
@@ -1198,6 +1293,7 @@ List<_StudentRecord> _demoStudents() => const [
     note: '无',
   ),
   _StudentRecord(
+    id: '',
     session: _Session.evening,
     studentName: '王晴',
     studentNo: 'G3030201',
@@ -1209,6 +1305,7 @@ List<_StudentRecord> _demoStudents() => const [
     note: '无',
   ),
   _StudentRecord(
+    id: '',
     session: _Session.evening,
     studentName: '王晴',
     studentNo: 'G3030201',
@@ -1220,6 +1317,7 @@ List<_StudentRecord> _demoStudents() => const [
     note: '无',
   ),
   _StudentRecord(
+    id: '',
     session: _Session.evening,
     studentName: '王晴',
     studentNo: 'G3030201',
@@ -1231,6 +1329,7 @@ List<_StudentRecord> _demoStudents() => const [
     note: '无',
   ),
   _StudentRecord(
+    id: '',
     session: _Session.evening,
     studentName: '王晴',
     studentNo: 'G3030201',
@@ -1243,6 +1342,7 @@ List<_StudentRecord> _demoStudents() => const [
   ),
   // 晨查寝
   _StudentRecord(
+    id: '',
     session: _Session.morning,
     studentName: '王晴',
     studentNo: 'G3030201',
@@ -1254,6 +1354,7 @@ List<_StudentRecord> _demoStudents() => const [
     note: '无',
   ),
   _StudentRecord(
+    id: '',
     session: _Session.morning,
     studentName: '王晴',
     studentNo: 'G3030201',
@@ -1265,6 +1366,7 @@ List<_StudentRecord> _demoStudents() => const [
     note: '无',
   ),
   _StudentRecord(
+    id: '',
     session: _Session.morning,
     studentName: '王晴',
     studentNo: 'G3030201',

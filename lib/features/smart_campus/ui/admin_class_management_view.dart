@@ -1,4 +1,4 @@
-﻿// 部分卡片只覆盖了部分模型可选字段，analyzer 误报为
+// 部分卡片只覆盖了部分模型可选字段，analyzer 误报为
 // unused_element_parameter，整体忽略。
 // ignore_for_file: unused_element_parameter
 
@@ -15,6 +15,7 @@ import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/popup_selector_field.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/admin_repository.dart';
+import '../data/admin_class_summary.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // ============================================================================
@@ -206,11 +207,7 @@ class _TeacherOption {
         ? nickname
         : (realname.isNotEmpty
               ? realname
-              : _pickString(json, [
-                  'name',
-                  'teacherName',
-                  'userName',
-                ], ''));
+              : _pickString(json, ['name', 'teacherName', 'userName'], ''));
     final rawAvatar = _pickString(json, [
       'headUrl',
       'avatarUrl',
@@ -314,11 +311,7 @@ class _CampusOption {
     final id = rawId is int ? rawId : int.tryParse('${rawId ?? ''}') ?? 0;
     return _CampusOption(
       id: id,
-      name: _pickString(json, [
-        'name',
-        'campusName',
-        'fullName',
-      ], '—'),
+      name: _pickString(json, ['name', 'campusName', 'fullName'], '—'),
     );
   }
 
@@ -390,11 +383,7 @@ class _ClassEntry {
           ], '');
     final rawAvatar = headTeacherMap == null
         ? ''
-        : _pickString(headTeacherMap, [
-            'headUrl',
-            'avatarUrl',
-            'avatar',
-          ], '');
+        : _pickString(headTeacherMap, ['headUrl', 'avatarUrl', 'avatar'], '');
     final headTeacherAvatarUrl = rawAvatar.isEmpty
         ? ''
         : MediaUrl.resolve(rawAvatar);
@@ -422,10 +411,7 @@ class _ClassEntry {
     ]);
     final classroom = classroomMap != null
         ? _pickString(classroomMap, ['name', 'classroomName', 'roomName'], '')
-        : _pickString(json, [
-            'classroomName',
-            'roomName',
-          ], '');
+        : _pickString(json, ['classroomName', 'roomName'], '');
 
     int? classroomId;
     final rawRoom =
@@ -660,6 +646,7 @@ class AdminClassManagementView extends ConsumerStatefulWidget {
 class _AdminClassManagementViewState
     extends ConsumerState<AdminClassManagementView> {
   List<_ClassEntry> _classes = const [];
+  AdminClassSummary _summary = const AdminClassSummary();
   bool _loading = true;
 
   /// 班级 id → 已加载的学生名单。`null` 表示尚未拉取，空 List 表示已拉取且为空。
@@ -733,12 +720,17 @@ class _AdminClassManagementViewState
   Future<void> _loadClasses() async {
     setState(() => _loading = true);
     final repo = ref.read(adminRepositoryProvider);
-    final resp = await repo.classList();
+    final responses = await Future.wait([repo.classList(), repo.classSum()]);
     if (!mounted) return;
+    final resp = responses[0];
+    final summaryResp = responses[1];
 
     if (!resp.isSuccess || resp.data == null) {
       setState(() {
         _classes = const [];
+        if (summaryResp.isSuccess) {
+          _summary = AdminClassSummary.fromJson(summaryResp.data);
+        }
         _loading = false;
       });
       return;
@@ -754,6 +746,9 @@ class _AdminClassManagementViewState
 
     setState(() {
       _classes = parsed;
+      if (summaryResp.isSuccess) {
+        _summary = AdminClassSummary.fromJson(summaryResp.data);
+      }
       _loading = false;
       _classStudents.clear();
       _classStudentsLoading.clear();
@@ -1177,12 +1172,6 @@ class _AdminClassManagementViewState
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
 
-    final adminClassCount = _classes.length;
-    final enrolledCount = _classes.fold<int>(
-      0,
-      (acc, c) => acc + c.studentCount,
-    );
-
     return Container(
       color: _kBg,
       child: SingleChildScrollView(
@@ -1197,14 +1186,10 @@ class _AdminClassManagementViewState
             ),
             SizedBox(height: ui(16)),
             _StatsRow(
-              classCount: adminClassCount,
-              enrolledCount: enrolledCount,
-              // 「可调班在籍」目前后端没有专属字段，行政班里所有在籍
-              // 学生本质上都可被调班，故沿用 enrolledCount。
-              transferableCount: enrolledCount,
-              // 「调班记录」需要后端单独的调班流水接口；接入前先以 0 渲染，
-              // 不再 hardcode 假值。
-              transferRecordCount: 0,
+              bigClassCount: _summary.bigClassCount,
+              smallClassCount: _summary.smallClassCount,
+              studentCount: _summary.studentCount,
+              unassignedStudentCount: _summary.unassignedStudentCount,
             ),
             SizedBox(height: ui(20)),
             Row(
@@ -1438,45 +1423,45 @@ class _BannerActionButton extends StatelessWidget {
 
 class _StatsRow extends StatelessWidget {
   const _StatsRow({
-    required this.classCount,
-    required this.enrolledCount,
-    required this.transferableCount,
-    required this.transferRecordCount,
+    required this.bigClassCount,
+    required this.smallClassCount,
+    required this.studentCount,
+    required this.unassignedStudentCount,
   });
 
-  final int classCount;
-  final int enrolledCount;
-  final int transferableCount;
-  final int transferRecordCount;
+  final int bigClassCount;
+  final int smallClassCount;
+  final int studentCount;
+  final int unassignedStudentCount;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final cards = <_StatCard>[
       _StatCard(
-        label: '行政班数',
-        value: classCount,
+        label: '大班数量',
+        value: bigClassCount,
         gradientStart: const Color(0xFFE7DCFF),
         icon: Icons.dashboard_outlined,
         iconColor: const Color(0xFFA985FF),
       ),
       _StatCard(
-        label: '在籍人数',
-        value: enrolledCount,
+        label: '小班数量',
+        value: smallClassCount,
         gradientStart: const Color(0xFFFFF0DC),
         icon: Icons.people_alt_outlined,
         iconColor: const Color(0xFFFFB85C),
       ),
       _StatCard(
-        label: '可调班在籍',
-        value: transferableCount,
+        label: '学生数量',
+        value: studentCount,
         gradientStart: const Color(0xFFDCFFE7),
         icon: Icons.shuffle_rounded,
         iconColor: const Color(0xFF52C49A),
       ),
       _StatCard(
-        label: '调班记录',
-        value: transferRecordCount,
+        label: '未分配学生',
+        value: unassignedStudentCount,
         gradientStart: const Color(0xFFFFE2DC),
         icon: Icons.receipt_long_outlined,
         iconColor: const Color(0xFFFF8A75),
@@ -1613,9 +1598,7 @@ class _ClassCard extends StatelessWidget {
             if (loadingStudents)
               SizedBox(
                 height: ui(64),
-                child: const Center(
-                  child: AppLoadingIndicator(),
-                ),
+                child: const Center(child: AppLoadingIndicator()),
               )
             else if (entry.students.isEmpty)
               SizedBox(
@@ -1667,115 +1650,115 @@ class _ClassHeader extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: onOpenDetail,
       child: Container(
-      constraints: BoxConstraints(minHeight: ui(65)),
-      decoration: BoxDecoration(
-        color: _kSubBg,
-        borderRadius: BorderRadius.circular(ui(12)),
-      ),
-      padding: EdgeInsets.fromLTRB(ui(12), ui(12), ui(12), ui(12)),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Container(
-            width: ui(36),
-            height: ui(36),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: _kPurpleAvatarBg,
-              borderRadius: BorderRadius.circular(ui(8)),
-            ),
-            child: ShaderMask(
-              shaderCallback: (rect) => const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xFF1C274D), _kPurple],
-              ).createShader(rect),
-              blendMode: BlendMode.srcIn,
-              child: Icon(
-                Icons.groups_outlined,
-                size: ui(20),
-                color: Colors.white,
-              ),
-            ),
-          ),
-          SizedBox(width: ui(8)),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        entry.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: ui(14),
-                          height: 1.2,
-                          fontWeight: AppFont.w500,
-                          color: _kTextPrimary,
-                          fontFamily: 'PingFang SC',
-                        ),
-                      ),
-                    ),
-                    SizedBox(width: ui(8)),
-                    _KindPill(kind: entry.kind),
-                  ],
-                ),
-                SizedBox(height: ui(6)),
-                Text(
-                  entry.metaLine,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: ui(12),
-                    height: 1.2,
-                    color: _kTextHint,
-                    fontFamily: 'PingFang SC',
-                  ),
-                ),
-              ],
-            ),
-          ),
-          SizedBox(width: ui(12)),
-          Text(
-            '共${entry.studentCount}人',
-            style: TextStyle(
-              fontSize: ui(12),
-              height: 1.2,
-              color: _kTextSub,
-              fontFamily: 'PingFang SC',
-            ),
-          ),
-          SizedBox(width: ui(12)),
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: onToggle,
-            child: Container(
-              width: ui(32),
-              height: ui(32),
+        constraints: BoxConstraints(minHeight: ui(65)),
+        decoration: BoxDecoration(
+          color: _kSubBg,
+          borderRadius: BorderRadius.circular(ui(12)),
+        ),
+        padding: EdgeInsets.fromLTRB(ui(12), ui(12), ui(12), ui(12)),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              width: ui(36),
+              height: ui(36),
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: _kPurpleAvatarBg,
                 borderRadius: BorderRadius.circular(ui(8)),
-                border: Border.all(color: _kBorder, width: 1),
               ),
-              child: AnimatedRotation(
-                turns: expanded ? 0.5 : 0,
-                duration: const Duration(milliseconds: 200),
+              child: ShaderMask(
+                shaderCallback: (rect) => const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFF1C274D), _kPurple],
+                ).createShader(rect),
+                blendMode: BlendMode.srcIn,
                 child: Icon(
-                  Icons.keyboard_arrow_down,
-                  size: ui(16),
-                  color: _kTextPrimary,
+                  Icons.groups_outlined,
+                  size: ui(20),
+                  color: Colors.white,
                 ),
               ),
             ),
-          ),
-        ],
-      ),
+            SizedBox(width: ui(8)),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          entry.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: ui(14),
+                            height: 1.2,
+                            fontWeight: AppFont.w500,
+                            color: _kTextPrimary,
+                            fontFamily: 'PingFang SC',
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: ui(8)),
+                      _KindPill(kind: entry.kind),
+                    ],
+                  ),
+                  SizedBox(height: ui(6)),
+                  Text(
+                    entry.metaLine,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: ui(12),
+                      height: 1.2,
+                      color: _kTextHint,
+                      fontFamily: 'PingFang SC',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(width: ui(12)),
+            Text(
+              '共${entry.studentCount}人',
+              style: TextStyle(
+                fontSize: ui(12),
+                height: 1.2,
+                color: _kTextSub,
+                fontFamily: 'PingFang SC',
+              ),
+            ),
+            SizedBox(width: ui(12)),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onToggle,
+              child: Container(
+                width: ui(32),
+                height: ui(32),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(ui(8)),
+                  border: Border.all(color: _kBorder, width: 1),
+                ),
+                child: AnimatedRotation(
+                  turns: expanded ? 0.5 : 0,
+                  duration: const Duration(milliseconds: 200),
+                  child: Icon(
+                    Icons.keyboard_arrow_down,
+                    size: ui(16),
+                    color: _kTextPrimary,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2858,11 +2841,7 @@ class _DrawerTitleBar extends StatelessWidget {
                 width: ui(28),
                 height: ui(28),
                 alignment: Alignment.center,
-                child: Icon(
-                  Icons.close,
-                  size: ui(18),
-                  color: _kTextHint,
-                ),
+                child: Icon(Icons.close, size: ui(18), color: _kTextHint),
               ),
             ),
           ],
@@ -3360,9 +3339,7 @@ class _TransferList extends StatelessWidget {
           ),
           Expanded(
             child: loading
-                ? const Center(
-                    child: AppLoadingIndicator(),
-                  )
+                ? const Center(child: AppLoadingIndicator())
                 : students.isEmpty
                 ? Center(
                     child: Text(
@@ -3644,9 +3621,7 @@ class _TeacherTransferList extends StatelessWidget {
           ),
           Expanded(
             child: loading
-                ? const Center(
-                    child: AppLoadingIndicator(),
-                  )
+                ? const Center(child: AppLoadingIndicator())
                 : teachers.isEmpty
                 ? Center(
                     child: Text(
@@ -3837,7 +3812,12 @@ class _ClassDetailDrawerState extends State<_ClassDetailDrawer> {
                 ),
                 Expanded(
                   child: SingleChildScrollView(
-                    padding: EdgeInsets.fromLTRB(ui(20), ui(20), ui(20), ui(20)),
+                    padding: EdgeInsets.fromLTRB(
+                      ui(20),
+                      ui(20),
+                      ui(20),
+                      ui(20),
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -3911,9 +3891,7 @@ class _ClassDetailDrawerState extends State<_ClassDetailDrawer> {
                           loading: _studentsLoading,
                           child: _students.isEmpty
                               ? _ClassDetailEmpty(
-                                  label: _studentsLoading
-                                      ? '正在加载…'
-                                      : '该班暂无学生',
+                                  label: _studentsLoading ? '正在加载…' : '该班暂无学生',
                                 )
                               : _StudentMiniGrid(students: _students),
                         ),
@@ -4159,8 +4137,7 @@ class _HeadTeacherCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final nickname = entry.headTeacherNickname;
-    final showNickname =
-        nickname.isNotEmpty && nickname != entry.headTeacher;
+    final showNickname = nickname.isNotEmpty && nickname != entry.headTeacher;
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -4215,15 +4192,9 @@ class _HeadTeacherCard extends StatelessWidget {
                 ),
                 SizedBox(height: ui(8)),
                 if (entry.headTeacherGender.isNotEmpty)
-                  _ClassDetailRow(
-                    label: '性别：',
-                    value: entry.headTeacherGender,
-                  ),
+                  _ClassDetailRow(label: '性别：', value: entry.headTeacherGender),
                 if (entry.headTeacherMobile.isNotEmpty)
-                  _ClassDetailRow(
-                    label: '手机：',
-                    value: entry.headTeacherMobile,
-                  ),
+                  _ClassDetailRow(label: '手机：', value: entry.headTeacherMobile),
                 if (entry.headTeacherIntroduce.isNotEmpty)
                   _ClassDetailRow(
                     label: '简介：',
@@ -4277,8 +4248,9 @@ class _TeacherMiniCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final statusLabel =
-        teacher.teacherStatus.isEmpty ? '在岗' : teacher.teacherStatus;
+    final statusLabel = teacher.teacherStatus.isEmpty
+        ? '在岗'
+        : teacher.teacherStatus;
     final onDuty = statusLabel.contains('在岗');
     return Container(
       constraints: BoxConstraints(minHeight: ui(64)),
@@ -4294,10 +4266,7 @@ class _TeacherMiniCard extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                _MiniAvatar(
-                  name: teacher.name,
-                  avatarUrl: teacher.avatarUrl,
-                ),
+                _MiniAvatar(name: teacher.name, avatarUrl: teacher.avatarUrl),
                 SizedBox(width: ui(8)),
                 Expanded(
                   child: Column(

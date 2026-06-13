@@ -23,8 +23,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
+import '../../shell/data/shell_repository.dart';
+import '../../shell/state/shell_controller.dart';
+import '../../shell/state/shell_state.dart';
 import '../../shell/ui/shell_layout.dart';
+import '../data/head_teacher_index_data.dart';
 import '../data/teacher_repository.dart';
+import 'widgets/smart_campus_page_banner.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 const Color _kPanelBg = Colors.white;
@@ -179,40 +184,54 @@ class _TeacherClassWorkbenchViewState
     extends ConsumerState<TeacherClassWorkbenchView> {
   _WorkbenchTab _tab = _WorkbenchTab.overview;
 
-  // 当前班级（从 classList 接口获取第一个班级）；id 用字符串避免雪花精度丢失。
+  // 当前班级（从 headTeacherIndex.classList 切换）；id 用字符串避免雪花精度丢失。
   String _classId = '0';
-  String _className = '';
+  int _selectedClassIndex = 0;
+  HeadTeacherIndexRes _index = HeadTeacherIndexRes.zero;
   bool _loadingClass = true;
   String _classError = '';
+
+  void _selectClass(int index) {
+    if (index < 0 || index >= _index.classList.length) return;
+    final item = _index.classList[index];
+    setState(() {
+      _selectedClassIndex = index;
+      _classId = item.classId;
+    });
+  }
 
   @override
   void initState() {
     super.initState();
-    _loadClass();
+    _loadIndex();
   }
 
-  Future<void> _loadClass() async {
-    final res = await ref.read(teacherRepositoryProvider).classList();
+  Future<void> _loadIndex() async {
+    final res = await ref.read(teacherRepositoryProvider).headTeacherIndex();
     if (!mounted) return;
     if (res.isSuccess) {
-      final list = res.data is List ? res.data as List : [];
-      if (list.isNotEmpty) {
-        final first = list.first as Map;
+      final index = parseHeadTeacherIndexRes(res.data);
+      if (index.classList.isNotEmpty) {
+        final first = index.classList.first;
         setState(() {
-          _classId =
-              first['id']?.toString() ??
-              first['classId']?.toString() ??
-              '0';
-          _className = first['name']?.toString() ?? '';
+          _index = index;
+          _selectedClassIndex = 0;
+          _classId = first.classId;
           _loadingClass = false;
         });
         return;
       }
+      setState(() {
+        _index = index;
+        _loadingClass = false;
+        _classError = '暂无绑定班级';
+      });
+      return;
     }
     if (mounted) {
       setState(() {
         _loadingClass = false;
-        _classError = res.msg.isNotEmpty ? res.msg : '暂无绑定班级';
+        _classError = res.msg.isNotEmpty ? res.msg : '加载班级工作台失败';
       });
     }
   }
@@ -266,7 +285,12 @@ class _TeacherClassWorkbenchViewState
           // 不同 Tab 的主体——保持 banner 一致，下方切换内容。
           switch (_tab) {
             _WorkbenchTab.overview =>
-              _OverviewTab(classId: _classId, className: _className),
+              _OverviewTab(
+                classId: _classId,
+                index: _index,
+                selectedClassIndex: _selectedClassIndex,
+                onClassChanged: _selectClass,
+              ),
             _WorkbenchTab.students => _StudentsTab(classId: _classId),
             _WorkbenchTab.grades => const _GradesTab(),
           },
@@ -297,14 +321,8 @@ class _WorkbenchBanner extends StatelessWidget {
     return Container(
       width: double.infinity,
       height: ui(62),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(ui(12)),
-        gradient: const LinearGradient(
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-          colors: [Colors.white, Color(0xFFF9EEFF)],
-        ),
-      ),
+      clipBehavior: Clip.antiAlias,
+      decoration: smartCampusPageBannerDecoration(ui, borderRadius: 12),
       child: Stack(
         children: [
           // 返回按钮
@@ -427,10 +445,17 @@ class _SegmentItem extends StatelessWidget {
 // =============================================================================
 
 class _OverviewTab extends StatelessWidget {
-  const _OverviewTab({required this.classId, required this.className});
+  const _OverviewTab({
+    required this.classId,
+    required this.index,
+    required this.selectedClassIndex,
+    required this.onClassChanged,
+  });
 
   final String classId;
-  final String className;
+  final HeadTeacherIndexRes index;
+  final int selectedClassIndex;
+  final ValueChanged<int> onClassChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -490,11 +515,16 @@ class _OverviewTab extends StatelessWidget {
     return [
       const _SectionTitle('我的班级'),
       SizedBox(height: ui(12)),
-      const _TeacherInfoCard(),
+      _TeacherInfoCard(
+        index: index,
+        classes: index.classList,
+        selectedClassIndex: selectedClassIndex,
+        onClassChanged: onClassChanged,
+      ),
       SizedBox(height: ui(20)),
       const _SectionTitle('班级捷径'),
       SizedBox(height: ui(12)),
-      const _ShortcutStatGrid(),
+      _ShortcutStatGrid(index: index),
       SizedBox(height: ui(20)),
       const _SectionTitle('本周出勤'),
       SizedBox(height: ui(12)),
@@ -1098,63 +1128,314 @@ Future<void> _showPublishNoticeDialog(
 
 // ----- 我的班级 卡片 -----
 
-class _TeacherInfoCard extends StatelessWidget {
-  const _TeacherInfoCard();
+/// 从 `/app/user/myInfo` 的 `user` 节点提取班主任个人信息。
+class _MyInfoProfile {
+  const _MyInfoProfile({
+    required this.displayName,
+    required this.avatarUrl,
+    required this.identity,
+    required this.introduce,
+  });
+
+  final String displayName;
+  final String avatarUrl;
+  final String identity;
+  final String introduce;
+
+  String get subtitle {
+    if (identity.isNotEmpty) return identity;
+    if (introduce.isNotEmpty) return introduce;
+    return '班主任';
+  }
+
+  factory _MyInfoProfile.fromShellUser(ShellUser user) {
+    return _MyInfoProfile(
+      displayName: user.displayName,
+      avatarUrl: user.avatarUrl,
+      identity: user.identity,
+      introduce: '',
+    );
+  }
+
+  factory _MyInfoProfile.fromUserMap(Map<dynamic, dynamic> map) {
+    final nickname = map['nickname']?.toString().trim() ?? '';
+    final realname = map['realname']?.toString().trim() ?? '';
+    final displayName = nickname.isNotEmpty
+        ? nickname
+        : (realname.isNotEmpty ? realname : '用户');
+    return _MyInfoProfile(
+      displayName: displayName,
+      avatarUrl: map['headUrl']?.toString().trim() ?? '',
+      identity: map['identity']?.toString().trim() ?? '',
+      introduce: map['introduce']?.toString().trim() ?? '',
+    );
+  }
+}
+
+Map<dynamic, dynamic>? _extractMyInfoUser(dynamic data) {
+  if (data is! Map) return null;
+  final user = data['user'];
+  if (user is Map) return user;
+  return data;
+}
+
+class _TeacherInfoCard extends ConsumerStatefulWidget {
+  const _TeacherInfoCard({
+    required this.index,
+    required this.classes,
+    required this.selectedClassIndex,
+    required this.onClassChanged,
+  });
+
+  final HeadTeacherIndexRes index;
+  final List<HeadTeacherClassItem> classes;
+  final int selectedClassIndex;
+  final ValueChanged<int> onClassChanged;
+
+  @override
+  ConsumerState<_TeacherInfoCard> createState() => _TeacherInfoCardState();
+}
+
+class _TeacherInfoCardState extends ConsumerState<_TeacherInfoCard> {
+  _MyInfoProfile? _profile;
+  late PageController _pageController;
+
+  int get _maxIndex =>
+      widget.classes.isEmpty ? 0 : widget.classes.length - 1;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(
+      initialPage: widget.selectedClassIndex.clamp(0, _maxIndex),
+    );
+    _loadMyInfo();
+  }
+
+  @override
+  void didUpdateWidget(covariant _TeacherInfoCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectedClassIndex != widget.selectedClassIndex &&
+        _pageController.hasClients) {
+      final target = widget.selectedClassIndex.clamp(0, _maxIndex);
+      if ((_pageController.page ?? target).round() != target) {
+        _pageController.animateToPage(
+          target,
+          duration: const Duration(milliseconds: 240),
+          curve: Curves.easeOutCubic,
+        );
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadMyInfo() async {
+    final shellUser = ref.read(shellControllerProvider).user;
+    if (mounted) {
+      setState(() => _profile = _MyInfoProfile.fromShellUser(shellUser));
+    }
+
+    final res = await ref.read(shellRepositoryProvider).getMyInfo();
+    if (!mounted || !res.isSuccess) return;
+    final userMap = _extractMyInfoUser(res.data);
+    if (userMap == null) return;
+    setState(() => _profile = _MyInfoProfile.fromUserMap(userMap));
+  }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      decoration: BoxDecoration(
-        color: _kPanelBg,
-        borderRadius: BorderRadius.circular(ui(16)),
-      ),
-      padding: EdgeInsets.all(ui(12)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _TeacherInfoHeader(),
-          SizedBox(height: ui(12)),
-          _TeacherInfoMeta(),
-          SizedBox(height: ui(14)),
-          _TeacherInfoStats(),
+    final shellUser = ref.watch(shellControllerProvider).user;
+    final profile = _profile ?? _MyInfoProfile.fromShellUser(shellUser);
+    final classes = widget.classes;
+    final hasMultiple = classes.length > 1;
+    // 单页内容高度：header + 班级信息 + 统计 + 内边距。
+    final pageHeight = ui(230);
+
+    if (classes.isEmpty) {
+      return Container(
+        decoration: BoxDecoration(
+          color: _kPanelBg,
+          borderRadius: BorderRadius.circular(ui(16)),
+        ),
+        padding: EdgeInsets.all(ui(12)),
+        child: Text(
+          '暂无班级',
+          style: TextStyle(fontSize: ui(12), color: _kTextHint),
+        ),
+      );
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: _kPanelBg,
+            borderRadius: BorderRadius.circular(ui(16)),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: SizedBox(
+            height: pageHeight,
+            child: PageView.builder(
+              controller: _pageController,
+              itemCount: classes.length,
+              onPageChanged: widget.onClassChanged,
+              itemBuilder: (context, index) {
+                return Padding(
+                  padding: EdgeInsets.all(ui(12)),
+                  child: _ClassCardPage(
+                    profile: profile,
+                    classItem: classes[index],
+                    index: widget.index,
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+        if (hasMultiple) ...[
+          SizedBox(height: ui(10)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              for (var i = 0; i < classes.length; i++) ...[
+                if (i > 0) SizedBox(width: ui(6)),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: i == widget.selectedClassIndex ? ui(14) : ui(6),
+                  height: ui(6),
+                  decoration: BoxDecoration(
+                    color: i == widget.selectedClassIndex
+                        ? _kPurple
+                        : const Color(0xFFD9D9DE),
+                    borderRadius: BorderRadius.circular(ui(3)),
+                  ),
+                ),
+              ],
+            ],
+          ),
         ],
-      ),
+      ],
+    );
+  }
+}
+
+/// 单张班级卡内容（个人信息 + 当前班级 + 统计）。
+class _ClassCardPage extends StatelessWidget {
+  const _ClassCardPage({
+    required this.profile,
+    required this.classItem,
+    required this.index,
+  });
+
+  final _MyInfoProfile profile;
+  final HeadTeacherClassItem classItem;
+  final HeadTeacherIndexRes index;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _TeacherInfoHeader(
+          profile: profile,
+          enrolledCount: classItem.studentCount,
+        ),
+        SizedBox(height: ui(12)),
+        _ClassMetaRow(classItem: classItem),
+        SizedBox(height: ui(14)),
+        _TeacherInfoStats(index: index),
+      ],
+    );
+  }
+}
+
+class _ClassMetaRow extends StatelessWidget {
+  const _ClassMetaRow({required this.classItem});
+
+  final HeadTeacherClassItem classItem;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              '带班：',
+              style: TextStyle(
+                fontSize: ui(12),
+                color: _kTextHint,
+                fontWeight: FontWeight.w400,
+                height: 1,
+              ),
+            ),
+            Expanded(
+              child: Text(
+                classItem.className,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: ui(14),
+                  color: _kTextDark,
+                  fontWeight: FontWeight.w500,
+                  height: 1,
+                ),
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: ui(6)),
+        Text(
+          '${classItem.studentCount} 人',
+          style: TextStyle(
+            fontSize: ui(12),
+            color: _kTextSecondary,
+            fontWeight: FontWeight.w400,
+            height: 1,
+          ),
+        ),
+      ],
     );
   }
 }
 
 class _TeacherInfoHeader extends StatelessWidget {
+  const _TeacherInfoHeader({
+    required this.profile,
+    required this.enrolledCount,
+  });
+
+  final _MyInfoProfile profile;
+  final int enrolledCount;
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // 头像 + 「班主任」徽标
         SizedBox(
           width: ui(56),
           height: ui(56),
           child: Stack(
             clipBehavior: Clip.none,
             children: [
-              Container(
-                width: ui(48),
-                height: ui(48),
-                decoration: BoxDecoration(
-                  color: _kPurple,
-                  borderRadius: BorderRadius.circular(ui(24)),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  '黎',
-                  style: TextStyle(
-                    fontSize: ui(18),
-                    color: Colors.white,
-                    fontWeight: FontWeight.w500,
-                    height: 1,
-                  ),
-                ),
+              _WorkbenchAvatar(
+                avatarUrl: profile.avatarUrl,
+                size: ui(48),
+                fallbackName: profile.displayName,
               ),
               Positioned(
                 left: 0,
@@ -1184,7 +1465,6 @@ class _TeacherInfoHeader extends StatelessWidget {
           ),
         ),
         SizedBox(width: ui(12)),
-        // 文字信息
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1192,13 +1472,17 @@ class _TeacherInfoHeader extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Text(
-                    'Grey黎',
-                    style: TextStyle(
-                      fontSize: ui(16),
-                      color: _kTextDark,
-                      fontWeight: FontWeight.w500,
-                      height: 1,
+                  Flexible(
+                    child: Text(
+                      profile.displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: ui(16),
+                        color: _kTextDark,
+                        fontWeight: FontWeight.w500,
+                        height: 1,
+                      ),
                     ),
                   ),
                   SizedBox(width: ui(8)),
@@ -1225,7 +1509,7 @@ class _TeacherInfoHeader extends StatelessWidget {
                         ),
                         SizedBox(width: ui(4)),
                         Text(
-                          '在岗',
+                          '运行中',
                           style: TextStyle(
                             fontSize: ui(12),
                             color: _kTextDark,
@@ -1240,7 +1524,9 @@ class _TeacherInfoHeader extends StatelessWidget {
               ),
               SizedBox(height: ui(6)),
               Text(
-                '音乐学科 一级教师',
+                profile.subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: ui(12),
                   color: _kTextSecondary,
@@ -1251,25 +1537,77 @@ class _TeacherInfoHeader extends StatelessWidget {
             ],
           ),
         ),
-        // 在籍 / 实到
-        Row(
-          children: [
-            _HeaderStat(label: '在籍人数', value: '32'),
-            SizedBox(width: ui(20)),
-            _HeaderStat(label: '实到/应到', value: '31', secondary: '/32'),
-          ],
+        _HeaderStat(
+          label: '在籍人数',
+          value: enrolledCount.toString(),
         ),
       ],
     );
   }
 }
 
+class _WorkbenchAvatar extends StatelessWidget {
+  const _WorkbenchAvatar({
+    required this.avatarUrl,
+    required this.size,
+    this.fallbackName,
+  });
+
+  final String avatarUrl;
+  final double size;
+  final String? fallbackName;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    Widget child;
+    if (avatarUrl.isNotEmpty) {
+      child = ClipRRect(
+        borderRadius: BorderRadius.circular(size / 2),
+        child: Image.network(
+          avatarUrl,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => _fallback(ui),
+        ),
+      );
+    } else {
+      child = _fallback(ui);
+    }
+    return SizedBox(width: size, height: size, child: child);
+  }
+
+  Widget _fallback(double Function(double) ui) {
+    final name = fallbackName?.trim() ?? '';
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: _kPurple,
+        borderRadius: BorderRadius.circular(size / 2),
+      ),
+      alignment: Alignment.center,
+      child: name.isNotEmpty
+          ? Text(
+              name.characters.first,
+              style: TextStyle(
+                fontSize: ui(18),
+                color: Colors.white,
+                fontWeight: FontWeight.w500,
+                height: 1,
+              ),
+            )
+          : Icon(Icons.person_rounded, size: ui(22), color: Colors.white),
+    );
+  }
+}
+
 class _HeaderStat extends StatelessWidget {
-  const _HeaderStat({required this.label, required this.value, this.secondary});
+  const _HeaderStat({required this.label, required this.value});
 
   final String label;
   final String value;
-  final String? secondary;
 
   @override
   Widget build(BuildContext context) {
@@ -1288,32 +1626,15 @@ class _HeaderStat extends StatelessWidget {
           ),
         ),
         SizedBox(height: ui(4)),
-        RichText(
+        Text(
+          value,
           textAlign: TextAlign.center,
-          text: TextSpan(
-            children: [
-              TextSpan(
-                text: value,
-                style: TextStyle(
-                  fontSize: ui(24),
-                  color: _kPurple,
-                  fontWeight: FontWeight.w500,
-                  fontFamily: 'Barlow',
-                  height: 1,
-                ),
-              ),
-              if (secondary != null)
-                TextSpan(
-                  text: secondary,
-                  style: TextStyle(
-                    fontSize: ui(16),
-                    color: _kTextHint,
-                    fontWeight: FontWeight.w400,
-                    fontFamily: 'Barlow',
-                    height: 1,
-                  ),
-                ),
-            ],
+          style: TextStyle(
+            fontSize: ui(24),
+            color: _kPurple,
+            fontWeight: FontWeight.w500,
+            fontFamily: 'Barlow',
+            height: 1,
           ),
         ),
       ],
@@ -1321,47 +1642,11 @@ class _HeaderStat extends StatelessWidget {
   }
 }
 
-class _TeacherInfoMeta extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    Widget metaRow(String key, String value) => Padding(
-      padding: EdgeInsets.only(bottom: ui(4)),
-      child: Row(
-        children: [
-          Text(
-            key,
-            style: TextStyle(
-              fontSize: ui(12),
-              color: _kTextHint,
-              fontWeight: FontWeight.w400,
-              height: 1,
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: ui(12),
-                color: _kTextDark,
-                fontWeight: FontWeight.w400,
-                height: 1,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [metaRow('带班：', '高三音乐实验班'), metaRow('位置：', '艺术楼·合唱排练厅A201')],
-    );
-  }
-}
-
 class _TeacherInfoStats extends StatelessWidget {
+  const _TeacherInfoStats({required this.index});
+
+  final HeadTeacherIndexRes index;
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
@@ -1403,11 +1688,11 @@ class _TeacherInfoStats extends StatelessWidget {
     );
     return Row(
       children: [
-        box('请假人数', '3'),
+        box('待批请假', index.pendingLeaveCount.toString()),
         SizedBox(width: ui(13)),
-        box('查寝人数', '3'),
+        box('待批补卡', index.pendingMakeupCount.toString()),
         SizedBox(width: ui(13)),
-        box('家校', '3'),
+        box('家校未读', index.chatUnreadCount.toString()),
       ],
     );
   }
@@ -1416,7 +1701,9 @@ class _TeacherInfoStats extends StatelessWidget {
 // ----- 班级捷径（左：4 张统计 + 操作链接） -----
 
 class _ShortcutStatGrid extends StatelessWidget {
-  const _ShortcutStatGrid();
+  const _ShortcutStatGrid({required this.index});
+
+  final HeadTeacherIndexRes index;
 
   @override
   Widget build(BuildContext context) {
@@ -1494,17 +1781,32 @@ class _ShortcutStatGrid extends StatelessWidget {
       children: [
         Row(
           children: [
-            cell(value: '6', label: '今日出勤率'),
+            cell(
+              value: index.pendingMakeupCount.toString(),
+              label: '待批补卡',
+            ),
             SizedBox(width: ui(12)),
-            cell(value: '6', label: '待批请假', actionLabel: '去处理'),
+            cell(
+              value: index.pendingLeaveCount.toString(),
+              label: '待批请假',
+              actionLabel: index.pendingLeaveCount > 0 ? '去处理' : null,
+            ),
           ],
         ),
         SizedBox(height: ui(12)),
         Row(
           children: [
-            cell(value: '6', label: '查寝异常', actionLabel: '查看'),
+            cell(
+              value: index.todayAbnormalDormCount.toString(),
+              label: '查寝异常',
+              actionLabel: index.todayAbnormalDormCount > 0 ? '查看' : null,
+            ),
             SizedBox(width: ui(12)),
-            cell(value: '6', label: '家校未读', actionLabel: '回复'),
+            cell(
+              value: index.chatUnreadCount.toString(),
+              label: '家校未读',
+              actionLabel: index.chatWaitingCount > 0 ? '回复' : null,
+            ),
           ],
         ),
       ],

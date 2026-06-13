@@ -31,10 +31,17 @@
 //        宿舍 13/#6D6B75 + 日期；灰底块同；底部 备注。
 // =============================================================================
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/widgets/app_toast.dart';
 import '../../shell/ui/shell_layout.dart';
+import '../data/teacher_dormitory_data.dart';
+import '../state/teacher_dormitory_controller.dart';
+import 'widgets/dormitory_detail_dialog.dart';
+import 'widgets/smart_campus_page_banner.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // —— 颜色 ————————————————————————————————————————————————————————
@@ -77,6 +84,7 @@ enum _FilterTab {
 // 可参考 _DormStatus 加入蓝底 _kBlue 配色。
 enum _StudentStatus {
   normal('正常', _kPurpleSoftBg, _kPurple),
+  late_('晚归', Color(0xFFDBE2FF), _kBlue),
   absent('未打卡', _kRedSoftBg, _kRed);
 
   const _StudentStatus(this.label, this.bg, this.fg);
@@ -163,6 +171,7 @@ class _DormRecord {
 
 class _PunchAuditRecord {
   const _PunchAuditRecord({
+    required this.id,
     required this.studentName,
     required this.studentNo,
     required this.dormName,
@@ -171,6 +180,7 @@ class _PunchAuditRecord {
     required this.status,
   });
 
+  final String id;
   final String studentName;
   final String studentNo;
   final String dormName;
@@ -181,34 +191,56 @@ class _PunchAuditRecord {
 
 // —— 顶级视图 ——————————————————————————————————————————————————
 
-class TeacherDormDynamicView extends StatefulWidget {
+class TeacherDormDynamicView extends ConsumerStatefulWidget {
   const TeacherDormDynamicView({super.key, required this.onBack});
 
   final VoidCallback onBack;
 
   @override
-  State<TeacherDormDynamicView> createState() => _TeacherDormDynamicViewState();
+  ConsumerState<TeacherDormDynamicView> createState() =>
+      _TeacherDormDynamicViewState();
 }
 
-class _TeacherDormDynamicViewState extends State<TeacherDormDynamicView> {
+class _TeacherDormDynamicViewState
+    extends ConsumerState<TeacherDormDynamicView> {
   _TopTab _topTab = _TopTab.classRoster;
   _FilterTab _filterTab = _FilterTab.all;
-  late final List<_StudentRecord> _students;
-  late final List<_DormRecord> _dormRecords;
-  // 补卡审核列表：使用可变 list，支持点击"通过/驳回"后实时更新状态。
-  late List<_PunchAuditRecord> _punchAudits;
 
   @override
   void initState() {
     super.initState();
-    _students = _demoStudents();
-    _dormRecords = _demoDormRecords();
-    _punchAudits = _demoPunchAudits();
+    Future.microtask(
+      () => ref.read(teacherDormitoryControllerProvider.notifier).initialize(),
+    );
+  }
+
+  Future<void> _showMakeupDetail(_PunchAuditRecord record) async {
+    if (record.id.isEmpty) return;
+    final fields = await ref
+        .read(teacherDormitoryControllerProvider.notifier)
+        .loadMakeupDetail(record.id);
+    if (!mounted) return;
+    if (fields.isEmpty) {
+      AppToast.show(context, '未获取到补卡详情');
+      return;
+    }
+    await showDormitoryDetailDialog(
+      context,
+      title: '${record.studentName} · 补卡详情',
+      fields: fields,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final state = ref.watch(teacherDormitoryControllerProvider);
+    final students = _studentRecords(state.dynamicItems);
+    final dormRecords = const <_DormRecord>[];
+    final punchAudits = _punchAuditRecords(state.makeupItems);
+    final pendingPunchCount = punchAudits
+        .where((record) => record.status == _PunchAuditStatus.pending)
+        .length;
     return Container(
       color: _kPageBg,
       child: SingleChildScrollView(
@@ -217,6 +249,7 @@ class _TeacherDormDynamicViewState extends State<TeacherDormDynamicView> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _Banner(onBack: widget.onBack),
+            if (state.loading) const LinearProgressIndicator(minHeight: 2),
             SizedBox(height: ui(10)),
             Padding(
               padding: EdgeInsets.only(left: ui(8)),
@@ -231,17 +264,31 @@ class _TeacherDormDynamicViewState extends State<TeacherDormDynamicView> {
                 ),
               ),
             ),
+            if (state.error.isNotEmpty)
+              Padding(
+                padding: EdgeInsets.only(left: ui(8), top: ui(6)),
+                child: Text(
+                  state.error,
+                  style: TextStyle(fontSize: ui(12), color: _kRed),
+                ),
+              ),
             SizedBox(height: ui(12)),
-            const _StatsRow(
-              residentCount: 12,
-              returnedCount: 10,
-              exceptionCount: 2,
-              auditCount: 1,
+            _StatsRow(
+              residentCount: state.overview.enrolledDormCount != 0
+                  ? state.overview.enrolledDormCount
+                  : state.stat.studentCount,
+              returnedCount: state.overview.todayNormalCount,
+              exceptionCount:
+                  state.overview.todayAbsentCount +
+                  state.overview.todayLateCount,
+              auditCount: state.overview.pendingMakeupCount != 0
+                  ? state.overview.pendingMakeupCount
+                  : pendingPunchCount,
             ),
             SizedBox(height: ui(16)),
             _TabsRow(
               current: _topTab,
-              pendingPunchCount: _pendingPunchCount(),
+              pendingPunchCount: pendingPunchCount,
               onTap: (t) => setState(() => _topTab = t),
             ),
             SizedBox(height: ui(16)),
@@ -249,18 +296,19 @@ class _TeacherDormDynamicViewState extends State<TeacherDormDynamicView> {
             // 「补卡审核」直接展示补卡申请卡片网格（无 toggle）。
             if (_topTab == _TopTab.classRoster) ...[
               _FilterToolbar(
-                total: _exceptionTotal(),
+                total: _exceptionTotal(students, dormRecords),
                 current: _filterTab,
                 onTap: (t) => setState(() => _filterTab = t),
               ),
               SizedBox(height: ui(12)),
               _CardsGrid(
-                students: _filteredStudents(),
-                dormRecords: _filteredDormRecords(),
+                students: _filteredStudents(students),
+                dormRecords: _filteredDormRecords(dormRecords),
               ),
             ] else ...[
               _PunchAuditGrid(
-                records: _punchAudits,
+                records: punchAudits,
+                onDetail: (record) => unawaited(_showMakeupDetail(record)),
                 onApprove: _onApprovePunchAudit,
                 onReject: _onRejectPunchAudit,
               ),
@@ -271,62 +319,95 @@ class _TeacherDormDynamicViewState extends State<TeacherDormDynamicView> {
     );
   }
 
-  int _exceptionTotal() {
-    final s = _students.where((r) => r.status.isException).length;
-    final d = _dormRecords.where((r) => r.status.isException).length;
+  int _exceptionTotal(
+    List<_StudentRecord> students,
+    List<_DormRecord> dormRecords,
+  ) {
+    final s = students.where((r) => r.status.isException).length;
+    final d = dormRecords.where((r) => r.status.isException).length;
     return s + d;
   }
 
-  int _pendingPunchCount() =>
-      _punchAudits.where((r) => r.status == _PunchAuditStatus.pending).length;
-
-  List<_StudentRecord> _filteredStudents() {
+  List<_StudentRecord> _filteredStudents(List<_StudentRecord> students) {
     if (_filterTab == _FilterTab.exception) {
-      return _students.where((r) => r.status.isException).toList();
+      return students.where((r) => r.status.isException).toList();
     }
-    return _students;
+    return students;
   }
 
-  List<_DormRecord> _filteredDormRecords() {
+  List<_DormRecord> _filteredDormRecords(List<_DormRecord> dormRecords) {
     if (_filterTab == _FilterTab.exception) {
-      return _dormRecords.where((r) => r.status.isException).toList();
+      return dormRecords.where((r) => r.status.isException).toList();
     }
-    return _dormRecords;
+    return dormRecords;
   }
 
-  void _onApprovePunchAudit(_PunchAuditRecord record) {
-    setState(() {
-      final idx = _punchAudits.indexOf(record);
-      if (idx >= 0) {
-        _punchAudits[idx] = _PunchAuditRecord(
-          studentName: record.studentName,
-          studentNo: record.studentNo,
-          dormName: record.dormName,
-          date: record.date,
-          reason: record.reason,
-          status: _PunchAuditStatus.approved,
-        );
-      }
-    });
-    AppToast.show(context, '已通过 ${record.studentName} 的补卡申请（演示）');
+  Future<void> _onApprovePunchAudit(_PunchAuditRecord record) async {
+    final response = await ref
+        .read(teacherDormitoryControllerProvider.notifier)
+        .auditMakeup(id: record.id, approve: true);
+    if (!mounted) return;
+    AppToast.show(
+      context,
+      response.isSuccess
+          ? '已通过 ${record.studentName} 的补卡申请'
+          : response.displayMsg,
+    );
   }
 
-  void _onRejectPunchAudit(_PunchAuditRecord record) {
-    setState(() {
-      final idx = _punchAudits.indexOf(record);
-      if (idx >= 0) {
-        _punchAudits[idx] = _PunchAuditRecord(
-          studentName: record.studentName,
-          studentNo: record.studentNo,
-          dormName: record.dormName,
-          date: record.date,
-          reason: record.reason,
-          status: _PunchAuditStatus.rejected,
-        );
-      }
-    });
-    AppToast.show(context, '已驳回 ${record.studentName} 的补卡申请（演示）');
+  Future<void> _onRejectPunchAudit(_PunchAuditRecord record) async {
+    final response = await ref
+        .read(teacherDormitoryControllerProvider.notifier)
+        .auditMakeup(id: record.id, approve: false);
+    if (!mounted) return;
+    AppToast.show(
+      context,
+      response.isSuccess
+          ? '已驳回 ${record.studentName} 的补卡申请'
+          : response.displayMsg,
+    );
   }
+}
+
+List<_StudentRecord> _studentRecords(List<TeacherDormitoryDynamicItem> items) {
+  return [
+    for (final item in items)
+      _StudentRecord(
+        studentName: item.studentName,
+        studentNo: item.studentNo,
+        status: switch (item.status) {
+          TeacherDormitoryStatus.normal => _StudentStatus.normal,
+          TeacherDormitoryStatus.late => _StudentStatus.late_,
+          TeacherDormitoryStatus.absent => _StudentStatus.absent,
+        },
+        dormName: item.dormName.isEmpty ? '未分配宿舍' : item.dormName,
+        date: item.checkDate.isEmpty ? '--' : item.checkDate,
+        requiredTime: '--',
+        punchTime: item.checkTime,
+        note: item.bedName.isEmpty ? '无' : item.bedName,
+      ),
+  ];
+}
+
+List<_PunchAuditRecord> _punchAuditRecords(
+  List<TeacherDormitoryMakeupItem> items,
+) {
+  return [
+    for (final item in items)
+      _PunchAuditRecord(
+        id: item.id,
+        studentName: item.studentName,
+        studentNo: '--',
+        dormName: item.checkType,
+        date: item.checkDate,
+        reason: item.reason,
+        status: switch (item.status) {
+          0 => _PunchAuditStatus.pending,
+          1 => _PunchAuditStatus.approved,
+          _ => _PunchAuditStatus.rejected,
+        },
+      ),
+  ];
 }
 
 // —— Banner ————————————————————————————————————————————————————————
@@ -343,14 +424,7 @@ class _Banner extends StatelessWidget {
       width: double.infinity,
       height: ui(62),
       clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.bottomCenter,
-          end: Alignment.topCenter,
-          colors: [Colors.white, Color(0xFFF9EDFF)],
-        ),
-        borderRadius: BorderRadius.circular(ui(16)),
-      ),
+      decoration: smartCampusPageBannerDecoration(ui),
       child: Stack(
         children: [
           Positioned(
@@ -1287,11 +1361,13 @@ class _TimeColumn extends StatelessWidget {
 class _PunchAuditGrid extends StatelessWidget {
   const _PunchAuditGrid({
     required this.records,
+    required this.onDetail,
     required this.onApprove,
     required this.onReject,
   });
 
   final List<_PunchAuditRecord> records;
+  final ValueChanged<_PunchAuditRecord> onDetail;
   final ValueChanged<_PunchAuditRecord> onApprove;
   final ValueChanged<_PunchAuditRecord> onReject;
 
@@ -1331,6 +1407,7 @@ class _PunchAuditGrid extends StatelessWidget {
                 width: cardWidth,
                 child: _PunchAuditCard(
                   record: r,
+                  onDetail: () => onDetail(r),
                   onApprove: () => onApprove(r),
                   onReject: () => onReject(r),
                 ),
@@ -1345,11 +1422,13 @@ class _PunchAuditGrid extends StatelessWidget {
 class _PunchAuditCard extends StatelessWidget {
   const _PunchAuditCard({
     required this.record,
+    required this.onDetail,
     required this.onApprove,
     required this.onReject,
   });
 
   final _PunchAuditRecord record;
+  final VoidCallback onDetail;
   final VoidCallback onApprove;
   final VoidCallback onReject;
 
@@ -1499,6 +1578,26 @@ class _PunchAuditCard extends StatelessWidget {
             ],
           ),
           SizedBox(height: ui(10)),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              onPressed: onDetail,
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.zero,
+                minimumSize: Size(ui(48), ui(28)),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(
+                '查看详情',
+                style: TextStyle(
+                  fontSize: ui(12),
+                  color: _kPurple,
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w500,
+                ),
+              ),
+            ),
+          ),
           // 仅"待审核"显示通过/驳回；已通过/已驳回时按钮自动隐藏。
           if (isPending)
             Row(
@@ -1606,8 +1705,10 @@ class _PunchActionButton extends StatelessWidget {
 
 // —— Demo 数据 ——————————————————————————————————————————————————
 
+// ignore: unused_element
 List<_PunchAuditRecord> _demoPunchAudits() => const [
   _PunchAuditRecord(
+    id: 'demo-1',
     studentName: '王晴',
     studentNo: 'G3030201',
     dormName: '男生公寓 B-310',
@@ -1616,6 +1717,7 @@ List<_PunchAuditRecord> _demoPunchAudits() => const [
     status: _PunchAuditStatus.pending,
   ),
   _PunchAuditRecord(
+    id: 'demo-2',
     studentName: '王晴',
     studentNo: 'G3030201',
     dormName: '男生公寓 B-310',
@@ -1624,6 +1726,7 @@ List<_PunchAuditRecord> _demoPunchAudits() => const [
     status: _PunchAuditStatus.pending,
   ),
   _PunchAuditRecord(
+    id: 'demo-3',
     studentName: '王晴',
     studentNo: 'G3030201',
     dormName: '男生公寓 B-310',
@@ -1633,6 +1736,7 @@ List<_PunchAuditRecord> _demoPunchAudits() => const [
   ),
 ];
 
+// ignore: unused_element
 List<_StudentRecord> _demoStudents() => const [
   _StudentRecord(
     studentName: '王晴',
@@ -1726,6 +1830,7 @@ List<_StudentRecord> _demoStudents() => const [
   ),
 ];
 
+// ignore: unused_element
 List<_DormRecord> _demoDormRecords() => const [
   _DormRecord(
     title: '晨查寝',
