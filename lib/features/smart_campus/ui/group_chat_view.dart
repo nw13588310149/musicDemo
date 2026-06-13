@@ -15,7 +15,7 @@
 //          · 多条会话 cell（36 头像 + 群名 + 摘要 + 时间 + 红色未读徽章 +
 //            免打扰图标），当前会话灰色高亮 #F5F6FA。
 //      右 ~690 聊天主区（白底圆右角）：
-//          · 顶部 68 高 gradient header：群名 + 32 人小字 +
+//          · 顶部 68 高 header（与课表页同款 [AppAssets.authBgTop]）：群名 +
 //            右侧 抽屉/详情图标；底色为 270deg `#C0D2F1→#E8C8F9`，
 //            并叠加 `#F9EEFF→#F9EEFF` 与左侧白色淡出，整体看起来像
 //            浅紫白渐变。
@@ -3702,7 +3702,7 @@ class _ChatRightPaneState extends State<_ChatRightPane> {
 }
 
 // =============================================================================
-// 顶部 header bar（68 高 紫色渐变）
+// 顶部 header bar（68 高，课表页同款 bgtop 背景）
 // =============================================================================
 
 class _ChatHeaderBar extends StatelessWidget {
@@ -3737,7 +3737,13 @@ class _ChatHeaderBar extends StatelessWidget {
                 topLeft: Radius.circular(ui(16)),
                 topRight: Radius.circular(ui(16)),
               ),
-              child: Image.asset(AppAssets.groupChatBg, fit: BoxFit.cover),
+              child: Image.asset(
+                AppAssets.authBgTop,
+                width: double.infinity,
+                height: double.infinity,
+                fit: BoxFit.fill,
+                alignment: Alignment.centerRight,
+              ),
             ),
           ),
           Positioned(

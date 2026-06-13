@@ -50,6 +50,8 @@ import '../../school/data/school_repository.dart';
 import '../../shell/state/shell_controller.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/teacher_repository.dart';
+import '../data/schedule_color_palette.dart';
+import 'widgets/schedule_color_swatch_picker.dart';
 import 'widgets/schedule_idle_slot.dart';
 import 'widgets/smart_campus_page_banner.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -64,15 +66,6 @@ const Color _kTextSecondary = Color(0xFF6D6B75);
 const Color _kTextHint = Color(0xFFB6B5BB);
 const Color _kTextDivider = Color(0xFFCECED1);
 const Color _kPurple = Color(0xFF8741FF);
-
-// 4 种课卡主题
-const Color _kSmallOrangeBg = Color(0xFFFFEDD3);
-const Color _kSmallOrangeTitle = Color(0xFF774B09);
-const Color _kSmallBlueBg = Color(0xFFD9EBFF);
-const Color _kSmallBlueTitle = Color(0xFF0D3A6D);
-const Color _kBigStandardBg = Color(0xFFE8D4FF);
-const Color _kBigExtendedBg = Color(0xFFF6EFFE);
-const Color _kBigTitle = Color(0xFF7535BE);
 
 const Color _kStatusGreen = Color(0xFF0CAC40);
 const Color _kStatusPurple = Color(0xFFA773FF);
@@ -865,7 +858,8 @@ class _TeacherLessonScheduleViewState
       'teacher',
     ], '');
     final className = _pickString(json, ['className', 'class'], '');
-    final colorOverride = _parseHexColor(_pickString(json, ['color'], ''));
+    final colorOverride =
+        parseScheduleHexColor(_pickString(json, ['color'], ''));
 
     final rawCopy = Map<String, dynamic>.from(json);
     if (isSmall) {
@@ -903,18 +897,6 @@ class _TeacherLessonScheduleViewState
       applyStatus: applyStatus,
       apply: apply,
     );
-  }
-
-  /// 解析 `#RRGGBB` / `#AARRGGBB` 形式的 hex；非法则返回 null。
-  Color? _parseHexColor(String hex) {
-    var s = hex.trim();
-    if (s.isEmpty) return null;
-    if (s.startsWith('#')) s = s.substring(1);
-    if (s.length == 6) s = 'FF$s';
-    if (s.length != 8) return null;
-    final v = int.tryParse(s, radix: 16);
-    if (v == null) return null;
-    return Color(v);
   }
 
   /// 根据 `_weekStart` 拼出 7 天的 header（标签 + MM/DD + 是否今天）。
@@ -2293,32 +2275,18 @@ class _ClassCard extends StatelessWidget {
   }
 
   _CardTheme _themeFor(_ScheduleCardData data) {
-    switch (data.kind) {
-      case _CardKind.smallOrange:
-        return _CardTheme(
-          bg: data.bgColor ?? _kSmallOrangeBg,
-          titleColor: _kSmallOrangeTitle,
-          isSmall: true,
-        );
-      case _CardKind.smallBlue:
-        return _CardTheme(
-          bg: data.bgColor ?? _kSmallBlueBg,
-          titleColor: _kSmallBlueTitle,
-          isSmall: true,
-        );
-      case _CardKind.bigStandard:
-        return _CardTheme(
-          bg: data.bgColor ?? _kBigStandardBg,
-          titleColor: _kBigTitle,
-          isSmall: false,
-        );
-      case _CardKind.bigExtended:
-        return _CardTheme(
-          bg: data.bgColor ?? _kBigExtendedBg,
-          titleColor: _kBigTitle,
-          isSmall: false,
-        );
-    }
+    final kind = switch (data.kind) {
+      _CardKind.smallOrange => ScheduleCardThemeKind.smallOrange,
+      _CardKind.smallBlue => ScheduleCardThemeKind.smallBlue,
+      _CardKind.bigStandard => ScheduleCardThemeKind.bigStandard,
+      _CardKind.bigExtended => ScheduleCardThemeKind.bigExtended,
+    };
+    final bg = data.bgColor ?? scheduleDefaultBg(kind);
+    return _CardTheme(
+      bg: bg,
+      titleColor: scheduleTitleColorForBackground(bg),
+      isSmall: scheduleIsSmallKind(kind),
+    );
   }
 }
 
@@ -3015,7 +2983,7 @@ class _ApplySmallLessonDrawer extends ConsumerStatefulWidget {
   final String? initialSubjectId;
 
   /// 「重新申请」场景下用驳回申请的原颜色（hex，含或不含 #）预选；
-  /// 解析失败 / 为空则走默认 _palette[1]。
+  /// 解析失败 / 为空则走默认 scheduleDefaultPickerColor。
   final String? initialColorHex;
 
   final VoidCallback onCancel;
@@ -3038,23 +3006,7 @@ class _ApplySmallLessonDrawerState
   String? _subjectId;
   bool _loadingSubjects = false;
 
-  static const List<Color> _palette = <Color>[
-    Color(0xFF1E1E1E),
-    Color(0xFFE6D0FF),
-    Color(0xFFD0E6FE),
-    Color(0xFFFFEDD3),
-    Color(0xFFD5CEC5),
-    Color(0xFFD2C4FF),
-    Color(0xFFADBFFF),
-    Color(0xFFAAEBDD),
-    Color(0xFFB1FFCE),
-    Color(0xFFA894EB),
-    Color(0xFF5EA9FF),
-    Color(0xFF40E9A6),
-    Color(0xFF74F0FE),
-  ];
-
-  Color _color = _palette[1];
+  Color _color = scheduleDefaultPickerColor;
   bool _customMode = false;
   String _reuse = '不复用';
   bool _submitting = false;
@@ -3069,26 +3021,21 @@ class _ApplySmallLessonDrawerState
   @override
   void initState() {
     super.initState();
-    // 「重新申请」入口会把驳回申请的颜色透传过来；解析成功就预选这色，
-    // 失败 / 空就保留默认 _palette[1]。
-    final initialColor = _parseHexToColor(widget.initialColorHex);
-    if (initialColor != null) _color = initialColor;
+    // 「重新申请」入口会把驳回申请的颜色透传过来；在色板中则预选，否则
+    // 保留原色并进入「取色」自定义模式。
+    final initialColor = parseScheduleHexColor(widget.initialColorHex);
+    if (initialColor != null) {
+      final matched = schedulePaletteMatch(initialColor);
+      if (matched != null) {
+        _color = matched;
+      } else {
+        _color = initialColor;
+        _customMode = true;
+      }
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadOptions();
     });
-  }
-
-  /// `#A894EB` / `A894EB` / `#FF0000` → Color；不合法返回 null。
-  Color? _parseHexToColor(String? hex) {
-    if (hex == null) return null;
-    var s = hex.trim();
-    if (s.isEmpty) return null;
-    if (s.startsWith('#')) s = s.substring(1);
-    if (s.length == 6) s = 'FF$s';
-    if (s.length != 8) return null;
-    final v = int.tryParse(s, radix: 16);
-    if (v == null) return null;
-    return Color(v);
   }
 
   Future<void> _loadOptions() async {
@@ -3183,11 +3130,7 @@ class _ApplySmallLessonDrawerState
     ];
   }
 
-  String get _hexLabel {
-    final argb = _color.toARGB32();
-    final rgb = argb & 0xFFFFFF;
-    return '#${rgb.toRadixString(16).padLeft(6, '0').toUpperCase()}';
-  }
+  String get _hexLabel => scheduleColorToHex(_color);
 
   /// 根据 `_reuse` 选项展开成多个排课日期：
   ///   - 不复用 → 仅基准日 1 行
@@ -3391,8 +3334,7 @@ class _ApplySmallLessonDrawerState
                       label: '颜色',
                     ),
                     SizedBox(height: ui(12)),
-                    _ColorSwatchRow(
-                      colors: _palette,
+                    ScheduleColorSwatchPicker(
                       selected: _customMode ? null : _color,
                       onSelect: (c) => setState(() {
                         _color = c;
@@ -3566,85 +3508,6 @@ class _ReadonlyField extends StatelessWidget {
           fontWeight: AppFont.w400,
           height: 20 / 14,
         ),
-      ),
-    );
-  }
-}
-
-class _ColorSwatchRow extends StatelessWidget {
-  const _ColorSwatchRow({
-    required this.colors,
-    required this.selected,
-    required this.onSelect,
-  });
-
-  final List<Color> colors;
-  final Color? selected;
-  final ValueChanged<Color> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      height: ui(48),
-      padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(14)),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(8)),
-        border: Border.all(color: _kInnerGray, width: 1),
-      ),
-      child: Row(
-        children: [
-          for (var i = 0; i < colors.length; i++) ...[
-            if (i > 0) SizedBox(width: ui(16)),
-            _ColorSwatch(
-              color: colors[i],
-              isSelected: selected == colors[i],
-              onTap: () => onSelect(colors[i]),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _ColorSwatch extends StatelessWidget {
-  const _ColorSwatch({
-    required this.color,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  final Color color;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return InkWell(
-      onTap: onTap,
-      customBorder: const CircleBorder(),
-      child: Container(
-        width: ui(20),
-        height: ui(20),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: isSelected ? Colors.white : color,
-          border: Border.all(
-            color: isSelected ? color : _kBorderSoft,
-            width: 1,
-          ),
-        ),
-        child: isSelected
-            ? Container(
-                width: ui(14),
-                height: ui(14),
-                decoration: BoxDecoration(shape: BoxShape.circle, color: color),
-              )
-            : null,
       ),
     );
   }

@@ -1,0 +1,249 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/network/api_response.dart';
+import '../data/course_sign_data.dart';
+import '../data/teacher_attendance_data.dart';
+import '../data/teacher_repository.dart';
+import 'teacher_attendance_state.dart';
+
+final teacherAttendanceControllerProvider =
+    StateNotifierProvider.autoDispose<
+      TeacherAttendanceController,
+      TeacherAttendanceState
+    >((ref) {
+      return TeacherAttendanceController(
+        repository: ref.watch(teacherRepositoryProvider),
+      );
+    });
+
+class TeacherAttendanceController
+    extends StateNotifier<TeacherAttendanceState> {
+  TeacherAttendanceController({required TeacherRepository repository})
+    : _repository = repository,
+      super(const TeacherAttendanceState());
+
+  final TeacherRepository _repository;
+  bool _initialized = false;
+
+  Future<void> initialize() async {
+    if (_initialized) return;
+    _initialized = true;
+    await _loadOverview();
+  }
+
+  Future<void> refresh() => _loadOverview();
+
+  Future<void> selectRange(TeacherAttendanceRange range) async {
+    if (state.range == range && !state.loadingOverview) return;
+    state = state.copyWith(range: range);
+    await _loadSummary();
+  }
+
+  Future<void> _loadOverview() async {
+    state = state.copyWith(loadingOverview: true, error: '');
+    final today = todayIsoDate();
+    final dates = state.range.dates(DateTime.now());
+    final responses = await Future.wait([
+      _repository.courseList(beginDate: today, endDate: today),
+      _repository.courseAttendanceStat(
+        beginDate: dates.beginDate,
+        endDate: dates.endDate,
+      ),
+      _repository.courseTeacherSignHistory(current: 1, size: 3),
+    ]);
+    final courseResponse = responses[0];
+    final summaryResponse = responses[1];
+    final recentResponse = responses[2];
+    final errors = [
+      if (!courseResponse.isSuccess) courseResponse.displayMsg,
+      if (!summaryResponse.isSuccess) summaryResponse.displayMsg,
+      if (!recentResponse.isSuccess) recentResponse.displayMsg,
+    ].where((item) => item.isNotEmpty).toList();
+    final courses = courseResponse.isSuccess
+        ? parseCourseSignSessionList(courseResponse.data)
+        : state.todayCourses;
+    state = state.copyWith(
+      loadingOverview: false,
+      todayCourses: courses,
+      summary: summaryResponse.isSuccess
+          ? TeacherAttendanceSummary.fromJson(summaryResponse.data)
+          : state.summary,
+      recentRecords: recentResponse.isSuccess
+          ? parseTeacherSignHistoryList(recentResponse.data)
+          : state.recentRecords,
+      error: errors.join('；'),
+    );
+    final firstBig = courses
+        .where((course) => course.courseType == 0 && course.courseId.isNotEmpty)
+        .firstOrNull;
+    if (firstBig != null) {
+      await loadCourseDetail(firstBig.courseId);
+    }
+  }
+
+  Future<void> _loadSummary() async {
+    state = state.copyWith(loadingOverview: true, error: '');
+    final dates = state.range.dates(DateTime.now());
+    final response = await _repository.courseAttendanceStat(
+      beginDate: dates.beginDate,
+      endDate: dates.endDate,
+    );
+    state = state.copyWith(
+      loadingOverview: false,
+      summary: response.isSuccess
+          ? TeacherAttendanceSummary.fromJson(response.data)
+          : state.summary,
+      error: response.isSuccess ? '' : response.displayMsg,
+    );
+  }
+
+  Future<void> loadHistory() async {
+    if (state.loadingHistory) return;
+    state = state.copyWith(loadingHistory: true, historyError: '');
+    final response = await _repository.courseTeacherSignHistory(
+      current: 1,
+      size: 200,
+    );
+    state = state.copyWith(
+      loadingHistory: false,
+      historyRecords: response.isSuccess
+          ? parseTeacherSignHistoryList(response.data)
+          : state.historyRecords,
+      historyError: response.isSuccess ? '' : response.displayMsg,
+    );
+  }
+
+  Future<void> loadCourseDetail(String courseId) async {
+    if (courseId.isEmpty || state.loadingCourseIds.contains(courseId)) return;
+    state = state.copyWith(
+      loadingCourseIds: {...state.loadingCourseIds, courseId},
+    );
+    final response = await _repository.courseClassSignDetail(
+      courseId: courseId,
+    );
+    if (response.isSuccess) {
+      final detail = TeacherClassSignDetail.fromJson(response.data);
+      state = state.copyWith(
+        todayCourses: [
+          for (final course in state.todayCourses)
+            if (course.courseId == courseId)
+              course.copyWith(
+                students: detail.students,
+                signStep: detail.courseSignStatus,
+                signStatus: detail.courseSignStatus,
+              )
+            else
+              course,
+        ],
+      );
+    }
+    state = state.copyWith(
+      loadingCourseIds: {...state.loadingCourseIds}..remove(courseId),
+    );
+  }
+
+  Future<ApiResponse> updateStudentStatus({
+    required String courseId,
+    required String studentId,
+    required CourseSignStatus status,
+  }) async {
+    final course = _courseById(courseId);
+    if (course == null) return ApiResponse.failure('当前课程不存在');
+    final student = course.students
+        .where((item) => item.studentId == studentId)
+        .firstOrNull;
+    if (student == null || student.studentId.isEmpty) {
+      return ApiResponse.failure('学生 ID 无效');
+    }
+    final response = await _repository.courseClassStudentSignUpdate(
+      courseId: courseId,
+      studentId: studentId,
+      signStatus: status.code,
+      remark: student.remark,
+    );
+    if (response.isSuccess) {
+      _replaceStudent(
+        courseId,
+        studentId,
+        student.copyWith(status: status),
+      );
+      await _loadSummary();
+    }
+    return response;
+  }
+
+  Future<ApiResponse> bulkSign(String courseId) async {
+    if (state.submittingCourseIds.contains(courseId)) {
+      return ApiResponse.failure('正在提交签到，请稍候');
+    }
+    final course = _courseById(courseId);
+    if (course == null || course.courseId.isEmpty) {
+      return ApiResponse.failure('当前课程缺少课表记录');
+    }
+    if (course.students.isEmpty) {
+      return ApiResponse.failure('当前课程暂无学生名单');
+    }
+    state = state.copyWith(
+      submittingCourseIds: {...state.submittingCourseIds, courseId},
+    );
+    final response = await _repository.courseClassSignAll(
+      courseId: courseId,
+      students: [
+        for (final student in course.students)
+          <String, dynamic>{
+            'studentId': student.studentId,
+            'signStatus': (student.status ?? CourseSignStatus.present).code,
+            if (student.remark.isNotEmpty) 'remark': student.remark,
+          },
+      ],
+    );
+    if (response.isSuccess) {
+      await loadCourseDetail(courseId);
+      await _loadSummary();
+      await _loadRecent();
+    }
+    state = state.copyWith(
+      submittingCourseIds: {...state.submittingCourseIds}..remove(courseId),
+    );
+    return response;
+  }
+
+  Future<void> _loadRecent() async {
+    final response = await _repository.courseTeacherSignHistory(
+      current: 1,
+      size: 3,
+    );
+    if (!response.isSuccess) return;
+    state = state.copyWith(
+      recentRecords: parseTeacherSignHistoryList(response.data),
+    );
+  }
+
+  CourseSignSession? _courseById(String courseId) {
+    return state.todayCourses
+        .where((course) => course.courseId == courseId)
+        .firstOrNull;
+  }
+
+  void _replaceStudent(
+    String courseId,
+    String studentId,
+    CourseSignStudent replacement,
+  ) {
+    state = state.copyWith(
+      todayCourses: [
+        for (final course in state.todayCourses)
+          if (course.courseId == courseId)
+            course.copyWith(
+              students: [
+                for (final student in course.students)
+                  if (student.studentId == studentId) replacement else student,
+              ],
+            )
+          else
+            course,
+      ],
+    );
+  }
+
+}

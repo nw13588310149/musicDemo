@@ -119,6 +119,10 @@ class ShellUser {
     return '\u7528\u6237';
   }
 
+  /// `/myInfo` 已成功回包：`user.id` 非空。Shell 与各业务页在 id 就绪前
+  /// 不应按默认「学生端」发起 `/student/*` 等身份相关请求。
+  bool get isMyInfoReady => id.trim().isNotEmpty;
+
   ShellUser copyWith({
     String? id,
     String? nickname,

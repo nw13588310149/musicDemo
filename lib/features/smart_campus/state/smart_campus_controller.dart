@@ -21,12 +21,20 @@ final smartCampusControllerProvider =
       // 立即拿一次 shell user，并在变化时（仅 role/identity 变化触发）
       // 重新应用后端身份。这里用 select 避免每次 ShellState.copyWith 都触发，
       // 配合 record 的相等性比较，做到 idempotent。
-      ref.listen<({String role, String identity})>(
+      ref.listen<({String role, String identity, String userId})>(
         shellControllerProvider.select(
-          (s) => (role: s.user.role, identity: s.user.identity),
+          (s) => (
+            role: s.user.role,
+            identity: s.user.identity,
+            userId: s.user.id,
+          ),
         ),
         (prev, next) {
-          controller.applyBackendRole(role: next.role, identity: next.identity);
+          controller.applyBackendRole(
+            role: next.role,
+            identity: next.identity,
+            userId: next.userId,
+          );
         },
         fireImmediately: true,
       );
@@ -109,6 +117,9 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
 
   /// 根据后端返回的 `role` / `identity` 重新计算当前可用身份与默认身份。
   ///
+  /// [userId] 为空时表示 `/myInfo` 尚未就绪，此时不做任何身份映射，避免
+  /// 在默认 `selectedRole = student` 下误发起学生端接口。
+  ///
   /// - 管理员：
   ///   - `availableRoles` 锁定为 5 个身份；
   ///   - 用户**没**主动切过身份时，默认视图就是「管理员」（mapped），不再
@@ -119,7 +130,14 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
   /// - 其他：`availableRoles` 锁定为唯一身份，强制 `selectedRole` 与之一致
   ///   （这种情况下 `hasUserSelectedRole` 仍保持 false，下一次后端推送依旧
   ///   会按 mapped 锁定）。
-  void applyBackendRole({required String role, required String identity}) {
+  void applyBackendRole({
+    required String role,
+    required String identity,
+    required String userId,
+  }) {
+    if (userId.trim().isEmpty) {
+      return;
+    }
     // shell role 变化（换号 / 登出登入）→ 失效本地「老师多重身份」缓存，
     // 下次 ensureTeacherRolesLoaded 会重新调接口。
     if (_lastBackendRole != role) {

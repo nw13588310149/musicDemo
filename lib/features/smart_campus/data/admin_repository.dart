@@ -312,12 +312,15 @@ class AdminRepository {
     return client.post('$_base/courseBatchSave', data: rows);
   }
 
-  /// 课表批量删除。后端入参格式：`{ "id": ["...","..."] }`，
-  /// `id` 同为雪花 long → 用 `List<String>` 透传。
+  /// 课表批量删除。后端入参：`{ "id": [2065017767469707300, ...] }`（int64 数组）。
   Future<ApiResponse> courseDelete(List<String> ids) {
+    final body = encodeNumericIdArrayRequestBody(ids);
+    if (body == null) {
+      return Future.value(ApiResponse.failure('缺少有效的课程 id'));
+    }
     return client.post(
       '$_base/courseDelete',
-      data: <String, dynamic>{'id': ids},
+      data: body,
     );
   }
 

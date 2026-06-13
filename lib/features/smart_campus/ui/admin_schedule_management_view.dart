@@ -49,6 +49,8 @@ import '../../../core/widgets/scaled_dialog.dart';
 import '../../school/data/school_repository.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/admin_repository.dart';
+import '../data/schedule_color_palette.dart';
+import 'widgets/schedule_color_swatch_picker.dart';
 import 'widgets/schedule_idle_slot.dart';
 import 'widgets/smart_campus_page_banner.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -64,15 +66,6 @@ const Color _kTextHint = Color(0xFFB6B5BB);
 const Color _kTextDivider = Color(0xFFCECED1);
 const Color _kPurple = Color(0xFF8741FF);
 const Color _kRedBadge = Color(0xFFF04545);
-
-// 4 种课卡主题
-const Color _kSmallOrangeBg = Color(0xFFFFEDD3);
-const Color _kSmallOrangeTitle = Color(0xFF774B09);
-const Color _kSmallBlueBg = Color(0xFFD9EBFF);
-const Color _kSmallBlueTitle = Color(0xFF0D3A6D);
-const Color _kBigStandardBg = Color(0xFFE8D4FF);
-const Color _kBigExtendedBg = Color(0xFFF6EFFE);
-const Color _kBigTitle = Color(0xFF7535BE);
 
 const Color _kStatusGreen = Color(0xFF0CAC40);
 const Color _kStatusPurple = Color(0xFFA773FF);
@@ -271,6 +264,35 @@ class _AdminScheduleManagementViewState
 
     if (submitted != true || !mounted) return;
     AppToast.show(context, '已写入课表');
+    await _loadSchedule();
+  }
+
+  /// 编辑模式下删除已有课程：二次确认后调 `courseDelete`。
+  Future<void> _onDeleteCourse(_ScheduleCardData card) async {
+    final raw = card.raw;
+    if (raw == null) return;
+    final id = _pickString(raw, ['id'], '');
+    if (id.isEmpty) return;
+
+    final ok = await showConfirmDialog(
+      context: context,
+      title: '删除课程',
+      content: '确认删除「${card.name}」？删除后该节次课表将清空，操作不可恢复。',
+      confirmLabel: '删除',
+    );
+    if (!ok || !mounted) return;
+
+    final repo = ref.read(adminRepositoryProvider);
+    final resp = await repo.courseDelete([id]);
+    if (!mounted) return;
+    if (!resp.isSuccess) {
+      AppToast.show(
+        context,
+        resp.displayMsg.isNotEmpty ? resp.displayMsg : '删除失败，请重试',
+      );
+      return;
+    }
+    AppToast.show(context, '已删除');
     await _loadSchedule();
   }
 
@@ -785,7 +807,8 @@ class _AdminScheduleManagementViewState
       'teacher',
     ], '');
     final className = _pickString(json, ['className', 'class'], '');
-    final colorOverride = _parseHexColor(_pickString(json, ['color'], ''));
+    final colorOverride =
+        parseScheduleHexColor(_pickString(json, ['color'], ''));
 
     final rawCopy = Map<String, dynamic>.from(json);
     if (isSmall) {
@@ -819,18 +842,6 @@ class _AdminScheduleManagementViewState
       bgColor: colorOverride,
       raw: rawCopy,
     );
-  }
-
-  /// 解析 `#RRGGBB` / `#AARRGGBB` 形式的 hex；非法则返回 null（不覆盖默认主题）。
-  Color? _parseHexColor(String hex) {
-    var s = hex.trim();
-    if (s.isEmpty) return null;
-    if (s.startsWith('#')) s = s.substring(1);
-    if (s.length == 6) s = 'FF$s';
-    if (s.length != 8) return null;
-    final v = int.tryParse(s, radix: 16);
-    if (v == null) return null;
-    return Color(v);
   }
 
   /// 根据 `_weekStart` 拼出 7 天的 header（标签 + MM/DD + 是否今天）。
@@ -1153,6 +1164,7 @@ class _AdminScheduleManagementViewState
                 cells: cells,
                 onApplySmallLesson: _onApplySmallLesson,
                 onDropCard: _onDropCard,
+                onDeleteCourse: _onDeleteCourse,
               ),
               if (_scheduleLoading)
                 Positioned.fill(
@@ -1873,6 +1885,7 @@ class _ScheduleGrid extends StatelessWidget {
     required this.cells,
     required this.onApplySmallLesson,
     required this.onDropCard,
+    required this.onDeleteCourse,
   });
 
   final _ScheduleMode mode;
@@ -1888,6 +1901,8 @@ class _ScheduleGrid extends StatelessWidget {
     int targetSlot,
   )
   onDropCard;
+
+  final Future<void> Function(_ScheduleCardData card) onDeleteCourse;
 
   @override
   Widget build(BuildContext context) {
@@ -1917,6 +1932,7 @@ class _ScheduleGrid extends StatelessWidget {
                           cells: cells,
                           onApplySmallLesson: onApplySmallLesson,
                           onDropCard: onDropCard,
+                          onDeleteCourse: onDeleteCourse,
                         ),
                       ),
                     ),
@@ -2087,6 +2103,7 @@ class _DaysArea extends StatelessWidget {
     required this.cells,
     required this.onApplySmallLesson,
     required this.onDropCard,
+    required this.onDeleteCourse,
   });
 
   final _ScheduleMode mode;
@@ -2100,6 +2117,7 @@ class _DaysArea extends StatelessWidget {
     int targetSlot,
   )
   onDropCard;
+  final Future<void> Function(_ScheduleCardData card) onDeleteCourse;
 
   @override
   Widget build(BuildContext context) {
@@ -2117,6 +2135,7 @@ class _DaysArea extends StatelessWidget {
             ],
             onApplySmallLesson: onApplySmallLesson,
             onDropCard: onDropCard,
+            onDeleteCourse: onDeleteCourse,
           ),
       ],
     );
@@ -2190,6 +2209,7 @@ class _DayBodyRow extends StatelessWidget {
     required this.rowCells,
     required this.onApplySmallLesson,
     required this.onDropCard,
+    required this.onDeleteCourse,
   });
 
   final int slotIdx;
@@ -2203,6 +2223,7 @@ class _DayBodyRow extends StatelessWidget {
     int targetSlot,
   )
   onDropCard;
+  final Future<void> Function(_ScheduleCardData card) onDeleteCourse;
 
   @override
   Widget build(BuildContext context) {
@@ -2226,6 +2247,7 @@ class _DayBodyRow extends StatelessWidget {
                       cards: rowCells[i],
                       onApplySmallLesson: () => onApplySmallLesson(i, slotIdx),
                       onDropCard: onDropCard,
+                      onDeleteCourse: onDeleteCourse,
                     ),
                   ),
                   Positioned(
@@ -2263,6 +2285,7 @@ class _CellContent extends StatelessWidget {
     required this.cards,
     required this.onApplySmallLesson,
     required this.onDropCard,
+    required this.onDeleteCourse,
   });
 
   final int dayIdx;
@@ -2277,6 +2300,7 @@ class _CellContent extends StatelessWidget {
     int targetSlot,
   )
   onDropCard;
+  final Future<void> Function(_ScheduleCardData card) onDeleteCourse;
 
   bool get _hasSmallCard => cards.any(
     (c) => c.kind == _CardKind.smallOrange || c.kind == _CardKind.smallBlue,
@@ -2363,6 +2387,7 @@ class _CellContent extends StatelessWidget {
                 sourceDay: dayIdx,
                 sourceSlot: slotIdx,
                 indexInSlot: i,
+                onDelete: isEditing ? () => onDeleteCourse(cards[i]) : null,
               ),
             ],
             if (shouldAppendApply) ...[
@@ -2389,6 +2414,7 @@ class _DraggableScheduleCard extends StatelessWidget {
     required this.sourceDay,
     required this.sourceSlot,
     required this.indexInSlot,
+    this.onDelete,
   });
 
   final _ScheduleCardData card;
@@ -2396,6 +2422,7 @@ class _DraggableScheduleCard extends StatelessWidget {
   final int sourceDay;
   final int sourceSlot;
   final int indexInSlot;
+  final VoidCallback? onDelete;
 
   bool get _draggable {
     if (!isEditing) return false;
@@ -2403,9 +2430,19 @@ class _DraggableScheduleCard extends StatelessWidget {
     return !_isSmallKind(card.kind);
   }
 
+  bool get _deletable {
+    if (onDelete == null || card.raw == null) return false;
+    return _pickString(card.raw!, ['id'], '').isNotEmpty;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final base = _ClassCard(data: card, editable: _draggable);
+    final deleteHandler = _deletable ? onDelete : null;
+    final base = _ClassCard(
+      data: card,
+      editable: isEditing || _draggable,
+      onDelete: deleteHandler,
+    );
     if (!_draggable) return base;
     final payload = _DragPayload(
       sourceDay: sourceDay,
@@ -2519,10 +2556,15 @@ class _ApplySmallLessonButton extends StatelessWidget {
 // =============================================================================
 
 class _ClassCard extends StatelessWidget {
-  const _ClassCard({required this.data, required this.editable});
+  const _ClassCard({
+    required this.data,
+    required this.editable,
+    this.onDelete,
+  });
 
   final _ScheduleCardData data;
   final bool editable;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -2564,6 +2606,12 @@ class _ClassCard extends StatelessWidget {
                 left: ui(126),
                 top: ui(6),
                 child: _ClassKindTag(isSmall: theme.isSmall, outlined: false),
+              ),
+            if (onDelete != null)
+              Positioned(
+                right: ui(6),
+                top: ui(6),
+                child: _CourseDeleteButton(onTap: onDelete!),
               ),
             Positioned(
               left: ui(4),
@@ -2659,34 +2707,57 @@ class _ClassCard extends StatelessWidget {
   }
 
   _CardTheme _themeFor(_ScheduleCardData data) {
-    // API 给了 color 时优先用它做背景；标题色根据 kind 选语义色（小课橙/蓝、
-    // 大课紫），保证在浅色背景上仍有合适的对比度。
-    switch (data.kind) {
-      case _CardKind.smallOrange:
-        return _CardTheme(
-          bg: data.bgColor ?? _kSmallOrangeBg,
-          titleColor: _kSmallOrangeTitle,
-          isSmall: true,
-        );
-      case _CardKind.smallBlue:
-        return _CardTheme(
-          bg: data.bgColor ?? _kSmallBlueBg,
-          titleColor: _kSmallBlueTitle,
-          isSmall: true,
-        );
-      case _CardKind.bigStandard:
-        return _CardTheme(
-          bg: data.bgColor ?? _kBigStandardBg,
-          titleColor: _kBigTitle,
-          isSmall: false,
-        );
-      case _CardKind.bigExtended:
-        return _CardTheme(
-          bg: data.bgColor ?? _kBigExtendedBg,
-          titleColor: _kBigTitle,
-          isSmall: false,
-        );
-    }
+    final kind = switch (data.kind) {
+      _CardKind.smallOrange => ScheduleCardThemeKind.smallOrange,
+      _CardKind.smallBlue => ScheduleCardThemeKind.smallBlue,
+      _CardKind.bigStandard => ScheduleCardThemeKind.bigStandard,
+      _CardKind.bigExtended => ScheduleCardThemeKind.bigExtended,
+    };
+    final bg = data.bgColor ?? scheduleDefaultBg(kind);
+    return _CardTheme(
+      bg: bg,
+      titleColor: scheduleTitleColorForBackground(bg),
+      isSmall: scheduleIsSmallKind(kind),
+    );
+  }
+}
+
+class _CourseDeleteButton extends StatelessWidget {
+  const _CourseDeleteButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: Container(
+          width: ui(20),
+          height: ui(20),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.94),
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: ui(4),
+                offset: Offset(0, ui(1)),
+              ),
+            ],
+          ),
+          alignment: Alignment.center,
+          child: Icon(
+            Icons.delete_outline_rounded,
+            size: ui(12),
+            color: _kRedBadge,
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -2897,24 +2968,7 @@ class _AdminEditCourseDrawerState
   String? _subjectId;
   bool _loadingSubjects = false;
 
-  // 颜色：色板选择（_palette[1] 默认）。
-  static const List<Color> _palette = <Color>[
-    Color(0xFF1E1E1E),
-    Color(0xFFE6D0FF),
-    Color(0xFFD0E6FE),
-    Color(0xFFFFEDD3),
-    Color(0xFFD5CEC5),
-    Color(0xFFD2C4FF),
-    Color(0xFFADBFFF),
-    Color(0xFFAAEBDD),
-    Color(0xFFB1FFCE),
-    Color(0xFFA894EB),
-    Color(0xFF5EA9FF),
-    Color(0xFF40E9A6),
-    Color(0xFF74F0FE),
-  ];
-
-  Color _color = _palette[1];
+  Color _color = scheduleDefaultPickerColor;
   String _reuse = '不复用';
   bool _submitting = false;
 
@@ -3019,11 +3073,7 @@ class _AdminEditCourseDrawerState
     ];
   }
 
-  String get _hexLabel {
-    final argb = _color.toARGB32();
-    final rgb = argb & 0xFFFFFF;
-    return '#${rgb.toRadixString(16).padLeft(6, '0').toUpperCase()}';
-  }
+  String get _hexLabel => scheduleColorToHex(_color);
 
   Future<void> _submit() async {
     if (_submitting) return;
@@ -3223,8 +3273,7 @@ class _AdminEditCourseDrawerState
                       label: '颜色',
                     ),
                     SizedBox(height: ui(12)),
-                    _ColorSwatchRow(
-                      colors: _palette,
+                    ScheduleColorSwatchPicker(
                       selected: _color,
                       onSelect: (c) => setState(() => _color = c),
                     ),
@@ -3375,106 +3424,6 @@ class _ReadonlyField extends StatelessWidget {
           fontFamily: 'PingFang SC',
           fontWeight: AppFont.w400,
           height: 20 / 14,
-        ),
-      ),
-    );
-  }
-}
-
-class _ColorSwatchRow extends StatelessWidget {
-  const _ColorSwatchRow({
-    required this.colors,
-    required this.selected,
-    required this.onSelect,
-  });
-
-  final List<Color> colors;
-  final Color? selected;
-  final ValueChanged<Color> onSelect;
-
-  static bool _sameColor(Color? a, Color b) {
-    if (a == null) return false;
-    return a.toARGB32() == b.toARGB32();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      height: ui(48),
-      padding: EdgeInsets.symmetric(horizontal: ui(16)),
-      alignment: Alignment.centerLeft,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(8)),
-        border: Border.all(color: _kInnerGray, width: 1),
-      ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        physics: const BouncingScrollPhysics(),
-        child: Row(
-          children: [
-            for (var i = 0; i < colors.length; i++) ...[
-              if (i > 0) SizedBox(width: ui(12)),
-              _ColorSwatch(
-                color: colors[i],
-                isSelected: _sameColor(selected, colors[i]),
-                onTap: () => onSelect(colors[i]),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ColorSwatch extends StatelessWidget {
-  const _ColorSwatch({
-    required this.color,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  final Color color;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    const dotSize = 22.0;
-    const ringWidth = 2.0;
-    const outerSize = dotSize + ringWidth * 2;
-
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: SizedBox(
-        width: ui(outerSize),
-        height: ui(outerSize),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: isSelected ? _kPurple : Colors.transparent,
-              width: ui(ringWidth),
-            ),
-          ),
-          child: Center(
-            child: Container(
-              width: ui(dotSize),
-              height: ui(dotSize),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: color,
-                border: Border.all(
-                  color: Colors.black.withValues(alpha: 0.08),
-                  width: 1,
-                ),
-              ),
-            ),
-          ),
         ),
       ),
     );

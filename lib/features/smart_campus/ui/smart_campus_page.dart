@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 
 import '../../../app/router/route_paths.dart';
 import '../../shell/state/shell_controller.dart';
@@ -93,8 +94,40 @@ import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 /// 进入「校长信箱 / 我的班级 / 我的课表 / 班级工作台」全部走
 /// [SmartCampusController] 的 open* 方法，从 dashboard 返回时调
 /// `controller.backToDashboard()`。
-class SmartCampusPage extends ConsumerWidget {
+class SmartCampusPage extends ConsumerStatefulWidget {
   const SmartCampusPage({super.key});
+
+  @override
+  ConsumerState<SmartCampusPage> createState() => _SmartCampusPageState();
+}
+
+class _SmartCampusPageState extends ConsumerState<SmartCampusPage> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _ensureMyInfoLoaded());
+  }
+
+  /// 刷新进入智慧校园时，若 Shell 的 `/myInfo` 尚未回包，主动补拉一次。
+  void _ensureMyInfoLoaded() {
+    if (!mounted) return;
+    if (ref.read(shellControllerProvider).user.isMyInfoReady) return;
+    ref.read(shellControllerProvider.notifier).refreshUserAndSchool();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final shellState = ref.watch(shellControllerProvider);
+    if (!shellState.user.isMyInfoReady) {
+      return const Center(child: AppLoadingIndicator());
+    }
+
+    return const _SmartCampusPageBody();
+  }
+}
+
+class _SmartCampusPageBody extends ConsumerWidget {
+  const _SmartCampusPageBody();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

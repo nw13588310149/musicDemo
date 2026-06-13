@@ -34,6 +34,7 @@ import '../../../core/widgets/app_toast.dart';
 import '../../school/data/school_repository.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/student_repository.dart';
+import '../data/schedule_color_palette.dart';
 import 'widgets/schedule_idle_slot.dart';
 import 'widgets/smart_campus_page_banner.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -49,15 +50,6 @@ const Color _kTextSecondary = Color(0xFF6D6B75);
 const Color _kTextHint = Color(0xFFB6B5BB);
 const Color _kTextDivider = Color(0xFFCECED1);
 const Color _kPurple = Color(0xFF8741FF);
-
-// 4 种课卡主题
-const Color _kSmallOrangeBg = Color(0xFFFFEDD3);
-const Color _kSmallOrangeTitle = Color(0xFF774B09);
-const Color _kSmallBlueBg = Color(0xFFD9EBFF);
-const Color _kSmallBlueTitle = Color(0xFF0D3A6D);
-const Color _kBigStandardBg = Color(0xFFE8D4FF);
-const Color _kBigExtendedBg = Color(0xFFF6EFFE);
-const Color _kBigTitle = Color(0xFF7535BE);
 
 const Color _kStatusGreen = Color(0xFF0CAC40);
 const Color _kStatusPurple = Color(0xFFA773FF);
@@ -538,6 +530,8 @@ _ScheduleCardData _parseCourseCard(
     'teacher',
   ], '');
   final className = _pickString(json, ['className', 'class'], '');
+  final colorOverride =
+      parseScheduleHexColor(_pickString(json, ['color'], ''));
 
   if (isSmall) {
     final kind = smallIdxInCell.isEven
@@ -551,6 +545,7 @@ _ScheduleCardData _parseCourseCard(
           ? teacher
           : (className.isNotEmpty ? className : '—'),
       capacity: _pickCapacityLabel(json),
+      bgColor: colorOverride,
     );
   }
 
@@ -562,6 +557,7 @@ _ScheduleCardData _parseCourseCard(
     location: location,
     name: name,
     subline: subline,
+    bgColor: colorOverride,
   );
 }
 
@@ -1129,7 +1125,7 @@ class _ClassCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final theme = _themeFor(data.kind);
+    final theme = _themeFor(data);
     final cardHeight = data.kind == _CardKind.bigExtended ? 120.0 : 96.0;
     return Container(
       width: ui(176),
@@ -1264,33 +1260,19 @@ class _ClassCard extends StatelessWidget {
     );
   }
 
-  _CardTheme _themeFor(_CardKind kind) {
-    switch (kind) {
-      case _CardKind.smallOrange:
-        return const _CardTheme(
-          bg: _kSmallOrangeBg,
-          titleColor: _kSmallOrangeTitle,
-          isSmall: true,
-        );
-      case _CardKind.smallBlue:
-        return const _CardTheme(
-          bg: _kSmallBlueBg,
-          titleColor: _kSmallBlueTitle,
-          isSmall: true,
-        );
-      case _CardKind.bigStandard:
-        return const _CardTheme(
-          bg: _kBigStandardBg,
-          titleColor: _kBigTitle,
-          isSmall: false,
-        );
-      case _CardKind.bigExtended:
-        return const _CardTheme(
-          bg: _kBigExtendedBg,
-          titleColor: _kBigTitle,
-          isSmall: false,
-        );
-    }
+  _CardTheme _themeFor(_ScheduleCardData data) {
+    final kind = switch (data.kind) {
+      _CardKind.smallOrange => ScheduleCardThemeKind.smallOrange,
+      _CardKind.smallBlue => ScheduleCardThemeKind.smallBlue,
+      _CardKind.bigStandard => ScheduleCardThemeKind.bigStandard,
+      _CardKind.bigExtended => ScheduleCardThemeKind.bigExtended,
+    };
+    final bg = data.bgColor ?? scheduleDefaultBg(kind);
+    return _CardTheme(
+      bg: bg,
+      titleColor: scheduleTitleColorForBackground(bg),
+      isSmall: scheduleIsSmallKind(kind),
+    );
   }
 }
 
@@ -1362,6 +1344,7 @@ class _ScheduleCardData {
     required this.name,
     required this.subline,
     this.capacity,
+    this.bgColor,
   });
 
   final _CardKind kind;
@@ -1374,6 +1357,9 @@ class _ScheduleCardData {
 
   /// 仅小课用，右侧"11/23人"。
   final String? capacity;
+
+  /// API `color` 字段解析后的背景色。
+  final Color? bgColor;
 }
 
 class _TimeSlotData {

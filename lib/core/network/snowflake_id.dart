@@ -110,3 +110,21 @@ Object? coerceSnowflakeRequestData(Object? data, [String? key]) {
   }
   return data;
 }
+
+/// 构造 `{ "id": [123, 456] }` 请求 JSON 文本（id 为 number，非 string）。
+///
+/// 课表删除等接口要求 int64 数组；若走 [coerceSnowflakeRequestData] +
+/// [BigIntSafeTransformer]，会把元素变成 `"2065…"` 字符串。这里直接把
+/// 雪花 id 的十进制字面量写入 JSON，并以 [String] 交给 Dio，绕过 Transformer
+/// 的字符串化，同时避免 Web 端 JS Number 精度丢失。
+String? encodeNumericIdArrayRequestBody(List<String> ids) {
+  final literals = <String>[];
+  for (final raw in ids) {
+    final id = readSnowflakeId(raw);
+    if (id != null && RegExp(r'^\d+$').hasMatch(id)) {
+      literals.add(id);
+    }
+  }
+  if (literals.isEmpty) return null;
+  return '{"id":[${literals.join(',')}]}';
+}
