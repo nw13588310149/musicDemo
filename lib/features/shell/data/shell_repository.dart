@@ -104,13 +104,10 @@ class ShellRepository {
     );
   }
 
-  Future<ApiResponse> searchRecordingList({
-    required String keyword,
-    required String province,
-  }) {
+  Future<ApiResponse> searchRecordingList({required String keyword}) {
     return client.post(
-      '/app/user/recordingList',
-      data: _searchBody(keyword, province),
+      '/app/recording/v2/recordingList',
+      data: <String, dynamic>{'current': 1, 'keyword': keyword, 'size': 100},
     );
   }
 

@@ -42,11 +42,7 @@ class DormitoryManagerController extends StateNotifier<DormitoryManagerState> {
   }) async {
     state = state.copyWith(loadingHistory: true, error: '');
     final responses = await Future.wait([
-      _repository.dormitoryCheckStat(
-        buildingId: buildingId,
-        floorId: floorId,
-        date: date,
-      ),
+      _repository.dormitoryCheckStat(),
       _repository.dormitoryCheckHistory(
         buildingId: buildingId,
         floorId: floorId,

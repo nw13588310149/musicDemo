@@ -283,8 +283,7 @@ class _AdminScheduleManagementViewState
     final ok = await showConfirmDialog(
       context: context,
       title: '删除课程',
-      content:
-          '确认删除「${card.name}」（$location）？$detail\n删除后该节次课表将清空，操作不可恢复。',
+      content: '确认删除「${card.name}」（$location）？$detail\n删除后该节次课表将清空，操作不可恢复。',
       confirmLabel: '删除',
     );
     if (!ok || !mounted) return;
@@ -363,7 +362,6 @@ class _AdminScheduleManagementViewState
         if (teacherId.isNotEmpty) 'teacherId': teacherId,
         if (raw['classroomId'] != null) 'classroomId': raw['classroomId'],
         if (raw['subjectId'] != null) 'subjectId': raw['subjectId'],
-        if (raw['type'] != null) 'type': raw['type'],
         if ((raw['color'] ?? '').toString().isNotEmpty) 'color': raw['color'],
         // courseBatchSave 期望 swagger 里的 ISO+TZ 格式（与 _onApplySmallLesson 一致）。
         'date': newDate,
@@ -1656,10 +1654,7 @@ class _ScheduleControlBar extends StatelessWidget {
                     ),
                   ),
                   SizedBox(width: ui(8)),
-                  AppPickerAssetIcon(
-                    AppAssets.homeRili,
-                    imageSize: ui(14),
-                  ),
+                  AppPickerAssetIcon(AppAssets.homeRili, imageSize: ui(14)),
                 ],
               ),
             ),
@@ -2419,8 +2414,9 @@ class _DraggableScheduleCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final deleteHandler = _deletable ? onDelete : null;
-    final cardHeight =
-        card.display.kind == ScheduleCourseCardKind.bigExtended ? 120.0 : 96.0;
+    final cardHeight = card.display.kind == ScheduleCourseCardKind.bigExtended
+        ? 120.0
+        : 96.0;
     Widget courseCard = ScheduleCourseCard(
       data: card.display,
       editable: isEditing || _draggable,
@@ -2552,10 +2548,7 @@ class _ApplySmallLessonButton extends StatelessWidget {
 // =============================================================================
 
 class _ScheduleCardData {
-  const _ScheduleCardData({
-    required this.display,
-    this.raw,
-  });
+  const _ScheduleCardData({required this.display, this.raw});
 
   final ScheduleCourseCardData display;
   final Map<String, dynamic>? raw;

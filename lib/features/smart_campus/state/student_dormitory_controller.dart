@@ -97,7 +97,7 @@ class StudentDormitoryController extends StateNotifier<StudentDormitoryState> {
     state = state.copyWith(submittingMakeup: true, error: '');
     final response = await _repository.dormitoryMakeupSave(
       date: studentDormitoryIsoDate(date),
-      scene: studentDormitoryMakeupSceneApi(sceneLabel),
+      checkType: studentDormitoryMakeupSceneApi(sceneLabel),
       reason: reason,
     );
     if (response.isSuccess) {

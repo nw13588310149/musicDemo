@@ -139,13 +139,7 @@ extension _NStatusX on _NStatus {
 }
 
 /// 通知类型：与新建抽屉里的下拉一一对应。
-const List<String> _kNotificationTypes = <String>[
-  '督导',
-  '通知',
-  '活动',
-  '会议',
-  '其他',
-];
+const List<String> _kNotificationTypes = <String>['督导', '通知', '活动', '会议', '其他'];
 
 /// 推送范围：抽屉里的多选项；表格里展示拼接后的字符串。
 const List<String> _kScopeOptions = <String>[
@@ -192,8 +186,7 @@ class _NotificationRecord {
   /// 仅 [_NStatus.scheduled] 时使用：定时发布的时间。
   DateTime? scheduledAt;
 
-  String get scopeLabel =>
-      scopes.isEmpty ? '全校师生' : scopes.join('、');
+  String get scopeLabel => scopes.isEmpty ? '全校师生' : scopes.join('、');
 }
 
 // =============================================================================
@@ -244,8 +237,7 @@ class _AdminNotificationManagementViewState
     final q = _query.trim().toLowerCase();
     return _records.where((r) {
       if (_typeFilter != _kAllType && r.type != _typeFilter) return false;
-      if (_statusFilter != _kAllStatus &&
-          _statusFilter != r.status.label) {
+      if (_statusFilter != _kAllStatus && _statusFilter != r.status.label) {
         return false;
       }
       if (q.isEmpty) return true;
@@ -326,7 +318,6 @@ class _AdminNotificationManagementViewState
   }
 
   Future<bool> _submitNotice({
-    String? editId,
     required String title,
     required String content,
     required String type,
@@ -341,7 +332,6 @@ class _AdminNotificationManagementViewState
       _PublishMode.scheduled => 2,
     };
     final request = AdminNoticeSaveRequest(
-      id: editId,
       title: title,
       content: content,
       type: type,
@@ -363,13 +353,10 @@ class _AdminNotificationManagementViewState
     if (!mounted) return true;
     AppToast.show(
       context,
-      _toastForStatus(
-        switch (mode) {
-          _PublishMode.now => _NStatus.published,
-          _PublishMode.scheduled => _NStatus.scheduled,
-        },
-        isCreate: editId == null,
-      ),
+      _toastForStatus(switch (mode) {
+        _PublishMode.now => _NStatus.published,
+        _PublishMode.scheduled => _NStatus.scheduled,
+      }, isCreate: true),
     );
     return true;
   }
@@ -403,19 +390,19 @@ class _AdminNotificationManagementViewState
           child: _NotificationFormDrawer(
             initial: null,
             onCancel: () => Navigator.of(ctx).pop(),
-            onSubmit: (params) => _submitNotice(
-              editId: null,
-              title: params.title,
-              content: params.content,
-              type: params.type,
-              priority: params.priority,
-              scopes: params.scopes,
-              mode: params.mode,
-              scheduledAt: params.scheduledAt,
-            ).then((ok) {
-              if (ok && ctx.mounted) Navigator.of(ctx).pop();
-              return ok;
-            }),
+            onSubmit: (params) =>
+                _submitNotice(
+                  title: params.title,
+                  content: params.content,
+                  type: params.type,
+                  priority: params.priority,
+                  scopes: params.scopes,
+                  mode: params.mode,
+                  scheduledAt: params.scheduledAt,
+                ).then((ok) {
+                  if (ok && ctx.mounted) Navigator.of(ctx).pop();
+                  return ok;
+                }),
           ),
         ),
       ),
@@ -430,46 +417,7 @@ class _AdminNotificationManagementViewState
   }
 
   Future<void> _openEditDrawer(_NotificationRecord origin) async {
-    final detail = await _fetchNoticeDetail(origin.id) ?? origin;
-    if (!mounted) return;
-    final scale = DashboardScaleScope.of(context);
-    await showGeneralDialog<void>(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: '关闭编辑通知',
-      barrierColor: Colors.black.withValues(alpha: 0.32),
-      transitionDuration: const Duration(milliseconds: 240),
-      pageBuilder: (ctx, anim, sec) => Align(
-        alignment: Alignment.centerRight,
-        child: DashboardScaleScope(
-          data: scale,
-          child: _NotificationFormDrawer(
-            initial: detail,
-            onCancel: () => Navigator.of(ctx).pop(),
-            onSubmit: (params) => _submitNotice(
-              editId: detail.id,
-              title: params.title,
-              content: params.content,
-              type: params.type,
-              priority: params.priority,
-              scopes: params.scopes,
-              mode: params.mode,
-              scheduledAt: params.scheduledAt,
-            ).then((ok) {
-              if (ok && ctx.mounted) Navigator.of(ctx).pop();
-              return ok;
-            }),
-          ),
-        ),
-      ),
-      transitionBuilder: (ctx, anim, sec, child) => SlideTransition(
-        position: Tween<Offset>(
-          begin: const Offset(1, 0),
-          end: Offset.zero,
-        ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
-        child: child,
-      ),
-    );
+    AppToast.show(context, 'APP端接口暂未提供通知更新能力');
   }
 
   Future<void> _onDeleteRecord(_NotificationRecord r) async {
@@ -530,10 +478,7 @@ class _AdminNotificationManagementViewState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _Banner(
-              onBack: widget.onBack,
-              onCreate: _openCreateDrawer,
-            ),
+            _Banner(onBack: widget.onBack, onCreate: _openCreateDrawer),
             SizedBox(height: ui(16)),
             MainContentLoadingShell(
               loading: _loading && _records.isEmpty,
@@ -1034,11 +979,7 @@ class _NotificationFilterFieldState extends State<_NotificationFilterField> {
         padding: EdgeInsets.symmetric(horizontal: ui(16)),
         child: Row(
           children: [
-            Icon(
-              widget.icon,
-              size: ui(16),
-              color: const Color(0xFFC6C6C6),
-            ),
+            Icon(widget.icon, size: ui(16), color: const Color(0xFFC6C6C6)),
             SizedBox(width: ui(10)),
             Expanded(
               child: Text(
@@ -1238,7 +1179,10 @@ class _TableRow extends StatelessWidget {
             const _HeaderGap(),
             Expanded(child: _StatusCell(status: record.status)),
             const _HeaderGap(),
-            SizedBox(width: ui(120), child: _TextCell(text: record.time)),
+            SizedBox(
+              width: ui(120),
+              child: _TextCell(text: record.time),
+            ),
             const _HeaderGap(),
             SizedBox(
               width: ui(120),
@@ -1422,49 +1366,24 @@ class _ActionCell extends StatelessWidget {
     if (status == _NStatus.withdrawn) {
       return Row(
         children: [
-          _actionText(
-            text: '查看',
-            color: _kBlue,
-            onTap: onView,
-            ui: ui,
-          ),
+          _actionText(text: '查看', color: _kBlue, onTap: onView, ui: ui),
         ],
       );
     }
     if (status == _NStatus.published) {
       return Row(
         children: [
-          _actionText(
-            text: '查看',
-            color: _kBlue,
-            onTap: onView,
-            ui: ui,
-          ),
+          _actionText(text: '查看', color: _kBlue, onTap: onView, ui: ui),
           SizedBox(width: ui(12)),
-          _actionText(
-            text: '删除',
-            color: _kRed,
-            onTap: onDelete,
-            ui: ui,
-          ),
+          _actionText(text: '删除', color: _kRed, onTap: onDelete, ui: ui),
         ],
       );
     }
     return Row(
       children: [
-        _actionText(
-          text: '编辑',
-          color: _kPurple,
-          onTap: onEdit,
-          ui: ui,
-        ),
+        _actionText(text: '编辑', color: _kPurple, onTap: onEdit, ui: ui),
         SizedBox(width: ui(12)),
-        _actionText(
-          text: '删除',
-          color: _kRed,
-          onTap: onDelete,
-          ui: ui,
-        ),
+        _actionText(text: '删除', color: _kRed, onTap: onDelete, ui: ui),
       ],
     );
   }
@@ -1522,10 +1441,7 @@ class _NotificationDetailBody extends StatelessWidget {
         Row(
           children: [
             Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: ui(6),
-                vertical: ui(2),
-              ),
+              padding: EdgeInsets.symmetric(horizontal: ui(6), vertical: ui(2)),
               decoration: BoxDecoration(
                 color: record.status.bg,
                 borderRadius: BorderRadius.circular(ui(4)),
@@ -1861,95 +1777,95 @@ class _NotificationFormDrawerState extends State<_NotificationFormDrawer> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                    const _SectionLabel(label: '通知标题', required: true),
-                    SizedBox(height: ui(8)),
-                    _TextField(
-                      controller: _titleCtrl,
-                      hint: '请输入通知标题（建议 ≤ 30 字）',
-                      maxLength: 60,
-                    ),
-                    SizedBox(height: ui(20)),
-                    const _SectionLabel(label: '通知内容', required: true),
-                    SizedBox(height: ui(8)),
-                    _TextField(
-                      controller: _contentCtrl,
-                      hint: '请输入正文，可包含时间、地点、参加人员等关键信息',
-                      maxLines: 5,
-                      maxLength: 500,
-                    ),
-                    SizedBox(height: ui(20)),
-                    const _SectionLabel(label: '通知类型'),
-                    SizedBox(height: ui(8)),
-                    PopupSelectorField<String>(
-                      value: _type,
-                      items: _kNotificationTypes,
-                      itemLabel: (s) => s,
-                      onChanged: (v) => setState(() => _type = v),
-                    ),
-                    SizedBox(height: ui(20)),
-                    const _SectionLabel(label: '优先级'),
-                    SizedBox(height: ui(8)),
-                    _PrioritySegment(
-                      value: _priority,
-                      onChanged: (v) => setState(() => _priority = v),
-                    ),
-                    SizedBox(height: ui(20)),
-                    const _SectionLabel(label: '推送范围', required: true),
-                    SizedBox(height: ui(8)),
-                    _ScopeChips(
-                      selected: _scopes,
-                      onToggle: (s) => setState(() {
-                        if (_scopes.contains(s)) {
-                          _scopes.remove(s);
-                        } else {
-                          _scopes.add(s);
-                        }
-                      }),
-                    ),
-                    SizedBox(height: ui(20)),
-                    const _SectionLabel(label: '发布方式'),
-                    SizedBox(height: ui(8)),
-                    _PublishModeSegment(
-                      value: _mode,
-                      onChanged: (v) => setState(() => _mode = v),
-                    ),
-                    if (_mode == _PublishMode.scheduled) ...[
-                      SizedBox(height: ui(12)),
-                      _ScheduledPickerField(
-                        value: _scheduledAt,
-                        onTap: _pickScheduledAt,
+                      const _SectionLabel(label: '通知标题', required: true),
+                      SizedBox(height: ui(8)),
+                      _TextField(
+                        controller: _titleCtrl,
+                        hint: '请输入通知标题（建议 ≤ 30 字）',
+                        maxLength: 60,
                       ),
+                      SizedBox(height: ui(20)),
+                      const _SectionLabel(label: '通知内容', required: true),
+                      SizedBox(height: ui(8)),
+                      _TextField(
+                        controller: _contentCtrl,
+                        hint: '请输入正文，可包含时间、地点、参加人员等关键信息',
+                        maxLines: 5,
+                        maxLength: 500,
+                      ),
+                      SizedBox(height: ui(20)),
+                      const _SectionLabel(label: '通知类型'),
+                      SizedBox(height: ui(8)),
+                      PopupSelectorField<String>(
+                        value: _type,
+                        items: _kNotificationTypes,
+                        itemLabel: (s) => s,
+                        onChanged: (v) => setState(() => _type = v),
+                      ),
+                      SizedBox(height: ui(20)),
+                      const _SectionLabel(label: '优先级'),
+                      SizedBox(height: ui(8)),
+                      _PrioritySegment(
+                        value: _priority,
+                        onChanged: (v) => setState(() => _priority = v),
+                      ),
+                      SizedBox(height: ui(20)),
+                      const _SectionLabel(label: '推送范围', required: true),
+                      SizedBox(height: ui(8)),
+                      _ScopeChips(
+                        selected: _scopes,
+                        onToggle: (s) => setState(() {
+                          if (_scopes.contains(s)) {
+                            _scopes.remove(s);
+                          } else {
+                            _scopes.add(s);
+                          }
+                        }),
+                      ),
+                      SizedBox(height: ui(20)),
+                      const _SectionLabel(label: '发布方式'),
+                      SizedBox(height: ui(8)),
+                      _PublishModeSegment(
+                        value: _mode,
+                        onChanged: (v) => setState(() => _mode = v),
+                      ),
+                      if (_mode == _PublishMode.scheduled) ...[
+                        SizedBox(height: ui(12)),
+                        _ScheduledPickerField(
+                          value: _scheduledAt,
+                          onTap: _pickScheduledAt,
+                        ),
+                      ],
+                      SizedBox(height: ui(8)),
                     ],
-                    SizedBox(height: ui(8)),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: EdgeInsets.fromLTRB(ui(20), ui(12), ui(20), ui(20)),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _SecondaryButton(
+                        label: '取消',
+                        onTap: _submitting ? null : widget.onCancel,
+                      ),
+                    ),
+                    SizedBox(width: ui(12)),
+                    Expanded(
+                      flex: 2,
+                      child: _PrimaryButton(
+                        label: _submitLabel(),
+                        onTap: _submitting ? null : _onSubmit,
+                      ),
+                    ),
                   ],
                 ),
               ),
-            ),
-            Padding(
-              padding: EdgeInsets.fromLTRB(ui(20), ui(12), ui(20), ui(20)),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _SecondaryButton(
-                      label: '取消',
-                      onTap: _submitting ? null : widget.onCancel,
-                    ),
-                  ),
-                  SizedBox(width: ui(12)),
-                  Expanded(
-                    flex: 2,
-                    child: _PrimaryButton(
-                      label: _submitLabel(),
-                      onTap: _submitting ? null : _onSubmit,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
-    ),
     );
   }
 }
@@ -2138,14 +2054,11 @@ class _PrioritySegment extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    _bar(ui(2), ui(4),
-                        p.bars[0] ? p.color : _kTextDivider),
+                    _bar(ui(2), ui(4), p.bars[0] ? p.color : _kTextDivider),
                     SizedBox(width: ui(2)),
-                    _bar(ui(2), ui(6),
-                        p.bars[1] ? p.color : _kTextDivider),
+                    _bar(ui(2), ui(6), p.bars[1] ? p.color : _kTextDivider),
                     SizedBox(width: ui(2)),
-                    _bar(ui(2), ui(8),
-                        p.bars[2] ? p.color : _kTextDivider),
+                    _bar(ui(2), ui(8), p.bars[2] ? p.color : _kTextDivider),
                     SizedBox(width: ui(6)),
                     Text(
                       p.label,
@@ -2227,9 +2140,7 @@ class _ScopeChips extends StatelessWidget {
                     s,
                     style: TextStyle(
                       fontSize: ui(13),
-                      color: selected.contains(s)
-                          ? _kPurple
-                          : _kTextDark,
+                      color: selected.contains(s) ? _kPurple : _kTextDark,
                       fontFamily: 'PingFang SC',
                       fontWeight: selected.contains(s)
                           ? AppFont.w600
@@ -2280,8 +2191,7 @@ class _PublishModeSegment extends StatelessWidget {
                     fontSize: ui(13),
                     color: value == m ? _kPurple : _kTextSecondary,
                     fontFamily: 'PingFang SC',
-                    fontWeight:
-                        value == m ? AppFont.w600 : AppFont.w400,
+                    fontWeight: value == m ? AppFont.w600 : AppFont.w400,
                     height: 1.2,
                   ),
                 ),
@@ -2318,11 +2228,7 @@ class _ScheduledPickerField extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(
-              Icons.event_rounded,
-              size: ui(16),
-              color: _kPurple,
-            ),
+            Icon(Icons.event_rounded, size: ui(16), color: _kPurple),
             SizedBox(width: ui(8)),
             Expanded(
               child: Text(
@@ -2336,11 +2242,7 @@ class _ScheduledPickerField extends StatelessWidget {
                 ),
               ),
             ),
-            Icon(
-              Icons.chevron_right_rounded,
-              size: ui(18),
-              color: _kTextHint,
-            ),
+            Icon(Icons.chevron_right_rounded, size: ui(18), color: _kTextHint),
           ],
         ),
       ),

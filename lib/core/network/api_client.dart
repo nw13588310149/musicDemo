@@ -37,12 +37,14 @@ class ApiClient {
 
   Future<ApiResponse> get(
     String path, {
+    Map<String, dynamic>? queryParameters,
     Map<String, dynamic>? headers,
     Duration? timeout,
   }) async {
     try {
       final response = await _dio.get<dynamic>(
         path,
+        queryParameters: queryParameters,
         options: _buildOptions(headers: headers, timeout: timeout),
       );
       return _finalizeResponse(
@@ -189,9 +191,7 @@ class ApiClient {
           }
           if (decoded is Map) {
             return ApiResponse.fromJson(
-              decoded.map(
-                (key, value) => MapEntry(key.toString(), value),
-              ),
+              decoded.map((key, value) => MapEntry(key.toString(), value)),
             );
           }
         } catch (error) {
@@ -281,10 +281,7 @@ class ApiClient {
     if (statusCode == 401) {
       return _finalizeResponse(
         path,
-        ApiResponse.failure(
-          _extractDioMessage(error),
-          code: 401,
-        ),
+        ApiResponse.failure(_extractDioMessage(error), code: 401),
       );
     }
     return ApiResponse.failure(_extractDioMessage(error));

@@ -703,6 +703,90 @@ String todayIsoDate() {
   return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
 }
 
+/// 课程时段阶段（按当日 `HH:mm` 起止判断）。
+enum CourseSlotPhase { upcoming, inProgress, ended }
+
+/// 签到操作区右上角倒计时快照。
+class CourseSlotCountdownSnapshot {
+  const CourseSlotCountdownSnapshot({
+    required this.phase,
+    required this.label,
+    required this.timeText,
+  });
+
+  final CourseSlotPhase phase;
+  final String label;
+  final String timeText;
+}
+
+DateTime? dateTimeAtCourseClock(DateTime day, String hm) {
+  final clock = pickCourseClock(hm) ?? hm.trim();
+  if (clock.isEmpty) return null;
+  final parts = clock.split(':');
+  if (parts.length < 2) return null;
+  final hour = int.tryParse(parts[0]);
+  final minute = int.tryParse(parts[1]);
+  if (hour == null || minute == null) return null;
+  return DateTime(day.year, day.month, day.day, hour, minute);
+}
+
+CourseSlotPhase resolveCourseSlotPhase(
+  DateTime now,
+  String startHm,
+  String endHm,
+) {
+  final start = dateTimeAtCourseClock(now, startHm);
+  final end = dateTimeAtCourseClock(now, endHm);
+  if (start == null || end == null) return CourseSlotPhase.upcoming;
+  if (now.isBefore(start)) return CourseSlotPhase.upcoming;
+  if (now.isAfter(end)) return CourseSlotPhase.ended;
+  return CourseSlotPhase.inProgress;
+}
+
+CourseSlotCountdownSnapshot buildCourseSlotCountdown({
+  required DateTime now,
+  required String startHm,
+  required String endHm,
+}) {
+  final phase = resolveCourseSlotPhase(now, startHm, endHm);
+  if (phase == CourseSlotPhase.ended) {
+    return const CourseSlotCountdownSnapshot(
+      phase: CourseSlotPhase.ended,
+      label: '',
+      timeText: '已结束',
+    );
+  }
+
+  final start = dateTimeAtCourseClock(now, startHm);
+  final end = dateTimeAtCourseClock(now, endHm);
+  final target = phase == CourseSlotPhase.upcoming ? start : end;
+  if (target == null) {
+    return const CourseSlotCountdownSnapshot(
+      phase: CourseSlotPhase.upcoming,
+      label: '距上课',
+      timeText: '--:--:--',
+    );
+  }
+
+  final remaining = target.difference(now);
+  final safe = remaining.isNegative ? Duration.zero : remaining;
+  return CourseSlotCountdownSnapshot(
+    phase: phase,
+    label: phase == CourseSlotPhase.upcoming ? '距上课' : '距下课',
+    timeText: formatCourseCountdownDuration(safe),
+  );
+}
+
+String formatCourseCountdownDuration(Duration duration) {
+  final totalSeconds = duration.inSeconds;
+  final hours = totalSeconds ~/ 3600;
+  final minutes = (totalSeconds % 3600) ~/ 60;
+  final seconds = totalSeconds % 60;
+  return '${hours.toString().padLeft(2, '0')}:'
+      '${minutes.toString().padLeft(2, '0')}:'
+      '${seconds.toString().padLeft(2, '0')}';
+}
+
 Map<String, dynamic>? _asMap(dynamic value) {
   if (value is Map<String, dynamic>) return value;
   if (value is Map) {

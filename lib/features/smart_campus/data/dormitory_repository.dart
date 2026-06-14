@@ -19,10 +19,7 @@ class DormitoryRepository {
   static const _base = '/app/school/v2/dormitory';
 
   /// 宿管首页通知列表。
-  Future<ApiResponse> noticeList({
-    int current = 1,
-    int size = 20,
-  }) {
+  Future<ApiResponse> noticeList({int current = 1, int size = 20}) {
     return client.post(
       '$_base/noticeList',
       data: <String, dynamic>{'current': current, 'size': size},
@@ -39,20 +36,9 @@ class DormitoryRepository {
 
   // ============== 按宿舍查寝 ==============
 
-  /// 查寝顶部统计。
-  Future<ApiResponse> dormitoryCheckStat({
-    String? buildingId,
-    String? floorId,
-    String? date,
-  }) {
-    return client.post(
-      '$_base/dormitoryCheckStat',
-      data: _checkFilterBody(
-        buildingId: buildingId,
-        floorId: floorId,
-        date: date,
-      ),
-    );
+  /// 查寝顶部统计。Swagger 未定义请求体，统计范围由当前宿管账号决定。
+  Future<ApiResponse> dormitoryCheckStat() {
+    return client.post('$_base/dormitoryCheckStat');
   }
 
   /// 宿管管辖宿舍楼列表。
@@ -91,9 +77,7 @@ class DormitoryRepository {
     required String roomId,
     String? date,
   }) {
-    final body = <String, dynamic>{
-      'roomId': readSnowflakeId(roomId) ?? roomId,
-    };
+    final body = <String, dynamic>{'roomId': readSnowflakeId(roomId) ?? roomId};
     if (date != null && date.isNotEmpty) body['date'] = date;
     return client.post('$_base/dormitoryCheckRoomOneClick', data: body);
   }
@@ -176,24 +160,24 @@ class DormitoryRepository {
 
   /// 导出查寝记录。
   Future<ApiResponse> dormitoryCheckExport({
+    required String beginDate,
+    required String endDate,
     String? buildingId,
     String? floorId,
     String? roomId,
-    String? beginDate,
-    String? endDate,
     String? status,
   }) {
-    return client.post(
+    return client.get(
       '$_base/dormitoryCheckExport',
-      data: <String, dynamic>{
+      queryParameters: <String, dynamic>{
+        'beginDate': beginDate,
+        'endDate': endDate,
         if (buildingId != null && buildingId.isNotEmpty)
           'buildingId': readSnowflakeId(buildingId) ?? buildingId,
         if (floorId != null && floorId.isNotEmpty)
           'floorId': readSnowflakeId(floorId) ?? floorId,
         if (roomId != null && roomId.isNotEmpty)
           'roomId': readSnowflakeId(roomId) ?? roomId,
-        if (beginDate != null && beginDate.isNotEmpty) 'beginDate': beginDate,
-        if (endDate != null && endDate.isNotEmpty) 'endDate': endDate,
         if (status != null && status.isNotEmpty) 'status': status,
       },
     );
@@ -213,7 +197,7 @@ class DormitoryRepository {
         'size': size,
         if (buildingId != null && buildingId.isNotEmpty)
           'buildingId': readSnowflakeId(buildingId) ?? buildingId,
-        if (status != null) 'status': status,
+        'status': ?status,
       },
     );
   }

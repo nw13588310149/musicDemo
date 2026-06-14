@@ -28,8 +28,13 @@ class StudentRepository {
   }
 
   /// 考试统计概览：均分、排名、最佳考试、趋势和分数段分布。
-  Future<ApiResponse> examOverview() {
-    return client.post('$_base/examOverview');
+  Future<ApiResponse> examOverview({int? subjectId}) {
+    return client.post(
+      '$_base/examOverview',
+      data: subjectId == null
+          ? null
+          : <String, dynamic>{'subjectId': subjectId},
+    );
   }
 
   /// 已发布成绩的考试记录与各科成绩。
@@ -138,34 +143,22 @@ class StudentRepository {
     );
   }
 
-  /// 小课上课签到。
-  Future<ApiResponse> courseStudentSignIn({
-    required String courseId,
-    String remark = '',
-    int signStatus = 1,
-  }) {
+  /// 学生小课上课签到。App 端请求体仅包含 `courseId`。
+  Future<ApiResponse> courseStudentSignIn({required String courseId}) {
     return client.post(
       '$_base/courseStudentSignIn',
       data: <String, dynamic>{
         'courseId': readSnowflakeId(courseId) ?? courseId,
-        'remark': remark,
-        'signStatus': signStatus,
       },
     );
   }
 
-  /// 小课下课签到。
-  Future<ApiResponse> courseStudentSignOut({
-    required String courseId,
-    String remark = '',
-    int signStatus = 1,
-  }) {
+  /// 学生小课下课签到。App 端请求体仅包含 `courseId`。
+  Future<ApiResponse> courseStudentSignOut({required String courseId}) {
     return client.post(
       '$_base/courseStudentSignOut',
       data: <String, dynamic>{
         'courseId': readSnowflakeId(courseId) ?? courseId,
-        'remark': remark,
-        'signStatus': signStatus,
       },
     );
   }
@@ -210,10 +203,7 @@ class StudentRepository {
   }
 
   /// 学生查寝统计。
-  Future<ApiResponse> dormitoryCheckStat({
-    String? beginDate,
-    String? endDate,
-  }) {
+  Future<ApiResponse> dormitoryCheckStat({String? beginDate, String? endDate}) {
     return client.post(
       '$_base/dormitoryCheckStat',
       data: <String, dynamic>{
@@ -254,7 +244,7 @@ class StudentRepository {
   /// 提交查寝补卡申请。
   Future<ApiResponse> dormitoryMakeupSave({
     required String date,
-    required String scene,
+    required String checkType,
     required String reason,
     String attachment = '',
   }) {
@@ -262,7 +252,7 @@ class StudentRepository {
       '$_base/dormitoryMakeupSave',
       data: <String, dynamic>{
         'date': date,
-        'scene': scene,
+        'checkType': checkType,
         'reason': reason,
         if (attachment.isNotEmpty) 'attachment': attachment,
       },
@@ -280,7 +270,7 @@ class StudentRepository {
       data: <String, dynamic>{
         'current': current,
         'size': size,
-        if (status != null) 'status': status,
+        'status': ?status,
       },
     );
   }

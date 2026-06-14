@@ -947,7 +947,7 @@ class _TopSearchBoxState extends ConsumerState<_TopSearchBox> {
       final responses = await Future.wait([
         repo.searchTextbookList(keyword: keyword, province: province),
         repo.searchVideoList(keyword: keyword, province: province),
-        repo.searchRecordingList(keyword: keyword, province: province),
+        repo.searchRecordingList(keyword: keyword),
         repo.searchNoteList(keyword: keyword, province: province),
       ]);
       // 过期请求兜底：在 await 期间用户可能继续打字，老 keyword 的结果应被丢弃。

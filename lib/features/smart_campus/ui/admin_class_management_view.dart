@@ -1150,7 +1150,6 @@ class _AdminClassManagementViewState
       'campusId': target.campusId ?? 0,
       'name': target.name,
       'classCode': target.code,
-      'type': target.kind.apiCode,
       'headTeacherId':
           (target.headTeacherId != null && target.headTeacherId!.isNotEmpty)
           ? target.headTeacherId

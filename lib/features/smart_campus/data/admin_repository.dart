@@ -7,7 +7,7 @@ import '../../../core/providers/app_providers.dart';
 
 /// 管理员（教务管理端）相关接口的 Repository。
 ///
-/// 全部为 `POST /app/school1/v2/manager/*`，对应后端 Swagger 中的
+/// 全部为 `POST /app/school/v2/manager/*`，对应后端 Swagger 中的
 /// **v2 智慧校园-教务管理端 (App School V2 Manager Controller)** 一组：
 ///   - `campusList`                校区下拉列表
 ///   - `classList`                 班级列表
@@ -68,14 +68,14 @@ class AdminRepository {
     return client.post('$_base/campusList');
   }
 
-  /// 班级列表。可按 `campusId` / `keyword` / `type` 过滤；空 body 拉全量。
+  /// 班级列表（`ClassListReq`）。
   ///
   /// - `type`: 班级类型，`0 = 大班`，`1 = 小班`；不传 = 全量。
   ///   主要给「编辑大课」抽屉用，过滤掉小班避免误选。
-  Future<ApiResponse> classList({int? campusId, String? keyword, int? type}) {
+  /// - `isHeadTeacher`: 是否为班主任；不传 = 不按该字段过滤。
+  Future<ApiResponse> classList({int? isHeadTeacher, int? type}) {
     final body = <String, dynamic>{};
-    if (campusId != null) body['campusId'] = campusId;
-    if (keyword != null && keyword.isNotEmpty) body['keyword'] = keyword;
+    if (isHeadTeacher != null) body['isHeadTeacher'] = isHeadTeacher;
     if (type != null) body['type'] = type;
     return client.post('$_base/classList', data: body);
   }
@@ -94,10 +94,8 @@ class AdminRepository {
   }
 
   /// 教室下拉列表。
-  Future<ApiResponse> classroomList({int? campusId}) {
-    final body = <String, dynamic>{};
-    if (campusId != null) body['campusId'] = campusId;
-    return client.post('$_base/classroomList', data: body);
+  Future<ApiResponse> classroomList() {
+    return client.post('$_base/classroomList');
   }
 
   /// 学生下拉 / 名册列表（`SchoolStudentSearchReq`）。
@@ -139,12 +137,14 @@ class AdminRepository {
 
   /// 学生考试成绩详情。
   Future<ApiResponse> studentExamRecordList({required String studentId}) {
-    return client.post(
-      '$_base/studentExamRecordList',
-      data: <String, dynamic>{
-        'studentId': readSnowflakeId(studentId) ?? studentId,
-      },
+    final body = encodeNumericIdRequestBody(
+      <String, dynamic>{'studentId': studentId},
+      numericIdKeys: const {'studentId'},
     );
+    if (body == null) {
+      return Future.value(ApiResponse.failure('学生 id 格式错误'));
+    }
+    return client.post('$_base/studentExamRecordList', data: body);
   }
 
   /// 学生总览统计。`schoolId` 已由 [ApiClient] 通过 header 自动注入，
@@ -325,10 +325,7 @@ class AdminRepository {
     if (body == null) {
       return Future.value(ApiResponse.failure('缺少有效的课程 id'));
     }
-    return client.post(
-      '$_base/courseDelete',
-      data: body,
-    );
+    return client.post('$_base/courseDelete', data: body);
   }
 
   // ============== 小班课申请 ==============

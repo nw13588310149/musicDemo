@@ -95,8 +95,7 @@ class AdminNoticeRecord {
   final DateTime? scheduledAt;
   final int? publishMode;
 
-  String get scopeLabel =>
-      scopes.isEmpty ? '—' : scopes.join('、');
+  String get scopeLabel => scopes.isEmpty ? '—' : scopes.join('、');
 
   factory AdminNoticeRecord.fromJson(Map<String, dynamic> json) {
     final status =
@@ -152,7 +151,6 @@ class AdminNoticeRecord {
 
 class AdminNoticeSaveRequest {
   const AdminNoticeSaveRequest({
-    this.id,
     required this.title,
     required this.content,
     required this.type,
@@ -164,7 +162,6 @@ class AdminNoticeSaveRequest {
     this.deptName,
   });
 
-  final String? id;
   final String title;
   final String content;
   final String type;
@@ -188,8 +185,6 @@ class AdminNoticeSaveRequest {
       if (deptName != null && deptName!.isNotEmpty) 'deptName': deptName,
       if (publishMode == 2 && scheduledAt != null)
         'scheduledTime': formatAdminNoticeApiDateTime(scheduledAt!),
-      if (id != null && id!.isNotEmpty)
-        'id': readSnowflakeId(id) ?? id,
     };
   }
 }

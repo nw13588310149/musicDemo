@@ -85,8 +85,8 @@ class AppStorage {
   }
 
   Future<void> saveSchoolId(dynamic schoolId) async {
-    final value = int.tryParse(schoolId?.toString() ?? '') ?? 0;
-    await _prefs.setString(_schoolIdKey, value.toString());
+    final value = schoolId?.toString().trim() ?? '';
+    await _prefs.setString(_schoolIdKey, value.isEmpty ? '0' : value);
   }
 
   Future<void> clearSchoolId() async {

@@ -255,6 +255,7 @@ class _InfoRows extends StatelessWidget {
           value: '',
           onTap: () => _editPassword(context, controller),
         ),
+        if (!state.checkStatusEnabled) const _AccountDeletionEntry(),
       ],
     );
   }
@@ -276,10 +277,6 @@ class _RowDivider extends StatelessWidget {
     );
   }
 }
-
-// ─────────────────────────────────────────────────────────────────────
-// 单条信息行：左标题 + 右值 + chevron
-// ─────────────────────────────────────────────────────────────────────
 
 class _InfoRow extends StatelessWidget {
   const _InfoRow({
@@ -347,6 +344,80 @@ class _InfoRow extends StatelessWidget {
       ),
     );
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// 账号注销（苹果审核合规入口，仅审核中展示，不调用真实接口）
+// ─────────────────────────────────────────────────────────────────────
+
+class _AccountDeletionEntry extends StatelessWidget {
+  const _AccountDeletionEntry();
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(ui(16), ui(20), ui(16), ui(8)),
+      child: Column(
+        children: <Widget>[
+          const _RowDivider(),
+          SizedBox(height: ui(20)),
+          GestureDetector(
+            onTap: () => _requestAccountDeletion(context),
+            behavior: HitTestBehavior.opaque,
+            child: Text(
+              '账号注销',
+              style: TextStyle(
+                color: const Color(0xFFFF323C),
+                fontSize: ui(14),
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w500,
+                height: 1.0,
+              ),
+            ),
+          ),
+          SizedBox(height: ui(10)),
+          Text(
+            '提交注销申请后，我们将在 7 个工作日内处理您的请求。',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: const Color(0xFFB6B5BB),
+              fontSize: ui(12),
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w400,
+              height: 1.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+Future<void> _requestAccountDeletion(BuildContext context) async {
+  final step1 = await showConfirmDialog(
+    context: context,
+    title: '账号注销',
+    content:
+        '注销账号后，您的个人资料、学习记录及相关数据将被删除且无法恢复。'
+        '若您确定要继续，请点击「继续申请」。',
+    confirmLabel: '继续申请',
+    cancelLabel: '取消',
+    barrierDismissible: false,
+  );
+  if (!step1 || !context.mounted) return;
+
+  final step2 = await showConfirmDialog(
+    context: context,
+    title: '确认提交注销申请',
+    content: '提交后我们将在 7 个工作日内处理您的账号注销请求。确认要提交吗？',
+    confirmLabel: '确认提交',
+    cancelLabel: '再想想',
+    barrierDismissible: false,
+  );
+  if (!step2 || !context.mounted) return;
+
+  _toast(context, '我们已收到您的申请，将在 7 个工作日内处理您的请求');
 }
 
 class _AvatarRow extends StatelessWidget {

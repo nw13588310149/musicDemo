@@ -2906,41 +2906,41 @@ class _LessonTeacherRow extends StatelessWidget {
                   ),
                   SizedBox(width: ui(6)),
                   Container(
-                    height: ui(16),
                     padding: EdgeInsets.symmetric(
                       horizontal: ui(4),
-                      vertical: ui(2),
+                      vertical: ui(3),
                     ),
                     decoration: BoxDecoration(
                       color: courseBg,
                       borderRadius: BorderRadius.circular(ui(4)),
                     ),
-                    alignment: Alignment.center,
                     child: Text(
                       data.courseName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: ui(11),
                         color: courseColor,
+                        fontFamily: 'PingFang SC',
                         fontWeight: FontWeight.w400,
-                        height: 14 / 11,
+                        height: 1.2,
                       ),
                     ),
                   ),
                   SizedBox(width: ui(4)),
                   Container(
-                    height: ui(16),
                     padding: EdgeInsets.symmetric(
                       horizontal: ui(4),
-                      vertical: ui(2),
+                      vertical: ui(3),
                     ),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(ui(4)),
                       border: Border.all(color: const Color(0xFFF3F2F3)),
                     ),
-                    alignment: Alignment.center,
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         Container(
                           width: ui(6),
@@ -2956,8 +2956,9 @@ class _LessonTeacherRow extends StatelessWidget {
                           style: TextStyle(
                             fontSize: ui(11),
                             color: tagTextColor,
+                            fontFamily: 'PingFang SC',
                             fontWeight: FontWeight.w400,
-                            height: 14 / 11,
+                            height: 1.2,
                           ),
                         ),
                       ],

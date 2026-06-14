@@ -83,9 +83,7 @@ class _DormManagerCheckByRoomViewState
   List<DormitoryBuildingOption> _buildingOptions = const [
     DormitoryBuildingOption.all,
   ];
-  List<DormitoryFloorOption> _floorOptions = const [
-    DormitoryFloorOption.all,
-  ];
+  List<DormitoryFloorOption> _floorOptions = const [DormitoryFloorOption.all];
   DormitoryBuildingOption _selectedBuilding = DormitoryBuildingOption.all;
   DormitoryFloorOption _selectedFloor = DormitoryFloorOption.all;
 
@@ -117,8 +115,9 @@ class _DormManagerCheckByRoomViewState
   }
 
   Future<void> _loadBuildings() async {
-    final resp =
-        await ref.read(dormitoryRepositoryProvider).dormitoryManagedBuildingList();
+    final resp = await ref
+        .read(dormitoryRepositoryProvider)
+        .dormitoryManagedBuildingList();
     if (!mounted) return;
     if (!resp.isSuccess) {
       setState(() {
@@ -161,15 +160,12 @@ class _DormManagerCheckByRoomViewState
       _loadError = null;
     });
     final repo = ref.read(dormitoryRepositoryProvider);
-    final buildingId =
-        _selectedBuilding.id.isEmpty ? null : _selectedBuilding.id;
+    final buildingId = _selectedBuilding.id.isEmpty
+        ? null
+        : _selectedBuilding.id;
     final floorId = _selectedFloor.id.isEmpty ? null : _selectedFloor.id;
     final results = await Future.wait([
-      repo.dormitoryCheckStat(
-        buildingId: buildingId,
-        floorId: floorId,
-        date: _checkDate,
-      ),
+      repo.dormitoryCheckStat(),
       repo.dormitoryCheckRoomList(
         buildingId: buildingId,
         floorId: floorId,
@@ -215,10 +211,9 @@ class _DormManagerCheckByRoomViewState
   }
 
   Future<void> _checkInAll(DormitoryRoomCheck room) async {
-    final resp = await ref.read(dormitoryRepositoryProvider).dormitoryCheckRoomOneClick(
-          roomId: room.roomId,
-          date: _checkDate,
-        );
+    final resp = await ref
+        .read(dormitoryRepositoryProvider)
+        .dormitoryCheckRoomOneClick(roomId: room.roomId, date: _checkDate);
     if (!mounted) return;
     if (!resp.isSuccess) {
       AppToast.show(context, resp.displayMsg);
@@ -232,12 +227,13 @@ class _DormManagerCheckByRoomViewState
     DormitoryRoomStudent student,
     DormitoryStudentCheckStatus next,
   ) async {
-    final resp =
-        await ref.read(dormitoryRepositoryProvider).dormitoryCheckUserUpdate(
-              userId: student.userId,
-              status: next.apiValue,
-              date: _checkDate,
-            );
+    final resp = await ref
+        .read(dormitoryRepositoryProvider)
+        .dormitoryCheckUserUpdate(
+          userId: student.userId,
+          status: next.apiValue,
+          date: _checkDate,
+        );
     if (!mounted) return;
     if (!resp.isSuccess) {
       AppToast.show(context, resp.displayMsg);
@@ -295,10 +291,7 @@ class _DormManagerCheckByRoomViewState
                 child: const Center(child: AppLoadingIndicator()),
               )
             else if (_loadError != null)
-              _LoadErrorHint(
-                message: _loadError!,
-                onRetry: _reloadAll,
-              )
+              _LoadErrorHint(message: _loadError!, onRetry: _reloadAll)
             else if (_rooms.isEmpty)
               _EmptyRoomsHint()
             else
@@ -510,11 +503,7 @@ class _DormitorySelectFieldState<T> extends State<_DormitorySelectField<T>> {
         padding: EdgeInsets.symmetric(horizontal: ui(16)),
         child: Row(
           children: [
-            Icon(
-              widget.icon,
-              size: ui(16),
-              color: const Color(0xFFC6C6C6),
-            ),
+            Icon(widget.icon, size: ui(16), color: const Color(0xFFC6C6C6)),
             SizedBox(width: ui(10)),
             Expanded(
               child: Text(
@@ -804,7 +793,8 @@ class _RoomCard extends StatelessWidget {
   final void Function(
     DormitoryRoomStudent student,
     DormitoryStudentCheckStatus next,
-  ) onChangeStatus;
+  )
+  onChangeStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -820,10 +810,7 @@ class _RoomCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _RoomHeader(
-            room: room,
-            onCheckInAll: onCheckInAll,
-          ),
+          _RoomHeader(room: room, onCheckInAll: onCheckInAll),
           SizedBox(height: ui(12)),
           _RoomStudentGrid(
             students: room.students,
@@ -866,11 +853,7 @@ class _RoomHeader extends StatelessWidget {
               borderRadius: BorderRadius.circular(ui(8)),
             ),
             alignment: Alignment.center,
-            child: Icon(
-              Icons.home_rounded,
-              size: ui(22),
-              color: _kPurple,
-            ),
+            child: Icon(Icons.home_rounded, size: ui(22), color: _kPurple),
           ),
           SizedBox(width: ui(12)),
           Expanded(
@@ -958,11 +941,7 @@ class _CheckInAllButton extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.fact_check_outlined,
-              size: ui(18),
-              color: Colors.white,
-            ),
+            Icon(Icons.fact_check_outlined, size: ui(18), color: Colors.white),
             SizedBox(width: ui(6)),
             Text(
               '一键打卡',
@@ -995,7 +974,8 @@ class _RoomStudentGrid extends StatelessWidget {
   final void Function(
     DormitoryRoomStudent student,
     DormitoryStudentCheckStatus next,
-  ) onChangeStatus;
+  )
+  onChangeStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -1018,10 +998,7 @@ class _RoomStudentGrid extends StatelessWidget {
 }
 
 class _RoomStudentTile extends StatelessWidget {
-  const _RoomStudentTile({
-    required this.student,
-    required this.onChangeStatus,
-  });
+  const _RoomStudentTile({required this.student, required this.onChangeStatus});
 
   final DormitoryRoomStudent student;
   final ValueChanged<DormitoryStudentCheckStatus> onChangeStatus;
@@ -1074,10 +1051,7 @@ class _RoomStudentTile extends StatelessWidget {
             ),
           ),
           SizedBox(width: ui(8)),
-          _StatusDropdown(
-            current: student.status,
-            onChange: onChangeStatus,
-          ),
+          _StatusDropdown(current: student.status, onChange: onChangeStatus),
         ],
       ),
     );
@@ -1101,10 +1075,7 @@ class _Avatar extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(ui(8)),
         image: url.isNotEmpty
-            ? DecorationImage(
-                image: NetworkImage(url),
-                fit: BoxFit.cover,
-              )
+            ? DecorationImage(image: NetworkImage(url), fit: BoxFit.cover)
             : null,
       ),
       alignment: Alignment.center,

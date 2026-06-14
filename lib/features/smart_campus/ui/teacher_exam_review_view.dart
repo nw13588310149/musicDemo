@@ -1,4 +1,4 @@
-﻿// =============================================================================
+// =============================================================================
 // 任课老师 / 班主任端「考评管理」独立页面
 //
 // 入口：教师 dashboard 快捷区「考评管理」按钮 → controller.openExamReview()
@@ -13,8 +13,8 @@
 //      + 副标题 12/400 #B6B5BB「列表展示已关联到您任教的月考科目；教师仅可
 //      查看学生提交并进行评分与点评，不可新建考试。」/ 右上仅一个 "历史月考"
 //      胶囊按钮（紫色钟铃图标 + 白底 1px #F3F2F3 边）。
-//   3. 状态 tabs：5 项 = 全部 / 审批中 / 已通过 / 已拒绝 / 已撤销。
-//   4. 统计面板（与作业批改共用 PopupSelectorField + 累计/本学期/本月 toggle）：
+//   3. 状态 tabs：全部 / 成绩未发布 / 成绩已发布。
+//   4. 统计面板（真实班级筛选 + 6 项统计）：
 //      6 项统计 = 待评分人次 / 关联考试科目 / 已评人次 / 已评均分 / 最高分 /
 //      最低分。
 //   5. 左侧考试列表卡（白卡 + 灰底 #F5F6FA / 选中态紫底 #F4F4FF）：每张卡
@@ -76,6 +76,9 @@ enum _SubmissionState { passed, pending, missing, reviewed }
 class _Submission {
   const _Submission({
     this.studentId = '',
+    this.score,
+    this.comment = '',
+    this.path = '',
     required this.studentName,
     required this.avatarSeed,
     required this.state,
@@ -86,6 +89,9 @@ class _Submission {
   });
 
   final String studentId;
+  final num? score;
+  final String comment;
+  final String path;
   final String studentName;
   final int avatarSeed;
   final _SubmissionState state;
@@ -178,7 +184,12 @@ class _ExamOverviewStats {
     double? decimal(List<String> keys) =>
         double.tryParse(_pickApiValue(map, keys));
     return _ExamOverviewStats(
-      pending: integer(['unScoreCount', 'pendingCount', 'notScoreCount']),
+      pending: integer([
+        'unscoredCount',
+        'unScoreCount',
+        'pendingCount',
+        'notScoreCount',
+      ]),
       subjects: 1,
       reviewed: integer(['scoreCount', 'reviewedCount', 'scoredCount']),
       average: decimal(['avgScore', 'averageScore', 'scoreAvg']),
@@ -213,15 +224,14 @@ class _ExamOverviewStats {
   static double? _extreme(Iterable<double?> values, bool highest) {
     final numbers = values.whereType<double>().toList();
     if (numbers.isEmpty) return null;
-    return numbers.reduce(highest
-        ? (a, b) => a > b ? a : b
-        : (a, b) => a < b ? a : b);
+    return numbers.reduce(
+      highest ? (a, b) => a > b ? a : b : (a, b) => a < b ? a : b,
+    );
   }
 }
 
-const List<String> _kStatusTabs = ['全部', '审批中', '已通过', '已拒绝', '已撤销'];
-const List<String> _kRangeTabs = ['累计', '本学期', '本月'];
-const List<String> _kClassOptions = ['全部班级', '高三音乐实验班', '高三声乐回课', '高二音乐实验班'];
+const List<String> _kStatusTabs = ['全部', '成绩未发布', '成绩已发布'];
+const String _kAllClasses = '全部班级';
 
 // ---- 入口 view --------------------------------------------------------------
 
@@ -235,11 +245,11 @@ class TeacherExamReviewView extends ConsumerStatefulWidget {
       _TeacherExamReviewViewState();
 }
 
-class _TeacherExamReviewViewState
-    extends ConsumerState<TeacherExamReviewView> {
+class _TeacherExamReviewViewState extends ConsumerState<TeacherExamReviewView> {
   int _statusTab = 0;
-  int _rangeTab = 0;
-  String _classFilter = _kClassOptions.first;
+  String _classFilter = _kAllClasses;
+  List<String> _classOptions = const [_kAllClasses];
+  Map<String, String> _classIdByLabel = const {_kAllClasses: ''};
   int _activeIdx = 0;
   bool _loading = true;
   String? _loadError;
@@ -250,16 +260,35 @@ class _TeacherExamReviewViewState
   @override
   void initState() {
     super.initState();
+    unawaited(_loadClassOptions());
     unawaited(_loadExams());
   }
 
-  Future<void> _loadExams() async {
+  Future<void> _loadClassOptions() async {
+    final response = await ref.read(teacherRepositoryProvider).classList();
+    if (!mounted || !response.isSuccess) return;
+    final labels = <String>[_kAllClasses];
+    final ids = <String, String>{_kAllClasses: ''};
+    for (final row in _examRows(response.data)) {
+      final id = _stringValue(row['id']);
+      final name = _stringValue(row['name']);
+      if (id.isEmpty || name.isEmpty || ids.containsKey(name)) continue;
+      labels.add(name);
+      ids[name] = id;
+    }
+    setState(() {
+      _classOptions = labels;
+      _classIdByLabel = ids;
+    });
+  }
+
+  Future<void> _loadExams({String? classId}) async {
     setState(() {
       _loading = true;
       _loadError = null;
     });
     final repo = ref.read(teacherRepositoryProvider);
-    final response = await repo.examList();
+    final response = await repo.examList(classId: classId);
     if (!mounted) return;
     if (!response.isSuccess) {
       setState(() {
@@ -275,17 +304,22 @@ class _TeacherExamReviewViewState
     for (final row in _examRows(response.data)) {
       final subjectIds = _csvInts(row['subjectIds']);
       final subjectNames = _csvStrings(row['subjectNames']);
-      final subjectId = subjectIds.isEmpty ? 0 : subjectIds.first;
-      final studentResponse = subjectId == 0
-          ? null
-          : await repo.examStudentList(
-              examId: _stringValue(row['id']),
-              subjectId: subjectId,
-            );
-      final submissions = studentResponse?.isSuccess == true
-          ? _submissionRows(studentResponse!.data)
-          : const <_Submission>[];
-      if (subjectId != 0) {
+      if (subjectIds.isEmpty) {
+        exams.add(_examFromApi(row, 0, '未设置科目', const []));
+        continue;
+      }
+      for (var index = 0; index < subjectIds.length; index++) {
+        final subjectId = subjectIds[index];
+        final subjectName = index < subjectNames.length
+            ? subjectNames[index]
+            : '科目$subjectId';
+        final studentResponse = await repo.examStudentList(
+          examId: _stringValue(row['id']),
+          subjectId: subjectId,
+        );
+        final submissions = studentResponse.isSuccess
+            ? _submissionRows(studentResponse.data, subjectName: subjectName)
+            : const <_Submission>[];
         final statResponse = await repo.examStudentStat(
           examId: _stringValue(row['id']),
           subjectId: subjectId,
@@ -293,8 +327,8 @@ class _TeacherExamReviewViewState
         if (statResponse.isSuccess) {
           stats.add(_ExamOverviewStats.fromApi(statResponse.data));
         }
+        exams.add(_examFromApi(row, subjectId, subjectName, submissions));
       }
-      exams.add(_examFromApi(row, subjectId, subjectNames, submissions));
     }
     if (!mounted) return;
     setState(() {
@@ -308,7 +342,15 @@ class _TeacherExamReviewViewState
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final active = _all.isEmpty ? null : _all[_activeIdx];
+    final visibleItems = switch (_statusTab) {
+      1 =>
+        _all.where((item) => item.cornerKind == _CornerKind.pending).toList(),
+      2 => _all.where((item) => item.cornerKind == _CornerKind.closed).toList(),
+      _ => _all,
+    };
+    final active = visibleItems.isEmpty
+        ? null
+        : visibleItems[_activeIdx.clamp(0, visibleItems.length - 1)];
 
     final initialLoading = _loading && _all.isEmpty;
 
@@ -334,22 +376,30 @@ class _TeacherExamReviewViewState
                   _StatusTabsRow(
                     tabs: _kStatusTabs,
                     activeIdx: _statusTab,
-                    onTap: (i) => setState(() => _statusTab = i),
+                    onTap: (i) => setState(() {
+                      _statusTab = i;
+                      _activeIdx = 0;
+                    }),
                   ),
                   SizedBox(height: ui(12)),
                   _StatsPanel(
                     stats: _overviewStats,
                     classFilter: _classFilter,
-                    onClassChanged: (v) => setState(() => _classFilter = v),
-                    rangeIdx: _rangeTab,
-                    onRangeChanged: (i) => setState(() => _rangeTab = i),
+                    classOptions: _classOptions,
+                    onClassChanged: (value) {
+                      setState(() {
+                        _classFilter = value;
+                        _activeIdx = 0;
+                      });
+                      unawaited(_loadExams(classId: _classIdByLabel[value]));
+                    },
                   ),
                   SizedBox(height: ui(16)),
                   if (!initialLoading && active == null)
                     Center(child: Text(_loadError ?? '暂无可批改的考试'))
                   else if (!initialLoading)
                     _BodyRow(
-                      items: _all,
+                      items: visibleItems,
                       activeIdx: _activeIdx,
                       onSelect: (i) => setState(() => _activeIdx = i),
                       active: active!,
@@ -409,7 +459,8 @@ class _TeacherExamReviewViewState
             child: _ScoreDrawer(
               item: item,
               submission: submission,
-              onScored: _loadExams,
+              onScored: () =>
+                  _loadExams(classId: _classIdByLabel[_classFilter]),
             ),
           ),
         );
@@ -607,13 +658,11 @@ class _SegmentChip extends StatelessWidget {
     required this.label,
     required this.active,
     required this.onTap,
-    this.compact = false,
   });
 
   final String label;
   final bool active;
   final VoidCallback onTap;
-  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -622,10 +671,7 @@ class _SegmentChip extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(ui(6)),
       child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: ui(compact ? 12 : 16),
-          vertical: ui(10),
-        ),
+        padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(10)),
         decoration: BoxDecoration(
           color: active ? _kTextDark : Colors.transparent,
           borderRadius: BorderRadius.circular(ui(6)),
@@ -653,16 +699,14 @@ class _StatsPanel extends StatelessWidget {
   const _StatsPanel({
     required this.stats,
     required this.classFilter,
+    required this.classOptions,
     required this.onClassChanged,
-    required this.rangeIdx,
-    required this.onRangeChanged,
   });
 
   final _ExamOverviewStats stats;
   final String classFilter;
+  final List<String> classOptions;
   final ValueChanged<String> onClassChanged;
-  final int rangeIdx;
-  final ValueChanged<int> onRangeChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -683,32 +727,9 @@ class _StatsPanel extends StatelessWidget {
                 width: ui(180),
                 child: PopupSelectorField<String>(
                   value: classFilter,
-                  items: _kClassOptions,
+                  items: classOptions,
                   itemLabel: (s) => s,
                   onChanged: onClassChanged,
-                ),
-              ),
-              const Spacer(),
-              Container(
-                padding: EdgeInsets.all(ui(4)),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(ui(12)),
-                  border: Border.all(color: _kBorderSoft),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    for (var i = 0; i < _kRangeTabs.length; i++) ...[
-                      if (i > 0) SizedBox(width: ui(4)),
-                      _SegmentChip(
-                        label: _kRangeTabs[i],
-                        active: i == rangeIdx,
-                        onTap: () => onRangeChanged(i),
-                        compact: true,
-                      ),
-                    ],
-                  ],
                 ),
               ),
             ],
@@ -1801,9 +1822,18 @@ class _ScoreDrawer extends ConsumerStatefulWidget {
 class _ScoreDrawerState extends ConsumerState<_ScoreDrawer> {
   String _scope = '高三音乐实验班';
   String _form = '文字 + 评分';
-  final _scoreCtrl = TextEditingController(text: '95');
-  final _commentCtrl = TextEditingController();
+  late final TextEditingController _scoreCtrl;
+  late final TextEditingController _commentCtrl;
   bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scoreCtrl = TextEditingController(
+      text: widget.submission.score?.toString() ?? '',
+    );
+    _commentCtrl = TextEditingController(text: widget.submission.comment);
+  }
 
   @override
   void dispose() {
@@ -1915,7 +1945,7 @@ class _ScoreDrawerState extends ConsumerState<_ScoreDrawer> {
 
   Future<void> _submit() async {
     if (_submitting) return;
-    final score = int.tryParse(_scoreCtrl.text.trim());
+    final score = num.tryParse(_scoreCtrl.text.trim());
     if (score == null || score < 0 || score > 100) {
       AppToast.show(context, '请输入 0-100 的分数', type: AppToastType.error);
       return;
@@ -1927,16 +1957,16 @@ class _ScoreDrawerState extends ConsumerState<_ScoreDrawer> {
       return;
     }
     setState(() => _submitting = true);
-    final response = await ref.read(teacherRepositoryProvider).examStudentScore(
-      <String, dynamic>{
-        'examId': widget.item.id,
-        'subjectId': widget.item.subjectId,
-        'studentId': widget.submission.studentId,
-        'score': score,
-        if (_commentCtrl.text.trim().isNotEmpty)
-          'remark': _commentCtrl.text.trim(),
-      },
-    );
+    final response = await ref
+        .read(teacherRepositoryProvider)
+        .examStudentScore(
+          examId: widget.item.id,
+          subjectId: widget.item.subjectId,
+          studentId: widget.submission.studentId,
+          score: score,
+          comment: _commentCtrl.text.trim(),
+          path: widget.submission.path,
+        );
     if (!mounted) return;
     setState(() => _submitting = false);
     if (!response.isSuccess) {
@@ -2234,7 +2264,9 @@ class _ScoreInput extends StatelessWidget {
           Expanded(
             child: AppTextField(
               controller: controller,
-              keyboardType: TextInputType.number,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               cursorColor: _kPurple,
               cursorWidth: 1.5,
               cursorHeight: ui(16),
@@ -2485,53 +2517,64 @@ String _pickApiValue(Map<String, dynamic> map, List<String> keys) {
   return '';
 }
 
-List<_Submission> _submissionRows(dynamic raw) {
-  return _examRows(raw).map((row) {
-    final score = int.tryParse(_stringValue(row['score']));
-    final path = _stringValue(row['path']);
-    return _Submission(
-      studentId: _stringValue(row['studentId']),
-      studentName: _stringValue(row['realname'], fallback: '未命名学生'),
-      avatarSeed: _stringValue(row['studentId']).hashCode.abs(),
-      state: score == null
-          ? _SubmissionState.pending
-          : _SubmissionState.reviewed,
-      subject: _stringValue(row['subjectName'], fallback: '考试科目'),
-      medium: _mediumFromPath(path),
-      uploadAt: '',
-      action: score == null ? '评分' : '查看',
-    );
-  }).toList(growable: false);
+List<_Submission> _submissionRows(dynamic raw, {required String subjectName}) {
+  return _examRows(raw)
+      .map((row) {
+        final score = num.tryParse(_stringValue(row['score']));
+        final path = _stringValue(row['path']);
+        final scored =
+            row['scored'] == true ||
+            int.tryParse(_stringValue(row['scoreStatus'])) == 1 ||
+            score != null;
+        final state = scored
+            ? _SubmissionState.reviewed
+            : _SubmissionState.pending;
+        return _Submission(
+          studentId: _stringValue(row['studentId']),
+          score: score,
+          comment: _stringValue(row['comment']),
+          path: path,
+          studentName: _stringValue(row['realname'], fallback: '未命名学生'),
+          avatarSeed: _stringValue(row['studentId']).hashCode.abs(),
+          state: state,
+          subject: subjectName,
+          medium: _mediumFromPath(path),
+          uploadAt: '',
+          action: scored ? '查看' : '评分',
+        );
+      })
+      .toList(growable: false);
 }
 
 _ExamItem _examFromApi(
   Map<String, dynamic> row,
   int subjectId,
-  List<String> subjectNames,
+  String subjectName,
   List<_Submission> submissions,
 ) {
-  final reviewed =
-      submissions.where((s) => s.state == _SubmissionState.reviewed).length;
+  final reviewed = submissions
+      .where((s) => s.state == _SubmissionState.reviewed)
+      .length;
   final pending = submissions.length - reviewed;
   final classes = row['classList'] is List
       ? (row['classList'] as List)
-          .whereType<Map>()
-          .map((e) => _stringValue(e['name']))
-          .where((e) => e.isNotEmpty)
-          .join('、')
+            .whereType<Map>()
+            .map((e) => _stringValue(e['name']))
+            .where((e) => e.isNotEmpty)
+            .join('、')
       : '';
   final status = int.tryParse(_stringValue(row['status'])) ?? 0;
   return _ExamItem(
     id: _stringValue(row['id']),
     subjectId: subjectId,
     title: _stringValue(row['name'], fallback: '未命名考试'),
-    subject: subjectNames.isEmpty ? '未设置科目' : subjectNames.first,
+    subject: subjectName,
     examLabel: '考试',
     classLabel: classes.isEmpty ? '全部关联班级' : classes,
     deadline: _stringValue(row['examDate'], fallback: '--'),
     syncNote: '数据来自教务考试安排',
     officialDesc: _stringValue(row['remark'], fallback: '暂无考试说明'),
-    cornerLabel: status == 0 ? '进行中' : '已截止',
+    cornerLabel: status == 0 ? '成绩未发布' : '成绩已发布',
     cornerKind: status == 0 ? _CornerKind.pending : _CornerKind.closed,
     attended: submissions.length,
     unsubmitted: 0,
@@ -2548,10 +2591,8 @@ List<String> _csvStrings(dynamic raw) => _stringValue(raw)
     .where((e) => e.isNotEmpty)
     .toList(growable: false);
 
-List<int> _csvInts(dynamic raw) => _csvStrings(raw)
-    .map(int.tryParse)
-    .whereType<int>()
-    .toList(growable: false);
+List<int> _csvInts(dynamic raw) =>
+    _csvStrings(raw).map(int.tryParse).whereType<int>().toList(growable: false);
 
 String _stringValue(dynamic raw, {String fallback = ''}) {
   final value = raw?.toString().trim() ?? '';

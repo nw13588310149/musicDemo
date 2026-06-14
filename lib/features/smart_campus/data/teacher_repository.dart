@@ -194,20 +194,17 @@ class TeacherRepository {
   ///
   /// - `type`: 班级类型过滤，`0 = 大班`，`1 = 小班`；不传 = 全量（大 + 小）。
   ///   主要场景：申请小课时传 `type: 1` 只展示「我的小班」。
-  /// - `campusId` / `keyword`: 与 admin classList 同义，按校区或关键字过滤。
-  Future<ApiResponse> classList({int? type, int? campusId, String? keyword}) {
+  /// - `isHeadTeacher`: 是否为班主任；不传 = 不按该字段过滤。
+  Future<ApiResponse> classList({int? type, int? isHeadTeacher}) {
     final body = <String, dynamic>{};
     if (type != null) body['type'] = type;
-    if (campusId != null) body['campusId'] = campusId;
-    if (keyword != null && keyword.isNotEmpty) body['keyword'] = keyword;
+    if (isHeadTeacher != null) body['isHeadTeacher'] = isHeadTeacher;
     return client.post('$_base/classList', data: body);
   }
 
   /// 任课老师端教室下拉列表。
-  Future<ApiResponse> classroomList({int? campusId}) {
-    final body = <String, dynamic>{};
-    if (campusId != null) body['campusId'] = campusId;
-    return client.post('$_base/classroomList', data: body);
+  Future<ApiResponse> classroomList() {
+    return client.post('$_base/classroomList');
   }
 
   /// 任课老师"我的课表"。后端会基于 token 自动定位到当前老师的全部排课。
@@ -347,7 +344,7 @@ class TeacherRepository {
     );
   }
 
-  /// 教师上课签到。`courseId` 为课表记录 id。
+  /// 教师小课上课签到。App 端请求体仅包含 `courseId`。
   Future<ApiResponse> courseTeacherSignIn({required String courseId}) {
     return client.post(
       '$_base/courseTeacherSignIn',
@@ -357,7 +354,7 @@ class TeacherRepository {
     );
   }
 
-  /// 教师下课签到。必须先完成上课签到。
+  /// 教师小课下课签到。App 端请求体仅包含 `courseId`。
   Future<ApiResponse> courseTeacherSignOut({required String courseId}) {
     return client.post(
       '$_base/courseTeacherSignOut',
@@ -601,24 +598,29 @@ class TeacherRepository {
 
   /// 学生考试成绩详情。
   Future<ApiResponse> studentExamRecordList({required String studentId}) {
-    return client.post(
-      '$_base/studentExamRecordList',
-      data: <String, dynamic>{
-        'studentId': readSnowflakeId(studentId) ?? studentId,
-      },
+    final body = encodeNumericIdRequestBody(
+      <String, dynamic>{'studentId': studentId},
+      numericIdKeys: const {'studentId'},
     );
+    if (body == null) {
+      return Future.value(ApiResponse.failure('学生 id 格式错误'));
+    }
+    return client.post('$_base/studentExamRecordList', data: body);
   }
 
   // ============== 考评管理 ==============
 
-  /// 当前老师有权批改的考试列表。`classId` 为空或 0 时查询全部班级。
-  Future<ApiResponse> examList({String classId = '0'}) {
-    return client.post(
-      '$_base/examList',
-      data: <String, dynamic>{
-        'classId': readSnowflakeId(classId) ?? int.tryParse(classId) ?? 0,
-      },
+  /// 当前老师有权批改的考试列表。`classId` 不传时查询全部有权批改的考试。
+  Future<ApiResponse> examList({String? classId}) {
+    if (classId == null || classId.trim().isEmpty) {
+      return client.post('$_base/examList');
+    }
+    final body = encodeNumericIdRequestBody(
+      <String, dynamic>{'classId': classId},
+      numericIdKeys: const {'classId'},
     );
+    if (body == null) return Future.value(ApiResponse.failure('班级 id 格式错误'));
+    return client.post('$_base/examList', data: body);
   }
 
   /// 考试考生列表。`scoreStatus`: 0 未打分、1 已打分；不传查询全部。
@@ -627,18 +629,41 @@ class TeacherRepository {
     required int subjectId,
     int? scoreStatus,
   }) {
-    return client.post(
-      '$_base/examStudentList',
-      data: <String, dynamic>{
-        'examId': readSnowflakeId(examId) ?? examId,
+    final body = encodeNumericIdRequestBody(
+      <String, dynamic>{
+        'examId': examId,
         'subjectId': subjectId,
-        'scoreStatus': ?scoreStatus,
+        'scoreStatus': scoreStatus,
       },
+      numericIdKeys: const {'examId'},
     );
+    if (body == null) return Future.value(ApiResponse.failure('考试 id 格式错误'));
+    return client.post('$_base/examStudentList', data: body);
   }
 
   /// 考试打分。请求体字段与老师端 Swagger 保持一致。
-  Future<ApiResponse> examStudentScore(Map<String, dynamic> body) {
+  Future<ApiResponse> examStudentScore({
+    required String examId,
+    required int subjectId,
+    required String studentId,
+    required num score,
+    String? comment,
+    String? path,
+  }) {
+    final body = encodeNumericIdRequestBody(
+      <String, dynamic>{
+        'examId': examId,
+        'subjectId': subjectId,
+        'studentId': studentId,
+        'score': score,
+        if (comment != null && comment.isNotEmpty) 'comment': comment,
+        if (path != null && path.isNotEmpty) 'path': path,
+      },
+      numericIdKeys: const {'examId', 'studentId'},
+    );
+    if (body == null) {
+      return Future.value(ApiResponse.failure('考试或学生 id 格式错误'));
+    }
     return client.post('$_base/examStudentScore', data: body);
   }
 
@@ -647,13 +672,12 @@ class TeacherRepository {
     required String examId,
     required int subjectId,
   }) {
-    return client.post(
-      '$_base/examStudentStat',
-      data: <String, dynamic>{
-        'examId': readSnowflakeId(examId) ?? examId,
-        'subjectId': subjectId,
-      },
+    final body = encodeNumericIdRequestBody(
+      <String, dynamic>{'examId': examId, 'subjectId': subjectId},
+      numericIdKeys: const {'examId'},
     );
+    if (body == null) return Future.value(ApiResponse.failure('考试 id 格式错误'));
+    return client.post('$_base/examStudentStat', data: body);
   }
 
   /// 向尚未提交考试的学生发送催交提醒。
@@ -662,16 +686,19 @@ class TeacherRepository {
     required int subjectId,
     required List<String> studentIds,
   }) {
-    return client.post(
-      '$_base/examStudentRemind',
-      data: <String, dynamic>{
-        'examId': readSnowflakeId(examId) ?? examId,
+    final body = encodeNumericIdRequestBody(
+      <String, dynamic>{
+        'examId': examId,
         'subjectId': subjectId,
-        'studentIds': studentIds
-            .map((id) => readSnowflakeId(id) ?? id)
-            .toList(growable: false),
+        'studentIds': studentIds,
       },
+      numericIdKeys: const {'examId'},
+      numericIdArrayKeys: const {'studentIds'},
     );
+    if (body == null) {
+      return Future.value(ApiResponse.failure('考试或学生 id 格式错误'));
+    }
+    return client.post('$_base/examStudentRemind', data: body);
   }
 
   // ============== 作业管理（任课老师端） ==============

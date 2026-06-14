@@ -39,7 +39,8 @@ String encodeSnowflakeSafeRequestBody(Map<String, dynamic> body) {
     if (value == null) return;
     final encodedKey = jsonEncode(key);
     if (isSnowflakeJsonKey(key)) {
-      final id = readSnowflakeId(value) ?? (value is String ? value.trim() : null);
+      final id =
+          readSnowflakeId(value) ?? (value is String ? value.trim() : null);
       if (id == null || id.isEmpty) return;
       entries.add('$encodedKey:${jsonEncode(id)}');
       return;
@@ -127,4 +128,45 @@ String? encodeNumericIdArrayRequestBody(List<String> ids) {
   }
   if (literals.isEmpty) return null;
   return '{"id":[${literals.join(',')}]}';
+}
+
+/// 按 Swagger `int64` 约定构造 JSON 请求体，同时避免 Web 端大整数精度丢失。
+///
+/// [numericIdKeys] 中的标量和 [numericIdArrayKeys] 中的数组元素会以不带引号
+/// 的十进制字面量写入；其它字段仍走标准 [jsonEncode]。
+String? encodeNumericIdRequestBody(
+  Map<String, dynamic> body, {
+  Set<String> numericIdKeys = const {},
+  Set<String> numericIdArrayKeys = const {},
+}) {
+  final entries = <String>[];
+  for (final entry in body.entries) {
+    final value = entry.value;
+    if (value == null) continue;
+    final key = jsonEncode(entry.key);
+    if (numericIdKeys.contains(entry.key)) {
+      final literal = _numericIdLiteral(value);
+      if (literal == null) return null;
+      entries.add('$key:$literal');
+      continue;
+    }
+    if (numericIdArrayKeys.contains(entry.key)) {
+      if (value is! Iterable) return null;
+      final literals = <String>[];
+      for (final item in value) {
+        final literal = _numericIdLiteral(item);
+        if (literal == null) return null;
+        literals.add(literal);
+      }
+      entries.add('$key:[${literals.join(',')}]');
+      continue;
+    }
+    entries.add('$key:${jsonEncode(value)}');
+  }
+  return '{${entries.join(',')}}';
+}
+
+String? _numericIdLiteral(dynamic raw) {
+  final value = readSnowflakeId(raw);
+  return value != null && RegExp(r'^\d+$').hasMatch(value) ? value : null;
 }

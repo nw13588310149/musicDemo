@@ -49,6 +49,7 @@ import '../data/course_sign_data.dart';
 import '../data/teacher_attendance_data.dart';
 import '../data/teacher_repository.dart';
 import '../state/teacher_attendance_controller.dart';
+import 'course_sign_countdown.dart';
 import 'widgets/course_sign_status_picker.dart';
 import '../../shell/ui/shell_layout.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -192,7 +193,9 @@ _RecentRecord _recentRecordFromHistory(TeacherSignHistoryItem item) {
     time: item.time.isEmpty ? '--:--' : item.time,
     date: _dateOnly(item.date),
     courseName: item.courseName,
-    kind: isSmallCourseType(item.courseType) ? _ClassKind.small : _ClassKind.big,
+    kind: isSmallCourseType(item.courseType)
+        ? _ClassKind.small
+        : _ClassKind.big,
     periodLabel: item.lineNum > 0 ? '第${item.lineNum}节' : '签课记录',
     teacherName: item.teacherName,
     expected: item.shouldCount,
@@ -341,9 +344,7 @@ class _TeacherClassAttendanceViewState
     }
     final stats = _statsFromSummary(attendance.summary);
     final overviewLoading =
-        attendance.loadingOverview &&
-        recentRecords.isEmpty &&
-        classes.isEmpty;
+        attendance.loadingOverview && recentRecords.isEmpty && classes.isEmpty;
     return SingleChildScrollView(
       padding: EdgeInsets.only(bottom: ui(24)),
       child: Column(
@@ -378,10 +379,7 @@ class _TeacherClassAttendanceViewState
             ),
             SizedBox(height: ui(12)),
             if (recentRecords.isEmpty)
-              _AttendanceEmptyPanel(
-                loading: false,
-                message: '暂无最近签课记录',
-              )
+              _AttendanceEmptyPanel(loading: false, message: '暂无最近签课记录')
             else
               _RecentRecordsRow(records: recentRecords),
             SizedBox(height: ui(28)),
@@ -395,71 +393,71 @@ class _TeacherClassAttendanceViewState
               )
             else
               LayoutBuilder(
-              builder: (context, c) {
-                final isCompact = c.maxWidth < ui(720);
-                if (isCompact) {
-                  return Column(
+                builder: (context, c) {
+                  final isCompact = c.maxWidth < ui(720);
+                  if (isCompact) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _SectionTitle('今日课程'),
+                        SizedBox(height: ui(12)),
+                        _TodayClassesPanel(
+                          title: _todayPanelTitle(),
+                          classes: classes,
+                          activeIdx: activeIdx,
+                          onSelect: (idx) => _selectClass(idx, classes),
+                        ),
+                        SizedBox(height: ui(20)),
+                        _SectionTitle('签到操作'),
+                        SizedBox(height: ui(12)),
+                        _ActionPanelSwitcher(
+                          data: classes[activeIdx],
+                          onPickStudentStatus: (idx) =>
+                              _pickStudentStatus(classes[activeIdx], idx),
+                          onBulkSign: () => _bulkSign(classes[activeIdx]),
+                        ),
+                      ],
+                    );
+                  }
+                  return Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _SectionTitle('今日课程'),
-                      SizedBox(height: ui(12)),
-                      _TodayClassesPanel(
-                        title: _todayPanelTitle(),
-                        classes: classes,
-                        activeIdx: activeIdx,
-                        onSelect: (idx) => _selectClass(idx, classes),
+                      SizedBox(
+                        width: ui(340),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _SectionTitle('今日课程'),
+                            SizedBox(height: ui(12)),
+                            _TodayClassesPanel(
+                              title: _todayPanelTitle(),
+                              classes: classes,
+                              activeIdx: activeIdx,
+                              onSelect: (idx) => _selectClass(idx, classes),
+                            ),
+                          ],
+                        ),
                       ),
-                      SizedBox(height: ui(20)),
-                      _SectionTitle('签到操作'),
-                      SizedBox(height: ui(12)),
-                      _ActionPanelSwitcher(
-                        data: classes[activeIdx],
-                        onPickStudentStatus: (idx) =>
-                            _pickStudentStatus(classes[activeIdx], idx),
-                        onBulkSign: () => _bulkSign(classes[activeIdx]),
+                      SizedBox(width: ui(16)),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _SectionTitle('签到操作'),
+                            SizedBox(height: ui(12)),
+                            _ActionPanelSwitcher(
+                              data: classes[activeIdx],
+                              onPickStudentStatus: (idx) =>
+                                  _pickStudentStatus(classes[activeIdx], idx),
+                              onBulkSign: () => _bulkSign(classes[activeIdx]),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   );
-                }
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: ui(340),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _SectionTitle('今日课程'),
-                          SizedBox(height: ui(12)),
-                          _TodayClassesPanel(
-                            title: _todayPanelTitle(),
-                            classes: classes,
-                            activeIdx: activeIdx,
-                            onSelect: (idx) => _selectClass(idx, classes),
-                          ),
-                        ],
-                      ),
-                    ),
-                    SizedBox(width: ui(16)),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _SectionTitle('签到操作'),
-                          SizedBox(height: ui(12)),
-                          _ActionPanelSwitcher(
-                            data: classes[activeIdx],
-                            onPickStudentStatus: (idx) =>
-                                _pickStudentStatus(classes[activeIdx], idx),
-                            onBulkSign: () => _bulkSign(classes[activeIdx]),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
+                },
+              ),
           ],
         ],
       ),
@@ -1252,7 +1250,10 @@ class _CourseTimeLabel extends StatelessWidget {
         style: baseStyle,
         children: [
           TextSpan(text: '$startTime '),
-          const TextSpan(text: '- ', style: TextStyle(color: _kTextHint)),
+          const TextSpan(
+            text: '- ',
+            style: TextStyle(color: _kTextHint),
+          ),
           TextSpan(text: endTime),
         ],
       ),
@@ -1459,26 +1460,37 @@ class _BigClassActionPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // 顶部：第N节·HH:MM-HH:MM（时间紫色）
-          RichText(
-            text: TextSpan(
-              style: TextStyle(
-                fontSize: ui(16),
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w500,
-                height: 1,
+          // 顶部：第N节·HH:MM-HH:MM（时间紫色）+ 右上角倒计时
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: RichText(
+                  text: TextSpan(
+                    style: TextStyle(
+                      fontSize: ui(16),
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w500,
+                      height: 1,
+                    ),
+                    children: [
+                      TextSpan(
+                        text: '第${data.periodIndex}节·',
+                        style: const TextStyle(color: _kTextSection),
+                      ),
+                      TextSpan(
+                        text: '${data.startTime}-${data.endTime}',
+                        style: const TextStyle(color: _kPurple),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              children: [
-                TextSpan(
-                  text: '第${data.periodIndex}节·',
-                  style: const TextStyle(color: _kTextSection),
-                ),
-                TextSpan(
-                  text: '${data.startTime}-${data.endTime}',
-                  style: const TextStyle(color: _kPurple),
-                ),
-              ],
-            ),
+              CourseSignCountdownBadge(
+                startTime: data.startTime,
+                endTime: data.endTime,
+              ),
+            ],
           ),
           SizedBox(height: ui(20)),
           // 教师信息行：头像 + 姓名 + 时长·教室 + 课程 tag
@@ -1982,25 +1994,36 @@ class _SmallClassActionPanelState
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          RichText(
-            text: TextSpan(
-              style: TextStyle(
-                fontSize: ui(16),
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w500,
-                height: 1,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: RichText(
+                  text: TextSpan(
+                    style: TextStyle(
+                      fontSize: ui(16),
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w500,
+                      height: 1,
+                    ),
+                    children: [
+                      TextSpan(
+                        text: '第${data.periodIndex}节·',
+                        style: const TextStyle(color: _kTextSection),
+                      ),
+                      TextSpan(
+                        text: '${data.startTime}-${data.endTime}',
+                        style: const TextStyle(color: _kPurple),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              children: [
-                TextSpan(
-                  text: '第${data.periodIndex}节·',
-                  style: const TextStyle(color: _kTextSection),
-                ),
-                TextSpan(
-                  text: '${data.startTime}-${data.endTime}',
-                  style: const TextStyle(color: _kPurple),
-                ),
-              ],
-            ),
+              CourseSignCountdownBadge(
+                startTime: data.startTime,
+                endTime: data.endTime,
+              ),
+            ],
           ),
           SizedBox(height: ui(16)),
           // 灰底面板：单学生 + 时间轴 + 上下课签按钮
@@ -2400,7 +2423,8 @@ CourseSignStatus? _courseSignStatusOf(_AttendStatus status) {
   };
 }
 
-String _displayCourseClock(String raw) => pickCourseClock(raw) ?? _clockPart(raw);
+String _displayCourseClock(String raw) =>
+    pickCourseClock(raw) ?? _clockPart(raw);
 
 String _clockPart(String value) {
   final trimmed = value.trim();
@@ -2562,7 +2586,9 @@ List<_HistoryDay> _historyDaysFromRecords(
             time: item.time.isEmpty ? '--:--' : item.time,
             periodLabel: item.lineNum > 0 ? '第${item.lineNum}节' : '签课记录',
             courseName: item.courseName,
-            kind: isSmallCourseType(item.courseType) ? _ClassKind.small : _ClassKind.big,
+            kind: isSmallCourseType(item.courseType)
+                ? _ClassKind.small
+                : _ClassKind.big,
             location: item.classroom,
             teacherName: item.teacherName,
             expected: item.shouldCount,

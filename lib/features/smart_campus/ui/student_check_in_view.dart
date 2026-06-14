@@ -35,6 +35,7 @@ import '../../school/data/school_repository.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/student_check_in_data.dart';
 import '../data/student_repository.dart';
+import 'course_sign_countdown.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 const Color _kCardBg = Colors.white;
@@ -107,7 +108,9 @@ class _StudentCheckInViewState extends ConsumerState<StudentCheckInView> {
         if (map is Map) {
           final schoolClass = map['schoolClass'];
           if (schoolClass is Map) {
-            classId = readSnowflakeId(schoolClass['id'] ?? schoolClass['classId']);
+            classId = readSnowflakeId(
+              schoolClass['id'] ?? schoolClass['classId'],
+            );
           }
         }
       }
@@ -164,10 +167,7 @@ class _StudentCheckInViewState extends ConsumerState<StudentCheckInView> {
           .courseStudentSignIn(courseId: course.courseId);
       if (!mounted) return;
       if (!resp.isSuccess) {
-        AppToast.show(
-          context,
-          resp.msg.isNotEmpty ? resp.msg : '上课签到失败',
-        );
+        AppToast.show(context, resp.msg.isNotEmpty ? resp.msg : '上课签到失败');
         return;
       }
       AppToast.show(context, '上课签到成功');
@@ -186,10 +186,7 @@ class _StudentCheckInViewState extends ConsumerState<StudentCheckInView> {
           .courseStudentSignOut(courseId: course.courseId);
       if (!mounted) return;
       if (!resp.isSuccess) {
-        AppToast.show(
-          context,
-          resp.msg.isNotEmpty ? resp.msg : '下课签到失败',
-        );
+        AppToast.show(context, resp.msg.isNotEmpty ? resp.msg : '下课签到失败');
         return;
       }
       AppToast.show(context, '下课签到成功');
@@ -214,17 +211,16 @@ class _StudentCheckInViewState extends ConsumerState<StudentCheckInView> {
 
     setState(() => _submitting = true);
     try {
-      final resp = await ref.read(studentRepositoryProvider).courseStudentComment(
-        courseId: course.courseId,
-        comment: result.comment,
-        score: result.score,
-      );
+      final resp = await ref
+          .read(studentRepositoryProvider)
+          .courseStudentComment(
+            courseId: course.courseId,
+            comment: result.comment,
+            score: result.score,
+          );
       if (!mounted) return;
       if (!resp.isSuccess) {
-        AppToast.show(
-          context,
-          resp.msg.isNotEmpty ? resp.msg : '评价提交失败',
-        );
+        AppToast.show(context, resp.msg.isNotEmpty ? resp.msg : '评价提交失败');
         return;
       }
       AppToast.show(context, '评价已提交');
@@ -259,83 +255,90 @@ class _StudentCheckInViewState extends ConsumerState<StudentCheckInView> {
                 SizedBox(height: ui(24)),
                 // 双列：今日课程 + 签到操作
                 LayoutBuilder(
-            builder: (context, c) {
-              final isCompact = c.maxWidth < ui(720);
-              if (isCompact) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _SectionTitle('今日课程'),
-                    SizedBox(height: ui(12)),
-                    _TodayClassesPanel(
-                      title: _todayTitle,
-                      courses: _todayCourses,
-                      selectedCourseId: _selectedCourseId,
-                      onSelect: (course) =>
-                          setState(() => _selectedCourseId = course.courseId),
-                    ),
-                    SizedBox(height: ui(20)),
-                    _SectionTitle('签到操作'),
-                    SizedBox(height: ui(12)),
-                    _CheckInActionPanel(
-                      course: selected,
-                      submitting: _submitting,
-                      onSignIn: selected == null ? null : () => _signIn(selected),
-                      onSignOut:
-                          selected == null ? null : () => _signOut(selected),
-                      onComment: selected == null || !selected.canComment
-                          ? null
-                          : () => _showCommentDialog(selected),
-                    ),
-                  ],
-                );
-              }
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: ui(340),
-                    child: Column(
+                  builder: (context, c) {
+                    final isCompact = c.maxWidth < ui(720);
+                    if (isCompact) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _SectionTitle('今日课程'),
+                          SizedBox(height: ui(12)),
+                          _TodayClassesPanel(
+                            title: _todayTitle,
+                            courses: _todayCourses,
+                            selectedCourseId: _selectedCourseId,
+                            onSelect: (course) => setState(
+                              () => _selectedCourseId = course.courseId,
+                            ),
+                          ),
+                          SizedBox(height: ui(20)),
+                          _SectionTitle('签到操作'),
+                          SizedBox(height: ui(12)),
+                          _CheckInActionPanel(
+                            course: selected,
+                            submitting: _submitting,
+                            onSignIn: selected == null
+                                ? null
+                                : () => _signIn(selected),
+                            onSignOut: selected == null
+                                ? null
+                                : () => _signOut(selected),
+                            onComment: selected == null || !selected.canComment
+                                ? null
+                                : () => _showCommentDialog(selected),
+                          ),
+                        ],
+                      );
+                    }
+                    return Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _SectionTitle('今日课程'),
-                        SizedBox(height: ui(12)),
-                        _TodayClassesPanel(
-                          title: _todayTitle,
-                          courses: _todayCourses,
-                          selectedCourseId: _selectedCourseId,
-                          onSelect: (course) => setState(
-                            () => _selectedCourseId = course.courseId,
+                        SizedBox(
+                          width: ui(340),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _SectionTitle('今日课程'),
+                              SizedBox(height: ui(12)),
+                              _TodayClassesPanel(
+                                title: _todayTitle,
+                                courses: _todayCourses,
+                                selectedCourseId: _selectedCourseId,
+                                onSelect: (course) => setState(
+                                  () => _selectedCourseId = course.courseId,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        SizedBox(width: ui(16)),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _SectionTitle('签到操作'),
+                              SizedBox(height: ui(12)),
+                              _CheckInActionPanel(
+                                course: selected,
+                                submitting: _submitting,
+                                onSignIn: selected == null
+                                    ? null
+                                    : () => _signIn(selected),
+                                onSignOut: selected == null
+                                    ? null
+                                    : () => _signOut(selected),
+                                onComment:
+                                    selected == null || !selected.canComment
+                                    ? null
+                                    : () => _showCommentDialog(selected),
+                              ),
+                            ],
                           ),
                         ),
                       ],
-                    ),
-                  ),
-                  SizedBox(width: ui(16)),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _SectionTitle('签到操作'),
-                        SizedBox(height: ui(12)),
-                        _CheckInActionPanel(
-                          course: selected,
-                          submitting: _submitting,
-                          onSignIn:
-                              selected == null ? null : () => _signIn(selected),
-                          onSignOut:
-                              selected == null ? null : () => _signOut(selected),
-                          onComment: selected == null || !selected.canComment
-                              ? null
-                              : () => _showCommentDialog(selected),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
+                    );
+                  },
+                ),
                 SizedBox(height: ui(28)),
                 _SectionTitle('最近课堂记录'),
                 SizedBox(height: ui(12)),
@@ -412,10 +415,7 @@ class _StudentCheckInViewState extends ConsumerState<StudentCheckInView> {
 // =============================================================================
 
 class _CheckInBanner extends StatelessWidget {
-  const _CheckInBanner({
-    required this.onBack,
-    required this.onOpenHistory,
-  });
+  const _CheckInBanner({required this.onBack, required this.onOpenHistory});
 
   final VoidCallback onBack;
   final VoidCallback onOpenHistory;
@@ -694,9 +694,7 @@ class _TodayClassCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: isEnded ? _kInnerGray : const Color(0xFFF4F4FF),
             borderRadius: BorderRadius.circular(ui(12)),
-            border: selected
-                ? Border.all(color: _kPurple, width: 1.5)
-                : null,
+            border: selected ? Border.all(color: _kPurple, width: 1.5) : null,
           ),
           child: Stack(
             children: [
@@ -717,9 +715,7 @@ class _TodayClassCard extends StatelessWidget {
                   ),
                   alignment: Alignment.center,
                   child: Text(
-                    isEnded
-                        ? '已结束'
-                        : (isInProgress ? '进行中' : '未开始'),
+                    isEnded ? '已结束' : (isInProgress ? '进行中' : '未开始'),
                     style: TextStyle(
                       fontSize: ui(12),
                       color: isEnded ? _kTextHint : _kTextDark,
@@ -871,25 +867,37 @@ class _CheckInActionPanel extends StatelessWidget {
                 Positioned(
                   left: ui(12),
                   top: ui(12),
-                  child: RichText(
-                    text: TextSpan(
-                      style: TextStyle(
-                        fontSize: ui(16),
-                        fontFamily: 'PingFang SC',
-                        fontWeight: AppFont.w500,
-                        height: 1.2,
+                  right: ui(12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: RichText(
+                          text: TextSpan(
+                            style: TextStyle(
+                              fontSize: ui(16),
+                              fontFamily: 'PingFang SC',
+                              fontWeight: AppFont.w500,
+                              height: 1.2,
+                            ),
+                            children: [
+                              TextSpan(
+                                text: '${data.periodLabel}·',
+                                style: const TextStyle(color: _kTextSection),
+                              ),
+                              TextSpan(
+                                text: data.timeRange,
+                                style: const TextStyle(color: _kPurple),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                      children: [
-                        TextSpan(
-                          text: '${data.periodLabel}·',
-                          style: const TextStyle(color: _kTextSection),
-                        ),
-                        TextSpan(
-                          text: data.timeRange,
-                          style: const TextStyle(color: _kPurple),
-                        ),
-                      ],
-                    ),
+                      CourseSignCountdownBadge(
+                        startTime: data.timeStart,
+                        endTime: data.timeEnd,
+                      ),
+                    ],
                   ),
                 ),
                 Positioned(
@@ -905,7 +913,8 @@ class _CheckInActionPanel extends StatelessWidget {
                           borderRadius: BorderRadius.circular(ui(12)),
                         ),
                       ),
-                      if (data.fenceLabel != null && data.fenceLabel!.isNotEmpty)
+                      if (data.fenceLabel != null &&
+                          data.fenceLabel!.isNotEmpty)
                         Positioned(
                           right: 0,
                           top: 0,
@@ -2199,20 +2208,38 @@ class _HistorySummaryBar extends StatelessWidget {
             height: 1,
           ),
           children: [
-            const TextSpan(text: '共 ', style: TextStyle(color: _kTextHint)),
+            const TextSpan(
+              text: '共 ',
+              style: TextStyle(color: _kTextHint),
+            ),
             TextSpan(
               text: '$total',
               style: const TextStyle(color: _kTextDark),
             ),
-            const TextSpan(text: ' 条', style: TextStyle(color: _kTextHint)),
-            const TextSpan(text: '   ·   ', style: TextStyle(color: _kTextDivider)),
-            const TextSpan(text: '正常 ', style: TextStyle(color: _kTextHint)),
+            const TextSpan(
+              text: ' 条',
+              style: TextStyle(color: _kTextHint),
+            ),
+            const TextSpan(
+              text: '   ·   ',
+              style: TextStyle(color: _kTextDivider),
+            ),
+            const TextSpan(
+              text: '正常 ',
+              style: TextStyle(color: _kTextHint),
+            ),
             TextSpan(
               text: '$normal',
               style: const TextStyle(color: _kStatusGreen),
             ),
-            const TextSpan(text: '   ·   ', style: TextStyle(color: _kTextDivider)),
-            const TextSpan(text: '缺勤 ', style: TextStyle(color: _kTextHint)),
+            const TextSpan(
+              text: '   ·   ',
+              style: TextStyle(color: _kTextDivider),
+            ),
+            const TextSpan(
+              text: '缺勤 ',
+              style: TextStyle(color: _kTextHint),
+            ),
             TextSpan(
               text: '$absent',
               style: const TextStyle(color: _kAttendRed),
@@ -2288,10 +2315,9 @@ class _CourseCommentDialogState extends State<_CourseCommentDialog> {
         cancelLabel: '取消',
         onCancel: () => Navigator.of(context).pop(),
         onConfirm: () {
-          Navigator.of(context).pop((
-            score: _score,
-            comment: _commentCtrl.text.trim(),
-          ));
+          Navigator.of(
+            context,
+          ).pop((score: _score, comment: _commentCtrl.text.trim()));
         },
       ),
       child: Column(
@@ -2328,9 +2354,13 @@ class _CourseCommentDialogState extends State<_CourseCommentDialog> {
                   onTap: () => setState(() => _score = i),
                   borderRadius: BorderRadius.circular(ui(4)),
                   child: Icon(
-                    i <= _score ? Icons.star_rounded : Icons.star_outline_rounded,
+                    i <= _score
+                        ? Icons.star_rounded
+                        : Icons.star_outline_rounded,
                     size: ui(28),
-                    color: i <= _score ? const Color(0xFFFFB800) : _kTextDivider,
+                    color: i <= _score
+                        ? const Color(0xFFFFB800)
+                        : _kTextDivider,
                   ),
                 ),
               ],
