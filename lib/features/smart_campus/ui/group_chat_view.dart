@@ -62,6 +62,7 @@ import '../../../app/router/route_paths.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/network/chat_socket_service.dart';
 import '../../../core/network/chat_sync_payload.dart';
+import '../../../core/network/media_url.dart';
 import '../../../core/network/snowflake_id.dart';
 import '../../../core/widgets/app_asset_graphic.dart';
 import '../../../core/widgets/app_toast.dart';
@@ -491,18 +492,21 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
     });
   }
 
-  /// 滚动到「最新一条消息」位置：reverse:true 下即 offset 0。
-  /// 调用方一般用 [_scheduleScrollToBottom] 排到下一帧，等 ListView 完成布局。
+  /// 滚动到「最新一条消息」位置：
+  /// - 有更早历史（reverse 列表）：offset 0
+  /// - 新群无历史（正序列表）：滚到 maxScrollExtent
   void _scrollToBottom({bool animated = false}) {
     if (!_messagesController.hasClients) return;
+    final position = _messagesController.position;
+    final target = _hasMoreOlder ? 0.0 : position.maxScrollExtent;
     if (animated) {
       _messagesController.animateTo(
-        0,
+        target,
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeOut,
       );
     } else {
-      _messagesController.jumpTo(0);
+      _messagesController.jumpTo(target);
     }
   }
 
@@ -798,8 +802,9 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
       _playingFraction = 0;
     });
 
-    final url = bubble?.url;
-    if (url == null || url.isEmpty) return; // 无 URL（尚未上传），仅切换 UI 状态
+    final rawUrl = bubble?.url;
+    if (rawUrl == null || rawUrl.isEmpty) return; // 无 URL（尚未上传），仅切换 UI 状态
+    final url = _resolveMediaUrl(rawUrl);
 
     // 启动真实播放
     unawaited(_startVoicePlayback(voiceMsgId, url, bubble?.durationSec ?? 0));
@@ -1711,11 +1716,15 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
   }
 
   String? _extractUploadUrl(Object? data) {
-    if (data is String && data.startsWith('http')) return data;
-    if (data is Map) {
-      return (data['url'] ?? data['path'] ?? data['fileUrl'])?.toString();
+    String? raw;
+    if (data is String && data.isNotEmpty) {
+      raw = data;
+    } else if (data is Map) {
+      raw = (data['url'] ?? data['path'] ?? data['fileUrl'])?.toString();
     }
-    return null;
+    if (raw == null || raw.isEmpty) return null;
+    final resolved = _resolveMediaUrl(raw);
+    return resolved.isEmpty ? null : resolved;
   }
 
   String? _extractMsgId(Object? data) {
@@ -2797,10 +2806,8 @@ class _MemberGrid extends StatelessWidget {
                     if (idx >= members.length) return const SizedBox();
                     final m = members[idx];
                     final headUrl = m.headUrl ?? '';
-                    final hasAvatar = headUrl.isNotEmpty;
-                    final fullUrl = headUrl.startsWith('http')
-                        ? headUrl
-                        : 'https://img.yyzl0931.com/$headUrl';
+                    final resolvedUrl = _resolveMediaUrl(headUrl);
+                    final hasAvatar = resolvedUrl.isNotEmpty;
                     final initial = m.displayName.isNotEmpty
                         ? m.displayName.substring(0, 1)
                         : '?';
@@ -2817,7 +2824,7 @@ class _MemberGrid extends StatelessWidget {
                           borderRadius: BorderRadius.circular(ui(22)),
                           child: hasAvatar
                               ? Image.network(
-                                  fullUrl,
+                                  resolvedUrl,
                                   width: ui(44),
                                   height: ui(44),
                                   fit: BoxFit.cover,
@@ -2870,14 +2877,12 @@ class _MemberTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final headUrl = member.headUrl ?? '';
+    final resolvedUrl = _resolveMediaUrl(headUrl);
     final avatarColor = _avatarColorFor(member.id);
     final initials = member.displayName.isNotEmpty
         ? member.displayName.substring(0, 1)
         : '?';
-    final hasAvatar = headUrl.isNotEmpty;
-    final fullUrl = headUrl.startsWith('http')
-        ? headUrl
-        : 'https://img.yyzl0931.com/$headUrl';
+    final hasAvatar = resolvedUrl.isNotEmpty;
     final hasNick =
         member.nickname.trim().isNotEmpty &&
         member.nickname.trim() != member.displayName;
@@ -2887,7 +2892,7 @@ class _MemberTile extends StatelessWidget {
           borderRadius: BorderRadius.circular(ui(20)),
           child: hasAvatar
               ? Image.network(
-                  fullUrl,
+                  resolvedUrl,
                   width: ui(40),
                   height: ui(40),
                   fit: BoxFit.cover,
@@ -3958,6 +3963,8 @@ class _ChatBodyBoard extends StatelessWidget {
     final hasAnnouncement = announcement.trim().isNotEmpty;
     final showAnnouncement =
         hasSelection && (hasAnnouncement || canEditAnnouncement);
+    // 无更早历史的新群：消息从上往下排；有历史则 reverse 锚底并支持上滑加载。
+    final anchorToBottom = hasMoreOlder;
     return Padding(
       padding: EdgeInsets.fromLTRB(ui(16), ui(8), ui(16), ui(8)),
       child: Container(
@@ -4002,15 +4009,11 @@ class _ChatBodyBoard extends StatelessWidget {
                     )
                   : ListView.builder(
                       controller: scrollController,
-                      reverse: true,
+                      reverse: anchorToBottom,
                       padding: EdgeInsets.zero,
-                      // reverse:true 下 i=0 是视觉底部（最新消息），i=length-1 是视觉
-                      // 顶部（最旧消息）；如果还能继续往上拉，再追加一个顶端 loader 行。
                       itemCount: messages.length + (hasMoreOlder ? 1 : 0),
                       itemBuilder: (context, i) {
-                        // 顶端 loader 行（仅当 hasMoreOlder=true 时存在，位于
-                        // itemCount 最后一项 → 视觉上在最上方）。
-                        if (i == messages.length) {
+                        if (anchorToBottom && i == messages.length) {
                           return Padding(
                             padding: EdgeInsets.symmetric(vertical: ui(8)),
                             child: Center(
@@ -4028,9 +4031,9 @@ class _ChatBodyBoard extends StatelessWidget {
                             ),
                           );
                         }
-                        // 真实消息：reverse 后我们要让 i=0 显示 messages.last，
-                        // i=messages.length-1 显示 messages.first → 反向取值。
-                        final realIdx = messages.length - 1 - i;
+                        final realIdx = anchorToBottom
+                            ? messages.length - 1 - i
+                            : i;
                         final m = messages[realIdx];
                         final showDate = _shouldShowDateBar(messages, realIdx);
                         return Column(
@@ -4941,11 +4944,13 @@ class _ImageBubbleView extends StatelessWidget {
   }
 }
 
-/// 补全相对路径媒体 URL。
+/// 补全相对路径媒体 URL（头像、图片、封面等）。
 String _resolveMediaUrl(String? raw) {
-  if (raw == null || raw.isEmpty) return '';
-  if (raw.startsWith('http') || raw.startsWith('blob:')) return raw;
-  return 'https://img.yyzl0931.com/$raw';
+  if (raw == null) return '';
+  final trimmed = raw.trim();
+  if (trimmed.isEmpty) return '';
+  if (trimmed.startsWith('blob:')) return trimmed;
+  return MediaUrl.resolve(trimmed);
 }
 
 /// 根据分享内容的子类型跳转到对应详情页。
@@ -5123,7 +5128,7 @@ class _SharedCardBubbleView extends StatelessWidget {
             ClipRRect(
               borderRadius: BorderRadius.circular(ui(4)),
               child: Image.network(
-                bubble.coverUrl!,
+                _resolveMediaUrl(bubble.coverUrl),
                 width: ui(44),
                 height: ui(44),
                 fit: BoxFit.cover,
@@ -6765,7 +6770,6 @@ class GroupChatMessageParser {
                   raw['realname']?.toString().trim() ??
                   (fromId.isNotEmpty ? '用户$fromId' : ''))
               .trim();
-    // 头像：userMap 内已归一化；回退路径额外做 URL 补全
     final avatar = userInfo?.headUrl?.isNotEmpty == true
         ? userInfo!.headUrl
         : _resolveMediaUrl(
@@ -6799,7 +6803,7 @@ class GroupChatMessageParser {
           bubble = _VoiceBubble(
             durationSec: int.tryParse(dur) ?? 0,
             waveform: _kDemoWaveformIdle,
-            url: obj?['url']?.toString(),
+            url: _resolveMediaUrl(obj?['url']?.toString()),
           );
           break;
         case 'file':
@@ -6817,7 +6821,12 @@ class GroupChatMessageParser {
           if (p3raw is String && p3raw.isNotEmpty) {
             try {
               final imgs = _jsonDecodeQuiet(p3raw);
-              if (imgs is List) kjImgs = imgs.cast<String>();
+              if (imgs is List) {
+                kjImgs = imgs
+                    .map((item) => _resolveMediaUrl(item?.toString()))
+                    .where((url) => url.isNotEmpty)
+                    .toList(growable: false);
+              }
             } catch (_) {}
           }
           bubble = _SharedCardBubble(
@@ -6828,7 +6837,7 @@ class GroupChatMessageParser {
             subtype: 'kj',
             coverUrl: kjImgs.isNotEmpty ? kjImgs.first : null,
             contentId: obj?['id']?.toString(),
-            kjAudioUrl: kjAudio,
+            kjAudioUrl: kjAudio.isEmpty ? null : _resolveMediaUrl(kjAudio),
             kjImageUrls: kjImgs,
             kjTypeValue: obj?['param1']?.toString(),
           );
@@ -6840,7 +6849,7 @@ class GroupChatMessageParser {
             title: (obj?['name'] ?? obj?['title'] ?? '视频分享').toString(),
             subtitle: '视频 · ${obj?['duration'] ?? ''}',
             subtype: 'video',
-            coverUrl: obj?['coverImg']?.toString(),
+            coverUrl: _resolveMediaUrl(obj?['coverImg']?.toString()),
             contentId: obj?['id']?.toString(),
             schoolMode:
                 _isTruthy(obj?['schoolMode']) || _isTruthy(obj?['school']),
@@ -6854,8 +6863,9 @@ class GroupChatMessageParser {
             title: (obj?['title'] ?? '资讯').toString(),
             subtitle: '资讯',
             subtype: 'news',
-            coverUrl:
-                obj?['coverImg']?.toString() ?? obj?['imgUrl']?.toString(),
+            coverUrl: _resolveMediaUrl(
+              obj?['coverImg']?.toString() ?? obj?['imgUrl']?.toString(),
+            ),
             contentId: obj?['id']?.toString(),
           );
           break;
@@ -6869,8 +6879,9 @@ class GroupChatMessageParser {
             title: (obj?['title'] ?? '课程分享').toString(),
             subtitle: subtitle.isEmpty ? '课程分享' : subtitle,
             subtype: 'book',
-            coverUrl:
-                obj?['coverImg']?.toString() ?? obj?['imgUrl']?.toString(),
+            coverUrl: _resolveMediaUrl(
+              obj?['coverImg']?.toString() ?? obj?['imgUrl']?.toString(),
+            ),
             contentId: obj?['id']?.toString(),
             bookType: _asInt(obj?['type']),
           );
@@ -7221,7 +7232,7 @@ _MemberInfo? _parseMemberInfo(Object? raw) {
     realname: (m['realname'] ?? '').toString(),
     nickname: (m['nickname'] ?? '').toString(),
     role: (m['role'] ?? '').toString(),
-    headUrl: m['headUrl']?.toString(),
+    headUrl: _resolveMediaUrl(m['headUrl']?.toString()),
     mobile: m['mobile']?.toString(),
     gender: m['gender']?.toString(),
   );

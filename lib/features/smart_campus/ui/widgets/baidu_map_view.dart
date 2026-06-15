@@ -1,17 +1,10 @@
-// 百度地图嵌入 widget 入口。Web 端以 iframe 加载 `web/baidu_map.html`；
-// 非 web 平台返回友好占位（后续可接入移动端原生 BMap SDK）。
+// 百度地图嵌入 widget 入口。
 //
-// 用法：
-// ```dart
-// BaiduMapView(
-//   lat: 39.9087,
-//   lng: 116.3975,
-//   label: '教学楼A区',
-// )
-// ```
+// - Web：iframe 加载 `web/baidu_map.html`，传入 [BaiduMapConfig.webJsAk]。
+// - iOS / Android：静态底图 + 逆地理编码（[BaiduGeoService]），规避 WebView Referer 白名单。
+// - iOS SDK AK（[BaiduMapConfig.iosSdkAk]）仅用于原生 BMap SDK，不可用于 JS / Web 服务。
 //
-// 配置：在 `web/baidu_map.html` 顶部替换 `__BAIDU_MAP_AK__` 为你在
-// `https://lbsyun.baidu.com/apiconsole/key` 申请到的浏览器端 AK，
-// 并把当前域名加入白名单。
+// AK 白名单：浏览器端密钥需配置 Referer（Web iframe）；Web 服务 API 需在控制台开通
+// 静态图 / 逆地理编码权限（开发时可加 `localhost`、`127.0.0.1`）。
 export 'baidu_map_view_io.dart'
     if (dart.library.html) 'baidu_map_view_web.dart';

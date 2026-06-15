@@ -42,10 +42,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 
+import '../../../core/network/media_url.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/popup_selector_field.dart';
-import '../data/teacher_repository.dart';
+import '../../courseware/ui/courseware_url_opener.dart';
+import '../data/teacher_exam_data.dart';
+import '../state/teacher_exam_controller.dart';
 import '../../shell/ui/shell_layout.dart';
+import 'student_homework_submission_preview.dart';
 import 'widgets/smart_campus_page_banner.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
@@ -73,165 +77,42 @@ const Color _kPillIconColor = Color(0xFF1C274C);
 
 enum _SubmissionState { passed, pending, missing, reviewed }
 
-class _Submission {
-  const _Submission({
-    this.studentId = '',
-    this.score,
-    this.comment = '',
-    this.path = '',
-    required this.studentName,
-    required this.avatarSeed,
-    required this.state,
-    required this.subject,
-    required this.medium,
-    required this.uploadAt,
-    required this.action,
-  });
+typedef _Submission = TeacherExamSubmission;
+typedef _ExamItem = TeacherExamItem;
+typedef _ExamOverviewStats = TeacherExamOverviewStats;
+typedef _CornerKind = TeacherExamCornerKind;
 
-  final String studentId;
-  final num? score;
-  final String comment;
-  final String path;
-  final String studentName;
-  final int avatarSeed;
-  final _SubmissionState state;
-  final String subject;
-  final String medium;
-  final String uploadAt;
-
-  /// 操作按钮文案（试听/评分 · 查看 · 催交/详情）。
-  final String action;
+extension _SubmissionStateCompat on TeacherExamSubmissionState {
+  _SubmissionState get uiState => switch (this) {
+    TeacherExamSubmissionState.passed => _SubmissionState.passed,
+    TeacherExamSubmissionState.pending => _SubmissionState.pending,
+    TeacherExamSubmissionState.missing => _SubmissionState.missing,
+    TeacherExamSubmissionState.reviewed => _SubmissionState.reviewed,
+  };
 }
 
-class _ExamItem {
-  const _ExamItem({
-    this.id = '',
-    this.subjectId = 0,
-    required this.title,
-    required this.subject,
-    required this.examLabel,
-    required this.classLabel,
-    required this.deadline,
-    required this.syncNote,
-    required this.officialDesc,
-    required this.cornerLabel,
-    required this.cornerKind,
-    required this.attended,
-    required this.unsubmitted,
-    required this.pendingReview,
-    required this.reviewed,
-    required this.submissions,
-    required this.publishedRatio,
-  });
-
-  final String id;
-  final int subjectId;
-  final String title;
-  final String subject;
-  final String examLabel;
-  final String classLabel;
-  final String deadline;
-
-  /// 紫色 #8741FF 的同步说明（标题与灰底卡之间）。
-  final String syncNote;
-
-  /// 灰底卡【教务月考要求】描述。
-  final String officialDesc;
-
-  /// 角标文案（已截止 / 进行中）。
-  final String cornerLabel;
-  final _CornerKind cornerKind;
-
-  /// 4 项指标：参与人数 / 未交人数 / 待评人数 / 已评人数。
-  final int attended;
-  final int unsubmitted;
-  final int pendingReview;
-  final int reviewed;
-
-  final List<_Submission> submissions;
-
-  /// 列表卡左下 N/M 提交比（如 (4, 11)）。
-  final ({int submitted, int total}) publishedRatio;
+int _avatarSeedFor(String studentId, String studentName) {
+  if (studentId.isNotEmpty) return studentId.hashCode.abs();
+  return studentName.hashCode.abs();
 }
 
-enum _CornerKind { closed, pending }
-
-class _ExamOverviewStats {
-  const _ExamOverviewStats({
-    this.pending = 0,
-    this.subjects = 0,
-    this.reviewed = 0,
-    this.average,
-    this.max,
-    this.min,
-  });
-
-  final int pending;
-  final int subjects;
-  final int reviewed;
-  final double? average;
-  final double? max;
-  final double? min;
-
-  String get averageLabel => average?.toStringAsFixed(1) ?? '—';
-  String get maxLabel => max?.toStringAsFixed(1) ?? '—';
-  String get minLabel => min?.toStringAsFixed(1) ?? '—';
-
-  factory _ExamOverviewStats.fromApi(dynamic raw) {
-    final map = _apiMap(raw);
-    int integer(List<String> keys) =>
-        int.tryParse(_pickApiValue(map, keys)) ?? 0;
-    double? decimal(List<String> keys) =>
-        double.tryParse(_pickApiValue(map, keys));
-    return _ExamOverviewStats(
-      pending: integer([
-        'unscoredCount',
-        'unScoreCount',
-        'pendingCount',
-        'notScoreCount',
-      ]),
-      subjects: 1,
-      reviewed: integer(['scoreCount', 'reviewedCount', 'scoredCount']),
-      average: decimal(['avgScore', 'averageScore', 'scoreAvg']),
-      max: decimal(['maxScore', 'highestScore']),
-      min: decimal(['minScore', 'lowestScore']),
-    );
-  }
-
-  static _ExamOverviewStats merge(List<_ExamOverviewStats> rows) {
-    if (rows.isEmpty) return const _ExamOverviewStats();
-    final reviewed = rows.fold<int>(0, (sum, item) => sum + item.reviewed);
-    final averages = rows.where((item) => item.average != null).toList();
-    return _ExamOverviewStats(
-      pending: rows.fold<int>(0, (sum, item) => sum + item.pending),
-      subjects: rows.length,
-      reviewed: reviewed,
-      average: averages.isEmpty
-          ? null
-          : reviewed == 0
-          ? averages.fold<double>(0, (sum, item) => sum + item.average!) /
-                averages.length
-          : averages.fold<double>(
-                  0,
-                  (sum, item) => sum + item.average! * item.reviewed,
-                ) /
-                reviewed,
-      max: _extreme(rows.map((item) => item.max), true),
-      min: _extreme(rows.map((item) => item.min), false),
-    );
-  }
-
-  static double? _extreme(Iterable<double?> values, bool highest) {
-    final numbers = values.whereType<double>().toList();
-    if (numbers.isEmpty) return null;
-    return numbers.reduce(
-      highest ? (a, b) => a > b ? a : b : (a, b) => a < b ? a : b,
-    );
-  }
+String? _resolveMediaUrl(String? raw) {
+  if (raw == null) return null;
+  final trimmed = raw.trim();
+  if (trimmed.isEmpty) return null;
+  final resolved = MediaUrl.resolve(trimmed);
+  return resolved.isEmpty ? null : resolved;
 }
+
+String _fileNameFromPath(String path, String fallback) {
+  final segments = path.split('/').where((s) => s.isNotEmpty).toList();
+  if (segments.isEmpty) return fallback;
+  return segments.last;
+}
+
+// ---- 数据模型（UI 层复用 [TeacherExamSubmission] 等 API 模型）---------------
 
 const List<String> _kStatusTabs = ['全部', '成绩未发布', '成绩已发布'];
-const String _kAllClasses = '全部班级';
 
 // ---- 入口 view --------------------------------------------------------------
 
@@ -246,113 +127,44 @@ class TeacherExamReviewView extends ConsumerStatefulWidget {
 }
 
 class _TeacherExamReviewViewState extends ConsumerState<TeacherExamReviewView> {
-  int _statusTab = 0;
-  String _classFilter = _kAllClasses;
-  List<String> _classOptions = const [_kAllClasses];
-  Map<String, String> _classIdByLabel = const {_kAllClasses: ''};
-  int _activeIdx = 0;
-  bool _loading = true;
-  String? _loadError;
-
-  List<_ExamItem> _all = const [];
-  _ExamOverviewStats _overviewStats = const _ExamOverviewStats();
-
   @override
   void initState() {
     super.initState();
-    unawaited(_loadClassOptions());
-    unawaited(_loadExams());
-  }
-
-  Future<void> _loadClassOptions() async {
-    final response = await ref.read(teacherRepositoryProvider).classList();
-    if (!mounted || !response.isSuccess) return;
-    final labels = <String>[_kAllClasses];
-    final ids = <String, String>{_kAllClasses: ''};
-    for (final row in _examRows(response.data)) {
-      final id = _stringValue(row['id']);
-      final name = _stringValue(row['name']);
-      if (id.isEmpty || name.isEmpty || ids.containsKey(name)) continue;
-      labels.add(name);
-      ids[name] = id;
-    }
-    setState(() {
-      _classOptions = labels;
-      _classIdByLabel = ids;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(teacherExamControllerProvider.notifier).initialize();
     });
   }
 
-  Future<void> _loadExams({String? classId}) async {
-    setState(() {
-      _loading = true;
-      _loadError = null;
-    });
-    final repo = ref.read(teacherRepositoryProvider);
-    final response = await repo.examList(classId: classId);
-    if (!mounted) return;
-    if (!response.isSuccess) {
-      setState(() {
-        _loading = false;
-        _loadError = response.displayMsg;
-        _all = const [];
-      });
+  Future<void> _handleSubmissionAction(_ExamItem exam, _Submission submission) async {
+    if (submission.canRemind) {
+      final response = await ref
+          .read(teacherExamControllerProvider.notifier)
+          .remindStudent(
+            examId: exam.id,
+            subjectId: exam.subjectId,
+            studentId: submission.studentId,
+          );
+      if (!mounted) return;
+      AppToast.show(
+        context,
+        response.isSuccess ? '催交提醒已发送' : response.displayMsg,
+        type: response.isSuccess ? AppToastType.success : AppToastType.error,
+      );
       return;
     }
-
-    final exams = <_ExamItem>[];
-    final stats = <_ExamOverviewStats>[];
-    for (final row in _examRows(response.data)) {
-      final subjectIds = _csvInts(row['subjectIds']);
-      final subjectNames = _csvStrings(row['subjectNames']);
-      if (subjectIds.isEmpty) {
-        exams.add(_examFromApi(row, 0, '未设置科目', const []));
-        continue;
-      }
-      for (var index = 0; index < subjectIds.length; index++) {
-        final subjectId = subjectIds[index];
-        final subjectName = index < subjectNames.length
-            ? subjectNames[index]
-            : '科目$subjectId';
-        final studentResponse = await repo.examStudentList(
-          examId: _stringValue(row['id']),
-          subjectId: subjectId,
-        );
-        final submissions = studentResponse.isSuccess
-            ? _submissionRows(studentResponse.data, subjectName: subjectName)
-            : const <_Submission>[];
-        final statResponse = await repo.examStudentStat(
-          examId: _stringValue(row['id']),
-          subjectId: subjectId,
-        );
-        if (statResponse.isSuccess) {
-          stats.add(_ExamOverviewStats.fromApi(statResponse.data));
-        }
-        exams.add(_examFromApi(row, subjectId, subjectName, submissions));
-      }
-    }
-    if (!mounted) return;
-    setState(() {
-      _all = exams;
-      _overviewStats = _ExamOverviewStats.merge(stats);
-      _activeIdx = 0;
-      _loading = false;
-    });
+    _openScoreDrawer(exam, submission);
   }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final visibleItems = switch (_statusTab) {
-      1 =>
-        _all.where((item) => item.cornerKind == _CornerKind.pending).toList(),
-      2 => _all.where((item) => item.cornerKind == _CornerKind.closed).toList(),
-      _ => _all,
-    };
-    final active = visibleItems.isEmpty
-        ? null
-        : visibleItems[_activeIdx.clamp(0, visibleItems.length - 1)];
-
-    final initialLoading = _loading && _all.isEmpty;
+    final examState = ref.watch(teacherExamControllerProvider);
+    final visibleItems = examState.visibleExams;
+    final activeIdx = visibleItems.isEmpty
+        ? 0
+        : examState.activeIdx.clamp(0, visibleItems.length - 1);
+    final active = visibleItems.isEmpty ? null : visibleItems[activeIdx];
+    final initialLoading = examState.loading && examState.exams.isEmpty;
 
     return Container(
       color: _kPageBg,
@@ -375,35 +187,39 @@ class _TeacherExamReviewViewState extends ConsumerState<TeacherExamReviewView> {
                 children: [
                   _StatusTabsRow(
                     tabs: _kStatusTabs,
-                    activeIdx: _statusTab,
-                    onTap: (i) => setState(() {
-                      _statusTab = i;
-                      _activeIdx = 0;
-                    }),
+                    activeIdx: examState.statusTab,
+                    onTap: (i) => ref
+                        .read(teacherExamControllerProvider.notifier)
+                        .selectStatusTab(i),
                   ),
                   SizedBox(height: ui(12)),
                   _StatsPanel(
-                    stats: _overviewStats,
-                    classFilter: _classFilter,
-                    classOptions: _classOptions,
-                    onClassChanged: (value) {
-                      setState(() {
-                        _classFilter = value;
-                        _activeIdx = 0;
-                      });
-                      unawaited(_loadExams(classId: _classIdByLabel[value]));
-                    },
+                    stats: examState.overviewStats,
+                    classFilter: examState.classFilter,
+                    classOptions: examState.classOptions,
+                    onClassChanged: (value) => ref
+                        .read(teacherExamControllerProvider.notifier)
+                        .selectClass(value),
                   ),
                   SizedBox(height: ui(16)),
                   if (!initialLoading && active == null)
-                    Center(child: Text(_loadError ?? '暂无可批改的考试'))
+                    Center(
+                      child: Text(
+                        examState.error.isNotEmpty
+                            ? examState.error
+                            : '暂无可批改的考试',
+                      ),
+                    )
                   else if (!initialLoading)
                     _BodyRow(
                       items: visibleItems,
-                      activeIdx: _activeIdx,
-                      onSelect: (i) => setState(() => _activeIdx = i),
+                      activeIdx: activeIdx,
+                      loadingDetail: examState.loadingDetail,
+                      onSelect: (i) => ref
+                          .read(teacherExamControllerProvider.notifier)
+                          .selectExam(i),
                       active: active!,
-                      onOpenScore: (s) => _openScoreDrawer(active, s),
+                      onOpenScore: (s) => unawaited(_handleSubmissionAction(active, s)),
                     ),
                 ],
               ),
@@ -427,7 +243,7 @@ class _TeacherExamReviewViewState extends ConsumerState<TeacherExamReviewView> {
           alignment: Alignment.centerRight,
           child: DashboardScaleScope(
             data: scale,
-            child: _HistoryDrawer(items: _all),
+            child: _HistoryDrawer(items: ref.read(teacherExamControllerProvider).exams),
           ),
         );
       },
@@ -459,8 +275,9 @@ class _TeacherExamReviewViewState extends ConsumerState<TeacherExamReviewView> {
             child: _ScoreDrawer(
               item: item,
               submission: submission,
-              onScored: () =>
-                  _loadExams(classId: _classIdByLabel[_classFilter]),
+              onScored: () => ref
+                  .read(teacherExamControllerProvider.notifier)
+                  .refreshActiveExam(),
             ),
           ),
         );
@@ -837,6 +654,7 @@ class _BodyRow extends StatelessWidget {
     required this.onSelect,
     required this.active,
     required this.onOpenScore,
+    this.loadingDetail = false,
   });
 
   final List<_ExamItem> items;
@@ -844,6 +662,7 @@ class _BodyRow extends StatelessWidget {
   final ValueChanged<int> onSelect;
   final _ExamItem active;
   final ValueChanged<_Submission> onOpenScore;
+  final bool loadingDetail;
 
   @override
   Widget build(BuildContext context) {
@@ -862,7 +681,11 @@ class _BodyRow extends StatelessWidget {
           ),
           SizedBox(width: ui(16)),
           Expanded(
-            child: _ExamDetailPanel(item: active, onOpenScore: onOpenScore),
+            child: _ExamDetailPanel(
+              item: active,
+              onOpenScore: onOpenScore,
+              loadingDetail: loadingDetail,
+            ),
           ),
         ],
       ),
@@ -1109,10 +932,11 @@ class _CornerLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final bg = kind == _CornerKind.closed
+    final bg = kind == TeacherExamCornerKind.published
         ? const Color(0xFFE6E9F1)
         : _kOrangeBg;
-    final fg = kind == _CornerKind.closed ? _kTextHint : _kOrange;
+    final fg =
+        kind == TeacherExamCornerKind.published ? _kTextHint : _kOrange;
     return Container(
       width: ui(68),
       height: ui(22),
@@ -1141,10 +965,15 @@ class _CornerLabel extends StatelessWidget {
 // ---- 右侧考试详情 + 4 项指标 + 学生表格 -------------------------------------
 
 class _ExamDetailPanel extends StatelessWidget {
-  const _ExamDetailPanel({required this.item, required this.onOpenScore});
+  const _ExamDetailPanel({
+    required this.item,
+    required this.onOpenScore,
+    this.loadingDetail = false,
+  });
 
   final _ExamItem item;
   final ValueChanged<_Submission> onOpenScore;
+  final bool loadingDetail;
 
   @override
   Widget build(BuildContext context) {
@@ -1203,10 +1032,16 @@ class _ExamDetailPanel extends StatelessWidget {
           SizedBox(height: ui(12)),
           _ProgressMetrics(item: item),
           SizedBox(height: ui(12)),
-          _SubmissionsTable(
-            submissions: item.submissions,
-            onOpenScore: onOpenScore,
-          ),
+          if (loadingDetail && item.submissions.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(child: AppLoadingIndicator()),
+            )
+          else
+            _SubmissionsTable(
+              submissions: item.submissions,
+              onOpenScore: onOpenScore,
+            ),
         ],
       ),
     );
@@ -1464,7 +1299,10 @@ class _SubmissionRow extends StatelessWidget {
             width: ui(94),
             child: Row(
               children: [
-                _AvatarCircle(name: item.studentName, seed: item.avatarSeed),
+                _AvatarCircle(
+                  name: item.studentName,
+                  seed: _avatarSeedFor(item.studentId, item.studentName),
+                ),
                 SizedBox(width: ui(4)),
                 Flexible(
                   child: Text(
@@ -1484,7 +1322,7 @@ class _SubmissionRow extends StatelessWidget {
             ),
           ),
           SizedBox(width: ui(12)),
-          Expanded(child: _StatusPill(state: item.state)),
+          Expanded(child: _StatusPill(state: item.state.uiState)),
           Expanded(child: _CellText(item.subject)),
           Expanded(child: _CellText(item.medium)),
           Expanded(child: _CellText(item.uploadAt)),
@@ -1845,6 +1683,14 @@ class _ScoreDrawerState extends ConsumerState<_ScoreDrawer> {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final resolvedUrl = _resolveMediaUrl(widget.submission.path) ?? '';
+    final hasAttachment = resolvedUrl.isNotEmpty;
+    final fileName = hasAttachment
+        ? _fileNameFromPath(
+            widget.submission.path,
+            '${widget.submission.studentName}_${widget.item.title}.${_extOf(widget.submission.medium)}',
+          )
+        : '${widget.submission.studentName}_${widget.item.title}.${_extOf(widget.submission.medium)}';
     return Material(
       color: Colors.white,
       child: SizedBox(
@@ -1867,12 +1713,43 @@ class _ScoreDrawerState extends ConsumerState<_ScoreDrawer> {
                       item: widget.item,
                     ),
                     SizedBox(height: ui(16)),
-                    _AttachmentCard(
-                      filename:
-                          '${widget.submission.studentName}_${widget.item.title}.${_extOf(widget.submission.medium)}',
-                      size: '3.32M',
-                      medium: widget.submission.medium,
-                    ),
+                    if (hasAttachment)
+                      _AttachmentCard(
+                        filename: fileName,
+                        medium: widget.submission.medium,
+                        onPreview: () => showStudentHomeworkSubmissionPreview(
+                          context,
+                          ref: ref,
+                          fileUrl: resolvedUrl,
+                          title: fileName,
+                          typeTag: widget.submission.medium,
+                          mediumLabel: widget.submission.medium,
+                          attachmentName: fileName,
+                        ),
+                        onDownload: () => openCoursewareUrl(resolvedUrl),
+                      )
+                    else
+                      Container(
+                        width: double.infinity,
+                        padding: EdgeInsets.symmetric(
+                          horizontal: ui(12),
+                          vertical: ui(10),
+                        ),
+                        decoration: BoxDecoration(
+                          color: _kPageGrey,
+                          borderRadius: BorderRadius.circular(ui(8)),
+                        ),
+                        child: Text(
+                          '该学生尚未提交考试文件',
+                          style: TextStyle(
+                            fontSize: ui(13),
+                            color: _kTextSecondary,
+                            fontFamily: 'PingFang SC',
+                            fontWeight: AppFont.w400,
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
                     SizedBox(height: ui(20)),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
@@ -1927,16 +1804,17 @@ class _ScoreDrawerState extends ConsumerState<_ScoreDrawer> {
                 ),
               ),
             ),
-            Positioned(
-              left: ui(20),
-              right: ui(20),
-              bottom: ui(20),
-              child: _PrimaryGradientButton(
-                icon: Icons.check_circle_outline_rounded,
-                label: _submitting ? '提交中...' : '提交评分',
-                onTap: _submit,
+            if (hasAttachment)
+              Positioned(
+                left: ui(20),
+                right: ui(20),
+                bottom: ui(20),
+                child: _PrimaryGradientButton(
+                  icon: Icons.check_circle_outline_rounded,
+                  label: _submitting ? '提交中...' : '提交评分',
+                  onTap: _submit,
+                ),
               ),
-            ),
           ],
         ),
       ),
@@ -1958,8 +1836,8 @@ class _ScoreDrawerState extends ConsumerState<_ScoreDrawer> {
     }
     setState(() => _submitting = true);
     final response = await ref
-        .read(teacherRepositoryProvider)
-        .examStudentScore(
+        .read(teacherExamControllerProvider.notifier)
+        .submitScore(
           examId: widget.item.id,
           subjectId: widget.item.subjectId,
           studentId: widget.submission.studentId,
@@ -2006,7 +1884,7 @@ class _ScoreProfileRow extends StatelessWidget {
       children: [
         _AvatarCircle(
           name: submission.studentName,
-          seed: submission.avatarSeed,
+          seed: _avatarSeedFor(submission.studentId, submission.studentName),
           size: 40,
         ),
         SizedBox(width: ui(12)),
@@ -2032,7 +1910,7 @@ class _ScoreProfileRow extends StatelessWidget {
                     ),
                   ),
                   SizedBox(width: ui(8)),
-                  const _StatusPill(state: _SubmissionState.pending),
+                  _StatusPill(state: submission.state.uiState),
                 ],
               ),
               SizedBox(height: ui(4)),
@@ -2076,13 +1954,15 @@ class _ScoreProfileRow extends StatelessWidget {
 class _AttachmentCard extends StatelessWidget {
   const _AttachmentCard({
     required this.filename,
-    required this.size,
     required this.medium,
+    required this.onPreview,
+    required this.onDownload,
   });
 
   final String filename;
-  final String size;
   final String medium;
+  final VoidCallback onPreview;
+  final VoidCallback onDownload;
 
   @override
   Widget build(BuildContext context) {
@@ -2163,17 +2043,6 @@ class _AttachmentCard extends StatelessWidget {
                     height: 1.4,
                   ),
                 ),
-                SizedBox(height: ui(2)),
-                Text(
-                  size,
-                  style: TextStyle(
-                    fontSize: ui(11),
-                    color: _kTextSecondary,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w400,
-                    height: 1.2,
-                  ),
-                ),
               ],
             ),
           ),
@@ -2181,7 +2050,7 @@ class _AttachmentCard extends StatelessWidget {
           _GhostButton(
             icon: Icons.file_download_outlined,
             label: '下载',
-            onTap: () {},
+            onTap: onDownload,
           ),
           SizedBox(width: ui(8)),
           _GhostButton(
@@ -2189,7 +2058,7 @@ class _AttachmentCard extends StatelessWidget {
                 ? Icons.headphones_rounded
                 : Icons.remove_red_eye_outlined,
             label: medium == '音频' ? '试听' : '在线预览',
-            onTap: () {},
+            onTap: onPreview,
           ),
         ],
       ),
@@ -2481,213 +2350,4 @@ class _PrimaryGradientButton extends StatelessWidget {
       ),
     );
   }
-}
-
-// =============================================================================
-// Demo 数据
-// =============================================================================
-
-List<Map<String, dynamic>> _examRows(dynamic raw) {
-  dynamic value = raw;
-  if (value is Map) {
-    value = value['records'] ?? value['list'] ?? value['rows'] ?? value['data'];
-  }
-  if (value is! List) return const [];
-  return value
-      .whereType<Map>()
-      .map((e) => e.map((key, value) => MapEntry(key.toString(), value)))
-      .toList(growable: false);
-}
-
-Map<String, dynamic> _apiMap(dynamic raw) {
-  dynamic value = raw;
-  while (value is Map && value['data'] is Map) {
-    value = value['data'];
-  }
-  return value is Map
-      ? value.map((key, value) => MapEntry(key.toString(), value))
-      : const {};
-}
-
-String _pickApiValue(Map<String, dynamic> map, List<String> keys) {
-  for (final key in keys) {
-    final value = map[key]?.toString().trim() ?? '';
-    if (value.isNotEmpty && value != 'null') return value;
-  }
-  return '';
-}
-
-List<_Submission> _submissionRows(dynamic raw, {required String subjectName}) {
-  return _examRows(raw)
-      .map((row) {
-        final score = num.tryParse(_stringValue(row['score']));
-        final path = _stringValue(row['path']);
-        final scored =
-            row['scored'] == true ||
-            int.tryParse(_stringValue(row['scoreStatus'])) == 1 ||
-            score != null;
-        final state = scored
-            ? _SubmissionState.reviewed
-            : _SubmissionState.pending;
-        return _Submission(
-          studentId: _stringValue(row['studentId']),
-          score: score,
-          comment: _stringValue(row['comment']),
-          path: path,
-          studentName: _stringValue(row['realname'], fallback: '未命名学生'),
-          avatarSeed: _stringValue(row['studentId']).hashCode.abs(),
-          state: state,
-          subject: subjectName,
-          medium: _mediumFromPath(path),
-          uploadAt: '',
-          action: scored ? '查看' : '评分',
-        );
-      })
-      .toList(growable: false);
-}
-
-_ExamItem _examFromApi(
-  Map<String, dynamic> row,
-  int subjectId,
-  String subjectName,
-  List<_Submission> submissions,
-) {
-  final reviewed = submissions
-      .where((s) => s.state == _SubmissionState.reviewed)
-      .length;
-  final pending = submissions.length - reviewed;
-  final classes = row['classList'] is List
-      ? (row['classList'] as List)
-            .whereType<Map>()
-            .map((e) => _stringValue(e['name']))
-            .where((e) => e.isNotEmpty)
-            .join('、')
-      : '';
-  final status = int.tryParse(_stringValue(row['status'])) ?? 0;
-  return _ExamItem(
-    id: _stringValue(row['id']),
-    subjectId: subjectId,
-    title: _stringValue(row['name'], fallback: '未命名考试'),
-    subject: subjectName,
-    examLabel: '考试',
-    classLabel: classes.isEmpty ? '全部关联班级' : classes,
-    deadline: _stringValue(row['examDate'], fallback: '--'),
-    syncNote: '数据来自教务考试安排',
-    officialDesc: _stringValue(row['remark'], fallback: '暂无考试说明'),
-    cornerLabel: status == 0 ? '成绩未发布' : '成绩已发布',
-    cornerKind: status == 0 ? _CornerKind.pending : _CornerKind.closed,
-    attended: submissions.length,
-    unsubmitted: 0,
-    pendingReview: pending,
-    reviewed: reviewed,
-    submissions: submissions,
-    publishedRatio: (submitted: submissions.length, total: submissions.length),
-  );
-}
-
-List<String> _csvStrings(dynamic raw) => _stringValue(raw)
-    .split(',')
-    .map((e) => e.trim())
-    .where((e) => e.isNotEmpty)
-    .toList(growable: false);
-
-List<int> _csvInts(dynamic raw) =>
-    _csvStrings(raw).map(int.tryParse).whereType<int>().toList(growable: false);
-
-String _stringValue(dynamic raw, {String fallback = ''}) {
-  final value = raw?.toString().trim() ?? '';
-  return value.isEmpty || value == 'null' ? fallback : value;
-}
-
-String _mediumFromPath(String path) {
-  final lower = path.toLowerCase();
-  if (lower.endsWith('.mp3') ||
-      lower.endsWith('.wav') ||
-      lower.endsWith('.m4a')) {
-    return '音频';
-  }
-  if (lower.endsWith('.mp4') || lower.endsWith('.mov')) return '视频';
-  if (lower.endsWith('.jpg') ||
-      lower.endsWith('.jpeg') ||
-      lower.endsWith('.png')) {
-    return '图片';
-  }
-  return '文件';
-}
-
-// Kept as a visual fixture for widget previews; production data uses the API.
-// ignore: unused_element
-List<_ExamItem> _buildDemoExams() {
-  const submissions = [
-    _Submission(
-      studentName: '钱丽红',
-      avatarSeed: 0,
-      state: _SubmissionState.pending,
-      subject: '声乐',
-      medium: '音频',
-      uploadAt: '04-03 20:00',
-      action: '试听/评分',
-    ),
-    _Submission(
-      studentName: '钱丽红',
-      avatarSeed: 1,
-      state: _SubmissionState.passed,
-      subject: '声乐',
-      medium: '音频',
-      uploadAt: '04-03 20:00',
-      action: '查看',
-    ),
-    _Submission(
-      studentName: '钱丽红',
-      avatarSeed: 2,
-      state: _SubmissionState.missing,
-      subject: '声乐',
-      medium: '音频',
-      uploadAt: '04-03 20:00',
-      action: '催交/详情',
-    ),
-    _Submission(
-      studentName: '钱丽红',
-      avatarSeed: 0,
-      state: _SubmissionState.pending,
-      subject: '声乐',
-      medium: '音频',
-      uploadAt: '04-03 20:00',
-      action: '试听/评分',
-    ),
-  ];
-
-  _ExamItem makeItem({
-    required _CornerKind kind,
-    required String corner,
-    int submitted = 4,
-    int total = 11,
-    int pending = 2,
-  }) {
-    return _ExamItem(
-      title: '声乐主项 · 录制提交',
-      subject: '声乐',
-      examLabel: '2026年4月 月考',
-      classLabel: '高三音乐实验班',
-      deadline: '04-12 21:00',
-      syncNote: '与全校月考同步：主项曲目一遍完整演唱；机位与命名按教务公告执行。',
-      officialDesc:
-          '按报名主项录制规定曲目片段；干声或现场伴奏二选一；视频须一镜到底无剪辑。文件名：姓名+曲名简称。成绩纳入月考过程性评价。',
-      cornerLabel: corner,
-      cornerKind: kind,
-      attended: 12,
-      unsubmitted: 12,
-      pendingReview: pending,
-      reviewed: 12,
-      submissions: submissions,
-      publishedRatio: (submitted: submitted, total: total),
-    );
-  }
-
-  return [
-    makeItem(kind: _CornerKind.closed, corner: '已截止'),
-    makeItem(kind: _CornerKind.pending, corner: '进行中', submitted: 6),
-    makeItem(kind: _CornerKind.closed, corner: '已截止', submitted: 9),
-    makeItem(kind: _CornerKind.closed, corner: '已截止', submitted: 11),
-  ];
 }

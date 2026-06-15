@@ -6,6 +6,7 @@ class TeacherAttendanceState {
     this.range = TeacherAttendanceRange.total,
     this.summary = const TeacherAttendanceSummary(),
     this.todayCourses = const [],
+    this.selectedCourseId,
     this.recentRecords = const [],
     this.historyRecords = const [],
     this.loadingOverview = false,
@@ -19,6 +20,7 @@ class TeacherAttendanceState {
   final TeacherAttendanceRange range;
   final TeacherAttendanceSummary summary;
   final List<CourseSignSession> todayCourses;
+  final String? selectedCourseId;
   final List<TeacherSignHistoryItem> recentRecords;
   final List<TeacherSignHistoryItem> historyRecords;
   final bool loadingOverview;
@@ -32,6 +34,7 @@ class TeacherAttendanceState {
     TeacherAttendanceRange? range,
     TeacherAttendanceSummary? summary,
     List<CourseSignSession>? todayCourses,
+    String? selectedCourseId,
     List<TeacherSignHistoryItem>? recentRecords,
     List<TeacherSignHistoryItem>? historyRecords,
     bool? loadingOverview,
@@ -45,6 +48,7 @@ class TeacherAttendanceState {
       range: range ?? this.range,
       summary: summary ?? this.summary,
       todayCourses: todayCourses ?? this.todayCourses,
+      selectedCourseId: selectedCourseId ?? this.selectedCourseId,
       recentRecords: recentRecords ?? this.recentRecords,
       historyRecords: historyRecords ?? this.historyRecords,
       loadingOverview: loadingOverview ?? this.loadingOverview,

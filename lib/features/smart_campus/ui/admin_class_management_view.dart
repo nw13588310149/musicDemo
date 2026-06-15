@@ -337,6 +337,7 @@ class _ClassEntry {
     required this.code,
     required this.headTeacher,
     required this.classroom,
+    this.logoUrl = '',
     this.headTeacherAvatarUrl = '',
     this.headTeacherNickname = '',
     this.headTeacherMobile = '',
@@ -447,6 +448,8 @@ class _ClassEntry {
     ], '');
 
     final teacherIdsRaw = _pickString(json, ['teacherIds', 'teacherId'], '');
+    final rawLogo = _pickString(json, ['logo', 'logoUrl', 'classLogo'], '');
+    final logoUrl = rawLogo.isEmpty ? '' : MediaUrl.resolve(rawLogo);
 
     // 后端在班级列表上直接下发 `studentCount`（已含在籍人数），免去
     // 折叠状态下还得展开拉 studentList 才能填出「共 N 人」的损耗。
@@ -474,6 +477,7 @@ class _ClassEntry {
       kind: _parseKind(json['type'] ?? json['classType'] ?? json['kind']),
       code: code,
       headTeacher: teacher,
+      logoUrl: logoUrl,
       headTeacherAvatarUrl: headTeacherAvatarUrl,
       headTeacherNickname: headTeacherNickname,
       headTeacherMobile: headTeacherMobile,
@@ -497,6 +501,7 @@ class _ClassEntry {
   final _ClassKind kind;
   final String code;
   final String headTeacher;
+  final String logoUrl;
   final String headTeacherAvatarUrl;
   final String headTeacherNickname;
   final String headTeacherMobile;
@@ -533,13 +538,14 @@ class _ClassEntry {
   int get studentCount =>
       students.isNotEmpty ? students.length : serverStudentCount;
 
-  _ClassEntry copyWith({List<_StudentRecord>? students}) {
+  _ClassEntry copyWith({List<_StudentRecord>? students, String? name}) {
     return _ClassEntry(
       id: id,
-      name: name,
+      name: name ?? this.name,
       kind: kind,
       code: code,
       headTeacher: headTeacher,
+      logoUrl: logoUrl,
       headTeacherAvatarUrl: headTeacherAvatarUrl,
       headTeacherNickname: headTeacherNickname,
       headTeacherMobile: headTeacherMobile,
@@ -1052,6 +1058,7 @@ class _AdminClassManagementViewState
             initialStudents: cachedStudents,
             ensureClassTeachers: _ensureClassTeachers,
             ensureClassStudents: _ensureClassStudents,
+            onRename: () => _promptRenameClass(entry),
           ),
         ),
       ),
@@ -1063,6 +1070,45 @@ class _AdminClassManagementViewState
         child: child,
       ),
     );
+  }
+
+  Future<void> _promptRenameClass(_ClassEntry entry) async {
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (ctx) => _RenameClassDialog(initialName: entry.name),
+    );
+    if (!mounted || newName == null) return;
+    await _submitClassNameUpdate(target: entry, newName: newName);
+  }
+
+  Future<bool> _submitClassNameUpdate({
+    required _ClassEntry target,
+    required String newName,
+  }) async {
+    final name = newName.trim();
+    if (name.isEmpty) {
+      AppToast.show(context, '请填写班级名称');
+      return false;
+    }
+    if (target.id.isEmpty) {
+      AppToast.show(context, '班级 id 不可用');
+      return false;
+    }
+    if (name == target.name) return true;
+
+    final repo = ref.read(adminRepositoryProvider);
+    final resp = await repo.classUpdate(<String, dynamic>{
+      'id': target.id,
+      'name': name,
+    });
+    if (!mounted) return false;
+    if (!resp.isSuccess) {
+      AppToast.show(context, resp.displayMsg);
+      return false;
+    }
+    AppToast.show(context, '班级名称已更新');
+    await _loadClasses();
+    return true;
   }
 
   Future<bool> _submitCreateClass({
@@ -1227,6 +1273,7 @@ class _AdminClassManagementViewState
                   loadingStudents: _classStudentsLoading.contains(c.id),
                   onToggle: () => _toggle(c.id),
                   onOpenDetail: () => _openClassDetailDrawer(c),
+                  onRename: () => _promptRenameClass(c),
                 ),
                 SizedBox(height: ui(12)),
               ],
@@ -1571,6 +1618,7 @@ class _ClassCard extends StatelessWidget {
     required this.expanded,
     required this.onToggle,
     required this.onOpenDetail,
+    required this.onRename,
     this.loadingStudents = false,
   });
 
@@ -1578,10 +1626,8 @@ class _ClassCard extends StatelessWidget {
   final bool expanded;
   final bool loadingStudents;
   final VoidCallback onToggle;
-
-  /// 点击卡片头（除右侧 chevron 之外的任意位置）时触发，用来弹出班级
-  /// 详情抽屉。chevron 单独保留内联展开 / 折叠的能力。
   final VoidCallback onOpenDetail;
+  final VoidCallback onRename;
 
   @override
   Widget build(BuildContext context) {
@@ -1601,6 +1647,7 @@ class _ClassCard extends StatelessWidget {
             expanded: expanded,
             onToggle: onToggle,
             onOpenDetail: onOpenDetail,
+            onRename: onRename,
           ),
           if (expanded) ...[
             SizedBox(height: ui(12)),
@@ -1639,12 +1686,14 @@ class _ClassHeader extends StatelessWidget {
     required this.expanded,
     required this.onToggle,
     required this.onOpenDetail,
+    required this.onRename,
   });
 
   final _ClassEntry entry;
   final bool expanded;
   final VoidCallback onToggle;
   final VoidCallback onOpenDetail;
+  final VoidCallback onRename;
 
   @override
   Widget build(BuildContext context) {
@@ -1668,27 +1717,10 @@ class _ClassHeader extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Container(
-              width: ui(36),
-              height: ui(36),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: _kPurpleAvatarBg,
-                borderRadius: BorderRadius.circular(ui(8)),
-              ),
-              child: ShaderMask(
-                shaderCallback: (rect) => const LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Color(0xFF1C274D), _kPurple],
-                ).createShader(rect),
-                blendMode: BlendMode.srcIn,
-                child: Icon(
-                  Icons.groups_outlined,
-                  size: ui(20),
-                  color: Colors.white,
-                ),
-              ),
+            _ClassLogoBox(
+              logoUrl: entry.logoUrl,
+              size: ui(36),
+              borderRadius: ui(8),
             ),
             SizedBox(width: ui(8)),
             Expanded(
@@ -1713,7 +1745,20 @@ class _ClassHeader extends StatelessWidget {
                           ),
                         ),
                       ),
-                      SizedBox(width: ui(8)),
+                      SizedBox(width: ui(4)),
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: onRename,
+                        child: Padding(
+                          padding: EdgeInsets.all(ui(2)),
+                          child: Icon(
+                            Icons.edit_outlined,
+                            size: ui(14),
+                            color: _kPurple,
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: ui(4)),
                       _KindPill(kind: entry.kind),
                     ],
                   ),
@@ -1767,6 +1812,64 @@ class _ClassHeader extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ClassLogoBox extends StatelessWidget {
+  const _ClassLogoBox({
+    required this.logoUrl,
+    required this.size,
+    required this.borderRadius,
+  });
+
+  final String logoUrl;
+  final double size;
+  final double borderRadius;
+
+  @override
+  Widget build(BuildContext context) {
+    final fallback = _fallback();
+    if (logoUrl.isEmpty) return fallback;
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final decodeSize = (size * dpr).round().clamp(48, 256);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(borderRadius),
+      child: Image.network(
+        logoUrl,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        filterQuality: FilterQuality.medium,
+        cacheWidth: decodeSize,
+        cacheHeight: decodeSize,
+        errorBuilder: (_, _, _) => fallback,
+      ),
+    );
+  }
+
+  Widget _fallback() {
+    return Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: _kPurpleAvatarBg,
+        borderRadius: BorderRadius.circular(borderRadius),
+      ),
+      child: ShaderMask(
+        shaderCallback: (rect) => const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF1C274D), _kPurple],
+        ).createShader(rect),
+        blendMode: BlendMode.srcIn,
+        child: Icon(
+          Icons.groups_outlined,
+          size: size * 0.56,
+          color: Colors.white,
         ),
       ),
     );
@@ -3759,6 +3862,7 @@ class _ClassDetailDrawer extends StatefulWidget {
     required this.initialStudents,
     required this.ensureClassTeachers,
     required this.ensureClassStudents,
+    required this.onRename,
   });
 
   final _ClassEntry entry;
@@ -3768,6 +3872,7 @@ class _ClassDetailDrawer extends StatefulWidget {
   ensureClassTeachers;
   final Future<List<_StudentRecord>> Function(_ClassEntry entry)
   ensureClassStudents;
+  final VoidCallback onRename;
 
   @override
   State<_ClassDetailDrawer> createState() => _ClassDetailDrawerState();
@@ -3842,6 +3947,7 @@ class _ClassDetailDrawerState extends State<_ClassDetailDrawer> {
                               _ClassDetailRow(
                                 label: '班级名称：',
                                 value: entry.name.isEmpty ? '—' : entry.name,
+                                onEdit: widget.onRename,
                               ),
                               _ClassDetailRow(
                                 label: '班级编码：',
@@ -3939,27 +4045,10 @@ class _ClassDetailHero extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Container(
-            width: ui(48),
-            height: ui(48),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: _kPurpleAvatarBg,
-              borderRadius: BorderRadius.circular(ui(10)),
-            ),
-            child: ShaderMask(
-              shaderCallback: (rect) => const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xFF1C274D), _kPurple],
-              ).createShader(rect),
-              blendMode: BlendMode.srcIn,
-              child: Icon(
-                Icons.groups_outlined,
-                size: ui(26),
-                color: Colors.white,
-              ),
-            ),
+          _ClassLogoBox(
+            logoUrl: entry.logoUrl,
+            size: ui(48),
+            borderRadius: ui(10),
           ),
           SizedBox(width: ui(12)),
           Expanded(
@@ -4065,11 +4154,13 @@ class _ClassDetailRow extends StatelessWidget {
     required this.label,
     required this.value,
     this.multiline = false,
+    this.onEdit,
   });
 
   final String label;
   final String value;
   final bool multiline;
+  final VoidCallback? onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -4104,6 +4195,23 @@ class _ClassDetailRow extends StatelessWidget {
               ),
             ),
           ),
+          if (onEdit != null)
+            TextButton(
+              onPressed: onEdit,
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.symmetric(horizontal: ui(8)),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(
+                '修改',
+                style: TextStyle(
+                  fontSize: ui(12),
+                  color: _kPurple,
+                  fontFamily: 'PingFang SC',
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -4357,6 +4465,57 @@ class _TeacherMiniCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _RenameClassDialog extends StatefulWidget {
+  const _RenameClassDialog({required this.initialName});
+
+  final String initialName;
+
+  @override
+  State<_RenameClassDialog> createState() => _RenameClassDialogState();
+}
+
+class _RenameClassDialogState extends State<_RenameClassDialog> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initialName,
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('修改班级名称'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        maxLength: 50,
+        decoration: const InputDecoration(
+          hintText: '请输入班级名称',
+          border: OutlineInputBorder(),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        TextButton(
+          onPressed: () {
+            final name = _controller.text.trim();
+            if (name.isEmpty) return;
+            Navigator.of(context).pop(name);
+          },
+          child: const Text('保存'),
+        ),
+      ],
     );
   }
 }

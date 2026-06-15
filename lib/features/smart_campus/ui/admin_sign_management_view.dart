@@ -41,6 +41,7 @@ import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_date_time_pickers.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/popup_selector_field.dart';
+import '../../../core/widgets/smooth_circle_network_avatar.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/admin_repository.dart';
 import '../data/course_sign_data.dart';
@@ -1385,6 +1386,7 @@ class _SmallClassSessionCard extends StatelessWidget {
             icon: Icons.person_rounded,
             iconColor: _kPurple,
             title: '${session.teacherName}（教师）',
+            avatarUrl: session.logoUrl,
             rows: [
               _TimelineRow(
                 label: '上课签到',
@@ -1552,12 +1554,14 @@ class _TimelineSection extends StatelessWidget {
     required this.iconColor,
     required this.title,
     required this.rows,
+    this.avatarUrl = '',
   });
 
   final IconData icon;
   final Color iconColor;
   final String title;
   final List<_TimelineRow> rows;
+  final String avatarUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -1570,7 +1574,7 @@ class _TimelineSection extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: ui(10), vertical: ui(8)),
       child: Row(
         children: [
-          _MiniAvatar(seed: title, size: ui(30)),
+          _MiniAvatar(seed: title, size: ui(30), imageUrl: avatarUrl),
           SizedBox(width: ui(8)),
           Expanded(
             child: Column(
@@ -2757,15 +2761,20 @@ class _SignProgressPill extends StatelessWidget {
 }
 
 class _MiniAvatar extends StatelessWidget {
-  const _MiniAvatar({required this.seed, required this.size});
+  const _MiniAvatar({
+    required this.seed,
+    required this.size,
+    this.imageUrl = '',
+  });
 
   final String seed;
   final double size;
+  final String imageUrl;
 
   @override
   Widget build(BuildContext context) {
     final firstChar = seed.isNotEmpty ? seed.characters.first : '?';
-    return Container(
+    final fallback = Container(
       width: size,
       height: size,
       decoration: const BoxDecoration(
@@ -2783,6 +2792,11 @@ class _MiniAvatar extends StatelessWidget {
           height: 1,
         ),
       ),
+    );
+    return SmoothCircleNetworkAvatar(
+      url: imageUrl,
+      size: size,
+      placeholder: fallback,
     );
   }
 }

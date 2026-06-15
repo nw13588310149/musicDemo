@@ -219,7 +219,8 @@ class TeacherClassAttendanceView extends ConsumerStatefulWidget {
 }
 
 class _TeacherClassAttendanceViewState
-    extends ConsumerState<TeacherClassAttendanceView> {
+    extends ConsumerState<TeacherClassAttendanceView>
+    with WidgetsBindingObserver {
   /// 0 = 总数据 / 1 = 本学期 / 2 = 本月。切换后重新拉取对应时间范围统计。
   int _selectedTabIdx = 0;
 
@@ -241,29 +242,42 @@ class _TeacherClassAttendanceViewState
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _runStateTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       if (mounted) setState(() {});
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(teacherAttendanceControllerProvider.notifier).initialize();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final notifier = ref.read(teacherAttendanceControllerProvider.notifier);
+      await notifier.initialize();
+      notifier.startLiveSync();
     });
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _runStateTimer?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !_showHistory) {
+      unawaited(
+        ref.read(teacherAttendanceControllerProvider.notifier).resumeSync(),
+      );
+    }
   }
 
   void _selectClass(int idx, List<_AttendClass> classes) {
     if (_activeClassIdx == idx) return;
     setState(() => _activeClassIdx = idx);
     final course = classes[idx];
-    if (course.kind == _ClassKind.big && course.courseId.isNotEmpty) {
+    if (course.courseId.isNotEmpty) {
       unawaited(
         ref
             .read(teacherAttendanceControllerProvider.notifier)
-            .loadCourseDetail(course.courseId),
+            .selectCourse(course.courseId),
       );
     }
   }
@@ -306,6 +320,7 @@ class _TeacherClassAttendanceViewState
 
   void _openHistory() {
     if (_showHistory) return;
+    ref.read(teacherAttendanceControllerProvider.notifier).stopLiveSync();
     setState(() => _showHistory = true);
     unawaited(
       ref.read(teacherAttendanceControllerProvider.notifier).loadHistory(),
@@ -315,6 +330,7 @@ class _TeacherClassAttendanceViewState
   void _closeHistory() {
     if (!_showHistory) return;
     setState(() => _showHistory = false);
+    ref.read(teacherAttendanceControllerProvider.notifier).startLiveSync();
   }
 
   @override
@@ -324,9 +340,16 @@ class _TeacherClassAttendanceViewState
     final classes = attendance.todayCourses
         .map(_attendClassFromSession)
         .toList();
-    final activeIdx = classes.isEmpty
+    final selectedId = attendance.selectedCourseId;
+    var activeIdx = classes.isEmpty
         ? 0
         : _activeClassIdx.clamp(0, classes.length - 1);
+    if (selectedId != null && selectedId.isNotEmpty) {
+      final matched = classes.indexWhere((item) => item.courseId == selectedId);
+      if (matched >= 0) {
+        activeIdx = matched;
+      }
+    }
     final recentRecords = attendance.recentRecords
         .map(_recentRecordFromHistory)
         .toList(growable: false);
@@ -1449,6 +1472,7 @@ class _BigClassActionPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final bulkSignCompleted = _isBigClassBulkSignCompleted(data);
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -1619,84 +1643,120 @@ class _BigClassActionPanel extends StatelessWidget {
             ),
           ),
           SizedBox(height: ui(12)),
-          // 提示带：待完成大班一键签到
-          Container(
-            width: double.infinity,
-            padding: EdgeInsets.fromLTRB(ui(12), ui(8), ui(12), ui(8)),
-            decoration: BoxDecoration(
-              color: _kPurpleSoftHint,
-              borderRadius: BorderRadius.circular(ui(8)),
-              border: Border.all(color: _kBorderSoft, width: 0.5),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '待完成大班一键签到',
-                  style: TextStyle(
-                    fontSize: ui(13),
-                    color: _kTextDark,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w500,
-                    height: 20 / 13,
-                  ),
-                ),
-                SizedBox(height: ui(2)),
-                Text(
-                  '可先核对名单并修改状态，再点击下方完成全班签到；完成后学生端展示到课结果。',
-                  style: TextStyle(
-                    fontSize: ui(11),
-                    color: _kTextSecondary,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w400,
-                    height: 14 / 11,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          SizedBox(height: ui(12)),
-          // CTA：一键完成全班签到
-          InkWell(
-            onTap: onBulkSign,
-            borderRadius: BorderRadius.circular(ui(12)),
-            child: Container(
+          if (!bulkSignCompleted) ...[
+            Container(
               width: double.infinity,
-              height: ui(48),
-              alignment: Alignment.center,
+              padding: EdgeInsets.fromLTRB(ui(12), ui(8), ui(12), ui(8)),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  begin: Alignment.centerRight,
-                  end: Alignment.centerLeft,
-                  colors: [Color(0xFFB68EFF), Color(0xFF8640FF)],
-                ),
-                borderRadius: BorderRadius.circular(ui(12)),
+                color: _kPurpleSoftHint,
+                borderRadius: BorderRadius.circular(ui(8)),
+                border: Border.all(color: _kBorderSoft, width: 0.5),
               ),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    Icons.fact_check_outlined,
-                    size: ui(20),
-                    color: Colors.white,
-                  ),
-                  SizedBox(width: ui(4)),
                   Text(
-                    '一键完成全班签到',
+                    '待完成大班一键签到',
                     style: TextStyle(
-                      fontSize: ui(14),
-                      color: Colors.white,
+                      fontSize: ui(13),
+                      color: _kTextDark,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w500,
+                      height: 20 / 13,
+                    ),
+                  ),
+                  SizedBox(height: ui(2)),
+                  Text(
+                    '可先核对名单并修改状态，再点击下方完成全班签到；完成后学生端展示到课结果。',
+                    style: TextStyle(
+                      fontSize: ui(11),
+                      color: _kTextSecondary,
                       fontFamily: 'PingFang SC',
                       fontWeight: AppFont.w400,
-                      height: 1,
+                      height: 14 / 11,
                     ),
                   ),
                 ],
               ),
             ),
-          ),
+            SizedBox(height: ui(12)),
+            InkWell(
+              onTap: onBulkSign,
+              borderRadius: BorderRadius.circular(ui(12)),
+              child: Container(
+                width: double.infinity,
+                height: ui(48),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.centerRight,
+                    end: Alignment.centerLeft,
+                    colors: [Color(0xFFB68EFF), Color(0xFF8640FF)],
+                  ),
+                  borderRadius: BorderRadius.circular(ui(12)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.fact_check_outlined,
+                      size: ui(20),
+                      color: Colors.white,
+                    ),
+                    SizedBox(width: ui(4)),
+                    Text(
+                      '一键完成全班签到',
+                      style: TextStyle(
+                        fontSize: ui(14),
+                        color: Colors.white,
+                        fontFamily: 'PingFang SC',
+                        fontWeight: AppFont.w400,
+                        height: 1,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ] else
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.fromLTRB(ui(12), ui(8), ui(12), ui(8)),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE4FFED),
+                borderRadius: BorderRadius.circular(ui(8)),
+                border: Border.all(color: _kBorderSoft, width: 0.5),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '已完成全班签到',
+                    style: TextStyle(
+                      fontSize: ui(13),
+                      color: _kStatusPresent,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w500,
+                      height: 20 / 13,
+                    ),
+                  ),
+                  SizedBox(height: ui(2)),
+                  Text(
+                    '当前状态：${data.signStatusLabel}。可在上方名单中查看或调整个别学生签到状态。',
+                    style: TextStyle(
+                      fontSize: ui(11),
+                      color: _kTextSecondary,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w400,
+                      height: 14 / 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
@@ -1927,7 +1987,9 @@ class _SmallClassActionPanelState
     });
     if (response.isSuccess) {
       unawaited(
-        ref.read(teacherAttendanceControllerProvider.notifier).refresh(),
+        ref
+            .read(teacherAttendanceControllerProvider.notifier)
+            .loadCourseDetail(widget.data.courseId),
       );
     }
     AppToast.show(
@@ -1954,7 +2016,9 @@ class _SmallClassActionPanelState
     });
     if (response.isSuccess) {
       unawaited(
-        ref.read(teacherAttendanceControllerProvider.notifier).refresh(),
+        ref
+            .read(teacherAttendanceControllerProvider.notifier)
+            .loadCourseDetail(widget.data.courseId),
       );
     }
     AppToast.show(
@@ -2421,6 +2485,17 @@ CourseSignStatus? _courseSignStatusOf(_AttendStatus status) {
     _AttendStatus.absent => CourseSignStatus.absent,
     _AttendStatus.missing => null,
   };
+}
+
+bool _isBigClassBulkSignCompleted(_AttendClass data) {
+  if (data.signStatus >= CourseSignFlowStatus.studentStart.code) {
+    return true;
+  }
+  if (data.students.isNotEmpty &&
+      data.students.every((student) => student.status != _AttendStatus.missing)) {
+    return true;
+  }
+  return false;
 }
 
 String _displayCourseClock(String raw) =>

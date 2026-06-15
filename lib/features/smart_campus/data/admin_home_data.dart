@@ -61,7 +61,7 @@ class AdminHomeNotice {
       id: record.id,
       tag: record.type.trim().isEmpty ? '通知' : record.type,
       text: text,
-      time: _shortDisplayTime(record.time),
+      time: record.time,
       highlighted: record.priority != AdminNoticePriority.normal,
     );
   }
@@ -80,13 +80,3 @@ int _readInt(dynamic raw) {
   return int.tryParse(raw?.toString() ?? '') ?? 0;
 }
 
-String _shortDisplayTime(String raw) {
-  final trimmed = raw.trim();
-  if (trimmed.isEmpty || trimmed == '—') return '—';
-  final parsed = DateTime.tryParse(trimmed);
-  if (parsed == null) return trimmed;
-  final local = parsed.toLocal();
-  String two(int value) => value.toString().padLeft(2, '0');
-  return '${two(local.month)}-${two(local.day)} '
-      '${two(local.hour)}:${two(local.minute)}';
-}

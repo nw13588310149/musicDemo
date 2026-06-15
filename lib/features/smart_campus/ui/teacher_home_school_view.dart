@@ -36,11 +36,13 @@ import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 
 import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_asset_graphic.dart';
+import '../../../core/widgets/app_refresh_indicator.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/home_school_chat_data.dart';
 import '../data/teacher_repository.dart';
+import 'widgets/smart_campus_page_banner.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // —— 颜色 ————————————————————————————————————————————————————————
@@ -181,47 +183,53 @@ class _TeacherHomeSchoolViewState extends ConsumerState<TeacherHomeSchoolView> {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final initialLoading = _loading && _conversations.isEmpty;
     return Container(
       color: _kPageBg,
-      child: SingleChildScrollView(
-        padding: EdgeInsets.only(bottom: ui(20)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _Banner(onBack: widget.onBack),
-            SizedBox(height: ui(16)),
-            MainContentLoadingShell(
-              loading: _loading && _conversations.isEmpty,
-              preserveChrome: true,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _StatsRow(
-                    unread: _stat.unreadCount,
-                    pending: _stat.waitingReplyCount,
-                    total: _stat.totalCount,
-                  ),
-                  SizedBox(height: ui(16)),
-                  _TabsAndSearchRow(
-                    current: _tab,
-                    query: _query,
-                    onTabChanged: _onTabChanged,
-                    onQueryChanged: _onQueryChanged,
-                  ),
-                  SizedBox(height: ui(16)),
-                  if (_loadError != null)
-                    _ErrorHint(message: _loadError!, onRetry: _reloadAll)
-                  else if (_conversations.isEmpty)
-                    _EmptyHint(query: _query, tab: _tab)
-                  else
-                    _ConversationGrid(
-                      items: _conversations,
-                      onTap: _openConversation,
+      child: AppRefreshIndicator(
+        onRefresh: _reloadAll,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: EdgeInsets.only(bottom: ui(20)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _Banner(onBack: widget.onBack),
+              SizedBox(height: ui(16)),
+              MainContentLoadingShell(
+                loading: initialLoading,
+                preserveChrome: true,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _StatsRow(
+                      unread: _stat.unreadCount,
+                      pending: _stat.waitingReplyCount,
+                      total: _stat.totalCount,
+                      onTabChanged: _onTabChanged,
                     ),
-                ],
+                    SizedBox(height: ui(16)),
+                    _TabsAndSearchRow(
+                      current: _tab,
+                      query: _query,
+                      onTabChanged: _onTabChanged,
+                      onQueryChanged: _onQueryChanged,
+                    ),
+                    SizedBox(height: ui(16)),
+                    if (_loadError != null)
+                      _ErrorHint(message: _loadError!, onRetry: _reloadAll)
+                    else if (_conversations.isEmpty && !_loading)
+                      _EmptyHint(query: _query, tab: _tab)
+                    else if (_conversations.isNotEmpty)
+                      _ConversationGrid(
+                        items: _conversations,
+                        onTap: _openConversation,
+                      ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -242,14 +250,7 @@ class _Banner extends StatelessWidget {
       width: double.infinity,
       height: ui(62),
       clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(ui(16)),
-        image: DecorationImage(
-          image: AssetImage(AppAssets.xiaoquanHeaderBg),
-          fit: BoxFit.cover,
-          alignment: Alignment.centerRight,
-        ),
-      ),
+      decoration: smartCampusPageBannerDecoration(ui),
       child: Stack(
         children: [
           Positioned(
@@ -291,6 +292,20 @@ class _Banner extends StatelessWidget {
                       height: 1.2,
                     ),
                   ),
+                  SizedBox(height: ui(2)),
+                  Text(
+                    '与本班家长就请假、成绩、心理等进行文字沟通',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: ui(12),
+                      color: _kTextHint,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w400,
+                      height: 1.2,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -308,11 +323,13 @@ class _StatsRow extends StatelessWidget {
     required this.unread,
     required this.pending,
     required this.total,
+    required this.onTabChanged,
   });
 
   final int unread;
   final int pending;
   final int total;
+  final ValueChanged<_TopTab> onTabChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -325,6 +342,7 @@ class _StatsRow extends StatelessWidget {
             value: unread,
             gradient: const [Color(0xFFFFE2DC), Colors.white],
             blobColor: const Color(0xFFFF9985),
+            onTap: () => onTabChanged(_TopTab.unread),
           ),
         ),
         SizedBox(width: ui(12)),
@@ -334,6 +352,7 @@ class _StatsRow extends StatelessWidget {
             value: pending,
             gradient: const [Color(0xFFFFF0DC), Colors.white],
             blobColor: const Color(0xFFFFD79F),
+            onTap: () => onTabChanged(_TopTab.pending),
           ),
         ),
         SizedBox(width: ui(12)),
@@ -343,6 +362,7 @@ class _StatsRow extends StatelessWidget {
             value: total,
             gradient: const [Color(0xFFE7DCFF), Colors.white],
             blobColor: const Color(0xFFD4BEFF),
+            onTap: () => onTabChanged(_TopTab.all),
           ),
         ),
       ],
@@ -356,82 +376,90 @@ class _StatCard extends StatelessWidget {
     required this.value,
     required this.gradient,
     required this.blobColor,
+    this.onTap,
   });
 
   final String title;
   final int value;
   final List<Color> gradient;
   final Color blobColor;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      height: ui(100),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: const Alignment(0.5, -0.95),
-          end: const Alignment(-0.5, 0.95),
-          stops: const [0.0, 0.73],
-          colors: gradient,
-        ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(ui(12)),
-        border: Border.all(color: Colors.white, width: 1),
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            left: ui(16),
-            top: ui(16),
-            right: ui(76),
-            child: Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: ui(14),
-                color: _kTextDark,
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w500,
-                height: 1.2,
-              ),
+        child: Ink(
+          height: ui(100),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: const Alignment(0.5, -0.95),
+              end: const Alignment(-0.5, 0.95),
+              stops: const [0.0, 0.73],
+              colors: gradient,
             ),
+            borderRadius: BorderRadius.circular(ui(12)),
+            border: Border.all(color: Colors.white, width: 1),
           ),
-          Positioned(
-            left: ui(16),
-            top: ui(40),
-            child: Text(
-              '$value',
-              style: TextStyle(
-                fontSize: ui(32),
-                color: _kTextDark,
-                fontFamily: 'Barlow',
-                fontWeight: FontWeight.w500,
-                height: 1.0,
-              ),
-            ),
-          ),
-          // 右下角装饰渐变方块（演示用纯色圆角）
-          Positioned(
-            right: ui(16),
-            bottom: ui(8),
-            child: Container(
-              width: ui(54),
-              height: ui(54),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    blobColor.withValues(alpha: 0.35),
-                    blobColor.withValues(alpha: 0.05),
-                  ],
+          child: Stack(
+            children: [
+              Positioned(
+                left: ui(16),
+                top: ui(16),
+                right: ui(76),
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: ui(14),
+                    color: _kTextDark,
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w500,
+                    height: 1.2,
+                  ),
                 ),
-                borderRadius: BorderRadius.circular(ui(12)),
               ),
-            ),
+              Positioned(
+                left: ui(16),
+                top: ui(40),
+                child: Text(
+                  '$value',
+                  style: TextStyle(
+                    fontSize: ui(32),
+                    color: _kTextDark,
+                    fontFamily: 'Barlow',
+                    fontWeight: FontWeight.w500,
+                    height: 1.0,
+                  ),
+                ),
+              ),
+              Positioned(
+                right: ui(16),
+                bottom: ui(8),
+                child: Container(
+                  width: ui(54),
+                  height: ui(54),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        blobColor.withValues(alpha: 0.35),
+                        blobColor.withValues(alpha: 0.05),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(ui(12)),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -611,6 +639,19 @@ class _SearchBoxState extends State<_SearchBox> {
               ),
             ),
           ),
+          if (widget.value.isNotEmpty)
+            GestureDetector(
+              onTap: () => widget.onChanged(''),
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: EdgeInsets.only(left: ui(4)),
+                child: Icon(
+                  Icons.cancel,
+                  size: ui(16),
+                  color: const Color(0xFFC6C6C6),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -718,10 +759,10 @@ class _ConversationGrid extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     return LayoutBuilder(
       builder: (context, c) {
-        const cols = 3;
+        final w = c.maxWidth;
+        final cols = w >= ui(900) ? 3 : (w >= ui(560) ? 2 : 1);
         const gap = 12.0;
         final scaledGap = ui(gap);
-        final w = c.maxWidth;
         final cardW = (w - scaledGap * (cols - 1)) / cols;
         return Wrap(
           spacing: scaledGap,
@@ -763,7 +804,6 @@ class _ConversationCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              // 顶部：头像 + 姓名/学号 + 标签
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -776,32 +816,19 @@ class _ConversationCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                conversation.studentName,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: ui(14),
-                                  color: _kTextDark,
-                                  fontFamily: 'PingFang SC',
-                                  fontWeight: AppFont.w500,
-                                  height: 1.2,
-                                ),
-                              ),
-                            ),
-                            SizedBox(width: ui(8)),
-                            Expanded(
-                              child: _TagsRow(
-                                tags: conversation.tags,
-                                replyPending: conversation.replyPending,
-                              ),
-                            ),
-                          ],
+                        Text(
+                          conversation.studentName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: ui(14),
+                            color: _kTextDark,
+                            fontFamily: 'PingFang SC',
+                            fontWeight: AppFont.w500,
+                            height: 1.2,
+                          ),
                         ),
-                        SizedBox(height: ui(6)),
+                        SizedBox(height: ui(4)),
                         Text(
                           '${conversation.parentName}（${conversation.parentRelation}）',
                           maxLines: 1,
@@ -814,7 +841,7 @@ class _ConversationCard extends StatelessWidget {
                             height: 1.2,
                           ),
                         ),
-                        SizedBox(height: ui(5)),
+                        SizedBox(height: ui(4)),
                         Text(
                           conversation.studentNo,
                           maxLines: 1,
@@ -832,6 +859,13 @@ class _ConversationCard extends StatelessWidget {
                   ),
                 ],
               ),
+              if (conversation.tags.isNotEmpty || conversation.replyPending) ...[
+                SizedBox(height: ui(8)),
+                _TagsRow(
+                  tags: conversation.tags,
+                  replyPending: conversation.replyPending,
+                ),
+              ],
               SizedBox(height: ui(10)),
               // 消息预览灰底块
               Container(
@@ -844,35 +878,46 @@ class _ConversationCard extends StatelessWidget {
                   color: _kCardGreyBg,
                   borderRadius: BorderRadius.circular(ui(8)),
                 ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${conversation.lastSpeaker}：',
-                      style: TextStyle(
-                        fontSize: ui(12),
-                        color: _kTextHint,
-                        fontFamily: 'PingFang SC',
-                        fontWeight: AppFont.w400,
-                        height: 1.4,
-                      ),
-                    ),
-                    Expanded(
-                      child: Text(
-                        conversation.lastMessage,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                child: conversation.lastMessage.trim().isEmpty
+                    ? Text(
+                        '暂无消息，点击开始沟通',
                         style: TextStyle(
                           fontSize: ui(12),
-                          color: _kTextSecondary,
+                          color: _kTextHint,
                           fontFamily: 'PingFang SC',
                           fontWeight: AppFont.w400,
                           height: 1.4,
                         ),
+                      )
+                    : Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${conversation.lastSpeaker}：',
+                            style: TextStyle(
+                              fontSize: ui(12),
+                              color: _kTextHint,
+                              fontFamily: 'PingFang SC',
+                              fontWeight: AppFont.w400,
+                              height: 1.4,
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              conversation.lastMessage,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: ui(12),
+                                color: _kTextSecondary,
+                                fontFamily: 'PingFang SC',
+                                fontWeight: AppFont.w400,
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                  ],
-                ),
               ),
               SizedBox(height: ui(8)),
               Row(
@@ -977,16 +1022,13 @@ class _TagsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      reverse: true,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          for (final t in tags) ...[_TagPill.grey(t), SizedBox(width: ui(4))],
-          if (replyPending) const _TagPill.purple('待回复'),
-        ],
-      ),
+    return Wrap(
+      spacing: ui(4),
+      runSpacing: ui(4),
+      children: [
+        for (final t in tags) _TagPill.grey(t),
+        if (replyPending) const _TagPill.purple('待回复'),
+      ],
     );
   }
 }
@@ -1046,6 +1088,7 @@ class _ChatDetailDialogState extends ConsumerState<_ChatDetailDialog> {
   bool _loading = true;
   bool _sending = false;
   final _inputController = TextEditingController();
+  final _scrollController = ScrollController();
 
   @override
   void initState() {
@@ -1058,7 +1101,15 @@ class _ChatDetailDialogState extends ConsumerState<_ChatDetailDialog> {
   @override
   void dispose() {
     _inputController.dispose();
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _scrollToBottom() async {
+    if (!_scrollController.hasClients) return;
+    await Future<void>.delayed(const Duration(milliseconds: 16));
+    if (!mounted || !_scrollController.hasClients) return;
+    _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
   }
 
   Future<void> _loadMessages() async {
@@ -1079,6 +1130,7 @@ class _ChatDetailDialogState extends ConsumerState<_ChatDetailDialog> {
       _messages = parsed.reversed.toList();
       _loading = false;
     });
+    await _scrollToBottom();
   }
 
   Future<void> _onSend() async {
@@ -1104,73 +1156,69 @@ class _ChatDetailDialogState extends ConsumerState<_ChatDetailDialog> {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final maxH = MediaQuery.sizeOf(context).height * 0.82;
     return Center(
       child: Material(
         color: Colors.transparent,
-        child: Container(
-          width: ui(428),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(ui(24)),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: ui(428),
+            maxHeight: maxH,
           ),
-          clipBehavior: Clip.antiAlias,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _DialogHeader(conversation: widget.conversation),
-              Flexible(
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(ui(24), ui(8), ui(24), ui(0)),
-                  child: _loading
-                      ? Center(child: AppLoadingIndicator(size: ui(28)))
-                      : SingleChildScrollView(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              for (final m in _messages) ...[
-                                _ChatBubble(message: m),
-                                SizedBox(height: ui(8)),
-                              ],
-                            ],
-                          ),
-                        ),
+          child: Container(
+            width: ui(428),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(ui(24)),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _DialogHeader(
+                  conversation: widget.conversation,
+                  onClose: () => Navigator.of(context).pop(),
                 ),
-              ),
-              Padding(
-                padding: EdgeInsets.fromLTRB(ui(24), ui(12), ui(24), ui(20)),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    _InputBar(
-                      controller: _inputController,
-                      onSend: _onSend,
-                      sending: _sending,
-                    ),
-                    SizedBox(height: ui(12)),
-                    InkWell(
-                      onTap: () => Navigator.of(context).pop(),
-                      borderRadius: BorderRadius.circular(ui(8)),
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: ui(12),
-                          vertical: ui(6),
-                        ),
-                        child: Text(
-                          '退出',
-                          style: TextStyle(
-                            fontSize: ui(16),
-                            color: _kTextDark,
-                            fontFamily: 'PingFang SC',
-                            fontWeight: AppFont.w400,
-                            height: 1.2,
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(ui(24), ui(8), ui(24), ui(0)),
+                    child: _loading
+                        ? Center(child: AppLoadingIndicator(size: ui(28)))
+                        : _messages.isEmpty
+                        ? Center(
+                            child: Text(
+                              '暂无消息，发送第一条回复吧',
+                              style: TextStyle(
+                                fontSize: ui(13),
+                                color: _kTextHint,
+                                fontFamily: 'PingFang SC',
+                                fontWeight: AppFont.w400,
+                              ),
+                            ),
+                          )
+                        : ListView.builder(
+                            controller: _scrollController,
+                            padding: EdgeInsets.only(bottom: ui(8)),
+                            itemCount: _messages.length,
+                            itemBuilder: (context, index) {
+                              return Padding(
+                                padding: EdgeInsets.only(bottom: ui(8)),
+                                child: _ChatBubble(message: _messages[index]),
+                              );
+                            },
                           ),
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ],
+                Padding(
+                  padding: EdgeInsets.fromLTRB(ui(24), ui(12), ui(24), ui(20)),
+                  child: _InputBar(
+                    controller: _inputController,
+                    onSend: _onSend,
+                    sending: _sending,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1178,11 +1226,14 @@ class _ChatDetailDialogState extends ConsumerState<_ChatDetailDialog> {
   }
 }
 
-// 头部紫白渐变 + 学生姓名/学号 + 家长头像 + 家长称谓
 class _DialogHeader extends StatelessWidget {
-  const _DialogHeader({required this.conversation});
+  const _DialogHeader({
+    required this.conversation,
+    required this.onClose,
+  });
 
   final HomeSchoolConversation conversation;
+  final VoidCallback onClose;
 
   @override
   Widget build(BuildContext context) {
@@ -1199,66 +1250,91 @@ class _DialogHeader extends StatelessWidget {
           colors: [Color(0xFFD8CCFF), Colors.white],
         ),
       ),
-      padding: EdgeInsets.fromLTRB(ui(24), ui(28), ui(24), ui(16)),
+      padding: EdgeInsets.fromLTRB(ui(24), ui(20), ui(16), ui(16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: ui(56),
-                height: ui(56),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(ui(12)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 12,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  initial,
-                  style: TextStyle(
-                    fontSize: ui(22),
-                    color: _kPurple,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w600,
-                    height: 1.0,
-                  ),
-                ),
-              ),
-              SizedBox(width: ui(12)),
               Expanded(
-                child: Column(
+                child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      conversation.studentName,
-                      style: TextStyle(
-                        fontSize: ui(16),
-                        color: Colors.black,
-                        fontFamily: 'PingFang SC',
-                        fontWeight: AppFont.w600,
-                        height: 1.2,
+                    Container(
+                      width: ui(56),
+                      height: ui(56),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(ui(12)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.05),
+                            blurRadius: 12,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        initial,
+                        style: TextStyle(
+                          fontSize: ui(22),
+                          color: _kPurple,
+                          fontFamily: 'PingFang SC',
+                          fontWeight: AppFont.w600,
+                          height: 1.0,
+                        ),
                       ),
                     ),
-                    SizedBox(height: ui(4)),
-                    Text(
-                      conversation.studentNo,
-                      style: TextStyle(
-                        fontSize: ui(12),
-                        color: _kTextHint,
-                        fontFamily: 'PingFang SC',
-                        fontWeight: AppFont.w400,
-                        height: 1.2,
+                    SizedBox(width: ui(12)),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            conversation.studentName,
+                            style: TextStyle(
+                              fontSize: ui(16),
+                              color: Colors.black,
+                              fontFamily: 'PingFang SC',
+                              fontWeight: AppFont.w600,
+                              height: 1.2,
+                            ),
+                          ),
+                          SizedBox(height: ui(4)),
+                          Text(
+                            conversation.studentNo,
+                            style: TextStyle(
+                              fontSize: ui(12),
+                              color: _kTextHint,
+                              fontFamily: 'PingFang SC',
+                              fontWeight: AppFont.w400,
+                              height: 1.2,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
+                ),
+              ),
+              InkWell(
+                onTap: onClose,
+                borderRadius: BorderRadius.circular(ui(8)),
+                child: Container(
+                  width: ui(32),
+                  height: ui(32),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.85),
+                    borderRadius: BorderRadius.circular(ui(8)),
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(
+                    Icons.close_rounded,
+                    size: ui(18),
+                    color: _kTextSecondary,
+                  ),
                 ),
               ),
             ],
@@ -1281,14 +1357,18 @@ class _DialogHeader extends StatelessWidget {
                 ),
               ),
               SizedBox(width: ui(8)),
-              Text(
-                '${conversation.parentRelation}-${conversation.parentName}',
-                style: TextStyle(
-                  fontSize: ui(16),
-                  color: _kTextDark,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w500,
-                  height: 20 / 16,
+              Expanded(
+                child: Text(
+                  '${conversation.parentRelation}-${conversation.parentName}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: ui(16),
+                    color: _kTextDark,
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w500,
+                    height: 20 / 16,
+                  ),
                 ),
               ),
             ],
@@ -1441,37 +1521,7 @@ class _InputBar extends StatelessWidget {
               ),
             ),
           ),
-          SizedBox(width: ui(6)),
-          _IconBtn(icon: Icons.image_outlined, onTap: () {}),
-          SizedBox(width: ui(4)),
-          _IconBtn(icon: Icons.attach_file_rounded, onTap: () {}),
         ],
-      ),
-    );
-  }
-}
-
-class _IconBtn extends StatelessWidget {
-  const _IconBtn({required this.icon, required this.onTap});
-
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(ui(8)),
-      child: Container(
-        width: ui(36),
-        height: ui(36),
-        decoration: BoxDecoration(
-          color: _kCardGreyBg,
-          borderRadius: BorderRadius.circular(ui(8)),
-        ),
-        alignment: Alignment.center,
-        child: Icon(icon, size: ui(18), color: _kTextDark),
       ),
     );
   }

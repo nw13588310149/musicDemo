@@ -23,18 +23,18 @@
 // 字体：PingFang SC（标题 16~18 / 正文 12~14）+ Barlow（日期 18 / 时间 18）
 // =============================================================================
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 
-import '../../../core/network/snowflake_id.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
-import '../../school/data/school_repository.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/student_check_in_data.dart';
-import '../data/student_repository.dart';
+import '../state/student_check_in_controller.dart';
 import 'course_sign_countdown.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
@@ -66,138 +66,65 @@ class StudentCheckInView extends ConsumerStatefulWidget {
   ConsumerState<StudentCheckInView> createState() => _StudentCheckInViewState();
 }
 
-class _StudentCheckInViewState extends ConsumerState<StudentCheckInView> {
-  bool _loading = true;
-  bool _submitting = false;
-  List<StudentTodayCourse> _todayCourses = const [];
-  String? _selectedCourseId;
-  late String _todayTitle = formatChineseDateTitle(DateTime.now());
-
+class _StudentCheckInViewState extends ConsumerState<StudentCheckInView>
+    with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadPage());
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final notifier = ref.read(studentCheckInControllerProvider.notifier);
+      await notifier.initialize();
+      notifier.startLiveSync();
+    });
   }
 
-  StudentTodayCourse? get _selectedCourse {
-    if (_selectedCourseId == null) return null;
-    for (final c in _todayCourses) {
-      if (c.courseId == _selectedCourseId) return c;
-    }
-    return null;
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
-  Future<void> _loadPage() async {
-    if (!mounted) return;
-    setState(() => _loading = true);
-
-    final today = DateTime.now();
-    final todayIso = todayIsoDate();
-    _todayTitle = formatChineseDateTitle(today);
-
-    final studentRepo = ref.read(studentRepositoryProvider);
-    final schoolRepo = ref.read(schoolRepositoryProvider);
-
-    try {
-      var timeConfigs = kDefaultStudentTimeConfigs;
-      String? classId;
-
-      final classResp = await studentRepo.mySchoolClass();
-      if (classResp.isSuccess) {
-        final map = classResp.data;
-        if (map is Map) {
-          final schoolClass = map['schoolClass'];
-          if (schoolClass is Map) {
-            classId = readSnowflakeId(
-              schoolClass['id'] ?? schoolClass['classId'],
-            );
-          }
-        }
-      }
-
-      if (classId != null && classId.isNotEmpty) {
-        final tcResp = await schoolRepo.schoolTimeConfigList(classId: classId);
-        if (tcResp.isSuccess) {
-          final parsed = parseStudentTimeConfigs(tcResp.data);
-          if (parsed.isNotEmpty) timeConfigs = parsed;
-        }
-      }
-
-      final courseResp = await studentRepo.courseList(
-        beginDate: todayIso,
-        endDate: todayIso,
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(
+        ref.read(studentCheckInControllerProvider.notifier).resumeSync(),
       );
-      if (!mounted) return;
-
-      if (!courseResp.isSuccess && courseResp.msg.isNotEmpty) {
-        AppToast.show(context, courseResp.msg);
-      }
-
-      final courses = courseResp.isSuccess
-          ? parseStudentTodaySmallCourses(
-              raw: courseResp.data,
-              timeConfigs: timeConfigs,
-              now: today,
-              todayIso: todayIso,
-            )
-          : const <StudentTodayCourse>[];
-
-      final active = pickActiveStudentCourse(courses);
-      setState(() {
-        _loading = false;
-        _todayCourses = courses;
-        _selectedCourseId = active?.courseId;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _todayCourses = const [];
-        _selectedCourseId = null;
-      });
     }
   }
 
   Future<void> _signIn(StudentTodayCourse course) async {
-    if (_submitting) return;
-    setState(() => _submitting = true);
-    try {
-      final resp = await ref
-          .read(studentRepositoryProvider)
-          .courseStudentSignIn(courseId: course.courseId);
-      if (!mounted) return;
-      if (!resp.isSuccess) {
-        AppToast.show(context, resp.msg.isNotEmpty ? resp.msg : '上课签到失败');
-        return;
-      }
-      AppToast.show(context, '上课签到成功');
-      await _loadPage();
-    } finally {
-      if (mounted) setState(() => _submitting = false);
-    }
+    final response = await ref
+        .read(studentCheckInControllerProvider.notifier)
+        .signIn(course.courseId);
+    if (!mounted) return;
+    AppToast.show(
+      context,
+      response.isSuccess
+          ? '上课签到成功'
+          : (response.msg.isNotEmpty ? response.msg : '上课签到失败'),
+      type: response.isSuccess ? AppToastType.success : AppToastType.error,
+    );
   }
 
   Future<void> _signOut(StudentTodayCourse course) async {
-    if (_submitting) return;
-    setState(() => _submitting = true);
-    try {
-      final resp = await ref
-          .read(studentRepositoryProvider)
-          .courseStudentSignOut(courseId: course.courseId);
-      if (!mounted) return;
-      if (!resp.isSuccess) {
-        AppToast.show(context, resp.msg.isNotEmpty ? resp.msg : '下课签到失败');
-        return;
-      }
-      AppToast.show(context, '下课签到成功');
-      await _loadPage();
-      if (!mounted) return;
-      final updated = _selectedCourse;
-      if (updated != null && updated.canComment) {
-        await _showCommentDialog(updated);
-      }
-    } finally {
-      if (mounted) setState(() => _submitting = false);
+    final response = await ref
+        .read(studentCheckInControllerProvider.notifier)
+        .signOut(course.courseId);
+    if (!mounted) return;
+    if (!response.isSuccess) {
+      AppToast.show(
+        context,
+        response.msg.isNotEmpty ? response.msg : '下课签到失败',
+        type: AppToastType.error,
+      );
+      return;
+    }
+    AppToast.show(context, '下课签到成功');
+    final updated = ref.read(studentCheckInControllerProvider).selectedCourse;
+    if (updated != null && updated.canComment) {
+      await _showCommentDialog(updated);
     }
   }
 
@@ -209,31 +136,61 @@ class _StudentCheckInViewState extends ConsumerState<StudentCheckInView> {
     );
     if (result == null || !mounted) return;
 
-    setState(() => _submitting = true);
-    try {
-      final resp = await ref
-          .read(studentRepositoryProvider)
-          .courseStudentComment(
-            courseId: course.courseId,
-            comment: result.comment,
-            score: result.score,
-          );
-      if (!mounted) return;
-      if (!resp.isSuccess) {
-        AppToast.show(context, resp.msg.isNotEmpty ? resp.msg : '评价提交失败');
-        return;
-      }
-      AppToast.show(context, '评价已提交');
-      await _loadPage();
-    } finally {
-      if (mounted) setState(() => _submitting = false);
+    final resp = await ref
+        .read(studentCheckInControllerProvider.notifier)
+        .submitComment(
+          courseId: course.courseId,
+          comment: result.comment,
+          score: result.score,
+        );
+    if (!mounted) return;
+    if (!resp.isSuccess) {
+      AppToast.show(context, resp.msg.isNotEmpty ? resp.msg : '评价提交失败');
+      return;
     }
+    AppToast.show(context, '评价已提交');
+  }
+
+  Future<void> _applyMakeup(StudentSignRecordItem record) async {
+    if (record.courseId.isEmpty) {
+      AppToast.show(context, '缺少课程信息，无法申请补签', type: AppToastType.error);
+      return;
+    }
+    final reason = await showScaledDialog<String>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.18),
+      builder: (ctx) => _MakeupReasonDialog(courseName: record.subjectName),
+    );
+    if (reason == null || reason.trim().isEmpty || !mounted) return;
+    final response = await ref
+        .read(studentCheckInControllerProvider.notifier)
+        .submitMakeup(
+          courseId: record.courseId,
+          signType: 1,
+          reason: reason.trim(),
+        );
+    if (!mounted) return;
+    AppToast.show(
+      context,
+      response.isSuccess
+          ? '补签申请已提交'
+          : (response.displayMsg.isNotEmpty
+                ? response.displayMsg
+                : '补签申请失败'),
+      type: response.isSuccess ? AppToastType.success : AppToastType.error,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final selected = _selectedCourse;
+    final checkIn = ref.watch(studentCheckInControllerProvider);
+    final selected = checkIn.selectedCourse;
+    final recentRecords = checkIn.recentRecords
+        .asMap()
+        .entries
+        .map((entry) => _recentRecordFromItem(entry.value, entry.key))
+        .toList(growable: false);
 
     return SingleChildScrollView(
       padding: EdgeInsets.only(bottom: ui(24)),
@@ -246,12 +203,12 @@ class _StudentCheckInViewState extends ConsumerState<StudentCheckInView> {
           ),
           SizedBox(height: ui(16)),
           MainContentLoadingShell(
-            loading: _loading,
+            loading: checkIn.loading,
             preserveChrome: true,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _StatsRow(stats: _kDemoStats),
+                _StatsRow(stats: _statsFromSummary(checkIn.stats)),
                 SizedBox(height: ui(24)),
                 // 双列：今日课程 + 签到操作
                 LayoutBuilder(
@@ -264,19 +221,19 @@ class _StudentCheckInViewState extends ConsumerState<StudentCheckInView> {
                           _SectionTitle('今日课程'),
                           SizedBox(height: ui(12)),
                           _TodayClassesPanel(
-                            title: _todayTitle,
-                            courses: _todayCourses,
-                            selectedCourseId: _selectedCourseId,
-                            onSelect: (course) => setState(
-                              () => _selectedCourseId = course.courseId,
-                            ),
+                            title: checkIn.todayTitle,
+                            courses: checkIn.todayCourses,
+                            selectedCourseId: checkIn.selectedCourseId,
+                            onSelect: (course) => ref
+                                .read(studentCheckInControllerProvider.notifier)
+                                .selectCourse(course.courseId),
                           ),
                           SizedBox(height: ui(20)),
                           _SectionTitle('签到操作'),
                           SizedBox(height: ui(12)),
                           _CheckInActionPanel(
                             course: selected,
-                            submitting: _submitting,
+                            submitting: checkIn.submitting,
                             onSignIn: selected == null
                                 ? null
                                 : () => _signIn(selected),
@@ -301,12 +258,14 @@ class _StudentCheckInViewState extends ConsumerState<StudentCheckInView> {
                               _SectionTitle('今日课程'),
                               SizedBox(height: ui(12)),
                               _TodayClassesPanel(
-                                title: _todayTitle,
-                                courses: _todayCourses,
-                                selectedCourseId: _selectedCourseId,
-                                onSelect: (course) => setState(
-                                  () => _selectedCourseId = course.courseId,
-                                ),
+                                title: checkIn.todayTitle,
+                                courses: checkIn.todayCourses,
+                                selectedCourseId: checkIn.selectedCourseId,
+                                onSelect: (course) => ref
+                                    .read(
+                                      studentCheckInControllerProvider.notifier,
+                                    )
+                                    .selectCourse(course.courseId),
                               ),
                             ],
                           ),
@@ -320,7 +279,7 @@ class _StudentCheckInViewState extends ConsumerState<StudentCheckInView> {
                               SizedBox(height: ui(12)),
                               _CheckInActionPanel(
                                 course: selected,
-                                submitting: _submitting,
+                                submitting: checkIn.submitting,
                                 onSignIn: selected == null
                                     ? null
                                     : () => _signIn(selected),
@@ -342,14 +301,45 @@ class _StudentCheckInViewState extends ConsumerState<StudentCheckInView> {
                 SizedBox(height: ui(28)),
                 _SectionTitle('最近课堂记录'),
                 SizedBox(height: ui(12)),
-                _RecentRecordsGrid(
-                  records: _kDemoRecentRecords,
-                  onApplyMakeup: () => AppToast.show(
-                    context,
-                    '补签申请接口暂未开放，请联系班主任处理',
-                    type: AppToastType.error,
+                if (recentRecords.isEmpty)
+                  Padding(
+                    padding: EdgeInsets.symmetric(vertical: ui(24)),
+                    child: Center(
+                      child: Text(
+                        checkIn.error.isNotEmpty
+                            ? checkIn.error
+                            : '暂无最近课堂记录',
+                        style: TextStyle(
+                          fontSize: ui(14),
+                          color: _kTextHint,
+                          fontFamily: 'PingFang SC',
+                          fontWeight: AppFont.w400,
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  _RecentRecordsGrid(
+                    records: recentRecords,
+                    onApplyMakeup: (record) {
+                      StudentSignRecordItem? item;
+                      for (final r in checkIn.recentRecords) {
+                        if (r.courseId == record.courseId) {
+                          item = r;
+                          break;
+                        }
+                      }
+                      if (item == null) {
+                        AppToast.show(
+                          context,
+                          '缺少课程信息，无法申请补签',
+                          type: AppToastType.error,
+                        );
+                        return;
+                      }
+                      unawaited(_applyMakeup(item));
+                    },
                   ),
-                ),
               ],
             ),
           ),
@@ -358,24 +348,18 @@ class _StudentCheckInViewState extends ConsumerState<StudentCheckInView> {
     );
   }
 
-  /// 顶部 banner「历史记录」按钮入口：从屏幕右侧滑入抽屉，展示更长时间
-  /// 范围内的签到历史，支持按"本周 / 本月 / 本学期"切片 + 按"全部 / 正常
-  /// / 缺勤"筛选。
-  ///
-  /// 设计沿用 `_ApplyRecordsDrawer` / 教师端「学生人员调班」等右滑抽屉：
-  /// - `showGeneralDialog` + `Align(centerRight)` + `SlideTransition`
-  /// - 通过 [DashboardScaleScope] 透传当前的 ui 缩放尺度，保证抽屉内字号
-  ///   / 间距与父页面一致；
-  /// - 抽屉宽度 ui(520)，全屏高度。
-  ///
-  /// 数据：目前后端尚未提供学生端签到历史接口，与 1.0 `student-sign-history`
-  /// 页对齐使用 [_kDemoHistoryRecords] 占位。接入真实接口后，把这里改成
-  /// `ref.read(studentRepositoryProvider).signHistoryList(...)` 即可，抽屉内
-  /// 的卡片模型 [_RecentRecordData] 与最近课堂记录共用。
   Future<void> _openHistoryDrawer() async {
+    ref.read(studentCheckInControllerProvider.notifier).stopLiveSync();
     final scaleData =
         DashboardScaleScope.maybeOf(context) ??
         DashboardScaleScope.fromSize(MediaQuery.sizeOf(context));
+    await Future.wait([
+      ref
+          .read(studentCheckInControllerProvider.notifier)
+          .loadHistory(range: StudentCheckInHistoryRange.month),
+      ref.read(studentCheckInControllerProvider.notifier).loadMakeupList(),
+    ]);
+    if (!mounted) return;
     await showGeneralDialog<void>(
       context: context,
       barrierLabel: '关闭',
@@ -390,8 +374,8 @@ class _StudentCheckInViewState extends ConsumerState<StudentCheckInView> {
             child: Material(
               color: Colors.transparent,
               child: _CheckInHistoryDrawer(
-                records: _kDemoHistoryRecords,
                 onClose: () => Navigator.of(ctx).maybePop(),
+                onApplyMakeup: _applyMakeup,
               ),
             ),
           ),
@@ -407,6 +391,9 @@ class _StudentCheckInViewState extends ConsumerState<StudentCheckInView> {
         );
       },
     );
+    if (mounted) {
+      ref.read(studentCheckInControllerProvider.notifier).startLiveSync();
+    }
   }
 }
 
@@ -1322,6 +1309,7 @@ enum _TagPalette { green, yellow }
 
 class _RecentRecordData {
   const _RecentRecordData({
+    this.courseId = '',
     required this.date,
     required this.status,
     required this.studentName,
@@ -1335,6 +1323,7 @@ class _RecentRecordData {
     required this.note,
   });
 
+  final String courseId;
   final String date;
   final _AttendanceStatus status;
   final String studentName;
@@ -1362,7 +1351,7 @@ class _RecentRecordsGrid extends StatelessWidget {
   const _RecentRecordsGrid({required this.records, this.onApplyMakeup});
 
   final List<_RecentRecordData> records;
-  final VoidCallback? onApplyMakeup;
+  final ValueChanged<_RecentRecordData>? onApplyMakeup;
 
   @override
   Widget build(BuildContext context) {
@@ -1374,7 +1363,12 @@ class _RecentRecordsGrid extends StatelessWidget {
         for (final r in records)
           SizedBox(
             width: ui(312),
-            child: _RecentRecordCard(data: r, onApplyMakeup: onApplyMakeup),
+            child: _RecentRecordCard(
+              data: r,
+              onApplyMakeup: onApplyMakeup == null
+                  ? null
+                  : () => onApplyMakeup!(r),
+            ),
           ),
       ],
     );
@@ -1823,85 +1817,111 @@ class _SectionTitle extends StatelessWidget {
 //   - 空态：居中"暂无签到记录"灰字
 // =============================================================================
 
+enum _HistoryDrawerTab { signHistory, makeup }
+
 enum _HistoryTimeRange { week, month, semester }
+
+_HistoryTimeRange _historyRangeOf(StudentCheckInHistoryRange range) {
+  return switch (range) {
+    StudentCheckInHistoryRange.week => _HistoryTimeRange.week,
+    StudentCheckInHistoryRange.month => _HistoryTimeRange.month,
+    StudentCheckInHistoryRange.semester => _HistoryTimeRange.semester,
+  };
+}
+
+StudentCheckInHistoryRange _apiRangeOf(_HistoryTimeRange range) {
+  return switch (range) {
+    _HistoryTimeRange.week => StudentCheckInHistoryRange.week,
+    _HistoryTimeRange.month => StudentCheckInHistoryRange.month,
+    _HistoryTimeRange.semester => StudentCheckInHistoryRange.semester,
+  };
+}
 
 enum _HistoryStatusFilter { all, normal, absent }
 
-class _CheckInHistoryDrawer extends StatefulWidget {
-  const _CheckInHistoryDrawer({required this.records, required this.onClose});
+enum _MakeupStatusFilter { all, pending, approved, rejected }
 
-  final List<_RecentRecordData> records;
+class _CheckInHistoryDrawer extends ConsumerStatefulWidget {
+  const _CheckInHistoryDrawer({
+    required this.onClose,
+    required this.onApplyMakeup,
+  });
+
   final VoidCallback onClose;
+  final Future<void> Function(StudentSignRecordItem record) onApplyMakeup;
 
   @override
-  State<_CheckInHistoryDrawer> createState() => _CheckInHistoryDrawerState();
+  ConsumerState<_CheckInHistoryDrawer> createState() =>
+      _CheckInHistoryDrawerState();
 }
 
-class _CheckInHistoryDrawerState extends State<_CheckInHistoryDrawer> {
-  _HistoryTimeRange _range = _HistoryTimeRange.month;
+class _CheckInHistoryDrawerState extends ConsumerState<_CheckInHistoryDrawer> {
+  _HistoryDrawerTab _tab = _HistoryDrawerTab.signHistory;
+  StudentCheckInHistoryRange _range = StudentCheckInHistoryRange.month;
   _HistoryStatusFilter _status = _HistoryStatusFilter.all;
+  _MakeupStatusFilter _makeupStatus = _MakeupStatusFilter.all;
 
-  /// 时间范围筛选：用「今天」为基准切出三种区间。
-  ///
-  /// - 本周：周一 00:00:00 ~ 周日 23:59:59
-  /// - 本月：月初 1 号 ~ 月底
-  /// - 本学期：2-7 月当作春学期、8-1 月当作秋学期（与 1.0 的拆分保持一致）
-  ///
-  /// 解析失败的 date 字符串一律视作"不在范围内"，避免脏数据干扰过滤逻辑。
-  bool _inTimeRange(String dateStr, DateTime now) {
-    final date = DateTime.tryParse(dateStr);
-    if (date == null) return false;
-    switch (_range) {
-      case _HistoryTimeRange.week:
-        final monday = DateTime(
-          now.year,
-          now.month,
-          now.day - (now.weekday - 1),
-        );
-        final sunday = monday.add(const Duration(days: 7));
-        return !date.isBefore(monday) && date.isBefore(sunday);
-      case _HistoryTimeRange.month:
-        final monthStart = DateTime(now.year, now.month, 1);
-        final monthEnd = DateTime(now.year, now.month + 1, 1);
-        return !date.isBefore(monthStart) && date.isBefore(monthEnd);
-      case _HistoryTimeRange.semester:
-        final month = now.month;
-        if (month >= 2 && month <= 7) {
-          return !date.isBefore(DateTime(now.year, 2, 1)) &&
-              date.isBefore(DateTime(now.year, 8, 1));
-        } else if (month >= 8) {
-          return !date.isBefore(DateTime(now.year, 8, 1)) &&
-              date.isBefore(DateTime(now.year + 1, 2, 1));
-        } else {
-          return !date.isBefore(DateTime(now.year - 1, 8, 1)) &&
-              date.isBefore(DateTime(now.year, 2, 1));
-        }
-    }
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _reloadSignHistory());
   }
 
-  List<_RecentRecordData> _filterRecords() {
-    final now = DateTime.now();
-    return widget.records.where((r) {
-      if (!_inTimeRange(r.date, now)) return false;
-      switch (_status) {
-        case _HistoryStatusFilter.all:
-          return true;
-        case _HistoryStatusFilter.normal:
-          return r.status == _AttendanceStatus.normal;
-        case _HistoryStatusFilter.absent:
-          return r.status == _AttendanceStatus.absent;
-      }
-    }).toList();
+  int? get _apiStatusFilter => switch (_status) {
+    _HistoryStatusFilter.all => null,
+    _HistoryStatusFilter.normal => 0,
+    _HistoryStatusFilter.absent => 1,
+  };
+
+  int? get _apiMakeupStatusFilter => switch (_makeupStatus) {
+    _MakeupStatusFilter.all => null,
+    _MakeupStatusFilter.pending => 0,
+    _MakeupStatusFilter.approved => 1,
+    _MakeupStatusFilter.rejected => 2,
+  };
+
+  Future<void> _reloadSignHistory() {
+    return ref
+        .read(studentCheckInControllerProvider.notifier)
+        .loadHistory(range: _range, status: _apiStatusFilter);
+  }
+
+  Future<void> _reloadMakeupList() {
+    return ref
+        .read(studentCheckInControllerProvider.notifier)
+        .loadMakeupList(status: _apiMakeupStatusFilter);
+  }
+
+  Future<void> _showMakeupDetail(StudentCourseSignMakeupItem item) async {
+    final fields = await ref
+        .read(studentCheckInControllerProvider.notifier)
+        .loadMakeupDetail(item.id);
+    if (!mounted) return;
+    await _showCourseSignMakeupDetailDialog(
+      context,
+      title: '补签申请详情',
+      fields: fields,
+    );
+  }
+
+  List<_RecentRecordData> _mapRecords(List<StudentSignRecordItem> items) {
+    return items
+        .asMap()
+        .entries
+        .map((entry) => _recentRecordFromItem(entry.value, entry.key))
+        .toList(growable: false);
   }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final filtered = _filterRecords();
+    final checkIn = ref.watch(studentCheckInControllerProvider);
+    final filtered = _mapRecords(checkIn.historyRecords);
     final normalCount = filtered
         .where((r) => r.status == _AttendanceStatus.normal)
         .length;
     final absentCount = filtered.length - normalCount;
+    final makeupItems = checkIn.makeupRecords;
     return Container(
       width: ui(520),
       height: double.infinity,
@@ -1915,34 +1935,101 @@ class _CheckInHistoryDrawerState extends State<_CheckInHistoryDrawer> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _HistoryDrawerHeader(onClose: widget.onClose),
-          _HistoryFilterBar(
-            range: _range,
-            status: _status,
-            onRangeChanged: (r) => setState(() => _range = r),
-            onStatusChanged: (s) => setState(() => _status = s),
+          _HistoryDrawerHeader(
+            onClose: widget.onClose,
+            tab: _tab,
+            onTabChanged: (tab) {
+              setState(() => _tab = tab);
+              if (tab == _HistoryDrawerTab.makeup) {
+                unawaited(_reloadMakeupList());
+              }
+            },
           ),
-          _HistorySummaryBar(
-            total: filtered.length,
-            normal: normalCount,
-            absent: absentCount,
-          ),
-          Expanded(
-            child: filtered.isEmpty
-                ? _HistoryEmpty()
-                : ListView.separated(
-                    padding: EdgeInsets.fromLTRB(
-                      ui(16),
-                      ui(12),
-                      ui(16),
-                      ui(20),
+          if (_tab == _HistoryDrawerTab.signHistory) ...[
+            _HistoryFilterBar(
+              range: _historyRangeOf(_range),
+              status: _status,
+              onRangeChanged: (r) {
+                setState(() => _range = _apiRangeOf(r));
+                unawaited(_reloadSignHistory());
+              },
+              onStatusChanged: (s) {
+                setState(() => _status = s);
+                unawaited(_reloadSignHistory());
+              },
+            ),
+            _HistorySummaryBar(
+              total: filtered.length,
+              normal: normalCount,
+              absent: absentCount,
+            ),
+            Expanded(
+              child: checkIn.loadingHistory
+                  ? const Center(child: AppLoadingIndicator())
+                  : filtered.isEmpty
+                  ? _HistoryEmpty(
+                      message: checkIn.historyError.isNotEmpty
+                          ? checkIn.historyError
+                          : '暂无签到记录',
+                    )
+                  : ListView.separated(
+                      padding: EdgeInsets.fromLTRB(
+                        ui(16),
+                        ui(12),
+                        ui(16),
+                        ui(20),
+                      ),
+                      itemCount: filtered.length,
+                      separatorBuilder: (_, _) => SizedBox(height: ui(12)),
+                      itemBuilder: (ctx, i) {
+                        final card = filtered[i];
+                        final item = checkIn.historyRecords[i];
+                        return _RecentRecordCard(
+                          data: card,
+                          onApplyMakeup: card.status == _AttendanceStatus.absent
+                              ? () => widget.onApplyMakeup(item)
+                              : null,
+                        );
+                      },
                     ),
-                    itemCount: filtered.length,
-                    separatorBuilder: (_, _) => SizedBox(height: ui(12)),
-                    itemBuilder: (ctx, i) =>
-                        _RecentRecordCard(data: filtered[i]),
-                  ),
-          ),
+            ),
+          ] else ...[
+            _MakeupFilterBar(
+              status: _makeupStatus,
+              onStatusChanged: (s) {
+                setState(() => _makeupStatus = s);
+                unawaited(_reloadMakeupList());
+              },
+            ),
+            _MakeupSummaryBar(total: makeupItems.length),
+            Expanded(
+              child: checkIn.loadingMakeup
+                  ? const Center(child: AppLoadingIndicator())
+                  : makeupItems.isEmpty
+                  ? _HistoryEmpty(
+                      message: checkIn.makeupError.isNotEmpty
+                          ? checkIn.makeupError
+                          : '暂无补签申请',
+                    )
+                  : ListView.separated(
+                      padding: EdgeInsets.fromLTRB(
+                        ui(16),
+                        ui(12),
+                        ui(16),
+                        ui(20),
+                      ),
+                      itemCount: makeupItems.length,
+                      separatorBuilder: (_, _) => SizedBox(height: ui(12)),
+                      itemBuilder: (ctx, i) {
+                        final item = makeupItems[i];
+                        return _CourseSignMakeupCard(
+                          item: item,
+                          onTap: () => unawaited(_showMakeupDetail(item)),
+                        );
+                      },
+                    ),
+            ),
+          ],
         ],
       ),
     );
@@ -1950,54 +2037,138 @@ class _CheckInHistoryDrawerState extends State<_CheckInHistoryDrawer> {
 }
 
 class _HistoryDrawerHeader extends StatelessWidget {
-  const _HistoryDrawerHeader({required this.onClose});
+  const _HistoryDrawerHeader({
+    required this.onClose,
+    required this.tab,
+    required this.onTabChanged,
+  });
 
   final VoidCallback onClose;
+  final _HistoryDrawerTab tab;
+  final ValueChanged<_HistoryDrawerTab> onTabChanged;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
-      height: ui(62),
-      padding: EdgeInsets.symmetric(horizontal: ui(12)),
+      padding: EdgeInsets.fromLTRB(ui(12), ui(12), ui(12), ui(8)),
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: _kBorderSoft)),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            width: ui(3.25),
-            height: ui(15),
-            decoration: BoxDecoration(
-              color: _kPurple,
-              borderRadius: BorderRadius.circular(ui(6)),
-            ),
-          ),
-          SizedBox(width: ui(8)),
-          Text(
-            '签到历史',
-            style: TextStyle(
-              fontSize: ui(16),
-              color: _kTextDark,
-              fontFamily: 'PingFang SC',
-              fontWeight: AppFont.w600,
-              height: 1.2,
-            ),
-          ),
-          const Spacer(),
-          InkWell(
-            onTap: onClose,
-            borderRadius: BorderRadius.circular(ui(8)),
-            child: Padding(
-              padding: EdgeInsets.all(ui(8)),
-              child: Icon(
-                Icons.close_rounded,
-                size: ui(18),
-                color: _kTextSecondary,
+          Row(
+            children: [
+              Container(
+                width: ui(3.25),
+                height: ui(15),
+                decoration: BoxDecoration(
+                  color: _kPurple,
+                  borderRadius: BorderRadius.circular(ui(6)),
+                ),
               ),
+              SizedBox(width: ui(8)),
+              Text(
+                '历史记录',
+                style: TextStyle(
+                  fontSize: ui(16),
+                  color: _kTextDark,
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w600,
+                  height: 1.2,
+                ),
+              ),
+              const Spacer(),
+              InkWell(
+                onTap: onClose,
+                borderRadius: BorderRadius.circular(ui(8)),
+                child: Padding(
+                  padding: EdgeInsets.all(ui(8)),
+                  child: Icon(
+                    Icons.close_rounded,
+                    size: ui(18),
+                    color: _kTextSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: ui(12)),
+          Container(
+            height: ui(34),
+            decoration: BoxDecoration(
+              color: _kInnerGray,
+              borderRadius: BorderRadius.circular(ui(10)),
+            ),
+            padding: EdgeInsets.all(ui(3)),
+            child: Row(
+              children: [
+                _HistoryDrawerTabButton(
+                  label: '签到历史',
+                  selected: tab == _HistoryDrawerTab.signHistory,
+                  onTap: () => onTabChanged(_HistoryDrawerTab.signHistory),
+                ),
+                _HistoryDrawerTabButton(
+                  label: '补签申请',
+                  selected: tab == _HistoryDrawerTab.makeup,
+                  onTap: () => onTabChanged(_HistoryDrawerTab.makeup),
+                ),
+              ],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _HistoryDrawerTabButton extends StatelessWidget {
+  const _HistoryDrawerTabButton({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Expanded(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOut,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected ? Colors.white : Colors.transparent,
+            borderRadius: BorderRadius.circular(ui(8)),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.04),
+                      blurRadius: 6,
+                      offset: const Offset(0, 1),
+                    ),
+                  ]
+                : const [],
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: ui(13),
+              color: selected ? _kPurple : _kTextSecondary,
+              fontFamily: 'PingFang SC',
+              fontWeight: selected ? AppFont.w500 : AppFont.w400,
+              height: 1,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -2252,6 +2423,10 @@ class _HistorySummaryBar extends StatelessWidget {
 }
 
 class _HistoryEmpty extends StatelessWidget {
+  const _HistoryEmpty({this.message = '暂无签到记录'});
+
+  final String message;
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
@@ -2266,7 +2441,7 @@ class _HistoryEmpty extends StatelessWidget {
           ),
           SizedBox(height: ui(12)),
           Text(
-            '暂无签到记录',
+            message,
             style: TextStyle(
               fontSize: ui(13),
               color: _kTextHint,
@@ -2279,6 +2454,292 @@ class _HistoryEmpty extends StatelessWidget {
       ),
     );
   }
+}
+
+class _MakeupFilterBar extends StatelessWidget {
+  const _MakeupFilterBar({
+    required this.status,
+    required this.onStatusChanged,
+  });
+
+  final _MakeupStatusFilter status;
+  final ValueChanged<_MakeupStatusFilter> onStatusChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(ui(16), ui(16), ui(16), ui(8)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '审批状态',
+            style: TextStyle(
+              fontSize: ui(12),
+              color: _kTextSecondary,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w400,
+              height: 1,
+            ),
+          ),
+          SizedBox(height: ui(8)),
+          Container(
+            height: ui(34),
+            decoration: BoxDecoration(
+              color: _kInnerGray,
+              borderRadius: BorderRadius.circular(ui(10)),
+            ),
+            padding: EdgeInsets.all(ui(3)),
+            child: Row(
+              children: [
+                _HistoryStatusTab(
+                  label: '全部',
+                  selected: status == _MakeupStatusFilter.all,
+                  onTap: () => onStatusChanged(_MakeupStatusFilter.all),
+                ),
+                _HistoryStatusTab(
+                  label: '待审批',
+                  selected: status == _MakeupStatusFilter.pending,
+                  onTap: () => onStatusChanged(_MakeupStatusFilter.pending),
+                ),
+                _HistoryStatusTab(
+                  label: '已通过',
+                  selected: status == _MakeupStatusFilter.approved,
+                  onTap: () => onStatusChanged(_MakeupStatusFilter.approved),
+                ),
+                _HistoryStatusTab(
+                  label: '已驳回',
+                  selected: status == _MakeupStatusFilter.rejected,
+                  onTap: () => onStatusChanged(_MakeupStatusFilter.rejected),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MakeupSummaryBar extends StatelessWidget {
+  const _MakeupSummaryBar({required this.total});
+
+  final int total;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(ui(16), ui(12), ui(16), 0),
+      child: RichText(
+        text: TextSpan(
+          style: TextStyle(
+            fontSize: ui(12),
+            fontFamily: 'PingFang SC',
+            fontWeight: AppFont.w400,
+            height: 1,
+          ),
+          children: [
+            const TextSpan(
+              text: '共 ',
+              style: TextStyle(color: _kTextHint),
+            ),
+            TextSpan(
+              text: '$total',
+              style: const TextStyle(color: _kTextDark),
+            ),
+            const TextSpan(
+              text: ' 条补签申请',
+              style: TextStyle(color: _kTextHint),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CourseSignMakeupCard extends StatelessWidget {
+  const _CourseSignMakeupCard({required this.item, required this.onTap});
+
+  final StudentCourseSignMakeupItem item;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final (Color bg, Color fg) = switch (item.status) {
+      0 => (const Color(0xFFFFF3E0), const Color(0xFFFF9800)),
+      1 => (const Color(0xFFE8F5E9), _kStatusGreen),
+      2 => (const Color(0xFFFEE4E8), _kAttendRed),
+      _ => (_kInnerGray, _kTextSecondary),
+    };
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(ui(16)),
+      child: Container(
+        padding: EdgeInsets.all(ui(12)),
+        decoration: BoxDecoration(
+          color: _kCardBg,
+          borderRadius: BorderRadius.circular(ui(16)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    item.courseName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: ui(15),
+                      color: _kTextSection,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w600,
+                      height: 1.2,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: ui(6),
+                    vertical: ui(2),
+                  ),
+                  decoration: BoxDecoration(
+                    color: bg,
+                    borderRadius: BorderRadius.circular(ui(4)),
+                  ),
+                  child: Text(
+                    item.displayStatus,
+                    style: TextStyle(
+                      fontSize: ui(12),
+                      color: fg,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w400,
+                      height: 1,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: ui(8)),
+            Text(
+              '${item.signTypeLabel} · ${item.createTime.isEmpty ? '—' : item.createTime}',
+              style: TextStyle(
+                fontSize: ui(12),
+                color: _kTextHint,
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w400,
+                height: 1.4,
+              ),
+            ),
+            SizedBox(height: ui(6)),
+            Text(
+              item.reason,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: ui(13),
+                color: _kTextSecondary,
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w400,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+Future<void> _showCourseSignMakeupDetailDialog(
+  BuildContext context, {
+  required String title,
+  required List<({String label, String value})> fields,
+}) {
+  final ui = DashboardScaleScope.of(context).ui;
+  return showScaledDialog<void>(
+    context: context,
+    barrierColor: Colors.black.withValues(alpha: 0.18),
+    builder: (ctx) => GradientHeaderDialog(
+      title: title,
+      width: 460,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: double.infinity,
+            padding: EdgeInsets.all(ui(16)),
+            decoration: BoxDecoration(
+              color: _kInnerGray,
+              borderRadius: BorderRadius.circular(ui(12)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var i = 0; i < fields.length; i++) ...[
+                  if (i > 0) SizedBox(height: ui(6)),
+                  RichText(
+                    text: TextSpan(
+                      style: TextStyle(
+                        fontSize: ui(13),
+                        height: 1.5,
+                        fontFamily: 'PingFang SC',
+                      ),
+                      children: [
+                        TextSpan(
+                          text: '${fields[i].label}：',
+                          style: TextStyle(
+                            color: _kTextHint,
+                            fontWeight: AppFont.w400,
+                          ),
+                        ),
+                        TextSpan(
+                          text: fields[i].value.isEmpty ? '—' : fields[i].value,
+                          style: TextStyle(
+                            color: _kTextDark,
+                            fontWeight: AppFont.w400,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          SizedBox(height: ui(16)),
+          SizedBox(
+            width: double.infinity,
+            height: ui(44),
+            child: OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: _kBorderSoft),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(ui(12)),
+                ),
+              ),
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(
+                '关闭',
+                style: TextStyle(
+                  fontSize: ui(14),
+                  color: _kTextDark,
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w500,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 // =============================================================================
@@ -2405,315 +2866,139 @@ class _CourseCommentDialogState extends State<_CourseCommentDialog> {
   }
 }
 
+
 // =============================================================================
-// Demo 数据
+// API 数据映射
 // =============================================================================
 
-const List<_StatItem> _kDemoStats = [
-  _StatItem(value: '6', label: '小课应签课次'),
-  _StatItem(value: '6', label: '大课一键入册'),
-  _StatItem(value: '86.5', label: '小课打卡（合计）'),
-  _StatItem(value: '4', label: '迟到'),
-  _StatItem(value: '96.5%', label: '小课准时率', valueColor: _kPurple),
-];
+List<_StatItem> _statsFromSummary(StudentCheckInStat stat) {
+  final rate = stat.smallCourseOnTimeRate;
+  final rateLabel = rate > 0
+      ? (rate % 1 == 0 ? '%' : '%')
+      : '0%';
+  return [
+    _StatItem(value: '', label: '小课应签课次'),
+    _StatItem(value: '', label: '大课一键入册'),
+    _StatItem(value: '', label: '小课打卡（合计）'),
+    _StatItem(value: '', label: '迟到'),
+    _StatItem(value: rateLabel, label: '小课准时率', valueColor: _kPurple),
+  ];
+}
 
-const List<_RecentRecordData> _kDemoRecentRecords = [
-  _RecentRecordData(
-    date: '2026-03-29',
-    status: _AttendanceStatus.normal,
-    studentName: '郝江',
-    duration: '45分钟',
-    location: '艺术楼 报告厅',
-    tagPalette: _TagPalette.green,
-    tagInline: true,
-    startCard: '-',
-    endCard: '-',
-    method: '签到',
-    note: '教师一键签到入册',
-  ),
-  _RecentRecordData(
-    date: '2026-03-29',
-    status: _AttendanceStatus.absent,
-    studentName: '陈江凯',
-    duration: '45分钟',
-    location: '艺术楼 报告厅',
-    tagPalette: _TagPalette.green,
-    tagInline: true,
-    startCard: null,
-    endCard: null,
-    method: null,
-    note: '未检测到上下课打卡，记为缺勤',
-  ),
-  _RecentRecordData(
-    date: '2026-03-29',
-    status: _AttendanceStatus.normal,
-    studentName: '李梓燕',
-    duration: '45分钟',
-    location: '艺术楼 报告厅',
-    tagPalette: _TagPalette.green,
-    tagInline: true,
-    startCard: '08:00:02',
-    endCard: '08:55:02',
-    method: '扫码',
-    note: '无',
-  ),
-  _RecentRecordData(
-    date: '2026-03-29',
-    status: _AttendanceStatus.normal,
-    studentName: '郝江',
-    duration: '45分钟',
-    location: '艺术楼 报告厅',
-    tagPalette: _TagPalette.yellow,
-    tagInline: false,
-    startCard: '/',
-    endCard: '/',
-    method: '教师一键签到',
-    note: '教师一键签到入册',
-  ),
-  _RecentRecordData(
-    date: '2026-03-29',
-    status: _AttendanceStatus.normal,
-    studentName: '李梓燕',
-    duration: '45分钟',
-    location: '艺术楼 报告厅',
-    tagPalette: _TagPalette.yellow,
-    tagInline: false,
-    startCard: '08:00:02',
-    endCard: '08:55:02',
-    method: '扫码',
-    note: '无',
-  ),
-  _RecentRecordData(
-    date: '2026-03-29',
-    status: _AttendanceStatus.normal,
-    studentName: '李梓燕',
-    duration: '45分钟',
-    location: '艺术楼 报告厅',
-    tagPalette: _TagPalette.yellow,
-    tagInline: false,
-    startCard: '08:00:02',
-    endCard: '08:55:02',
-    method: '扫码',
-    note: '无',
-  ),
-];
+_RecentRecordData _recentRecordFromItem(StudentSignRecordItem item, int index) {
+  final start = item.studentSignInTime;
+  final end = item.studentSignOutTime;
+  return _RecentRecordData(
+    courseId: item.courseId,
+    date: item.date,
+    status: item.isAbsent ? _AttendanceStatus.absent : _AttendanceStatus.normal,
+    studentName: item.subjectName,
+    duration: item.durationLabel,
+    location: item.location,
+    tagPalette: index < 3 ? _TagPalette.green : _TagPalette.yellow,
+    tagInline: index < 3,
+    startCard: item.isAbsent
+        ? null
+        : (start == null || start.isEmpty ? '-' : start),
+    endCard: item.isAbsent ? null : (end == null || end.isEmpty ? '-' : end),
+    method: item.method.isEmpty ? null : item.method,
+    note: item.note.isEmpty
+        ? (item.isAbsent ? '未检测到上下课打卡，记为缺勤' : '无')
+        : item.note,
+  );
+}
 
-/// 「签到历史」抽屉用的扩展 demo 数据。日期分布刻意横跨本周 / 本月 /
-/// 本学期，确保三种时间范围筛选都能命中到几条记录，方便联调与回归。
-///
-/// 接入真实接口（如 `/app/school/v2/student/signHistoryList`）后，这里
-/// 应替换为 `studentRepository.signHistoryList(start, end, status)` 的
-/// 返回值；卡片渲染部分（[_RecentRecordCard]）已经是按字段驱动的，无需改动。
-const List<_RecentRecordData> _kDemoHistoryRecords = [
-  // —— 本周（2026-05-11 ~ 2026-05-17）——————————————————————————————
-  _RecentRecordData(
-    date: '2026-05-15',
-    status: _AttendanceStatus.normal,
-    studentName: '郝江',
-    duration: '45分钟',
-    location: '艺术楼 报告厅',
-    tagPalette: _TagPalette.green,
-    tagInline: true,
-    startCard: '08:00:12',
-    endCard: '08:54:38',
-    method: '人脸',
-    note: '准时到课',
-  ),
-  _RecentRecordData(
-    date: '2026-05-14',
-    status: _AttendanceStatus.normal,
-    studentName: '郝江',
-    duration: '45分钟',
-    location: '艺术楼 排练厅',
-    tagPalette: _TagPalette.green,
-    tagInline: true,
-    startCard: '09:58:21',
-    endCard: '10:44:52',
-    method: '扫码',
-    note: '无',
-  ),
-  _RecentRecordData(
-    date: '2026-05-13',
-    status: _AttendanceStatus.absent,
-    studentName: '郝江',
-    duration: '45分钟',
-    location: '艺术楼 报告厅',
-    tagPalette: _TagPalette.green,
-    tagInline: true,
-    startCard: null,
-    endCard: null,
-    method: null,
-    note: '未检测到上下课打卡，记为缺勤',
-  ),
-  _RecentRecordData(
-    date: '2026-05-12',
-    status: _AttendanceStatus.normal,
-    studentName: '郝江',
-    duration: '45分钟',
-    location: '艺术楼 209',
-    tagPalette: _TagPalette.green,
-    tagInline: true,
-    startCard: '14:02:33',
-    endCard: '14:47:09',
-    method: '按键打卡',
-    note: '无',
-  ),
-  _RecentRecordData(
-    date: '2026-05-11',
-    status: _AttendanceStatus.normal,
-    studentName: '郝江',
-    duration: '45分钟',
-    location: '艺术楼 报告厅',
-    tagPalette: _TagPalette.green,
-    tagInline: true,
-    startCard: '/',
-    endCard: '/',
-    method: '教师一键签到',
-    note: '教师一键签到入册',
-  ),
-  // —— 本月（5 月内的更早几天）——————————————————————————————————
-  _RecentRecordData(
-    date: '2026-05-08',
-    status: _AttendanceStatus.normal,
-    studentName: '郝江',
-    duration: '45分钟',
-    location: '艺术楼 排练厅',
-    tagPalette: _TagPalette.yellow,
-    tagInline: false,
-    startCard: '08:01:48',
-    endCard: '08:53:02',
-    method: '人脸',
-    note: '无',
-  ),
-  _RecentRecordData(
-    date: '2026-05-07',
-    status: _AttendanceStatus.absent,
-    studentName: '郝江',
-    duration: '45分钟',
-    location: '艺术楼 报告厅',
-    tagPalette: _TagPalette.yellow,
-    tagInline: false,
-    startCard: null,
-    endCard: null,
-    method: null,
-    note: '请假未补签',
-  ),
-  _RecentRecordData(
-    date: '2026-05-06',
-    status: _AttendanceStatus.normal,
-    studentName: '郝江',
-    duration: '45分钟',
-    location: '艺术楼 209',
-    tagPalette: _TagPalette.yellow,
-    tagInline: false,
-    startCard: '10:01:05',
-    endCard: '10:45:00',
-    method: '扫码',
-    note: '无',
-  ),
-  _RecentRecordData(
-    date: '2026-05-05',
-    status: _AttendanceStatus.normal,
-    studentName: '郝江',
-    duration: '45分钟',
-    location: '艺术楼 报告厅',
-    tagPalette: _TagPalette.yellow,
-    tagInline: false,
-    startCard: '14:05:11',
-    endCard: '14:49:33',
-    method: '按键打卡',
-    note: '准时',
-  ),
-  _RecentRecordData(
-    date: '2026-05-04',
-    status: _AttendanceStatus.normal,
-    studentName: '郝江',
-    duration: '45分钟',
-    location: '艺术楼 排练厅',
-    tagPalette: _TagPalette.yellow,
-    tagInline: false,
-    startCard: '/',
-    endCard: '/',
-    method: '教师一键签到',
-    note: '教师一键签到入册',
-  ),
-  // —— 本学期（4 月及更早）—————————————————————————————————————
-  _RecentRecordData(
-    date: '2026-04-28',
-    status: _AttendanceStatus.normal,
-    studentName: '郝江',
-    duration: '45分钟',
-    location: '艺术楼 209',
-    tagPalette: _TagPalette.yellow,
-    tagInline: false,
-    startCard: '08:00:21',
-    endCard: '08:54:11',
-    method: '扫码',
-    note: '无',
-  ),
-  _RecentRecordData(
-    date: '2026-04-24',
-    status: _AttendanceStatus.absent,
-    studentName: '郝江',
-    duration: '45分钟',
-    location: '艺术楼 报告厅',
-    tagPalette: _TagPalette.yellow,
-    tagInline: false,
-    startCard: null,
-    endCard: null,
-    method: null,
-    note: '迟到超 15 分钟，记为缺勤',
-  ),
-  _RecentRecordData(
-    date: '2026-04-18',
-    status: _AttendanceStatus.normal,
-    studentName: '郝江',
-    duration: '45分钟',
-    location: '艺术楼 排练厅',
-    tagPalette: _TagPalette.yellow,
-    tagInline: false,
-    startCard: '10:00:09',
-    endCard: '10:44:55',
-    method: '人脸',
-    note: '无',
-  ),
-  _RecentRecordData(
-    date: '2026-04-10',
-    status: _AttendanceStatus.normal,
-    studentName: '郝江',
-    duration: '45分钟',
-    location: '艺术楼 报告厅',
-    tagPalette: _TagPalette.yellow,
-    tagInline: false,
-    startCard: '14:00:32',
-    endCard: '14:46:08',
-    method: '扫码',
-    note: '无',
-  ),
-  _RecentRecordData(
-    date: '2026-03-29',
-    status: _AttendanceStatus.normal,
-    studentName: '郝江',
-    duration: '45分钟',
-    location: '艺术楼 209',
-    tagPalette: _TagPalette.yellow,
-    tagInline: false,
-    startCard: '08:00:02',
-    endCard: '08:55:02',
-    method: '扫码',
-    note: '无',
-  ),
-  _RecentRecordData(
-    date: '2026-03-15',
-    status: _AttendanceStatus.normal,
-    studentName: '郝江',
-    duration: '45分钟',
-    location: '艺术楼 报告厅',
-    tagPalette: _TagPalette.yellow,
-    tagInline: false,
-    startCard: '14:02:18',
-    endCard: '14:46:55',
-    method: '按键打卡',
-    note: '准时',
-  ),
-];
+class _MakeupReasonDialog extends StatefulWidget {
+  const _MakeupReasonDialog({required this.courseName});
+
+  final String courseName;
+
+  @override
+  State<_MakeupReasonDialog> createState() => _MakeupReasonDialogState();
+}
+
+class _MakeupReasonDialogState extends State<_MakeupReasonDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Dialog(
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(ui(16)),
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(ui(20)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              '申请补签',
+              style: TextStyle(
+                fontSize: ui(16),
+                color: _kTextDark,
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w600,
+              ),
+            ),
+            SizedBox(height: ui(8)),
+            Text(
+              widget.courseName,
+              style: TextStyle(
+                fontSize: ui(13),
+                color: _kTextSecondary,
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w400,
+              ),
+            ),
+            SizedBox(height: ui(12)),
+            TextField(
+              controller: _controller,
+              maxLines: 4,
+              decoration: InputDecoration(
+                hintText: '请填写补签原因',
+                filled: true,
+                fillColor: _kInnerGray,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(ui(8)),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: EdgeInsets.all(ui(12)),
+              ),
+            ),
+            SizedBox(height: ui(16)),
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('取消'),
+                  ),
+                ),
+                SizedBox(width: ui(12)),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: () {
+                      final text = _controller.text.trim();
+                      if (text.isEmpty) return;
+                      Navigator.of(context).pop(text);
+                    },
+                    child: const Text('提交申请'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

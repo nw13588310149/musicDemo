@@ -229,7 +229,10 @@ class HomeDashboardController extends StateNotifier<HomeDashboardState> {
 
       // 接口 color 字段作为卡片彩色标记（如 "#fed7aa"）
       final colorHex = item['color']?.toString();
-      final avatarRaw = teacher['headUrl']?.toString() ?? '';
+      final avatarRaw = teacher['headUrl']?.toString().trim() ?? '';
+      final logoRaw = item['logo']?.toString().trim().isNotEmpty == true
+          ? item['logo'].toString().trim()
+          : schoolClass['logo']?.toString().trim() ?? '';
 
       result.add(
         HomeCourseNotice(
@@ -237,7 +240,9 @@ class HomeDashboardController extends StateNotifier<HomeDashboardState> {
           endTime: endTime,
           subjectName: subjectName,
           teacherName: teacherName,
-          teacherAvatar: MediaUrl.resolve(avatarRaw),
+          teacherAvatar: MediaUrl.resolve(
+            avatarRaw.isNotEmpty ? avatarRaw : logoRaw,
+          ),
           description: durationText,
           status: _isEnded(item)
               ? HomeCourseStatus.ended

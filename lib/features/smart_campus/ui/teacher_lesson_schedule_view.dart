@@ -46,6 +46,7 @@ import '../../../core/network/api_response.dart';
 import '../../../core/widgets/app_date_time_pickers.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/popup_selector_field.dart';
+import '../../../core/widgets/scaled_dialog.dart';
 import '../../school/data/school_repository.dart';
 import '../../shell/state/shell_controller.dart';
 import '../../shell/ui/shell_layout.dart';
@@ -824,6 +825,23 @@ class _TeacherLessonScheduleViewState
     );
   }
 
+  /// 当前周课表内，指定日期 + 节次是否已有小课（含待审核申请幽灵卡）。
+  bool _slotHasSmallCourseAt(String dateIso, int lineNum) {
+    final dayIdx = _dayIndex(dateIso);
+    if (dayIdx < 0) return false;
+    final configs = _activeTimeConfigs;
+    var slotIdx = configs.indexWhere((c) => c.lineNum == lineNum);
+    if (slotIdx < 0) {
+      slotIdx = (lineNum - 1).clamp(0, configs.length - 1);
+    }
+    final cells = _serverCells ?? _emptyCells();
+    return cells[dayIdx][slotIdx].any(_isSmallScheduleCard);
+  }
+
+  bool _isSmallScheduleCard(_ScheduleCardData card) =>
+      card.kind == ScheduleCourseCardKind.smallOrange ||
+      card.kind == ScheduleCourseCardKind.smallBlue;
+
   /// 根据 `_weekStart` 拼出 7 天的 header（标签 + MM/DD + 是否今天）。
   List<_DayHeaderData> _buildDayHeaders() {
     final today = DateTime.now();
@@ -967,6 +985,7 @@ class _TeacherLessonScheduleViewState
                 initialClassId: apply.classId,
                 initialClassroomId: apply.classroomId?.toString(),
                 initialSubjectId: apply.subjectId?.toString(),
+                slotHasSmallCourseAt: _slotHasSmallCourseAt,
                 onCancel: () => Navigator.of(ctx).maybePop(),
                 onSubmitted: () => Navigator.of(ctx).pop(true),
               ),
@@ -1017,6 +1036,7 @@ class _TeacherLessonScheduleViewState
                 lineNum: _lineNumOf(slotIdx),
                 currentWeek: _currentWeek,
                 initialClassId: _firstClassId,
+                slotHasSmallCourseAt: _slotHasSmallCourseAt,
                 onCancel: () => Navigator.of(ctx).maybePop(),
                 onSubmitted: () => Navigator.of(ctx).pop(true),
               ),
@@ -2683,6 +2703,7 @@ class _ApplySmallLessonDrawer extends ConsumerStatefulWidget {
     required this.currentWeek,
     required this.onCancel,
     required this.onSubmitted,
+    required this.slotHasSmallCourseAt,
     this.initialClassId,
     this.initialClassroomId,
     this.initialSubjectId,
@@ -2711,6 +2732,9 @@ class _ApplySmallLessonDrawer extends ConsumerStatefulWidget {
   /// 「重新申请」场景下用驳回申请的原 subjectId 预选；
   /// 等 _loadSubjects 拉完后会校验该 id 是否在当前班级科目里。
   final String? initialSubjectId;
+
+  /// 查询当前周课表内指定日期 + 节次是否已有小课。
+  final bool Function(String dateIso, int lineNum) slotHasSmallCourseAt;
 
   final VoidCallback onCancel;
   final VoidCallback onSubmitted;
@@ -2891,6 +2915,22 @@ class _ApplySmallLessonDrawerState
       AppToast.show(context, '请先选择科目');
       return;
     }
+
+    final dates = _computeReuseDates();
+    final hasExistingSmall = dates.any(
+      (d) => widget.slotHasSmallCourseAt(_ymd(d), widget.lineNum),
+    );
+    if (hasExistingSmall) {
+      final confirmed = await showConfirmDialog(
+        context: context,
+        title: '提示',
+        content: '本时段已有小课，是否继续申请？',
+        confirmLabel: '继续申请',
+        cancelLabel: '取消',
+      );
+      if (!confirmed || !mounted) return;
+    }
+
     setState(() => _submitting = true);
 
     // classroomId / subjectId 后端期望 int；雪花长 classId / teacherId 走 String。
@@ -2902,7 +2942,6 @@ class _ApplySmallLessonDrawerState
     // 让后端按 token 自行解析。
     final teacherId = ref.read(shellControllerProvider).user.id;
 
-    final dates = _computeReuseDates();
     final color = _hexLabel;
     final courseList = <Map<String, dynamic>>[
       for (final d in dates)

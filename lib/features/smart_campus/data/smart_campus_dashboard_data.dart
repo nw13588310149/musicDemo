@@ -161,7 +161,8 @@ class SmartCampusDashboardData {
   final List<SmartCampusRoleScopeSectionData> roleScopeSections;
   final List<SmartCampusAlertData> alerts;
 
-  bool get isAdmin => role == SmartCampusRole.admin;
+  bool get isAdmin =>
+      role == SmartCampusRole.admin || role == SmartCampusRole.principal;
 }
 
 SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
@@ -884,11 +885,12 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
           ],
         ),
       );
+    case SmartCampusRole.principal:
     case SmartCampusRole.admin:
       return SmartCampusDashboardData(
         role: role,
         statColumns: 4,
-        roleTabs: const [SmartCampusRole.admin],
+        roleTabs: [role],
         noticeTitle: '校级通知',
         stats: const [
           SmartCampusStatCardData(label: '在籍学生', value: '75'),

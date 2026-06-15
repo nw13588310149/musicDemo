@@ -442,9 +442,8 @@ class _AdminNotificationManagementViewState
   Future<void> _onViewRecord(_NotificationRecord r) async {
     final detail = await _fetchNoticeDetail(r.id) ?? r;
     if (!mounted) return;
-    return showScaledDialog<void>(
+    return showNoticeDetailDialog<void>(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.18),
       builder: (ctx) => GradientHeaderDialog(
         title: '通知详情',
         width: 460,

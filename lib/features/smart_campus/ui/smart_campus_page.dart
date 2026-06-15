@@ -17,10 +17,12 @@ import 'admin_sign_management_view.dart';
 import 'admin_student_management_view.dart';
 import 'admin_teacher_management_view.dart';
 import 'dorm_manager_check_by_room_view.dart';
+import 'dorm_manager_check_in_view.dart';
 import 'dorm_manager_check_history_view.dart';
 import 'dorm_manager_home_view.dart';
 import 'dorm_manager_makeup_audit_view.dart';
 import 'group_chat_view.dart';
+import 'principal_inbox_view.dart';
 import 'principal_mailbox_view.dart';
 import 'student_check_in_view.dart';
 import 'student_dorm_check_view.dart';
@@ -157,15 +159,17 @@ class _SmartCampusPageBody extends ConsumerWidget {
       Navigator.of(context).pushNamed(RoutePaths.circle);
     }
 
-    // 管理员智慧校园首页：8 统计卡 + 10 项快捷入口 + 数据看板 + 四端职能 +
-    // 工作提醒 + 右侧档案/校级通知。三个共享入口直接复用全站对应页面：
-    //   - 群聊 → controller.openGroupChat → GroupChatView
-    //   - 校长信箱 → controller.openPrincipalMailbox → PrincipalMailboxView
-    //   - 校圈治理 → Navigator.pushNamed(circle) → CirclePage
-    // 从子页 backToDashboard 后会自动落回 AdminHomeView。
-    if (state.selectedRole == SmartCampusRole.admin) {
+    Widget buildPrincipalMailboxRoute() {
+      if (state.selectedRole == SmartCampusRole.principal) {
+        return PrincipalInboxView(onBack: controller.backToDashboard);
+      }
+      return PrincipalMailboxView(onBack: controller.backToDashboard);
+    }
+
+    // 管理员 / 校长智慧校园首页：复用同一套控制台与子路由。
+    if (state.selectedRole.usesAdminConsole) {
       if (state.mainView == SmartCampusMainView.principalMailbox) {
-        return PrincipalMailboxView(onBack: controller.backToDashboard);
+        return buildPrincipalMailboxRoute();
       }
       if (state.mainView == SmartCampusMainView.groupChat) {
         return GroupChatView(
@@ -265,7 +269,7 @@ class _SmartCampusPageBody extends ConsumerWidget {
         return TeacherClassWorkbenchView(onBack: controller.backToDashboard);
       }
       if (state.mainView == SmartCampusMainView.principalMailbox) {
-        return PrincipalMailboxView(onBack: controller.backToDashboard);
+        return buildPrincipalMailboxRoute();
       }
       // 教师/班主任端"授课课表"独立视图：与学生"我的课表"共用 mainView=mySchedule，
       // 但渲染 [TeacherLessonScheduleView]（多了 查看/编辑 切换 + legend +
@@ -374,7 +378,7 @@ class _SmartCampusPageBody extends ConsumerWidget {
 
     if (state.selectedRole == SmartCampusRole.student) {
       if (state.mainView == SmartCampusMainView.principalMailbox) {
-        return PrincipalMailboxView(onBack: controller.backToDashboard);
+        return buildPrincipalMailboxRoute();
       }
       // 学生端"我的班级"独立视图：从 dashboard 进入后切走，由 banner 上的
       // 返回按钮调 controller.backToDashboard() 回到首页。
@@ -436,7 +440,7 @@ class _SmartCampusPageBody extends ConsumerWidget {
     // 「按宿舍查寝 / 查寝历史 / 宿管请假」已接入独立视图（请假复用任课老师「我的请假」）。
     if (state.selectedRole == SmartCampusRole.dormManager) {
       if (state.mainView == SmartCampusMainView.principalMailbox) {
-        return PrincipalMailboxView(onBack: controller.backToDashboard);
+        return buildPrincipalMailboxRoute();
       }
       if (state.mainView == SmartCampusMainView.groupChat) {
         return GroupChatView(
@@ -453,6 +457,11 @@ class _SmartCampusPageBody extends ConsumerWidget {
       }
       if (state.mainView == SmartCampusMainView.dormHistory) {
         return DormManagerCheckHistoryView(
+          onBack: controller.backToDashboard,
+        );
+      }
+      if (state.mainView == SmartCampusMainView.dormCheckInManagement) {
+        return DormManagerCheckInView(
           onBack: controller.backToDashboard,
         );
       }
@@ -476,6 +485,7 @@ class _SmartCampusPageBody extends ConsumerWidget {
           onOpenSchoolCircle: openSchoolCircle,
           onOpenDormCheckByRoom: controller.openDormCheckByRoom,
           onOpenDormCheckHistory: controller.openDormHistory,
+          onOpenCheckInManagement: controller.openDormCheckInManagement,
           onOpenDormManagerLeave: controller.openMyTeacherLeave,
           onOpenDormMakeupAudit: controller.openDormMakeupAudit,
         );

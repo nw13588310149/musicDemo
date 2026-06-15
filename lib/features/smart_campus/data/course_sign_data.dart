@@ -3,6 +3,7 @@
 /// 考勤状态与后端一致：`0` 出勤 / `1` 缺勤 / `2` 迟到 / `3` 请假。
 library;
 
+import '../../../core/network/media_url.dart';
 import '../../../core/network/snowflake_id.dart';
 
 /// 课程 `type` 约定：0 = 大课，1 = 小课（课表、签课、班级等接口统一）。
@@ -39,6 +40,20 @@ enum CourseSignFlowStatus {
   static String labelFor(dynamic raw, {String fallback = '未签到'}) {
     return fromApi(raw)?.label ?? fallback;
   }
+}
+
+/// 大课是否已完成一键全班签到。
+bool isBigClassBulkSignCompleted({
+  required int courseSignStatus,
+  required List<CourseSignStudent> students,
+}) {
+  if (courseSignStatus >= CourseSignFlowStatus.studentStart.code) {
+    return true;
+  }
+  if (students.isNotEmpty && students.every((student) => student.status != null)) {
+    return true;
+  }
+  return false;
 }
 
 /// 从课表时间字段提取 `HH:mm`（支持 `yyyy-MM-dd HH:mm:ss` / ISO / 纯时分）。
@@ -328,6 +343,7 @@ class CourseSignSession {
     required this.classroom,
     required this.students,
     this.teacherName = '',
+    this.logoUrl = '',
     this.teacherCheckInTime,
     this.teacherCheckOutTime,
     this.adminConfirmed = false,
@@ -345,6 +361,7 @@ class CourseSignSession {
   final String classroom;
   final List<CourseSignStudent> students;
   final String teacherName;
+  final String logoUrl;
   final String? teacherCheckInTime;
   final String? teacherCheckOutTime;
   final bool adminConfirmed;
@@ -446,6 +463,7 @@ class CourseSignSession {
       classroom: classroom,
       students: students,
       teacherName: teacherName,
+      logoUrl: MediaUrl.resolve(_pickString(json, ['logo'], '')),
       teacherCheckInTime: _pickStringNullable(json, [
         'teacherCheckInTime',
         'teacherSignInTime',
@@ -488,6 +506,7 @@ class CourseSignSession {
       classroom: classroom,
       students: students ?? this.students,
       teacherName: teacherName,
+      logoUrl: logoUrl,
       teacherCheckInTime: teacherCheckInTime ?? this.teacherCheckInTime,
       teacherCheckOutTime: teacherCheckOutTime ?? this.teacherCheckOutTime,
       adminConfirmed: adminConfirmed ?? this.adminConfirmed,

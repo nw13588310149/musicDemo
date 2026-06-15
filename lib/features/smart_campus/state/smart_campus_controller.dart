@@ -23,11 +23,8 @@ final smartCampusControllerProvider =
       // 配合 record 的相等性比较，做到 idempotent。
       ref.listen<({String role, String identity, String userId})>(
         shellControllerProvider.select(
-          (s) => (
-            role: s.user.role,
-            identity: s.user.identity,
-            userId: s.user.id,
-          ),
+          (s) =>
+              (role: s.user.role, identity: s.user.identity, userId: s.user.id),
         ),
         (prev, next) {
           controller.applyBackendRole(
@@ -73,6 +70,7 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
     SmartCampusRole.headTeacher,
     SmartCampusRole.dormManager,
     SmartCampusRole.admin,
+    SmartCampusRole.principal,
   ];
 
   /// 后端 `AppSchoolTeacher.roles` 字段（CSV）单 token 到本地
@@ -85,8 +83,9 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
   static SmartCampusRole? _teacherRoleTokenToCampus(String token) {
     switch (token.trim().toLowerCase()) {
       case 'headmaster':
-      case 'manager':
       case 'principal':
+        return SmartCampusRole.principal;
+      case 'manager':
       case 'admin':
         return SmartCampusRole.admin;
       case 'head_teacher':
@@ -108,6 +107,7 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
   /// 展示优先级：admin > headTeacher > teacher > dormManager > student。
   /// 用作多身份默认落地视图（兼具最高权限 + 最常用的工作台）。
   static const List<SmartCampusRole> _rolePriority = [
+    SmartCampusRole.principal,
     SmartCampusRole.admin,
     SmartCampusRole.headTeacher,
     SmartCampusRole.teacher,
@@ -156,16 +156,18 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
 
     final mapped = mapBackendRoleToCampus(role, identity);
     _mappedBackendRole = mapped;
-    final isAdmin = mapped == SmartCampusRole.admin;
-    final available = isAdmin ? _allRoles : <SmartCampusRole>[mapped];
+    final isPrivileged =
+        mapped == SmartCampusRole.admin ||
+        mapped == SmartCampusRole.principal;
+    final available = isPrivileged ? _allRoles : <SmartCampusRole>[mapped];
 
     final SmartCampusRole nextSelected;
-    if (isAdmin) {
+    if (isPrivileged) {
       if (state.hasUserSelectedRole && available.contains(state.selectedRole)) {
         // 用户已主动选过身份，保留它。
         nextSelected = state.selectedRole;
       } else {
-        // 首次进入或还没主动选过：默认 admin 视图。
+        // 首次进入或还没主动选过：默认当前映射身份（校长 / 管理员）。
         nextSelected = mapped;
       }
     } else {
@@ -229,15 +231,17 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
     }
   }
 
-  /// 把后端 `AppSchoolTeacher` 列表中的 `roles` CSV 字段聚合 + 解析 +
-  /// 排序成 [SmartCampusRole] 列表。容忍：data 不是 List、item 不是
-  /// Map、roles 为空 / 非字符串、单条记录里有重复 token、跨校多条记录。
+  /// 把后端 `AppSchoolTeacher` 单对象或列表中的 `roles` CSV 字段聚合 +
+  /// 解析 + 排序成 [SmartCampusRole] 列表。生产接口当前返回单对象，
+  /// Swagger 示例曾返回列表，因此两种结构都兼容。
   List<SmartCampusRole> _parseTeacherRoles(dynamic data) {
-    if (data is! List) {
-      return const [];
-    }
+    final records = data is List
+        ? data
+        : data is Map
+        ? <dynamic>[data]
+        : const <dynamic>[];
     final tokens = <String>{};
-    for (final item in data) {
+    for (final item in records) {
       if (item is! Map) {
         continue;
       }
@@ -281,10 +285,7 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
         _sameRoleList(state.availableRoles, roles)) {
       return;
     }
-    state = state.copyWith(
-      selectedRole: nextSelected,
-      availableRoles: roles,
-    );
+    state = state.copyWith(selectedRole: nextSelected, availableRoles: roles);
   }
 
   /// 用户主动切换身份（`_RoleChip` / dashboard 内任课老师↔班主任 tab）。
@@ -638,9 +639,7 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
     if (state.mainView == SmartCampusMainView.dormCheckInManagement) {
       return;
     }
-    state = state.copyWith(
-      mainView: SmartCampusMainView.dormCheckInManagement,
-    );
+    state = state.copyWith(mainView: SmartCampusMainView.dormCheckInManagement);
   }
 
   /// 宿管端「补卡审核」入口。

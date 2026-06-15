@@ -52,7 +52,7 @@ class GeoException implements Exception {
       case GeoErrorKind.unsupported:
         return '当前环境不支持获取定位';
       case GeoErrorKind.permissionDenied:
-        return '已拒绝定位权限，请在浏览器地址栏左侧开启';
+        return message ?? '已拒绝定位权限，请在系统设置中开启';
       case GeoErrorKind.positionUnavailable:
         return '暂时无法获取位置，请检查网络与定位是否开启';
       case GeoErrorKind.timeout:

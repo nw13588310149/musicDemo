@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_client.dart';
@@ -18,7 +20,33 @@ class DormitoryRepository {
 
   static const _base = '/app/school/v2/dormitory';
 
-  /// 宿管首页通知列表。
+  Future<ApiResponse> _postEncoded(
+    String path,
+    Map<String, dynamic> body, {
+    Set<String> numericIdKeys = const {},
+    Set<String> numericIdArrayKeys = const {},
+    String idErrorMessage = 'id 格式错误',
+  }) {
+    final encoded = encodeNumericIdRequestBody(
+      body,
+      numericIdKeys: numericIdKeys,
+      numericIdArrayKeys: numericIdArrayKeys,
+    );
+    if (encoded == null) {
+      return Future.value(ApiResponse.failure(idErrorMessage));
+    }
+    return client.post(path, data: encoded);
+  }
+
+  Future<ApiResponse> _postLongId(String path, String id) {
+    return _postEncoded(
+      path,
+      <String, dynamic>{'id': id},
+      numericIdKeys: const {'id'},
+    );
+  }
+
+  /// 宿管首页通知列表。`AppSchoolNoticeListBO`：`current` / `size` 分页。
   Future<ApiResponse> noticeList({int current = 1, int size = 20}) {
     return client.post(
       '$_base/noticeList',
@@ -26,140 +54,149 @@ class DormitoryRepository {
     );
   }
 
-  /// 宿管端通知详情。`id` 为雪花 long 字符串。
+  /// 宿管端通知详情。`LongIdBO`：`id`(int64)。
   Future<ApiResponse> noticeDetail({required String id}) {
-    return client.post(
-      '$_base/noticeDetail',
-      data: <String, dynamic>{'id': readSnowflakeId(id) ?? id},
-    );
+    return _postLongId('$_base/noticeDetail', id);
   }
 
   // ============== 按宿舍查寝 ==============
 
-  /// 查寝顶部统计。Swagger 未定义请求体，统计范围由当前宿管账号决定。
+  /// 查寝顶部统计。无请求体。
   Future<ApiResponse> dormitoryCheckStat() {
     return client.post('$_base/dormitoryCheckStat');
   }
 
-  /// 宿管管辖宿舍楼列表。
+  /// 宿管管辖宿舍楼列表。无请求体。
   Future<ApiResponse> dormitoryManagedBuildingList() {
     return client.post('$_base/dormitoryManagedBuildingList');
   }
 
-  /// 指定宿舍楼的楼层列表。
+  /// 指定宿舍楼的楼层列表。`DormitoryFloorListReq`：`buildingId`(int64) 必填。
   Future<ApiResponse> dormitoryFloorList({required String buildingId}) {
-    return client.post(
+    return _postEncoded(
       '$_base/dormitoryFloorList',
-      data: <String, dynamic>{
-        'buildingId': readSnowflakeId(buildingId) ?? buildingId,
-      },
+      <String, dynamic>{'buildingId': buildingId},
+      numericIdKeys: const {'buildingId'},
+      idErrorMessage: '宿舍楼 id 格式错误',
     );
   }
 
-  /// 查寝寝室列表。
+  /// 查寝寝室列表。`DormitoryRoomCheckListReq`：`date` / `buildingId` / `floorId`。
   Future<ApiResponse> dormitoryCheckRoomList({
     String? buildingId,
     String? floorId,
     String? date,
   }) {
-    return client.post(
+    return _postEncoded(
       '$_base/dormitoryCheckRoomList',
-      data: _checkFilterBody(
-        buildingId: buildingId,
-        floorId: floorId,
-        date: date,
-      ),
+      <String, dynamic>{
+        if (date != null && date.isNotEmpty) 'date': date,
+        if (buildingId != null && buildingId.isNotEmpty)
+          'buildingId': buildingId,
+        if (floorId != null && floorId.isNotEmpty) 'floorId': floorId,
+      },
+      numericIdKeys: const {'buildingId', 'floorId'},
+      idErrorMessage: '宿舍楼或楼层 id 格式错误',
     );
   }
 
-  /// 查寝房间一键打卡。
+  /// 查寝房间一键打卡。`DormitoryRoomOneClickCheckInReq`：`roomId`(int64) 必填。
   Future<ApiResponse> dormitoryCheckRoomOneClick({
     required String roomId,
     String? date,
   }) {
-    final body = <String, dynamic>{'roomId': readSnowflakeId(roomId) ?? roomId};
-    if (date != null && date.isNotEmpty) body['date'] = date;
-    return client.post('$_base/dormitoryCheckRoomOneClick', data: body);
+    return _postEncoded(
+      '$_base/dormitoryCheckRoomOneClick',
+      <String, dynamic>{
+        'roomId': roomId,
+        if (date != null && date.isNotEmpty) 'date': date,
+      },
+      numericIdKeys: const {'roomId'},
+      idErrorMessage: '宿舍 id 格式错误',
+    );
   }
 
-  /// 单个学生查寝状态修改。
+  /// 单个学生查寝状态修改。`DormitoryUserCheckInUpdateReq`。
   Future<ApiResponse> dormitoryCheckUserUpdate({
     required String userId,
     required String status,
     String? date,
   }) {
-    final body = <String, dynamic>{
-      'userId': readSnowflakeId(userId) ?? userId,
-      'status': status,
-    };
-    if (date != null && date.isNotEmpty) body['date'] = date;
-    return client.post('$_base/dormitoryCheckUserUpdate', data: body);
+    return _postEncoded(
+      '$_base/dormitoryCheckUserUpdate',
+      <String, dynamic>{
+        'userId': userId,
+        'status': status,
+        if (date != null && date.isNotEmpty) 'date': date,
+      },
+      numericIdKeys: const {'userId'},
+      idErrorMessage: '学生 id 格式错误',
+    );
   }
 
   // ============== 宿管首页 / 历史 / 异常 / 补卡 ==============
 
-  /// 宿管首页工作台汇总。
+  /// 宿管首页工作台汇总。无请求体。
   Future<ApiResponse> index() {
     return client.post('$_base/index');
   }
 
-  /// 查寝历史记录。
+  /// 查寝历史记录。`DormitoryCheckHistoryReq`：`beginDate`/`endDate`/`current`/`size` 必填。
   Future<ApiResponse> dormitoryCheckHistory({
     String? buildingId,
     String? floorId,
     String? roomId,
-    String? beginDate,
-    String? endDate,
+    required String beginDate,
+    required String endDate,
     String? status,
     int current = 1,
     int size = 200,
   }) {
-    return client.post(
+    return _postEncoded(
       '$_base/dormitoryCheckHistory',
-      data: <String, dynamic>{
+      <String, dynamic>{
+        'beginDate': beginDate,
+        'endDate': endDate,
         'current': current,
         'size': size,
         if (buildingId != null && buildingId.isNotEmpty)
-          'buildingId': readSnowflakeId(buildingId) ?? buildingId,
-        if (floorId != null && floorId.isNotEmpty)
-          'floorId': readSnowflakeId(floorId) ?? floorId,
-        if (roomId != null && roomId.isNotEmpty)
-          'roomId': readSnowflakeId(roomId) ?? roomId,
-        if (beginDate != null && beginDate.isNotEmpty) 'beginDate': beginDate,
-        if (endDate != null && endDate.isNotEmpty) 'endDate': endDate,
+          'buildingId': buildingId,
+        if (floorId != null && floorId.isNotEmpty) 'floorId': floorId,
+        if (roomId != null && roomId.isNotEmpty) 'roomId': roomId,
         if (status != null && status.isNotEmpty) 'status': status,
       },
+      numericIdKeys: const {'buildingId', 'floorId', 'roomId'},
+      idErrorMessage: '查寝筛选 id 格式错误',
     );
   }
 
-  /// 单次查寝详情。
+  /// 单次查寝详情。`LongIdBO`。
   Future<ApiResponse> dormitoryCheckDetail({required String id}) {
-    return client.post(
-      '$_base/dormitoryCheckDetail',
-      data: <String, dynamic>{'id': readSnowflakeId(id) ?? id},
-    );
+    return _postLongId('$_base/dormitoryCheckDetail', id);
   }
 
-  /// 查寝异常处理。
+  /// 查寝异常处理。`DormitoryCheckExceptionHandleReq`。
   Future<ApiResponse> dormitoryCheckExceptionHandle({
     required String checkId,
     required String studentId,
     required int handleStatus,
     String remark = '',
   }) {
-    return client.post(
+    return _postEncoded(
       '$_base/dormitoryCheckExceptionHandle',
-      data: <String, dynamic>{
-        'checkId': readSnowflakeId(checkId) ?? checkId,
-        'studentId': readSnowflakeId(studentId) ?? studentId,
+      <String, dynamic>{
+        'checkId': checkId,
+        'studentId': studentId,
         'handleStatus': handleStatus,
         if (remark.isNotEmpty) 'remark': remark,
       },
+      numericIdKeys: const {'checkId', 'studentId'},
+      idErrorMessage: '查寝或学生 id 格式错误',
     );
   }
 
-  /// 导出查寝记录。
-  Future<ApiResponse> dormitoryCheckExport({
+  /// 导出查寝记录。GET `dormitoryCheckExport`，`DormitoryCheckExportReq`。
+  Future<Uint8List> dormitoryCheckExport({
     required String beginDate,
     required String endDate,
     String? buildingId,
@@ -167,78 +204,65 @@ class DormitoryRepository {
     String? roomId,
     String? status,
   }) {
-    return client.get(
+    final params = <String, dynamic>{
+      'beginDate': beginDate,
+      'endDate': endDate,
+      if (buildingId != null && buildingId.isNotEmpty)
+        'buildingId': readSnowflakeId(buildingId) ?? buildingId,
+      if (floorId != null && floorId.isNotEmpty)
+        'floorId': readSnowflakeId(floorId) ?? floorId,
+      if (roomId != null && roomId.isNotEmpty)
+        'roomId': readSnowflakeId(roomId) ?? roomId,
+      if (status != null && status.isNotEmpty) 'status': status,
+    };
+    return client.getBytes(
       '$_base/dormitoryCheckExport',
-      queryParameters: <String, dynamic>{
-        'beginDate': beginDate,
-        'endDate': endDate,
-        if (buildingId != null && buildingId.isNotEmpty)
-          'buildingId': readSnowflakeId(buildingId) ?? buildingId,
-        if (floorId != null && floorId.isNotEmpty)
-          'floorId': readSnowflakeId(floorId) ?? floorId,
-        if (roomId != null && roomId.isNotEmpty)
-          'roomId': readSnowflakeId(roomId) ?? roomId,
-        if (status != null && status.isNotEmpty) 'status': status,
-      },
+      queryParameters: params,
+      allowEmpty: true,
     );
   }
 
-  /// 宿管端补卡申请列表。
+  /// 宿管端补卡申请列表。`DormitoryMakeupListReq`：`current`/`size` 必填。
   Future<ApiResponse> dormitoryMakeupList({
     String? buildingId,
     int? status,
     int current = 1,
     int size = 200,
   }) {
-    return client.post(
+    return _postEncoded(
       '$_base/dormitoryMakeupList',
-      data: <String, dynamic>{
+      <String, dynamic>{
         'current': current,
         'size': size,
         if (buildingId != null && buildingId.isNotEmpty)
-          'buildingId': readSnowflakeId(buildingId) ?? buildingId,
+          'buildingId': buildingId,
         'status': ?status,
       },
+      numericIdKeys: const {'buildingId'},
+      idErrorMessage: '宿舍楼 id 格式错误',
     );
   }
 
-  /// 补卡申请详情。
+  /// 补卡申请详情。`LongIdBO`。
   Future<ApiResponse> dormitoryMakeupDetail({required String id}) {
-    return client.post(
-      '$_base/dormitoryMakeupDetail',
-      data: <String, dynamic>{'id': readSnowflakeId(id) ?? id},
-    );
+    return _postLongId('$_base/dormitoryMakeupDetail', id);
   }
 
-  /// 审批补卡申请。`status`: 1-通过 / 2-拒绝。
+  /// 审批补卡申请。`DormitoryMakeupAuditReq`：`status` 1-通过 / 2-拒绝。
   Future<ApiResponse> dormitoryMakeupAudit({
     required String id,
     required int status,
     String auditReason = '',
   }) {
-    return client.post(
+    return _postEncoded(
       '$_base/dormitoryMakeupAudit',
-      data: <String, dynamic>{
-        'id': readSnowflakeId(id) ?? id,
+      <String, dynamic>{
+        'id': id,
         'status': status,
         if (auditReason.isNotEmpty) 'auditReason': auditReason,
       },
+      numericIdKeys: const {'id'},
+      idErrorMessage: '补卡申请 id 格式错误',
     );
-  }
-
-  Map<String, dynamic> _checkFilterBody({
-    String? buildingId,
-    String? floorId,
-    String? date,
-  }) {
-    final body = <String, dynamic>{};
-    if (buildingId != null && buildingId.isNotEmpty) {
-      body['buildingId'] = readSnowflakeId(buildingId) ?? buildingId;
-    }
-    if (floorId != null && floorId.isNotEmpty) {
-      body['floorId'] = readSnowflakeId(floorId) ?? floorId;
-    }
-    if (date != null && date.isNotEmpty) body['date'] = date;
-    return body;
   }
 }

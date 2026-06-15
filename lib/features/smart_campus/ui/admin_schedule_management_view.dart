@@ -123,9 +123,26 @@ class _AdminScheduleManagementViewState
   /// `courseList` 都要求 classId 必填，所以默认进入 = 班级列表第 1 项；
   /// 列表为空前用空字符串占位，加载完成后自动回填。
   List<({String id, String name})> _classes = const [];
+  /// 班级 id → 是否小班（后端 `type`: 0 大班 / 1 小班）。
+  Map<String, bool> _classIsSmallById = const {};
   String? _selectedClassId;
   String _selectedClassName = '加载中…';
   bool _classesLoading = true;
+
+  bool get _selectedClassIsSmall =>
+      _selectedClassId != null &&
+      (_classIsSmallById[_selectedClassId] ?? false);
+
+  void _onScheduleModeChanged(_ScheduleMode next) {
+    if (next == _ScheduleMode.edit && _selectedClassIsSmall) return;
+    setState(() => _mode = next);
+  }
+
+  void _resetModeIfSmallClassSelected() {
+    if (_selectedClassIsSmall && _mode == _ScheduleMode.edit) {
+      _mode = _ScheduleMode.view;
+    }
+  }
 
   /// 「小课申请审核」用的字典：申请记录里只有 ID（classId / classroomId /
   /// subjectId / teacherId），需要查字典还原成名称才能在卡片上显示。
@@ -501,18 +518,23 @@ class _AdminScheduleManagementViewState
     final rows = _extractList(resp);
     final list = <({String id, String name})>[];
     final nameById = <String, String>{};
+    final isSmallById = <String, bool>{};
     for (final m in rows) {
       final id = _pickString(m, ['id', 'classId'], '');
       final name = _pickString(m, ['name', 'className', 'fullName'], '');
       if (id.isNotEmpty && name.isNotEmpty) {
         list.add((id: id, name: name));
         nameById[id] = name;
+        isSmallById[id] = _isSmallClassType(
+          m['type'] ?? m['classType'] ?? m['kind'],
+        );
       }
     }
     if (!mounted) return;
     setState(() {
       _classes = list;
       _classNameById = nameById;
+      _classIsSmallById = isSmallById;
       _classesLoading = false;
       if (list.isNotEmpty &&
           (_selectedClassId == null ||
@@ -524,6 +546,7 @@ class _AdminScheduleManagementViewState
       } else {
         _selectedClassName = '选择班级';
       }
+      _resetModeIfSmallClassSelected();
     });
   }
 
@@ -1074,6 +1097,7 @@ class _AdminScheduleManagementViewState
                   setState(() {
                     _selectedClassId = picked.id;
                     _selectedClassName = picked.name;
+                    _resetModeIfSmallClassSelected();
                   });
                   // 班级一变：先按新班重拉左侧时间表（节次可能不同），
                   // 再按新 configs 拉课表，保证 lineNum 落格正确。
@@ -1085,7 +1109,8 @@ class _AdminScheduleManagementViewState
               const Spacer(),
               _ViewEditSegment(
                 mode: _mode,
-                onChanged: (m) => setState(() => _mode = m),
+                editEnabled: !_selectedClassIsSmall,
+                onChanged: _onScheduleModeChanged,
               ),
             ],
           ),
@@ -1479,10 +1504,15 @@ class _ScheduleClassFilterFieldState extends State<_ScheduleClassFilterField> {
 }
 
 class _ViewEditSegment extends StatelessWidget {
-  const _ViewEditSegment({required this.mode, required this.onChanged});
+  const _ViewEditSegment({
+    required this.mode,
+    required this.onChanged,
+    this.editEnabled = true,
+  });
 
   final _ScheduleMode mode;
   final ValueChanged<_ScheduleMode> onChanged;
+  final bool editEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -1505,6 +1535,7 @@ class _ViewEditSegment extends StatelessWidget {
           _SegChip(
             label: '编辑',
             active: mode == _ScheduleMode.edit,
+            enabled: editEnabled,
             onTap: () => onChanged(_ScheduleMode.edit),
           ),
         ],
@@ -1518,17 +1549,19 @@ class _SegChip extends StatelessWidget {
     required this.label,
     required this.active,
     required this.onTap,
+    this.enabled = true,
   });
 
   final String label;
   final bool active;
   final VoidCallback onTap;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return InkWell(
-      onTap: onTap,
+      onTap: enabled ? onTap : null,
       borderRadius: BorderRadius.circular(ui(6)),
       child: Container(
         padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(4)),
@@ -1540,7 +1573,9 @@ class _SegChip extends StatelessWidget {
           label,
           style: TextStyle(
             fontSize: ui(12),
-            color: active ? Colors.white : _kTextHint,
+            color: active
+                ? Colors.white
+                : (enabled ? _kTextHint : const Color(0xFFD0CFD4)),
             fontFamily: 'PingFang SC',
             fontWeight: active ? AppFont.w500 : AppFont.w400,
             height: 1,
@@ -3938,6 +3973,15 @@ Future<String?> _showRejectDialog(
 // =============================================================================
 // 通用 helpers
 // =============================================================================
+
+/// 后端 `type`: 0 / 含「大」= 大班；1 / 含「小」= 小班。
+bool _isSmallClassType(dynamic raw) {
+  if (raw == null) return false;
+  if (raw is int) return raw == 1;
+  final s = raw.toString().trim().toLowerCase();
+  if (s.isEmpty) return false;
+  return s == '1' || s.contains('小') || s == 'small';
+}
 
 String _pickString(
   Map<String, dynamic> json,

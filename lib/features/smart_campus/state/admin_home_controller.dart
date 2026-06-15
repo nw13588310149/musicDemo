@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/admin_home_data.dart';
 import '../data/admin_repository.dart';
+import '../data/teacher_notice_data.dart';
 import 'admin_home_state.dart';
 
 final adminHomeControllerProvider =
@@ -44,5 +45,15 @@ class AdminHomeController extends StateNotifier<AdminHomeState> {
       summaryError: summaryResponse.isSuccess ? '' : summaryResponse.displayMsg,
       noticeError: noticeResponse.isSuccess ? '' : noticeResponse.displayMsg,
     );
+  }
+
+  Future<TeacherNoticeListItem?> loadNoticeDetail(String id) async {
+    if (id.isEmpty) return null;
+    final response = await _repository.noticeDetail(id: id);
+    if (!response.isSuccess) {
+      state = state.copyWith(noticeError: response.displayMsg);
+      return null;
+    }
+    return parseTeacherNoticeDetail(response.data);
   }
 }

@@ -43,7 +43,7 @@ class TeacherNoticeListItem {
       id: record.id,
       tag: record.type.isNotEmpty ? record.type : '通知',
       title: record.title,
-      time: _shortDisplayTime(record.time),
+      time: record.time,
       content: record.content,
       deptName: record.deptName,
       author: author,
@@ -92,15 +92,3 @@ TeacherNoticeListItem? parseTeacherNoticeDetail(dynamic raw) {
   };
 }
 
-String _shortDisplayTime(String raw) {
-  final trimmed = raw.trim();
-  if (trimmed.isEmpty || trimmed == '—') return '—';
-  final space = trimmed.indexOf(' ');
-  if (space >= 0 && space + 1 < trimmed.length) {
-    final tail = trimmed.substring(space + 1).trim();
-    if (RegExp(r'^\d{1,2}:\d{2}').hasMatch(tail)) {
-      return tail.length >= 5 ? tail.substring(0, 5) : tail;
-    }
-  }
-  return trimmed;
-}

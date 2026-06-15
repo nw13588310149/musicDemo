@@ -1,4 +1,4 @@
-enum SmartCampusRole { student, teacher, headTeacher, dormManager, admin }
+enum SmartCampusRole { student, teacher, headTeacher, dormManager, admin, principal }
 
 enum SmartCampusMainView {
   dashboard,
@@ -55,6 +55,8 @@ extension SmartCampusRoleX on SmartCampusRole {
         return '宿管';
       case SmartCampusRole.admin:
         return '管理员';
+      case SmartCampusRole.principal:
+        return '校长';
     }
   }
 
@@ -70,8 +72,14 @@ extension SmartCampusRoleX on SmartCampusRole {
         return '宿管';
       case SmartCampusRole.admin:
         return '管理';
+      case SmartCampusRole.principal:
+        return '校长';
     }
   }
+
+  /// 校长端暂时复用管理员控制台页面与子路由。
+  bool get usesAdminConsole =>
+      this == SmartCampusRole.admin || this == SmartCampusRole.principal;
 }
 
 /// 把后端 `myInfo` 接口返回的 `role` / `identity` 字段映射到智慧校园
@@ -108,19 +116,23 @@ SmartCampusRole mapBackendRoleToCampus(String role, [String identity = '']) {
     case 'admin':
     case 'administrator':
     case 'manager':
-    case 'principal':
-    case 'headmaster':
     case 'super':
     case 'superadmin':
     case 'schooladmin':
       return SmartCampusRole.admin;
+    case 'principal':
+    case 'headmaster':
+      return SmartCampusRole.principal;
   }
 
-  // 2. 中文 identity 兜底（注意：班主任要先于「老师」，校长/管理员要先于「教」）
+  // 2. 中文 identity 兜底（注意：班主任要先于「老师」，校长/管理员要分开识别）
   if (identity.contains('班主任')) {
     return SmartCampusRole.headTeacher;
   }
-  if (identity.contains('校长') || identity.contains('管理')) {
+  if (identity.contains('校长')) {
+    return SmartCampusRole.principal;
+  }
+  if (identity.contains('管理')) {
     return SmartCampusRole.admin;
   }
   if (identity.contains('宿管') || identity.contains('宿舍')) {
@@ -164,6 +176,7 @@ class SmartCampusState {
       SmartCampusRole.headTeacher,
       SmartCampusRole.dormManager,
       SmartCampusRole.admin,
+      SmartCampusRole.principal,
     ],
   });
 

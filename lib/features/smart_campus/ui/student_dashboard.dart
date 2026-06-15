@@ -727,6 +727,7 @@ _LessonRowData _lessonRowFromStudentCourse(
 
   return _LessonRowData(
     avatarSeed: avatarSeed,
+    logoUrl: resolveScheduleLogoUrl(flat),
     teacherName: displayName,
     courseName: subjectName,
     courseColor: courseColor,

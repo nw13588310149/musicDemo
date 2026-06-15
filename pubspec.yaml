@@ -86,6 +86,8 @@ dependencies:
   # 回退到 no-op，不会触发原生绑定缺失错误。
   getuiflut: ^0.2.41
   permission_handler: ^12.0.1
+  geolocator: ^13.0.2
+  geocoding: ^3.0.0
   camera: ^0.11.1
   image: ^4.5.4
   music_xml: ^2.7.0
@@ -188,6 +190,7 @@ flutter:
     - assets/images/groupChat/
     - assets/images/xiaoquan/
     - assets/images/smartCampus/
+    - assets/web/baidu_map.html
     - assets/images/circle/
     - assets/audio/demo.mid
     - assets/audio/demo.mp3

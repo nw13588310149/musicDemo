@@ -6,9 +6,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/api_response.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
+import '../../../core/widgets/smooth_circle_network_avatar.dart';
 import '../../school/data/school_repository.dart';
 import '../../shell/state/shell_state.dart';
 import '../../shell/ui/shell_layout.dart';
+import '../data/schedule_course_card_builder.dart';
 import '../data/smart_campus_dashboard_data.dart';
 import '../data/student_repository.dart';
 import '../data/teacher_notice_data.dart';
@@ -1536,9 +1538,8 @@ class _TeacherNoticePanelState extends ConsumerState<_TeacherNoticePanel> {
       AppToast.show(context, '通知详情加载失败');
       return;
     }
-    await showScaledDialog<void>(
+    await showNoticeDetailDialog<void>(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.18),
       builder: (ctx) => GradientHeaderDialog(
         title: '通知详情',
         width: 460,
@@ -1926,6 +1927,7 @@ class _TeacherNoticeCard extends StatelessWidget {
 class _LessonRowData {
   const _LessonRowData({
     required this.avatarSeed,
+    required this.logoUrl,
     required this.teacherName,
     required this.courseName,
     required this.courseColor,
@@ -1936,6 +1938,7 @@ class _LessonRowData {
   });
 
   final String avatarSeed;
+  final String logoUrl;
   final String teacherName;
   final String courseName;
   final Color courseColor;
@@ -2405,6 +2408,7 @@ _LessonRowData _lessonRowFromCourse(
 
   return _LessonRowData(
     avatarSeed: avatarSeed,
+    logoUrl: resolveScheduleLogoUrl(row),
     teacherName: displayName,
     courseName: subjectName,
     courseColor: courseColor,
@@ -2881,7 +2885,11 @@ class _LessonTeacherRow extends StatelessWidget {
       children: [
         Opacity(
           opacity: muted ? 0.72 : 1,
-          child: _LessonSeedAvatar(seed: data.avatarSeed, size: ui(40)),
+          child: _LessonSeedAvatar(
+            seed: data.avatarSeed,
+            logoUrl: data.logoUrl,
+            size: ui(40),
+          ),
         ),
         SizedBox(width: ui(8)),
         Expanded(
@@ -2989,13 +2997,26 @@ class _LessonTeacherRow extends StatelessWidget {
 /// 与学生端 `_SeedAvatar` 视觉一致的渐变首字头像。
 /// 各取首字 `seed.codeUnitAt(0)` 在 5 套调色盘中循环。
 class _LessonSeedAvatar extends StatelessWidget {
-  const _LessonSeedAvatar({required this.seed, required this.size});
+  const _LessonSeedAvatar({
+    required this.seed,
+    required this.logoUrl,
+    required this.size,
+  });
 
   final String seed;
+  final String logoUrl;
   final double size;
 
   @override
   Widget build(BuildContext context) {
+    return SmoothCircleNetworkAvatar(
+      url: logoUrl,
+      size: size,
+      placeholder: _buildFallback(),
+    );
+  }
+
+  Widget _buildFallback() {
     final palettes = <List<Color>>[
       const [Color(0xFFFFD9E3), Color(0xFFFFBFD0)],
       const [Color(0xFFD8E4FF), Color(0xFFB9D0FF)],

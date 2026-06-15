@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_response.dart';
+import '../../../core/network/snowflake_id.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/storage/app_storage.dart';
 
@@ -12,6 +13,10 @@ import '../../../core/storage/app_storage.dart';
 /// **校长信箱**（`POST /app/school/v2/user/*`）：
 ///   - `principalMailboxList`    我提交的校长信箱列表（按 status 过滤）
 ///   - `principalMailboxSubmit`  提交校长信箱
+///
+/// **校长端收件箱**（`POST /app/school/v2/headmaster/*`）：
+///   - `headmasterPrincipalMailboxList`   校长查看来信列表
+///   - `headmasterPrincipalMailboxReply`  校长回复来信
 ///
 /// **意见反馈**（`POST /app/user/*`，与学校上下文无关）：
 ///   - `feedbackList`            我提交的意见反馈列表（分页）
@@ -36,6 +41,7 @@ class PrincipalMailboxRepository {
   final AppStorage storage;
 
   static const _base = '/app/school/v2/user';
+  static const _headmasterBase = '/app/school/v2/headmaster';
   static const _userBase = '/app/user';
 
   /// 「我提交的校长信箱」列表。
@@ -84,6 +90,39 @@ class PrincipalMailboxRepository {
         'schoolId': sid,
       },
     );
+  }
+
+  /// 校长端：查看来信列表。
+  ///
+  /// `status`：0 已发送 / 1 已回复 / 2 已关闭
+  Future<ApiResponse> headmasterPrincipalMailboxList({
+    int current = 1,
+    int size = 10,
+    int status = 0,
+  }) {
+    return client.post(
+      '$_headmasterBase/principalMailboxList',
+      data: <String, dynamic>{
+        'current': current,
+        'size': size,
+        'status': status,
+      },
+    );
+  }
+
+  /// 校长端：回复来信。
+  Future<ApiResponse> headmasterPrincipalMailboxReply({
+    required String id,
+    required String replyContent,
+  }) {
+    final encoded = encodeNumericIdRequestBody(
+      <String, dynamic>{'id': id, 'replyContent': replyContent},
+      numericIdKeys: const {'id'},
+    );
+    if (encoded == null) {
+      return Future.value(ApiResponse.failure('信件 id 无效'));
+    }
+    return client.post('$_headmasterBase/principalMailboxReply', data: encoded);
   }
 
   // ============== 意见反馈 ==============

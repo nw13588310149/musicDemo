@@ -166,6 +166,8 @@ class TeacherClassSignDetail {
     required this.shouldCount,
     required this.presentCount,
     required this.students,
+    this.teacherSignInTime,
+    this.teacherSignOutTime,
   });
 
   final String courseId;
@@ -173,9 +175,12 @@ class TeacherClassSignDetail {
   final int shouldCount;
   final int presentCount;
   final List<CourseSignStudent> students;
+  final String? teacherSignInTime;
+  final String? teacherSignOutTime;
 
   factory TeacherClassSignDetail.fromJson(dynamic raw) {
     final map = _unwrapMap(raw) ?? const <String, dynamic>{};
+    final teacherSignIn = _asMap(map['teacherSignIn']);
     return TeacherClassSignDetail(
       courseId: pickFirstSnowflakeId(map, ['courseId', 'id']) ?? '',
       courseSignStatus: _pickInt(map, ['courseSignStatus', 'signStatus']),
@@ -184,6 +189,12 @@ class TeacherClassSignDetail {
       students: parseCourseSignStudentList(
         map['studentList'] ?? map['students'] ?? map['list'],
       ),
+      teacherSignInTime: teacherSignIn == null
+          ? null
+          : _pickString(teacherSignIn, ['signInTime', 'teacherSignInTime']),
+      teacherSignOutTime: teacherSignIn == null
+          ? null
+          : _pickString(teacherSignIn, ['signOutTime', 'teacherSignOutTime']),
     );
   }
 }

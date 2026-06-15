@@ -124,18 +124,21 @@ class ApiClient {
 
   Future<Uint8List> getBytes(
     String url, {
+    Map<String, dynamic>? queryParameters,
     Map<String, dynamic>? headers,
     Duration? timeout,
+    bool allowEmpty = false,
   }) async {
     final response = await _dio.get<List<int>>(
       url,
+      queryParameters: queryParameters,
       options: _buildOptions(
         headers: headers,
         timeout: timeout,
       ).copyWith(responseType: ResponseType.bytes),
     );
     final bytes = response.data;
-    if (bytes == null || bytes.isEmpty) {
+    if (bytes == null || (!allowEmpty && bytes.isEmpty)) {
       throw StateError('Empty response bytes');
     }
     return Uint8List.fromList(bytes);

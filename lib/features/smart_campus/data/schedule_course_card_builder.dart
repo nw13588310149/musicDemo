@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/network/media_url.dart';
 import 'schedule_color_palette.dart';
 
 /// 课表网格内课程卡片的四种视觉主题（与管理员排课页一致）。
@@ -17,6 +18,7 @@ class ScheduleCourseCardData {
     required this.location,
     required this.name,
     required this.subline,
+    this.logoUrl = '',
     this.capacity,
     this.bgColor,
   });
@@ -25,6 +27,7 @@ class ScheduleCourseCardData {
   final String location;
   final String name;
   final String subline;
+  final String logoUrl;
   final String? capacity;
   final Color? bgColor;
 }
@@ -82,6 +85,7 @@ ScheduleCourseCardData buildScheduleCourseCard(
       location: location,
       name: name,
       subline: className.isNotEmpty ? className : teacher,
+      logoUrl: resolveScheduleLogoUrl(json),
       capacity: pickScheduleCapacityLabel(json),
       bgColor: colorOverride,
     );
@@ -93,8 +97,25 @@ ScheduleCourseCardData buildScheduleCourseCard(
     subline: teacher.isEmpty
         ? className
         : (className.isEmpty ? teacher : '$teacher-$className'),
+    logoUrl: resolveScheduleLogoUrl(json),
     bgColor: colorOverride,
   );
+}
+
+/// 课程与班级相关接口统一下发的 `logo`。课程列表为顶层字段，下一节课等
+/// 组合响应可能把它放在 `schoolClass` / `classInfo` 内。
+String resolveScheduleLogoUrl(Map<String, dynamic> json) {
+  var raw = pickScheduleString(json, ['logo', 'logoUrl', 'classLogo']);
+  if (raw.isEmpty) {
+    for (final key in ['schoolClass', 'classInfo', 'class']) {
+      final nested = json[key];
+      if (nested is! Map) continue;
+      final map = nested.map((key, value) => MapEntry(key.toString(), value));
+      raw = pickScheduleString(map, ['logo', 'logoUrl', 'classLogo']);
+      if (raw.isNotEmpty) break;
+    }
+  }
+  return raw.isEmpty ? '' : MediaUrl.resolve(raw);
 }
 
 String pickScheduleString(

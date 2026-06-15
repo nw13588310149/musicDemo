@@ -4,6 +4,7 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   connectivity_plus
+  geolocator_windows
   media_kit_video
   permission_handler_windows
   record_windows

@@ -15,8 +15,10 @@
 //   - 状态徽章配色：正常 #A773FF / 请假免检 #1CD097 / 迟到 #325BFF /
 //     未打卡 #FF323C
 //
-// 表格区列：
-//   场次（晨/晚）| 宿舍 | 状态 | 规定时间 | 打卡时间 | 备注
+// 表格区列：学生 | 宿舍/床位 | 状态 | 查寝日期 | 打卡时间 | 操作
+//
+// 页面结构（自上而下）：
+//   banner → 4 张统计卡 → 14 天日期条 → 宿舍楼/楼层筛选 → 表格列表
 //
 // 在 by-room 视图基础之上额外补充的「历史能力」：
 //   1. 日期切换 → 即时刷新统计卡 + 列表
@@ -38,7 +40,7 @@ import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/popup_selector_field.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/dormitory_check_data.dart';
-import '../data/dormitory_repository.dart';
+import '../services/dormitory_export_saver.dart';
 import '../state/dormitory_manager_controller.dart';
 import 'widgets/dormitory_detail_dialog.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -63,16 +65,28 @@ const Color _kGreen = Color(0xFF1CD097);
 enum _HistoryStatus {
   normal('正常', _kPurpleSolid),
   absent('未打卡', _kRed),
+  missing('缺勤', _kRed),
   late_('晚归', _kBlue);
 
   const _HistoryStatus(this.label, this.bg);
   final String label;
   final Color bg;
 
+  static _HistoryStatus fromLabel(String label) {
+    return switch (label) {
+      '正常' || '已打卡' => _HistoryStatus.normal,
+      '晚归' => _HistoryStatus.late_,
+      '缺勤' => _HistoryStatus.missing,
+      '未打卡' => _HistoryStatus.absent,
+      _ => fromCheckStatus(DormitoryStudentCheckStatus.fromApi(label)),
+    };
+  }
+
   static _HistoryStatus fromCheckStatus(DormitoryStudentCheckStatus status) {
     return switch (status) {
       DormitoryStudentCheckStatus.normal => _HistoryStatus.normal,
       DormitoryStudentCheckStatus.lateReturn => _HistoryStatus.late_,
+      DormitoryStudentCheckStatus.absent => _HistoryStatus.missing,
       DormitoryStudentCheckStatus.unchecked => _HistoryStatus.absent,
     };
   }
@@ -114,17 +128,8 @@ class _DormManagerCheckHistoryViewState
   late List<_CalendarDay> _days;
   late int _selectedDayIndex;
 
-  List<DormitoryBuildingOption> _buildingOptions = const [
-    DormitoryBuildingOption.all,
-  ];
-  List<DormitoryFloorOption> _floorOptions = const [
-    DormitoryFloorOption.all,
-  ];
   DormitoryBuildingOption _selectedBuilding = DormitoryBuildingOption.all;
   DormitoryFloorOption _selectedFloor = DormitoryFloorOption.all;
-
-  bool _loadingFloors = false;
-  int _loadToken = 0;
 
   @override
   void initState() {
@@ -139,62 +144,38 @@ class _DormManagerCheckHistoryViewState
   String get _selectedDateText => _days[_selectedDayIndex].isoDate;
 
   Future<void> _bootstrap() async {
-    await _loadBuildings();
+    await ref
+        .read(dormitoryManagerControllerProvider.notifier)
+        .loadManagedBuildings();
     await _reloadAll();
   }
 
-  Future<void> _loadBuildings() async {
-    final resp =
-        await ref.read(dormitoryRepositoryProvider).dormitoryManagedBuildingList();
-    if (!mounted) return;
-    setState(() {
-      _buildingOptions = resp.isSuccess
-          ? parseDormitoryManagedBuildingList(resp.data)
-          : const [DormitoryBuildingOption.all];
-    });
-  }
-
   Future<void> _loadFloors(String buildingId) async {
-    if (buildingId.isEmpty) {
-      setState(() {
-        _floorOptions = const [DormitoryFloorOption.all];
-        _selectedFloor = DormitoryFloorOption.all;
-        _loadingFloors = false;
-      });
-      return;
-    }
-    setState(() => _loadingFloors = true);
-    final resp = await ref
-        .read(dormitoryRepositoryProvider)
-        .dormitoryFloorList(buildingId: buildingId);
-    if (!mounted) return;
-    setState(() {
-      _floorOptions = resp.isSuccess
-          ? parseDormitoryFloorList(resp.data)
-          : const [DormitoryFloorOption.all];
-      _selectedFloor = DormitoryFloorOption.all;
-      _loadingFloors = false;
-    });
+    await ref
+        .read(dormitoryManagerControllerProvider.notifier)
+        .loadFloors(buildingId);
   }
 
   Future<void> _reloadAll() async {
-    final token = ++_loadToken;
-    final buildingId =
-        _selectedBuilding.id.isEmpty ? null : _selectedBuilding.id;
+    final buildingId = _selectedBuilding.id.isEmpty
+        ? null
+        : _selectedBuilding.id;
     final floorId = _selectedFloor.id.isEmpty ? null : _selectedFloor.id;
-    await ref.read(dormitoryManagerControllerProvider.notifier).loadHistory(
-      buildingId: buildingId,
-      floorId: floorId,
-      date: _selectedDateText,
-    );
-    if (!mounted || token != _loadToken) return;
+    await ref
+        .read(dormitoryManagerControllerProvider.notifier)
+        .loadHistory(
+          buildingId: buildingId,
+          floorId: floorId,
+          date: _selectedDateText,
+        );
   }
 
   Future<void> _exportHistory() async {
-    final buildingId =
-        _selectedBuilding.id.isEmpty ? null : _selectedBuilding.id;
+    final buildingId = _selectedBuilding.id.isEmpty
+        ? null
+        : _selectedBuilding.id;
     final floorId = _selectedFloor.id.isEmpty ? null : _selectedFloor.id;
-    final response = await ref
+    final bytes = await ref
         .read(dormitoryManagerControllerProvider.notifier)
         .exportHistory(
           buildingId: buildingId,
@@ -202,14 +183,23 @@ class _DormManagerCheckHistoryViewState
           date: _selectedDateText,
         );
     if (!mounted) return;
-    if (response.isSuccess) {
-      final url = parseDormitoryCheckExportUrl(response.data);
-      AppToast.show(
-        context,
-        url == null || url.isEmpty ? '导出任务已提交' : '导出地址：$url',
-      );
+    if (bytes == null) {
+      AppToast.show(context, '导出失败，请稍后重试');
+      return;
+    }
+    if (bytes.isEmpty) {
+      AppToast.show(context, '当前筛选条件下暂无可导出的查寝记录');
+      return;
+    }
+    final result = await saveDormitoryExport(
+      bytes: bytes,
+      suggestedName: '查寝记录_$_selectedDateText.xlsx',
+    );
+    if (!mounted || result.cancelled) return;
+    if (result.ok) {
+      AppToast.show(context, '查寝记录已导出');
     } else {
-      AppToast.show(context, response.displayMsg);
+      AppToast.show(context, result.error ?? '保存失败');
     }
   }
 
@@ -225,7 +215,7 @@ class _DormManagerCheckHistoryViewState
     }
     await showDormitoryDetailDialog(
       context,
-      title: '${item.studentName} · ${item.checkType}',
+      title: '${item.studentName} · 查寝详情',
       fields: fields,
     );
   }
@@ -238,16 +228,9 @@ class _DormManagerCheckHistoryViewState
     if (!mounted || remark == null) return;
     final response = await ref
         .read(dormitoryManagerControllerProvider.notifier)
-        .handleException(
-          item: item,
-          handleStatus: 1,
-          remark: remark,
-        );
+        .handleException(item: item, handleStatus: 1, remark: remark);
     if (!mounted) return;
-    AppToast.show(
-      context,
-      response.isSuccess ? '异常已处理' : response.displayMsg,
-    );
+    AppToast.show(context, response.isSuccess ? '异常已处理' : response.displayMsg);
   }
 
   Future<void> _onBuildingChanged(DormitoryBuildingOption option) async {
@@ -289,14 +272,11 @@ class _DormManagerCheckHistoryViewState
               onExport: managerState.exporting ? null : _exportHistory,
             ),
             SizedBox(height: ui(16)),
-            _FilterRow(
-              buildingOptions: _buildingOptions,
-              floorOptions: _floorOptions,
-              selectedBuilding: _selectedBuilding,
-              selectedFloor: _selectedFloor,
-              floorEnabled: _selectedBuilding.id.isNotEmpty && !_loadingFloors,
-              onBuildingChanged: (v) => unawaited(_onBuildingChanged(v)),
-              onFloorChanged: (v) => unawaited(_onFloorChanged(v)),
+            _StatsRow(
+              beds: stat.bedCount,
+              normal: stat.normalCount,
+              lateReturn: stat.lateCount,
+              absent: stat.notCheckedCount,
             ),
             SizedBox(height: ui(16)),
             MainContentLoadingShell(
@@ -309,22 +289,24 @@ class _DormManagerCheckHistoryViewState
                     days: _days,
                     selectedIndex: _selectedDayIndex,
                     dateText: _selectedDateText,
-                    statText: '共 ${historyItems.length} 条记录',
+                    statText: '共 ${historyItems.length} 条',
                     onTapDay: _onTapDay,
                   ),
                   SizedBox(height: ui(16)),
-                  _StatsRow(
-                    beds: stat.bedCount,
-                    normal: stat.normalCount,
-                    lateReturn: stat.lateCount,
-                    absent: stat.notCheckedCount,
+                  _FilterRow(
+                    buildingOptions: managerState.managedBuildings,
+                    floorOptions: managerState.floorOptions,
+                    selectedBuilding: _selectedBuilding,
+                    selectedFloor: _selectedFloor,
+                    floorEnabled:
+                        _selectedBuilding.id.isNotEmpty &&
+                        !managerState.loadingFloors,
+                    onBuildingChanged: (v) => unawaited(_onBuildingChanged(v)),
+                    onFloorChanged: (v) => unawaited(_onFloorChanged(v)),
                   ),
                   SizedBox(height: ui(16)),
                   if (loadError.isNotEmpty)
-                    _LoadErrorHint(
-                      message: loadError,
-                      onRetry: _reloadAll,
-                    )
+                    _LoadErrorHint(message: loadError, onRetry: _reloadAll)
                   else if (historyItems.isEmpty)
                     const _EmptyState()
                   else
@@ -564,11 +546,7 @@ class _DormitorySelectFieldState<T> extends State<_DormitorySelectField<T>> {
         padding: EdgeInsets.symmetric(horizontal: ui(16)),
         child: Row(
           children: [
-            Icon(
-              widget.icon,
-              size: ui(16),
-              color: const Color(0xFFC6C6C6),
-            ),
+            Icon(widget.icon, size: ui(16), color: const Color(0xFFC6C6C6)),
             SizedBox(width: ui(10)),
             Expanded(
               child: Text(
@@ -822,7 +800,7 @@ class _StatsRow extends StatelessWidget {
       children: [
         Expanded(
           child: _StatCard(
-            label: '在册床位',
+            label: '记录总数',
             value: beds,
             gradient: const LinearGradient(
               begin: Alignment.topRight,
@@ -836,7 +814,7 @@ class _StatsRow extends StatelessWidget {
         SizedBox(width: ui(12)),
         Expanded(
           child: _StatCard(
-            label: '正常口径',
+            label: '正常',
             value: normal,
             gradient: const LinearGradient(
               begin: Alignment.topRight,
@@ -971,7 +949,7 @@ class _StatCard extends StatelessWidget {
 }
 
 // =============================================================================
-// 历史记录表格：场次 | 宿舍 | 学生 | 状态 | 规定时间 | 打卡时间 | 备注
+// 历史记录表格：学生 | 宿舍/床位 | 状态 | 查寝日期 | 打卡时间 | 操作
 // =============================================================================
 
 class _HistoryTable extends StatelessWidget {
@@ -1005,13 +983,12 @@ class _HistoryTable extends StatelessWidget {
             decoration: const BoxDecoration(color: _kCardGreyBg),
             child: Row(
               children: [
-                SizedBox(width: ui(72), child: const _HeaderText('场次')),
-                SizedBox(width: ui(160), child: const _HeaderText('宿舍')),
-                SizedBox(width: ui(88), child: const _HeaderText('学生')),
-                SizedBox(width: ui(72), child: const _HeaderText('状态')),
-                SizedBox(width: ui(96), child: const _HeaderText('规定时间')),
-                SizedBox(width: ui(88), child: const _HeaderText('打卡时间')),
-                const Expanded(child: _HeaderText('备注 / 操作')),
+                Expanded(flex: 22, child: const _HeaderText('学生')),
+                Expanded(flex: 28, child: const _HeaderText('宿舍 / 床位')),
+                Expanded(flex: 12, child: const _HeaderText('状态')),
+                Expanded(flex: 16, child: const _HeaderText('查寝日期')),
+                Expanded(flex: 14, child: const _HeaderText('打卡时间')),
+                Expanded(flex: 14, child: const _HeaderText('操作')),
               ],
             ),
           ),
@@ -1047,104 +1024,206 @@ class _HistoryTableRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final status = _HistoryStatus.fromCheckStatus(item.status);
+    final status = _HistoryStatus.fromLabel(item.statusLabel);
+    final badgeText = item.statusLabel.isNotEmpty
+        ? item.statusLabel
+        : status.label;
     return Material(
       color: zebra ? const Color(0xFFFAFAFC) : Colors.white,
       child: InkWell(
         onTap: item.id.isEmpty ? null : () => onTapDetail(item),
         child: Padding(
-      padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(12)),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: ui(72),
-            child: Text(
-              item.checkType,
-              style: TextStyle(fontSize: ui(12), color: _kTextDark),
-            ),
-          ),
-          SizedBox(
-            width: ui(160),
-            child: Text(
-              item.dormName.isEmpty ? '—' : item.dormName,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: ui(12), color: _kTextDark),
-            ),
-          ),
-          SizedBox(
-            width: ui(88),
-            child: Text(
-              item.studentName,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: ui(12), color: _kTextDark),
-            ),
-          ),
-          SizedBox(
-            width: ui(72),
-            child: Container(
-              padding: EdgeInsets.symmetric(horizontal: ui(6), vertical: ui(2)),
-              decoration: BoxDecoration(
-                color: status.bg,
-                borderRadius: BorderRadius.circular(ui(4)),
+          padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(12)),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                flex: 22,
+                child: _TwoLineCell(
+                  primary: item.studentName,
+                  secondary: item.studentNo != '—' ? item.studentNo : null,
+                ),
               ),
-              child: Text(
-                status.label,
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: ui(11), color: Colors.white),
+              Expanded(
+                flex: 28,
+                child: _TwoLineCell(
+                  primary: item.dormName.isEmpty ? '—' : item.dormName,
+                  secondary: item.bedName.isNotEmpty ? '${item.bedName}床' : null,
+                ),
               ),
-            ),
-          ),
-          SizedBox(
-            width: ui(96),
-            child: Text(
-              item.deadline,
-              style: TextStyle(fontSize: ui(12), color: _kTextSecondary),
-            ),
-          ),
-          SizedBox(
-            width: ui(88),
-            child: Text(
-              item.checkTime,
-              style: TextStyle(
-                fontSize: ui(12),
-                color: item.status == DormitoryStudentCheckStatus.lateReturn
-                    ? _kRed
-                    : _kTextDark,
+              Expanded(
+                flex: 12,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: _StatusBadge(text: badgeText, bg: status.bg),
+                ),
               ),
-            ),
-          ),
-          Expanded(
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    item.remark,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: ui(12), color: _kTextHint),
+              Expanded(
+                flex: 16,
+                child: Text(
+                  item.checkDate.isEmpty ? '—' : item.checkDate,
+                  style: TextStyle(fontSize: ui(12), color: _kTextSecondary),
+                ),
+              ),
+              Expanded(
+                flex: 14,
+                child: Text(
+                  item.checkTime.isEmpty ? '—' : item.checkTime,
+                  style: TextStyle(
+                    fontSize: ui(12),
+                    fontFamily: 'Barlow',
+                    fontWeight: FontWeight.w500,
+                    color: item.status == DormitoryStudentCheckStatus.lateReturn
+                        ? _kRed
+                        : _kTextDark,
                   ),
                 ),
-                if (item.needsExceptionHandle)
-                  TextButton(
-                    onPressed: () => onHandleException(item),
-                    child: Text(
-                      '处理',
-                      style: TextStyle(fontSize: ui(12), color: _kPurple),
-                    ),
-                  )
-                else if (item.handleStatus > 0)
-                  Text(
-                    '已处理',
-                    style: TextStyle(fontSize: ui(11), color: _kGreen),
-                  ),
-              ],
+              ),
+              Expanded(
+                flex: 14,
+                child: _RowActions(
+                  item: item,
+                  onHandleException: onHandleException,
+                  onTapDetail: onTapDetail,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TwoLineCell extends StatelessWidget {
+  const _TwoLineCell({required this.primary, this.secondary});
+
+  final String primary;
+  final String? secondary;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          primary,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: ui(13),
+            color: _kTextDark,
+            fontFamily: 'PingFang SC',
+            fontWeight: AppFont.w500,
+            height: 1.3,
+          ),
+        ),
+        if (secondary != null && secondary!.isNotEmpty) ...[
+          SizedBox(height: ui(2)),
+          Text(
+            secondary!,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: ui(11),
+              color: _kTextHint,
+              fontFamily: 'PingFang SC',
+              height: 1.2,
             ),
           ),
         ],
+      ],
+    );
+  }
+}
+
+class _StatusBadge extends StatelessWidget {
+  const _StatusBadge({required this.text, required this.bg});
+
+  final String text;
+  final Color bg;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: ui(8), vertical: ui(3)),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(ui(4)),
       ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: ui(11),
+          color: Colors.white,
+          fontFamily: 'PingFang SC',
+          fontWeight: AppFont.w500,
+          height: 1.2,
+        ),
+      ),
+    );
+  }
+}
+
+class _RowActions extends StatelessWidget {
+  const _RowActions({
+    required this.item,
+    required this.onHandleException,
+    required this.onTapDetail,
+  });
+
+  final DormitoryCheckHistoryItem item;
+  final ValueChanged<DormitoryCheckHistoryItem> onHandleException;
+  final ValueChanged<DormitoryCheckHistoryItem> onTapDetail;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    if (item.needsExceptionHandle) {
+      return TextButton(
+        style: TextButton.styleFrom(
+          padding: EdgeInsets.symmetric(horizontal: ui(8)),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        onPressed: () => onHandleException(item),
+        child: Text(
+          '处理',
+          style: TextStyle(
+            fontSize: ui(12),
+            color: _kPurple,
+            fontFamily: 'PingFang SC',
+            fontWeight: AppFont.w500,
+          ),
+        ),
+      );
+    }
+    if (item.handleStatus > 0) {
+      return Text(
+        '已处理',
+        style: TextStyle(
+          fontSize: ui(11),
+          color: _kGreen,
+          fontFamily: 'PingFang SC',
+        ),
+      );
+    }
+    return TextButton(
+      style: TextButton.styleFrom(
+        padding: EdgeInsets.symmetric(horizontal: ui(8)),
+        minimumSize: Size.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      onPressed: item.id.isEmpty ? null : () => onTapDetail(item),
+      child: Text(
+        '详情',
+        style: TextStyle(
+          fontSize: ui(12),
+          color: _kTextSecondary,
+          fontFamily: 'PingFang SC',
         ),
       ),
     );

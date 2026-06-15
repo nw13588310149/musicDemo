@@ -40,6 +40,34 @@ Future<T?> showScaledDialog<T>({
   );
 }
 
+/// 通知详情弹窗：无进入/退出动画，点击后立即展示。
+Future<T?> showNoticeDetailDialog<T>({
+  required BuildContext context,
+  required WidgetBuilder builder,
+  Color? barrierColor,
+  String? barrierLabel,
+  bool barrierDismissible = true,
+}) {
+  final scale = DashboardScaleScope.of(context);
+  return showGeneralDialog<T>(
+    context: context,
+    barrierDismissible: barrierDismissible,
+    barrierLabel: barrierDismissible
+        ? (barrierLabel ??
+            MaterialLocalizations.of(context).modalBarrierDismissLabel)
+        : null,
+    barrierColor: barrierColor ?? Colors.black.withValues(alpha: 0.18),
+    transitionDuration: Duration.zero,
+    pageBuilder: (dialogContext, animation, secondaryAnimation) {
+      return DashboardScaleScope(
+        data: scale,
+        child: Builder(builder: builder),
+      );
+    },
+    transitionBuilder: (context, animation, secondaryAnimation, child) => child,
+  );
+}
+
 /// 输入弹窗标题的设计基准：对齐首页 [ShellSectionTitleBar]（如「最新」），字号 20。
 const double kAppDialogTitleFontSize = 20;
 const Color kAppDialogTitleColor = Color(0xFF1A1A1A);

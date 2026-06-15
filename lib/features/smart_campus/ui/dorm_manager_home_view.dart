@@ -8,12 +8,12 @@ import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/dormitory_check_data.dart';
-import '../data/dormitory_repository.dart';
 import '../state/dormitory_manager_controller.dart';
 import '../data/teacher_notice_data.dart';
 import '../state/smart_campus_state.dart';
 import 'widgets/role_switcher_buttons.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
+
 /// 宿管端 · 智慧校园首页。
 ///
 /// 970×~820 双栏布局，参考 Figma 设计稿：
@@ -53,6 +53,7 @@ class DormManagerHomeView extends ConsumerStatefulWidget {
     this.onOpenSchoolCircle,
     this.onOpenDormCheckByRoom,
     this.onOpenDormCheckHistory,
+    this.onOpenCheckInManagement,
     this.onOpenDormManagerLeave,
     this.onOpenDormMakeupAudit,
   });
@@ -81,6 +82,7 @@ class DormManagerHomeView extends ConsumerStatefulWidget {
   /// 宿管专属快捷入口；后续按需要可接入对应独立视图（目前先保留回调）。
   final VoidCallback? onOpenDormCheckByRoom;
   final VoidCallback? onOpenDormCheckHistory;
+  final VoidCallback? onOpenCheckInManagement;
   final VoidCallback? onOpenDormManagerLeave;
   final VoidCallback? onOpenDormMakeupAudit;
 
@@ -94,7 +96,9 @@ class _DormManagerHomeViewState extends ConsumerState<DormManagerHomeView> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(ref.read(dormitoryManagerControllerProvider.notifier).loadHome());
+      unawaited(
+        ref.read(dormitoryManagerControllerProvider.notifier).loadHome(),
+      );
     });
   }
 
@@ -126,6 +130,7 @@ class _DormManagerHomeViewState extends ConsumerState<DormManagerHomeView> {
                   onOpenSchoolCircle: widget.onOpenSchoolCircle,
                   onOpenDormCheckByRoom: widget.onOpenDormCheckByRoom,
                   onOpenDormCheckHistory: widget.onOpenDormCheckHistory,
+                  onOpenCheckInManagement: widget.onOpenCheckInManagement,
                   onOpenDormManagerLeave: widget.onOpenDormManagerLeave,
                 ),
                 SizedBox(height: ui(16)),
@@ -202,6 +207,7 @@ class _QuickAction {
 const _dormQuickActions = <_QuickAction>[
   _QuickAction('按宿舍查寝', 'assets/images/schoolA/16.png'),
   _QuickAction('查寝历史', 'assets/images/schoolA/17.png'),
+  _QuickAction('打卡管理', 'assets/images/schoolA/18.png'),
   _QuickAction('宿管请假', 'assets/images/schoolA/19.png'),
   _QuickAction('校圈', 'assets/images/adminHome/10.png'),
   _QuickAction('群聊', 'assets/images/adminHome/8.png'),
@@ -221,21 +227,6 @@ class _DutyTask {
   final String timeFrom;
   final String timeTo;
 }
-
-const _fallbackDutyTasks = <_DutyTask>[
-  _DutyTask(
-    tag: '晨检',
-    title: '晨检开门 离检统计同步',
-    timeFrom: '06:30',
-    timeTo: '07:15',
-  ),
-  _DutyTask(
-    tag: '晚查',
-    title: '晚自习宿舍秩序巡查',
-    timeFrom: '19:30',
-    timeTo: '20:00',
-  ),
-];
 
 _DutyTask _mapDutyTask(DormitoryDutyTask task) {
   return _DutyTask(
@@ -367,11 +358,7 @@ class _StatCard extends StatelessWidget {
 
 /// 「待处理」紫高亮卡：24/500 紫色数值 + 12 灰色文案，居中布局。
 class _PendingCard extends StatelessWidget {
-  const _PendingCard({
-    required this.value,
-    required this.label,
-    this.onTap,
-  });
+  const _PendingCard({required this.value, required this.label, this.onTap});
 
   final String value;
   final String label;
@@ -432,6 +419,7 @@ class _DormQuickActionsCard extends StatelessWidget {
     this.onOpenSchoolCircle,
     this.onOpenDormCheckByRoom,
     this.onOpenDormCheckHistory,
+    this.onOpenCheckInManagement,
     this.onOpenDormManagerLeave,
   });
 
@@ -440,6 +428,7 @@ class _DormQuickActionsCard extends StatelessWidget {
   final VoidCallback? onOpenSchoolCircle;
   final VoidCallback? onOpenDormCheckByRoom;
   final VoidCallback? onOpenDormCheckHistory;
+  final VoidCallback? onOpenCheckInManagement;
   final VoidCallback? onOpenDormManagerLeave;
 
   VoidCallback? _resolveTap(String label) {
@@ -454,6 +443,8 @@ class _DormQuickActionsCard extends StatelessWidget {
         return onOpenDormCheckByRoom;
       case '查寝历史':
         return onOpenDormCheckHistory;
+      case '打卡管理':
+        return onOpenCheckInManagement;
       case '宿管请假':
         return onOpenDormManagerLeave;
     }
@@ -647,7 +638,14 @@ class _TodayDutyCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final dutyTasks = tasks.isEmpty
-        ? _fallbackDutyTasks
+        ? const [
+            _DutyTask(
+              tag: '值班',
+              title: '接口暂未提供今日值班安排',
+              timeFrom: '--',
+              timeTo: '--',
+            ),
+          ]
         : tasks.map(_mapDutyTask).toList(growable: false);
     return Container(
       height: ui(340),
@@ -693,10 +691,7 @@ class _DutyTaskTile extends StatelessWidget {
           Align(
             alignment: Alignment.centerLeft,
             child: Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: ui(4),
-                vertical: ui(2),
-              ),
+              padding: EdgeInsets.symmetric(horizontal: ui(4), vertical: ui(2)),
               decoration: BoxDecoration(
                 color: const Color(0xFFDAD2FF),
                 borderRadius: BorderRadius.circular(ui(4)),
@@ -774,8 +769,7 @@ class _DormManagerSidePanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     // 多身份用户才显示「身份切换」区块；单身份宿管直接隐藏。
-    final showRoleSwitcher =
-        onSelectRole != null && availableRoles.length > 1;
+    final showRoleSwitcher = onSelectRole != null && availableRoles.length > 1;
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -819,10 +813,7 @@ class _DormManagerSidePanel extends StatelessWidget {
             ),
           ),
           SizedBox(height: ui(12)),
-          SizedBox(
-            height: ui(500),
-            child: const _DormNoticePanel(),
-          ),
+          SizedBox(height: ui(500), child: const _DormNoticePanel()),
         ],
       ),
     );
@@ -986,9 +977,7 @@ class _ProfileAreaRows extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final rows = areas.isEmpty
-        ? const ['暂无管辖区域']
-        : areas;
+    final rows = areas.isEmpty ? const ['暂无管辖区域'] : areas;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1045,53 +1034,28 @@ class _DormNoticePanel extends ConsumerStatefulWidget {
 }
 
 class _DormNoticePanelState extends ConsumerState<_DormNoticePanel> {
-  List<TeacherNoticeListItem> _notices = const [];
-  bool _loading = false;
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(_loadNotices());
-    });
-  }
-
-  Future<void> _loadNotices() async {
-    setState(() => _loading = true);
-    final resp = await ref.read(dormitoryRepositoryProvider).noticeList(size: 20);
-    if (!mounted) return;
-    if (!resp.isSuccess) {
-      setState(() {
-        _notices = const [];
-        _loading = false;
-      });
-      return;
-    }
-    setState(() {
-      _notices = parseTeacherNoticeList(resp.data);
-      _loading = false;
+      unawaited(
+        ref.read(dormitoryManagerControllerProvider.notifier).loadNotices(),
+      );
     });
   }
 
   Future<void> _openNoticeDetail(TeacherNoticeListItem item) async {
-    final resp =
-        await ref.read(dormitoryRepositoryProvider).noticeDetail(id: item.id);
+    final detail = await ref
+        .read(dormitoryManagerControllerProvider.notifier)
+        .loadNoticeDetail(item.id);
     if (!mounted) return;
-    if (!resp.isSuccess) {
-      AppToast.show(
-        context,
-        resp.msg.isNotEmpty ? resp.msg : '通知详情加载失败',
-      );
-      return;
-    }
-    final detail = parseTeacherNoticeDetail(resp.data);
     if (detail == null) {
-      AppToast.show(context, '通知详情加载失败');
+      final error = ref.read(dormitoryManagerControllerProvider).noticeError;
+      AppToast.show(context, error.isEmpty ? '通知详情加载失败' : error);
       return;
     }
-    await showScaledDialog<void>(
+    await showNoticeDetailDialog<void>(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.18),
       builder: (ctx) => GradientHeaderDialog(
         title: '通知详情',
         width: 460,
@@ -1103,13 +1067,14 @@ class _DormNoticePanelState extends ConsumerState<_DormNoticePanel> {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    if (_loading) {
+    final state = ref.watch(dormitoryManagerControllerProvider);
+    if (state.loadingNotices) {
       return const Center(child: AppLoadingIndicator());
     }
-    if (_notices.isEmpty) {
+    if (state.notices.isEmpty) {
       return Center(
         child: Text(
-          '暂无通知',
+          state.noticeError.isEmpty ? '暂无通知' : state.noticeError,
           style: TextStyle(
             fontSize: ui(12),
             color: const Color(0xFFCECED1),
@@ -1120,10 +1085,10 @@ class _DormNoticePanelState extends ConsumerState<_DormNoticePanel> {
     }
     return ListView.separated(
       padding: EdgeInsets.zero,
-      itemCount: _notices.length,
+      itemCount: state.notices.length,
       separatorBuilder: (_, _) => SizedBox(height: ui(8)),
       itemBuilder: (_, i) {
-        final item = _notices[i];
+        final item = state.notices[i];
         return _SchoolNoticeCard(
           item: item,
           onTap: () => unawaited(_openNoticeDetail(item)),
@@ -1160,10 +1125,7 @@ class _DormNoticeDetailBody extends StatelessWidget {
         Row(
           children: [
             Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: ui(6),
-                vertical: ui(2),
-              ),
+              padding: EdgeInsets.symmetric(horizontal: ui(6), vertical: ui(2)),
               decoration: BoxDecoration(
                 color: tagStyle.background,
                 borderRadius: BorderRadius.circular(ui(4)),
@@ -1206,7 +1168,9 @@ class _DormNoticeDetailBody extends StatelessWidget {
           _DormNoticeDetailRow(label: '推送范围', value: notice.scopeLabel),
         _DormNoticeDetailRow(
           label: '时间',
-          value: notice.publishedAt.isNotEmpty ? notice.publishedAt : notice.time,
+          value: notice.publishedAt.isNotEmpty
+              ? notice.publishedAt
+              : notice.time,
           isLast: true,
         ),
         SizedBox(height: ui(12)),

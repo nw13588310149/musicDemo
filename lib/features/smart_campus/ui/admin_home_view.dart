@@ -1,10 +1,14 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/admin_home_data.dart';
+import '../data/teacher_notice_data.dart';
 import '../state/admin_home_controller.dart';
 import '../state/smart_campus_state.dart';
 import 'widgets/role_switcher_buttons.dart';
@@ -116,6 +120,27 @@ class _AdminHomeViewState extends ConsumerState<AdminHomeView> {
     );
   }
 
+  Future<void> _openNoticeDetail(AdminHomeNotice item) async {
+    if (item.id.isEmpty) return;
+    final detail = await ref
+        .read(adminHomeControllerProvider.notifier)
+        .loadNoticeDetail(item.id);
+    if (!mounted) return;
+    if (detail == null) {
+      final error = ref.read(adminHomeControllerProvider).noticeError;
+      AppToast.show(context, error.isEmpty ? '通知详情加载失败' : error);
+      return;
+    }
+    await showNoticeDetailDialog<void>(
+      context: context,
+      builder: (ctx) => GradientHeaderDialog(
+        title: '通知详情',
+        width: 460,
+        child: _AdminNoticeDetailBody(notice: detail),
+      ),
+    );
+  }
+
   List<_StatItem> _statsRow1(AdminHomeSummary summary) => [
     _StatItem('${summary.studentCount}', '在籍学生'),
     _StatItem('${summary.teacherCount}', '任课老师'),
@@ -149,6 +174,7 @@ class _AdminHomeViewState extends ConsumerState<AdminHomeView> {
                 _StatsRow(stats: _statsRow2(homeState.summary)),
                 SizedBox(height: ui(16)),
                 _QuickActionsCard(
+                  selectedRole: widget.selectedRole,
                   onOpenGroupChat: widget.onOpenGroupChat,
                   onOpenPrincipalMailbox: widget.onOpenPrincipalMailbox,
                   onOpenSchoolCircle: widget.onOpenSchoolCircle,
@@ -211,6 +237,7 @@ class _AdminHomeViewState extends ConsumerState<AdminHomeView> {
                   .read(adminHomeControllerProvider.notifier)
                   .refresh,
               onOpenNotices: widget.onOpenNotificationManagement,
+              onNoticeTap: (item) => unawaited(_openNoticeDetail(item)),
             ),
           ),
         ],
@@ -260,6 +287,19 @@ const _quickActions = <_QuickAction>[
   _QuickAction('校长信箱', 'assets/images/adminHome/9.png'),
   _QuickAction('校圈治理', 'assets/images/adminHome/10.png'),
 ];
+
+const _mailboxQuickAction = _QuickAction(
+  '校长信箱',
+  'assets/images/adminHome/9.png',
+);
+
+List<_QuickAction> _quickActionsForRole(SmartCampusRole role) {
+  if (role == SmartCampusRole.principal) {
+    final base = _quickActions.where((action) => action.label != '校长信箱');
+    return [...base, _mailboxQuickAction];
+  }
+  return _quickActions;
+}
 
 class _WorkReminder {
   const _WorkReminder(this.title, this.subtitle);
@@ -316,6 +356,7 @@ class _SectionTitle extends StatelessWidget {
 
 class _QuickActionsCard extends StatelessWidget {
   const _QuickActionsCard({
+    required this.selectedRole,
     this.onOpenGroupChat,
     this.onOpenPrincipalMailbox,
     this.onOpenSchoolCircle,
@@ -329,6 +370,7 @@ class _QuickActionsCard extends StatelessWidget {
     this.onOpenSignManagement,
   });
 
+  final SmartCampusRole selectedRole;
   final VoidCallback? onOpenGroupChat;
   final VoidCallback? onOpenPrincipalMailbox;
   final VoidCallback? onOpenSchoolCircle;
@@ -372,9 +414,10 @@ class _QuickActionsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final actions = _quickActionsForRole(selectedRole);
     // 11 items → 5 + 5 + 1（末行左对齐，其余列用空白 Expanded 补位）
     const rowSize = 5;
-    final rowCount = (_quickActions.length / rowSize).ceil();
+    final rowCount = (actions.length / rowSize).ceil();
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -392,10 +435,10 @@ class _QuickActionsCard extends StatelessWidget {
                   Expanded(
                     child: () {
                       final idx = ri * rowSize + ci;
-                      if (idx < _quickActions.length) {
+                      if (idx < actions.length) {
                         return _QuickActionCell(
-                          action: _quickActions[idx],
-                          onTap: _resolveTap(_quickActions[idx].label),
+                          action: actions[idx],
+                          onTap: _resolveTap(actions[idx].label),
                         );
                       }
                       return const SizedBox();
@@ -1009,6 +1052,7 @@ class _AdminSidePanel extends StatelessWidget {
     required this.noticeError,
     required this.onRefreshNotices,
     required this.onOpenNotices,
+    this.onNoticeTap,
   });
 
   final String displayName;
@@ -1021,6 +1065,7 @@ class _AdminSidePanel extends StatelessWidget {
   final String noticeError;
   final VoidCallback onRefreshNotices;
   final VoidCallback? onOpenNotices;
+  final ValueChanged<AdminHomeNotice>? onNoticeTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1039,7 +1084,11 @@ class _AdminSidePanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _ProfileHeader(displayName: displayName, avatarUrl: avatarUrl),
+          _ProfileHeader(
+            displayName: displayName,
+            avatarUrl: avatarUrl,
+            roleBadge: selectedRole == SmartCampusRole.principal ? '校长' : '管理员',
+          ),
           SizedBox(height: ui(20)),
           const _ProfileInfoRows(),
           if (showRoleSwitcher) ...[
@@ -1105,6 +1154,7 @@ class _AdminSidePanel extends StatelessWidget {
               loading: noticesLoading,
               error: noticeError,
               onRefresh: onRefreshNotices,
+              onNoticeTap: onNoticeTap,
             ),
           ),
         ],
@@ -1119,12 +1169,14 @@ class _SchoolNoticeList extends StatelessWidget {
     required this.loading,
     required this.error,
     required this.onRefresh,
+    this.onNoticeTap,
   });
 
   final List<AdminHomeNotice> notices;
   final bool loading;
   final String error;
   final VoidCallback onRefresh;
+  final ValueChanged<AdminHomeNotice>? onNoticeTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1157,16 +1209,24 @@ class _SchoolNoticeList extends StatelessWidget {
       padding: EdgeInsets.zero,
       itemCount: notices.length,
       separatorBuilder: (_, _) => SizedBox(height: ui(8)),
-      itemBuilder: (_, i) => _SchoolNoticeCard(item: notices[i]),
+      itemBuilder: (_, i) => _SchoolNoticeCard(
+        item: notices[i],
+        onTap: onNoticeTap == null ? null : () => onNoticeTap!(notices[i]),
+      ),
     );
   }
 }
 
 class _ProfileHeader extends StatelessWidget {
-  const _ProfileHeader({required this.displayName, required this.avatarUrl});
+  const _ProfileHeader({
+    required this.displayName,
+    required this.avatarUrl,
+    this.roleBadge = '管理员',
+  });
 
   final String displayName;
   final String avatarUrl;
+  final String roleBadge;
 
   @override
   Widget build(BuildContext context) {
@@ -1287,7 +1347,7 @@ class _ProfileHeader extends StatelessWidget {
               border: Border.all(color: Colors.white, width: 1),
             ),
             child: Text(
-              '管理员',
+              roleBadge,
               style: TextStyle(
                 fontSize: ui(11),
                 height: 1.2,
@@ -1357,87 +1417,236 @@ class _InfoLine extends StatelessWidget {
 }
 
 class _SchoolNoticeCard extends StatelessWidget {
-  const _SchoolNoticeCard({required this.item});
+  const _SchoolNoticeCard({required this.item, this.onTap});
 
   final AdminHomeNotice item;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      padding: EdgeInsets.fromLTRB(ui(10), ui(10), ui(20), ui(10)),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF5F6FA),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(ui(8)),
-      ),
-      child: Stack(
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+        child: Container(
+          padding: EdgeInsets.fromLTRB(ui(10), ui(10), ui(20), ui(10)),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF5F6FA),
+            borderRadius: BorderRadius.circular(ui(8)),
+          ),
+          child: Stack(
             children: [
-              Row(
+              Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: ui(6),
-                      vertical: ui(2),
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEAE5FF),
-                      borderRadius: BorderRadius.circular(ui(4)),
-                    ),
-                    child: Text(
-                      item.tag,
-                      style: TextStyle(
-                        fontSize: ui(10),
-                        height: 1.2,
-                        fontWeight: AppFont.w500,
-                        color: const Color(0xFF0B081A),
-                        fontFamily: 'PingFang SC',
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: ui(6),
+                          vertical: ui(2),
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEAE5FF),
+                          borderRadius: BorderRadius.circular(ui(4)),
+                        ),
+                        child: Text(
+                          item.tag,
+                          style: TextStyle(
+                            fontSize: ui(10),
+                            height: 1.2,
+                            fontWeight: AppFont.w500,
+                            color: const Color(0xFF0B081A),
+                            fontFamily: 'PingFang SC',
+                          ),
+                        ),
                       ),
-                    ),
+                      SizedBox(width: ui(6)),
+                      Expanded(
+                        child: Text(
+                          item.text,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: ui(12),
+                            height: 1.4,
+                            color: const Color(0xFF0B081A),
+                            fontFamily: 'Source Han Sans SC',
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  SizedBox(width: ui(6)),
-                  Expanded(
-                    child: Text(
-                      item.text,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: ui(12),
-                        height: 1.4,
-                        color: const Color(0xFF0B081A),
-                        fontFamily: 'Source Han Sans SC',
-                      ),
+                  SizedBox(height: ui(6)),
+                  Text(
+                    item.time,
+                    style: TextStyle(
+                      fontSize: ui(12),
+                      height: 1.2,
+                      color: const Color(0xFFCECED1),
+                      fontFamily: 'Source Han Sans SC',
                     ),
                   ),
                 ],
               ),
-              SizedBox(height: ui(6)),
-              Text(
-                item.time,
-                style: TextStyle(
-                  fontSize: ui(12),
-                  height: 1.2,
-                  color: const Color(0xFFCECED1),
-                  fontFamily: 'Source Han Sans SC',
+              Positioned(
+                right: 0,
+                top: 0,
+                child: Container(
+                  width: ui(6),
+                  height: ui(6),
+                  decoration: BoxDecoration(
+                    color: item.highlighted
+                        ? const Color(0xFFFF323C)
+                        : const Color(0xFFCECED1),
+                    shape: BoxShape.circle,
+                  ),
                 ),
               ),
             ],
           ),
-          Positioned(
-            right: 0,
-            top: 0,
-            child: Container(
-              width: ui(6),
-              height: ui(6),
+        ),
+      ),
+    );
+  }
+}
+
+class _AdminNoticeDetailBody extends StatelessWidget {
+  const _AdminNoticeDetailBody({required this.notice});
+
+  final TeacherNoticeListItem notice;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final tagStyle = notice.tagStyle;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          notice.title,
+          style: TextStyle(
+            fontSize: ui(15),
+            color: const Color(0xFF0B081A),
+            fontFamily: 'PingFang SC',
+            fontWeight: AppFont.w600,
+            height: 1.5,
+          ),
+        ),
+        SizedBox(height: ui(8)),
+        Row(
+          children: [
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: ui(6), vertical: ui(2)),
               decoration: BoxDecoration(
-                color: item.highlighted
-                    ? const Color(0xFFFF323C)
-                    : const Color(0xFFCECED1),
-                shape: BoxShape.circle,
+                color: tagStyle.background,
+                borderRadius: BorderRadius.circular(ui(4)),
+              ),
+              child: Text(
+                notice.tag,
+                style: TextStyle(
+                  fontSize: ui(12),
+                  color: tagStyle.foreground,
+                  fontFamily: 'PingFang SC',
+                ),
+              ),
+            ),
+            if (notice.author.isNotEmpty && notice.author != '—') ...[
+              SizedBox(width: ui(8)),
+              Expanded(
+                child: Text(
+                  notice.author,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: ui(12),
+                    color: const Color(0xFF6D6B75),
+                    fontFamily: 'PingFang SC',
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        SizedBox(height: ui(16)),
+        _AdminNoticeDetailRow(label: '类型', value: notice.type),
+        if (notice.priority.isNotEmpty)
+          _AdminNoticeDetailRow(label: '优先级', value: notice.priority),
+        if (notice.scopeLabel.isNotEmpty && notice.scopeLabel != '—')
+          _AdminNoticeDetailRow(label: '推送范围', value: notice.scopeLabel),
+        _AdminNoticeDetailRow(
+          label: '时间',
+          value: notice.publishedAt.isNotEmpty
+              ? notice.publishedAt
+              : notice.time,
+          isLast: true,
+        ),
+        SizedBox(height: ui(12)),
+        Text(
+          '内容',
+          style: TextStyle(
+            fontSize: ui(13),
+            color: const Color(0xFF6D6B75),
+            fontFamily: 'PingFang SC',
+          ),
+        ),
+        SizedBox(height: ui(8)),
+        Text(
+          notice.content.isEmpty ? '—' : notice.content,
+          style: TextStyle(
+            fontSize: ui(14),
+            color: const Color(0xFF0B081A),
+            fontFamily: 'PingFang SC',
+            height: 1.6,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AdminNoticeDetailRow extends StatelessWidget {
+  const _AdminNoticeDetailRow({
+    required this.label,
+    required this.value,
+    this.isLast = false,
+  });
+
+  final String label;
+  final String value;
+  final bool isLast;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Padding(
+      padding: EdgeInsets.only(bottom: isLast ? 0 : ui(8)),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: ui(72),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: ui(13),
+                color: const Color(0xFF6D6B75),
+                fontFamily: 'PingFang SC',
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value.isEmpty ? '—' : value,
+              style: TextStyle(
+                fontSize: ui(13),
+                color: const Color(0xFF0B081A),
+                fontFamily: 'PingFang SC',
               ),
             ),
           ),

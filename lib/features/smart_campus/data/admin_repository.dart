@@ -252,7 +252,22 @@ class AdminRepository {
   ///
   /// `id` 必填；其它字段允许部分更新（调用方按需传）。
   Future<ApiResponse> classUpdate(Map<String, dynamic> body) {
-    return client.post('$_base/classUpdate', data: body);
+    final encoded = encodeNumericIdRequestBody(
+      body,
+      numericIdKeys: const {
+        'id',
+        'headTeacherId',
+        'classroomId',
+        'campusId',
+      },
+      numericIdArrayKeys: body.containsKey('studentIds')
+          ? const {'studentIds'}
+          : const {},
+    );
+    if (encoded == null) {
+      return Future.value(ApiResponse.failure('班级 id 格式错误'));
+    }
+    return client.post('$_base/classUpdate', data: encoded);
   }
 
   // ============== 课表 ==============

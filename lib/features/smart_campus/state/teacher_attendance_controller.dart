@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_response.dart';
@@ -11,9 +13,11 @@ final teacherAttendanceControllerProvider =
       TeacherAttendanceController,
       TeacherAttendanceState
     >((ref) {
-      return TeacherAttendanceController(
+      final controller = TeacherAttendanceController(
         repository: ref.watch(teacherRepositoryProvider),
       );
+      ref.onDispose(controller.stopLiveSync);
+      return controller;
     });
 
 class TeacherAttendanceController
@@ -24,6 +28,48 @@ class TeacherAttendanceController
 
   final TeacherRepository _repository;
   bool _initialized = false;
+  Timer? _liveSyncTimer;
+  bool _liveSyncActive = false;
+
+  static const _liveSyncInterval = Duration(seconds: 5);
+
+  void startLiveSync() {
+    if (_liveSyncActive) return;
+    _liveSyncActive = true;
+    _liveSyncTimer?.cancel();
+    _liveSyncTimer = Timer.periodic(_liveSyncInterval, (_) {
+      unawaited(pollActiveCourseDetail());
+    });
+  }
+
+  void stopLiveSync() {
+    _liveSyncActive = false;
+    _liveSyncTimer?.cancel();
+    _liveSyncTimer = null;
+  }
+
+  Future<void> resumeSync() async {
+    await pollActiveCourseDetail(force: true);
+  }
+
+  Future<void> pollActiveCourseDetail({bool force = false}) async {
+    if (!_liveSyncActive && !force) return;
+    if (state.loadingOverview) return;
+    final courseId = state.selectedCourseId;
+    if (courseId == null || courseId.isEmpty) return;
+    if (state.submittingCourseIds.contains(courseId)) return;
+    final course = _courseById(courseId);
+    if (!_shouldKeepLiveSync(course)) return;
+    await loadCourseDetail(courseId, silent: true);
+  }
+
+  bool _shouldKeepLiveSync(CourseSignSession? course) {
+    if (course == null) return true;
+    if (course.signStatus >= CourseSignFlowStatus.studentEval.code) {
+      return false;
+    }
+    return true;
+  }
 
   Future<void> initialize() async {
     if (_initialized) return;
@@ -62,9 +108,14 @@ class TeacherAttendanceController
     final courses = courseResponse.isSuccess
         ? parseCourseSignSessionList(courseResponse.data)
         : state.todayCourses;
+    final firstCourse = courses
+        .where((course) => course.courseId.isNotEmpty)
+        .firstOrNull;
+    final selectedId = state.selectedCourseId ?? firstCourse?.courseId;
     state = state.copyWith(
       loadingOverview: false,
       todayCourses: courses,
+      selectedCourseId: selectedId,
       summary: summaryResponse.isSuccess
           ? TeacherAttendanceSummary.fromJson(summaryResponse.data)
           : state.summary,
@@ -73,12 +124,15 @@ class TeacherAttendanceController
           : state.recentRecords,
       error: errors.join('；'),
     );
-    final firstBig = courses
-        .where((course) => course.courseType == 0 && course.courseId.isNotEmpty)
-        .firstOrNull;
-    if (firstBig != null) {
-      await loadCourseDetail(firstBig.courseId);
+    if (selectedId != null && selectedId.isNotEmpty) {
+      await loadCourseDetail(selectedId);
     }
+  }
+
+  Future<void> selectCourse(String courseId) async {
+    if (courseId.isEmpty) return;
+    state = state.copyWith(selectedCourseId: courseId);
+    await loadCourseDetail(courseId);
   }
 
   Future<void> _loadSummary() async {
@@ -113,11 +167,14 @@ class TeacherAttendanceController
     );
   }
 
-  Future<void> loadCourseDetail(String courseId) async {
-    if (courseId.isEmpty || state.loadingCourseIds.contains(courseId)) return;
-    state = state.copyWith(
-      loadingCourseIds: {...state.loadingCourseIds, courseId},
-    );
+  Future<void> loadCourseDetail(String courseId, {bool silent = false}) async {
+    if (courseId.isEmpty) return;
+    if (state.loadingCourseIds.contains(courseId)) return;
+    if (!silent) {
+      state = state.copyWith(
+        loadingCourseIds: {...state.loadingCourseIds, courseId},
+      );
+    }
     final response = await _repository.courseClassSignDetail(
       courseId: courseId,
     );
@@ -131,15 +188,19 @@ class TeacherAttendanceController
                 students: detail.students,
                 signStep: detail.courseSignStatus,
                 signStatus: detail.courseSignStatus,
+                teacherCheckInTime: detail.teacherSignInTime,
+                teacherCheckOutTime: detail.teacherSignOutTime,
               )
             else
               course,
         ],
       );
     }
-    state = state.copyWith(
-      loadingCourseIds: {...state.loadingCourseIds}..remove(courseId),
-    );
+    if (!silent) {
+      state = state.copyWith(
+        loadingCourseIds: {...state.loadingCourseIds}..remove(courseId),
+      );
+    }
   }
 
   Future<ApiResponse> updateStudentStatus({
@@ -182,6 +243,12 @@ class TeacherAttendanceController
     }
     if (course.students.isEmpty) {
       return ApiResponse.failure('当前课程暂无学生名单');
+    }
+    if (isBigClassBulkSignCompleted(
+      courseSignStatus: course.signStatus,
+      students: course.students,
+    )) {
+      return ApiResponse.failure('该课程已完成签到');
     }
     state = state.copyWith(
       submittingCourseIds: {...state.submittingCourseIds, courseId},

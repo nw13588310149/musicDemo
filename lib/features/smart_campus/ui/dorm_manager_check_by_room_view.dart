@@ -45,7 +45,7 @@ import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/popup_selector_field.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/dormitory_check_data.dart';
-import '../data/dormitory_repository.dart';
+import '../state/dormitory_manager_controller.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // —— 颜色 ————————————————————————————————————————————————————————
@@ -78,22 +78,11 @@ class _DormManagerCheckByRoomViewState
     extends ConsumerState<DormManagerCheckByRoomView> {
   final _checkDate = dormitoryCheckDateParam();
 
-  DormitoryCheckStat _stat = DormitoryCheckStat.zero;
-  List<DormitoryRoomCheck> _rooms = const [];
-  List<DormitoryBuildingOption> _buildingOptions = const [
-    DormitoryBuildingOption.all,
-  ];
-  List<DormitoryFloorOption> _floorOptions = const [DormitoryFloorOption.all];
   DormitoryBuildingOption _selectedBuilding = DormitoryBuildingOption.all;
   DormitoryFloorOption _selectedFloor = DormitoryFloorOption.all;
 
-  bool _loading = false;
-  bool _loadingFloors = false;
-  String? _loadError;
-  int _loadToken = 0;
-
-  String get _deadlineText {
-    for (final room in _rooms) {
+  String _deadlineText(List<DormitoryRoomCheck> rooms) {
+    for (final room in rooms) {
       if (room.deadline.isNotEmpty && room.deadline != '—') {
         return '$_checkDate ${room.deadline}';
       }
@@ -110,90 +99,30 @@ class _DormManagerCheckByRoomViewState
   }
 
   Future<void> _bootstrap() async {
-    await _loadBuildings();
+    await ref
+        .read(dormitoryManagerControllerProvider.notifier)
+        .loadManagedBuildings();
     await _reloadAll();
   }
 
-  Future<void> _loadBuildings() async {
-    final resp = await ref
-        .read(dormitoryRepositoryProvider)
-        .dormitoryManagedBuildingList();
-    if (!mounted) return;
-    if (!resp.isSuccess) {
-      setState(() {
-        _buildingOptions = const [DormitoryBuildingOption.all];
-      });
-      return;
-    }
-    setState(() {
-      _buildingOptions = parseDormitoryManagedBuildingList(resp.data);
-    });
-  }
-
   Future<void> _loadFloors(String buildingId) async {
-    if (buildingId.isEmpty) {
-      setState(() {
-        _floorOptions = const [DormitoryFloorOption.all];
-        _selectedFloor = DormitoryFloorOption.all;
-        _loadingFloors = false;
-      });
-      return;
-    }
-    setState(() => _loadingFloors = true);
-    final resp = await ref
-        .read(dormitoryRepositoryProvider)
-        .dormitoryFloorList(buildingId: buildingId);
-    if (!mounted) return;
-    setState(() {
-      _floorOptions = resp.isSuccess
-          ? parseDormitoryFloorList(resp.data)
-          : const [DormitoryFloorOption.all];
-      _selectedFloor = DormitoryFloorOption.all;
-      _loadingFloors = false;
-    });
+    await ref
+        .read(dormitoryManagerControllerProvider.notifier)
+        .loadFloors(buildingId);
   }
 
   Future<void> _reloadAll() async {
-    final token = ++_loadToken;
-    setState(() {
-      _loading = true;
-      _loadError = null;
-    });
-    final repo = ref.read(dormitoryRepositoryProvider);
     final buildingId = _selectedBuilding.id.isEmpty
         ? null
         : _selectedBuilding.id;
     final floorId = _selectedFloor.id.isEmpty ? null : _selectedFloor.id;
-    final results = await Future.wait([
-      repo.dormitoryCheckStat(),
-      repo.dormitoryCheckRoomList(
-        buildingId: buildingId,
-        floorId: floorId,
-        date: _checkDate,
-      ),
-    ]);
-    if (!mounted || token != _loadToken) return;
-
-    final statResp = results[0];
-    final roomResp = results[1];
-    if (!statResp.isSuccess || !roomResp.isSuccess) {
-      setState(() {
-        _stat = DormitoryCheckStat.zero;
-        _rooms = const [];
-        _loading = false;
-        _loadError = !statResp.isSuccess
-            ? statResp.displayMsg
-            : roomResp.displayMsg;
-      });
-      return;
-    }
-
-    setState(() {
-      _stat = parseDormitoryCheckStat(statResp.data);
-      _rooms = parseDormitoryCheckRoomList(roomResp.data);
-      _loading = false;
-      _loadError = null;
-    });
+    await ref
+        .read(dormitoryManagerControllerProvider.notifier)
+        .loadRoomChecks(
+          buildingId: buildingId,
+          floorId: floorId,
+          date: _checkDate,
+        );
   }
 
   Future<void> _onBuildingChanged(DormitoryBuildingOption option) async {
@@ -212,15 +141,21 @@ class _DormManagerCheckByRoomViewState
 
   Future<void> _checkInAll(DormitoryRoomCheck room) async {
     final resp = await ref
-        .read(dormitoryRepositoryProvider)
-        .dormitoryCheckRoomOneClick(roomId: room.roomId, date: _checkDate);
+        .read(dormitoryManagerControllerProvider.notifier)
+        .checkInRoom(
+          room: room,
+          date: _checkDate,
+          buildingId: _selectedBuilding.id.isEmpty
+              ? null
+              : _selectedBuilding.id,
+          floorId: _selectedFloor.id.isEmpty ? null : _selectedFloor.id,
+        );
     if (!mounted) return;
     if (!resp.isSuccess) {
       AppToast.show(context, resp.displayMsg);
       return;
     }
     AppToast.show(context, '${room.roomName} 已一键打卡');
-    await _reloadAll();
   }
 
   Future<void> _updateStudentStatus(
@@ -228,23 +163,29 @@ class _DormManagerCheckByRoomViewState
     DormitoryStudentCheckStatus next,
   ) async {
     final resp = await ref
-        .read(dormitoryRepositoryProvider)
-        .dormitoryCheckUserUpdate(
-          userId: student.userId,
-          status: next.apiValue,
+        .read(dormitoryManagerControllerProvider.notifier)
+        .updateStudentCheckStatus(
+          student: student,
+          status: next,
           date: _checkDate,
+          buildingId: _selectedBuilding.id.isEmpty
+              ? null
+              : _selectedBuilding.id,
+          floorId: _selectedFloor.id.isEmpty ? null : _selectedFloor.id,
         );
     if (!mounted) return;
     if (!resp.isSuccess) {
       AppToast.show(context, resp.displayMsg);
       return;
     }
-    await _reloadAll();
   }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final state = ref.watch(dormitoryManagerControllerProvider);
+    final stat = state.roomCheckStat;
+    final rooms = state.roomChecks;
     return Container(
       color: _kPageBg,
       child: SingleChildScrollView(
@@ -255,11 +196,12 @@ class _DormManagerCheckByRoomViewState
             _Banner(onBack: widget.onBack),
             SizedBox(height: ui(16)),
             _FilterRow(
-              buildingOptions: _buildingOptions,
-              floorOptions: _floorOptions,
+              buildingOptions: state.managedBuildings,
+              floorOptions: state.floorOptions,
               selectedBuilding: _selectedBuilding,
               selectedFloor: _selectedFloor,
-              floorEnabled: _selectedBuilding.id.isNotEmpty && !_loadingFloors,
+              floorEnabled:
+                  _selectedBuilding.id.isNotEmpty && !state.loadingFloors,
               onBuildingChanged: (v) => unawaited(_onBuildingChanged(v)),
               onFloorChanged: (v) => unawaited(_onFloorChanged(v)),
             ),
@@ -267,7 +209,7 @@ class _DormManagerCheckByRoomViewState
             Padding(
               padding: EdgeInsets.only(left: ui(4)),
               child: Text(
-                _deadlineText,
+                _deadlineText(rooms),
                 style: TextStyle(
                   fontSize: ui(16),
                   color: _kTextDark,
@@ -279,29 +221,31 @@ class _DormManagerCheckByRoomViewState
             ),
             SizedBox(height: ui(16)),
             _StatsRow(
-              beds: _stat.bedCount,
-              normal: _stat.normalCount,
-              lateReturn: _stat.lateCount,
-              absent: _stat.notCheckedCount,
+              beds: stat.bedCount,
+              normal: stat.normalCount,
+              lateReturn: stat.lateCount,
+              absent: stat.notCheckedCount,
             ),
             SizedBox(height: ui(16)),
-            if (_loading)
+            if (state.loadingRoomChecks)
               Padding(
                 padding: EdgeInsets.symmetric(vertical: ui(40)),
                 child: const Center(child: AppLoadingIndicator()),
               )
-            else if (_loadError != null)
-              _LoadErrorHint(message: _loadError!, onRetry: _reloadAll)
-            else if (_rooms.isEmpty)
+            else if (state.roomCheckError.isNotEmpty)
+              _LoadErrorHint(message: state.roomCheckError, onRetry: _reloadAll)
+            else if (rooms.isEmpty)
               _EmptyRoomsHint()
             else
-              for (var i = 0; i < _rooms.length; i++) ...[
+              for (var i = 0; i < rooms.length; i++) ...[
                 if (i > 0) SizedBox(height: ui(16)),
                 _RoomCard(
-                  room: _rooms[i],
-                  onCheckInAll: _rooms[i].allChecked
+                  room: rooms[i],
+                  onCheckInAll:
+                      rooms[i].allChecked ||
+                          state.submittingRoomIds.contains(rooms[i].roomId)
                       ? null
-                      : () => unawaited(_checkInAll(_rooms[i])),
+                      : () => unawaited(_checkInAll(rooms[i])),
                   onChangeStatus: (student, next) =>
                       unawaited(_updateStudentStatus(student, next)),
                 ),
@@ -1036,7 +980,7 @@ class _RoomStudentTile extends StatelessWidget {
                 ),
                 SizedBox(height: ui(4)),
                 Text(
-                  student.studentNo,
+                  '${student.studentNo} · ${student.bedName}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(

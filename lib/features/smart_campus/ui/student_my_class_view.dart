@@ -221,9 +221,8 @@ class _StudentMyClassViewState extends ConsumerState<StudentMyClassView> {
 
   void _showNoticeDetail(_ClassNoticeItem item) {
     final ui = DashboardScaleScope.of(context).ui;
-    showScaledDialog<void>(
+    showNoticeDetailDialog<void>(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.18),
       builder: (ctx) => GradientHeaderDialog(
         title: item.title.isNotEmpty ? item.title : '班级通知',
         width: 460,

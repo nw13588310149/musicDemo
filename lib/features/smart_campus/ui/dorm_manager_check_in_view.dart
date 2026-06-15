@@ -32,6 +32,7 @@ import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dar
 
 import '../../../core/widgets/app_toast.dart';
 import '../../shell/ui/shell_layout.dart';
+import '../services/baidu_geo_service.dart';
 import '../services/geo_locator.dart';
 import 'widgets/baidu_map_view.dart';
 import 'widgets/smart_campus_page_banner.dart';
@@ -178,11 +179,12 @@ class _DormManagerCheckInViewState extends State<DormManagerCheckInView> {
       if (!mounted) return;
       setState(() {
         _position = pos;
-        _resolvedAddress = null; // 等地图反编码回填
+        _resolvedAddress = null; // 等反编码回填
         _locationStatus =
             '已定位 · 精度 ${pos.accuracyMeters.toStringAsFixed(0)}m';
         _locationStatusKind = _LocationStatusKind.success;
       });
+      unawaited(_resolveAddress(pos));
     } on GeoException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -201,12 +203,25 @@ class _DormManagerCheckInViewState extends State<DormManagerCheckInView> {
     }
   }
 
+  Future<void> _resolveAddress(GeoPosition pos) async {
+    final address = await BaiduGeoService.reverseGeocode(
+      lat: pos.lat,
+      lng: pos.lng,
+    );
+    if (!mounted || address == null || address.isEmpty) return;
+    _onMapAddressResolved(address);
+  }
+
   void _onMapAddressResolved(String address) {
     if (!mounted) return;
     setState(() {
       _resolvedAddress = address;
       if (_locationStatusKind == _LocationStatusKind.success) {
-        _locationStatus = address;
+        final p = _position;
+        final accuracy = p != null
+            ? ' · 精度 ${p.accuracyMeters.toStringAsFixed(0)}m'
+            : '';
+        _locationStatus = '已定位$accuracy';
       }
     });
   }
@@ -221,6 +236,12 @@ class _DormManagerCheckInViewState extends State<DormManagerCheckInView> {
       return '纬度 ${p.lat.toStringAsFixed(5)} / 经度 ${p.lng.toStringAsFixed(5)}';
     }
     return '暂无定位';
+  }
+
+  String? get _coordinateLine {
+    final p = _position;
+    if (p == null) return null;
+    return '经纬度 ${p.lat.toStringAsFixed(5)}°N, ${p.lng.toStringAsFixed(5)}°E';
   }
 
   /// 当前应为「上班打卡」还是「下班打卡」（仅用于大圆按钮文案）：
@@ -300,6 +321,8 @@ class _DormManagerCheckInViewState extends State<DormManagerCheckInView> {
               clock: _formatTime(_now),
               punchLabel: _punchLabel,
               locationStatus: _locationStatus,
+              locationAddress: _currentLocationDisplay,
+              coordinateLine: _coordinateLine,
               locationStatusColor: _statusColor(_locationStatusKind),
               position: _position,
               locating: _locating,
@@ -417,6 +440,8 @@ class _PunchPanel extends StatelessWidget {
     required this.clock,
     required this.punchLabel,
     required this.locationStatus,
+    required this.locationAddress,
+    required this.coordinateLine,
     required this.locationStatusColor,
     required this.position,
     required this.locating,
@@ -428,6 +453,8 @@ class _PunchPanel extends StatelessWidget {
   final String clock;
   final String punchLabel;
   final String locationStatus;
+  final String locationAddress;
+  final String? coordinateLine;
   final Color locationStatusColor;
   final GeoPosition? position;
   final bool locating;
@@ -460,54 +487,109 @@ class _PunchPanel extends StatelessWidget {
               onAddressResolved: onAddressResolved,
             ),
           ),
-          // 顶部覆盖层（白底半透明），让状态文字 / 按钮在地图上仍可读。
+          // 顶部信息条：定位状态 + 详细地址 + 经纬度。
           Positioned(
             left: 0,
             right: 0,
             top: 0,
             child: Container(
-              padding: EdgeInsets.only(top: ui(20), bottom: ui(16)),
+              padding: EdgeInsets.fromLTRB(ui(16), ui(14), ui(16), ui(12)),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.white.withValues(alpha: 0.96),
+                    Colors.white.withValues(alpha: 0.94),
+                    Colors.white.withValues(alpha: 0.72),
                     Colors.white.withValues(alpha: 0.0),
                   ],
+                  stops: const [0, 0.55, 1],
                 ),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    Icons.location_on_rounded,
-                    size: ui(36),
-                    color: locationStatusColor,
-                  ),
-                  SizedBox(height: ui(8)),
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: ui(24)),
-                    child: Text(
-                      locationStatus,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: ui(14),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.location_on_rounded,
+                        size: ui(22),
                         color: locationStatusColor,
-                        fontFamily: 'PingFang SC',
-                        fontWeight: AppFont.w400,
-                        height: 1.2,
                       ),
-                    ),
-                  ),
-                  SizedBox(height: ui(16)),
-                  _RefreshLocationButton(
-                    onTap: onRefreshLocation,
-                    busy: locating,
+                      SizedBox(width: ui(8)),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              locationAddress,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: ui(14),
+                                color: _kTextDark,
+                                fontFamily: 'PingFang SC',
+                                fontWeight: AppFont.w500,
+                                height: 1.35,
+                              ),
+                            ),
+                            if (coordinateLine != null) ...[
+                              SizedBox(height: ui(4)),
+                              Text(
+                                coordinateLine!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: ui(11),
+                                  color: _kTextHint,
+                                  fontFamily: 'PingFang SC',
+                                  height: 1.2,
+                                ),
+                              ),
+                            ],
+                            SizedBox(height: ui(4)),
+                            Text(
+                              locationStatus,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: ui(12),
+                                color: locationStatusColor,
+                                fontFamily: 'PingFang SC',
+                                height: 1.2,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      SizedBox(width: ui(8)),
+                      _RefreshLocationButton(
+                        onTap: onRefreshLocation,
+                        busy: locating,
+                      ),
+                    ],
                   ),
                 ],
+              ),
+            ),
+          ),
+          // 底部半透明条，避免地图被大按钮完全挡住时仍能看到下方区域。
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: ui(48),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: [
+                    Colors.white.withValues(alpha: 0.85),
+                    Colors.white.withValues(alpha: 0.0),
+                  ],
+                ),
               ),
             ),
           ),

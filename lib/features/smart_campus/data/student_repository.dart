@@ -143,40 +143,150 @@ class StudentRepository {
     );
   }
 
-  /// 学生小课上课签到。App 端请求体仅包含 `courseId`。
+  /// 学生小课上课签到。Swagger 请求体：`{ "courseId": int64 }`。
   Future<ApiResponse> courseStudentSignIn({required String courseId}) {
-    return client.post(
-      '$_base/courseStudentSignIn',
-      data: <String, dynamic>{
-        'courseId': readSnowflakeId(courseId) ?? courseId,
-      },
-    );
+    return _postNumericCourseId('$_base/courseStudentSignIn', courseId);
   }
 
-  /// 学生小课下课签到。App 端请求体仅包含 `courseId`。
+  /// 学生小课下课签到。Swagger 请求体：`{ "courseId": int64 }`。
   Future<ApiResponse> courseStudentSignOut({required String courseId}) {
-    return client.post(
-      '$_base/courseStudentSignOut',
-      data: <String, dynamic>{
-        'courseId': readSnowflakeId(courseId) ?? courseId,
-      },
-    );
+    return _postNumericCourseId('$_base/courseStudentSignOut', courseId);
   }
 
-  /// 小课学生评价。
+  /// 小课学生评价。Swagger 请求体：`courseId`(int64)、`comment`、`score`。
   Future<ApiResponse> courseStudentComment({
     required String courseId,
     required String comment,
     required int score,
   }) {
-    return client.post(
-      '$_base/courseStudentComment',
-      data: <String, dynamic>{
-        'courseId': readSnowflakeId(courseId) ?? courseId,
+    final body = encodeNumericIdRequestBody(
+      <String, dynamic>{
+        'courseId': courseId,
         'comment': comment,
         'score': score,
       },
+      numericIdKeys: const {'courseId'},
     );
+    if (body == null) {
+      return Future.value(ApiResponse.failure('课程 id 格式错误'));
+    }
+    return client.post('$_base/courseStudentComment', data: body);
+  }
+
+  // ============== 课堂签到（统计 / 记录 / 详情 / 补签） ==============
+
+  /// 签到统计：小课应签、大课入册、打卡合计、迟到、准时率等。
+  Future<ApiResponse> courseSignStat({
+    String? beginDate,
+    String? endDate,
+  }) {
+    return client.post(
+      '$_base/courseSignStat',
+      data: <String, dynamic>{
+        if (beginDate != null && beginDate.isNotEmpty) 'beginDate': beginDate,
+        if (endDate != null && endDate.isNotEmpty) 'endDate': endDate,
+      },
+    );
+  }
+
+  /// 最近签到记录（首页「最近课堂记录」）。
+  Future<ApiResponse> courseSignRecentList({int size = 6}) {
+    return client.post(
+      '$_base/courseSignRecentList',
+      data: <String, dynamic>{'size': size.clamp(1, 50)},
+    );
+  }
+
+  /// 签到历史（分页；[status] 由后端约定，常见 0 正常 / 1 缺勤）。
+  Future<ApiResponse> courseSignHistory({
+    String? beginDate,
+    String? endDate,
+    int? status,
+    int current = 1,
+    int size = 200,
+  }) {
+    return client.post(
+      '$_base/courseSignHistory',
+      data: <String, dynamic>{
+        if (beginDate != null && beginDate.isNotEmpty) 'beginDate': beginDate,
+        if (endDate != null && endDate.isNotEmpty) 'endDate': endDate,
+        'status': ?status,
+        'current': current,
+        'size': size,
+      },
+    );
+  }
+
+  /// 单次课程签到详情。Swagger 请求体：`{ "id": int64 }`（签到记录 id，非 courseId）。
+  Future<ApiResponse> courseSignDetail({required String id}) {
+    return _postNumericId('$_base/courseSignDetail', id);
+  }
+
+  /// 缺勤课程申请补签。Swagger：`courseId`(int64)、`signType`、`reason`、`attachment?`。
+  Future<ApiResponse> courseSignMakeupSave({
+    required String courseId,
+    required int signType,
+    required String reason,
+    String attachment = '',
+  }) {
+    final body = encodeNumericIdRequestBody(
+      <String, dynamic>{
+        'courseId': courseId,
+        'signType': signType,
+        'reason': reason,
+        if (attachment.isNotEmpty) 'attachment': attachment,
+      },
+      numericIdKeys: const {'courseId'},
+    );
+    if (body == null) {
+      return Future.value(ApiResponse.failure('课程 id 格式错误'));
+    }
+    return client.post('$_base/courseSignMakeupSave', data: body);
+  }
+
+  /// 本人课堂补签申请列表（分页）。
+  ///
+  /// [status]：审批状态筛选，常见 0 待审批 / 1 已通过 / 2 已驳回；不传则全部。
+  Future<ApiResponse> courseSignMakeupList({
+    int? status,
+    int current = 1,
+    int size = 200,
+  }) {
+    return client.post(
+      '$_base/courseSignMakeupList',
+      data: <String, dynamic>{
+        'current': current,
+        'size': size,
+        'status': ?status,
+      },
+    );
+  }
+
+  /// 课堂补签申请详情。Swagger 请求体：`{ "id": int64 }`。
+  Future<ApiResponse> courseSignMakeupDetail({required String id}) {
+    return _postNumericId('$_base/courseSignMakeupDetail', id);
+  }
+
+  Future<ApiResponse> _postNumericId(String path, String id) {
+    final body = encodeNumericIdRequestBody(
+      <String, dynamic>{'id': id},
+      numericIdKeys: const {'id'},
+    );
+    if (body == null) {
+      return Future.value(ApiResponse.failure('id 格式错误'));
+    }
+    return client.post(path, data: body);
+  }
+
+  Future<ApiResponse> _postNumericCourseId(String path, String courseId) {
+    final body = encodeNumericIdRequestBody(
+      <String, dynamic>{'courseId': courseId},
+      numericIdKeys: const {'courseId'},
+    );
+    if (body == null) {
+      return Future.value(ApiResponse.failure('课程 id 格式错误'));
+    }
+    return client.post(path, data: body);
   }
 
   /// 学生请假列表（分页）。

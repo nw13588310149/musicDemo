@@ -45,8 +45,7 @@ class _NativeMusicPlayAudioVisualizer implements MusicPlayAudioVisualizer {
     );
     await kMusicPlayVisualizerMethodChannel.invokeMethod<void>('attach', {
       'url': url,
-      if (androidAudioSessionId != null)
-        'androidAudioSessionId': androidAudioSessionId,
+      'androidAudioSessionId': ?androidAudioSessionId,
     });
   }
 

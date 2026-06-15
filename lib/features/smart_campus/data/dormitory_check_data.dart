@@ -29,10 +29,14 @@ class DormitoryBuildingOption {
   const DormitoryBuildingOption({
     required this.id,
     required this.label,
+    this.roomCount = 0,
+    this.assignedBedCount = 0,
   });
 
   final String id;
   final String label;
+  final int roomCount;
+  final int assignedBedCount;
 
   static const all = DormitoryBuildingOption(id: '', label: '全部宿舍楼');
 }
@@ -41,10 +45,14 @@ class DormitoryFloorOption {
   const DormitoryFloorOption({
     required this.id,
     required this.label,
+    this.roomCount = 0,
+    this.assignedBedCount = 0,
   });
 
   final String id;
   final String label;
+  final int roomCount;
+  final int assignedBedCount;
 
   static const all = DormitoryFloorOption(id: '', label: '全部楼层');
 }
@@ -52,7 +60,8 @@ class DormitoryFloorOption {
 enum DormitoryStudentCheckStatus {
   unchecked('未打卡'),
   normal('正常'),
-  lateReturn('晚归');
+  lateReturn('晚归'),
+  absent('缺勤');
 
   const DormitoryStudentCheckStatus(this.apiValue);
   final String apiValue;
@@ -63,6 +72,7 @@ enum DormitoryStudentCheckStatus {
       return DormitoryStudentCheckStatus.normal;
     }
     if (v == '晚归') return DormitoryStudentCheckStatus.lateReturn;
+    if (v == '缺勤') return DormitoryStudentCheckStatus.absent;
     return DormitoryStudentCheckStatus.unchecked;
   }
 }
@@ -72,6 +82,7 @@ class DormitoryRoomStudent {
     required this.userId,
     required this.name,
     required this.studentNo,
+    required this.bedName,
     required this.avatarUrl,
     required this.status,
   });
@@ -79,6 +90,7 @@ class DormitoryRoomStudent {
   final String userId;
   final String name;
   final String studentNo;
+  final String bedName;
   final String avatarUrl;
   final DormitoryStudentCheckStatus status;
 }
@@ -128,6 +140,8 @@ List<DormitoryBuildingOption> parseDormitoryManagedBuildingList(dynamic raw) {
       DormitoryBuildingOption(
         id: id,
         label: _pickString(m, ['buildingName'], '未命名宿舍楼'),
+        roomCount: _asInt(m['roomCount']) ?? 0,
+        assignedBedCount: _asInt(m['assignedBedCount']) ?? 0,
       ),
     );
   }
@@ -144,6 +158,8 @@ List<DormitoryFloorOption> parseDormitoryFloorList(dynamic raw) {
       DormitoryFloorOption(
         id: id,
         label: _pickString(m, ['floorName'], '未命名楼层'),
+        roomCount: _asInt(m['roomCount']) ?? 0,
+        assignedBedCount: _asInt(m['assignedBedCount']) ?? 0,
       ),
     );
   }
@@ -171,7 +187,8 @@ List<DormitoryRoomCheck> parseDormitoryCheckRoomList(dynamic raw) {
         buildingDesc: buildingDesc.isEmpty ? '—' : buildingDesc,
         session: _pickString(m, ['checkType'], '查寝'),
         deadline: _pickString(m, ['checkDeadline'], '—'),
-        allChecked: m['allChecked'] == true ||
+        allChecked:
+            m['allChecked'] == true ||
             m['allChecked']?.toString() == 'true' ||
             m['allChecked'] == 1,
         students: students,
@@ -197,8 +214,14 @@ List<DormitoryRoomStudent> _parseUserList(dynamic raw) {
     parsed.add(
       DormitoryRoomStudent(
         userId: userId,
-        name: _pickString(m, ['studentName', 'name', 'userName'], '未命名'),
+        name: _pickString(m, [
+          'realname',
+          'studentName',
+          'name',
+          'userName',
+        ], '未命名'),
         studentNo: _pickString(m, ['studentNo', 'userNo'], '—'),
+        bedName: _pickString(m, ['bedName', 'bedInfo'], '—'),
         avatarUrl: _pickString(m, ['studentHeadUrl', 'headUrl', 'avatar'], ''),
         status: DormitoryStudentCheckStatus.fromApi(
           _pickString(m, ['status', 'checkStatus'], '未打卡'),
@@ -218,10 +241,20 @@ List<Map<String, dynamic>> _coerceList(dynamic raw) {
   }
   if (raw is Map) {
     final m = raw.cast<String, dynamic>();
-    if (m['data'] is List) return _coerceList(m['data']);
     if (m['records'] is List) return _coerceList(m['records']);
+    if (m['data'] is List) return _coerceList(m['data']);
+    if (m['data'] is Map) return _coerceList(m['data']);
   }
   return const [];
+}
+
+int parseDormitoryHistoryTotal(dynamic raw) {
+  if (raw is! Map) return 0;
+  var map = raw.cast<String, dynamic>();
+  if (map['data'] is Map) {
+    map = Map<String, dynamic>.from(map['data'] as Map);
+  }
+  return _asInt(map['total']) ?? _coerceList(raw).length;
 }
 
 String _pickString(
@@ -276,6 +309,33 @@ class DormitoryIndexOverview {
   final List<DormitoryDutyTask> todayDutyTasks;
 
   static const zero = DormitoryIndexOverview();
+
+  DormitoryIndexOverview copyWith({
+    int? managedBuildingCount,
+    int? bedCount,
+    int? todayNormalCount,
+    int? todayLateCount,
+    int? todayAbsentCount,
+    int? pendingMakeupCount,
+    int? unclosedExceptionCount,
+    List<String>? managedAreas,
+    DormitoryDutyTask? currentTask,
+    List<DormitoryDutyTask>? todayDutyTasks,
+  }) {
+    return DormitoryIndexOverview(
+      managedBuildingCount: managedBuildingCount ?? this.managedBuildingCount,
+      bedCount: bedCount ?? this.bedCount,
+      todayNormalCount: todayNormalCount ?? this.todayNormalCount,
+      todayLateCount: todayLateCount ?? this.todayLateCount,
+      todayAbsentCount: todayAbsentCount ?? this.todayAbsentCount,
+      pendingMakeupCount: pendingMakeupCount ?? this.pendingMakeupCount,
+      unclosedExceptionCount:
+          unclosedExceptionCount ?? this.unclosedExceptionCount,
+      managedAreas: managedAreas ?? this.managedAreas,
+      currentTask: currentTask ?? this.currentTask,
+      todayDutyTasks: todayDutyTasks ?? this.todayDutyTasks,
+    );
+  }
 }
 
 class DormitoryDutyTask {
@@ -295,7 +355,9 @@ class DormitoryDutyTask {
     return DormitoryDutyTask(
       tag: _pickString(map, ['checkType', 'tag', 'type'], '查寝'),
       title: _pickString(map, ['title', 'taskName', 'name'], '查寝任务'),
-      timeFrom: _clock(_pickString(map, ['timeFrom', 'beginTime', 'startTime'])),
+      timeFrom: _clock(
+        _pickString(map, ['timeFrom', 'beginTime', 'startTime']),
+      ),
       timeTo: _clock(_pickString(map, ['timeTo', 'endTime', 'finishTime'])),
     );
   }
@@ -308,11 +370,13 @@ class DormitoryCheckHistoryItem {
     required this.studentName,
     required this.studentNo,
     required this.dormName,
+    required this.bedName,
     required this.checkDate,
     required this.checkType,
     required this.deadline,
     required this.checkTime,
     required this.status,
+    required this.statusLabel,
     required this.remark,
     required this.handleStatus,
   });
@@ -322,18 +386,35 @@ class DormitoryCheckHistoryItem {
   final String studentName;
   final String studentNo;
   final String dormName;
+  final String bedName;
   final String checkDate;
   final String checkType;
   final String deadline;
   final String checkTime;
   final DormitoryStudentCheckStatus status;
+  final String statusLabel;
   final String remark;
   final int handleStatus;
+
+  String get locationLabel {
+    final parts = <String>[
+      if (dormName.isNotEmpty) dormName,
+      if (bedName.isNotEmpty) '$bedName床',
+    ];
+    return parts.isEmpty ? '—' : parts.join(' · ');
+  }
 
   bool get needsExceptionHandle =>
       status != DormitoryStudentCheckStatus.normal && handleStatus == 0;
 
   factory DormitoryCheckHistoryItem.fromJson(Map<String, dynamic> map) {
+    final bedName = _pickString(map, ['bedName', 'bedInfo']);
+    final statusLabel = _pickString(map, ['status', 'checkStatus'], '未打卡');
+    final rawName = map['studentName'] ?? map['realname'] ?? map['userName'];
+    final trimmedName = rawName?.toString().trim() ?? '';
+    final studentName = trimmedName.isNotEmpty && trimmedName != 'null'
+        ? trimmedName
+        : (bedName.isNotEmpty ? '$bedName（未登记）' : '未登记学生');
     return DormitoryCheckHistoryItem(
       id: readSnowflakeId(map['id']) ?? map['id']?.toString() ?? '',
       userId:
@@ -341,17 +422,21 @@ class DormitoryCheckHistoryItem {
           readSnowflakeId(map['studentId']) ??
           map['userId']?.toString() ??
           '',
-      studentName: _pickString(map, ['studentName', 'realname', 'userName'], '未命名'),
+      studentName: studentName,
       studentNo: _pickString(map, ['studentNo', 'userNo'], '—'),
       dormName: _historyDormName(map),
+      bedName: bedName,
       checkDate: _pickString(map, ['checkDate', 'date']),
-      checkType: _pickString(map, ['checkType', 'scene'], '查寝'),
-      deadline: _pickString(map, ['checkDeadline', 'deadline', 'requiredTime'], '—'),
+      checkType: _pickString(map, ['checkType', 'scene']),
+      deadline: _pickString(map, [
+        'checkDeadline',
+        'deadline',
+        'requiredTime',
+      ]),
       checkTime: _historyClock(_pickString(map, ['checkTime', 'stampTime'])),
-      status: DormitoryStudentCheckStatus.fromApi(
-        _pickString(map, ['status', 'checkStatus'], '未打卡'),
-      ),
-      remark: _pickString(map, ['remark', 'note'], '无'),
+      status: DormitoryStudentCheckStatus.fromApi(statusLabel),
+      statusLabel: statusLabel,
+      remark: _pickString(map, ['anomalyReason', 'remark', 'note']),
       handleStatus: _asInt(map['handleStatus']) ?? 0,
     );
   }
@@ -368,6 +453,7 @@ class DormitoryMakeupItem {
     required this.status,
     required this.statusText,
     required this.dormName,
+    required this.createTime,
   });
 
   final String id;
@@ -379,6 +465,7 @@ class DormitoryMakeupItem {
   final int status;
   final String statusText;
   final String dormName;
+  final String createTime;
 
   factory DormitoryMakeupItem.fromJson(Map<String, dynamic> map) {
     return DormitoryMakeupItem(
@@ -394,6 +481,7 @@ class DormitoryMakeupItem {
       status: _asInt(map['status']) ?? 0,
       statusText: _pickString(map, ['statusText']),
       dormName: _historyDormName(map),
+      createTime: _pickString(map, ['createTime', 'applyTime']),
     );
   }
 }
@@ -409,10 +497,11 @@ DormitoryIndexOverview parseDormitoryIndexOverview(dynamic raw) {
   if (areaRaw is List) {
     for (final item in areaRaw) {
       if (item is Map) {
-        final name = _pickString(
-          Map<String, dynamic>.from(item),
-          ['buildingName', 'name', 'areaName'],
-        );
+        final name = _pickString(Map<String, dynamic>.from(item), [
+          'buildingName',
+          'name',
+          'areaName',
+        ]);
         if (name.isNotEmpty) areas.add(name);
       } else {
         final text = item?.toString().trim() ?? '';
@@ -441,9 +530,11 @@ DormitoryIndexOverview parseDormitoryIndexOverview(dynamic raw) {
         _asInt(map['managedBuildingCount']) ??
         _asInt(map['buildingCount']) ??
         0,
-    bedCount: _asInt(map['bedCount']) ?? 0,
-    todayNormalCount: _asInt(map['todayNormalCount']) ?? _asInt(map['normalCount']) ?? 0,
-    todayLateCount: _asInt(map['todayLateCount']) ?? _asInt(map['lateCount']) ?? 0,
+    bedCount: _asInt(map['totalBedCount']) ?? _asInt(map['bedCount']) ?? 0,
+    todayNormalCount:
+        _asInt(map['todayNormalCount']) ?? _asInt(map['normalCount']) ?? 0,
+    todayLateCount:
+        _asInt(map['todayLateCount']) ?? _asInt(map['lateCount']) ?? 0,
     todayAbsentCount:
         _asInt(map['todayAbsentCount']) ??
         _asInt(map['notCheckedCount']) ??
@@ -451,6 +542,7 @@ DormitoryIndexOverview parseDormitoryIndexOverview(dynamic raw) {
         0,
     pendingMakeupCount: _asInt(map['pendingMakeupCount']) ?? 0,
     unclosedExceptionCount:
+        _asInt(map['unhandledExceptionCount']) ??
         _asInt(map['unclosedExceptionCount']) ??
         _asInt(map['exceptionCount']) ??
         0,
@@ -461,26 +553,65 @@ DormitoryIndexOverview parseDormitoryIndexOverview(dynamic raw) {
 }
 
 List<DormitoryCheckHistoryItem> parseDormitoryCheckHistoryList(dynamic raw) {
-  return _coerceList(raw)
-      .map(DormitoryCheckHistoryItem.fromJson)
-      .toList(growable: false);
+  return _coerceList(
+    raw,
+  ).map(DormitoryCheckHistoryItem.fromJson).toList(growable: false);
+}
+
+DormitoryCheckStat calculateDormitoryHistoryStat(
+  List<DormitoryCheckHistoryItem> items,
+) {
+  var normalCount = 0;
+  var lateCount = 0;
+  var notCheckedCount = 0;
+  for (final item in items) {
+    switch (item.status) {
+      case DormitoryStudentCheckStatus.normal:
+        normalCount++;
+      case DormitoryStudentCheckStatus.lateReturn:
+        lateCount++;
+      case DormitoryStudentCheckStatus.unchecked:
+      case DormitoryStudentCheckStatus.absent:
+        notCheckedCount++;
+    }
+  }
+  return DormitoryCheckStat(
+    bedCount: items.length,
+    normalCount: normalCount,
+    lateCount: lateCount,
+    notCheckedCount: notCheckedCount,
+  );
+}
+
+DormitoryCheckStat calculateDormitoryRoomStat(List<DormitoryRoomCheck> rooms) {
+  var normalCount = 0;
+  var lateCount = 0;
+  var notCheckedCount = 0;
+  for (final room in rooms) {
+    for (final student in room.students) {
+      switch (student.status) {
+        case DormitoryStudentCheckStatus.normal:
+          normalCount++;
+        case DormitoryStudentCheckStatus.lateReturn:
+          lateCount++;
+        case DormitoryStudentCheckStatus.unchecked:
+        case DormitoryStudentCheckStatus.absent:
+          notCheckedCount++;
+      }
+    }
+  }
+  return DormitoryCheckStat(
+    bedCount: normalCount + lateCount + notCheckedCount,
+    normalCount: normalCount,
+    lateCount: lateCount,
+    notCheckedCount: notCheckedCount,
+  );
 }
 
 List<DormitoryMakeupItem> parseDormitoryMakeupList(dynamic raw) {
-  return _coerceList(raw)
-      .map(DormitoryMakeupItem.fromJson)
-      .toList(growable: false);
-}
-
-String? parseDormitoryCheckExportUrl(dynamic raw) {
-  if (raw is! Map) return null;
-  var map = Map<String, dynamic>.from(raw);
-  if (map['data'] is Map) {
-    map = Map<String, dynamic>.from(map['data'] as Map);
-  } else if (map['data'] is String) {
-    return map['data']?.toString();
-  }
-  return _pickString(map, ['fileUrl', 'url', 'downloadUrl'], '');
+  return _coerceList(
+    raw,
+  ).map(DormitoryMakeupItem.fromJson).toList(growable: false);
 }
 
 String _historyDormName(Map<String, dynamic> map) {
@@ -488,7 +619,7 @@ String _historyDormName(Map<String, dynamic> map) {
     _pickString(map, ['buildingName']),
     _pickString(map, ['floorName']),
     _pickString(map, ['roomName']),
-  ].where((value) => value.isNotEmpty).join(' ');
+  ].where((value) => value.isNotEmpty).join(' · ');
 }
 
 String _historyClock(String value) {
@@ -513,25 +644,38 @@ List<DormitoryDetailField> parseDormitoryCheckDetailFields(dynamic raw) {
     _pickString(map, ['status', 'checkStatus'], '未打卡'),
   );
   final handleStatus = _asInt(map['handleStatus']) ?? 0;
+  final bedName = _pickString(map, ['bedName', 'bedInfo']);
+  final rawName = map['studentName'] ?? map['realname'] ?? map['userName'];
+  final trimmedName = rawName?.toString().trim() ?? '';
+  final studentDisplay = trimmedName.isNotEmpty && trimmedName != 'null'
+      ? trimmedName
+      : (bedName.isNotEmpty ? '$bedName（未登记）' : '未登记学生');
   return [
-    DormitoryDetailField('学生', _pickString(map, ['studentName', 'realname'])),
+    DormitoryDetailField('学生', studentDisplay),
     DormitoryDetailField('学号', _pickString(map, ['studentNo', 'userNo'], '—')),
-    DormitoryDetailField('查寝场次', _pickString(map, ['checkType', 'scene'], '查寝')),
     DormitoryDetailField('查寝日期', _pickString(map, ['checkDate', 'date'])),
     DormitoryDetailField('宿舍', _historyDormName(map)),
-    DormitoryDetailField('规定时间', _pickString(map, ['checkDeadline', 'deadline'], '—')),
-    DormitoryDetailField('打卡时间', _historyClock(_pickString(map, ['checkTime', 'stampTime']))),
-    DormitoryDetailField('查寝状态', status.apiValue),
-    DormitoryDetailField('备注', _pickString(map, ['remark', 'note'], '无')),
-    if (handleStatus > 0)
-      DormitoryDetailField(
-        '处理状态',
-        _pickString(map, ['handleStatusText'], '$handleStatus'),
-      ),
+    DormitoryDetailField('床位', _pickString(map, ['bedName', 'bedInfo'], '—')),
     DormitoryDetailField(
-      '处理说明',
-      _pickString(map, ['handleRemark', 'handleReason']),
+      '打卡时间',
+      _pickString(map, ['checkTime', 'stampTime'], '—'),
     ),
+    DormitoryDetailField(
+      '查寝状态',
+      _pickString(map, ['status', 'checkStatus'], status.apiValue),
+    ),
+    if (_pickString(map, ['anomalyReason', 'remark', 'note']).isNotEmpty)
+      DormitoryDetailField(
+        '备注',
+        _pickString(map, ['anomalyReason', 'remark', 'note']),
+      ),
+    if (handleStatus > 0)
+      DormitoryDetailField('处理状态', handleStatus == 1 ? '已处理' : '待处理'),
+    if (_pickString(map, ['handleRemark', 'handleReason']).isNotEmpty)
+      DormitoryDetailField(
+        '处理说明',
+        _pickString(map, ['handleRemark', 'handleReason']),
+      ),
   ];
 }
 
@@ -544,17 +688,27 @@ List<DormitoryDetailField> parseDormitoryMakeupDetailFields(dynamic raw) {
   final status = _asInt(map['status']) ?? 0;
   return [
     DormitoryDetailField('学生', _pickString(map, ['studentName', 'realname'])),
-    DormitoryDetailField('宿舍', _historyDormName(map)),
-    DormitoryDetailField('补卡场次', _pickString(map, ['checkType', 'scene'], '补卡')),
+    DormitoryDetailField(
+      '补卡场次',
+      _pickString(map, ['checkType', 'scene'], '补卡'),
+    ),
     DormitoryDetailField('补卡日期', _pickString(map, ['checkDate', 'date'])),
     DormitoryDetailField('申请原因', _pickString(map, ['reason'], '未填写')),
+    DormitoryDetailField('附件', _pickString(map, ['attachment'], '无')),
     DormitoryDetailField(
       '审批状态',
       _pickString(map, ['statusText'], _makeupStatusLabel(status)),
     ),
-    DormitoryDetailField('审批意见', _pickString(map, ['auditReason', 'auditRemark'])),
+    DormitoryDetailField('审批人', _pickString(map, ['approverName'], '—')),
+    DormitoryDetailField(
+      '审批意见',
+      _pickString(map, ['approveRemark', 'auditReason', 'auditRemark'], '无'),
+    ),
     DormitoryDetailField('申请时间', _pickString(map, ['createTime', 'applyTime'])),
-    DormitoryDetailField('审批时间', _pickString(map, ['auditTime', 'updateTime'])),
+    DormitoryDetailField(
+      '审批时间',
+      _pickString(map, ['approveTime', 'auditTime', 'updateTime'], '—'),
+    ),
   ];
 }
 
