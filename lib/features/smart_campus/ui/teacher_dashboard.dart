@@ -10,6 +10,8 @@ import '../../../core/widgets/smooth_circle_network_avatar.dart';
 import '../../school/data/school_repository.dart';
 import '../../shell/state/shell_state.dart';
 import '../../shell/ui/shell_layout.dart';
+import '../data/course_teacher_index_data.dart';
+import '../data/head_teacher_index_data.dart';
 import '../data/schedule_course_card_builder.dart';
 import '../data/smart_campus_dashboard_data.dart';
 import '../data/student_repository.dart';
@@ -50,7 +52,7 @@ void _showActionPending(BuildContext context, String label) {
 ///   - `didUpdateWidget` 仅在 `widget.selectedRole` 真正发生变化时才把
 ///     `_localTab` 同步为 `widget.selectedRole`，避免没变化时把已经切到的
 ///     本地预览打回去。
-class TeacherDashboardLayout extends StatefulWidget {
+class TeacherDashboardLayout extends ConsumerStatefulWidget {
   const TeacherDashboardLayout({
     super.key,
     required this.selectedRole,
@@ -177,28 +179,43 @@ class TeacherDashboardLayout extends StatefulWidget {
   final Widget? roleSwitcher;
 
   @override
-  State<TeacherDashboardLayout> createState() => _TeacherDashboardLayoutState();
+  ConsumerState<TeacherDashboardLayout> createState() =>
+      _TeacherDashboardLayoutState();
 }
 
-class _TeacherDashboardLayoutState extends State<TeacherDashboardLayout> {
+class _TeacherDashboardLayoutState
+    extends ConsumerState<TeacherDashboardLayout> {
   late SmartCampusRole _localTab;
+  List<SmartCampusStatCardData> _stats = const [];
+  List<SmartCampusQuickActionData> _actions = const [];
+  CourseTeacherIndexRes? _courseTeacherIndex;
+  List<_BoardItemData> _headTeacherTodos = const [];
+  List<_BoardItemData> _headTeacherRecent = const [];
 
   @override
   void initState() {
     super.initState();
     _localTab = _coerceRole(widget.selectedRole);
+    _syncPlaceholderData();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadHomeData());
+  }
+
+  void _syncPlaceholderData() {
+    final data = smartCampusDashboardDataForRole(_localTab);
+    _stats = data.stats;
+    _actions = data.actions;
+    _headTeacherTodos = const [];
+    _headTeacherRecent = const [];
+    _courseTeacherIndex = null;
   }
 
   @override
   void didUpdateWidget(covariant TeacherDashboardLayout oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // 只有当上层 `widget.selectedRole` 真的发生变化时，才让它覆盖本地 tab。
-    // - admin 在 placeholder / dashboard 切到班主任 → controller state 改变
-    //   → didUpdateWidget 触发 → 同步 _localTab。
-    // - 普通教师在 dashboard 内点「班主任」tab：selectRole 被 ignore，
-    //   widget.selectedRole 不变，didUpdateWidget 不会触发，本地预览保留。
     if (oldWidget.selectedRole != widget.selectedRole) {
       _localTab = _coerceRole(widget.selectedRole);
+      _syncPlaceholderData();
+      _loadHomeData();
     }
   }
 
@@ -228,9 +245,138 @@ class _TeacherDashboardLayoutState extends State<TeacherDashboardLayout> {
     // 单身份的普通教师被 ignore（仅保留本地预览效果）。
     setState(() {
       _localTab = role;
+      _syncPlaceholderData();
     });
     widget.onSelectRole?.call(role);
+    _loadHomeData();
   }
+
+  Future<void> _loadHomeData() async {
+    if (_localTab == SmartCampusRole.headTeacher) {
+      await _loadHeadTeacherHome();
+    } else {
+      await _loadCourseTeacherHome();
+    }
+  }
+
+  Future<void> _loadCourseTeacherHome() async {
+    if (!mounted) return;
+    final repo = ref.read(teacherRepositoryProvider);
+    final now = DateTime.now();
+    final weekRange = _currentWeekDateRange(now);
+
+    try {
+      final results = await Future.wait([
+        repo.courseTeacherIndex(),
+        repo.courseList(beginDate: weekRange.$1, endDate: weekRange.$2),
+      ]);
+      if (!mounted) return;
+
+      final indexResp = results[0];
+      final weekResp = results[1];
+      final weekCount = weekResp.isSuccess
+          ? countWeekCoursesFromCourseList(weekResp.data)
+          : null;
+
+      if (!indexResp.isSuccess) {
+        if (indexResp.msg.isNotEmpty) {
+          AppToast.show(context, indexResp.msg);
+        }
+        return;
+      }
+
+      final index = parseCourseTeacherIndexRes(indexResp.data);
+      final base = smartCampusDashboardDataForRole(SmartCampusRole.teacher);
+      setState(() {
+        _courseTeacherIndex = index;
+        _stats = buildCourseTeacherStats(
+          index: index,
+          weekCourseCount: weekCount,
+        );
+        _actions = _applyActionBadges(
+          base.actions,
+          buildCourseTeacherActionBadges(index),
+        );
+      });
+    } catch (_) {
+      // 保留占位统计，避免首页空白。
+    }
+  }
+
+  Future<void> _loadHeadTeacherHome() async {
+    if (!mounted) return;
+    try {
+      final resp =
+          await ref.read(teacherRepositoryProvider).headTeacherIndex();
+      if (!mounted) return;
+      if (!resp.isSuccess) {
+        if (resp.msg.isNotEmpty) {
+          AppToast.show(context, resp.msg);
+        }
+        return;
+      }
+
+      final index = parseHeadTeacherIndexRes(resp.data);
+      final base = smartCampusDashboardDataForRole(SmartCampusRole.headTeacher);
+      setState(() {
+        _stats = buildHeadTeacherStats(index);
+        _actions = _applyActionBadges(
+          base.actions,
+          buildHeadTeacherActionBadges(index),
+        );
+        _headTeacherTodos = _mapHeadTeacherBoardItems(
+          buildHeadTeacherTodoBoardItems(index),
+        );
+        _headTeacherRecent = _mapHeadTeacherBoardItems(
+          buildHeadTeacherRecentBoardItems(index),
+        );
+      });
+    } catch (_) {
+      // 保留占位统计，避免首页空白。
+    }
+  }
+
+  List<SmartCampusQuickActionData> _applyActionBadges(
+    List<SmartCampusQuickActionData> base,
+    Map<String, int> badges,
+  ) {
+    return [
+      for (final item in base)
+        SmartCampusQuickActionData(
+          label: item.label,
+          icon: item.icon,
+          background: item.background,
+          foreground: item.foreground,
+          badge: badges[item.label] ?? item.badge,
+          imagePath: item.imagePath,
+        ),
+    ];
+  }
+
+  List<_BoardItemData> _mapHeadTeacherBoardItems(
+    List<HeadTeacherBoardItem> items,
+  ) {
+    return [
+      for (final item in items)
+        _BoardItemData(
+          time: item.time,
+          title: item.title,
+          tag: item.tag,
+          tagForeground: _kBoardTagPurple,
+          tagBackground: _kBoardTagPurpleSoft,
+        ),
+    ];
+  }
+
+  (String, String) _currentWeekDateRange(DateTime now) {
+    final monday = DateTime(now.year, now.month, now.day)
+        .subtract(Duration(days: now.weekday - DateTime.monday));
+    final sunday = monday.add(const Duration(days: 6));
+    return (_isoDate(monday), _isoDate(sunday));
+  }
+
+  String _isoDate(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   @override
   Widget build(BuildContext context) {
@@ -269,6 +415,11 @@ class _TeacherDashboardLayoutState extends State<TeacherDashboardLayout> {
                 ],
                 _TeacherMainColumn(
                   data: data,
+                  stats: _stats,
+                  actions: _actions,
+                  courseTeacherIndex: _courseTeacherIndex,
+                  headTeacherTodos: _headTeacherTodos,
+                  headTeacherRecent: _headTeacherRecent,
                   width: mainWidth,
                   fillRemaining: false,
                   onOpenPrincipalMailbox: widget.onOpenPrincipalMailbox,
@@ -318,6 +469,11 @@ class _TeacherDashboardLayoutState extends State<TeacherDashboardLayout> {
               width: mainWidth,
               child: _TeacherMainColumn(
                 data: data,
+                stats: _stats,
+                actions: _actions,
+                courseTeacherIndex: _courseTeacherIndex,
+                headTeacherTodos: _headTeacherTodos,
+                headTeacherRecent: _headTeacherRecent,
                 width: mainWidth,
                 fillRemaining: true,
                 onOpenPrincipalMailbox: widget.onOpenPrincipalMailbox,
@@ -378,6 +534,11 @@ class _TeacherDashboardLayoutState extends State<TeacherDashboardLayout> {
 class _TeacherMainColumn extends StatelessWidget {
   const _TeacherMainColumn({
     required this.data,
+    required this.stats,
+    required this.actions,
+    this.courseTeacherIndex,
+    this.headTeacherTodos = const [],
+    this.headTeacherRecent = const [],
     required this.width,
     required this.fillRemaining,
     required this.onOpenPrincipalMailbox,
@@ -403,6 +564,11 @@ class _TeacherMainColumn extends StatelessWidget {
   });
 
   final SmartCampusDashboardData data;
+  final List<SmartCampusStatCardData> stats;
+  final List<SmartCampusQuickActionData> actions;
+  final CourseTeacherIndexRes? courseTeacherIndex;
+  final List<_BoardItemData> headTeacherTodos;
+  final List<_BoardItemData> headTeacherRecent;
   final double width;
   final bool fillRemaining;
   final VoidCallback onOpenPrincipalMailbox;
@@ -432,6 +598,7 @@ class _TeacherMainColumn extends StatelessWidget {
 
     final actionPanel = _TeacherActionPanel(
       data: data,
+      actions: actions,
       onOpenPrincipalMailbox: onOpenPrincipalMailbox,
       onOpenMyClass: onOpenMyClass,
       onOpenClassWorkbench: onOpenClassWorkbench,
@@ -459,11 +626,14 @@ class _TeacherMainColumn extends StatelessWidget {
       if (data.role == SmartCampusRole.headTeacher) {
         return _HeadTeacherBoardSection(
           fillRemaining: fill,
+          todoItems: headTeacherTodos,
+          recentItems: headTeacherRecent,
         );
       }
       return _TeacherScheduleSection(
         fillRemaining: fill,
         onOpenSchedule: onOpenMySchedule,
+        courseTeacherIndex: courseTeacherIndex,
       );
     }
 
@@ -474,7 +644,7 @@ class _TeacherMainColumn extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.max,
         children: [
-          _TeacherStatRow(stats: data.stats, width: width),
+          _TeacherStatRow(stats: stats, width: width),
           SizedBox(height: ui(16)),
           actionPanel,
           SizedBox(height: ui(16)),
@@ -490,7 +660,7 @@ class _TeacherMainColumn extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          _TeacherStatRow(stats: data.stats, width: width),
+          _TeacherStatRow(stats: stats, width: width),
           SizedBox(height: ui(16)),
           actionPanel,
           SizedBox(height: ui(16)),
@@ -635,6 +805,7 @@ class _TeacherStatCard extends StatelessWidget {
 class _TeacherActionPanel extends StatelessWidget {
   const _TeacherActionPanel({
     required this.data,
+    required this.actions,
     required this.onOpenPrincipalMailbox,
     required this.onOpenMyClass,
     required this.onOpenClassWorkbench,
@@ -658,6 +829,7 @@ class _TeacherActionPanel extends StatelessWidget {
   });
 
   final SmartCampusDashboardData data;
+  final List<SmartCampusQuickActionData> actions;
   final VoidCallback onOpenPrincipalMailbox;
   final VoidCallback onOpenMyClass;
   final VoidCallback onOpenClassWorkbench;
@@ -773,7 +945,6 @@ class _TeacherActionPanel extends StatelessWidget {
     // 均分（标准设计宽下 ≈ 21px）；纵向两行间距由 Column.spaceBetween
     // 在剩余 (255 − 76 − 70×2) = 39px 内分配。
     const cross = 5;
-    final actions = data.actions;
     final rowsCount = actions.isEmpty ? 0 : ((actions.length - 1) ~/ cross) + 1;
     final rows = <Widget>[
       for (var r = 0; r < rowsCount; r++)
@@ -1081,7 +1252,7 @@ class _TeacherProfileBlock extends StatelessWidget {
             : _courseTeacherInfoLines());
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(ui(16), ui(24), ui(16), 0),
+      padding: EdgeInsets.fromLTRB(ui(16), ui(14), ui(16), 0),
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -1144,7 +1315,7 @@ class _TeacherProfileBlock extends StatelessWidget {
                 vertical: ui(2),
               ),
               decoration: BoxDecoration(
-                color: const Color(0xFFE4FAF5),
+                color: const Color(0xFFEAE5FF),
                 borderRadius: BorderRadius.circular(ui(10)),
                 border: Border.all(color: Colors.white, width: 1),
               ),
@@ -1648,6 +1819,7 @@ class _TeacherNoticeList extends StatelessWidget {
             time: item.time,
             tagForeground: style.foreground,
             tagBackground: style.background,
+            unread: item.priority.isNotEmpty && item.priority != '普通',
           ),
           onTap: () => onTap(item),
         ),
@@ -1845,7 +2017,7 @@ class _TeacherNoticeCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(ui(8)),
         child: Container(
           width: double.infinity,
-          padding: EdgeInsets.all(ui(10)),
+          padding: EdgeInsets.fromLTRB(ui(10), ui(10), ui(16), ui(10)),
           decoration: BoxDecoration(
             color: const Color(0xFFF5F6FA),
             borderRadius: BorderRadius.circular(ui(8)),
@@ -1893,13 +2065,17 @@ class _TeacherNoticeCard extends StatelessWidget {
                 ],
               ),
               SizedBox(height: ui(4)),
-              Text(
-                item.time,
-                style: TextStyle(
-                  fontSize: ui(12),
-                  color: const Color(0xFFCECED1),
-                  fontWeight: FontWeight.w400,
-                  height: 1,
+              SizedBox(
+                width: double.infinity,
+                child: Text(
+                  item.time,
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    fontSize: ui(12),
+                    color: const Color(0xFFCECED1),
+                    fontWeight: FontWeight.w400,
+                    height: 1,
+                  ),
                 ),
               ),
             ],
@@ -1992,11 +2168,13 @@ class _TeacherScheduleSection extends ConsumerStatefulWidget {
   const _TeacherScheduleSection({
     this.fillRemaining = false,
     this.onOpenSchedule,
+    this.courseTeacherIndex,
   });
 
   /// true：父级提供有界高度，宽屏下双卡通过 `Expanded(cardsRow)` 撑满剩余高度。
   final bool fillRemaining;
   final VoidCallback? onOpenSchedule;
+  final CourseTeacherIndexRes? courseTeacherIndex;
 
   @override
   ConsumerState<_TeacherScheduleSection> createState() =>
@@ -2010,11 +2188,48 @@ class _TeacherScheduleSectionState extends ConsumerState<_TeacherScheduleSection
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadSchedule());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.courseTeacherIndex != null) {
+        _applyCourseTeacherIndex(widget.courseTeacherIndex);
+      } else {
+        _loadSchedule();
+      }
+    });
   }
 
-  String _isoDate(DateTime d) =>
-      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  Future<void> _applyCourseTeacherIndex(CourseTeacherIndexRes? index) async {
+    if (!mounted || index == null) return;
+    final teacherRepo = ref.read(teacherRepositoryProvider);
+    final schoolRepo = ref.read(schoolRepositoryProvider);
+    try {
+      final built = await _buildScheduleFromCourseTeacherIndex(
+        index: index,
+        schoolRepo: schoolRepo,
+        teacherRepo: teacherRepo,
+        timeConfigs: _kDefaultDashboardTimeConfigs,
+        now: DateTime.now(),
+      );
+      if (!mounted) return;
+      setState(() {
+        _currentLesson = built.current;
+        _todayLessons = built.today;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _currentLesson = null;
+        _todayLessons = const [];
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _TeacherScheduleSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.courseTeacherIndex != widget.courseTeacherIndex) {
+      _applyCourseTeacherIndex(widget.courseTeacherIndex);
+    }
+  }
 
   Future<void> _loadSchedule() async {
     if (!mounted) return;
@@ -2026,6 +2241,22 @@ class _TeacherScheduleSectionState extends ConsumerState<_TeacherScheduleSection
 
     var timeConfigs = _kDefaultDashboardTimeConfigs;
     try {
+      if (widget.courseTeacherIndex != null) {
+        final built = await _buildScheduleFromCourseTeacherIndex(
+          index: widget.courseTeacherIndex!,
+          schoolRepo: schoolRepo,
+          teacherRepo: teacherRepo,
+          timeConfigs: timeConfigs,
+          now: today,
+        );
+        if (!mounted) return;
+        setState(() {
+          _currentLesson = built.current;
+          _todayLessons = built.today;
+        });
+        return;
+      }
+
       final classResp = await teacherRepo.classList();
       if (classResp.isSuccess) {
         String? classId;
@@ -2080,6 +2311,9 @@ class _TeacherScheduleSectionState extends ConsumerState<_TeacherScheduleSection
       });
     }
   }
+
+  String _isoDate(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   @override
   Widget build(BuildContext context) {
@@ -2182,6 +2416,90 @@ class _BuiltDashboardSchedule {
 
   final _LessonScheduleData? current;
   final List<_LessonScheduleData> today;
+}
+
+Future<_BuiltDashboardSchedule> _buildScheduleFromCourseTeacherIndex({
+  required CourseTeacherIndexRes index,
+  required SchoolRepository schoolRepo,
+  required TeacherRepository teacherRepo,
+  required List<_DashboardTimeConfig> timeConfigs,
+  required DateTime now,
+}) async {
+  var configs = timeConfigs;
+  final classResp = await teacherRepo.classList();
+  if (classResp.isSuccess) {
+    String? classId;
+    for (final m in _scheduleExtractList(classResp)) {
+      final id = _schedulePickString(m, ['id', 'classId'], '');
+      if (id.isNotEmpty) {
+        classId = id;
+        break;
+      }
+    }
+    if (classId != null && classId.isNotEmpty) {
+      final tcResp = await schoolRepo.schoolTimeConfigList(classId: classId);
+      if (tcResp.isSuccess) {
+        final parsed = _parseDashboardTimeConfigs(tcResp);
+        if (parsed.isNotEmpty) configs = parsed;
+      }
+    }
+  }
+
+  return _buildDashboardScheduleFromIndex(
+    index: index,
+    timeConfigs: configs,
+    now: now,
+  );
+}
+
+_BuiltDashboardSchedule _buildDashboardScheduleFromIndex({
+  required CourseTeacherIndexRes index,
+  required List<_DashboardTimeConfig> timeConfigs,
+  required DateTime now,
+}) {
+  _LessonScheduleData lessonFromRow(
+    Map<String, dynamic> row,
+    _LessonSlotPhase phase,
+  ) {
+    final times = _resolveRowTimes(row, timeConfigs);
+    final style = _statusStyle(phase);
+    final start = times.start;
+    final end = times.end;
+    return _LessonScheduleData(
+      time: start.isNotEmpty && end.isNotEmpty ? '$start - $end' : '—',
+      status: style.label,
+      statusColor: style.foreground,
+      statusBg: style.background,
+      isPast: phase == _LessonSlotPhase.ended,
+      teachers: [_lessonRowFromCourse(row, start, end)],
+    );
+  }
+
+  final currentId = index.currentCourse?['id']?.toString();
+  final nextId = index.nextCourse?['id']?.toString();
+
+  _LessonScheduleData? current;
+  if (index.currentCourse != null) {
+    current = lessonFromRow(
+      index.currentCourse!,
+      _LessonSlotPhase.inProgress,
+    );
+  } else if (index.nextCourse != null) {
+    current = lessonFromRow(index.nextCourse!, _LessonSlotPhase.upcoming);
+  }
+
+  final today = <_LessonScheduleData>[];
+  for (final row in index.todayCourseList) {
+    final id = row['id']?.toString();
+    if (id != null && id.isNotEmpty && (id == currentId || id == nextId)) {
+      continue;
+    }
+    final times = _resolveRowTimes(row, timeConfigs);
+    final phase = _slotPhase(now, times.start, times.end);
+    today.add(lessonFromRow(row, phase));
+  }
+
+  return _BuiltDashboardSchedule(current: current, today: today);
 }
 
 _BuiltDashboardSchedule _buildDashboardSchedule({
@@ -3078,47 +3396,17 @@ class _BoardItemData {
 const Color _kBoardTagPurple = Color(0xFF8741FF);
 const Color _kBoardTagPurpleSoft = Color(0xFFDAD2FF);
 
-const List<_BoardItemData> _kHeadTeacherTodoItems = [
-  _BoardItemData(
-    time: '待审批',
-    title: '学生请假申请待处理',
-    tag: '请假',
-    tagForeground: _kBoardTagPurple,
-    tagBackground: _kBoardTagPurpleSoft,
-  ),
-  _BoardItemData(
-    time: '待确认',
-    title: '查寝异常记录待跟进',
-    tag: '查寝',
-    tagForeground: _kBoardTagPurple,
-    tagBackground: _kBoardTagPurpleSoft,
-  ),
-];
-
-const List<_BoardItemData> _kHeadTeacherRecentItems = [
-  _BoardItemData(
-    time: '待回复',
-    title: '家长留言待处理',
-    tag: '家校',
-    tagForeground: _kBoardTagPurple,
-    tagBackground: _kBoardTagPurpleSoft,
-  ),
-  _BoardItemData(
-    time: '已发布',
-    title: '班级通知同步至家长端',
-    tag: '通知',
-    tagForeground: _kBoardTagPurple,
-    tagBackground: _kBoardTagPurpleSoft,
-  ),
-];
-
 class _HeadTeacherBoardSection extends StatelessWidget {
   const _HeadTeacherBoardSection({
     this.fillRemaining = false,
+    this.todoItems = const [],
+    this.recentItems = const [],
   });
 
   /// true：父级提供有界高度，宽屏下双卡通过 `Expanded(cardsRow)` 撑满剩余高度。
   final bool fillRemaining;
+  final List<_BoardItemData> todoItems;
+  final List<_BoardItemData> recentItems;
 
   @override
   Widget build(BuildContext context) {
@@ -3148,15 +3436,15 @@ class _HeadTeacherBoardSection extends StatelessWidget {
               children: [
                 sectionTitle('待办提醒'),
                 SizedBox(height: ui(20)),
-                const _BoardPanel(
-                  items: _kHeadTeacherTodoItems,
+                _BoardPanel(
+                  items: todoItems,
                   emptyHint: '暂无待办',
                 ),
                 SizedBox(height: ui(20)),
                 sectionTitle('近期动态'),
                 SizedBox(height: ui(20)),
-                const _BoardPanel(
-                  items: _kHeadTeacherRecentItems,
+                _BoardPanel(
+                  items: recentItems,
                   emptyHint: '暂无近期动态',
                 ),
               ],
@@ -3167,16 +3455,16 @@ class _HeadTeacherBoardSection extends StatelessWidget {
         final cardsRow = Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Expanded(
+            Expanded(
               child: _BoardPanel(
-                items: _kHeadTeacherTodoItems,
+                items: todoItems,
                 emptyHint: '暂无待办',
               ),
             ),
             SizedBox(width: ui(16)),
-            const Expanded(
+            Expanded(
               child: _BoardPanel(
-                items: _kHeadTeacherRecentItems,
+                items: recentItems,
                 emptyHint: '暂无近期动态',
               ),
             ),

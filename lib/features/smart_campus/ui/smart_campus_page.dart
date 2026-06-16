@@ -266,7 +266,14 @@ class _SmartCampusPageBody extends ConsumerWidget {
 
     if (isTeacherOrHead) {
       if (state.mainView == SmartCampusMainView.classWorkbench) {
-        return TeacherClassWorkbenchView(onBack: controller.backToDashboard);
+        return TeacherClassWorkbenchView(
+          onBack: controller.backToDashboard,
+          onOpenLeaveApproval: controller.openLeaveApproval,
+          onOpenDormDynamic: controller.openDormDynamic,
+          onOpenHomeSchool: controller.openHomeSchoolCommunication,
+          onOpenGroupChat: controller.openGroupChat,
+          onOpenDormHistory: controller.openDormHistory,
+        );
       }
       if (state.mainView == SmartCampusMainView.principalMailbox) {
         return buildPrincipalMailboxRoute();

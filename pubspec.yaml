@@ -190,6 +190,7 @@ flutter:
     - assets/images/groupChat/
     - assets/images/xiaoquan/
     - assets/images/smartCampus/
+    - assets/images/smartCampus/head_teacher/
     - assets/web/baidu_map.html
     - assets/images/circle/
     - assets/audio/demo.mid

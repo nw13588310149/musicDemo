@@ -145,7 +145,7 @@ class _AdminHomeViewState extends ConsumerState<AdminHomeView> {
     _StatItem('${summary.studentCount}', '在籍学生'),
     _StatItem('${summary.teacherCount}', '任课老师'),
     _StatItem('${summary.classCount}', '本学期班级'),
-    _StatItem('${summary.toDoTodayCount}', '今日待办', highlight: true),
+    _StatItem('${summary.toDoTodayCount}', '今日待办', highlight: summary.toDoTodayCount > 0),
   ];
 
   List<_StatItem> _statsRow2(AdminHomeSummary summary) => [
@@ -161,7 +161,7 @@ class _AdminHomeViewState extends ConsumerState<AdminHomeView> {
     final homeState = ref.watch(adminHomeControllerProvider);
 
     return SingleChildScrollView(
-      padding: EdgeInsets.symmetric(vertical: ui(16)),
+      padding: EdgeInsets.only(bottom: ui(20)),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1080,7 +1080,7 @@ class _AdminSidePanel extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(ui(16)),
       ),
-      padding: EdgeInsets.fromLTRB(ui(16), ui(24), ui(16), ui(20)),
+      padding: EdgeInsets.fromLTRB(ui(16), ui(14), ui(16), ui(20)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1342,7 +1342,7 @@ class _ProfileHeader extends StatelessWidget {
           child: Container(
             padding: EdgeInsets.symmetric(horizontal: ui(7), vertical: ui(2)),
             decoration: BoxDecoration(
-              color: const Color(0xFFE4FAF5),
+              color: const Color(0xFFEAE5FF),
               borderRadius: BorderRadius.circular(ui(10)),
               border: Border.all(color: Colors.white, width: 1),
             ),
@@ -1431,79 +1431,65 @@ class _SchoolNoticeCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(ui(8)),
         child: Container(
-          padding: EdgeInsets.fromLTRB(ui(10), ui(10), ui(20), ui(10)),
+          padding: EdgeInsets.fromLTRB(ui(10), ui(10), ui(16), ui(10)),
           decoration: BoxDecoration(
             color: const Color(0xFFF5F6FA),
             borderRadius: BorderRadius.circular(ui(8)),
           ),
-          child: Stack(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Column(
+              Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: ui(6),
-                          vertical: ui(2),
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFEAE5FF),
-                          borderRadius: BorderRadius.circular(ui(4)),
-                        ),
-                        child: Text(
-                          item.tag,
-                          style: TextStyle(
-                            fontSize: ui(10),
-                            height: 1.2,
-                            fontWeight: AppFont.w500,
-                            color: const Color(0xFF0B081A),
-                            fontFamily: 'PingFang SC',
-                          ),
-                        ),
+                  Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: ui(6),
+                      vertical: ui(2),
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEAE5FF),
+                      borderRadius: BorderRadius.circular(ui(4)),
+                    ),
+                    child: Text(
+                      item.tag,
+                      style: TextStyle(
+                        fontSize: ui(10),
+                        height: 1.2,
+                        fontWeight: AppFont.w500,
+                        color: const Color(0xFF0B081A),
+                        fontFamily: 'PingFang SC',
                       ),
-                      SizedBox(width: ui(6)),
-                      Expanded(
-                        child: Text(
-                          item.text,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: ui(12),
-                            height: 1.4,
-                            color: const Color(0xFF0B081A),
-                            fontFamily: 'Source Han Sans SC',
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-                  SizedBox(height: ui(6)),
-                  Text(
-                    item.time,
-                    style: TextStyle(
-                      fontSize: ui(12),
-                      height: 1.2,
-                      color: const Color(0xFFCECED1),
-                      fontFamily: 'Source Han Sans SC',
+                  SizedBox(width: ui(6)),
+                  Expanded(
+                    child: Text(
+                      item.text,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: ui(12),
+                        height: 1.4,
+                        color: const Color(0xFF0B081A),
+                        fontFamily: 'Source Han Sans SC',
+                      ),
                     ),
                   ),
                 ],
               ),
-              Positioned(
-                right: 0,
-                top: 0,
-                child: Container(
-                  width: ui(6),
-                  height: ui(6),
-                  decoration: BoxDecoration(
-                    color: item.highlighted
-                        ? const Color(0xFFFF323C)
-                        : const Color(0xFFCECED1),
-                    shape: BoxShape.circle,
+              SizedBox(height: ui(6)),
+              SizedBox(
+                width: double.infinity,
+                child: Text(
+                  item.time,
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    fontSize: ui(12),
+                    height: 1.2,
+                    color: const Color(0xFFCECED1),
+                    fontFamily: 'Source Han Sans SC',
                   ),
                 ),
               ),

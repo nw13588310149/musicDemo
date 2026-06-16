@@ -15,7 +15,7 @@ const List<Color> scheduleColorPalette = <Color>[
   Color(0xFFFE96EB),
   Color(0xFFFFD0F4),
   Color(0xFF00FF01),
-  Color(0xFF4360ED),
+  Color(0xFFA4E5DB),
   Color(0xFF79D1E8),
   Color(0xFFC5EBAA),
 ];

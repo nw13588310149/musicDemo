@@ -542,6 +542,34 @@ abstract final class AppAssets {
   /// 课表空闲格子背景（斜线占位，替代「空闲」文案与描边）。
   static const smartCampusIdleSlot = 'assets/images/smartCampus/nok.png';
 
+  /// 班主任 · 查寝动态 · 顶部统计卡背景（从左到右）。
+  static const headTeacherDormDynamicStatResident =
+      'assets/images/smartCampus/head_teacher/dorm_dynamic_stat_resident.png';
+  static const headTeacherDormDynamicStatReturned =
+      'assets/images/smartCampus/head_teacher/dorm_dynamic_stat_returned.png';
+  static const headTeacherDormDynamicStatException =
+      'assets/images/smartCampus/head_teacher/dorm_dynamic_stat_exception.png';
+  static const headTeacherDormDynamicStatPunchAudit =
+      'assets/images/smartCampus/head_teacher/dorm_dynamic_stat_punch_audit.png';
+
+  /// 班主任 · 家校沟通 · 顶部统计卡背景（从左到右）。
+  static const headTeacherHomeSchoolStatUnread =
+      'assets/images/smartCampus/head_teacher/home_school_stat_unread.png';
+  static const headTeacherHomeSchoolStatPendingReply =
+      'assets/images/smartCampus/head_teacher/home_school_stat_pending_reply.png';
+  static const headTeacherHomeSchoolStatTotal =
+      'assets/images/smartCampus/head_teacher/home_school_stat_total.png';
+
+  /// 班主任 · 请假审批 · 顶部统计卡背景（从左到右）。
+  static const headTeacherLeaveApprovalStatPending =
+      'assets/images/smartCampus/head_teacher/leave_approval_stat_pending.png';
+  static const headTeacherLeaveApprovalStatReviewing =
+      'assets/images/smartCampus/head_teacher/leave_approval_stat_reviewing.png';
+  static const headTeacherLeaveApprovalStatApproved =
+      'assets/images/smartCampus/head_teacher/leave_approval_stat_approved.png';
+  static const headTeacherLeaveApprovalStatRejected =
+      'assets/images/smartCampus/head_teacher/leave_approval_stat_rejected.png';
+
   // 智慧校园群聊
   static const groupChatBg = 'assets/images/groupChat/bg.png';
   static const groupChatPin = 'assets/images/groupChat/Pin.png';

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_client.dart';
@@ -193,7 +195,7 @@ class TeacherRepository {
   /// 或担任班主任的班级。
   ///
   /// - `type`: 班级类型过滤，`0 = 大班`，`1 = 小班`；不传 = 全量（大 + 小）。
-  ///   主要场景：申请小课时传 `type: 1` 只展示「我的小班」。
+  ///   申请小课抽屉拉全量班级；`studentList` 的 `type` 与所选班级类型对齐。
   /// - `isHeadTeacher`: 是否为班主任；不传 = 不按该字段过滤。
   Future<ApiResponse> classList({int? type, int? isHeadTeacher}) {
     final body = <String, dynamic>{};
@@ -387,20 +389,27 @@ class TeacherRepository {
   ///       "date": "2026-05-30",
   ///       "lineNum": 1,
   ///       "subjectId": 1,
-  ///       "teacherId": "1788178798952914945"  // 当前任课老师 id（雪花，String）
+  ///       "teacherId": "1788178798952914945",
+  ///       "studentIds": ["1795667363756507137"]
   ///     }
   ///   ],
   ///   "endDate": "2026-05-08",
   ///   "lineNum": 1,
   ///   "startDate": "2026-05-08",
-  ///   "subjectId": 1
+  ///   "subjectId": 1,
+  ///   "forceSubmit": false
   /// }
   /// ```
   ///
-  /// 雪花 long（`classId` / `teacherId`）必须以字符串形式提交，避免在 web 端
-  /// 因 JS Number 53bit 精度丢失。日期字段统一使用 `yyyy-MM-dd`。
+  /// `courseList[].studentIds` 为参与学生雪花 id 列表；不传或空表示全班。
+  /// 雪花 long（`classId` / `teacherId` / `studentIds`）必须以字符串形式提交，
+  /// 避免在 web 端因 JS Number 53bit 精度丢失。日期字段统一使用 `yyyy-MM-dd`。
   Future<ApiResponse> schoolSmallCourseApplySave(Map<String, dynamic> body) {
-    return client.post('$_base/schoolSmallCourseApplySave', data: body);
+    final encoded = _encodeSmallCourseApplySaveBody(body);
+    if (encoded == null) {
+      return Future.value(ApiResponse.failure('小课申请参数格式错误'));
+    }
+    return client.post('$_base/schoolSmallCourseApplySave', data: encoded);
   }
 
   /// 我的小班课申请列表。`current` / `size` 默认 1 / 10，与 swagger 一致。
@@ -819,7 +828,7 @@ class TeacherRepository {
   /// 学生请假列表（`AppSchoolStudentLeaveTeacherListBO`）。
   ///
   /// `status`: 0-待家长审批 / 1-家长同意 / 2-家长拒绝 / 3-老师同意 /
-  /// 4-老师拒绝；不传 = 全部。
+  /// 4-老师拒绝；[kHeadTeacherPendingLeaveFilterStatus] = 待批筛选。
   Future<ApiResponse> headTeacherStudentLeaveList({
     int current = 1,
     int size = 200,
@@ -925,4 +934,48 @@ class TeacherRepository {
       data: <String, dynamic>{'id': readSnowflakeId(id) ?? id},
     );
   }
+}
+
+/// 小课申请请求体编码：`courseList[].studentIds` 按 Swagger int64 数组写入，
+/// 避免 Web 端 JSON number 精度截断。
+String? _encodeSmallCourseApplySaveBody(Map<String, dynamic> body) {
+  final courseList = body['courseList'];
+  if (courseList is! List || courseList.isEmpty) return null;
+
+  final courseEntries = <String>[];
+  for (final rawItem in courseList) {
+    if (rawItem is! Map) return null;
+    final item = Map<String, dynamic>.from(rawItem);
+    final parts = <String>[];
+    for (final entry in item.entries) {
+      final value = entry.value;
+      if (value == null) continue;
+      final key = jsonEncode(entry.key);
+      if (entry.key == 'studentIds') {
+        if (value is! Iterable) return null;
+        final literals = <String>[];
+        for (final id in value) {
+          final sid = readSnowflakeId(id);
+          if (sid == null || !RegExp(r'^\d+$').hasMatch(sid)) return null;
+          literals.add(sid);
+        }
+        parts.add('$key:[${literals.join(',')}]');
+        continue;
+      }
+      parts.add('$key:${jsonEncode(value)}');
+    }
+    courseEntries.add('{${parts.join(',')}}');
+  }
+
+  final topParts = <String>[];
+  for (final entry in body.entries) {
+    if (entry.key == 'courseList') {
+      topParts.add('${jsonEncode(entry.key)}:[${courseEntries.join(',')}]');
+      continue;
+    }
+    final value = entry.value;
+    if (value == null) continue;
+    topParts.add('${jsonEncode(entry.key)}:${jsonEncode(value)}');
+  }
+  return '{${topParts.join(',')}}';
 }

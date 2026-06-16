@@ -13,6 +13,9 @@ const String kHeadTeacherLeaveApproveReasonDefault = '同意请假';
 /// 班主任拒绝默认填写的审批意见。
 const String kHeadTeacherLeaveRejectReasonDefault = '不予批准请假';
 
+/// 班主任工作台「待批请假」列表筛选：后端待批状态位掩码。
+const int kHeadTeacherPendingLeaveFilterStatus = 1073741824;
+
 /// API `status`：0-待家长审批 / 1-家长同意 / 2-家长拒绝 / 3-老师同意 / 4-老师拒绝
 enum StudentLeaveStatus {
   waitingParent(0, '待家长审批'),

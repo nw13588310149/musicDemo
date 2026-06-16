@@ -109,7 +109,7 @@ class _DormManagerHomeViewState extends ConsumerState<DormManagerHomeView> {
     final index = managerState.index;
 
     return SingleChildScrollView(
-      padding: EdgeInsets.symmetric(vertical: ui(16)),
+      padding: EdgeInsets.only(bottom: ui(20)),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -117,8 +117,6 @@ class _DormManagerHomeViewState extends ConsumerState<DormManagerHomeView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (managerState.loadingHome)
-                  const LinearProgressIndicator(minHeight: 2),
                 _DormStatsRow(
                   index: index,
                   onOpenPending: widget.onOpenDormMakeupAudit,
@@ -276,7 +274,7 @@ class _DormStatsRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final rate = index.bedCount == 0
-        ? '—'
+        ? '0'
         : '${(index.todayNormalCount * 100 / index.bedCount).round()}%';
     final items = <_StatItem>[
       _StatItem('${index.managedBuildingCount}', '管辖楼数'),
@@ -775,7 +773,7 @@ class _DormManagerSidePanel extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(ui(16)),
       ),
-      padding: EdgeInsets.fromLTRB(ui(16), ui(24), ui(16), ui(20)),
+      padding: EdgeInsets.fromLTRB(ui(16), ui(14), ui(16), ui(20)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -950,7 +948,7 @@ class _ProfileHeader extends StatelessWidget {
           child: Container(
             padding: EdgeInsets.symmetric(horizontal: ui(7), vertical: ui(2)),
             decoration: BoxDecoration(
-              color: const Color(0xFF325BFF),
+              color: const Color(0xFFEAE5FF),
               borderRadius: BorderRadius.circular(ui(10)),
               border: Border.all(color: Colors.white, width: 1),
             ),
@@ -959,7 +957,7 @@ class _ProfileHeader extends StatelessWidget {
               style: TextStyle(
                 fontSize: ui(11),
                 height: 1.0,
-                color: Colors.white,
+                color: const Color(0xFF0B081A),
                 fontFamily: 'PingFang SC',
               ),
             ),
@@ -1274,7 +1272,7 @@ class _SchoolNoticeCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(ui(8)),
         child: Container(
-          padding: EdgeInsets.fromLTRB(ui(10), ui(10), ui(20), ui(10)),
+          padding: EdgeInsets.fromLTRB(ui(10), ui(10), ui(16), ui(10)),
           decoration: BoxDecoration(
             color: const Color(0xFFF5F6FA),
             borderRadius: BorderRadius.circular(ui(8)),
@@ -1323,13 +1321,17 @@ class _SchoolNoticeCard extends StatelessWidget {
                 ],
               ),
               SizedBox(height: ui(6)),
-              Text(
-                item.time,
-                style: TextStyle(
-                  fontSize: ui(12),
-                  height: 1.2,
-                  color: const Color(0xFFCECED1),
-                  fontFamily: 'Source Han Sans SC',
+              SizedBox(
+                width: double.infinity,
+                child: Text(
+                  item.time,
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    fontSize: ui(12),
+                    height: 1.2,
+                    color: const Color(0xFFCECED1),
+                    fontFamily: 'Source Han Sans SC',
+                  ),
                 ),
               ),
             ],

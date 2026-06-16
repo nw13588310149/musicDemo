@@ -13,6 +13,7 @@ import '../../../core/widgets/seamless_banner_carousel.dart';
 import '../../../core/widgets/smooth_circle_network_avatar.dart';
 import '../state/home_dashboard_controller.dart';
 import '../state/home_dashboard_state.dart';
+import '../../shell/state/shell_controller.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../../smart_campus/state/smart_campus_controller.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -40,10 +41,13 @@ class _HomePageView extends ConsumerStatefulWidget {
 class _HomePageViewState extends ConsumerState<_HomePageView> {
   int _bannerIndex = 0;
 
-  /// 跳转到智慧校园「我的课表」视图：先把 SmartCampusController 切到
-  /// mySchedule 视图，再 push 智慧校园页，避免落在默认 dashboard 上。
+  /// 跳转到智慧校园课表：按 `/myInfo` 真实身份进入「授课课表」或「我的课表」，
+  /// 避免 admin / 校长视角占位页拦截。
   void _openMySchedule() {
-    ref.read(smartCampusControllerProvider.notifier).openMySchedule();
+    final user = ref.read(shellControllerProvider).user;
+    ref
+        .read(smartCampusControllerProvider.notifier)
+        .openMyScheduleForUser(role: user.role, identity: user.identity);
     Navigator.pushNamed(context, RoutePaths.smartCampus);
   }
 

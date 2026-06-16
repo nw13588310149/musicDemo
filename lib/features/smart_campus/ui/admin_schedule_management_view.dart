@@ -37,7 +37,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -153,9 +152,9 @@ class _AdminScheduleManagementViewState
   Map<int, String> _subjectNameById = const {};
   Map<String, String> _teacherNameById = const {};
 
-  /// 课表网格的实际数据（[7 天][N 节] → 多张课卡）。null 表示尚未加载。
-  List<List<List<_ScheduleCardData>>>? _serverCells;
-  bool _scheduleLoading = false;
+  /// 课表网格的实际数据（[7 天][N 节] → 多张课卡）。
+  late List<List<List<_ScheduleCardData>>> _serverCells;
+  int _scheduleLoadGeneration = 0;
 
   /// 课表左侧节次时间表（来自 `schoolTimeConfigList`），按 `lineNum` 升序。
   /// API 未返回时退回 [_kDefaultTimeConfigs] 的 5 节兜底。
@@ -177,27 +176,30 @@ class _AdminScheduleManagementViewState
   }
 
   void _gotoPrev() {
-    setState(() {
-      _weekStart = _weekStart.subtract(const Duration(days: 7));
-      _currentWeek -= 1;
-    });
-    _loadSchedule();
+    unawaited(
+      _loadSchedule(
+        weekStart: _weekStart.subtract(const Duration(days: 7)),
+        weekNumber: _currentWeek - 1,
+      ),
+    );
   }
 
   void _gotoNext() {
-    setState(() {
-      _weekStart = _weekStart.add(const Duration(days: 7));
-      _currentWeek += 1;
-    });
-    _loadSchedule();
+    unawaited(
+      _loadSchedule(
+        weekStart: _weekStart.add(const Duration(days: 7)),
+        weekNumber: _currentWeek + 1,
+      ),
+    );
   }
 
   void _gotoCurrent() {
-    setState(() {
-      _weekStart = _mondayOf(DateTime.now());
-      _currentWeek = _baseWeek;
-    });
-    _loadSchedule();
+    unawaited(
+      _loadSchedule(
+        weekStart: _mondayOf(DateTime.now()),
+        weekNumber: _baseWeek,
+      ),
+    );
   }
 
   Future<void> _pickDate() async {
@@ -213,11 +215,12 @@ class _AdminScheduleManagementViewState
     if (picked == null) return;
     final newMonday = _mondayOf(picked);
     final deltaWeeks = (newMonday.difference(_weekStart).inDays / 7).round();
-    setState(() {
-      _weekStart = newMonday;
-      _currentWeek += deltaWeeks;
-    });
-    _loadSchedule();
+    unawaited(
+      _loadSchedule(
+        weekStart: newMonday,
+        weekNumber: _currentWeek + deltaWeeks,
+      ),
+    );
   }
 
   String _slotLabel(int dayIdx, int slotIdx) {
@@ -287,7 +290,8 @@ class _AdminScheduleManagementViewState
     await _loadSchedule();
   }
 
-  /// 编辑模式下删除已有课程：二次确认后调 `courseDelete`。
+  /// 编辑模式下删除已有课程：确认弹窗可选「仅本节」或按周循环删除，再调
+  /// `courseDelete`（循环模式会按日期范围拉课表并批量匹配同节课程）。
   Future<void> _onDeleteCourse(_ScheduleCardData card) async {
     final raw = card.raw;
     if (raw == null) return;
@@ -296,17 +300,20 @@ class _AdminScheduleManagementViewState
 
     final location = card.location.isNotEmpty ? card.location : '—';
     final subline = card.subline.trim();
-    final detail = subline.isEmpty ? '' : '\n$subline';
-    final ok = await showConfirmDialog(
-      context: context,
-      title: '删除课程',
-      content: '确认删除「${card.name}」（$location）？$detail\n删除后该节次课表将清空，操作不可恢复。',
-      confirmLabel: '删除',
+    final deleteScope = await _showDeleteCourseConfirmDialog(
+      context,
+      courseName: card.name,
+      location: location,
+      subline: subline,
     );
-    if (!ok || !mounted) return;
+    if (deleteScope == null || !mounted) return;
+
+    final ids = await _resolveDeleteCourseIds(raw: raw, deleteScope: deleteScope);
+    if (!mounted) return;
+    if (ids.isEmpty) return;
 
     final repo = ref.read(adminRepositoryProvider);
-    final resp = await repo.courseDelete([id]);
+    final resp = await repo.courseDelete(ids);
     if (!mounted) return;
     if (!resp.isSuccess) {
       AppToast.show(
@@ -315,8 +322,99 @@ class _AdminScheduleManagementViewState
       );
       return;
     }
-    AppToast.show(context, '已删除「${card.name}」');
+    if (ids.length > 1) {
+      AppToast.show(context, '已删除 ${ids.length} 节「${card.name}」');
+    } else {
+      AppToast.show(context, '已删除「${card.name}」');
+    }
     await _loadSchedule();
+  }
+
+  /// 按删除范围展开目标日期，再从 `courseList` 匹配同班级 / 节次 / 教师 /
+  /// 科目 / 教室的重复排课 id；「仅删除本节」直接返回当前 id。
+  Future<List<String>> _resolveDeleteCourseIds({
+    required Map<String, dynamic> raw,
+    required String deleteScope,
+  }) async {
+    final id = _pickString(raw, ['id'], '');
+    if (id.isEmpty) return const [];
+
+    if (deleteScope == '仅删除本节') {
+      return [id];
+    }
+
+    final dateStr = _pickString(raw, ['date', 'classDate', 'courseDate'], '');
+    final base =
+        DateTime.tryParse(dateStr.split('T').first) ??
+        DateTime.tryParse(dateStr);
+    if (base == null) return [id];
+
+    final dates = _computeScheduleReuseDates(
+      base: base,
+      reuseMode: deleteScope,
+      currentWeek: _currentWeek,
+    );
+    if (dates.length <= 1) return [id];
+
+    final dateSet = dates.map(_isoDate).toSet();
+    final classId = _pickString(raw, ['classId'], _selectedClassId ?? '');
+    if (classId.isEmpty) return [id];
+
+    final lineNumRaw = raw['lineNum'];
+    final lineNum = lineNumRaw is int
+        ? lineNumRaw
+        : int.tryParse(lineNumRaw?.toString() ?? '');
+    if (lineNum == null) return [id];
+
+    final teacherId = _pickString(raw, ['teacherId'], '');
+    final subjectId = raw['subjectId']?.toString() ?? '';
+    final classroomId = raw['classroomId']?.toString() ?? '';
+
+    final repo = ref.read(adminRepositoryProvider);
+    final resp = await repo.courseList(
+      classId: classId,
+      beginDate: _isoDate(dates.first),
+      endDate: _isoDate(dates.last),
+    );
+    if (!resp.isSuccess) return [id];
+
+    final ids = <String>[];
+    for (final entry in _extractCourseRows(resp)) {
+      final m = entry.row;
+      final recordId = _pickString(m, ['id'], '');
+      if (recordId.isEmpty) continue;
+
+      final recordDate = _normalizeCourseDateIso(
+        entry.dateKey.isNotEmpty
+            ? entry.dateKey
+            : _pickString(m, ['date', 'classDate', 'courseDate'], ''),
+      );
+      if (!dateSet.contains(recordDate)) continue;
+
+      final recordLineRaw = m['lineNum'];
+      final recordLine = recordLineRaw is int
+          ? recordLineRaw
+          : int.tryParse(recordLineRaw?.toString() ?? '');
+      if (recordLine != lineNum) continue;
+
+      if (_pickString(m, ['classId'], '') != classId) continue;
+      if (teacherId.isNotEmpty &&
+          _pickString(m, ['teacherId'], '') != teacherId) {
+        continue;
+      }
+      if (subjectId.isNotEmpty && m['subjectId']?.toString() != subjectId) {
+        continue;
+      }
+      if (classroomId.isNotEmpty &&
+          m['classroomId']?.toString() != classroomId) {
+        continue;
+      }
+
+      ids.add(recordId);
+    }
+
+    if (!ids.contains(id)) ids.add(id);
+    return ids;
   }
 
   /// 编辑模式下，把某节大课从 `(sourceDay, sourceSlot)` 拖到
@@ -341,7 +439,6 @@ class _AdminScheduleManagementViewState
     final configs = _activeTimeConfigs;
     if (targetSlot < 0 || targetSlot >= configs.length) return;
     final cellsNow = _serverCells;
-    if (cellsNow == null) return;
     final newLineNum = configs[targetSlot].lineNum;
     final newDate = _isoDate(_weekStart.add(Duration(days: targetDay)));
 
@@ -423,8 +520,7 @@ class _AdminScheduleManagementViewState
   }
 
   // —— tab 2 状态 ————————————————————————————————————————————————
-  bool _applyLoading = false;
-  List<_ApplyRecord>? _applies;
+  List<_ApplyRecord> _applies = const [];
   String? _applyError;
 
   /// 全量「待审核」小课申请数量（角标）。来自 `schoolSmallCourseApplyList`
@@ -434,6 +530,7 @@ class _AdminScheduleManagementViewState
   @override
   void initState() {
     super.initState();
+    _serverCells = _emptyCells();
     _weekStart = _mondayOf(DateTime.now());
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       unawaited(_loadPendingApplyCount());
@@ -492,7 +589,10 @@ class _AdminScheduleManagementViewState
     }
     list.sort((a, b) => a.lineNum.compareTo(b.lineNum));
     if (!mounted || list.isEmpty) return;
-    setState(() => _timeConfigs = list);
+    setState(() {
+      _timeConfigs = list;
+      _serverCells = _normalizeCells(_serverCells);
+    });
   }
 
   /// `HH:MM:SS` / `HH:MM` 都归一化成 `HH:MM`。
@@ -637,29 +737,34 @@ class _AdminScheduleManagementViewState
     });
   }
 
-  Future<void> _loadSchedule() async {
+  Future<void> _loadSchedule({
+    DateTime? weekStart,
+    int? weekNumber,
+    String? classId,
+  }) async {
+    final targetClassId = classId ?? _selectedClassId;
     // classId 必填：班级未就绪时先把网格清空，避免无意义请求。
-    if (_selectedClassId == null || _selectedClassId!.isEmpty) {
-      setState(() {
-        _serverCells = _emptyCells();
-        _scheduleLoading = false;
-      });
+    if (targetClassId == null || targetClassId.isEmpty) {
+      setState(() => _serverCells = _emptyCells());
       return;
     }
-    setState(() => _scheduleLoading = true);
+    final targetWeekStart = weekStart ?? _weekStart;
+    final targetWeekNumber = weekNumber ?? _currentWeek;
+    final generation = ++_scheduleLoadGeneration;
     final repo = ref.read(adminRepositoryProvider);
-    final start = _weekStart;
+    final start = targetWeekStart;
     final end = start.add(const Duration(days: 6));
     final resp = await repo.courseList(
-      classId: _selectedClassId,
+      classId: targetClassId,
       beginDate: _isoDate(start),
       endDate: _isoDate(end),
     );
-    if (!mounted) return;
+    if (!mounted || generation != _scheduleLoadGeneration) return;
     if (!resp.isSuccess) {
       setState(() {
+        _weekStart = targetWeekStart;
+        _currentWeek = targetWeekNumber;
         _serverCells = _emptyCells();
-        _scheduleLoading = false;
       });
       return;
     }
@@ -676,7 +781,7 @@ class _AdminScheduleManagementViewState
       final dateStr = entry.dateKey.isNotEmpty
           ? entry.dateKey
           : _pickString(m, ['date', 'classDate', 'courseDate'], '');
-      final dayIdx = _dayIndex(dateStr);
+      final dayIdx = _dayIndex(dateStr, targetWeekStart);
       if (dayIdx < 0) continue;
 
       final lineNumRaw = m['lineNum'];
@@ -696,9 +801,11 @@ class _AdminScheduleManagementViewState
       cells[dayIdx][slotIdx].add(card);
     }
 
+    if (!mounted || generation != _scheduleLoadGeneration) return;
     setState(() {
+      _weekStart = targetWeekStart;
+      _currentWeek = targetWeekNumber;
       _serverCells = cells;
-      _scheduleLoading = false;
     });
   }
 
@@ -740,6 +847,23 @@ class _AdminScheduleManagementViewState
     ];
   }
 
+  /// 把已缓存课表网格对齐到当前节次数量，避免 timeConfig 变更后
+  /// slots 行数与 cells 列数不一致触发 RangeError。
+  List<List<List<_ScheduleCardData>>> _normalizeCells(
+    List<List<List<_ScheduleCardData>>> cells,
+  ) {
+    final slotCount = _activeTimeConfigs.length;
+    return [
+      for (var d = 0; d < 7; d++)
+        [
+          for (var s = 0; s < slotCount; s++)
+            d < cells.length && s < cells[d].length
+                ? cells[d][s]
+                : <_ScheduleCardData>[],
+        ],
+    ];
+  }
+
   /// 根据当前格子内最多课卡数算出每行高度（动态适配 1 / 2 / N 张课卡叠放）。
   /// 所有节次行共用同一套高度规则，第一行不再特殊拉高。
   List<_TimeSlotData> _buildSlots(List<List<List<_ScheduleCardData>>> cells) {
@@ -771,7 +895,7 @@ class _AdminScheduleManagementViewState
   }
 
   /// 把后端返回的日期字符串归一化到当前周内的 [0..6]，否则返回 -1。
-  int _dayIndex(String dateStr) {
+  int _dayIndex(String dateStr, [DateTime? weekStart]) {
     if (dateStr.isEmpty) return -1;
     DateTime? d = DateTime.tryParse(dateStr);
     if (d == null) {
@@ -780,7 +904,8 @@ class _AdminScheduleManagementViewState
     }
     if (d == null) return -1;
     final dn = DateTime(d.year, d.month, d.day);
-    final ws = DateTime(_weekStart.year, _weekStart.month, _weekStart.day);
+    final anchor = weekStart ?? _weekStart;
+    final ws = DateTime(anchor.year, anchor.month, anchor.day);
     final diff = dn.difference(ws).inDays;
     return (diff < 0 || diff > 6) ? -1 : diff;
   }
@@ -838,7 +963,6 @@ class _AdminScheduleManagementViewState
   }
 
   Future<void> _loadApplies() async {
-    setState(() => _applyLoading = true);
     final repo = ref.read(adminRepositoryProvider);
 
     final listResp = await repo.schoolSmallCourseApplyList(
@@ -852,7 +976,6 @@ class _AdminScheduleManagementViewState
       setState(() {
         _applyError = listResp.displayMsg;
         _applies = const [];
-        _applyLoading = false;
       });
       return;
     }
@@ -875,7 +998,6 @@ class _AdminScheduleManagementViewState
     setState(() {
       _applies = parsed;
       _applyError = null;
-      _applyLoading = false;
     });
   }
 
@@ -1078,7 +1200,7 @@ class _AdminScheduleManagementViewState
   }
 
   Widget _buildScheduleTab(double Function(num) ui) {
-    final cells = _serverCells ?? _emptyCells();
+    final cells = _normalizeCells(_serverCells);
     final slots = _buildSlots(cells);
     final days = _buildDayHeaders();
     return Column(
@@ -1103,7 +1225,7 @@ class _AdminScheduleManagementViewState
                   // 再按新 configs 拉课表，保证 lineNum 落格正确。
                   await _loadTimeConfig();
                   if (!mounted) return;
-                  _loadSchedule();
+                  await _loadSchedule(classId: picked.id);
                 },
               ),
               const Spacer(),
@@ -1128,31 +1250,14 @@ class _AdminScheduleManagementViewState
         ),
         Padding(
           padding: EdgeInsets.fromLTRB(ui(20), 0, ui(20), ui(20)),
-          child: Stack(
-            children: [
-              _ScheduleGrid(
-                mode: _mode,
-                slots: slots,
-                days: days,
-                cells: cells,
-                onApplySmallLesson: _onApplySmallLesson,
-                onDropCard: _onDropCard,
-                onDeleteCourse: _onDeleteCourse,
-              ),
-              if (_scheduleLoading)
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.55),
-                        borderRadius: BorderRadius.circular(ui(12)),
-                      ),
-                      alignment: Alignment.center,
-                      child: const AppLoadingIndicator(),
-                    ),
-                  ),
-                ),
-            ],
+          child: _ScheduleGrid(
+            mode: _mode,
+            slots: slots,
+            days: days,
+            cells: cells,
+            onApplySmallLesson: _onApplySmallLesson,
+            onDropCard: _onDropCard,
+            onDeleteCourse: _onDeleteCourse,
           ),
         ),
       ],
@@ -1160,7 +1265,7 @@ class _AdminScheduleManagementViewState
   }
 
   Widget _buildApplyTab(double Function(num) ui) {
-    final list = _applies ?? const <_ApplyRecord>[];
+    final list = _applies;
     return Padding(
       padding: EdgeInsets.fromLTRB(ui(20), 0, ui(20), ui(20)),
       child: Column(
@@ -1179,12 +1284,7 @@ class _AdminScheduleManagementViewState
               ),
             ),
           ),
-          if (_applyLoading && list.isEmpty)
-            Padding(
-              padding: EdgeInsets.symmetric(vertical: ui(40)),
-              child: const Center(child: AppLoadingIndicator()),
-            )
-          else if (list.isEmpty)
+          if (list.isEmpty)
             _ApplyEmptyState(message: _applyError ?? '暂无小课排班申请')
           else
             _ApplyGrid(
@@ -2699,6 +2799,141 @@ class _AdminEditCourseDrawer extends ConsumerStatefulWidget {
 /// 模式下从当前 `currentWeek` 起补到第 [_kTermTotalWeeks] 周。
 const int _kTermTotalWeeks = 18;
 
+/// 删除课程时可选的循环范围（与新增排课「是否复用」选项对齐，首项为仅本节）。
+const List<String> _kDeleteCourseScopeOptions = <String>[
+  '仅删除本节',
+  '本学期所有教学周',
+  '后续 4 周',
+  '后续 8 周',
+];
+
+int _scheduleReuseExtraWeeks(String mode, int currentWeek) {
+  switch (mode) {
+    case '本学期所有教学周':
+      return (_kTermTotalWeeks - currentWeek).clamp(0, _kTermTotalWeeks);
+    case '后续 4 周':
+      return 4;
+    case '后续 8 周':
+      return 8;
+    case '不复用':
+    case '仅删除本节':
+    default:
+      return 0;
+  }
+}
+
+List<DateTime> _computeScheduleReuseDates({
+  required DateTime base,
+  required String reuseMode,
+  required int currentWeek,
+}) {
+  final extraWeeks = _scheduleReuseExtraWeeks(reuseMode, currentWeek);
+  final pure = DateTime(base.year, base.month, base.day);
+  return [
+    for (var i = 0; i <= extraWeeks; i++) pure.add(Duration(days: i * 7)),
+  ];
+}
+
+String _normalizeCourseDateIso(dynamic raw) {
+  final s = raw?.toString().trim() ?? '';
+  if (s.isEmpty) return '';
+  final d =
+      DateTime.tryParse(s) ?? DateTime.tryParse(s.split('T').first);
+  if (d == null) return '';
+  return '${d.year.toString().padLeft(4, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
+}
+
+Future<String?> _showDeleteCourseConfirmDialog(
+  BuildContext context, {
+  required String courseName,
+  required String location,
+  required String subline,
+}) {
+  var selectedScope = _kDeleteCourseScopeOptions.first;
+  final detail = subline.isEmpty ? '' : '\n$subline';
+  return showScaledDialog<String>(
+    context: context,
+    barrierDismissible: true,
+    barrierColor: Colors.black.withValues(alpha: 0.18),
+    builder: (dialogContext) {
+      final ui = DashboardScaleScope.of(dialogContext).ui;
+      return Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: EdgeInsets.symmetric(
+          horizontal: ui(32),
+          vertical: ui(24),
+        ),
+        child: StatefulBuilder(
+          builder: (localContext, setLocalState) {
+            return Container(
+              width: ui(420),
+              padding: EdgeInsets.fromLTRB(ui(24), ui(28), ui(24), ui(20)),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(ui(24)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '删除课程',
+                    style: TextStyle(
+                      fontSize: ui(18),
+                      color: const Color(0xFF0B081A),
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w600,
+                    ),
+                  ),
+                  SizedBox(height: ui(12)),
+                  Text(
+                    '确认删除「$courseName」（$location）？$detail\n'
+                    '删除后对应节次课表将清空，操作不可恢复。',
+                    style: TextStyle(
+                      fontSize: ui(14),
+                      height: 1.6,
+                      color: const Color(0xFF788698),
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w400,
+                    ),
+                  ),
+                  SizedBox(height: ui(20)),
+                  Text(
+                    '删除范围',
+                    style: TextStyle(
+                      fontSize: ui(14),
+                      color: _kTextDark,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w500,
+                    ),
+                  ),
+                  SizedBox(height: ui(12)),
+                  PopupSelectorField<String>(
+                    value: selectedScope,
+                    items: _kDeleteCourseScopeOptions,
+                    itemLabel: (s) => s,
+                    onChanged: (v) => setLocalState(() => selectedScope = v),
+                  ),
+                  SizedBox(height: ui(24)),
+                  AppDialogActionBar(
+                    cancelLabel: '取消',
+                    confirmLabel: '删除',
+                    onCancel: () => Navigator.of(dialogContext).pop(),
+                    onConfirm: () =>
+                        Navigator.of(dialogContext).pop(selectedScope),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      );
+    },
+  );
+}
+
 class _AdminEditCourseDrawerState
     extends ConsumerState<_AdminEditCourseDrawer> {
   // 班级 / 教室 / 教师 / 科目下拉的 cache：(label, id)。下拉用 label 做用户
@@ -2879,27 +3114,11 @@ class _AdminEditCourseDrawerState
   /// 完全复用。
   List<DateTime> _computeReuseDates() {
     final base = DateTime.tryParse(widget.dateIso) ?? DateTime.now();
-    int extraWeeks;
-    switch (_reuse) {
-      case '本学期所有教学周':
-        extraWeeks = (_kTermTotalWeeks - widget.currentWeek).clamp(
-          0,
-          _kTermTotalWeeks,
-        );
-        break;
-      case '后续 4 周':
-        extraWeeks = 4;
-        break;
-      case '后续 8 周':
-        extraWeeks = 8;
-        break;
-      case '不复用':
-      default:
-        extraWeeks = 0;
-    }
-    return [
-      for (var i = 0; i <= extraWeeks; i++) base.add(Duration(days: i * 7)),
-    ];
+    return _computeScheduleReuseDates(
+      base: base,
+      reuseMode: _reuse,
+      currentWeek: widget.currentWeek,
+    );
   }
 
   /// `2026-05-04T00:00:00.000+00:00` 格式（与 `widget.dateIso` 一致），后端

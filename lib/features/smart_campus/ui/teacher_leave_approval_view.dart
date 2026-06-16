@@ -433,11 +433,7 @@ class _StatsRow extends StatelessWidget {
           child: _StatCard(
             label: '待审批',
             value: pendingCount,
-            gradient: const LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [Color(0x29FFA846), Color(0x00FFFFFF)],
-            ),
+            backgroundAsset: AppAssets.headTeacherLeaveApprovalStatPending,
           ),
         ),
         SizedBox(width: ui(12)),
@@ -445,11 +441,7 @@ class _StatsRow extends StatelessWidget {
           child: _StatCard(
             label: '审批中',
             value: reviewingCount,
-            gradient: const LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [Color(0x249346FF), Color(0x00FFFFFF)],
-            ),
+            backgroundAsset: AppAssets.headTeacherLeaveApprovalStatReviewing,
           ),
         ),
         SizedBox(width: ui(12)),
@@ -457,12 +449,7 @@ class _StatsRow extends StatelessWidget {
           child: _StatCard(
             label: '已通过',
             value: approvedCount,
-            gradient: const LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [Color(0xFFDCFFE7), Colors.white],
-              stops: [0.0, 0.73],
-            ),
+            backgroundAsset: AppAssets.headTeacherLeaveApprovalStatApproved,
           ),
         ),
         SizedBox(width: ui(12)),
@@ -470,12 +457,7 @@ class _StatsRow extends StatelessWidget {
           child: _StatCard(
             label: '已拒绝',
             value: rejectedCount,
-            gradient: const LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [Color(0xFFFFE2DC), Colors.white],
-              stops: [0.0, 0.73],
-            ),
+            backgroundAsset: AppAssets.headTeacherLeaveApprovalStatRejected,
           ),
         ),
       ],
@@ -487,12 +469,12 @@ class _StatCard extends StatelessWidget {
   const _StatCard({
     required this.label,
     required this.value,
-    required this.gradient,
+    required this.backgroundAsset,
   });
 
   final String label;
   final int value;
-  final LinearGradient gradient;
+  final String backgroundAsset;
 
   @override
   Widget build(BuildContext context) {
@@ -501,9 +483,11 @@ class _StatCard extends StatelessWidget {
       height: ui(100),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        gradient: gradient,
-        color: Colors.white,
         borderRadius: BorderRadius.circular(ui(12)),
+        image: DecorationImage(
+          image: AssetImage(backgroundAsset),
+          fit: BoxFit.cover,
+        ),
       ),
       child: Padding(
         padding: EdgeInsets.fromLTRB(ui(16), ui(16), ui(16), ui(0)),

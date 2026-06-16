@@ -174,12 +174,12 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
         roleTabs: const [SmartCampusRole.student],
         noticeTitle: '校级通知',
         stats: const [
-          SmartCampusStatCardData(label: '今日课程', value: '6'),
-          SmartCampusStatCardData(label: '待交作业', value: '6'),
-          SmartCampusStatCardData(label: '学期均分', value: '86.5'),
-          SmartCampusStatCardData(label: '未读通知', value: '4'),
-          SmartCampusStatCardData(label: '月考时间', value: '周五'),
-          SmartCampusStatCardData(label: '距离省统考', value: '186天'),
+          SmartCampusStatCardData(label: '今日课程', value: '0'),
+          SmartCampusStatCardData(label: '待交作业', value: '0'),
+          SmartCampusStatCardData(label: '学期均分', value: '0'),
+          SmartCampusStatCardData(label: '未读通知', value: '0'),
+          SmartCampusStatCardData(label: '月考时间', value: '0'),
+          SmartCampusStatCardData(label: '距离省统考', value: '0'),
         ],
         actions: const [
           SmartCampusQuickActionData(
@@ -373,16 +373,12 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
         roleTabs: const [SmartCampusRole.teacher, SmartCampusRole.headTeacher],
         noticeTitle: '通知',
         stats: const [
-          SmartCampusStatCardData(label: '今日授课', value: '6'),
-          SmartCampusStatCardData(label: '待批改', value: '6'),
-          SmartCampusStatCardData(label: '待签课', value: '86.5'),
+          SmartCampusStatCardData(label: '今日授课', value: '0'),
+          SmartCampusStatCardData(label: '待批改', value: '0'),
+          SmartCampusStatCardData(label: '待签课', value: '0'),
           SmartCampusStatCardData(label: '待办事项', value: '0'),
-          SmartCampusStatCardData(label: '本周课时', value: '周五'),
-          SmartCampusStatCardData(
-            label: '下一节',
-            value: '15:30',
-            highlight: true,
-          ),
+          SmartCampusStatCardData(label: '本周课时', value: '0'),
+          SmartCampusStatCardData(label: '下一节', value: '0'),
         ],
         actions: const [
           SmartCampusQuickActionData(
@@ -561,12 +557,12 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
         roleTabs: const [SmartCampusRole.teacher, SmartCampusRole.headTeacher],
         noticeTitle: '通知',
         stats: const [
-          SmartCampusStatCardData(label: '班级出勤', value: '6'),
-          SmartCampusStatCardData(label: '待批请假', value: '6'),
-          SmartCampusStatCardData(label: '查寝异常', value: '86.5'),
-          SmartCampusStatCardData(label: '家校未读', value: '4'),
-          SmartCampusStatCardData(label: '关注学生', value: '周五'),
-          SmartCampusStatCardData(label: '待办', value: '9', highlight: true),
+          SmartCampusStatCardData(label: '班级出勤', value: '0'),
+          SmartCampusStatCardData(label: '待批请假', value: '0'),
+          SmartCampusStatCardData(label: '查寝异常', value: '0'),
+          SmartCampusStatCardData(label: '家校未读', value: '0'),
+          SmartCampusStatCardData(label: '关注学生', value: '0'),
+          SmartCampusStatCardData(label: '待办', value: '0'),
         ],
         actions: const [
           SmartCampusQuickActionData(
@@ -745,12 +741,12 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
         roleTabs: const [SmartCampusRole.dormManager],
         noticeTitle: '宿舍通知',
         stats: const [
-          SmartCampusStatCardData(label: '今日批次', value: '6'),
-          SmartCampusStatCardData(label: '待审补卡', value: '6'),
-          SmartCampusStatCardData(label: '晚归登记', value: '3'),
-          SmartCampusStatCardData(label: '异常未闭环', value: '4', highlight: true),
-          SmartCampusStatCardData(label: '在寝率', value: '98%'),
-          SmartCampusStatCardData(label: '待处理', value: '12'),
+          SmartCampusStatCardData(label: '今日批次', value: '0'),
+          SmartCampusStatCardData(label: '待审补卡', value: '0'),
+          SmartCampusStatCardData(label: '晚归登记', value: '0'),
+          SmartCampusStatCardData(label: '异常未闭环', value: '0'),
+          SmartCampusStatCardData(label: '在寝率', value: '0'),
+          SmartCampusStatCardData(label: '待处理', value: '0'),
         ],
         actions: const [
           SmartCampusQuickActionData(
@@ -893,14 +889,14 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
         roleTabs: [role],
         noticeTitle: '校级通知',
         stats: const [
-          SmartCampusStatCardData(label: '在籍学生', value: '75'),
-          SmartCampusStatCardData(label: '任课老师', value: '73'),
-          SmartCampusStatCardData(label: '本学期班级', value: '68'),
-          SmartCampusStatCardData(label: '今日待办', value: '4', highlight: true),
-          SmartCampusStatCardData(label: '待审宿管假', value: '23'),
-          SmartCampusStatCardData(label: '人脸待补录', value: '67'),
-          SmartCampusStatCardData(label: '通知草稿', value: '43'),
-          SmartCampusStatCardData(label: '校园待处理', value: '32'),
+          SmartCampusStatCardData(label: '在籍学生', value: '0'),
+          SmartCampusStatCardData(label: '任课老师', value: '0'),
+          SmartCampusStatCardData(label: '本学期班级', value: '0'),
+          SmartCampusStatCardData(label: '今日待办', value: '0'),
+          SmartCampusStatCardData(label: '待审宿管假', value: '0'),
+          SmartCampusStatCardData(label: '人脸待补录', value: '0'),
+          SmartCampusStatCardData(label: '通知草稿', value: '0'),
+          SmartCampusStatCardData(label: '校园待处理', value: '0'),
         ],
         actions: const [
           SmartCampusQuickActionData(

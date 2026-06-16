@@ -35,14 +35,15 @@
 //      #B6B5BB 提示 / #774B09 橙文 / #0D3A6D 蓝文 / #7535BE 紫文
 // =============================================================================
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_assets.dart';
 import '../../../core/network/api_response.dart';
+import '../../../core/network/snowflake_id.dart';
 import '../../../core/widgets/app_date_time_pickers.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/popup_selector_field.dart';
@@ -70,6 +71,7 @@ const Color _kTextSecondary = Color(0xFF6D6B75);
 const Color _kTextHint = Color(0xFFB6B5BB);
 const Color _kTextDivider = Color(0xFFCECED1);
 const Color _kPurple = Color(0xFF8741FF);
+const Color _kCheckboxBorder = Color(0xFFCECED1);
 
 const Color _kStatusGreen = Color(0xFF0CAC40);
 const Color _kStatusPurple = Color(0xFFA773FF);
@@ -129,6 +131,7 @@ class _ApplyContext {
     this.classroomId,
     this.subjectId,
     this.colorHex,
+    this.studentIds = const [],
   });
 
   final String applyId;
@@ -142,6 +145,9 @@ class _ApplyContext {
   final int? classroomId;
   final int? subjectId;
   final String? colorHex;
+
+  /// `courseData` 中解析出的参与学生 id；重新申请时用于回填勾选。
+  final List<String> studentIds;
 }
 
 class _TimeSlotData {
@@ -225,7 +231,7 @@ class _TeacherLessonScheduleViewState
   /// 班级列表第一项 id（来自 teacher `/teacher/classList`，已基于 token
   /// 过滤为「我教的班级」）。仅用于驱动 `schoolTimeConfigList` 拉对应班级
   /// 的节次时间表 + 抽屉默认班级回填。抽屉自身会再调一次 `classList`
-  /// (带 type:1) 拿最新的我的小班列表，无需在这里整张缓存。
+  /// 拿最新的我教的班级列表（大 + 小），无需在这里整张缓存。
   String? _firstClassId;
 
   /// 课表数据字典（id → 名称），仅给「我的小课申请」幽灵卡用 ——
@@ -244,9 +250,9 @@ class _TeacherLessonScheduleViewState
   List<_TimeConfig> get _activeTimeConfigs =>
       _timeConfigs.isNotEmpty ? _timeConfigs : _kDefaultTimeConfigs;
 
-  /// 当前周的网格数据，[7 天][N 节] → 多张课卡。null = 尚未加载。
-  List<List<List<_ScheduleCardData>>>? _serverCells;
-  bool _scheduleLoading = false;
+  /// 当前周的网格数据，[7 天][N 节] → 多张课卡。
+  late List<List<List<_ScheduleCardData>>> _serverCells;
+  int _scheduleLoadGeneration = 0;
 
   String _fmtDate(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}/${d.month.toString().padLeft(2, '0')}/${d.day.toString().padLeft(2, '0')}';
@@ -260,27 +266,30 @@ class _TeacherLessonScheduleViewState
   }
 
   void _gotoPrev() {
-    setState(() {
-      _weekStart = _weekStart.subtract(const Duration(days: 7));
-      _currentWeek -= 1;
-    });
-    _loadSchedule();
+    unawaited(
+      _loadSchedule(
+        weekStart: _weekStart.subtract(const Duration(days: 7)),
+        weekNumber: _currentWeek - 1,
+      ),
+    );
   }
 
   void _gotoNext() {
-    setState(() {
-      _weekStart = _weekStart.add(const Duration(days: 7));
-      _currentWeek += 1;
-    });
-    _loadSchedule();
+    unawaited(
+      _loadSchedule(
+        weekStart: _weekStart.add(const Duration(days: 7)),
+        weekNumber: _currentWeek + 1,
+      ),
+    );
   }
 
   void _gotoCurrent() {
-    setState(() {
-      _weekStart = _mondayOf(DateTime.now());
-      _currentWeek = _baseWeek;
-    });
-    _loadSchedule();
+    unawaited(
+      _loadSchedule(
+        weekStart: _mondayOf(DateTime.now()),
+        weekNumber: _baseWeek,
+      ),
+    );
   }
 
   Future<void> _pickDate() async {
@@ -296,16 +305,18 @@ class _TeacherLessonScheduleViewState
     if (picked == null || !mounted) return;
     final newWeekStart = _mondayOf(picked);
     final delta = newWeekStart.difference(_mondayOf(DateTime.now())).inDays;
-    setState(() {
-      _weekStart = newWeekStart;
-      _currentWeek = _baseWeek + (delta / 7).round();
-    });
-    _loadSchedule();
+    unawaited(
+      _loadSchedule(
+        weekStart: newWeekStart,
+        weekNumber: _baseWeek + (delta / 7).round(),
+      ),
+    );
   }
 
   @override
   void initState() {
     super.initState();
+    _serverCells = _emptyCells();
     _weekStart = _mondayOf(DateTime.now());
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // 先拉班级列表（驱动 timeConfig 用），再并行拉时间表 + 字典
@@ -436,13 +447,21 @@ class _TeacherLessonScheduleViewState
     }
     list.sort((a, b) => a.lineNum.compareTo(b.lineNum));
     if (!mounted || list.isEmpty) return;
-    setState(() => _timeConfigs = list);
+    setState(() {
+      _timeConfigs = list;
+      _serverCells = _normalizeCells(_serverCells);
+    });
   }
 
-  Future<void> _loadSchedule() async {
-    setState(() => _scheduleLoading = true);
+  Future<void> _loadSchedule({
+    DateTime? weekStart,
+    int? weekNumber,
+  }) async {
+    final targetWeekStart = weekStart ?? _weekStart;
+    final targetWeekNumber = weekNumber ?? _currentWeek;
+    final generation = ++_scheduleLoadGeneration;
     final repo = ref.read(teacherRepositoryProvider);
-    final start = _weekStart;
+    final start = targetWeekStart;
     final end = start.add(const Duration(days: 6));
     // 并行：① 真实课表（已排定）； ② 我的小课申请列表（含审核中 / 已驳回，
     // 用来在课表上同步显示状态徽章）。已通过的申请会同步出现在 ① 里作为
@@ -454,14 +473,15 @@ class _TeacherLessonScheduleViewState
       repo.courseList(beginDate: _isoDate(start), endDate: _isoDate(end)),
       repo.schoolSmallCourseApplyList(current: 1, size: 100),
     ]);
-    if (!mounted) return;
+    if (!mounted || generation != _scheduleLoadGeneration) return;
     final courseResp = results[0];
     final applyResp = results[1];
 
     if (!courseResp.isSuccess) {
       setState(() {
+        _weekStart = targetWeekStart;
+        _currentWeek = targetWeekNumber;
         _serverCells = _emptyCells();
-        _scheduleLoading = false;
       });
       return;
     }
@@ -480,7 +500,7 @@ class _TeacherLessonScheduleViewState
       final dateStr = entry.dateKey.isNotEmpty
           ? entry.dateKey
           : _pickString(m, ['date', 'classDate', 'courseDate'], '');
-      final dayIdx = _dayIndex(dateStr);
+      final dayIdx = _dayIndex(dateStr, targetWeekStart);
       if (dayIdx < 0) continue;
 
       final lineNumRaw = m['lineNum'];
@@ -509,15 +529,18 @@ class _TeacherLessonScheduleViewState
     if (applyResp.isSuccess) {
       _mergeApplyRecords(
         applyResp,
+        weekStart: targetWeekStart,
         cells: cells,
         smallSeq: smallSeq,
         realCourseKeys: realCourseKeys,
       );
     }
 
+    if (!mounted || generation != _scheduleLoadGeneration) return;
     setState(() {
+      _weekStart = targetWeekStart;
+      _currentWeek = targetWeekNumber;
       _serverCells = cells;
-      _scheduleLoading = false;
     });
   }
 
@@ -540,6 +563,7 @@ class _TeacherLessonScheduleViewState
   /// / 后续 8 周）会展开成多条 child，按 child.date 落到对应日期 / 节次格。
   void _mergeApplyRecords(
     ApiResponse resp, {
+    required DateTime weekStart,
     required List<List<List<_ScheduleCardData>>> cells,
     required Map<int, int> smallSeq,
     required Set<String> realCourseKeys,
@@ -612,7 +636,7 @@ class _TeacherLessonScheduleViewState
           'classDate',
           'courseDate',
         ], '');
-        final dayIdx = _dayIndex(dateStr);
+        final dayIdx = _dayIndex(dateStr, weekStart);
         if (dayIdx < 0) continue;
 
         final lnRaw = cm['lineNum'] ?? apply['lineNum'];
@@ -753,6 +777,23 @@ class _TeacherLessonScheduleViewState
     ];
   }
 
+  /// 把已缓存课表网格对齐到当前节次数量，避免 timeConfig 变更后
+  /// slots 行数与 cells 列数不一致触发 RangeError。
+  List<List<List<_ScheduleCardData>>> _normalizeCells(
+    List<List<List<_ScheduleCardData>>> cells,
+  ) {
+    final slotCount = _activeTimeConfigs.length;
+    return [
+      for (var d = 0; d < 7; d++)
+        [
+          for (var s = 0; s < slotCount; s++)
+            d < cells.length && s < cells[d].length
+                ? cells[d][s]
+                : <_ScheduleCardData>[],
+        ],
+    ];
+  }
+
   /// 根据当前格子内最多课卡数算出每行高度（动态适配 1 / 2 / N 张课卡叠放）。
   /// 编辑模式下额外预留 56px：8 间距 + 48 高 "申请小课" pill，让"大课下方
   /// 也能申请小课"在每一节都成立。
@@ -788,7 +829,7 @@ class _TeacherLessonScheduleViewState
   }
 
   /// 把后端返回的日期字符串归一化到当前周内的 [0..6]，否则返回 -1。
-  int _dayIndex(String dateStr) {
+  int _dayIndex(String dateStr, [DateTime? weekStart]) {
     if (dateStr.isEmpty) return -1;
     DateTime? d = DateTime.tryParse(dateStr);
     if (d == null) {
@@ -797,7 +838,8 @@ class _TeacherLessonScheduleViewState
     }
     if (d == null) return -1;
     final dn = DateTime(d.year, d.month, d.day);
-    final ws = DateTime(_weekStart.year, _weekStart.month, _weekStart.day);
+    final anchor = weekStart ?? _weekStart;
+    final ws = DateTime(anchor.year, anchor.month, anchor.day);
     final diff = dn.difference(ws).inDays;
     return (diff < 0 || diff > 6) ? -1 : diff;
   }
@@ -834,7 +876,7 @@ class _TeacherLessonScheduleViewState
     if (slotIdx < 0) {
       slotIdx = (lineNum - 1).clamp(0, configs.length - 1);
     }
-    final cells = _serverCells ?? _emptyCells();
+    final cells = _normalizeCells(_serverCells);
     return cells[dayIdx][slotIdx].any(_isSmallScheduleCard);
   }
 
@@ -985,6 +1027,7 @@ class _TeacherLessonScheduleViewState
                 initialClassId: apply.classId,
                 initialClassroomId: apply.classroomId?.toString(),
                 initialSubjectId: apply.subjectId?.toString(),
+                initialStudentIds: apply.studentIds,
                 slotHasSmallCourseAt: _slotHasSmallCourseAt,
                 onCancel: () => Navigator.of(ctx).maybePop(),
                 onSubmitted: () => Navigator.of(ctx).pop(true),
@@ -1065,7 +1108,7 @@ class _TeacherLessonScheduleViewState
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final cells = _serverCells ?? _emptyCells();
+    final cells = _normalizeCells(_serverCells);
     final slots = _buildSlots(cells);
     final days = _buildDayHeaders();
 
@@ -1093,29 +1136,12 @@ class _TeacherLessonScheduleViewState
           ),
           Padding(
             padding: EdgeInsets.fromLTRB(ui(20), ui(0), ui(20), ui(20)),
-            child: Stack(
-              children: [
-                _ScheduleGrid(
-                  mode: _mode,
-                  slots: slots,
-                  days: days,
-                  cells: cells,
-                  onApplySmallLesson: _onApplySmallLesson,
-                ),
-                if (_scheduleLoading)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.55),
-                          borderRadius: BorderRadius.circular(ui(12)),
-                        ),
-                        alignment: Alignment.center,
-                        child: const AppLoadingIndicator(),
-                      ),
-                    ),
-                  ),
-              ],
+            child: _ScheduleGrid(
+              mode: _mode,
+              slots: slots,
+              days: days,
+              cells: cells,
+              onApplySmallLesson: _onApplySmallLesson,
             ),
           ),
         ],
@@ -2267,7 +2293,6 @@ class _ApplyRecordsDrawer extends ConsumerStatefulWidget {
 }
 
 class _ApplyRecordsDrawerState extends ConsumerState<_ApplyRecordsDrawer> {
-  bool _loading = true;
   String? _error;
   List<_ApplyRecordItem> _records = const [];
 
@@ -2278,17 +2303,13 @@ class _ApplyRecordsDrawerState extends ConsumerState<_ApplyRecordsDrawer> {
   }
 
   Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
     final repo = ref.read(teacherRepositoryProvider);
     final resp = await repo.schoolSmallCourseApplyList(current: 1, size: 100);
     if (!mounted) return;
     if (!resp.isSuccess) {
       setState(() {
-        _loading = false;
         _error = resp.displayMsg;
+        _records = const [];
       });
       return;
     }
@@ -2312,7 +2333,7 @@ class _ApplyRecordsDrawerState extends ConsumerState<_ApplyRecordsDrawer> {
     items.sort((a, b) => b.createTime.compareTo(a.createTime));
     setState(() {
       _records = items;
-      _loading = false;
+      _error = null;
     });
   }
 
@@ -2334,9 +2355,6 @@ class _ApplyRecordsDrawerState extends ConsumerState<_ApplyRecordsDrawer> {
   }
 
   Widget _buildBody(BuildContext context, double Function(double) ui) {
-    if (_loading) {
-      return const Center(child: AppLoadingIndicator());
-    }
     if (_error != null) {
       return Center(
         child: Text(
@@ -2396,6 +2414,7 @@ class _ApplyRecordItem {
     required this.colorHex,
     required this.reason,
     required this.createTime,
+    this.studentIds = const [],
   });
 
   final String id;
@@ -2414,6 +2433,7 @@ class _ApplyRecordItem {
   final String colorHex;
   final String reason;
   final String createTime;
+  final List<String> studentIds;
 
   static _ApplyRecordItem? fromJson(Map<String, dynamic> m) {
     final id = _pickString(m, ['id', 'applyId'], '');
@@ -2439,10 +2459,10 @@ class _ApplyRecordItem {
     final reason = _pickString(m, ['reason'], '');
     final createTime = _pickString(m, ['createTime'], '');
 
-    // 解 courseData 拿到「共 N 次」和 firstDateIso。雪花 ID 走 _preserveLongIds
-    // 包成字符串再 decode，避免 Web 端 JS number 53bit 截断。
+    // 解 courseData 拿到「共 N 次」、firstDateIso 与参与学生。
     int occurrences = 0;
     String firstDateIso = startDate;
+    final studentIds = <String>{};
     final cdRaw = m['courseData'];
     List<dynamic>? children;
     if (cdRaw is String && cdRaw.isNotEmpty) {
@@ -2460,6 +2480,13 @@ class _ApplyRecordItem {
         final d = _pickString(first, ['date'], '');
         if (d.isNotEmpty) firstDateIso = d;
       }
+      for (final child in children) {
+        if (child is Map) {
+          studentIds.addAll(
+            _extractStudentIdsFromCourseMap(child.cast<String, dynamic>()),
+          );
+        }
+      }
     }
 
     return _ApplyRecordItem(
@@ -2476,6 +2503,7 @@ class _ApplyRecordItem {
       colorHex: colorHex,
       reason: reason,
       createTime: createTime,
+      studentIds: studentIds.toList(),
     );
   }
 
@@ -2490,6 +2518,7 @@ class _ApplyRecordItem {
       classroomId: classroomId,
       subjectId: subjectId,
       colorHex: colorHex,
+      studentIds: studentIds,
     );
   }
 }
@@ -2659,12 +2688,13 @@ class _ApplyRecordCard extends StatelessWidget {
 // 设计：宽 600，全高，白底；顶部 62 高 _DrawerHeader（3×15 紫竖条 + "申请小课"
 // 16/600 标题 + 关闭 X，底部 1px #F3F2F3 边）；表单 6 段：
 //   1. 课程时间：只读 #F5F6FA 灰底 48 高
-//   2. 班级：调 teacher.classList(type: 1)，String id 下拉 ——
-//          仅展示「我的小班」（type=1），避免把小课申请挂到大班上。
-//   3. 教室：调 teacher.classroomList，int id 下拉
-//   4. 科目：调 user.subjectList(classId)，int id 下拉
-//   5. 颜色：13 色色板 + 当前 hex chip
-//   6. 是否复用：不复用 / 本学期所有 / 后续 4 周 / 后续 8 周
+//   2. 班级：调 teacher.classList()（大 + 小全量），String id 下拉。
+//   3. 参与学生：按所选班级调 teacher.studentList，`type` 与班级类型
+//          对齐（0 大班 / 1 小班），勾选后写入 courseList[].studentIds。
+//   4. 教室：调 teacher.classroomList，int id 下拉
+//   5. 科目：调 user.subjectList(classId)，int id 下拉
+//   6. 颜色：13 色色板 + 当前 hex chip
+//   7. 是否复用：不复用 / 本学期所有 / 后续 4 周 / 后续 8 周
 // 底部：560×48 紫色横向渐变 (#B68EFF→#8640FF) "提交教务审核" 按钮。
 //
 // 提交：调 `/app/school/v2/teacher/schoolSmallCourseApplySave`，
@@ -2687,6 +2717,7 @@ class _ApplyRecordCard extends StatelessWidget {
 //       "date": "2026-05-08",
 //       "lineNum": 1,
 //       "teacherId": "..."   // String，当前任课老师 id（雪花）
+//       "studentIds": ["..."] // 参与学生雪花 id 列表
 //     }
 //   ]
 // }
@@ -2694,6 +2725,18 @@ class _ApplyRecordCard extends StatelessWidget {
 //
 // 时间字段全部使用 `yyyy-MM-dd`（不带时区后缀，按需求统一）。
 // =============================================================================
+
+// =============================================================================
+// 申请小课抽屉（任课老师授课课表专用）
+// =============================================================================
+
+/// 任课老师「申请小课」默认选中色与色板首色。
+const Color _kTeacherApplySmallLessonDefaultColor = Color(0xFFACFBBA);
+
+final List<Color> _kTeacherApplySmallLessonPalette = <Color>[
+  _kTeacherApplySmallLessonDefaultColor,
+  ...scheduleColorPalette.sublist(1),
+];
 
 class _ApplySmallLessonDrawer extends ConsumerStatefulWidget {
   const _ApplySmallLessonDrawer({
@@ -2707,6 +2750,7 @@ class _ApplySmallLessonDrawer extends ConsumerStatefulWidget {
     this.initialClassId,
     this.initialClassroomId,
     this.initialSubjectId,
+    this.initialStudentIds,
   });
 
   /// 抽屉顶部只读"课程时间"展示，例如
@@ -2733,6 +2777,9 @@ class _ApplySmallLessonDrawer extends ConsumerStatefulWidget {
   /// 等 _loadSubjects 拉完后会校验该 id 是否在当前班级科目里。
   final String? initialSubjectId;
 
+  /// 「重新申请」场景下从 courseData 解析的参与学生 id，用于回填勾选。
+  final List<String>? initialStudentIds;
+
   /// 查询当前周课表内指定日期 + 节次是否已有小课。
   final bool Function(String dateIso, int lineNum) slotHasSmallCourseAt;
 
@@ -2746,17 +2793,20 @@ class _ApplySmallLessonDrawer extends ConsumerStatefulWidget {
 
 class _ApplySmallLessonDrawerState
     extends ConsumerState<_ApplySmallLessonDrawer> {
-  // 班级 / 教室 / 科目下拉的 cache：(label, id)。
-  List<({String id, String name})> _classes = const [];
+  // 班级下拉 cache：(id, name, type)。`type` 与 studentList 请求体对齐：0 大班 / 1 小班。
+  List<({String id, String name, int type})> _classes = const [];
   List<({String id, String name})> _classrooms = const [];
   List<({String id, String name})> _subjects = const [];
+  List<({String id, String name, String studentNo})> _students = const [];
 
   String? _classId;
   String? _classroomId;
   String? _subjectId;
+  final Set<String> _selectedStudentIds = <String>{};
   bool _loadingSubjects = false;
+  bool _loadingStudents = false;
 
-  Color _color = scheduleDefaultPickerColor;
+  Color _color = _kTeacherApplySmallLessonDefaultColor;
   String _reuse = '不复用';
   bool _submitting = false;
 
@@ -2777,16 +2827,12 @@ class _ApplySmallLessonDrawerState
     // 班级 / 教室均走 teacher 端接口。
     final teacherRepo = ref.read(teacherRepositoryProvider);
     final results = await Future.wait([
-      teacherRepo.classList(type: 1),
+      teacherRepo.classList(),
       teacherRepo.classroomList(),
     ]);
     if (!mounted) return;
     setState(() {
-      _classes = _toOptions(
-        results[0],
-        idKeys: const ['id', 'classId', 'cId'],
-        nameKeys: const ['className', 'class', 'name', 'fullName'],
-      );
+      _classes = _toClassOptions(results[0]);
       _classrooms = _toOptions(
         results[1],
         idKeys: const ['id', 'classroomId', 'roomId'],
@@ -2818,7 +2864,89 @@ class _ApplySmallLessonDrawerState
         _subjectId = widget.initialSubjectId;
       }
     });
-    _loadSubjects(_classId);
+    await Future.wait([
+      _loadSubjects(_classId),
+      _loadStudents(_classId),
+    ]);
+  }
+
+  Future<void> _loadStudents(String? classId) async {
+    if (classId == null || classId.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _students = const [];
+        _selectedStudentIds.clear();
+        _loadingStudents = false;
+      });
+      return;
+    }
+
+    setState(() => _loadingStudents = true);
+    final classType = _classTypeFor(classId);
+    final resp = await ref
+        .read(teacherRepositoryProvider)
+        .studentList(classId: classId, current: 1, size: 200, type: classType);
+    if (!mounted) return;
+
+    final rows = _extractList(resp);
+    final students = <({String id, String name, String studentNo})>[];
+    for (final m in rows) {
+      final id = readSnowflakeId(m['id'] ?? m['userId'] ?? m['stuId']) ?? '';
+      if (id.isEmpty) continue;
+      final nickname = _pickString(m, ['nickname', 'nickName'], '');
+      final realname = _pickString(m, ['realname', 'realName'], '');
+      final name = nickname.isNotEmpty
+          ? nickname
+          : (realname.isNotEmpty
+                ? realname
+                : _pickString(m, ['name', 'stuName', 'studentName'], '未命名'));
+      final studentNo = _pickString(m, [
+        'no',
+        'studentNo',
+        'studentId',
+        'stuNo',
+        'stuId',
+        'code',
+        'studentCode',
+      ], '');
+      students.add((id: id, name: name, studentNo: studentNo));
+    }
+
+    final initial = (classId == widget.initialClassId)
+        ? (widget.initialStudentIds ?? const <String>[])
+        : const <String>[];
+    final preselected = initial.isEmpty
+        ? <String>{}
+        : students
+              .map((s) => s.id)
+              .where((id) => initial.contains(id))
+              .toSet();
+
+    setState(() {
+      _students = students;
+      _selectedStudentIds
+        ..clear()
+        ..addAll(preselected);
+      _loadingStudents = false;
+    });
+  }
+
+  void _toggleStudent(String id, bool selected) {
+    setState(() {
+      if (selected) {
+        _selectedStudentIds.add(id);
+      } else {
+        _selectedStudentIds.remove(id);
+      }
+    });
+  }
+
+  void _toggleAllStudents(bool selectAll) {
+    setState(() {
+      _selectedStudentIds
+        ..clear()
+        ..addAll(selectAll ? _students.map((s) => s.id) : const <String>[]);
+    });
   }
 
   Future<void> _loadSubjects(String? classId) async {
@@ -2848,6 +2976,37 @@ class _ApplySmallLessonDrawerState
       }
       _loadingSubjects = false;
     });
+  }
+
+  int _classTypeFor(String? classId) {
+    if (classId == null || classId.isEmpty) return 0;
+    for (final c in _classes) {
+      if (c.id == classId) return c.type;
+    }
+    return 0;
+  }
+
+  List<({String id, String name, int type})> _toClassOptions(ApiResponse resp) {
+    if (!resp.isSuccess) return const [];
+    final rows = _extractList(resp);
+    return [
+      for (final m in rows)
+        if (_pickString(m, const ['id', 'classId', 'cId'], '').isNotEmpty &&
+            _pickString(
+              m,
+              const ['className', 'class', 'name', 'fullName'],
+              '',
+            ).isNotEmpty)
+          (
+            id: _pickString(m, const ['id', 'classId', 'cId'], ''),
+            name: _pickString(
+              m,
+              const ['className', 'class', 'name', 'fullName'],
+              '',
+            ),
+            type: _classTypeFromJson(m['type'] ?? m['classType'] ?? m['kind']),
+          ),
+    ];
   }
 
   List<({String id, String name})> _toOptions(
@@ -2915,6 +3074,10 @@ class _ApplySmallLessonDrawerState
       AppToast.show(context, '请先选择科目');
       return;
     }
+    if (_selectedStudentIds.isEmpty) {
+      AppToast.show(context, '请至少勾选一名参与学生');
+      return;
+    }
 
     final dates = _computeReuseDates();
     final hasExistingSmall = dates.any(
@@ -2943,6 +3106,7 @@ class _ApplySmallLessonDrawerState
     final teacherId = ref.read(shellControllerProvider).user.id;
 
     final color = _hexLabel;
+    final studentIds = _selectedStudentIds.toList(growable: false);
     final courseList = <Map<String, dynamic>>[
       for (final d in dates)
         <String, dynamic>{
@@ -2953,6 +3117,7 @@ class _ApplySmallLessonDrawerState
           'date': _ymd(d),
           'lineNum': widget.lineNum,
           if (teacherId.isNotEmpty) 'teacherId': teacherId,
+          'studentIds': studentIds,
         },
     ];
 
@@ -3016,25 +3181,30 @@ class _ApplySmallLessonDrawerState
                         return _classes
                             .firstWhere(
                               (c) => c.id == id,
-                              orElse: () => (id: id, name: id),
+                              orElse: () => (id: id, name: id, type: 0),
                             )
                             .name;
                       },
                       onChanged: (v) {
                         setState(() => _classId = v);
-                        _loadSubjects(v);
+                        unawaited(Future.wait([
+                          _loadSubjects(v),
+                          _loadStudents(v),
+                        ]));
                       },
                     ),
-                    SizedBox(height: ui(8)),
-                    Text(
-                      '课表展示为「小班·班级名」，无需再选教学组织形式。',
-                      style: TextStyle(
-                        fontSize: ui(12),
-                        color: _kTextDivider,
-                        fontFamily: 'PingFang SC',
-                        fontWeight: AppFont.w400,
-                        height: 1,
-                      ),
+                    SizedBox(height: ui(20)),
+                    const _SectionLabel(
+                      icon: Icons.people_outline_rounded,
+                      label: '参与学生',
+                    ),
+                    SizedBox(height: ui(12)),
+                    _SmallCourseStudentPicker(
+                      students: _students,
+                      selectedIds: _selectedStudentIds,
+                      loading: _loadingStudents,
+                      onToggle: _toggleStudent,
+                      onToggleAll: _toggleAllStudents,
                     ),
                     SizedBox(height: ui(20)),
                     const _SectionLabel(
@@ -3085,6 +3255,7 @@ class _ApplySmallLessonDrawerState
                     ),
                     SizedBox(height: ui(12)),
                     ScheduleColorSwatchPicker(
+                      colors: _kTeacherApplySmallLessonPalette,
                       selected: _color,
                       onSelect: (c) => setState(() => _color = c),
                     ),
@@ -3285,9 +3456,192 @@ class _SubmitGradientButton extends StatelessWidget {
   }
 }
 
+class _SmallCourseStudentPicker extends StatelessWidget {
+  const _SmallCourseStudentPicker({
+    required this.students,
+    required this.selectedIds,
+    required this.loading,
+    required this.onToggle,
+    required this.onToggleAll,
+  });
+
+  final List<({String id, String name, String studentNo})> students;
+  final Set<String> selectedIds;
+  final bool loading;
+  final void Function(String id, bool selected) onToggle;
+  final ValueChanged<bool> onToggleAll;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    const listHeight = 220.0;
+    final allSelected =
+        !loading && students.isNotEmpty && selectedIds.length == students.length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              loading
+                  ? '学生加载中…'
+                  : '已选 ${selectedIds.length} / ${students.length} 人',
+              style: TextStyle(
+                fontSize: ui(12),
+                color: _kTextSecondary,
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w400,
+              ),
+            ),
+            const Spacer(),
+            if (!loading && students.isNotEmpty)
+              InkWell(
+                onTap: () => onToggleAll(!allSelected),
+                borderRadius: BorderRadius.circular(ui(6)),
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: ui(8),
+                    vertical: ui(4),
+                  ),
+                  child: Text(
+                    allSelected ? '取消全选' : '全选',
+                    style: TextStyle(
+                      fontSize: ui(12),
+                      color: _kPurple,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w500,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        SizedBox(height: ui(8)),
+        SizedBox(
+          height: ui(listHeight),
+          child: Container(
+            decoration: BoxDecoration(
+              color: _kInnerGray,
+              borderRadius: BorderRadius.circular(ui(8)),
+              border: Border.all(color: _kBorderSoft),
+            ),
+            child: loading
+                ? Center(
+                    child: Text(
+                      '学生加载中…',
+                      style: TextStyle(
+                        fontSize: ui(13),
+                        color: _kTextSecondary,
+                        fontFamily: 'PingFang SC',
+                      ),
+                    ),
+                  )
+                : students.isEmpty
+                ? Center(
+                    child: Text(
+                      '该班级暂无学生',
+                      style: TextStyle(
+                        fontSize: ui(13),
+                        color: _kTextSecondary,
+                        fontFamily: 'PingFang SC',
+                      ),
+                    ),
+                  )
+                : ListView.separated(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: ui(12),
+                      vertical: ui(8),
+                    ),
+                    itemCount: students.length,
+                    separatorBuilder: (_, _) => SizedBox(height: ui(8)),
+                    itemBuilder: (context, index) {
+                      final student = students[index];
+                      final checked = selectedIds.contains(student.id);
+                      return GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => onToggle(student.id, !checked),
+                        child: Row(
+                          children: [
+                            _ApplySmallLessonCheckbox(checked: checked),
+                            SizedBox(width: ui(12)),
+                            Text(
+                              student.studentNo.isEmpty
+                                  ? '—'
+                                  : student.studentNo,
+                              style: TextStyle(
+                                fontSize: ui(12),
+                                color: _kTextHint,
+                                fontFamily: 'PingFang SC',
+                              ),
+                            ),
+                            SizedBox(width: ui(12)),
+                            Expanded(
+                              child: Text(
+                                student.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: ui(14),
+                                  color: _kTextDark,
+                                  fontFamily: 'PingFang SC',
+                                  fontWeight: AppFont.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ApplySmallLessonCheckbox extends StatelessWidget {
+  const _ApplySmallLessonCheckbox({required this.checked});
+
+  final bool checked;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      width: ui(16),
+      height: ui(16),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: checked ? _kPurple : Colors.white,
+        borderRadius: BorderRadius.circular(ui(4)),
+        border: Border.all(
+          color: checked ? _kPurple : _kCheckboxBorder,
+          width: 1,
+        ),
+      ),
+      child: checked
+          ? Icon(Icons.check, size: ui(10), color: Colors.white)
+          : null,
+    );
+  }
+}
+
 // =============================================================================
 // 通用 helpers（与 admin / 学生端一致的解析函数）
 // =============================================================================
+
+List<String> _extractStudentIdsFromCourseMap(Map<String, dynamic> map) {
+  final raw = map['studentIds'];
+  if (raw is! List) return const [];
+  final ids = <String>[];
+  for (final item in raw) {
+    final sid = readSnowflakeId(item);
+    if (sid != null && sid.isNotEmpty) ids.add(sid);
+  }
+  return ids;
+}
 
 /// `status`: 1 = 已通过；2 = 已驳回；0 / null / 其他 = 待审核。
 /// 顶层 helper：申请记录抽屉的 `_ApplyRecordItem.fromJson` 是静态工厂方法，
@@ -3362,4 +3716,14 @@ String _trimToHm(String s) {
     return '${parts[0]}:${parts[1]}';
   }
   return s;
+}
+
+/// 后端班级 `type`：0 / 含「大」= 大班；1 / 含「小」= 小班。
+int _classTypeFromJson(dynamic raw) {
+  if (raw == null) return 0;
+  if (raw is int) return raw == 1 ? 1 : 0;
+  final s = raw.toString().trim().toLowerCase();
+  if (s.isEmpty) return 0;
+  if (s == '1' || s.contains('小') || s == 'small') return 1;
+  return 0;
 }

@@ -1992,7 +1992,9 @@ class _PracticeResultDialog extends StatelessWidget {
                     right: ui(24),
                     top: ui(52),
                     child: Text(
-                      '太棒了！恭喜完成本课',
+                      session.sourceMode == SmartDictationMode.smart
+                          ? '太棒了！恭喜完成本课'
+                          : '太棒了！恭喜完成本关',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: ui(24),
@@ -2503,7 +2505,7 @@ class _LessonTile extends StatelessWidget {
                     children: [
                       SizedBox(height: ui(4)),
                       Text(
-                        '第${lesson.number}课',
+                        '第${lesson.number}关',
                         style: TextStyle(
                           fontSize: ui(13),
                           color: const Color(0xFF0B081A),
@@ -2598,7 +2600,7 @@ class _LessonTile extends StatelessWidget {
                                 SizedBox(width: ui(4)),
                                 Expanded(
                                   child: Text(
-                                    '通过上一课即可解锁',
+                                    '通过上一关即可解锁',
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(

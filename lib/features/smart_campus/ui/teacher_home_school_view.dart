@@ -340,8 +340,7 @@ class _StatsRow extends StatelessWidget {
           child: _StatCard(
             title: '未读消息',
             value: unread,
-            gradient: const [Color(0xFFFFE2DC), Colors.white],
-            blobColor: const Color(0xFFFF9985),
+            backgroundAsset: AppAssets.headTeacherHomeSchoolStatUnread,
             onTap: () => onTabChanged(_TopTab.unread),
           ),
         ),
@@ -350,8 +349,7 @@ class _StatsRow extends StatelessWidget {
           child: _StatCard(
             title: '待回复',
             value: pending,
-            gradient: const [Color(0xFFFFF0DC), Colors.white],
-            blobColor: const Color(0xFFFFD79F),
+            backgroundAsset: AppAssets.headTeacherHomeSchoolStatPendingReply,
             onTap: () => onTabChanged(_TopTab.pending),
           ),
         ),
@@ -360,8 +358,7 @@ class _StatsRow extends StatelessWidget {
           child: _StatCard(
             title: '会话总数',
             value: total,
-            gradient: const [Color(0xFFE7DCFF), Colors.white],
-            blobColor: const Color(0xFFD4BEFF),
+            backgroundAsset: AppAssets.headTeacherHomeSchoolStatTotal,
             onTap: () => onTabChanged(_TopTab.all),
           ),
         ),
@@ -374,15 +371,13 @@ class _StatCard extends StatelessWidget {
   const _StatCard({
     required this.title,
     required this.value,
-    required this.gradient,
-    required this.blobColor,
+    required this.backgroundAsset,
     this.onTap,
   });
 
   final String title;
   final int value;
-  final List<Color> gradient;
-  final Color blobColor;
+  final String backgroundAsset;
   final VoidCallback? onTap;
 
   @override
@@ -396,22 +391,18 @@ class _StatCard extends StatelessWidget {
         child: Ink(
           height: ui(100),
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: const Alignment(0.5, -0.95),
-              end: const Alignment(-0.5, 0.95),
-              stops: const [0.0, 0.73],
-              colors: gradient,
-            ),
             borderRadius: BorderRadius.circular(ui(12)),
-            border: Border.all(color: Colors.white, width: 1),
+            image: DecorationImage(
+              image: AssetImage(backgroundAsset),
+              fit: BoxFit.cover,
+            ),
           ),
-          child: Stack(
-            children: [
-              Positioned(
-                left: ui(16),
-                top: ui(16),
-                right: ui(76),
-                child: Text(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(ui(16), ui(16), ui(76), ui(0)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -423,11 +414,8 @@ class _StatCard extends StatelessWidget {
                     height: 1.2,
                   ),
                 ),
-              ),
-              Positioned(
-                left: ui(16),
-                top: ui(40),
-                child: Text(
+                SizedBox(height: ui(8)),
+                Text(
                   '$value',
                   style: TextStyle(
                     fontSize: ui(32),
@@ -437,27 +425,8 @@ class _StatCard extends StatelessWidget {
                     height: 1.0,
                   ),
                 ),
-              ),
-              Positioned(
-                right: ui(16),
-                bottom: ui(8),
-                child: Container(
-                  width: ui(54),
-                  height: ui(54),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        blobColor.withValues(alpha: 0.35),
-                        blobColor.withValues(alpha: 0.05),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(ui(12)),
-                  ),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

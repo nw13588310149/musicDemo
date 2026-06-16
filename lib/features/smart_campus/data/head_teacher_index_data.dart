@@ -3,6 +3,8 @@ library;
 
 import '../../../core/network/snowflake_id.dart';
 
+import 'smart_campus_dashboard_data.dart';
+
 class HeadTeacherClassItem {
   const HeadTeacherClassItem({
     required this.classId,
@@ -61,6 +63,123 @@ class HeadTeacherIndexRes {
 
   int get pendingTodoCount =>
       pendingLeaveCount + pendingMakeupCount + todayAbnormalDormCount;
+}
+
+List<SmartCampusStatCardData> buildHeadTeacherStats(HeadTeacherIndexRes res) {
+  return [
+    SmartCampusStatCardData(
+      label: '在籍学生',
+      value: '${res.totalStudentCount}',
+    ),
+    SmartCampusStatCardData(
+      label: '待批请假',
+      value: '${res.pendingLeaveCount}',
+    ),
+    SmartCampusStatCardData(
+      label: '查寝异常',
+      value: '${res.todayAbnormalDormCount}',
+    ),
+    SmartCampusStatCardData(
+      label: '家校未读',
+      value: '${res.chatUnreadCount}',
+    ),
+    SmartCampusStatCardData(
+      label: '待回复',
+      value: '${res.chatWaitingCount}',
+    ),
+    SmartCampusStatCardData(
+      label: '待办',
+      value: '${res.pendingTodoCount}',
+      highlight: res.pendingTodoCount > 0,
+    ),
+  ];
+}
+
+class HeadTeacherBoardItem {
+  const HeadTeacherBoardItem({
+    required this.time,
+    required this.title,
+    required this.tag,
+  });
+
+  final String time;
+  final String title;
+  final String tag;
+}
+
+List<HeadTeacherBoardItem> buildHeadTeacherTodoBoardItems(
+  HeadTeacherIndexRes res,
+) {
+  final items = <HeadTeacherBoardItem>[];
+  if (res.pendingLeaveCount > 0) {
+    items.add(
+      HeadTeacherBoardItem(
+        time: '待审批 ${res.pendingLeaveCount}',
+        title: '学生请假申请待处理',
+        tag: '请假',
+      ),
+    );
+  }
+  if (res.pendingMakeupCount > 0) {
+    items.add(
+      HeadTeacherBoardItem(
+        time: '待审核 ${res.pendingMakeupCount}',
+        title: '学生补卡申请待处理',
+        tag: '补卡',
+      ),
+    );
+  }
+  if (res.todayAbnormalDormCount > 0) {
+    items.add(
+      HeadTeacherBoardItem(
+        time: '待确认 ${res.todayAbnormalDormCount}',
+        title: '查寝异常记录待跟进',
+        tag: '查寝',
+      ),
+    );
+  }
+  return items;
+}
+
+List<HeadTeacherBoardItem> buildHeadTeacherRecentBoardItems(
+  HeadTeacherIndexRes res,
+) {
+  final items = <HeadTeacherBoardItem>[];
+  if (res.chatWaitingCount > 0) {
+    items.add(
+      HeadTeacherBoardItem(
+        time: '待回复 ${res.chatWaitingCount}',
+        title: '家长留言待处理',
+        tag: '家校',
+      ),
+    );
+  }
+  if (res.chatUnreadCount > 0) {
+    items.add(
+      HeadTeacherBoardItem(
+        time: '未读 ${res.chatUnreadCount}',
+        title: '家校沟通有新消息',
+        tag: '家校',
+      ),
+    );
+  }
+  if (res.classList.isNotEmpty) {
+    items.add(
+      HeadTeacherBoardItem(
+        time: '管辖 ${res.classList.length} 班',
+        title: res.classNamesLabel,
+        tag: '班级',
+      ),
+    );
+  }
+  return items;
+}
+
+Map<String, int> buildHeadTeacherActionBadges(HeadTeacherIndexRes res) {
+  return <String, int>{
+    '请假审批': res.pendingLeaveCount,
+    '家校沟通': res.chatUnreadCount + res.chatWaitingCount,
+  };
 }
 
 HeadTeacherIndexRes parseHeadTeacherIndexRes(dynamic raw) {

@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>百度地图打卡定位</title>
   <style>
     html, body {
@@ -100,7 +100,12 @@
 
       const map = new BMap.Map('map', { enableMapClick: false });
       map.centerAndZoom(centerBd09, zoom);
+      map.enableDragging(true);
       map.enableScrollWheelZoom(true);
+      map.enableDoubleClickZoom(true);
+      if (typeof map.enablePinchToZoom === 'function') {
+        map.enablePinchToZoom();
+      }
       map.addControl(new BMap.NavigationControl({ type: BMAP_NAVIGATION_CONTROL_ZOOM }));
       map.addControl(new BMap.ScaleControl());
 
@@ -115,7 +120,6 @@
 
       const marker = new BMap.Marker(centerBd09);
       map.addOverlay(marker);
-      marker.setAnimation(BMAP_ANIMATION_BOUNCE);
 
       new BMap.Geocoder().getLocation(centerBd09, function (rs) {
         const address = rs && rs.address ? rs.address : label;

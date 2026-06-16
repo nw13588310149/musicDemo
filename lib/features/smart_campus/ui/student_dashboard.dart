@@ -207,6 +207,7 @@ class _StudentMainColumn extends StatelessWidget {
 
     final actionPanel = _TeacherActionPanel(
       data: data,
+      actions: data.actions,
       onOpenPrincipalMailbox: onOpenPrincipalMailbox,
       onOpenMyClass: onOpenMyClass,
       onOpenClassWorkbench: () {},
@@ -418,12 +419,12 @@ class _StudentDashboardScheduleSectionState
 
 List<SmartCampusStatCardData> _placeholderStudentStats() {
   return const [
-    SmartCampusStatCardData(label: '今日课程', value: '—'),
-    SmartCampusStatCardData(label: '待交作业', value: '—'),
-    SmartCampusStatCardData(label: '学期均分', value: '—'),
-    SmartCampusStatCardData(label: '未读通知', value: '—'),
-    SmartCampusStatCardData(label: '月考时间', value: '—'),
-    SmartCampusStatCardData(label: '距离省统考', value: '—'),
+    SmartCampusStatCardData(label: '今日课程', value: '0'),
+    SmartCampusStatCardData(label: '待交作业', value: '0'),
+    SmartCampusStatCardData(label: '学期均分', value: '0'),
+    SmartCampusStatCardData(label: '未读通知', value: '0'),
+    SmartCampusStatCardData(label: '月考时间', value: '0'),
+    SmartCampusStatCardData(label: '距离省统考', value: '0'),
   ];
 }
 
@@ -448,7 +449,7 @@ List<SmartCampusStatCardData> _parseStudentIndexStats(dynamic raw) {
 
   String displayInt(String key) {
     final v = readInt(key);
-    return v == null ? '—' : '$v';
+    return '${v ?? 0}';
   }
 
   return [
@@ -462,7 +463,7 @@ List<SmartCampusStatCardData> _parseStudentIndexStats(dynamic raw) {
     ),
     SmartCampusStatCardData(
       label: '学期均分',
-      value: avgScore == null ? '—' : avgScore.toStringAsFixed(1),
+      value: avgScore == null ? '0' : avgScore.toStringAsFixed(1),
     ),
     SmartCampusStatCardData(
       label: '未读通知',
@@ -480,17 +481,17 @@ List<SmartCampusStatCardData> _parseStudentIndexStats(dynamic raw) {
 }
 
 String _formatStudentExamWeekday(String? isoDate) {
-  if (isoDate == null || isoDate.trim().isEmpty) return '—';
+  if (isoDate == null || isoDate.trim().isEmpty) return '0';
   final d = DateTime.tryParse(isoDate.trim());
-  if (d == null) return isoDate.trim();
+  if (d == null) return '0';
   const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
   return weekdays[d.weekday - 1];
 }
 
 String _formatStudentDaysUntil(String? isoDate) {
-  if (isoDate == null || isoDate.trim().isEmpty) return '—';
+  if (isoDate == null || isoDate.trim().isEmpty) return '0';
   final d = DateTime.tryParse(isoDate.trim());
-  if (d == null) return '—';
+  if (d == null) return '0';
   final now = DateTime.now();
   final target = DateTime(d.year, d.month, d.day);
   final today = DateTime(now.year, now.month, now.day);

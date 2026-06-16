@@ -307,7 +307,7 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
     final session = SmartPracticeSession(
       track: state.activeTrack,
       sourceMode: SmartDictationMode.stage,
-      title: lesson.title,
+      title: '第${lesson.number}关',
       questions: questions,
       currentIndex: 0,
       correctCount: 0,
@@ -900,7 +900,7 @@ class SmartDictationController extends StateNotifier<SmartDictationState> {
       final number = _toInt(item['number']);
       final title = _asString(item['title']).isNotEmpty
           ? _asString(item['title'])
-          : '第${number == 0 ? list.length + 1 : number}课';
+          : '第${number == 0 ? list.length + 1 : number}关';
       final subtitle = _asString(item['param4']);
       final unlocked =
           _toBool(item['unlock']) || _toBool(item['unlocked']) || number == 1;

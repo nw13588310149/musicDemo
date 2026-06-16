@@ -335,6 +335,27 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
     state = state.copyWith(mainView: SmartCampusMainView.mySchedule);
   }
 
+  /// 首页课表 / 课程卡片入口：按 `/myInfo` 真实身份切到对应角色的
+  /// 「授课课表 / 我的课表」，避免 admin / 校长视角占位页拦截。
+  void openMyScheduleForUser({
+    required String role,
+    required String identity,
+  }) {
+    final mapped = mapBackendRoleToCampus(role, identity);
+    final SmartCampusRole? scheduleRole = switch (mapped) {
+      SmartCampusRole.teacher || SmartCampusRole.headTeacher => mapped,
+      SmartCampusRole.student => SmartCampusRole.student,
+      _ => null,
+    };
+    if (scheduleRole != null && state.availableRoles.contains(scheduleRole)) {
+      selectRole(scheduleRole);
+    }
+    if (state.mainView == SmartCampusMainView.mySchedule) {
+      return;
+    }
+    state = state.copyWith(mainView: SmartCampusMainView.mySchedule);
+  }
+
   /// 学生端「课堂签到」独立入口：打开课堂签到页（顶部 banner + 5 项统计
   /// + 今日课程 + 签到操作 + 最近课堂记录）。
   void openCheckIn() {

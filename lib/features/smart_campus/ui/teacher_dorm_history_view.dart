@@ -10,20 +10,16 @@
 //      记录" 16/600 + 副标题 12/#B6B5BB「按自然日查看本班住宿生晚查寝、晨查寝
 //      打卡汇总；数据与「查寝动态」演示同源。查寝老师打卡在专用端完成。」；
 //      左 12 返回 32×32 白底 outline #F3F2F3）。
-//   2. 提示文字 12/#B6B5BB「默认由家长在小程序审批后再由班主任审批；……」。
-//   3. 日期条卡（970×110，圆角 16，白底）：
+//   2. 日期条卡（970×110，圆角 16，白底）：
 //      - 顶部 12,12 处 `2026-04-17` 14/500 + 下拉小箭头（演示）；
-//      - 右侧 762 处 `晚查寝应统计12人，当日流水20条。` 12 hint；
+//      - 右侧 `应统计 N 人，当日流水 M 条。` 12 hint；
 //      - 底部 14 个 58×59 圆角 8 灰底 cells（顶部 `星期` 12 hint /
 //        底部 `日期` 16 Barlow/600），第 7 个 "日 / 今" 紫底白字。
-//   4. 4 张统计卡（100 高 + 白底 + 右上 32×32 outlined icon 容器）：
-//      A. 「晚查寝 · 已归寝口径」10 + "正常/免检/补卡过" + 蓝色 sun icon
-//      B. 「晚查寝 · 待关注」 2 + "晚归/未打卡" + 绿色 home icon
-//      C. 「晨查寝 · 已到位口径」2 + "正常/免检/补卡过" + 紫色 alert icon
-//      D. 「晨查寝 · 待关注」 1 + "晚归/未打卡" + 紫色 alert icon
-//   5. Tabs row（44 高）：白底圆角 8 + 2 pills：晚查寝（active 黑底白字）/
+//   3. 4 张统计卡（白底圆角 12）：标题 + 大号数字与灰色说明同一行，
+//      如「晚查寝 · 已归寝口径」+ `10` + `正常/免检/补卡过`。
+//   4. Tabs row（44 高）：白底圆角 8 + 2 pills：晚查寝（active 黑底白字）/
 //      晨查寝（灰字）。无搜索框。
-//   6. 卡片网格 3 列（每张 312 宽，padding 12，背景 207deg #FAF0FF→white
+//   5. 卡片网格 3 列（每张 312 宽，padding 12，背景 207deg #FAF0FF→white
 //      渐变，圆角 16，gap 16）：
 //      - 宿舍口径卡：晨查寝 / 晚查寝 18 Barlow/600 标题 + 大色块状态徽章
 //        正常 #A773FF / 未打卡 #FF323C / 迟到 #325BFF 全为白字；下行
@@ -51,7 +47,6 @@ import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 const Color _kPageBg = Color(0xFFEFF3FC);
 const Color _kCardGreyBg = Color(0xFFF5F6FA);
 const Color _kBorderSoft = Color(0xFFF3F2F3);
-const Color _kBorderHair = Color(0xFFE5E7EB);
 const Color _kTextDark = Color(0xFF0B081A);
 const Color _kTextSecondary = Color(0xFF6D6B75);
 const Color _kTextHint = Color(0xFFB6B5BB);
@@ -60,7 +55,6 @@ const Color _kPurpleSoftBg = Color(0xFFDAD2FF);
 const Color _kRed = Color(0xFFFF323C);
 const Color _kRedSoftBg = Color(0xFFFEE4E8);
 const Color _kBlue = Color(0xFF325BFF);
-const Color _kGreen = Color(0xFF1CD097);
 const Color _kCalendarHint = Color(0xFFE6E9F1);
 
 // —— 顶部 tab 枚举（晚查寝 / 晨查寝）—————————————————————————————
@@ -227,28 +221,6 @@ class _TeacherDormHistoryViewState
             _Banner(onBack: widget.onBack),
             if (state.loading || state.loadingHistory)
               const LinearProgressIndicator(minHeight: 2),
-            SizedBox(height: ui(10)),
-            Padding(
-              padding: EdgeInsets.only(left: ui(8)),
-              child: Text(
-                '默认由家长在小程序审批后再由班主任审批；已与家长充分沟通的可选择班主任直接审批。补课协调以教务安排为准。',
-                style: TextStyle(
-                  fontSize: ui(12),
-                  color: _kTextHint,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w400,
-                  height: 1.5,
-                ),
-              ),
-            ),
-            if (state.error.isNotEmpty)
-              Padding(
-                padding: EdgeInsets.only(left: ui(8), top: ui(6)),
-                child: Text(
-                  state.error,
-                  style: TextStyle(fontSize: ui(12), color: _kRed),
-                ),
-              ),
             SizedBox(height: ui(12)),
             _DateStripCard(
               days: days,
@@ -580,8 +552,6 @@ class _StatsRow extends StatelessWidget {
             title: '晚查寝 · 已归寝口径',
             value: eveningReturned,
             subtitle: '正常/免检/补卡过',
-            icon: Icons.wb_sunny_outlined,
-            iconColor: _kBlue,
           ),
         ),
         SizedBox(width: ui(12)),
@@ -590,8 +560,6 @@ class _StatsRow extends StatelessWidget {
             title: '晚查寝 · 待关注',
             value: eveningWatch,
             subtitle: '晚归/未打卡',
-            icon: Icons.home_outlined,
-            iconColor: _kGreen,
           ),
         ),
         SizedBox(width: ui(12)),
@@ -600,8 +568,6 @@ class _StatsRow extends StatelessWidget {
             title: '晨查寝 · 已到位口径',
             value: morningArrived,
             subtitle: '正常/免检/补卡过',
-            icon: Icons.notifications_active_outlined,
-            iconColor: _kPurple,
           ),
         ),
         SizedBox(width: ui(12)),
@@ -610,8 +576,6 @@ class _StatsRow extends StatelessWidget {
             title: '晨查寝 · 待关注',
             value: morningWatch,
             subtitle: '晚归/未打卡',
-            icon: Icons.notifications_active_outlined,
-            iconColor: _kPurple,
           ),
         ),
       ],
@@ -624,87 +588,68 @@ class _StatCard extends StatelessWidget {
     required this.title,
     required this.value,
     required this.subtitle,
-    required this.icon,
-    required this.iconColor,
   });
 
   final String title;
   final int value;
   final String subtitle;
-  final IconData icon;
-  final Color iconColor;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
-      height: ui(100),
+      height: ui(88),
+      padding: EdgeInsets.fromLTRB(ui(16), ui(16), ui(16), ui(14)),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(ui(12)),
-        border: Border.all(color: Colors.white, width: 1),
       ),
-      child: Stack(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Positioned(
-            left: ui(16),
-            top: ui(16),
-            right: ui(56),
-            child: Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: ui(14),
-                color: _kTextDark,
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w500,
-                height: 1.2,
-              ),
+          Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: ui(14),
+              color: _kTextDark,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w500,
+              height: 1.2,
             ),
           ),
-          Positioned(
-            left: ui(16),
-            top: ui(40),
-            child: Text(
-              '$value',
-              style: TextStyle(
-                fontSize: ui(32),
-                color: _kTextDark,
-                fontFamily: 'Barlow',
-                fontWeight: FontWeight.w500,
-                height: 1.0,
+          const Spacer(),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                '$value',
+                style: TextStyle(
+                  fontSize: ui(32),
+                  color: _kTextDark,
+                  fontFamily: 'Barlow',
+                  fontWeight: FontWeight.w500,
+                  height: 1.0,
+                ),
               ),
-            ),
-          ),
-          Positioned(
-            right: ui(13),
-            top: ui(34),
-            child: Container(
-              width: ui(32),
-              height: ui(32),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(ui(8)),
-                border: Border.all(color: _kBorderHair, width: 0.5),
+              SizedBox(width: ui(8)),
+              Expanded(
+                child: Text(
+                  subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: ui(12),
+                    color: _kTextHint,
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w400,
+                    height: 1.2,
+                  ),
+                ),
               ),
-              alignment: Alignment.center,
-              child: Icon(icon, size: ui(20), color: iconColor),
-            ),
-          ),
-          Positioned(
-            left: ui(16),
-            bottom: ui(14),
-            child: Text(
-              subtitle,
-              style: TextStyle(
-                fontSize: ui(12),
-                color: _kTextHint,
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w400,
-                height: 1.2,
-              ),
-            ),
+            ],
           ),
         ],
       ),

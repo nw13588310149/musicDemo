@@ -9,18 +9,16 @@
 //   1. banner（62 高, 4deg #F9EDFF→white 渐变, 圆角 16, 顶部居中"查寝动态"
 //      16/600 + 副标题 12/#B6B5BB 说明本页不提供打卡入口；左 12 返回 32×32
 //      白底 outline #F3F2F3）。
-//   2. 提示文字 12/#B6B5BB「默认由家长在小程序审批后再由班主任审批；……
-//      补课协调以教务安排为准。」
-//   3. 4 张统计卡（100 高 + 各自 196deg 渐变 + 右下 54×54 装饰渐变方块 +
+//   2. 4 张统计卡（100 高 + 各自 196deg 渐变 + 右下 54×54 装饰渐变方块 +
 //      右上 32×32 白底图标）：
 //      A. 「住宿生」橙渐变 rgba(255,168,70,.16)→0 + 绿色 home icon
 //      B. 「今晚已归寝口径」绿渐变 rgba(70,255,119,.09)→0 + 同图标
 //      C. 「异常（未打/晚归）」红渐变 rgba(255,70,70,.09)→0 + 紫色 alert
 //      D. 「补卡待审」紫渐变 rgba(147,70,255,.14)→0 + "需协同审核" 12 副标题
-//   4. Tabs row（44 高）：白底圆角 8 + 2 个 pill：本班查纪 / 补卡审核
+//   3. Tabs row（44 高）：白底圆角 8 + 2 个 pill：本班查纪 / 补卡审核
 //      （后者带 22×15 #F04545 红底徽章 "10+"）；右侧搜索框 324×44。
-//   5. Sub-toolbar：「全部异常记录 N 条」(N 紫色) + 全部 / 异常 toggle。
-//   6. 卡片网格 3 列（每张 312×width，padding 12，背景 207deg #FAF0FF→
+//   4. Sub-toolbar：「全部异常记录 N 条」(N 紫色) + 全部 / 异常 toggle。
+//   5. 卡片网格 3 列（每张 312×width，padding 12，背景 207deg #FAF0FF→
 //      white 渐变，圆角 16，gap 16）：
 //      · 学生口径卡：头像 40 + 姓名 14/500 + 学号 12/#B6B5BB + "查寝"
 //        12/#6D6B75 + 状态徽章 16 高（正常 #DAD2FF/#8741FF / 未打卡
@@ -36,6 +34,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/teacher_dormitory_data.dart';
@@ -48,7 +47,6 @@ import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 const Color _kPageBg = Color(0xFFEFF3FC);
 const Color _kCardGreyBg = Color(0xFFF5F6FA);
 const Color _kBorderSoft = Color(0xFFF3F2F3);
-const Color _kBorderHair = Color(0xFFE5E7EB);
 const Color _kTextDark = Color(0xFF0B081A);
 const Color _kTextSecondary = Color(0xFF6D6B75);
 const Color _kTextHint = Color(0xFFB6B5BB);
@@ -58,7 +56,6 @@ const Color _kPurpleSoftBg = Color(0xFFDAD2FF);
 const Color _kRed = Color(0xFFFF323C);
 const Color _kRedSoftBg = Color(0xFFFEE4E8);
 const Color _kBlue = Color(0xFF325BFF);
-const Color _kGreen = Color(0xFF1CD097);
 const Color _kBadgeRed = Color(0xFFF04545);
 
 // —— 顶部 tab 枚举 ——————————————————————————————————————————————
@@ -250,28 +247,6 @@ class _TeacherDormDynamicViewState
           children: [
             _Banner(onBack: widget.onBack),
             if (state.loading) const LinearProgressIndicator(minHeight: 2),
-            SizedBox(height: ui(10)),
-            Padding(
-              padding: EdgeInsets.only(left: ui(8)),
-              child: Text(
-                '默认由家长在小程序审批后再由班主任审批；已与家长充分沟通的可选择班主任直接审批。补课协调以教务安排为准。',
-                style: TextStyle(
-                  fontSize: ui(12),
-                  color: _kTextHint,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w400,
-                  height: 1.5,
-                ),
-              ),
-            ),
-            if (state.error.isNotEmpty)
-              Padding(
-                padding: EdgeInsets.only(left: ui(8), top: ui(6)),
-                child: Text(
-                  state.error,
-                  style: TextStyle(fontSize: ui(12), color: _kRed),
-                ),
-              ),
             SizedBox(height: ui(12)),
             _StatsRow(
               residentCount: state.overview.enrolledDormCount != 0
@@ -507,169 +482,128 @@ class _StatsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Row(
-      children: [
-        Expanded(
-          child: _StatCard(
-            label: '住宿生',
-            value: residentCount,
-            gradient: const LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [Color(0x29FFA846), Color(0x00FFFFFF)],
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: _StatCard(
+              label: '住宿生',
+              value: residentCount,
+              backgroundAsset: AppAssets.headTeacherDormDynamicStatResident,
             ),
-            iconColor: _kGreen,
-            iconKind: _StatIconKind.home,
           ),
-        ),
-        SizedBox(width: ui(12)),
-        Expanded(
-          child: _StatCard(
-            label: '今晚已归寝口径',
-            value: returnedCount,
-            gradient: const LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [Color(0x1746FF77), Color(0x00FFFFFF)],
+          SizedBox(width: ui(12)),
+          Expanded(
+            child: _StatCard(
+              label: '今晚已归寝口径',
+              value: returnedCount,
+              backgroundAsset: AppAssets.headTeacherDormDynamicStatReturned,
             ),
-            iconColor: _kGreen,
-            iconKind: _StatIconKind.home,
           ),
-        ),
-        SizedBox(width: ui(12)),
-        Expanded(
-          child: _StatCard(
-            label: '异常（未打/晚归）',
-            value: exceptionCount,
-            gradient: const LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [Color(0x17FF4646), Color(0x00FFFFFF)],
+          SizedBox(width: ui(12)),
+          Expanded(
+            child: _StatCard(
+              label: '异常（未打/晚归）',
+              value: exceptionCount,
+              backgroundAsset: AppAssets.headTeacherDormDynamicStatException,
             ),
-            iconColor: _kPurple,
-            iconKind: _StatIconKind.alert,
           ),
-        ),
-        SizedBox(width: ui(12)),
-        Expanded(
-          child: _StatCard(
-            label: '补卡待审',
-            value: auditCount,
-            subtitle: '需协同审核',
-            gradient: const LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [Color(0x249346FF), Color(0x00FFFFFF)],
+          SizedBox(width: ui(12)),
+          Expanded(
+            child: _StatCard(
+              label: '补卡待审',
+              value: auditCount,
+              subtitle: '需协同审核',
+              backgroundAsset: AppAssets.headTeacherDormDynamicStatPunchAudit,
             ),
-            iconColor: _kPurple,
-            iconKind: _StatIconKind.alert,
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
-
-enum _StatIconKind { home, alert }
 
 class _StatCard extends StatelessWidget {
   const _StatCard({
     required this.label,
     required this.value,
-    required this.gradient,
-    required this.iconColor,
-    required this.iconKind,
+    required this.backgroundAsset,
     this.subtitle,
   });
 
   final String label;
   final int value;
-  final LinearGradient gradient;
-  final Color iconColor;
-  final _StatIconKind iconKind;
+  final String backgroundAsset;
   final String? subtitle;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      height: ui(100),
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        gradient: gradient,
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(12)),
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            left: ui(16),
-            top: ui(16),
-            right: ui(56),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: ui(14),
-                    color: _kTextDark,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w500,
-                    height: 1.0,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+    return ConstrainedBox(
+      constraints: BoxConstraints(minHeight: ui(100)),
+      child: Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(ui(12)),
+          image: DecorationImage(
+            image: AssetImage(backgroundAsset),
+            fit: BoxFit.cover,
+          ),
+        ),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(ui(16), ui(14), ui(56), ui(14)),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: ui(14),
+                  color: _kTextDark,
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w500,
+                  height: 1.0,
                 ),
-                SizedBox(height: ui(12)),
-                Text(
-                  '$value',
-                  style: TextStyle(
-                    fontSize: ui(32),
-                    color: _kTextDark,
-                    fontFamily: 'Barlow',
-                    fontWeight: FontWeight.w500,
-                    height: 1.0,
-                  ),
-                ),
-                if (subtitle != null) ...[
-                  SizedBox(height: ui(5)),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              SizedBox(height: ui(8)),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
                   Text(
-                    subtitle!,
+                    '$value',
                     style: TextStyle(
-                      fontSize: ui(12),
-                      color: _kTextHint,
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w400,
+                      fontSize: ui(32),
+                      color: _kTextDark,
+                      fontFamily: 'Barlow',
+                      fontWeight: FontWeight.w500,
                       height: 1.0,
                     ),
                   ),
+                  if (subtitle != null) ...[
+                    SizedBox(width: ui(8)),
+                    Padding(
+                      padding: EdgeInsets.only(bottom: ui(2)),
+                      child: Text(
+                        subtitle!,
+                        style: TextStyle(
+                          fontSize: ui(12),
+                          color: _kTextHint,
+                          fontFamily: 'PingFang SC',
+                          fontWeight: AppFont.w400,
+                          height: 1.0,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
-              ],
-            ),
-          ),
-          Positioned(
-            right: ui(16),
-            top: ui(34),
-            child: Container(
-              width: ui(32),
-              height: ui(32),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(ui(8)),
-                border: Border.all(color: _kBorderHair, width: 0.5),
               ),
-              alignment: Alignment.center,
-              child: Icon(
-                iconKind == _StatIconKind.home
-                    ? Icons.home_rounded
-                    : Icons.error_outline_rounded,
-                size: ui(16),
-                color: iconColor,
-              ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

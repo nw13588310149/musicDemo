@@ -5,7 +5,7 @@
 // 三个 Tab：
 //   1. 概况   _OverviewTab   顶部「班级通知」(与学生「我的班级」共享 provider，
 //      可发布/删除) + 双列布局：我的班级 + 待批请假 / 班级捷径 / 本周出勤 +
-//      重点关注 / 今日节点 + 近期班务
+//      重点关注
 //   2. 学生管理 _StudentsTab  标题副标题 + 搜索框 + 学生卡 3 列网格
 //   3. 成绩   _GradesTab     班级成绩变化折线图 + 考试记录（分数+点评） + 学生分数变化卡
 //
@@ -28,6 +28,7 @@ import '../../shell/state/shell_controller.dart';
 import '../../shell/state/shell_state.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/head_teacher_index_data.dart';
+import '../data/student_leave_data.dart';
 import '../data/teacher_repository.dart';
 import 'widgets/smart_campus_page_banner.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -171,9 +172,22 @@ extension on _WorkbenchTab {
 }
 
 class TeacherClassWorkbenchView extends ConsumerStatefulWidget {
-  const TeacherClassWorkbenchView({super.key, required this.onBack});
+  const TeacherClassWorkbenchView({
+    super.key,
+    required this.onBack,
+    this.onOpenLeaveApproval,
+    this.onOpenDormDynamic,
+    this.onOpenHomeSchool,
+    this.onOpenGroupChat,
+    this.onOpenDormHistory,
+  });
 
   final VoidCallback onBack;
+  final VoidCallback? onOpenLeaveApproval;
+  final VoidCallback? onOpenDormDynamic;
+  final VoidCallback? onOpenHomeSchool;
+  final VoidCallback? onOpenGroupChat;
+  final VoidCallback? onOpenDormHistory;
 
   @override
   ConsumerState<TeacherClassWorkbenchView> createState() =>
@@ -290,6 +304,11 @@ class _TeacherClassWorkbenchViewState
                 index: _index,
                 selectedClassIndex: _selectedClassIndex,
                 onClassChanged: _selectClass,
+                onOpenLeaveApproval: widget.onOpenLeaveApproval,
+                onOpenDormDynamic: widget.onOpenDormDynamic,
+                onOpenHomeSchool: widget.onOpenHomeSchool,
+                onOpenGroupChat: widget.onOpenGroupChat,
+                onOpenDormHistory: widget.onOpenDormHistory,
               ),
             _WorkbenchTab.students => _StudentsTab(classId: _classId),
             _WorkbenchTab.grades => const _GradesTab(),
@@ -450,12 +469,22 @@ class _OverviewTab extends StatelessWidget {
     required this.index,
     required this.selectedClassIndex,
     required this.onClassChanged,
+    this.onOpenLeaveApproval,
+    this.onOpenDormDynamic,
+    this.onOpenHomeSchool,
+    this.onOpenGroupChat,
+    this.onOpenDormHistory,
   });
 
   final String classId;
   final HeadTeacherIndexRes index;
   final int selectedClassIndex;
   final ValueChanged<int> onClassChanged;
+  final VoidCallback? onOpenLeaveApproval;
+  final VoidCallback? onOpenDormDynamic;
+  final VoidCallback? onOpenHomeSchool;
+  final VoidCallback? onOpenGroupChat;
+  final VoidCallback? onOpenDormHistory;
 
   @override
   Widget build(BuildContext context) {
@@ -485,30 +514,92 @@ class _OverviewTab extends StatelessWidget {
             final gap = ui(12);
             final leftW = (w - gap) * leftRatio / (leftRatio + rightRatio);
             final rightW = (w - gap) * rightRatio / (leftRatio + rightRatio);
-            return Row(
+            return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: leftW,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: _buildLeftColumn(ui),
-                  ),
-                ),
-                SizedBox(width: gap),
-                SizedBox(
-                  width: rightW,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: _buildRightColumn(ui),
-                  ),
-                ),
-              ],
+              children: _buildPairedSections(ui, leftW, rightW, gap),
             );
           },
         ),
       ],
     );
+  }
+
+  List<Widget> _buildPairedSections(
+    double Function(double) ui,
+    double leftW,
+    double rightW,
+    double gap,
+  ) {
+    Widget section({
+      required Widget leftTitle,
+      required Widget rightTitle,
+      required Widget leftBody,
+      required Widget rightBody,
+      required double bodyHeight,
+    }) {
+      return _OverviewPairedSection(
+        leftWidth: leftW,
+        rightWidth: rightW,
+        gap: gap,
+        bodyHeight: bodyHeight,
+        leftTitle: leftTitle,
+        rightTitle: rightTitle,
+        leftBody: leftBody,
+        rightBody: rightBody,
+      );
+    }
+
+    return [
+      section(
+        leftTitle: const _SectionTitle('我的班级'),
+        rightTitle: _SectionTitleWithAction(
+          title: '待批请假',
+          actionLabel: '全部',
+          onActionTap: onOpenLeaveApproval,
+        ),
+        bodyHeight: 212,
+        leftBody: _TeacherInfoCard(
+          index: index,
+          classes: index.classList,
+          selectedClassIndex: selectedClassIndex,
+          onClassChanged: onClassChanged,
+          fillHeight: true,
+        ),
+        rightBody: _LeaveListCard(
+          fillHeight: true,
+          onOpenAll: onOpenLeaveApproval,
+        ),
+      ),
+      SizedBox(height: ui(20)),
+      section(
+        leftTitle: const _SectionTitle('班级捷径'),
+        rightTitle: const _SectionTitle('班级捷径'),
+        bodyHeight: 176,
+        leftBody: _ShortcutStatGrid(
+          index: index,
+          fillHeight: true,
+          onOpenLeaveApproval: onOpenLeaveApproval,
+          onOpenDormDynamic: onOpenDormDynamic,
+          onOpenHomeSchool: onOpenHomeSchool,
+        ),
+        rightBody: _QuickActionGrid(
+          fillHeight: true,
+          onOpenLeaveApproval: onOpenLeaveApproval,
+          onOpenDormDynamic: onOpenDormDynamic,
+          onOpenHomeSchool: onOpenHomeSchool,
+          onOpenGroupChat: onOpenGroupChat,
+          onOpenDormHistory: onOpenDormHistory,
+        ),
+      ),
+      SizedBox(height: ui(20)),
+      section(
+        leftTitle: const _SectionTitle('本周出勤'),
+        rightTitle: const _SectionTitle('重点关注'),
+        bodyHeight: 312,
+        leftBody: const _AttendanceBarCard(fillHeight: true),
+        rightBody: const _AttentionListCard(fillHeight: true),
+      ),
+    ];
   }
 
   List<Widget> _buildLeftColumn(double Function(double) ui) {
@@ -529,16 +620,15 @@ class _OverviewTab extends StatelessWidget {
       const _SectionTitle('本周出勤'),
       SizedBox(height: ui(12)),
       const _AttendanceBarCard(),
-      SizedBox(height: ui(20)),
-      const _SectionTitle('今日节点'),
-      SizedBox(height: ui(12)),
-      const _TimelineCard(items: _kTodayCheckpoints, accent: _kPurple),
     ];
   }
 
   List<Widget> _buildRightColumn(double Function(double) ui) {
     return [
-      const _SectionTitleWithAction(title: '待批请假', actionLabel: '全部'),
+      const _SectionTitleWithAction(
+        title: '待批请假',
+        actionLabel: '全部',
+      ),
       SizedBox(height: ui(12)),
       const _LeaveListCard(),
       SizedBox(height: ui(20)),
@@ -549,11 +639,68 @@ class _OverviewTab extends StatelessWidget {
       const _SectionTitle('重点关注'),
       SizedBox(height: ui(12)),
       const _AttentionListCard(),
-      SizedBox(height: ui(20)),
-      const _SectionTitle('近期班务'),
-      SizedBox(height: ui(12)),
-      const _TimelineCard(items: _kRecentDuty, accent: _kPurple),
     ];
+  }
+}
+
+/// 概况双列：同一行左右标题与内容区等高（固定设计高度，避免 IntrinsicHeight 断言）。
+class _OverviewPairedSection extends StatelessWidget {
+  const _OverviewPairedSection({
+    required this.leftWidth,
+    required this.rightWidth,
+    required this.gap,
+    required this.bodyHeight,
+    required this.leftTitle,
+    required this.rightTitle,
+    required this.leftBody,
+    required this.rightBody,
+  });
+
+  final double leftWidth;
+  final double rightWidth;
+  final double gap;
+  final double bodyHeight;
+  final Widget leftTitle;
+  final Widget rightTitle;
+  final Widget leftBody;
+  final Widget rightBody;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(width: leftWidth, child: leftTitle),
+            SizedBox(width: gap),
+            SizedBox(width: rightWidth, child: rightTitle),
+          ],
+        ),
+        SizedBox(height: ui(12)),
+        SizedBox(
+          height: ui(bodyHeight),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                width: leftWidth,
+                height: ui(bodyHeight),
+                child: leftBody,
+              ),
+              SizedBox(width: gap),
+              SizedBox(
+                width: rightWidth,
+                height: ui(bodyHeight),
+                child: rightBody,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -582,9 +729,11 @@ class _SectionTitleWithAction extends StatelessWidget {
   const _SectionTitleWithAction({
     required this.title,
     required this.actionLabel,
+    this.onActionTap,
   });
   final String title;
   final String actionLabel;
+  final VoidCallback? onActionTap;
 
   @override
   Widget build(BuildContext context) {
@@ -593,7 +742,7 @@ class _SectionTitleWithAction extends StatelessWidget {
       children: [
         Expanded(child: _SectionTitle(title)),
         InkWell(
-          onTap: null,
+          onTap: onActionTap,
           borderRadius: BorderRadius.circular(ui(6)),
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: ui(2), vertical: ui(2)),
@@ -1193,12 +1342,14 @@ class _TeacherInfoCard extends ConsumerStatefulWidget {
     required this.classes,
     required this.selectedClassIndex,
     required this.onClassChanged,
+    this.fillHeight = false,
   });
 
   final HeadTeacherIndexRes index;
   final List<HeadTeacherClassItem> classes;
   final int selectedClassIndex;
   final ValueChanged<int> onClassChanged;
+  final bool fillHeight;
 
   @override
   ConsumerState<_TeacherInfoCard> createState() => _TeacherInfoCardState();
@@ -1263,7 +1414,7 @@ class _TeacherInfoCardState extends ConsumerState<_TeacherInfoCard> {
     final classes = widget.classes;
     final hasMultiple = classes.length > 1;
     // 单页内容高度：header + 班级信息 + 统计 + 内边距。
-    final pageHeight = ui(230);
+    final pageHeight = ui(212);
 
     if (classes.isEmpty) {
       return Container(
@@ -1279,58 +1430,103 @@ class _TeacherInfoCardState extends ConsumerState<_TeacherInfoCard> {
       );
     }
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: double.infinity,
-          decoration: BoxDecoration(
-            color: _kPanelBg,
-            borderRadius: BorderRadius.circular(ui(16)),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: SizedBox(
-            height: pageHeight,
-            child: PageView.builder(
-              controller: _pageController,
-              itemCount: classes.length,
-              onPageChanged: widget.onClassChanged,
-              itemBuilder: (context, index) {
-                return Padding(
-                  padding: EdgeInsets.all(ui(12)),
-                  child: _ClassCardPage(
-                    profile: profile,
-                    classItem: classes[index],
-                    index: widget.index,
-                  ),
-                );
-              },
+    if (!widget.fillHeight) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _teacherInfoPanel(ui, pageHeight, classes, profile),
+          if (hasMultiple) ...[
+            SizedBox(height: ui(10)),
+            _classPagerDots(ui, classes),
+          ],
+        ],
+      );
+    }
+
+    // 配对行已给出固定高度；用 LayoutBuilder 分配面板与指示点，避免 Expanded 在无界父级下断言。
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxH = constraints.maxHeight;
+        final dotsBlock = hasMultiple ? ui(10) + ui(6) : 0.0;
+        final panelH = maxH.isFinite
+            ? math.max(0.0, maxH - dotsBlock)
+            : pageHeight;
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              height: panelH,
+              child: _teacherInfoPanel(ui, panelH, classes, profile),
             ),
-          ),
-        ),
-        if (hasMultiple) ...[
-          SizedBox(height: ui(10)),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              for (var i = 0; i < classes.length; i++) ...[
-                if (i > 0) SizedBox(width: ui(6)),
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: i == widget.selectedClassIndex ? ui(14) : ui(6),
-                  height: ui(6),
-                  decoration: BoxDecoration(
-                    color: i == widget.selectedClassIndex
-                        ? _kPurple
-                        : const Color(0xFFD9D9DE),
-                    borderRadius: BorderRadius.circular(ui(3)),
-                  ),
-                ),
-              ],
+            if (hasMultiple) ...[
+              SizedBox(height: ui(10)),
+              _classPagerDots(ui, classes),
             ],
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _classPagerDots(
+    double Function(double) ui,
+    List<HeadTeacherClassItem> classes,
+  ) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        for (var i = 0; i < classes.length; i++) ...[
+          if (i > 0) SizedBox(width: ui(6)),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            width: i == widget.selectedClassIndex ? ui(14) : ui(6),
+            height: ui(6),
+            decoration: BoxDecoration(
+              color: i == widget.selectedClassIndex
+                  ? _kPurple
+                  : const Color(0xFFD9D9DE),
+              borderRadius: BorderRadius.circular(ui(3)),
+            ),
           ),
         ],
       ],
+    );
+  }
+
+  Widget _teacherInfoPanel(
+    double Function(double) ui,
+    double panelHeight,
+    List<HeadTeacherClassItem> classes,
+    _MyInfoProfile profile,
+  ) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: _kPanelBg,
+        borderRadius: BorderRadius.circular(ui(16)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: SizedBox(
+        height: panelHeight,
+        child: PageView.builder(
+          controller: _pageController,
+          itemCount: classes.length,
+          onPageChanged: widget.onClassChanged,
+          itemBuilder: (context, index) {
+            return Padding(
+              padding: EdgeInsets.all(ui(8)),
+              child: _ClassCardPage(
+                profile: profile,
+                classItem: classes[index],
+                index: widget.index,
+                compact: widget.fillHeight,
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 }
@@ -1341,27 +1537,51 @@ class _ClassCardPage extends StatelessWidget {
     required this.profile,
     required this.classItem,
     required this.index,
+    this.compact = false,
   });
 
   final _MyInfoProfile profile;
   final HeadTeacherClassItem classItem;
   final HeadTeacherIndexRes index;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final stats = _TeacherInfoStats(
+      index: index,
+      boxHeight: ui(compact ? 70 : 78),
+    );
+
+    if (!compact) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _TeacherInfoHeader(
+            profile: profile,
+            enrolledCount: classItem.studentCount,
+          ),
+          SizedBox(height: ui(12)),
+          _ClassMetaRow(classItem: classItem),
+          SizedBox(height: ui(14)),
+          stats,
+        ],
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
+      mainAxisSize: MainAxisSize.max,
       children: [
         _TeacherInfoHeader(
           profile: profile,
           enrolledCount: classItem.studentCount,
         ),
-        SizedBox(height: ui(12)),
+        SizedBox(height: ui(10)),
         _ClassMetaRow(classItem: classItem),
-        SizedBox(height: ui(14)),
-        _TeacherInfoStats(index: index),
+        SizedBox(height: ui(10)),
+        Expanded(child: stats),
       ],
     );
   }
@@ -1651,16 +1871,21 @@ class _HeaderStat extends StatelessWidget {
 }
 
 class _TeacherInfoStats extends StatelessWidget {
-  const _TeacherInfoStats({required this.index});
+  const _TeacherInfoStats({
+    required this.index,
+    this.boxHeight,
+  });
 
   final HeadTeacherIndexRes index;
+  final double? boxHeight;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final h = boxHeight ?? ui(78);
     Widget box(String label, String value) => Expanded(
       child: Container(
-        height: ui(78),
+        height: h,
         decoration: BoxDecoration(
           color: _kInnerGray,
           borderRadius: BorderRadius.circular(ui(12)),
@@ -1709,9 +1934,19 @@ class _TeacherInfoStats extends StatelessWidget {
 // ----- 班级捷径（左：4 张统计 + 操作链接） -----
 
 class _ShortcutStatGrid extends StatelessWidget {
-  const _ShortcutStatGrid({required this.index});
+  const _ShortcutStatGrid({
+    required this.index,
+    this.fillHeight = false,
+    this.onOpenLeaveApproval,
+    this.onOpenDormDynamic,
+    this.onOpenHomeSchool,
+  });
 
   final HeadTeacherIndexRes index;
+  final bool fillHeight;
+  final VoidCallback? onOpenLeaveApproval;
+  final VoidCallback? onOpenDormDynamic;
+  final VoidCallback? onOpenHomeSchool;
 
   @override
   Widget build(BuildContext context) {
@@ -1720,84 +1955,101 @@ class _ShortcutStatGrid extends StatelessWidget {
       required String value,
       required String label,
       String? actionLabel,
-    }) => Expanded(
-      child: Container(
-        height: ui(82),
-        padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(8)),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(ui(16)),
-        ),
-        child: Stack(
-          children: [
-            Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    value,
-                    style: TextStyle(
-                      fontSize: ui(24),
-                      color: _kTextDark,
-                      fontWeight: FontWeight.w500,
-                      height: 1.1,
-                    ),
-                  ),
-                  SizedBox(height: ui(4)),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: ui(12),
-                      color: _kTextSecondary,
-                      fontWeight: FontWeight.w400,
-                      height: 1,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (actionLabel != null)
-              Positioned(
-                right: ui(8),
-                bottom: ui(6),
-                child: Row(
+      VoidCallback? onActionTap,
+    }) {
+      return Expanded(
+        child: Container(
+          height: ui(82),
+          padding: EdgeInsets.fromLTRB(ui(24), ui(8), ui(24), ui(8)),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(ui(16)),
+          ),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Center(
+                child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      actionLabel,
+                      value,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: ui(24),
+                        color: _kTextDark,
+                        fontWeight: FontWeight.w500,
+                        height: 1.1,
+                      ),
+                    ),
+                    SizedBox(height: ui(4)),
+                    Text(
+                      label,
+                      textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: ui(12),
-                        color: _kPurple,
+                        color: _kTextSecondary,
                         fontWeight: FontWeight.w400,
                         height: 1,
                       ),
                     ),
-                    SizedBox(width: ui(2)),
-                    Icon(
-                      Icons.chevron_right_rounded,
-                      size: ui(14),
-                      color: _kPurple,
-                    ),
                   ],
                 ),
               ),
-          ],
+              if (actionLabel != null && onActionTap != null)
+                Positioned(
+                  right: 0,
+                  top: 0,
+                  bottom: 0,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: onActionTap,
+                      borderRadius: BorderRadius.circular(ui(8)),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            actionLabel,
+                            style: TextStyle(
+                              fontSize: ui(14),
+                              color: _kPurple,
+                              fontWeight: FontWeight.w400,
+                              height: 1,
+                            ),
+                          ),
+                          SizedBox(width: ui(2)),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            size: ui(16),
+                            color: _kPurple,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
-      ),
-    );
-    return Column(
+      );
+    }
+
+    final grid = Column(
+      mainAxisSize: fillHeight ? MainAxisSize.max : MainAxisSize.min,
       children: [
         Row(
           children: [
             cell(
-              value: index.pendingMakeupCount.toString(),
-              label: '待批补卡',
+              value: '92%',
+              label: '今日出勤率',
             ),
             SizedBox(width: ui(12)),
             cell(
               value: index.pendingLeaveCount.toString(),
               label: '待批请假',
               actionLabel: index.pendingLeaveCount > 0 ? '去处理' : null,
+              onActionTap: onOpenLeaveApproval,
             ),
           ],
         ),
@@ -1808,24 +2060,42 @@ class _ShortcutStatGrid extends StatelessWidget {
               value: index.todayAbnormalDormCount.toString(),
               label: '查寝异常',
               actionLabel: index.todayAbnormalDormCount > 0 ? '查看' : null,
+              onActionTap: onOpenDormDynamic,
             ),
             SizedBox(width: ui(12)),
             cell(
               value: index.chatUnreadCount.toString(),
               label: '家校未读',
               actionLabel: index.chatWaitingCount > 0 ? '回复' : null,
+              onActionTap: onOpenHomeSchool,
             ),
           ],
         ),
       ],
     );
+    if (!fillHeight) return grid;
+    return Align(alignment: Alignment.center, child: grid);
   }
 }
 
 // ----- 班级捷径（右：6 个紫色图标按钮 2x3） -----
 
 class _QuickActionGrid extends StatelessWidget {
-  const _QuickActionGrid();
+  const _QuickActionGrid({
+    this.fillHeight = false,
+    this.onOpenLeaveApproval,
+    this.onOpenDormDynamic,
+    this.onOpenHomeSchool,
+    this.onOpenGroupChat,
+    this.onOpenDormHistory,
+  });
+
+  final bool fillHeight;
+  final VoidCallback? onOpenLeaveApproval;
+  final VoidCallback? onOpenDormDynamic;
+  final VoidCallback? onOpenHomeSchool;
+  final VoidCallback? onOpenGroupChat;
+  final VoidCallback? onOpenDormHistory;
 
   static const List<_QuickActionData> _items = [
     _QuickActionData(label: '班级工作台', imagePath: 'assets/images/schoolA/13.png'),
@@ -1836,16 +2106,34 @@ class _QuickActionGrid extends StatelessWidget {
     _QuickActionData(label: '查寝历史', imagePath: 'assets/images/schoolA/14.png'),
   ];
 
+  VoidCallback? _onTapForLabel(String label) {
+    return switch (label) {
+      '班级工作台' => null,
+      '请假审批' => onOpenLeaveApproval,
+      '查寝动态' => onOpenDormDynamic,
+      '家校沟通' => onOpenHomeSchool,
+      '班级群聊' => onOpenGroupChat,
+      '查寝历史' => onOpenDormHistory,
+      _ => null,
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
+      width: double.infinity,
+      height: fillHeight ? double.infinity : null,
       padding: EdgeInsets.all(ui(12)),
       decoration: BoxDecoration(
         color: _kPanelBg,
         borderRadius: BorderRadius.circular(ui(16)),
       ),
+      alignment: fillHeight ? Alignment.center : null,
       child: Column(
+        mainAxisSize: fillHeight ? MainAxisSize.max : MainAxisSize.min,
+        mainAxisAlignment:
+            fillHeight ? MainAxisAlignment.center : MainAxisAlignment.start,
         children: [
           for (var row = 0; row < 2; row++) ...[
             if (row > 0) SizedBox(height: ui(12)),
@@ -1854,7 +2142,10 @@ class _QuickActionGrid extends StatelessWidget {
                 for (var col = 0; col < 3; col++) ...[
                   if (col > 0) SizedBox(width: ui(8)),
                   Expanded(
-                    child: _QuickActionTile(data: _items[row * 3 + col]),
+                    child: _QuickActionTile(
+                      data: _items[row * 3 + col],
+                      onTap: _onTapForLabel(_items[row * 3 + col].label),
+                    ),
                   ),
                 ],
               ],
@@ -1873,45 +2164,53 @@ class _QuickActionData {
 }
 
 class _QuickActionTile extends StatelessWidget {
-  const _QuickActionTile({required this.data});
+  const _QuickActionTile({required this.data, this.onTap});
 
   final _QuickActionData data;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: ui(44),
-          height: ui(44),
-          decoration: BoxDecoration(
-            color: const Color(0xFFEAE5FF),
-            borderRadius: BorderRadius.circular(ui(8)),
-          ),
-          alignment: Alignment.center,
-          child: Image.asset(
-            data.imagePath,
-            width: ui(28),
-            height: ui(28),
-            fit: BoxFit.contain,
-          ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(ui(8)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: ui(44),
+              height: ui(44),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEAE5FF),
+                borderRadius: BorderRadius.circular(ui(8)),
+              ),
+              alignment: Alignment.center,
+              child: Image.asset(
+                data.imagePath,
+                width: ui(28),
+                height: ui(28),
+                fit: BoxFit.contain,
+              ),
+            ),
+            SizedBox(height: ui(6)),
+            Text(
+              data.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: ui(13),
+                color: _kTextSection,
+                fontWeight: FontWeight.w500,
+                height: 1,
+              ),
+            ),
+          ],
         ),
-        SizedBox(height: ui(6)),
-        Text(
-          data.label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: ui(13),
-            color: _kTextSection,
-            fontWeight: FontWeight.w500,
-            height: 1,
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -1919,7 +2218,9 @@ class _QuickActionTile extends StatelessWidget {
 // ----- 本周出勤 柱状图 -----
 
 class _AttendanceBarCard extends StatelessWidget {
-  const _AttendanceBarCard();
+  const _AttendanceBarCard({this.fillHeight = false});
+
+  final bool fillHeight;
 
   static const List<int> _values = [92, 92, 92, 92, 92, 92, 92];
   static const List<String> _labels = [
@@ -1936,8 +2237,9 @@ class _AttendanceBarCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final chartHeight = ui(180);
     return Container(
+      width: double.infinity,
+      height: fillHeight ? double.infinity : null,
       padding: EdgeInsets.all(ui(12)),
       decoration: BoxDecoration(
         color: _kPanelBg,
@@ -1945,42 +2247,89 @@ class _AttendanceBarCard extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // 顶部 % 单位
-          Padding(
-            padding: EdgeInsets.only(left: ui(2), bottom: ui(4)),
-            child: Text(
-              '%',
-              style: TextStyle(
-                fontSize: ui(12),
-                color: _kTextHint,
-                fontWeight: FontWeight.w400,
-                height: 20 / 12,
+          SizedBox(
+            height: ui(21),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '%',
+                style: TextStyle(
+                  fontSize: ui(12),
+                  color: _kTextHint,
+                  fontWeight: FontWeight.w400,
+                  height: 20 / 12,
+                ),
               ),
             ),
           ),
-          // 主图区
+          SizedBox(height: ui(8)),
           SizedBox(
-            height: chartHeight,
+            height: ui(230),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _AxisTicksColumn(ticks: _ticks),
+                SizedBox(width: ui(28), child: _AttendanceYAxis(ticks: _ticks)),
                 SizedBox(width: ui(8)),
-                Expanded(child: _BarsRow(values: _values, maxValue: 100)),
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      return Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          CustomPaint(
+                            size: Size(
+                              constraints.maxWidth,
+                              constraints.maxHeight,
+                            ),
+                            painter: _AttendanceGridPainter(
+                              tickRowHeight: ui(20),
+                              tickGap: ui(22),
+                              tickCount: _ticks.length,
+                            ),
+                          ),
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            height: ui(163),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                for (var i = 0; i < _values.length; i++) ...[
+                                  if (i > 0) SizedBox(width: ui(28)),
+                                  Expanded(
+                                    child: Align(
+                                      alignment: Alignment.bottomCenter,
+                                      child: _AttendanceBarColumn(
+                                        value: _values[i],
+                                        maxValue: 100,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
               ],
             ),
           ),
           SizedBox(height: ui(8)),
-          // X 轴标签
           Padding(
-            padding: EdgeInsets.only(left: ui(28)),
+            padding: EdgeInsets.only(left: ui(36)),
             child: Row(
               children: [
-                for (final l in _labels)
+                for (var i = 0; i < _labels.length; i++) ...[
+                  if (i > 0) SizedBox(width: ui(28)),
                   Expanded(
                     child: Text(
-                      l,
+                      _labels[i],
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: ui(12),
@@ -1990,6 +2339,7 @@ class _AttendanceBarCard extends StatelessWidget {
                       ),
                     ),
                   ),
+                ],
               ],
             ),
           ),
@@ -1999,6 +2349,216 @@ class _AttendanceBarCard extends StatelessWidget {
   }
 }
 
+class _AttendanceYAxis extends StatelessWidget {
+  const _AttendanceYAxis({required this.ticks});
+
+  final List<int> ticks;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        for (var i = 0; i < ticks.length; i++) ...[
+          SizedBox(
+            height: ui(20),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                ticks[i].toString(),
+                maxLines: 1,
+                softWrap: false,
+                style: TextStyle(
+                  fontSize: ui(12),
+                  color: _kTextHint,
+                  fontWeight: FontWeight.w400,
+                  height: 20 / 12,
+                ),
+              ),
+            ),
+          ),
+          if (i < ticks.length - 1) SizedBox(height: ui(22)),
+        ],
+      ],
+    );
+  }
+}
+
+class _AttendanceBarColumn extends StatelessWidget {
+  const _AttendanceBarColumn({
+    required this.value,
+    required this.maxValue,
+  });
+
+  final int value;
+  final int maxValue;
+
+  static const double _designBarH = 163;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final maxBarH = ui(_designBarH);
+    final ratio = (value / maxValue).clamp(0.0, 1.0);
+    final barH = maxBarH * ratio;
+
+    return SizedBox(
+      width: ui(28),
+      height: maxBarH,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.bottomCenter,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(ui(8)),
+              topRight: Radius.circular(ui(8)),
+            ),
+            child: SizedBox(
+              width: ui(28),
+              height: barH,
+              child: CustomPaint(
+                painter: const _AttendanceBarStripePainter(
+                  colorA: Color(0xFFC29EFF),
+                  colorB: Color(0xFFC9A6FF),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: barH + ui(4),
+            child: Text(
+              value.toString(),
+              style: TextStyle(
+                fontSize: ui(12),
+                color: _kTextSecondary,
+                fontWeight: FontWeight.w500,
+                height: 20 / 12,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 双色斜纹铺满柱体（含圆角顶部），-30°，带宽 10、间距 7。
+class _AttendanceBarStripePainter extends CustomPainter {
+  const _AttendanceBarStripePainter({
+    required this.colorA,
+    required this.colorB,
+  });
+
+  final Color colorA;
+  final Color colorB;
+
+  static const double _angleRad = -30 * math.pi / 180;
+  static const double _stripeThickness = 10;
+  static const double _stripeGap = 7;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final period = _stripeThickness + _stripeGap;
+    final extent = size.width + size.height + 200;
+
+    // 先铺底色，避免旋转裁切后露出白底。
+    canvas.drawRect(Offset.zero & size, Paint()..color = colorB);
+
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
+    canvas.translate(size.width * 0.5, size.height);
+    canvas.rotate(_angleRad);
+
+    for (var offset = -extent, i = 0; offset < extent; offset += period, i++) {
+      canvas.drawRect(
+        Rect.fromCenter(
+          center: Offset(0, offset),
+          width: extent * 2,
+          height: _stripeThickness,
+        ),
+        Paint()..color = i.isEven ? colorA : colorB,
+      );
+      canvas.drawRect(
+        Rect.fromCenter(
+          center: Offset(0, offset + _stripeThickness + _stripeGap / 2),
+          width: extent * 2,
+          height: _stripeGap,
+        ),
+        Paint()..color = i.isEven ? colorB : colorA,
+      );
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _AttendanceBarStripePainter oldDelegate) {
+    return oldDelegate.colorA != colorA || oldDelegate.colorB != colorB;
+  }
+}
+
+class _AttendanceGridPainter extends CustomPainter {
+  const _AttendanceGridPainter({
+    required this.tickRowHeight,
+    required this.tickGap,
+    required this.tickCount,
+  });
+
+  final double tickRowHeight;
+  final double tickGap;
+  final int tickCount;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFFE6E9F1)
+      ..strokeWidth = 1;
+
+    var y = tickRowHeight / 2;
+    for (var i = 0; i < tickCount - 1; i++) {
+      _paintDashedLine(
+        canvas,
+        Offset(0, y),
+        Offset(size.width, y),
+        paint,
+      );
+      y += tickRowHeight + tickGap;
+    }
+  }
+
+  static void _paintDashedLine(
+    Canvas canvas,
+    Offset start,
+    Offset end,
+    Paint paint,
+  ) {
+    const dashWidth = 4.0;
+    const dashSpace = 4.0;
+    final total = (end - start).distance;
+    if (total <= 0) return;
+    final direction = (end - start) / total;
+    var drawn = 0.0;
+    while (drawn < total) {
+      final segEnd = math.min(drawn + dashWidth, total);
+      canvas.drawLine(
+        start + direction * drawn,
+        start + direction * segEnd,
+        paint,
+      );
+      drawn += dashWidth + dashSpace;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _AttendanceGridPainter oldDelegate) {
+    return oldDelegate.tickRowHeight != tickRowHeight ||
+        oldDelegate.tickGap != tickGap ||
+        oldDelegate.tickCount != tickCount;
+  }
+}
+
+/// 成绩折线图等场景：Y 轴刻度纵向均分。
 class _AxisTicksColumn extends StatelessWidget {
   const _AxisTicksColumn({required this.ticks});
   final List<int> ticks;
@@ -2029,115 +2589,135 @@ class _AxisTicksColumn extends StatelessWidget {
   }
 }
 
-class _BarsRow extends StatelessWidget {
-  const _BarsRow({required this.values, required this.maxValue});
-  final List<int> values;
-  final int maxValue;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        for (var i = 0; i < values.length; i++) ...[
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, c) {
-                final ratio = (values[i] / maxValue).clamp(0.0, 1.0);
-                final h = c.maxHeight * ratio;
-                return Stack(
-                  alignment: Alignment.bottomCenter,
-                  children: [
-                    SizedBox(width: ui(28), height: c.maxHeight),
-                    Container(
-                      width: ui(28),
-                      height: h,
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [_kPurpleSoft, Color(0x66A773FF)],
-                        ),
-                        borderRadius: BorderRadius.only(
-                          topLeft: Radius.circular(8),
-                          topRight: Radius.circular(8),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      bottom: h + ui(2),
-                      child: Text(
-                        values[i].toString(),
-                        style: TextStyle(
-                          fontSize: ui(12),
-                          color: _kTextSecondary,
-                          fontWeight: FontWeight.w500,
-                          height: 1,
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-          if (i < values.length - 1) SizedBox(width: ui(8)),
-        ],
-      ],
-    );
-  }
-}
-
 // ----- 待批请假 列表 -----
 
-class _LeaveListCard extends StatelessWidget {
-  const _LeaveListCard();
+class _LeaveListCard extends ConsumerStatefulWidget {
+  const _LeaveListCard({
+    this.fillHeight = false,
+    this.onOpenAll,
+  });
 
-  static const List<_LeaveItem> _items = [
-    _LeaveItem(
-      name: '陈江凯',
-      timeRange: '今天14:00-明天08:00',
-      submitted: '提交于今天07:52',
-      tag: '病假',
-      tagColor: _kYellow,
-      tagTextColor: _kTextDark,
-    ),
-    _LeaveItem(
-      name: '陈江凯',
-      timeRange: '今天14:00-明天08:00',
-      submitted: '提交于今天07:52',
-      tag: '病假',
-      tagColor: _kYellow,
-      tagTextColor: _kTextDark,
-    ),
-  ];
+  final bool fillHeight;
+  final VoidCallback? onOpenAll;
+
+  @override
+  ConsumerState<_LeaveListCard> createState() => _LeaveListCardState();
+}
+
+class _LeaveListCardState extends ConsumerState<_LeaveListCard> {
+  List<_LeaveItem> _items = const [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLeaves();
+  }
+
+  Future<void> _loadLeaves() async {
+    final resp = await ref.read(teacherRepositoryProvider).headTeacherStudentLeaveList(
+      current: 1,
+      size: 10,
+      status: kHeadTeacherPendingLeaveFilterStatus,
+    );
+    if (!mounted) return;
+    if (!resp.isSuccess) {
+      setState(() {
+        _items = const [];
+        _loading = false;
+        _error = resp.displayMsg.isNotEmpty ? resp.displayMsg : '加载待批请假失败';
+      });
+      return;
+    }
+    final records = parseStudentLeaveList(resp.data);
+    setState(() {
+      _items = records.take(2).map(_mapLeaveRecord).toList();
+      _loading = false;
+      _error = null;
+    });
+  }
+
+  _LeaveItem _mapLeaveRecord(StudentLeaveRecord record) {
+    final (tagColor, tagTextColor) = switch (record.leaveType) {
+      '病假' => (_kYellow, _kTextDark),
+      '事假' => (_kPurple, Colors.white),
+      _ => (_kInnerGray, _kTextSecondary),
+    };
+    return _LeaveItem(
+      name: record.studentName,
+      timeRange: _formatLeaveTimeRange(record.timeRange),
+      submitted: record.appliedAt.isNotEmpty
+          ? '提交于${_formatLeaveSubmitted(record.appliedAt)}'
+          : '',
+      tag: record.leaveType,
+      tagColor: tagColor,
+      tagTextColor: tagTextColor,
+    );
+  }
+
+  String _formatLeaveTimeRange(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty || trimmed == '—') return '—';
+    return trimmed
+        .replaceAllMapped(
+          RegExp(r'(\d{4})-(\d{2})-(\d{2})'),
+          (m) => '${int.parse(m.group(2)!)}月${int.parse(m.group(3)!)}日',
+        )
+        .replaceAll(' - ', '-');
+  }
+
+  String _formatLeaveSubmitted(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return '';
+    final now = DateTime.now();
+    final today =
+        '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    if (trimmed.startsWith(today)) {
+      final hm = trimmed.length >= 16 ? trimmed.substring(11, 16) : '';
+      return hm.isNotEmpty ? '今天$hm' : '今天';
+    }
+    return trimmed.length >= 16 ? trimmed.substring(5, 16) : trimmed;
+  }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
+      width: double.infinity,
+      height: widget.fillHeight ? double.infinity : null,
       padding: EdgeInsets.all(ui(12)),
       decoration: BoxDecoration(
         color: _kPanelBg,
         borderRadius: BorderRadius.circular(ui(16)),
       ),
-      child: Column(
-        children: [
-          for (var i = 0; i < _items.length; i++) ...[
-            if (i > 0) SizedBox(height: ui(12)),
-            _PersonRowCard(
-              avatarSeed: _items[i].name.characters.first,
-              name: _items[i].name,
-              line2: _items[i].timeRange,
-              line3: _items[i].submitted,
-              tag: _items[i].tag,
-              tagColor: _items[i].tagColor,
-              tagTextColor: _items[i].tagTextColor,
-            ),
-          ],
-        ],
-      ),
+      child: _loading
+          ? const Center(child: AppLoadingIndicator())
+          : _items.isEmpty
+              ? Center(
+                  child: Text(
+                    _error ?? '暂无待批请假',
+                    style: TextStyle(fontSize: ui(12), color: _kTextHint),
+                  ),
+                )
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (var i = 0; i < _items.length; i++) ...[
+                      if (i > 0) SizedBox(height: ui(12)),
+                      _PersonRowCard(
+                        avatarSeed: _items[i].name.characters.first,
+                        name: _items[i].name,
+                        line2: _items[i].timeRange,
+                        line3: _items[i].submitted,
+                        tag: _items[i].tag,
+                        tagColor: _items[i].tagColor,
+                        tagTextColor: _items[i].tagTextColor,
+                        onTap: widget.onOpenAll,
+                      ),
+                    ],
+                  ],
+                ),
     );
   }
 }
@@ -2162,7 +2742,9 @@ class _LeaveItem {
 // ----- 重点关注 列表 -----
 
 class _AttentionListCard extends StatelessWidget {
-  const _AttentionListCard();
+  const _AttentionListCard({this.fillHeight = false});
+
+  final bool fillHeight;
 
   static const List<_AttentionItem> _items = [
     _AttentionItem(
@@ -2195,12 +2777,16 @@ class _AttentionListCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
+      width: double.infinity,
+      height: fillHeight ? double.infinity : null,
       padding: EdgeInsets.all(ui(12)),
       decoration: BoxDecoration(
         color: _kPanelBg,
         borderRadius: BorderRadius.circular(ui(16)),
       ),
+      clipBehavior: fillHeight ? Clip.antiAlias : Clip.none,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           for (var i = 0; i < _items.length; i++) ...[
             if (i > 0) SizedBox(height: ui(12)),
@@ -2246,6 +2832,7 @@ class _PersonRowCard extends StatelessWidget {
     required this.tag,
     required this.tagColor,
     required this.tagTextColor,
+    this.onTap,
   });
 
   final String avatarSeed;
@@ -2255,11 +2842,12 @@ class _PersonRowCard extends StatelessWidget {
   final String tag;
   final Color tagColor;
   final Color tagTextColor;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
+    final card = Container(
       height: ui(88),
       decoration: BoxDecoration(
         color: _kInnerGray,
@@ -2370,208 +2958,13 @@ class _PersonRowCard extends StatelessWidget {
         ],
       ),
     );
-  }
-}
-
-// ----- 通用：时间轴卡片（今日节点 / 近期班务） -----
-
-class _TimelineItem {
-  const _TimelineItem({required this.title, required this.subtitle, this.time});
-  final String title;
-  final String subtitle;
-  final String? time;
-}
-
-const List<_TimelineItem> _kTodayCheckpoints = [
-  _TimelineItem(title: '08:10', subtitle: '到校考勤'),
-  _TimelineItem(title: '09:10', subtitle: '上课打卡'),
-  _TimelineItem(title: '18:20', subtitle: '晚自习考勤'),
-  _TimelineItem(title: '21:20', subtitle: '宿舍考勤'),
-];
-
-const List<_TimelineItem> _kRecentDuty = [
-  _TimelineItem(
-    title: '晨检完成',
-    subtitle: '应到42人，实到 41 ，1人事假已备案',
-    time: '今天08:10',
-  ),
-  _TimelineItem(
-    title: '查寝反馈',
-    subtitle: '应到42人，实到 41 ，1人事假已备案',
-    time: '今天08:10',
-  ),
-  _TimelineItem(
-    title: '年级组通知已转发班级群',
-    subtitle: '应到42人，实到 41 ，1人事假已备案',
-    time: '今天08:10',
-  ),
-  _TimelineItem(
-    title: '班会材料已上传班群文件夹',
-    subtitle: '应到42人，实到 41 ，1人事假已备案',
-    time: '今天08:10',
-  ),
-];
-
-class _TimelineCard extends StatelessWidget {
-  const _TimelineCard({required this.items, required this.accent});
-  final List<_TimelineItem> items;
-  final Color accent;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      padding: EdgeInsets.all(ui(12)),
-      decoration: BoxDecoration(
-        color: _kPanelBg,
-        borderRadius: BorderRadius.circular(ui(16)),
-      ),
-      child: Column(
-        children: [
-          for (var i = 0; i < items.length; i++) ...[
-            if (i > 0) SizedBox(height: ui(20)),
-            _TimelineRow(item: items[i], accent: accent),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _TimelineRow extends StatelessWidget {
-  const _TimelineRow({required this.item, required this.accent});
-  final _TimelineItem item;
-  final Color accent;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // 圆点
-        Padding(
-          padding: EdgeInsets.only(top: ui(4)),
-          child: Container(
-            width: ui(14),
-            height: ui(14),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF7F2FF),
-              borderRadius: BorderRadius.circular(ui(7)),
-            ),
-            alignment: Alignment.center,
-            child: Container(
-              width: ui(8),
-              height: ui(8),
-              decoration: BoxDecoration(
-                color: accent,
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 1),
-              ),
-            ),
-          ),
-        ),
-        SizedBox(width: ui(12)),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      item.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: ui(14),
-                        color: _kTextDark,
-                        fontWeight: FontWeight.w500,
-                        height: 1,
-                      ),
-                    ),
-                  ),
-                  if (item.time != null)
-                    Text(
-                      item.time!,
-                      style: TextStyle(
-                        fontSize: ui(12),
-                        color: _kTextHint,
-                        fontWeight: FontWeight.w400,
-                        height: 1,
-                      ),
-                    ),
-                ],
-              ),
-              SizedBox(height: ui(8)),
-              _TimelineSubtitle(subtitle: item.subtitle),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _TimelineSubtitle extends StatelessWidget {
-  const _TimelineSubtitle({required this.subtitle});
-  final String subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    // 把数字部分（如 "实到 41 ，"）染成紫色，其它文字用次级灰。
-    final regex = RegExp(r'(\d+)');
-    final matches = regex.allMatches(subtitle).toList();
-    if (matches.isEmpty || subtitle.contains(':')) {
-      // 单纯描述（包含 ":" 的当作时间标题，原样灰色显示）。
-      return Text(
-        subtitle,
-        style: TextStyle(
-          fontSize: ui(12),
-          color: _kTextSecondary,
-          fontWeight: FontWeight.w400,
-          height: 1,
-        ),
-      );
-    }
-    // 用第一个数字做高亮（其余仍属上下文文字）。
-    final first = matches.first;
-    final before = subtitle.substring(0, first.start);
-    final number = subtitle.substring(first.start, first.end);
-    final after = subtitle.substring(first.end);
-    return RichText(
-      text: TextSpan(
-        children: [
-          TextSpan(
-            text: before,
-            style: TextStyle(
-              fontSize: ui(12),
-              color: _kTextSecondary,
-              fontWeight: FontWeight.w400,
-              height: 1,
-            ),
-          ),
-          TextSpan(
-            text: number,
-            style: TextStyle(
-              fontSize: ui(12),
-              color: _kPurple,
-              fontWeight: FontWeight.w400,
-              height: 1,
-            ),
-          ),
-          TextSpan(
-            text: after,
-            style: TextStyle(
-              fontSize: ui(12),
-              color: _kTextSecondary,
-              fontWeight: FontWeight.w400,
-              height: 1,
-            ),
-          ),
-        ],
+    if (onTap == null) return card;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(ui(12)),
+        child: card,
       ),
     );
   }

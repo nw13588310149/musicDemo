@@ -28,6 +28,7 @@ abstract final class BaiduGeoService {
     required int width,
     required int height,
     int zoom = 16,
+    int scaler = 2,
   }) {
     final w = width.clamp(100, 1024);
     final h = height.clamp(100, 1024);
@@ -41,6 +42,7 @@ abstract final class BaiduGeoService {
         'width': '$w',
         'height': '$h',
         'zoom': '$zoom',
+        'scaler': '${scaler.clamp(1, 2)}',
         'markers': '$lng,$lat',
         'coordtype': 'wgs84ll',
         'markerStyles': 'l,,0x8741FF',
@@ -55,6 +57,7 @@ abstract final class BaiduGeoService {
     required int width,
     required int height,
     int zoom = 16,
+    int scaler = 2,
   }) async {
     try {
       final url = staticMapUrl(
@@ -63,6 +66,7 @@ abstract final class BaiduGeoService {
         width: width,
         height: height,
         zoom: zoom,
+        scaler: scaler,
       );
       final resp = await _dio.get<List<int>>(
         url,
