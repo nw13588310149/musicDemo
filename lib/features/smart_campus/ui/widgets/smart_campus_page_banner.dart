@@ -61,6 +61,64 @@ class SmartCampusScheduleTopBar extends StatelessWidget {
   }
 }
 
+/// 学生端二级页通用壳层：
+///
+/// 顶部 [header]（标题 + 返回栏）固定浮在灰底上，**不随内容滚动**；与下方
+/// 主内容容器之间留 [headerGap] 间距（即「容器到顶部标题栏有间距」）。
+/// 主内容容器填满剩余高度并以 16 圆角裁切滚动内容；容器内部 **不再叠加**
+/// 任何底部 padding —— 滚动到底时由外层 dashboard 的 16px contentPadding
+/// 提供唯一、稳定的底部留白，避免「容器外下边距」忽大忽小。
+///
+/// 与 [SmartCampusSchedulePageShell]（banner 与内容同处一张白卡、banner
+/// 平贴顶部）的区别：本壳层让 banner 独立浮起、内容容器单独裁切，更贴合
+/// 学生端 `xiaoquanHeaderBg` 浮起式 banner 的视觉。
+class SmartCampusSecondaryPageShell extends StatelessWidget {
+  const SmartCampusSecondaryPageShell({
+    super.key,
+    required this.header,
+    required this.body,
+    this.backgroundColor = const Color(0xFFEFF3FC),
+    this.headerGap = 16,
+    this.bodyScrollable = true,
+  });
+
+  final Widget header;
+  final Widget body;
+  final Color backgroundColor;
+
+  /// banner 与主内容容器之间的固定间距。
+  final double headerGap;
+
+  /// 为 `true` 时 [body] 自动包进无底部 padding 的 [SingleChildScrollView]；
+  /// 为 `false` 时由调用方自行提供滚动（如下拉刷新场景）。
+  final bool bodyScrollable;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        header,
+        SizedBox(height: ui(headerGap)),
+        Expanded(
+          child: Container(
+            width: double.infinity,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              borderRadius: BorderRadius.circular(ui(16)),
+            ),
+            child: bodyScrollable
+                ? SingleChildScrollView(child: body)
+                : body,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 /// 课表页外层白卡：圆角固定不随内容滚动，内部仅 [body] 区域滚动。
 class SmartCampusSchedulePageShell extends StatelessWidget {
   const SmartCampusSchedulePageShell({
@@ -68,11 +126,15 @@ class SmartCampusSchedulePageShell extends StatelessWidget {
     required this.header,
     required this.body,
     this.backgroundColor = Colors.white,
+    this.bodyScrollable = true,
   });
 
   final Widget header;
   final Widget body;
   final Color backgroundColor;
+
+  /// 为 `false` 时 [body] 占满剩余高度，由内部（如课表网格）自行处理纵向滚动。
+  final bool bodyScrollable;
 
   @override
   Widget build(BuildContext context) {
@@ -88,12 +150,15 @@ class SmartCampusSchedulePageShell extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           header,
-          Expanded(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.only(bottom: ui(20)),
-              child: body,
-            ),
-          ),
+          if (bodyScrollable)
+            Expanded(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.only(bottom: ui(20)),
+                child: body,
+              ),
+            )
+          else
+            Expanded(child: body),
         ],
       ),
     );

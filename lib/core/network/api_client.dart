@@ -19,6 +19,7 @@ class ApiClient {
     '/app/user/register',
     '/app/user/resetPassword',
     '/app/user/sendSmsCode',
+    '/app/user/logout',
   };
 
   ApiClient({required AppStorage storage})

@@ -2200,12 +2200,36 @@ class _QuickActionGrid extends StatelessWidget {
   final VoidCallback? onOpenDormHistory;
 
   static const List<_QuickActionData> _items = [
-    _QuickActionData(label: '班级工作台', imagePath: 'assets/images/schoolA/13.png'),
-    _QuickActionData(label: '请假审批', imagePath: 'assets/images/schoolA/3.png'),
-    _QuickActionData(label: '查寝动态', imagePath: 'assets/images/schoolA/9.png'),
-    _QuickActionData(label: '家校沟通', imagePath: 'assets/images/schoolA/15.png'),
-    _QuickActionData(label: '班级群聊', imagePath: 'assets/images/schoolA/6.png'),
-    _QuickActionData(label: '查寝历史', imagePath: 'assets/images/schoolA/14.png'),
+    _QuickActionData(
+      label: '班级工作台',
+      imagePath:
+          'assets/images/smartCampus/home_actions/head_teacher/class_workbench.png',
+    ),
+    _QuickActionData(
+      label: '请假审批',
+      imagePath:
+          'assets/images/smartCampus/home_actions/head_teacher/leave_approval.png',
+    ),
+    _QuickActionData(
+      label: '查寝动态',
+      imagePath:
+          'assets/images/smartCampus/home_actions/head_teacher/dorm_dynamic.png',
+    ),
+    _QuickActionData(
+      label: '家校沟通',
+      imagePath:
+          'assets/images/smartCampus/home_actions/head_teacher/home_school_communication.png',
+    ),
+    _QuickActionData(
+      label: '班级群聊',
+      imagePath:
+          'assets/images/smartCampus/home_actions/head_teacher/group_chat.png',
+    ),
+    _QuickActionData(
+      label: '查寝历史',
+      imagePath:
+          'assets/images/smartCampus/home_actions/head_teacher/dorm_history.png',
+    ),
   ];
 
   VoidCallback? _onTapForLabel(String label) {

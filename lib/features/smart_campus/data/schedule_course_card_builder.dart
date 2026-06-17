@@ -102,6 +102,32 @@ ScheduleCourseCardData buildScheduleCourseCard(
   );
 }
 
+/// 课表条目中的任课老师头像。`student/courseList` 等新接口在顶层下发
+/// `teacherHeadUrl`；嵌套 `teacher` 对象内可能为 `headUrl`。
+String resolveScheduleTeacherHeadUrl(Map<String, dynamic> json) {
+  var raw = pickScheduleString(json, [
+    'teacherHeadUrl',
+    'teacherHead',
+    'headUrl',
+    'avatar',
+    'avatarUrl',
+    'headImg',
+  ]);
+  if (raw.isEmpty) {
+    final nested = json['teacher'];
+    if (nested is Map) {
+      final map = nested.map((key, value) => MapEntry(key.toString(), value));
+      raw = pickScheduleString(map, [
+        'headUrl',
+        'avatar',
+        'avatarUrl',
+        'headImg',
+      ]);
+    }
+  }
+  return raw.isEmpty ? '' : MediaUrl.resolve(raw);
+}
+
 /// 课程与班级相关接口统一下发的 `logo`。课程列表为顶层字段，下一节课等
 /// 组合响应可能把它放在 `schoolClass` / `classInfo` 内。
 String resolveScheduleLogoUrl(Map<String, dynamic> json) {

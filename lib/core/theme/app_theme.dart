@@ -21,12 +21,31 @@ class AppTheme {
     'PingFang SC',
   ];
 
+  /// 透明叠色：用于去除 Material 按钮按压 / 悬停 / 聚焦时的高亮叠色。
+  static const WidgetStateProperty<Color?> _kNoOverlay =
+      WidgetStatePropertyAll<Color?>(Colors.transparent);
+
+  /// 仅去除「点击效果」的按钮样式片段：透明叠色 + 无水波纹。
+  /// 不设置底色 / 形状 / 字体等，避免影响各按钮已有的基础样式（与控件自身或
+  /// 调用点 `styleFrom` 的设置合并，仅覆盖交互反馈相关字段）。
+  static final ButtonStyle _noEffectButtonStyle = ButtonStyle(
+    overlayColor: _kNoOverlay,
+    splashFactory: NoSplash.splashFactory,
+  );
+
   static ThemeData get light {
     final base = ThemeData(
       useMaterial3: true,
       fontFamily: 'Harmony',
       fontFamilyFallback: _fontFamilyFallback,
       scaffoldBackgroundColor: Colors.white,
+      // 全局去除「点击效果」：水波纹（splash）、按压高亮（highlight）、悬停
+      // （hover）。所有 InkWell / InkResponse 及未单独覆盖的 Material 控件都不再
+      // 出现点击/悬停反馈。Material 按钮的反馈另见各 ButtonTheme 的 overlayColor。
+      splashFactory: NoSplash.splashFactory,
+      splashColor: Colors.transparent,
+      highlightColor: Colors.transparent,
+      hoverColor: Colors.transparent,
       colorScheme: ColorScheme.fromSeed(
         seedColor: _primaryColor,
         primary: _primaryColor,
@@ -73,6 +92,9 @@ class AppTheme {
           minimumSize: const WidgetStatePropertyAll(Size.fromHeight(45)),
           backgroundColor: const WidgetStatePropertyAll(_primaryColor),
           foregroundColor: const WidgetStatePropertyAll(Colors.white),
+          // 去除按钮按压 / 悬停的叠色与水波纹。
+          overlayColor: _kNoOverlay,
+          splashFactory: NoSplash.splashFactory,
           shape: WidgetStatePropertyAll(
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
@@ -84,6 +106,14 @@ class AppTheme {
             ),
           ),
         ),
+      ),
+      // 其余 Material 按钮同样去除点击叠色与水波纹（不改变底色/形状等基础样式）。
+      elevatedButtonTheme: ElevatedButtonThemeData(style: _noEffectButtonStyle),
+      outlinedButtonTheme: OutlinedButtonThemeData(style: _noEffectButtonStyle),
+      textButtonTheme: TextButtonThemeData(style: _noEffectButtonStyle),
+      iconButtonTheme: IconButtonThemeData(style: _noEffectButtonStyle),
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: _noEffectButtonStyle,
       ),
     );
 

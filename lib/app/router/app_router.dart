@@ -74,19 +74,14 @@ class AppRouter {
 
   /// 需登录但不在 Shell 侧栏/顶栏内展示的全屏页。
   static bool _isShelllessRoute(String routeName) {
-    return routeName == RoutePaths.schoolWebsite;
+    return false;
   }
 
   static Widget _buildShelllessContent(String routeName) {
-    switch (routeName) {
-      case RoutePaths.schoolWebsite:
-        return const SchoolWebsitePage();
-      default:
-        return LegacyPlaceholderContent(
-          routeName: routeName,
-          title: _legacyPageTitle(routeName),
-        );
-    }
+    return LegacyPlaceholderContent(
+      routeName: routeName,
+      title: _legacyPageTitle(routeName),
+    );
   }
 
   static Route<dynamic> _buildPublicRoute(
@@ -131,6 +126,8 @@ class AppRouter {
         return const MusicCompanionV2Page();
       case RoutePaths.smartCampus:
         return const SmartCampusPage();
+      case RoutePaths.schoolWebsite:
+        return const SchoolWebsitePage();
       case RoutePaths.myNotes:
         return const my_notes.MyNotesPage();
       case RoutePaths.recording:

@@ -1450,7 +1450,9 @@ class _PunchAuditCard extends StatelessWidget {
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(ui(8)),
                   image: const DecorationImage(
-                    image: AssetImage('assets/images/schoolA/18.png'),
+                    image: AssetImage(
+                      'assets/images/smartCampus/home_actions/dorm_manager/punch_management.png',
+                    ),
                     fit: BoxFit.cover,
                   ),
                 ),

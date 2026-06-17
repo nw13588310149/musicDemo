@@ -361,27 +361,26 @@ class _StudentMyHomeworkViewState extends ConsumerState<StudentMyHomeworkView> {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final pageLoading = _initialLoad && _loadingList;
-    return Container(
-      color: _kPageBg,
-      child: AppRefreshIndicator(
+    return SmartCampusSecondaryPageShell(
+      backgroundColor: _kPageBg,
+      bodyScrollable: false,
+      header: _HomeworkBanner(onBack: widget.onBack),
+      body: AppRefreshIndicator(
         onRefresh: () async {
           await Future.wait([_loadList(), _loadSummary()]);
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: EdgeInsets.only(bottom: ui(24)),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _HomeworkBanner(onBack: widget.onBack),
-              SizedBox(height: ui(16)),
               MainContentLoadingShell(
                 loading: pageLoading,
                 preserveChrome: true,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _OverviewStatsRow(),
+                    _OverviewStatsRow(summary: _summary),
                     SizedBox(height: ui(16)),
                     _DualPanelRow(
                       chartGroup: _chartGroup,
@@ -393,6 +392,7 @@ class _StudentMyHomeworkViewState extends ConsumerState<StudentMyHomeworkView> {
                     _StatusTabsRow(
                       selected: _selectedTab,
                       onSelected: _onStatusTabChanged,
+                      summary: _summary,
                     ),
                     SizedBox(height: ui(10)),
                     if (!_loadingList && _records.isEmpty)
@@ -500,17 +500,39 @@ class _HomeworkBanner extends StatelessWidget {
 // =============================================================================
 
 class _OverviewStatsRow extends StatelessWidget {
+  const _OverviewStatsRow({required this.summary});
+
+  final StudentHomeworkSummary? summary;
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final s = summary;
+    final overdue = s?.overdue ?? 0;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(child: _AverageScoreCard()),
+        Expanded(child: _AverageScoreCard(avg: s?.overallAvgScore ?? 0)),
         SizedBox(width: ui(12)),
-        Expanded(child: _TrendCard.classRank()),
+        Expanded(
+          child: _HomeworkCountCard(
+            backgroundAsset: AppAssets.studentHomeworkStatCard2,
+            title: '已提交',
+            value: '${s?.submitted ?? 0}',
+            badgeText: '待提交 ${s?.pending ?? 0}',
+            badgeColor: _kPendingOrange,
+          ),
+        ),
         SizedBox(width: ui(12)),
-        Expanded(child: _TrendCard.gradeRank()),
+        Expanded(
+          child: _HomeworkCountCard(
+            backgroundAsset: AppAssets.studentHomeworkStatCard3,
+            title: '已批阅',
+            value: '${s?.reviewed ?? 0}',
+            badgeText: overdue > 0 ? '逾期 $overdue' : '无逾期',
+            badgeColor: overdue > 0 ? _kOverdueRed : _kRiseGreen,
+          ),
+        ),
       ],
     );
   }
@@ -555,9 +577,19 @@ class _HomeworkStatCardShell extends StatelessWidget {
 }
 
 class _AverageScoreCard extends StatelessWidget {
+  const _AverageScoreCard({required this.avg});
+
+  /// 作业总体均分（0 表示暂无数据）。
+  final double avg;
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final hasData = avg > 0;
+    final valueLabel = hasData
+        ? (avg % 1 == 0 ? avg.toStringAsFixed(0) : avg.toStringAsFixed(1))
+        : '—';
+    final widthFactor = (avg / 100).clamp(0.0, 1.0);
     return _HomeworkStatCardShell(
       backgroundAsset: AppAssets.studentHomeworkStatCard1,
       child: Padding(
@@ -568,7 +600,7 @@ class _AverageScoreCard extends StatelessWidget {
               left: 0,
               top: 0,
               child: Text(
-                '学期考试均分',
+                '作业均分',
                 style: TextStyle(
                   fontSize: ui(14),
                   color: Colors.black,
@@ -582,7 +614,7 @@ class _AverageScoreCard extends StatelessWidget {
               left: 0,
               top: ui(28),
               child: Text(
-                '32',
+                valueLabel,
                 style: TextStyle(
                   fontSize: ui(32),
                   color: _kTextDark,
@@ -597,7 +629,7 @@ class _AverageScoreCard extends StatelessWidget {
               top: ui(36),
               right: 0,
               child: Text(
-                '各次月考/大考总均分平均',
+                '各科作业得分平均',
                 textAlign: TextAlign.right,
                 style: TextStyle(
                   fontSize: ui(11),
@@ -618,7 +650,7 @@ class _AverageScoreCard extends StatelessWidget {
                   children: [
                     Container(height: ui(8), color: const Color(0xFFF4F4FF)),
                     FractionallySizedBox(
-                      widthFactor: 0.72,
+                      widthFactor: widthFactor,
                       child: Container(height: ui(8), color: _kPurpleLight),
                     ),
                   ],
@@ -632,32 +664,21 @@ class _AverageScoreCard extends StatelessWidget {
   }
 }
 
-class _TrendCard extends StatelessWidget {
-  const _TrendCard.classRank()
-    : title = '最近班级',
-      value = '8',
-      backgroundAsset = AppAssets.studentHomeworkStatCard2,
-      badgeIcon = null,
-      badgeText = '持平',
-      badgeColor = _kPurple,
-      badgeIconAsHorizontalLine = true;
+/// 作业计数卡（已提交/已批阅等），右上角徽标显示次级计数（待提交/逾期）。
+class _HomeworkCountCard extends StatelessWidget {
+  const _HomeworkCountCard({
+    required this.backgroundAsset,
+    required this.title,
+    required this.value,
+    required this.badgeText,
+    required this.badgeColor,
+  });
 
-  const _TrendCard.gradeRank()
-    : title = '最近年级',
-      value = '62',
-      backgroundAsset = AppAssets.studentHomeworkStatCard3,
-      badgeIcon = Icons.trending_up_rounded,
-      badgeText = '上升3名',
-      badgeColor = _kRiseGreen,
-      badgeIconAsHorizontalLine = false;
-
+  final String backgroundAsset;
   final String title;
   final String value;
-  final String backgroundAsset;
-  final IconData? badgeIcon;
   final String badgeText;
   final Color badgeColor;
-  final bool badgeIconAsHorizontalLine;
 
   @override
   Widget build(BuildContext context) {
@@ -705,25 +726,15 @@ class _TrendCard extends StatelessWidget {
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(ui(6)),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (badgeIconAsHorizontalLine)
-                    Container(width: ui(8), height: 1, color: badgeColor)
-                  else if (badgeIcon != null)
-                    Icon(badgeIcon, size: ui(12), color: badgeColor),
-                  SizedBox(width: ui(4)),
-                  Text(
-                    badgeText,
-                    style: TextStyle(
-                      fontSize: ui(11),
-                      color: badgeColor,
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w400,
-                      height: 1,
-                    ),
-                  ),
-                ],
+              child: Text(
+                badgeText,
+                style: TextStyle(
+                  fontSize: ui(11),
+                  color: badgeColor,
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w400,
+                  height: 1,
+                ),
               ),
             ),
           ),
@@ -763,7 +774,7 @@ class _DualPanelRow extends StatelessWidget {
               _AverageBarChartCard(
                 group: chartGroup,
                 onGroupChanged: onChartGroupChanged,
-                bars: _summaryBars(summary),
+                bars: _summaryBars(summary, chartGroup),
               ),
               SizedBox(height: ui(20)),
               _SectionTitle('分数段分布'),
@@ -785,7 +796,7 @@ class _DualPanelRow extends StatelessWidget {
                   _AverageBarChartCard(
                     group: chartGroup,
                     onGroupChanged: onChartGroupChanged,
-                    bars: _summaryBars(summary),
+                    bars: _summaryBars(summary, chartGroup),
                   ),
                 ],
               ),
@@ -1130,8 +1141,10 @@ class _ScoreDistributionEmpty extends StatelessWidget {
   }
 }
 
-List<_BarItem> _summaryBars(StudentHomeworkSummary? summary) {
-  final rows = summary?.subjectAvgScores ?? const <StudentSubjectAverage>[];
+List<_BarItem> _summaryBars(StudentHomeworkSummary? summary, _ChartGroup group) {
+  final rows = group == _ChartGroup.byTeacher
+      ? (summary?.teacherAvgScores ?? const <StudentSubjectAverage>[])
+      : (summary?.subjectAvgScores ?? const <StudentSubjectAverage>[]);
   if (rows.isEmpty) {
     return const [_BarItem(label: '暂无', value: 0)];
   }
@@ -1260,10 +1273,15 @@ class _ScoreSegmentTile extends StatelessWidget {
 enum _StatusTab { all, pending, submitted, reviewed }
 
 class _StatusTabsRow extends StatelessWidget {
-  const _StatusTabsRow({required this.selected, required this.onSelected});
+  const _StatusTabsRow({
+    required this.selected,
+    required this.onSelected,
+    this.summary,
+  });
 
   final _StatusTab selected;
   final ValueChanged<_StatusTab> onSelected;
+  final StudentHomeworkSummary? summary;
 
   static const _options = <(_StatusTab, String)>[
     (_StatusTab.all, '全部'),
@@ -1271,6 +1289,17 @@ class _StatusTabsRow extends StatelessWidget {
     (_StatusTab.submitted, '已提交'),
     (_StatusTab.reviewed, '已评分'),
   ];
+
+  int? _countOf(_StatusTab tab) {
+    final s = summary;
+    if (s == null) return null;
+    return switch (tab) {
+      _StatusTab.all => s.total,
+      _StatusTab.pending => s.pending,
+      _StatusTab.submitted => s.submitted,
+      _StatusTab.reviewed => s.reviewed,
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1291,6 +1320,7 @@ class _StatusTabsRow extends StatelessWidget {
               if (i > 0) SizedBox(width: ui(16)),
               _TabChip(
                 label: _options[i].$2,
+                count: _countOf(_options[i].$1),
                 active: _options[i].$1 == selected,
                 onTap: () => onSelected(_options[i].$1),
                 activeBg: _kTextDark,
@@ -1309,6 +1339,7 @@ class _TabChip extends StatelessWidget {
     required this.active,
     required this.onTap,
     required this.activeBg,
+    this.count,
   });
 
   final String label;
@@ -1316,9 +1347,13 @@ class _TabChip extends StatelessWidget {
   final VoidCallback onTap;
   final Color activeBg;
 
+  /// 该状态的数量；为 null 时不显示计数。
+  final int? count;
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final showCount = count != null;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(ui(6)),
@@ -1331,7 +1366,7 @@ class _TabChip extends StatelessWidget {
           borderRadius: BorderRadius.circular(ui(6)),
         ),
         child: Text(
-          label,
+          showCount ? '$label $count' : label,
           style: TextStyle(
             fontSize: ui(14),
             color: active ? Colors.white : _kTextSecondary,
@@ -1889,9 +1924,12 @@ class _HomeworkCard extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(ui(12)),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.bottomLeft,
-          end: Alignment.topRight,
+        // 设计稿里 #FAF0FF 只是右上角的一点淡紫，整张卡其余部分都是白色，
+        // 所以用从右上角发散的径向渐变（小半径）做角落点缀，而不是铺满全卡的
+        // 线性渐变。radius 以卡片短边为基准，可按需微调。
+        gradient: const RadialGradient(
+          center: Alignment.topRight,
+          radius: 0.9,
           colors: [Color(0xFFFAF0FF), Colors.white],
         ),
         color: _kCardBg,
@@ -2574,6 +2612,32 @@ class _SectionTitle extends StatelessWidget {
 
 enum _SubmitKind { video, audio, photo, doc }
 
+extension _SubmitKindX on _SubmitKind {
+  /// 类型芯片 / 上传框文案。
+  String get label => switch (this) {
+    _SubmitKind.video => '视频',
+    _SubmitKind.audio => '音频',
+    _SubmitKind.photo => '照片',
+    _SubmitKind.doc => '文档',
+  };
+
+  /// 选择文件时按类型过滤系统选择器（与「我的云盘」上传规则一致）。
+  CoursewarePickType get pickType => switch (this) {
+    _SubmitKind.video => CoursewarePickType.video,
+    _SubmitKind.audio => CoursewarePickType.audio,
+    _SubmitKind.photo => CoursewarePickType.image,
+    _SubmitKind.doc => CoursewarePickType.any,
+  };
+
+  /// 「上传文件」标题右侧的格式提示。
+  String get uploadTip => switch (this) {
+    _SubmitKind.video => '*支持 mp4 / mov 等视频格式',
+    _SubmitKind.audio => '*支持 mp3 / wav / m4a 等音频格式',
+    _SubmitKind.photo => '*支持 jpg / png / gif / webp 等格式',
+    _SubmitKind.doc => '*支持 PDF / Word / 图片 / HTML 等格式',
+  };
+}
+
 class _SubmitHomeworkDialog extends ConsumerStatefulWidget {
   const _SubmitHomeworkDialog({required this.data});
 
@@ -2610,9 +2674,23 @@ class _SubmitHomeworkDialogState extends ConsumerState<_SubmitHomeworkDialog> {
   bool get _ready =>
       _picked != null && _remotePath != null && !_uploading && !_submitting;
 
+  void _onKindChanged(_SubmitKind k) {
+    if (k == _kind || _uploading) return;
+    setState(() {
+      _kind = k;
+      _picked = null;
+      _remotePath = null;
+      _progress = 0;
+      _errorText = null;
+    });
+  }
+
   Future<void> _pickFile() async {
     if (_uploading) return;
-    final files = await pickCoursewareFiles(allowMultiple: false);
+    final files = await pickCoursewareFiles(
+      allowMultiple: false,
+      type: _kind.pickType,
+    );
     if (files.isEmpty) return;
     final f = files.first;
     if (!f.canUpload) {
@@ -2688,12 +2766,7 @@ class _SubmitHomeworkDialogState extends ConsumerState<_SubmitHomeworkDialog> {
     setState(() => _submitting = true);
     final note = _noteCtrl.text.trim();
     final desc = note.isNotEmpty ? note : '提交了：${_picked!.name}';
-    final kindLabel = switch (_kind) {
-      _SubmitKind.video => '视频',
-      _SubmitKind.audio => '音频',
-      _SubmitKind.photo => '照片',
-      _SubmitKind.doc => '文档',
-    };
+    final kindLabel = _kind.label;
     final res = await ref
         .read(studentRepositoryProvider)
         .studentHomeworkSubmit(
@@ -2785,13 +2858,34 @@ class _SubmitHomeworkDialogState extends ConsumerState<_SubmitHomeworkDialog> {
           SizedBox(height: ui(8)),
           _SubmitKindRow(
             value: _kind,
-            onChanged: (k) => setState(() => _kind = k),
+            onChanged: _onKindChanged,
           ),
           SizedBox(height: ui(12)),
-          _DialogLabel('上传文件'),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              _DialogLabel('上传文件'),
+              SizedBox(width: ui(8)),
+              Expanded(
+                child: Text(
+                  _kind.uploadTip,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    fontSize: ui(12),
+                    color: _kTextDivider,
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w400,
+                    height: 1,
+                  ),
+                ),
+              ),
+            ],
+          ),
           SizedBox(height: ui(8)),
           if (_picked == null)
-            _UploadDropZone(onTap: _pickFile)
+            _UploadDropZone(onTap: _pickFile, label: _kind.label)
           else
             _UploadFileTile(
               file: _picked!,
@@ -2904,8 +2998,11 @@ class _SubmitKindChip extends StatelessWidget {
 }
 
 class _UploadDropZone extends StatelessWidget {
-  const _UploadDropZone({required this.onTap});
+  const _UploadDropZone({required this.onTap, required this.label});
   final VoidCallback onTap;
+
+  /// 当前提交类型文案（视频 / 音频 / 照片 / 文档），用于「点击将X在此处上传」。
+  final String label;
 
   @override
   Widget build(BuildContext context) {
@@ -2914,26 +3011,45 @@ class _UploadDropZone extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(ui(12)),
       child: Container(
-        height: ui(64),
+        width: double.infinity,
+        height: ui(120),
         decoration: BoxDecoration(
-          color: _kInnerGray,
+          color: const Color(0xFFF4F4FF),
           borderRadius: BorderRadius.circular(ui(12)),
-          border: Border.all(color: _kPurpleLight, width: 1),
+          border: Border.all(color: _kBorderSoft, width: 1),
         ),
-        alignment: Alignment.center,
-        child: Row(
+        child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.cloud_upload_outlined, size: ui(16), color: _kPurple),
-            SizedBox(width: ui(8)),
-            Text(
-              '上传文件',
-              style: TextStyle(
-                fontSize: ui(13),
-                color: _kTextDark,
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w500,
-                height: 20 / 13,
+            Image.asset(
+              AppAssets.coursewareUploadFile,
+              width: ui(48),
+              height: ui(48),
+              fit: BoxFit.contain,
+            ),
+            SizedBox(height: ui(8)),
+            RichText(
+              text: TextSpan(
+                style: TextStyle(
+                  fontSize: ui(13),
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w400,
+                  height: 1,
+                ),
+                children: <InlineSpan>[
+                  const TextSpan(
+                    text: '点击将',
+                    style: TextStyle(color: _kTextHint),
+                  ),
+                  TextSpan(
+                    text: label,
+                    style: const TextStyle(color: _kTextDark),
+                  ),
+                  const TextSpan(
+                    text: '在此处上传',
+                    style: TextStyle(color: _kTextHint),
+                  ),
+                ],
               ),
             ),
           ],
@@ -3111,22 +3227,18 @@ class _HomeworkDetailDialog extends ConsumerStatefulWidget {
 
 class _HomeworkDetailDialogState extends ConsumerState<_HomeworkDetailDialog> {
   late _HomeworkData _d;
-  bool _loading = true;
 
   @override
   void initState() {
     super.initState();
     _d = widget.data;
-    if (widget.data.recordId.isEmpty) {
-      _loading = false;
-    } else {
+    if (widget.data.recordId.isNotEmpty) {
       _loadDetail();
     }
   }
 
   Future<void> _loadDetail() async {
     if (!mounted) return;
-    setState(() => _loading = true);
     final id = _d.recordId.isNotEmpty ? _d.recordId : widget.data.recordId;
     final res = await ref
         .read(studentRepositoryProvider)
@@ -3135,13 +3247,9 @@ class _HomeworkDetailDialogState extends ConsumerState<_HomeworkDetailDialog> {
     if (res.isSuccess && res.data is Map) {
       setState(() {
         _d = _HomeworkData.mergeDetail(_d, res.data as Map);
-        _loading = false;
       });
     } else {
-      setState(() => _loading = false);
-      if (mounted) {
-        AppToast.show(context, res.msg.isNotEmpty ? res.msg : '详情加载失败');
-      }
+      AppToast.show(context, res.msg.isNotEmpty ? res.msg : '详情加载失败');
     }
   }
 
@@ -3189,31 +3297,6 @@ class _HomeworkDetailDialogState extends ConsumerState<_HomeworkDetailDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(
-              style: TextButton.styleFrom(
-                padding: EdgeInsets.zero,
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                foregroundColor: _kPurple,
-              ),
-              onPressed: _loading ? null : _loadDetail,
-              child: Text(
-                '刷新',
-                style: TextStyle(
-                  fontSize: ui(12),
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w400,
-                ),
-              ),
-            ),
-          ),
-          if (_loading) ...[
-            SizedBox(height: ui(4)),
-            LinearProgressIndicator(minHeight: ui(2)),
-          ],
-          SizedBox(height: ui(8)),
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [

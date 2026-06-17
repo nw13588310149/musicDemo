@@ -61,7 +61,11 @@ class ShellController extends StateNotifier<ShellState> {
   }
 
   Future<void> logout() async {
-    await _repository.logout();
+    try {
+      await _repository.logout();
+    } catch (_) {
+      // 网络失败时仍必须清本地会话，否则顶栏退出无法回到登录页。
+    }
     await _storage.clearToken();
     await _storage.clearSchoolId();
     await _storage.clearMobile();

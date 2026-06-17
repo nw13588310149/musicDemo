@@ -603,6 +603,8 @@ abstract final class AppAssets {
       'assets/images/smartCampus/dorm_check/stat_card_3.png';
   static const dormCheckStatCard4 =
       'assets/images/smartCampus/dorm_check/stat_card_4.png';
+  static const dormCheckApplyMakeupIcon =
+      'assets/images/smartCampus/dorm_check/apply_makeup_icon.png';
 
   /// 管理员 · 班级编组 · 顶部统计卡背景（从左到右）。
   static const adminClassManagementStatCard1 =
@@ -679,6 +681,12 @@ abstract final class AppAssets {
       'assets/images/smartCampus/student/leave/stat_card_2.png';
   static const studentLeaveStatCard3 =
       'assets/images/smartCampus/student/leave/stat_card_3.png';
+  static const studentLeaveCreateApplyIcon =
+      'assets/images/smartCampus/student/leave/create_apply_icon.png';
+
+  /// 学生 · 我的班级 · 班级信息栏背景。
+  static const studentMyClassInfoBg =
+      'assets/images/smartCampus/student/my_class/class_info_bg.png';
 
   /// 任课老师 / 班主任 · 学生名册 · 顶部统计卡背景（当前列表 / 男 / 女）。
   static const teacherStudentRosterStatCard1 =

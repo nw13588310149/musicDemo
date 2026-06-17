@@ -21,7 +21,7 @@ import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 /// 1. **8 项数据统计**：分两行各 4 卡，白底 + 24/500 数值（今日待办 4
 ///    用 `#8741FF` 紫高亮） + 12/PingFang 灰色标签。
 /// 2. **管理端 10 项快捷入口卡**（697×255）：5×2 网格，每个 cell
-///    `43.73 #EAE5FF` 圆角底 + `assets/images/adminHome/{1..10}.png`
+///    `43.73 #EAE5FF` 圆角底 + `assets/images/smartCampus/home_actions/admin/*.png`
 ///    + 14/PingFang/500 文案；学生管理(1) → 教师管理(2) → 班级编辑(3) →
 ///    排课与课表(4) → 教师请假审批(5) → 人脸库(6) → 通知管理(7) →
 ///    群聊(8) → 校长信箱(9) → 校圈治理(10)。
@@ -276,22 +276,55 @@ class _QuickAction {
 }
 
 const _quickActions = <_QuickAction>[
-  _QuickAction('学生管理', 'assets/images/adminHome/1.png'),
-  _QuickAction('教师管理', 'assets/images/adminHome/2.png'),
-  _QuickAction('班级编辑', 'assets/images/adminHome/3.png'),
-  _QuickAction('排课与课表', 'assets/images/adminHome/4.png'),
-  _QuickAction('签课管理', 'assets/images/adminHome/4.png'),
-  _QuickAction('教师请假审批', 'assets/images/adminHome/5.png'),
-  _QuickAction('人脸库', 'assets/images/adminHome/6.png'),
-  _QuickAction('通知管理', 'assets/images/adminHome/7.png'),
-  _QuickAction('群聊', 'assets/images/adminHome/8.png'),
-  _QuickAction('校长信箱', 'assets/images/adminHome/9.png'),
-  _QuickAction('校圈治理', 'assets/images/adminHome/10.png'),
+  _QuickAction(
+    '学生管理',
+    'assets/images/smartCampus/home_actions/admin/student_management.png',
+  ),
+  _QuickAction(
+    '教师管理',
+    'assets/images/smartCampus/home_actions/admin/teacher_management.png',
+  ),
+  _QuickAction(
+    '班级编辑',
+    'assets/images/smartCampus/home_actions/admin/class_management.png',
+  ),
+  _QuickAction(
+    '排课与课表',
+    'assets/images/smartCampus/home_actions/admin/schedule_management.png',
+  ),
+  _QuickAction(
+    '签课管理',
+    'assets/images/smartCampus/home_actions/admin/schedule_management.png',
+  ),
+  _QuickAction(
+    '教师请假审批',
+    'assets/images/smartCampus/home_actions/admin/dorm_leave_approval.png',
+  ),
+  _QuickAction(
+    '人脸库',
+    'assets/images/smartCampus/home_actions/admin/face_library.png',
+  ),
+  _QuickAction(
+    '通知管理',
+    'assets/images/smartCampus/home_actions/admin/notification_management.png',
+  ),
+  _QuickAction(
+    '群聊',
+    'assets/images/smartCampus/home_actions/admin/group_chat.png',
+  ),
+  _QuickAction(
+    '校长信箱',
+    'assets/images/smartCampus/home_actions/admin/principal_mailbox.png',
+  ),
+  _QuickAction(
+    '校圈治理',
+    'assets/images/smartCampus/home_actions/admin/campus_governance.png',
+  ),
 ];
 
 const _mailboxQuickAction = _QuickAction(
   '校长信箱',
-  'assets/images/adminHome/9.png',
+  'assets/images/smartCampus/home_actions/admin/principal_mailbox.png',
 );
 
 List<_QuickAction> _quickActionsForRole(SmartCampusRole role) {

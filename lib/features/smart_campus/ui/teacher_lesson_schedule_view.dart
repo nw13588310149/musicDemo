@@ -48,6 +48,7 @@ import '../../../core/widgets/app_date_time_pickers.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/popup_selector_field.dart';
 import '../../../core/widgets/scaled_dialog.dart';
+import '../../../core/widgets/segment_toggle.dart';
 import '../../school/data/school_repository.dart';
 import '../../shell/state/shell_controller.dart';
 import '../../shell/ui/shell_layout.dart';
@@ -333,7 +334,7 @@ class _TeacherLessonScheduleViewState
     // 任课老师身份进入授课课表页 → 走 teacher 端 classList，后端基于 token
     // 自动过滤为「我教的班级」（含大班 + 小班），与 admin 端 classList 区分开。
     final repo = ref.read(teacherRepositoryProvider);
-    final resp = await repo.classList();
+    final resp = await repo.classList(isClassTeacher: 1);
     if (!mounted || !resp.isSuccess) return;
     final rows = _extractList(resp);
     String? firstId;
@@ -1281,69 +1282,14 @@ class _ViewEditSegment extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      height: ui(32),
-      padding: EdgeInsets.all(ui(2)),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(8)),
-        border: Border.all(color: _kBorderSoft),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _SegmentChip(
-            label: '查看',
-            active: mode == _ScheduleMode.view,
-            onTap: () => onChanged(_ScheduleMode.view),
-          ),
-          _SegmentChip(
-            label: '编辑',
-            active: mode == _ScheduleMode.edit,
-            onTap: () => onChanged(_ScheduleMode.edit),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SegmentChip extends StatelessWidget {
-  const _SegmentChip({
-    required this.label,
-    required this.active,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(ui(6)),
-      child: Container(
-        height: ui(28),
-        padding: EdgeInsets.symmetric(horizontal: ui(16)),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: active ? _kPurple : Colors.transparent,
-          borderRadius: BorderRadius.circular(ui(6)),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: ui(12),
-            color: active ? Colors.white : _kTextHint,
-            fontFamily: 'PingFang SC',
-            fontWeight: active ? AppFont.w500 : AppFont.w400,
-          ),
-        ),
-      ),
+    return SegmentToggle(
+      selectedIndex: mode == _ScheduleMode.view ? 0 : 1,
+      options: const [
+        SegmentToggleOption(label: '查看'),
+        SegmentToggleOption(label: '编辑'),
+      ],
+      onChanged: (i) =>
+          onChanged(i == 0 ? _ScheduleMode.view : _ScheduleMode.edit),
     );
   }
 }
@@ -2820,7 +2766,7 @@ class _ApplySmallLessonDrawerState
     // 班级 / 教室均走 teacher 端接口。
     final teacherRepo = ref.read(teacherRepositoryProvider);
     final results = await Future.wait([
-      teacherRepo.classList(),
+      teacherRepo.classList(isClassTeacher: 1),
       teacherRepo.classroomList(),
     ]);
     if (!mounted) return;

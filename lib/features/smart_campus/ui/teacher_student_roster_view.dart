@@ -406,7 +406,7 @@ class _TeacherStudentRosterViewState extends ConsumerState<TeacherStudentRosterV
 
   Future<void> _loadClasses() async {
     setState(() => _loadingClasses = true);
-    final res = await ref.read(teacherRepositoryProvider).classList();
+    final res = await ref.read(teacherRepositoryProvider).classList(isClassTeacher: 1);
     if (!mounted) return;
     final opts = <_RosterClassOption>[
       const _RosterClassOption(id: '', label: _kAllClassesLabel),

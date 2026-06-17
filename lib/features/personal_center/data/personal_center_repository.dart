@@ -33,7 +33,7 @@ class PersonalCenterRepository {
     data: <String, dynamic>{'cardNumber': cardNumber},
   );
 
-  /// 个人资料修改：传入需要更新的字段（昵称 / 性别 / 生日 / 学校 / 简介 / 头像 等）。
+  /// 个人资料修改：传入需要更新的字段（昵称 / 邮箱 / 性别 / 生日 / 学校 / 简介 / 头像 等）。
   Future<ApiResponse> editMyInfo(Map<String, dynamic> data) =>
       _client.post('/app/user/userinfoUpdate', data: data);
 

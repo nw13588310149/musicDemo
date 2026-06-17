@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 
 import '../../../app/router/route_paths.dart';
+import '../../../core/providers/app_providers.dart';
 import '../../shell/state/shell_controller.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../state/smart_campus_controller.dart';
@@ -115,6 +116,7 @@ class _SmartCampusPageState extends ConsumerState<SmartCampusPage> {
   /// 进入智慧校园前：补齐 myInfo / schoolList，并完成身份判定后再渲染子页。
   Future<void> _bootstrapEntry() async {
     if (!mounted || _bootstrapInFlight) return;
+    if (ref.read(appStorageProvider).token.isEmpty) return;
     _bootstrapInFlight = true;
     try {
       final shell = ref.read(shellControllerProvider);
@@ -134,6 +136,10 @@ class _SmartCampusPageState extends ConsumerState<SmartCampusPage> {
   @override
   Widget build(BuildContext context) {
     final shellState = ref.watch(shellControllerProvider);
+    if (shellState.user.id.isEmpty) {
+      // 登出清 token 后不再 bootstrap，避免 identity 永远 unresolved 卡在 loading。
+      return const SizedBox.shrink();
+    }
     final campusState = ref.watch(smartCampusControllerProvider);
     final ready =
         shellState.user.isMyInfoReady &&
@@ -642,7 +648,7 @@ class _SmartCampusPlaceholder extends StatelessWidget {
       case SmartCampusMainView.myHomework:
         return '我的作业';
       case SmartCampusMainView.myGrades:
-        return '我的成绩';
+        return '我的考试';
       case SmartCampusMainView.groupChat:
         return '群聊';
       case SmartCampusMainView.leaveManagement:

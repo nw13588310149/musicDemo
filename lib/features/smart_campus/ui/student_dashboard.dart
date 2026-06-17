@@ -39,6 +39,7 @@ class StudentDashboardLayout extends ConsumerStatefulWidget {
 
 class _StudentDashboardLayoutState extends ConsumerState<StudentDashboardLayout> {
   List<SmartCampusStatCardData> _stats = _placeholderStudentStats();
+  String? _studentDormBedLabel;
 
   @override
   void initState() {
@@ -49,15 +50,31 @@ class _StudentDashboardLayoutState extends ConsumerState<StudentDashboardLayout>
   Future<void> _loadIndex() async {
     if (!mounted) return;
     try {
-      final resp = await ref.read(studentRepositoryProvider).index();
+      final repo = ref.read(studentRepositoryProvider);
+      final responses = await Future.wait([
+        repo.index(),
+        repo.myDormitoryInfo(),
+      ]);
       if (!mounted) return;
-      if (!resp.isSuccess) {
-        if (resp.msg.isNotEmpty) {
-          AppToast.show(context, resp.msg);
-        }
-        return;
+
+      final indexResp = responses[0];
+      final dormResp = responses[1];
+
+      if (!indexResp.isSuccess && indexResp.msg.isNotEmpty) {
+        AppToast.show(context, indexResp.msg);
       }
-      setState(() => _stats = _parseStudentIndexStats(resp.data));
+
+      setState(() {
+        if (indexResp.isSuccess) {
+          _stats = _parseStudentIndexStats(indexResp.data);
+        }
+        if (dormResp.isSuccess) {
+          _studentDormBedLabel =
+              StudentDormitoryInfo.fromJson(dormResp.data).displayLabel;
+        } else {
+          _studentDormBedLabel = '—';
+        }
+      });
     } catch (_) {
       // 保留占位符，避免首页空白。
     }
@@ -114,6 +131,7 @@ class _StudentDashboardLayoutState extends ConsumerState<StudentDashboardLayout>
                   shellDisplayName: widget.shellUser.displayName,
                   avatarUrl: widget.shellUser.avatarUrl,
                   shellUser: widget.shellUser,
+                  studentDormBedLabel: _studentDormBedLabel,
                   fillHeight: false,
                 ),
               ],
@@ -157,6 +175,7 @@ class _StudentDashboardLayoutState extends ConsumerState<StudentDashboardLayout>
                 shellDisplayName: widget.shellUser.displayName,
                 avatarUrl: widget.shellUser.avatarUrl,
                 shellUser: widget.shellUser,
+                studentDormBedLabel: _studentDormBedLabel,
                 fillHeight: true,
               ),
             ),
@@ -221,7 +240,11 @@ class _StudentMainColumn extends StatelessWidget {
       onOpenDormCheck: onOpenDormCheck,
     );
 
-    final bottom = _StudentDashboardScheduleSection(fillRemaining: fillRemaining);
+    final bottom = _StudentDashboardScheduleSection(
+      fillRemaining: fillRemaining,
+      onOpenCheckIn: onOpenCheckIn,
+      onOpenMySchedule: onOpenMySchedule,
+    );
 
     if (fillRemaining) {
       return Column(
@@ -256,9 +279,15 @@ class _StudentMainColumn extends StatelessWidget {
 }
 
 class _StudentDashboardScheduleSection extends ConsumerStatefulWidget {
-  const _StudentDashboardScheduleSection({this.fillRemaining = false});
+  const _StudentDashboardScheduleSection({
+    this.fillRemaining = false,
+    required this.onOpenCheckIn,
+    required this.onOpenMySchedule,
+  });
 
   final bool fillRemaining;
+  final VoidCallback onOpenCheckIn;
+  final VoidCallback onOpenMySchedule;
 
   @override
   ConsumerState<_StudentDashboardScheduleSection> createState() =>
@@ -351,10 +380,12 @@ class _StudentDashboardScheduleSectionState
     final currentPanel = _CurrentLessonPanel(
       lesson: _currentLesson,
       fillHeight: widget.fillRemaining,
+      onTap: widget.onOpenCheckIn,
     );
     final todayPanel = _TodaySchedulePanel(
       lessons: _todayLessons,
       fillHeight: widget.fillRemaining,
+      onTap: widget.onOpenMySchedule,
     );
 
     return LayoutBuilder(
@@ -423,7 +454,7 @@ List<SmartCampusStatCardData> _placeholderStudentStats() {
     SmartCampusStatCardData(label: '待交作业', value: '0'),
     SmartCampusStatCardData(label: '学期均分', value: '0'),
     SmartCampusStatCardData(label: '未读通知', value: '0'),
-    SmartCampusStatCardData(label: '月考时间', value: '0'),
+    SmartCampusStatCardData(label: '最近考试', value: '0'),
     SmartCampusStatCardData(label: '距离省统考', value: '0'),
   ];
 }
@@ -470,7 +501,7 @@ List<SmartCampusStatCardData> _parseStudentIndexStats(dynamic raw) {
       value: displayInt('classNoticeCount'),
     ),
     SmartCampusStatCardData(
-      label: '月考时间',
+      label: '最近考试',
       value: _formatStudentExamWeekday(map['monthlyExamDate']?.toString()),
     ),
     SmartCampusStatCardData(
@@ -536,6 +567,9 @@ Map<String, dynamic> _flattenStudentCourseRow(Map<String, dynamic> row) {
     const MapEntry('realName', 'teacherRealname'),
     const MapEntry('nickname', 'teacherNickname'),
     const MapEntry('name', 'teacherName'),
+    const MapEntry('headUrl', 'teacherHeadUrl'),
+    const MapEntry('avatar', 'teacherHeadUrl'),
+    const MapEntry('avatarUrl', 'teacherHeadUrl'),
   ]);
   mergeNested('subject', [
     const MapEntry('name', 'subjectName'),
@@ -728,6 +762,7 @@ _LessonRowData _lessonRowFromStudentCourse(
 
   return _LessonRowData(
     avatarSeed: avatarSeed,
+    avatarUrl: resolveScheduleTeacherHeadUrl(flat),
     logoUrl: resolveScheduleLogoUrl(flat),
     teacherName: displayName,
     courseName: subjectName,

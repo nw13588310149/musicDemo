@@ -6,6 +6,7 @@ import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dar
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../app/router/app_navigator.dart';
 import '../../../../app/router/route_paths.dart';
 import '../../../../core/constants/app_assets.dart';
 import '../../../../core/widgets/app_asset_graphic.dart';
@@ -267,13 +268,26 @@ class ShellTopBar extends StatelessWidget {
   }
 
   Future<void> _handleLogout(BuildContext context) async {
-    await onLogout();
-    if (context.mounted) {
-      Navigator.pushNamedAndRemoveUntil(
-        context,
-        RoutePaths.login,
-        (route) => false,
-      );
+    try {
+      await onLogout();
+    } finally {
+      // 智慧校园等子页可能叠在首页之上；用根 Navigator 清栈，避免
+      // Shell 局部 context 跳转后仍留在 smart-campus 路由。
+      final navigator = rootNavigatorKey.currentState;
+      if (navigator != null) {
+        navigator.pushNamedAndRemoveUntil(
+          RoutePaths.login,
+          (route) => false,
+        );
+        return;
+      }
+      final rootContext = rootNavigatorKey.currentContext;
+      if (rootContext != null && rootContext.mounted) {
+        Navigator.of(rootContext, rootNavigator: true).pushNamedAndRemoveUntil(
+          RoutePaths.login,
+          (route) => false,
+        );
+      }
     }
   }
 

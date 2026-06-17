@@ -541,6 +541,50 @@ class AdminRepository {
     );
   }
 
+  // ============== 课堂签到补签审核 ==============
+
+  /// 学生课堂补签申请列表（管理员审核）。
+  ///
+  /// `status`：0-待审批 / 1-已通过 / 2-已驳回；不传 = 全部。
+  Future<ApiResponse> courseSignMakeupList({
+    int? status,
+    int current = 1,
+    int size = 200,
+  }) {
+    return client.post(
+      '$_base/courseSignMakeupList',
+      data: <String, dynamic>{
+        'current': current,
+        'size': size,
+        'status': ?status,
+      },
+    );
+  }
+
+  /// 学生课堂补签申请详情。`id` 为补签申请记录 id。
+  Future<ApiResponse> courseSignMakeupDetail({required String id}) {
+    return client.post(
+      '$_base/courseSignMakeupDetail',
+      data: <String, dynamic>{'id': readSnowflakeId(id) ?? id},
+    );
+  }
+
+  /// 审批学生课堂补签申请：`status` 1=通过 / 2=驳回。
+  Future<ApiResponse> courseSignMakeupAudit({
+    required String id,
+    required int status,
+    String auditReason = '',
+  }) {
+    return client.post(
+      '$_base/courseSignMakeupAudit',
+      data: <String, dynamic>{
+        'id': readSnowflakeId(id) ?? id,
+        'status': status,
+        if (auditReason.isNotEmpty) 'auditReason': auditReason,
+      },
+    );
+  }
+
   // ============== 教师请假审批 ==============
 
   /// 教师请假列表（`AppSchoolTeacherLeaveListBO`）。

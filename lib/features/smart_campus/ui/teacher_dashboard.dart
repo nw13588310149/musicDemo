@@ -14,6 +14,7 @@ import '../data/course_teacher_index_data.dart';
 import '../data/head_teacher_index_data.dart';
 import '../data/schedule_course_card_builder.dart';
 import '../data/smart_campus_dashboard_data.dart';
+import '../data/student_dormitory_data.dart';
 import '../data/student_repository.dart';
 import '../data/teacher_notice_data.dart';
 import '../data/teacher_repository.dart';
@@ -110,7 +111,7 @@ class TeacherDashboardLayout extends ConsumerStatefulWidget {
   /// 学生端「我的作业」入口；老师端没这个按钮，传 null 即可。
   final VoidCallback? onOpenMyHomework;
 
-  /// 学生端「我的成绩」入口；老师端没这个按钮，传 null 即可。
+  /// 学生端「我的考试」入口；老师端没这个按钮，传 null 即可。
   final VoidCallback? onOpenMyGrades;
 
   /// 「群聊」入口（学生 / 教师 / 班主任 共用同一个聊天页面）。
@@ -844,8 +845,8 @@ class _TeacherActionPanel extends StatelessWidget {
       // 学生端独有：我的作业。老师端的 "作业批改" 是另一条入口，单独处理。
       case '我的作业':
         return onOpenMyHomework;
-      // 学生端独有：我的成绩，进入「成绩与排名」总览页。
-      case '我的成绩':
+      // 学生端独有：我的考试，进入「我的考试」总览页（全部考试 + 我的成绩）。
+      case '我的考试':
         return onOpenMyGrades;
       // 五端共用：群聊（任一角色点击都进入同一聊天主界面）。
       case '群聊':
@@ -1068,6 +1069,7 @@ class _TeacherSidebar extends StatelessWidget {
     required this.avatarUrl,
     required this.fillHeight,
     this.shellUser = const ShellUser(),
+    this.studentDormBedLabel,
     this.selectedTab,
     this.onTabSelected,
     this.availableRoles = const [
@@ -1090,6 +1092,9 @@ class _TeacherSidebar extends StatelessWidget {
   final String shellDisplayName;
   final String avatarUrl;
   final ShellUser shellUser;
+
+  /// 学生端侧栏「宿舍床位」文案；`null` 表示尚未加载。
+  final String? studentDormBedLabel;
   final bool fillHeight;
 
   /// 判断是否需要走"通用多身份"切换器：只要 availableRoles 出现 teacher /
@@ -1133,6 +1138,7 @@ class _TeacherSidebar extends StatelessWidget {
               shellDisplayName: shellDisplayName,
               avatarUrl: avatarUrl,
               shellUser: shellUser,
+              studentDormBedLabel: studentDormBedLabel,
             ),
             SizedBox(height: ui(20)),
             if (selectedTab != null && onTabSelected != null) ...[
@@ -1196,12 +1202,14 @@ class _TeacherProfileBlock extends StatelessWidget {
     required this.shellDisplayName,
     required this.avatarUrl,
     this.shellUser = const ShellUser(),
+    this.studentDormBedLabel,
   });
 
   final SmartCampusDashboardData data;
   final String shellDisplayName;
   final String avatarUrl;
   final ShellUser shellUser;
+  final String? studentDormBedLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -1217,7 +1225,10 @@ class _TeacherProfileBlock extends StatelessWidget {
         : (isHeadTeacher ? '班主任' : '任课老师');
     final statusLabel = isStudent ? '在校' : '运行中';
     final infoLines = isStudent
-        ? _studentInfoLines(shellUser)
+        ? _studentInfoLines(
+            shellUser,
+            dormBedLabel: studentDormBedLabel,
+          )
         : (isHeadTeacher
             ? _headTeacherInfoLines()
             : _courseTeacherInfoLines());
@@ -1308,15 +1319,22 @@ class _TeacherProfileBlock extends StatelessWidget {
   }
 }
 
-/// 学生侧栏信息行（来自 myInfo.user）。
-List<String> _studentInfoLines(ShellUser user) {
+/// 学生侧栏信息行（来自 myInfo.user + myDormitoryInfo）。
+List<String> _studentInfoLines(
+  ShellUser user, {
+  String? dormBedLabel,
+}) {
   String display(String value) =>
       value.trim().isEmpty ? '—' : value.trim();
-  return [
+  final lines = <String>[
     '学校：${display(user.school)}',
     '目标院校：${display(user.targetSchool)}',
     '性别：${display(user.gender)}',
   ];
+  if (dormBedLabel != null) {
+    lines.insert(0, '宿舍床位：${display(dormBedLabel)}');
+  }
+  return lines;
 }
 
 /// 班主任侧栏信息行（不依赖班级接口，对齐管理员「岗位 / 权限 / 职责」结构）。
@@ -2082,10 +2100,13 @@ class _LessonRowData {
     required this.tag,
     required this.tagDotColor,
     required this.hint,
+    this.avatarUrl = '',
   });
 
   final String avatarSeed;
   final String logoUrl;
+  /// 任课老师头像；非空时优先于 [logoUrl]（学生端课表）。
+  final String avatarUrl;
   final String teacherName;
   final String courseName;
   final Color courseColor;
@@ -2228,7 +2249,7 @@ class _TeacherScheduleSectionState extends ConsumerState<_TeacherScheduleSection
         return;
       }
 
-      final classResp = await teacherRepo.classList();
+      final classResp = await teacherRepo.classList(isClassTeacher: 1);
       if (classResp.isSuccess) {
         String? classId;
         for (final m in _scheduleExtractList(classResp)) {
@@ -2397,7 +2418,7 @@ Future<_BuiltDashboardSchedule> _buildScheduleFromCourseTeacherIndex({
   required DateTime now,
 }) async {
   var configs = timeConfigs;
-  final classResp = await teacherRepo.classList();
+  final classResp = await teacherRepo.classList(isClassTeacher: 1);
   if (classResp.isSuccess) {
     String? classId;
     for (final m in _scheduleExtractList(classResp)) {
@@ -3177,6 +3198,7 @@ class _LessonTeacherRow extends StatelessWidget {
           child: _LessonSeedAvatar(
             seed: data.avatarSeed,
             logoUrl: data.logoUrl,
+            avatarUrl: data.avatarUrl,
             size: ui(40),
           ),
         ),
@@ -3290,16 +3312,19 @@ class _LessonSeedAvatar extends StatelessWidget {
     required this.seed,
     required this.logoUrl,
     required this.size,
+    this.avatarUrl = '',
   });
 
   final String seed;
   final String logoUrl;
+  final String avatarUrl;
   final double size;
 
   @override
   Widget build(BuildContext context) {
+    final url = avatarUrl.isNotEmpty ? avatarUrl : logoUrl;
     return SmoothCircleNetworkAvatar(
-      url: logoUrl,
+      url: url,
       size: size,
       placeholder: _buildFallback(),
     );

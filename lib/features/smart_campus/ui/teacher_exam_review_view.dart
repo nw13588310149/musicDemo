@@ -248,7 +248,9 @@ class _TeacherExamReviewViewState extends ConsumerState<TeacherExamReviewView> {
           alignment: Alignment.centerRight,
           child: DashboardScaleScope(
             data: scale,
-            child: _HistoryDrawer(items: ref.read(teacherExamControllerProvider).exams),
+            child: _HistoryDrawer(
+              items: ref.read(teacherExamControllerProvider).exams,
+            ),
           ),
         );
       },
@@ -972,8 +974,7 @@ class _CornerLabel extends StatelessWidget {
     final bg = kind == TeacherExamCornerKind.published
         ? const Color(0xFFE6E9F1)
         : _kOrangeBg;
-    final fg =
-        kind == TeacherExamCornerKind.published ? _kTextHint : _kOrange;
+    final fg = kind == TeacherExamCornerKind.published ? _kTextHint : _kOrange;
     return Container(
       width: ui(68),
       height: ui(22),
@@ -1478,10 +1479,8 @@ class _SeatPlanDrawerState extends ConsumerState<_SeatPlanDrawer> {
     return ListView.separated(
       itemCount: groups.length,
       separatorBuilder: (_, _) => SizedBox(height: ui(16)),
-      itemBuilder: (_, i) => _SeatRoomGroup(
-        room: groups[i].room,
-        students: groups[i].students,
-      ),
+      itemBuilder: (_, i) =>
+          _SeatRoomGroup(room: groups[i].room, students: groups[i].students),
     );
   }
 }
@@ -1585,7 +1584,8 @@ class _SeatStudentRow extends StatelessWidget {
                     height: 1.2,
                   ),
                 ),
-                if (entry.studentNo.isNotEmpty || entry.className.isNotEmpty) ...[
+                if (entry.studentNo.isNotEmpty ||
+                    entry.className.isNotEmpty) ...[
                   SizedBox(height: ui(2)),
                   Text(
                     [
@@ -2127,14 +2127,12 @@ class _ScoreDrawerState extends ConsumerState<_ScoreDrawer> {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final resolvedUrl = _resolveMediaUrl(widget.submission.path) ?? '';
-    final hasAttachment = resolvedUrl.isNotEmpty;
-    final fileName = hasAttachment
-        ? _fileNameFromPath(
-            widget.submission.path,
-            '${widget.submission.studentName}_${widget.item.title}.${_extOf(widget.submission.medium)}',
-          )
-        : '${widget.submission.studentName}_${widget.item.title}.${_extOf(widget.submission.medium)}';
+    final files = widget.submission.submitFiles.isNotEmpty
+        ? widget.submission.submitFiles
+        : (widget.submission.path.trim().isNotEmpty
+              ? <String>[widget.submission.path]
+              : const <String>[]);
+    final hasAttachment = files.isNotEmpty;
     return Material(
       color: Colors.white,
       child: SizedBox(
@@ -2158,20 +2156,10 @@ class _ScoreDrawerState extends ConsumerState<_ScoreDrawer> {
                     ),
                     SizedBox(height: ui(16)),
                     if (hasAttachment)
-                      _AttachmentCard(
-                        filename: fileName,
-                        medium: widget.submission.medium,
-                        onPreview: () => showStudentHomeworkSubmissionPreview(
-                          context,
-                          ref: ref,
-                          fileUrl: resolvedUrl,
-                          title: fileName,
-                          typeTag: widget.submission.medium,
-                          mediumLabel: widget.submission.medium,
-                          attachmentName: fileName,
-                        ),
-                        onDownload: () => openCoursewareUrl(resolvedUrl),
-                      )
+                      for (var i = 0; i < files.length; i++) ...[
+                        if (i > 0) SizedBox(height: ui(10)),
+                        _attachmentCardFor(files[i], i, files.length),
+                      ]
                     else
                       Container(
                         width: double.infinity,
@@ -2317,6 +2305,31 @@ class _ScoreDrawerState extends ConsumerState<_ScoreDrawer> {
     AppToast.show(context, '评分提交成功', type: AppToastType.success);
     await widget.onScored();
     if (mounted) Navigator.of(context).maybePop();
+  }
+
+  /// 单个上传文件的附件卡（在线科目可多次提交，逐个查看 / 播放）。
+  Widget _attachmentCardFor(String rawPath, int index, int total) {
+    final url = _resolveMediaUrl(rawPath) ?? '';
+    final medium = teacherSubmitMediaLabel(rawPath);
+    final baseName = _fileNameFromPath(
+      rawPath,
+      '${widget.submission.studentName}_${widget.item.title}.${_extOf(medium)}',
+    );
+    final label = total > 1 ? '第${index + 1}次 · $baseName' : baseName;
+    return _AttachmentCard(
+      filename: label,
+      medium: medium,
+      onPreview: () => showStudentHomeworkSubmissionPreview(
+        context,
+        ref: ref,
+        fileUrl: url,
+        title: baseName,
+        typeTag: medium,
+        mediumLabel: medium,
+        attachmentName: baseName,
+      ),
+      onDownload: () => openCoursewareUrl(url),
+    );
   }
 
   String _extOf(String medium) {

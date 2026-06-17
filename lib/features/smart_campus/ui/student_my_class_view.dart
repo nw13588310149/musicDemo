@@ -7,11 +7,12 @@
 //
 // 视觉（Figma 970 设计宽）：
 //   1. 顶部 banner（高 62）：xiaoquanHeaderBg 背景图，左返回按钮，居中"我的班级"标题
-//   2. 班级信息卡（高 163）：左上 班级名 + 副标题 + 三列信息（班主任 / 辅导员 / 教室）
+//   2. 班级信息卡（高 163）：背景图 class_info_bg + 左上 班级名 + 副标题 + 三列信息
 //      + 底部"教务与艺术实践办公室·列表展示12/42人"；右上 全班 / 男生 / 女生 三个
 //      100×100 紫色数字统计盒
 //   3. 班级通知：标题行（"班级通知" + "查看全部 >"）+ 白卡内一行多个紧凑通知预览
-//      （数据来自 `/student/schoolClassNotice/list`，点击弹窗展示全文）
+//      （数据来自 `POST /app/school/v2/student/schoolClassNotice/list`，
+//      传参 `{ "current": 1, "size": 10 }`，点击弹窗展示全文）
 //   4. 师资：三段（教务老师 / 班主任 / 任课老师），每段一张白卡内若干 308×171 灰底
 //      老师卡（任课卡右上多一个粉色课程标签）
 //   5. 同班同学：标题行（"同班同学" + 搜索框）+ 白卡内 124×124 学生卡 7 列网格，
@@ -35,8 +36,10 @@ import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/state/shell_controller.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/student_repository.dart';
+import 'widgets/smart_campus_page_banner.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
+const Color _kPageBg = Color(0xFFEFF3FC);
 const Color _kCardBg = Colors.white;
 const Color _kInnerGray = Color(0xFFF5F6FA);
 const Color _kTextDark = Color(0xFF0B081A);
@@ -135,13 +138,12 @@ class _StudentMyClassViewState extends ConsumerState<StudentMyClassView> {
     final ui = DashboardScaleScope.of(context).ui;
     final pageLoading = _loading;
 
-    return SingleChildScrollView(
-      padding: EdgeInsets.only(bottom: ui(24)),
-      child: Column(
+    return SmartCampusSecondaryPageShell(
+      backgroundColor: _kPageBg,
+      header: _MyClassBanner(onBack: widget.onBack),
+      body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _MyClassBanner(onBack: widget.onBack),
-          SizedBox(height: ui(16)),
           MainContentLoadingShell(
             loading: pageLoading,
             preserveChrome: true,
@@ -367,7 +369,7 @@ String _pickString(
 
 String _userDisplayName(Map<String, dynamic>? user) {
   if (user == null) return '—';
-  return _pickString(user, [
+  return _pickString(_flattenUserMap(user), [
     'nickname',
     'nickName',
     'realname',
@@ -375,10 +377,25 @@ String _userDisplayName(Map<String, dynamic>? user) {
   ], '—');
 }
 
-String _resolveAvatarUrl(Map<String, dynamic>? user) {
+String _pickAvatarUrl(Map<String, dynamic>? user) {
   if (user == null) return '';
-  final raw = _pickString(user, ['headUrl', 'avatar', 'avatarUrl'], '');
-  return raw.isEmpty ? '' : MediaUrl.resolve(raw);
+  final flat = _flattenUserMap(user);
+  return _pickString(flat, ['headUrl', 'avatar', 'avatarUrl'], '');
+}
+
+Map<String, dynamic> _flattenUserMap(Map<String, dynamic> user) {
+  final flat = Map<String, dynamic>.from(user);
+  for (final key in ['teacher', 'user', 'student']) {
+    final nested = _asMap(user[key]);
+    if (nested == null) continue;
+    nested.forEach((k, v) {
+      if (v == null) return;
+      final text = v.toString().trim();
+      if (text.isEmpty) return;
+      flat.putIfAbsent(k, () => v);
+    });
+  }
+  return flat;
 }
 
 _ParsedMySchoolClass _parseMySchoolClass(dynamic raw, String currentUserId) {
@@ -487,23 +504,33 @@ _FacultyMember _facultyFromUser(
   Map<String, dynamic> user, {
   required String role,
 }) {
-  final introduce = _pickString(user, ['introduce'], '');
-  final targetSchool = _pickString(user, ['targetSchool'], '');
-  final courseTag = _pickString(user, [
+  final flat = _flattenUserMap(user);
+  final introduce = _pickString(flat, ['introduce'], '');
+  final gender = _pickString(flat, ['gender'], '');
+  final genderLabel = gender.isNotEmpty && gender != '未知' ? gender : '—';
+  var courseTag = _pickString(user, [
     'courseTag',
     'subjectName',
     'courseName',
     'subject',
   ], '');
+  if (courseTag.isEmpty) {
+    courseTag = _pickString(flat, [
+      'courseTag',
+      'subjectName',
+      'courseName',
+      'subject',
+    ], '');
+  }
   return _FacultyMember(
     name: _userDisplayName(user),
     role: role,
-    location: targetSchool.isNotEmpty ? targetSchool : '—',
+    gender: genderLabel,
     description: introduce.isNotEmpty ? introduce : '—',
-    phone: _pickString(user, ['mobile'], '—'),
-    email: '—',
+    phone: _pickString(flat, ['mobile'], '—'),
+    email: _pickString(flat, ['email'], '—'),
     courseTag: courseTag.isEmpty ? null : courseTag,
-    avatarUrl: _resolveAvatarUrl(user),
+    avatarUrl: _pickAvatarUrl(user),
   );
 }
 
@@ -511,16 +538,17 @@ _ClassmateData _classmateFromUser(
   Map<String, dynamic> user, {
   required bool isSelf,
 }) {
-  final targetSchool = _pickString(user, ['targetSchool'], '');
-  final gender = _pickString(user, ['gender'], '');
+  final flat = _flattenUserMap(user);
+  final targetSchool = _pickString(flat, ['targetSchool'], '');
+  final gender = _pickString(flat, ['gender'], '');
   final major = targetSchool.isNotEmpty
       ? targetSchool
       : (gender.isNotEmpty && gender != '未知' ? gender : '—');
   return _ClassmateData(
     name: _userDisplayName(user),
     major: major,
-    role: _pickString(user, ['role', 'studentRole', 'identity'], ''),
-    avatarUrl: _resolveAvatarUrl(user),
+    role: _pickString(flat, ['role', 'studentRole', 'identity'], ''),
+    avatarUrl: _pickAvatarUrl(user),
     isSelf: isSelf,
   );
 }
@@ -662,11 +690,10 @@ class _ClassInfoCard extends StatelessWidget {
       height: ui(163),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(ui(16)),
-        gradient: const LinearGradient(
-          // 211deg ≈ 从右上向左下，颜色从白到 #FAF0FF
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-          colors: [Colors.white, Color(0xFFFAF0FF)],
+        image: DecorationImage(
+          image: AssetImage(AppAssets.studentMyClassInfoBg),
+          fit: BoxFit.cover,
+          alignment: Alignment.centerRight,
         ),
       ),
       child: Stack(
@@ -1269,7 +1296,7 @@ class _FacultyMember {
   const _FacultyMember({
     required this.name,
     required this.role,
-    required this.location,
+    required this.gender,
     required this.description,
     required this.phone,
     required this.email,
@@ -1279,7 +1306,7 @@ class _FacultyMember {
 
   final String name;
   final String role;
-  final String location;
+  final String gender;
   final String description;
   final String phone;
   final String email;
@@ -1443,7 +1470,7 @@ class _FacultyCard extends StatelessWidget {
                     ),
                     SizedBox(height: ui(8)),
                     Text(
-                      member.location,
+                      member.gender,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -1755,7 +1782,6 @@ class _ClassmateCard extends StatelessWidget {
             name: item.name,
             avatarUrl: item.avatarUrl,
             size: ui(36),
-            forceInitial: item.isSelf,
           ),
           SizedBox(height: ui(8)),
           Text(
@@ -1817,19 +1843,19 @@ class _UserAvatarBox extends StatelessWidget {
     required this.name,
     required this.avatarUrl,
     required this.size,
-    this.forceInitial = false,
   });
 
   final String name;
   final String avatarUrl;
   final double size;
-  final bool forceInitial;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final firstChar = name.isNotEmpty ? name.characters.first : '?';
-    final useInitial = forceInitial || avatarUrl.isEmpty;
+    final raw = avatarUrl.trim();
+    final resolvedUrl = raw.isEmpty ? '' : MediaUrl.resolve(raw);
+    final useInitial = resolvedUrl.isEmpty;
     return Container(
       width: size,
       height: size,
@@ -1851,14 +1877,19 @@ class _UserAvatarBox extends StatelessWidget {
               ),
             )
           : Image.network(
-              avatarUrl,
+              resolvedUrl,
               width: size,
               height: size,
               fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => Icon(
-                Icons.person_rounded,
-                size: ui(size * 0.55),
-                color: _kTextHint,
+              errorBuilder: (_, _, _) => Text(
+                firstChar,
+                style: TextStyle(
+                  fontSize: ui(13),
+                  color: Colors.white,
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w500,
+                  height: 1,
+                ),
               ),
             ),
     );

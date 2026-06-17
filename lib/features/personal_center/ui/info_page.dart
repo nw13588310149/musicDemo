@@ -199,9 +199,9 @@ class _InfoRows extends StatelessWidget {
         ),
         const _RowDivider(),
         _InfoRow(
-          title: '姓名',
-          value: user['realname']?.toString() ?? '',
-          showChevron: false,
+          title: '邮箱',
+          value: user['email']?.toString() ?? '',
+          onTap: () => _editEmail(context, controller, user),
         ),
         const _RowDivider(),
         _InfoRow(
@@ -510,6 +510,40 @@ class _AvatarImage extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────
 // 编辑动作：每个字段一个；除了头像和密码外都是简单弹窗。
 // ─────────────────────────────────────────────────────────────────────
+
+Future<void> _editEmail(
+  BuildContext context,
+  PersonalCenterController controller,
+  Map<String, dynamic> user,
+) async {
+  final value = await showTextInputDialog(
+    context: context,
+    title: '修改邮箱',
+    hintText: '请输入邮箱地址',
+    initialValue: user['email']?.toString() ?? '',
+    maxLength: 60,
+  );
+  if (value == null || value.isEmpty || !context.mounted) {
+    return;
+  }
+  if (!_isValidEmail(value)) {
+    _toast(context, '请输入正确的邮箱格式');
+    return;
+  }
+  final current = user['email']?.toString().trim() ?? '';
+  if (value == current) {
+    return;
+  }
+  final err = await controller.updateProfileFields(<String, dynamic>{
+    'email': value,
+  });
+  if (!context.mounted) return;
+  _toast(context, err ?? '修改成功！');
+}
+
+bool _isValidEmail(String value) {
+  return RegExp(r'^[\w.+-]+@[\w.-]+\.\w{2,}$').hasMatch(value);
+}
 
 Future<void> _editNickname(
   BuildContext context,

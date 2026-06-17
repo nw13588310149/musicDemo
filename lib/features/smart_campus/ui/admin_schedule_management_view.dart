@@ -46,6 +46,7 @@ import '../../../core/widgets/app_date_time_pickers.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/popup_selector_field.dart';
 import '../../../core/widgets/scaled_dialog.dart';
+import '../../../core/widgets/segment_toggle.dart';
 import '../../school/data/school_repository.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/admin_repository.dart';
@@ -68,7 +69,6 @@ const Color _kTextSecondary = Color(0xFF6D6B75);
 const Color _kTextHint = Color(0xFFB6B5BB);
 const Color _kTextDivider = Color(0xFFCECED1);
 const Color _kPurple = Color(0xFF8741FF);
-const Color _kRedBadge = Color(0xFFF04545);
 
 const Color _kStatusGreen = Color(0xFF0CAC40);
 const Color _kStatusPurple = Color(0xFFA773FF);
@@ -1391,102 +1391,14 @@ class _AdminTabSegment extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    // 不写死高度，让中文 line-height 1.2 自然撑开，避免 chip 文字被夹紧 / 裁切。
-    return Container(
-      padding: EdgeInsets.all(ui(4)),
-      decoration: BoxDecoration(
-        color: _kInnerGray,
-        borderRadius: BorderRadius.circular(ui(8)),
-        border: Border.all(color: _kBorderSoft),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _AdminTabChip(
-            label: '周课表与排课',
-            active: tab == _AdminScheduleTab.schedule,
-            onTap: () => onChanged(_AdminScheduleTab.schedule),
-          ),
-          SizedBox(width: ui(4)),
-          _AdminTabChip(
-            label: '小课申请审核',
-            active: tab == _AdminScheduleTab.applyAudit,
-            badge: _applyBadgeText,
-            onTap: () => onChanged(_AdminScheduleTab.applyAudit),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AdminTabChip extends StatelessWidget {
-  const _AdminTabChip({
-    required this.label,
-    required this.active,
-    required this.onTap,
-    this.badge,
-  });
-
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-  final String? badge;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(ui(6)),
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: ui(14), vertical: ui(7)),
-        decoration: BoxDecoration(
-          color: active ? _kTextDark : Colors.transparent,
-          borderRadius: BorderRadius.circular(ui(6)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              label,
-              maxLines: 1,
-              softWrap: false,
-              overflow: TextOverflow.visible,
-              style: TextStyle(
-                fontSize: ui(14),
-                color: active ? Colors.white : _kTextSecondary,
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w500,
-                height: 1.2,
-              ),
-            ),
-            if (badge != null) ...[
-              SizedBox(width: ui(6)),
-              Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: ui(5),
-                  vertical: ui(1),
-                ),
-                decoration: BoxDecoration(
-                  color: _kRedBadge,
-                  borderRadius: BorderRadius.circular(ui(20)),
-                ),
-                child: Text(
-                  badge!,
-                  style: TextStyle(
-                    fontSize: ui(10),
-                    color: Colors.white,
-                    fontFamily: 'Manrope',
-                    fontWeight: FontWeight.w800,
-                    height: 1.2,
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
+    return SegmentToggle(
+      selectedIndex: tab == _AdminScheduleTab.schedule ? 0 : 1,
+      options: [
+        const SegmentToggleOption(label: '周课表与排课'),
+        SegmentToggleOption(label: '小课申请审核', badge: _applyBadgeText),
+      ],
+      onChanged: (i) => onChanged(
+        i == 0 ? _AdminScheduleTab.schedule : _AdminScheduleTab.applyAudit,
       ),
     );
   }
@@ -1613,72 +1525,14 @@ class _ViewEditSegment extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      height: ui(32),
-      padding: EdgeInsets.all(ui(2)),
-      decoration: BoxDecoration(
-        color: _kInnerGray,
-        borderRadius: BorderRadius.circular(ui(8)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _SegChip(
-            label: '查看',
-            active: mode == _ScheduleMode.view,
-            onTap: () => onChanged(_ScheduleMode.view),
-          ),
-          _SegChip(
-            label: '编辑',
-            active: mode == _ScheduleMode.edit,
-            enabled: editEnabled,
-            onTap: () => onChanged(_ScheduleMode.edit),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SegChip extends StatelessWidget {
-  const _SegChip({
-    required this.label,
-    required this.active,
-    required this.onTap,
-    this.enabled = true,
-  });
-
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-  final bool enabled;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return InkWell(
-      onTap: enabled ? onTap : null,
-      borderRadius: BorderRadius.circular(ui(6)),
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(4)),
-        decoration: BoxDecoration(
-          color: active ? _kPurple : Colors.transparent,
-          borderRadius: BorderRadius.circular(ui(6)),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: ui(12),
-            color: active
-                ? Colors.white
-                : (enabled ? _kTextHint : const Color(0xFFD0CFD4)),
-            fontFamily: 'PingFang SC',
-            fontWeight: active ? AppFont.w500 : AppFont.w400,
-            height: 1,
-          ),
-        ),
-      ),
+    return SegmentToggle(
+      selectedIndex: mode == _ScheduleMode.view ? 0 : 1,
+      options: [
+        const SegmentToggleOption(label: '查看'),
+        SegmentToggleOption(label: '编辑', enabled: editEnabled),
+      ],
+      onChanged: (i) =>
+          onChanged(i == 0 ? _ScheduleMode.view : _ScheduleMode.edit),
     );
   }
 }

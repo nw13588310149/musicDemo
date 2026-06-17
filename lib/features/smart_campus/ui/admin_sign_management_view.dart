@@ -38,6 +38,7 @@ import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_assets.dart';
+import '../../../core/network/media_url.dart';
 import '../../../core/widgets/app_date_time_pickers.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/popup_selector_field.dart';
@@ -141,7 +142,6 @@ class _AdminSignManagementViewState extends State<AdminSignManagementView> {
             child: Material(
               color: Colors.transparent,
               child: _MakeupAuditDrawer(
-                records: const [],
                 onClose: () => Navigator.of(ctx).maybePop(),
                 onAuditDone: (remaining) {
                   setState(() => _pendingMakeupCount = remaining);
@@ -1928,28 +1928,100 @@ class _SmallClassStatusBadge extends StatelessWidget {
 // 补签审核右侧抽屉
 // =============================================================================
 
-class _MakeupAuditDrawer extends StatefulWidget {
+class _MakeupAuditDrawer extends ConsumerStatefulWidget {
   const _MakeupAuditDrawer({
-    required this.records,
     required this.onClose,
     required this.onAuditDone,
   });
 
-  final List<_MakeupRecord> records;
   final VoidCallback onClose;
   final void Function(int remaining) onAuditDone;
 
   @override
-  State<_MakeupAuditDrawer> createState() => _MakeupAuditDrawerState();
+  ConsumerState<_MakeupAuditDrawer> createState() => _MakeupAuditDrawerState();
 }
 
-class _MakeupAuditDrawerState extends State<_MakeupAuditDrawer> {
-  late final List<_MakeupRecord> _records;
+class _MakeupAuditDrawerState extends ConsumerState<_MakeupAuditDrawer> {
+  List<_MakeupRecord> _records = const [];
+  bool _loading = true;
+  String _error = '';
+
+  /// 正在审批中的记录 id（防重复点击 + 局部 loading）。
+  String _busyId = '';
 
   @override
   void initState() {
     super.initState();
-    _records = List.of(widget.records);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = '';
+    });
+    final res = await ref.read(adminRepositoryProvider).courseSignMakeupList();
+    if (!mounted) return;
+    if (res.isSuccess) {
+      final rows = _extractMakeupRows(res.data);
+      final records = rows
+          .map(_MakeupRecord.fromManagerMap)
+          .where((r) => r.id.isNotEmpty)
+          .toList();
+      setState(() {
+        _records = records;
+        _loading = false;
+      });
+      _reportPending();
+    } else {
+      setState(() {
+        _records = const [];
+        _loading = false;
+        _error = res.msg.isNotEmpty ? res.msg : '补签申请加载失败';
+      });
+    }
+  }
+
+  void _reportPending() {
+    final remaining = _records
+        .where((r) => r.status == _MakeupStatus.pending)
+        .length;
+    widget.onAuditDone(remaining);
+  }
+
+  Future<void> _audit(int index, int status, {String auditReason = ''}) async {
+    final record = _records[index];
+    if (record.id.isEmpty || _busyId.isNotEmpty) return;
+    setState(() => _busyId = record.id);
+    final res = await ref
+        .read(adminRepositoryProvider)
+        .courseSignMakeupAudit(
+          id: record.id,
+          status: status,
+          auditReason: auditReason,
+        );
+    if (!mounted) return;
+    setState(() => _busyId = '');
+    if (res.isSuccess) {
+      setState(() {
+        record.status = status == 1
+            ? _MakeupStatus.approved
+            : _MakeupStatus.rejected;
+        if (status == 2) record.rejectReason = auditReason;
+      });
+      _reportPending();
+      AppToast.show(
+        context,
+        status == 1 ? '已通过补签申请' : '已驳回补签申请',
+        type: AppToastType.success,
+      );
+    } else {
+      AppToast.show(
+        context,
+        res.msg.isNotEmpty ? res.msg : '操作失败，请重试',
+        type: AppToastType.error,
+      );
+    }
   }
 
   @override
@@ -2038,10 +2110,12 @@ class _MakeupAuditDrawerState extends State<_MakeupAuditDrawer> {
           ),
           // list
           Expanded(
-            child: _records.isEmpty
+            child: _loading
+                ? const Center(child: AppLoadingIndicator())
+                : _records.isEmpty
                 ? Center(
                     child: Text(
-                      '当前接口仅返回待处理数量，管理员补签审核明细与审批接口暂未开放',
+                      _error.isNotEmpty ? _error : '暂无补签申请',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: ui(13),
@@ -2050,36 +2124,24 @@ class _MakeupAuditDrawerState extends State<_MakeupAuditDrawer> {
                       ),
                     ),
                   )
-                : ListView.separated(
-                    padding: EdgeInsets.fromLTRB(
-                      ui(16),
-                      ui(16),
-                      ui(16),
-                      ui(20),
-                    ),
-                    itemCount: _records.length,
-                    separatorBuilder: (_, _) => SizedBox(height: ui(12)),
-                    itemBuilder: (ctx, i) => _MakeupAuditCard(
-                      record: _records[i],
-                      onApprove: () {
-                        setState(
-                          () => _records[i].status = _MakeupStatus.approved,
-                        );
-                        final remaining = _records
-                            .where((r) => r.status == _MakeupStatus.pending)
-                            .length;
-                        widget.onAuditDone(remaining);
-                      },
-                      onReject: (reason) {
-                        setState(() {
-                          _records[i].status = _MakeupStatus.rejected;
-                          _records[i].rejectReason = reason;
-                        });
-                        final remaining = _records
-                            .where((r) => r.status == _MakeupStatus.pending)
-                            .length;
-                        widget.onAuditDone(remaining);
-                      },
+                : RefreshIndicator(
+                    onRefresh: _load,
+                    child: ListView.separated(
+                      padding: EdgeInsets.fromLTRB(
+                        ui(16),
+                        ui(16),
+                        ui(16),
+                        ui(20),
+                      ),
+                      itemCount: _records.length,
+                      separatorBuilder: (_, _) => SizedBox(height: ui(12)),
+                      itemBuilder: (ctx, i) => _MakeupAuditCard(
+                        record: _records[i],
+                        busy: _busyId == _records[i].id,
+                        onApprove: () => _audit(i, 1),
+                        onReject: (reason) =>
+                            _audit(i, 2, auditReason: reason),
+                      ),
                     ),
                   ),
           ),
@@ -2094,11 +2156,15 @@ class _MakeupAuditCard extends StatelessWidget {
     required this.record,
     required this.onApprove,
     required this.onReject,
+    this.busy = false,
   });
 
   final _MakeupRecord record;
   final VoidCallback onApprove;
   final void Function(String reason) onReject;
+
+  /// 该卡审批中：禁用按钮，避免重复提交。
+  final bool busy;
 
   @override
   Widget build(BuildContext context) {
@@ -2138,34 +2204,84 @@ class _MakeupAuditCard extends StatelessWidget {
           // 申请人
           Row(
             children: [
-              _MiniAvatar(seed: record.applicantName, size: ui(32)),
+              _MiniAvatar(
+                seed: record.applicantName,
+                size: ui(32),
+                imageUrl: record.avatarUrl,
+              ),
               SizedBox(width: ui(8)),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    record.applicantName,
-                    style: TextStyle(
-                      fontSize: ui(13),
-                      color: _kTextDark,
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w600,
-                      height: 1,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            record.applicantName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: ui(13),
+                              color: _kTextDark,
+                              fontFamily: 'PingFang SC',
+                              fontWeight: AppFont.w600,
+                              height: 1,
+                            ),
+                          ),
+                        ),
+                        if (record.studentNo.isNotEmpty) ...[
+                          SizedBox(width: ui(6)),
+                          Text(
+                            record.studentNo,
+                            style: TextStyle(
+                              fontSize: ui(11),
+                              color: _kTextHint,
+                              fontFamily: 'PingFang SC',
+                              fontWeight: AppFont.w400,
+                              height: 1,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
+                    SizedBox(height: ui(2)),
+                    Text(
+                      record.applicantRole,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: ui(11),
+                        color: _kTextHint,
+                        fontFamily: 'PingFang SC',
+                        fontWeight: AppFont.w400,
+                        height: 1,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (record.signTypeLabel.isNotEmpty)
+                Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: ui(6),
+                    vertical: ui(2),
                   ),
-                  SizedBox(height: ui(2)),
-                  Text(
-                    record.applicantRole,
+                  decoration: BoxDecoration(
+                    color: _kPurpleSoftBg,
+                    borderRadius: BorderRadius.circular(ui(4)),
+                  ),
+                  child: Text(
+                    record.signTypeLabel,
                     style: TextStyle(
                       fontSize: ui(11),
-                      color: _kTextHint,
+                      color: _kPurple,
                       fontFamily: 'PingFang SC',
                       fontWeight: AppFont.w400,
                       height: 1,
                     ),
                   ),
-                ],
-              ),
+                ),
             ],
           ),
           SizedBox(height: ui(10)),
@@ -2184,7 +2300,10 @@ class _MakeupAuditCard extends StatelessWidget {
                 SizedBox(height: ui(6)),
                 _InfoLine(label: '补签课次', value: record.lessonDate),
                 SizedBox(height: ui(6)),
-                _InfoLine(label: '补签理由', value: record.reason),
+                _InfoLine(
+                  label: '补签理由',
+                  value: record.reason.isEmpty ? '—' : record.reason,
+                ),
                 SizedBox(height: ui(6)),
                 _InfoLine(
                   label: '类型',
@@ -2225,7 +2344,7 @@ class _MakeupAuditCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: () => _showRejectDialog(context),
+                    onPressed: busy ? null : () => _showRejectDialog(context),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: _kRed,
                       side: const BorderSide(color: _kRed),
@@ -2246,7 +2365,7 @@ class _MakeupAuditCard extends StatelessWidget {
                 SizedBox(width: ui(10)),
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: onApprove,
+                    onPressed: busy ? null : onApprove,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _kPurple,
                       foregroundColor: Colors.white,
@@ -2257,7 +2376,7 @@ class _MakeupAuditCard extends StatelessWidget {
                       padding: EdgeInsets.symmetric(vertical: ui(8)),
                     ),
                     child: Text(
-                      '通过',
+                      busy ? '处理中…' : '通过',
                       style: TextStyle(
                         fontSize: ui(13),
                         fontFamily: 'PingFang SC',
@@ -3008,18 +3127,13 @@ enum _SmallClassStep {
   adminConfirmed,
 }
 
-enum _ClassType {
-  large,
-
-  // Kept for parsing once the manager makeup-audit API is exposed.
-  // ignore: unused_field
-  small,
-}
+enum _ClassType { large, small }
 
 enum _MakeupStatus { pending, approved, rejected }
 
 class _MakeupRecord {
   _MakeupRecord({
+    required this.id,
     required this.applicantName,
     required this.applicantRole,
     required this.courseName,
@@ -3028,10 +3142,14 @@ class _MakeupRecord {
     required this.classType,
     required this.applyTime,
     required this.status,
-    // ignore: unused_element_parameter
+    this.signTypeLabel = '',
+    this.avatarUrl = '',
+    this.studentNo = '',
     this.rejectReason,
   });
 
+  /// 补签申请记录 id（审批接口入参）。
+  final String id;
   final String applicantName;
   final String applicantRole;
   final String courseName;
@@ -3039,6 +3157,102 @@ class _MakeupRecord {
   final String reason;
   final _ClassType classType;
   final String applyTime;
+
+  /// 补签类型（上课签/下课签/课堂补签）。
+  final String signTypeLabel;
+
+  /// 申请人头像（已 resolve 的完整地址）。
+  final String avatarUrl;
+
+  /// 学号。
+  final String studentNo;
   _MakeupStatus status;
   String? rejectReason;
+
+  static _MakeupRecord fromManagerMap(Map<dynamic, dynamic> m) {
+    String s(List<String> keys) {
+      for (final k in keys) {
+        final v = m[k];
+        if (v == null) continue;
+        final t = v.toString().trim();
+        if (t.isNotEmpty && t != 'null') return t;
+      }
+      return '';
+    }
+
+    int i(List<String> keys) {
+      for (final k in keys) {
+        final v = int.tryParse(m[k]?.toString() ?? '');
+        if (v != null) return v;
+      }
+      return 0;
+    }
+
+    final statusCode = i(['status', 'auditStatus']);
+    final status = switch (statusCode) {
+      1 => _MakeupStatus.approved,
+      2 => _MakeupStatus.rejected,
+      _ => _MakeupStatus.pending,
+    };
+    final type = i(['type', 'courseType', 'classType']);
+    final date = s(['courseDate', 'date']);
+    final line = i(['lineNum']);
+    final lessonDate = [
+      if (date.isNotEmpty) date,
+      if (line > 0) '第$line节',
+    ].join(' ');
+    final className = s(['className']);
+    final approveRemark = s(['approveRemark', 'auditReason', 'auditRemark']);
+    final studentName = s([
+      'studentName',
+      'studentRealname',
+      'studentNickname',
+      'realname',
+    ]);
+    final head = s(['studentHeadUrl', 'headUrl', 'teacherHeadUrl']);
+    return _MakeupRecord(
+      id: s(['id']),
+      applicantName: studentName.isNotEmpty ? studentName : '学生',
+      applicantRole: className.isNotEmpty ? className : '学生',
+      courseName: s(['subjectName', 'courseName', 'name']).isNotEmpty
+          ? s(['subjectName', 'courseName', 'name'])
+          : '未命名课程',
+      lessonDate: lessonDate.isEmpty ? '—' : lessonDate,
+      reason: s(['reason']),
+      classType: type == 0 ? _ClassType.large : _ClassType.small,
+      applyTime: s(['createTime', 'applyTime']),
+      status: status,
+      signTypeLabel: _makeupSignTypeLabel(s(['signType'])),
+      avatarUrl: head.isEmpty ? '' : MediaUrl.resolve(head),
+      studentNo: s(['studentNo', 'no']),
+      rejectReason: (status == _MakeupStatus.rejected && approveRemark.isNotEmpty)
+          ? approveRemark
+          : null,
+    );
+  }
+}
+
+/// 归一化补签类型标签，兼容中文 / 数字串 / 异常值。
+String _makeupSignTypeLabel(String raw) {
+  final t = raw.trim();
+  if (t.isEmpty) return '课堂补签';
+  if (t.contains('上课')) return '上课签';
+  if (t.contains('下课')) return '下课签';
+  if (t == '1') return '上课签';
+  if (t == '2') return '下课签';
+  return '课堂补签';
+}
+
+/// 从分页响应中取出补签记录数组（`records` / `list` / `rows` 或数组）。
+List<Map<dynamic, dynamic>> _extractMakeupRows(dynamic data) {
+  if (data is List) {
+    return data.whereType<Map<dynamic, dynamic>>().toList();
+  }
+  if (data is Map) {
+    for (final key in ['records', 'list', 'rows']) {
+      final v = data[key];
+      if (v is List) return v.whereType<Map<dynamic, dynamic>>().toList();
+    }
+  }
+  return const [];
 }

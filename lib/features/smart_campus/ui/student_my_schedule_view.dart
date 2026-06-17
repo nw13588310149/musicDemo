@@ -334,6 +334,7 @@ class _StudentMyScheduleViewState extends ConsumerState<StudentMyScheduleView> {
 
     return SmartCampusSchedulePageShell(
       backgroundColor: _kCardBg,
+      bodyScrollable: false,
       header: _ScheduleBanner(
         week: _currentWeek,
         dateRange: _dateRangeLabel,
@@ -654,7 +655,7 @@ class _ChevronButton extends StatelessWidget {
 // 网格主体：时间列（左，冻结）+ 日期区（右，横滚动）
 // =============================================================================
 
-class _ScheduleGrid extends StatelessWidget {
+class _ScheduleGrid extends StatefulWidget {
   const _ScheduleGrid({
     required this.slots,
     required this.days,
@@ -673,19 +674,46 @@ class _ScheduleGrid extends StatelessWidget {
   final bool loading;
 
   @override
+  State<_ScheduleGrid> createState() => _ScheduleGridState();
+}
+
+class _ScheduleGridState extends State<_ScheduleGrid> {
+  final ScrollController _verticalController = ScrollController();
+  final ScrollController _horizontalController = ScrollController();
+  final ScrollController _headerHorizontalController = ScrollController();
+  bool _syncingHorizontal = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _horizontalController.addListener(_syncHeaderHorizontalScroll);
+  }
+
+  void _syncHeaderHorizontalScroll() {
+    if (_syncingHorizontal || !_headerHorizontalController.hasClients) return;
+    _syncingHorizontal = true;
+    _headerHorizontalController.jumpTo(_horizontalController.offset);
+    _syncingHorizontal = false;
+  }
+
+  @override
+  void dispose() {
+    _horizontalController.removeListener(_syncHeaderHorizontalScroll);
+    _verticalController.dispose();
+    _horizontalController.dispose();
+    _headerHorizontalController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    if (loading) {
-      return Container(
-        height: ui(420),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(ui(12)),
-          border: Border.all(color: _kBorderSoft),
-        ),
-        child: const AppLoadingIndicator(),
-      );
+    if (widget.loading) {
+      return const Center(child: AppLoadingIndicator());
     }
+
+    final daysWidth = ui(_kDayColWidth) * widget.days.length;
+
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(ui(12)),
@@ -693,18 +721,50 @@ class _ScheduleGrid extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(ui(12)),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Column(
           children: [
-            // 时间列：完全冻结，不横滚
-            _TimeColumn(slots: slots),
-            // 日期区：横向滚动 7 × 200 宽
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: ui(_kTimeColWidth),
+                  child: const _TimeHeader(),
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    controller: _headerHorizontalController,
+                    physics: const NeverScrollableScrollPhysics(),
+                    child: SizedBox(
+                      width: daysWidth,
+                      child: _DaysHeaderRow(days: widget.days),
+                    ),
+                  ),
+                ),
+              ],
+            ),
             Expanded(
               child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: SizedBox(
-                  width: ui(_kDayColWidth) * days.length,
-                  child: _DaysArea(slots: slots, days: days, cells: cells),
+                controller: _verticalController,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _TimeColumnBody(slots: widget.slots),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        controller: _horizontalController,
+                        child: SizedBox(
+                          width: daysWidth,
+                          child: _DaysBodyArea(
+                            slots: widget.slots,
+                            days: widget.days,
+                            cells: widget.cells,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -719,8 +779,8 @@ class _ScheduleGrid extends StatelessWidget {
 // 时间列（冻结）
 // =============================================================================
 
-class _TimeColumn extends StatelessWidget {
-  const _TimeColumn({required this.slots});
+class _TimeColumnBody extends StatelessWidget {
+  const _TimeColumnBody({required this.slots});
 
   final List<_TimeSlotData> slots;
 
@@ -731,9 +791,6 @@ class _TimeColumn extends StatelessWidget {
       width: ui(_kTimeColWidth),
       child: Column(
         children: [
-          // 表头：60 高，#F5F6FA 底，"日期" / "节次" + 斜分割线
-          _TimeHeader(),
-          // 各时段
           for (final slot in slots)
             Container(
               width: double.infinity,
@@ -754,6 +811,7 @@ class _TimeColumn extends StatelessWidget {
 }
 
 class _TimeHeader extends StatelessWidget {
+  const _TimeHeader();
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
@@ -862,8 +920,8 @@ class _TimeRange extends StatelessWidget {
 // 日期区：表头 + 多行课卡
 // =============================================================================
 
-class _DaysArea extends StatelessWidget {
-  const _DaysArea({
+class _DaysBodyArea extends StatelessWidget {
+  const _DaysBodyArea({
     required this.slots,
     required this.days,
     required this.cells,
@@ -877,13 +935,11 @@ class _DaysArea extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        _DaysHeaderRow(days: days),
         for (var slotIdx = 0; slotIdx < slots.length; slotIdx++)
           _DayBodyRow(
             slotEnd: slots[slotIdx].end,
             height: slots[slotIdx].height,
             days: days,
-            // cells 第一维是 day，第二维是 slot；按行收集 7 列在该 slot 的卡片
             rowCells: [
               for (var dayIdx = 0; dayIdx < days.length; dayIdx++)
                 cells[dayIdx][slotIdx],

@@ -9,13 +9,11 @@
 //   1. 顶部 banner（62 高）：左→右白→#F9EEFF 渐变，左 32 返回 + 中
 //      "查寝管理" 16/600 + 副标题（仅展示本人「<姓名>」的查寝记录;补卡需
 //      宿管/班主任审核），其中名字段用紫色 #8741FF 高亮。
-//   2. 4 张统计卡（一行平铺，gap 12，100 高）：
-//      A. 「宿舍床位」14/500 + 床位 18/500（女生宿舍3号楼 612） + 蓝色
-//         楼宇图标小方块（米色淡色光晕）
-//      B. 「正常打卡」14/500 + 数字 32/500
-//      C. 「异常（未打/晚归）」14/500 + 数字 32/500 + 紫色异常图标
-//      D. 「补卡待审」14/500 + 数字 32/500 + "共 N 条申请"灰小字
-//   3. 列表区："我的查寝记录" 18/500 + 右侧白底 全部/异常 双 tab。
+//   2. 4 张统计卡（距标题栏 16；一行平铺，gap 12，100 高）：
+//      A. 「宿舍床位」内容与数字区底对齐
+//      …
+//   3. 标题栏右侧缩小版「查寝记录 / 补卡申请」切换；列表区距统计卡 20：
+//      "我的查寝记录" 18/500 + 右侧白底 全部/异常 双 tab，距下方卡片 20。
 //   4. 卡片网格（3 列，每张 312 宽，padding 12，gradient 207deg #FAF0FF→white）：
 //      - 头部：场次（晚查寝/晨查寝） 18/600 + 状态徽章
 //        正常 #A773FF / 未打卡 #FF323C / 迟到 #325BFF。
@@ -24,7 +22,7 @@
 //        #FF323C 高亮）。
 //      - 备注：灰小字。
 //   5. 顶部右上角浮按钮「申请补卡」12/600 + 紫色多日历图标 → 弹出
-//      `GradientHeaderDialog` 表单（日期 / 场次 / 补卡说明 + 取消/确认）。
+//      `GradientHeaderDialog` 表单（日期 / 补卡说明 + 取消/确认；场次默认晚打卡）。
 //
 // 颜色 / 字体：
 //   主紫 #8741FF / Banner 渐变 white → #F9EEFF / 卡片 gradient #FAF0FF→white；
@@ -62,6 +60,9 @@ const Color _kPurple = Color(0xFF8741FF);
 const Color _kPurpleStatus = Color(0xFFA773FF);
 const Color _kRed = Color(0xFFFF323C);
 const Color _kBlue = Color(0xFF325BFF);
+
+/// 标题栏右侧「申请补卡 / 查寝记录·补卡申请」控件统一高度。
+const double _kBannerControlHeight = 32;
 
 // —— 顶级视图 ——————————————————————————————————————————————————————
 
@@ -126,12 +127,15 @@ class _StudentDormCheckViewState extends ConsumerState<StudentDormCheckView> {
         .read(studentDormitoryControllerProvider.notifier)
         .submitMakeup(
           date: result.date,
-          sceneLabel: result.scene,
+          sceneLabel: _DormResubmitFormResult.defaultScene,
           reason: result.note,
         );
     if (!mounted) return;
     if (response.isSuccess) {
-      AppToast.show(context, '已提交补卡申请：${result.dateLabel} · ${result.scene}');
+      AppToast.show(
+        context,
+        '已提交补卡申请：${result.dateLabel} · ${_DormResubmitFormResult.defaultScene}',
+      );
     } else {
       AppToast.show(context, response.displayMsg);
     }
@@ -219,70 +223,62 @@ class _StudentDormCheckViewState extends ConsumerState<StudentDormCheckView> {
         ? state.pendingMakeupCount
         : state.stat.pendingMakeupCount;
     final displayName = widget.studentName.isEmpty ? '我' : widget.studentName;
-    return Container(
-      color: _kPageBg,
-      child: SingleChildScrollView(
-        padding: EdgeInsets.only(bottom: ui(24)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _DormBanner(
-              onBack: widget.onBack,
-              studentName: displayName,
-              onApplyResubmit: state.submittingMakeup ? null : _openApplyDialog,
-            ),
-            if (state.loading) const LinearProgressIndicator(minHeight: 2),
-            if (state.error.isNotEmpty)
-              Padding(
-                padding: EdgeInsets.only(top: ui(8)),
-                child: Text(
-                  state.error,
-                  style: TextStyle(fontSize: ui(12), color: _kRed),
-                ),
+    return SmartCampusSecondaryPageShell(
+      backgroundColor: _kPageBg,
+      header: _DormBanner(
+        onBack: widget.onBack,
+        studentName: displayName,
+        onApplyResubmit: state.submittingMakeup ? null : _openApplyDialog,
+        section: state.listSection,
+        onSection: (section) => ref
+            .read(studentDormitoryControllerProvider.notifier)
+            .selectListSection(section),
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (state.error.isNotEmpty)
+            Padding(
+              padding: EdgeInsets.only(top: ui(8)),
+              child: Text(
+                state.error,
+                style: TextStyle(fontSize: ui(12), color: _kRed),
               ),
-            SizedBox(height: ui(16)),
-            _DormStatsRow(
-              dorm: dormLabel,
-              normal: normalCount,
-              abnormal: abnormalCount,
-              pendingResubmits: pendingMakeups,
             ),
-            SizedBox(height: ui(28)),
-            _MainSectionHeader(
-              section: state.listSection,
-              onSection: (section) => ref
-                  .read(studentDormitoryControllerProvider.notifier)
-                  .selectListSection(section),
+          _DormStatsRow(
+            dorm: dormLabel,
+            normal: normalCount,
+            abnormal: abnormalCount,
+            pendingResubmits: pendingMakeups,
+          ),
+          SizedBox(height: ui(8)),
+          if (state.loading &&
+              ((state.listSection ==
+                          StudentDormitoryListSection.checkRecords &&
+                      records.isEmpty) ||
+                  (state.listSection !=
+                          StudentDormitoryListSection.checkRecords &&
+                      state.makeupItems.isEmpty)))
+            Padding(
+              padding: EdgeInsets.symmetric(vertical: ui(40)),
+              child: const Center(child: AppLoadingIndicator()),
+            )
+          else if (state.listSection ==
+              StudentDormitoryListSection.checkRecords) ...[
+            _SectionHeader(tab: _tab, onTab: (t) => setState(() => _tab = t)),
+            SizedBox(height: ui(8)),
+            _DormCardsGrid(
+              records: visible,
+              onTap: (record) => unawaited(
+                _showCheckDetail(record.id, '${record.session} · 查寝详情'),
+              ),
             ),
-            SizedBox(height: ui(16)),
-            if (state.loading &&
-                ((state.listSection ==
-                            StudentDormitoryListSection.checkRecords &&
-                        records.isEmpty) ||
-                    (state.listSection !=
-                            StudentDormitoryListSection.checkRecords &&
-                        state.makeupItems.isEmpty)))
-              Padding(
-                padding: EdgeInsets.symmetric(vertical: ui(40)),
-                child: const Center(child: AppLoadingIndicator()),
-              )
-            else if (state.listSection ==
-                StudentDormitoryListSection.checkRecords) ...[
-              _SectionHeader(tab: _tab, onTab: (t) => setState(() => _tab = t)),
-              SizedBox(height: ui(16)),
-              _DormCardsGrid(
-                records: visible,
-                onTap: (record) => unawaited(
-                  _showCheckDetail(record.id, '${record.session} · 查寝详情'),
-                ),
-              ),
-            ] else
-              _MakeupCardsGrid(
-                items: state.makeupItems,
-                onTap: (item) => unawaited(_showMakeupDetail(item)),
-              ),
-          ],
-        ),
+          ] else
+            _MakeupCardsGrid(
+              items: state.makeupItems,
+              onTap: (item) => unawaited(_showMakeupDetail(item)),
+            ),
+        ],
       ),
     );
   }
@@ -297,11 +293,15 @@ class _DormBanner extends StatelessWidget {
     required this.onBack,
     required this.studentName,
     required this.onApplyResubmit,
+    required this.section,
+    required this.onSection,
   });
 
   final VoidCallback onBack;
   final String studentName;
   final VoidCallback? onApplyResubmit;
+  final StudentDormitoryListSection section;
+  final ValueChanged<StudentDormitoryListSection> onSection;
 
   @override
   Widget build(BuildContext context) {
@@ -312,27 +312,48 @@ class _DormBanner extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       padding: EdgeInsets.symmetric(horizontal: ui(12)),
       decoration: smartCampusPageBannerDecoration(ui),
-      child: Row(
+      child: Stack(
         children: [
-          _BackButton(onTap: onBack),
-          Expanded(
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: ui(12)),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    '查寝管理',
-                    style: TextStyle(
-                      fontSize: ui(16),
-                      color: _kTextDark,
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w600,
-                      height: 1.1,
-                    ),
+          Positioned(
+            left: ui(12),
+            top: ui(15),
+            child: _BackButton(onTap: onBack),
+          ),
+          Positioned(
+            right: ui(12),
+            top: ui(15),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _ApplyResubmitButton(onTap: onApplyResubmit),
+                SizedBox(width: ui(8)),
+                _MainSectionHeader(
+                  section: section,
+                  onSection: onSection,
+                  compact: true,
+                ),
+              ],
+            ),
+          ),
+          Positioned.fill(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  '查寝管理',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: ui(16),
+                    color: _kTextDark,
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w600,
+                    height: 1.1,
                   ),
-                  SizedBox(height: ui(4)),
-                  RichText(
+                ),
+                SizedBox(height: ui(4)),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: ui(280)),
+                  child: RichText(
                     textAlign: TextAlign.center,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -354,11 +375,10 @@ class _DormBanner extends StatelessWidget {
                       ],
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
-          _ApplyResubmitButton(onTap: onApplyResubmit),
         ],
       ),
     );
@@ -407,7 +427,7 @@ class _ApplyResubmitButton extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(ui(8)),
       child: Container(
-        height: ui(32),
+        height: ui(_kBannerControlHeight),
         padding: EdgeInsets.symmetric(horizontal: ui(12)),
         alignment: Alignment.center,
         decoration: BoxDecoration(
@@ -418,7 +438,12 @@ class _ApplyResubmitButton extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.calendar_today_outlined, size: ui(14), color: _kPurple),
+            Image.asset(
+              AppAssets.dormCheckApplyMakeupIcon,
+              width: ui(16),
+              height: ui(16),
+              fit: BoxFit.contain,
+            ),
             SizedBox(width: ui(6)),
             Text(
               '申请补卡',
@@ -457,42 +482,46 @@ class _DormStatsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Row(
-      children: [
-        Expanded(
-          child: _DormStatCard(
-            backgroundAsset: AppAssets.dormCheckStatCard1,
-            label: '宿舍床位',
-            value: dorm,
-            valueIsText: true,
+    return SizedBox(
+      height: ui(100),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: _DormStatCard(
+              backgroundAsset: AppAssets.dormCheckStatCard1,
+              label: '宿舍床位',
+              value: dorm,
+              valueIsText: true,
+            ),
           ),
-        ),
-        SizedBox(width: ui(12)),
-        Expanded(
-          child: _DormStatCard(
-            backgroundAsset: AppAssets.dormCheckStatCard2,
-            label: '正常打卡',
-            value: '$normal',
+          SizedBox(width: ui(12)),
+          Expanded(
+            child: _DormStatCard(
+              backgroundAsset: AppAssets.dormCheckStatCard2,
+              label: '正常打卡',
+              value: '$normal',
+            ),
           ),
-        ),
-        SizedBox(width: ui(12)),
-        Expanded(
-          child: _DormStatCard(
-            backgroundAsset: AppAssets.dormCheckStatCard3,
-            label: '异常（未打/晚归）',
-            value: '$abnormal',
+          SizedBox(width: ui(12)),
+          Expanded(
+            child: _DormStatCard(
+              backgroundAsset: AppAssets.dormCheckStatCard3,
+              label: '异常（未打/晚归）',
+              value: '$abnormal',
+            ),
           ),
-        ),
-        SizedBox(width: ui(12)),
-        Expanded(
-          child: _DormStatCard(
-            backgroundAsset: AppAssets.dormCheckStatCard4,
-            label: '补卡待审',
-            value: '$pendingResubmits',
-            sublabel: '共$pendingResubmits条申请',
+          SizedBox(width: ui(12)),
+          Expanded(
+            child: _DormStatCard(
+              backgroundAsset: AppAssets.dormCheckStatCard4,
+              label: '补卡待审',
+              value: '$pendingResubmits',
+              sublabel: '共$pendingResubmits条申请',
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -515,80 +544,80 @@ class _DormStatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return ConstrainedBox(
-      constraints: BoxConstraints(minHeight: ui(100)),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(ui(12)),
-        child: Container(
-          padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(14)),
-          decoration: BoxDecoration(
-            image: DecorationImage(
-              image: AssetImage(backgroundAsset),
-              fit: BoxFit.cover,
-            ),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(ui(12)),
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(14)),
+        decoration: BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage(backgroundAsset),
+            fit: BoxFit.cover,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: ui(14),
-                  color: _kTextDark,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w500,
-                  height: 1,
-                ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: ui(14),
+                color: _kTextDark,
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w500,
+                height: 1,
               ),
-              SizedBox(height: ui(8)),
-              if (valueIsText)
-                Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: ui(18),
-                    color: _kTextDark,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w500,
-                    height: 1.1,
-                  ),
-                )
-              else
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      value,
-                      style: TextStyle(
-                        fontSize: ui(32),
-                        color: _kTextDark,
-                        fontFamily: 'Barlow',
-                        fontWeight: FontWeight.w500,
-                        height: 1.0,
-                      ),
-                    ),
-                    if (sublabel != null) ...[
-                      SizedBox(width: ui(8)),
-                      Padding(
-                        padding: EdgeInsets.only(bottom: ui(2)),
-                        child: Text(
-                          sublabel!,
-                          style: TextStyle(
-                            fontSize: ui(12),
-                            color: _kTextHint,
-                            fontFamily: 'PingFang SC',
-                            fontWeight: AppFont.w400,
-                            height: 1,
-                          ),
+            ),
+            SizedBox(height: ui(8)),
+            Expanded(
+              child: Align(
+                alignment: Alignment.bottomLeft,
+                child: valueIsText
+                    ? Text(
+                        value,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: ui(18),
+                          color: _kTextDark,
+                          fontFamily: 'PingFang SC',
+                          fontWeight: AppFont.w500,
+                          height: 1,
                         ),
+                      )
+                    : Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            value,
+                            style: TextStyle(
+                              fontSize: ui(32),
+                              color: _kTextDark,
+                              fontFamily: 'Barlow',
+                              fontWeight: FontWeight.w500,
+                              height: 1,
+                            ),
+                          ),
+                          if (sublabel != null) ...[
+                            SizedBox(width: ui(8)),
+                            Padding(
+                              padding: EdgeInsets.only(bottom: ui(2)),
+                              child: Text(
+                                sublabel!,
+                                style: TextStyle(
+                                  fontSize: ui(12),
+                                  color: _kTextHint,
+                                  fontFamily: 'PingFang SC',
+                                  fontWeight: AppFont.w400,
+                                  height: 1,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
-                    ],
-                  ],
-                ),
-            ],
-          ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -605,36 +634,44 @@ class _MainSectionHeader extends StatelessWidget {
   const _MainSectionHeader({
     required this.section,
     required this.onSection,
+    this.compact = false,
   });
 
   final StudentDormitoryListSection section;
   final ValueChanged<StudentDormitoryListSection> onSection;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final outerHeight = ui(compact ? _kBannerControlHeight : 44);
+    final outerRadius = ui(compact ? 8 : 8);
+    final inset = ui(compact ? 4 : 4);
     return Container(
-      height: ui(44),
-      padding: EdgeInsets.all(ui(4)),
+      height: outerHeight,
+      padding: EdgeInsets.all(inset),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(8)),
+        borderRadius: BorderRadius.circular(outerRadius),
         border: Border.all(color: _kBorderSoft),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _TabPill(
             label: '查寝记录',
             active: section == StudentDormitoryListSection.checkRecords,
             onTap: () => onSection(StudentDormitoryListSection.checkRecords),
+            compact: compact,
           ),
-          SizedBox(width: ui(4)),
+          SizedBox(width: ui(compact ? 4 : 4)),
           _TabPill(
             label: '补卡申请',
             active: section == StudentDormitoryListSection.makeupApplications,
             onTap: () =>
                 onSection(StudentDormitoryListSection.makeupApplications),
+            compact: compact,
           ),
         ],
       ),
@@ -699,30 +736,33 @@ class _TabPill extends StatelessWidget {
     required this.label,
     required this.active,
     required this.onTap,
+    this.compact = false,
   });
 
   final String label;
   final bool active;
   final VoidCallback onTap;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final pillRadius = ui(compact ? 6 : 6);
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(ui(6)),
+      borderRadius: BorderRadius.circular(pillRadius),
       child: Container(
-        height: ui(36),
-        padding: EdgeInsets.symmetric(horizontal: ui(16)),
+        height: compact ? null : ui(36),
+        padding: EdgeInsets.symmetric(horizontal: ui(compact ? 10 : 16)),
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: active ? _kTextDark : Colors.transparent,
-          borderRadius: BorderRadius.circular(ui(6)),
+          borderRadius: BorderRadius.circular(pillRadius),
         ),
         child: Text(
           label,
           style: TextStyle(
-            fontSize: ui(14),
+            fontSize: ui(compact ? 12 : 14),
             color: active ? Colors.white : _kTextSecondary,
             fontFamily: 'PingFang SC',
             fontWeight: AppFont.w500,
@@ -812,13 +852,9 @@ class _DormCard extends StatelessWidget {
       child: Container(
       padding: EdgeInsets.all(ui(12)),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-          colors: [Color(0xFFFAF0FF), Colors.white],
-        ),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(ui(16)),
-        border: Border.all(color: Colors.white),
+        border: Border.all(color: _kBorderSoft),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1151,27 +1187,14 @@ class _DormResubmitFormResult {
   const _DormResubmitFormResult({
     required this.date,
     required this.dateLabel,
-    required this.scene,
     required this.note,
   });
 
+  static const defaultScene = '晚打卡';
+
   final DateTime date;
   final String dateLabel;
-  final String scene;
   final String note;
-}
-
-enum _ResubmitScene { morning, evening }
-
-extension on _ResubmitScene {
-  String get label {
-    switch (this) {
-      case _ResubmitScene.morning:
-        return '晨打卡';
-      case _ResubmitScene.evening:
-        return '晚打卡';
-    }
-  }
 }
 
 class _DormResubmitDialog extends StatefulWidget {
@@ -1183,7 +1206,6 @@ class _DormResubmitDialog extends StatefulWidget {
 
 class _DormResubmitDialogState extends State<_DormResubmitDialog> {
   DateTime? _date;
-  _ResubmitScene _scene = _ResubmitScene.evening;
   final _noteCtrl = TextEditingController();
 
   @override
@@ -1223,7 +1245,6 @@ class _DormResubmitDialogState extends State<_DormResubmitDialog> {
       _DormResubmitFormResult(
         date: _date!,
         dateLabel: _dateText(),
-        scene: _scene.label,
         note: _noteCtrl.text.trim(),
       ),
     );
@@ -1250,24 +1271,6 @@ class _DormResubmitDialogState extends State<_DormResubmitDialog> {
             _FieldLabel('日期'),
             SizedBox(height: ui(10)),
             _DatePickerField(text: _dateText(), onTap: _pickDate),
-            SizedBox(height: ui(15)),
-            _FieldLabel('场次'),
-            SizedBox(height: ui(10)),
-            Row(
-              children: [
-                _ScenePill(
-                  label: _ResubmitScene.evening.label,
-                  active: _scene == _ResubmitScene.evening,
-                  onTap: () => setState(() => _scene = _ResubmitScene.evening),
-                ),
-                SizedBox(width: ui(12)),
-                _ScenePill(
-                  label: _ResubmitScene.morning.label,
-                  active: _scene == _ResubmitScene.morning,
-                  onTap: () => setState(() => _scene = _ResubmitScene.morning),
-                ),
-              ],
-            ),
             SizedBox(height: ui(15)),
             _FieldLabel('补卡说明'),
             SizedBox(height: ui(10)),
@@ -1337,47 +1340,6 @@ class _DatePickerField extends StatelessWidget {
             ),
             Icon(Icons.calendar_today_outlined, size: ui(16), color: _kPurple),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ScenePill extends StatelessWidget {
-  const _ScenePill({
-    required this.label,
-    required this.active,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(ui(8)),
-      child: Container(
-        height: ui(32),
-        padding: EdgeInsets.symmetric(horizontal: ui(24)),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: active ? _kTextDark : Colors.white,
-          borderRadius: BorderRadius.circular(ui(8)),
-          border: Border.all(color: _kBorderSoft),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: ui(14),
-            color: active ? Colors.white : _kTextSecondary,
-            fontFamily: 'PingFang SC',
-            fontWeight: AppFont.w400,
-            height: 1,
-          ),
         ),
       ),
     );

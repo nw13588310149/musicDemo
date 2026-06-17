@@ -240,8 +240,7 @@ class _ShellScaffoldState extends ConsumerState<ShellScaffold> {
   void _navigate(BuildContext context, WidgetRef ref, String route) {
     final navigator = Navigator.of(context);
 
-    // Web 端全屏二级页（如微校官网 iframe）可能漏点，Shell 侧栏仍可响应。
-    // 切换主导航前先 pop 掉栈顶 overlay route，避免其返回按钮叠在 Shell 上。
+    // 切换主导航前先 pop 掉栈顶 overlay route，避免其叠在 Shell 上。
     if (navigator.canPop()) {
       navigator.popUntil((r) => r.isFirst);
     }

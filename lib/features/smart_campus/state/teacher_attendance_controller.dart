@@ -141,7 +141,7 @@ class TeacherAttendanceController
 
   Future<List<CourseLineTimeConfig>> _loadTimeConfigs() async {
     var configs = kDefaultCourseLineTimeConfigs;
-    final classResp = await _repository.classList();
+    final classResp = await _repository.classList(isClassTeacher: 1);
     if (!classResp.isSuccess) return configs;
 
     final classes = parseCourseSignClassList(classResp.data);

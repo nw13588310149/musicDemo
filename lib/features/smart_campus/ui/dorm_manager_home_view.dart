@@ -25,8 +25,8 @@ import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 /// 2. **宿管 6 项快捷入口卡**（697×255）：5+1 网格，每格 44×44 `#EAE5FF`
 ///    圆角底 + 28×28 图标 + 14/500 文案。
 ///    - 按宿舍查寝（16.png）/ 查寝历史（17.png）/ 宿管请假（19.png）/
-///      校圈（adminHome/10.png）
-///    - 群聊（adminHome/8.png）/ 校长信箱（adminHome/9.png）
+///      校圈（home_actions/dorm_manager/school_circle.png）
+///    - 群聊（home_actions/dorm_manager/group_chat.png）/ 校长信箱（principal_mailbox.png）
 /// 3. **当前事项 + 今日值班** 两张 340×340 大白卡并排：
 ///    - 当前事项：单一灰底 92 高时间卡（紫色「晚查」徽标 + 21:50-22:25 +
 ///      "晚查寝预备·设备与名单核对"）
@@ -201,13 +201,34 @@ class _QuickAction {
 }
 
 const _dormQuickActions = <_QuickAction>[
-  _QuickAction('按宿舍查寝', 'assets/images/schoolA/16.png'),
-  _QuickAction('查寝历史', 'assets/images/schoolA/17.png'),
-  _QuickAction('打卡管理', 'assets/images/schoolA/18.png'),
-  _QuickAction('宿管请假', 'assets/images/schoolA/19.png'),
-  _QuickAction('校圈', 'assets/images/adminHome/10.png'),
-  _QuickAction('群聊', 'assets/images/adminHome/8.png'),
-  _QuickAction('校长信箱', 'assets/images/adminHome/9.png'),
+  _QuickAction(
+    '按宿舍查寝',
+    'assets/images/smartCampus/home_actions/dorm_manager/dorm_check_by_room.png',
+  ),
+  _QuickAction(
+    '查寝历史',
+    'assets/images/smartCampus/home_actions/dorm_manager/dorm_history.png',
+  ),
+  _QuickAction(
+    '打卡管理',
+    'assets/images/smartCampus/home_actions/dorm_manager/punch_management.png',
+  ),
+  _QuickAction(
+    '宿管请假',
+    'assets/images/smartCampus/home_actions/dorm_manager/dorm_leave.png',
+  ),
+  _QuickAction(
+    '校圈',
+    'assets/images/smartCampus/home_actions/dorm_manager/school_circle.png',
+  ),
+  _QuickAction(
+    '群聊',
+    'assets/images/smartCampus/home_actions/dorm_manager/group_chat.png',
+  ),
+  _QuickAction(
+    '校长信箱',
+    'assets/images/smartCampus/home_actions/dorm_manager/principal_mailbox.png',
+  ),
 ];
 
 class _DutyTask {

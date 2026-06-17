@@ -595,7 +595,7 @@ class _TeacherHomeworkReviewViewState
   }
 
   Future<void> _loadClassList() async {
-    final res = await ref.read(teacherRepositoryProvider).classList();
+    final res = await ref.read(teacherRepositoryProvider).classList(isClassTeacher: 1);
     if (!mounted) return;
     if (res.isSuccess && res.data is List) {
       final list = (res.data as List).whereType<Map>().toList();
@@ -2317,7 +2317,7 @@ class _PublishDrawerState extends ConsumerState<_PublishDrawer> {
   }
 
   Future<void> _loadClasses() async {
-    final res = await ref.read(teacherRepositoryProvider).classList();
+    final res = await ref.read(teacherRepositoryProvider).classList(isClassTeacher: 1);
     if (!mounted) return;
     if (res.isSuccess && res.data is List) {
       final list = (res.data as List).whereType<Map>().toList();

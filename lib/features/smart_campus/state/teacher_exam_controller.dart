@@ -38,7 +38,7 @@ class TeacherExamController extends StateNotifier<TeacherExamState> {
   }
 
   Future<void> loadClassOptions() async {
-    final response = await _repository.classList();
+    final response = await _repository.classList(isClassTeacher: 1);
     if (!response.isSuccess) return;
     final labels = <String>[];
     final ids = <String, String>{};

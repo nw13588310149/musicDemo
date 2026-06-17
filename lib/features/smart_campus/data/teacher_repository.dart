@@ -198,10 +198,14 @@ class TeacherRepository {
   ///
   /// - `type`: 班级类型过滤，`0 = 大班`，`1 = 小班`；不传 = 全量（大 + 小）。
   ///   申请小课抽屉拉全量班级；`studentList` 的 `type` 与所选班级类型对齐。
-  /// - `isHeadTeacher`: 是否为班主任；不传 = 不按该字段过滤。
-  Future<ApiResponse> classList({int? type, int? isHeadTeacher}) {
+  /// - `isClassTeacher`: 是不是任课老师。任课老师端（授课课表 / 签课 / 学生名册 /
+  ///   作业批改 / 考评管理等）调用统一传 `1`，让后端按"我任教的班级"过滤。
+  /// - `isHeadTeacher`: 是不是班主任。班主任端调用本接口时传 `1`，让后端按
+  ///   "我担任班主任的班级"过滤；不传 = 不按该字段过滤。
+  Future<ApiResponse> classList({int? type, int? isClassTeacher, int? isHeadTeacher}) {
     final body = <String, dynamic>{};
     if (type != null) body['type'] = type;
+    if (isClassTeacher != null) body['isClassTeacher'] = isClassTeacher;
     if (isHeadTeacher != null) body['isHeadTeacher'] = isHeadTeacher;
     return client.post('$_base/classList', data: body);
   }

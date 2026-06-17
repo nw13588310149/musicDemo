@@ -15,9 +15,10 @@
 //      右下角各放一个对应色 24~54 半透明几何装饰。
 //   3. Tabs row（44 高）：白底圆角 8 容器，5 个 pill：
 //      全部 / 审批中 / 已通过 / 已拒绝 / 已撤销，激活态 #0B081A 黑底白字 14/500，
-//      未激活 #6D6B75 14/500 透明底；右侧紫色渐变胶囊「+ 发起申请」（44 高）。
+//      未激活 #6D6B75 14/500 透明底；右侧白底「发起申请」（padding 8×12/13，
+//      描边 #F3F2F3，文字 #0B081A 16/500 + 日历加号图标 16）。
 //      点击「发起申请」→ 右侧抽屉 _LeaveApplyDrawer（600 宽，紫渐变提交按钮）。
-//   4. 双列卡片网格（每张 477 宽，padding 12，gradient 210deg #F9EEFF→white，
+//   4. 双列卡片网格（每张 477 宽，padding 12，白底 + 右上角淡紫渐变，
 //      圆角 12，gap 16）：
 //      · header 一行：类型 16/500「病假/事假」+ "时长4小时" 12/#6D6B75 +
 //        右侧状态徽章 12/4×2 padding（审批中紫底紫字 / 已通过 #E4FFED+#12CE51 /
@@ -31,7 +32,7 @@
 //      · footer：审批中卡多一行 40 高描边按钮"撤销申请"。
 //
 // 颜色 / 字体：
-//   主紫 #8741FF / 主紫渐变 270deg #B68EFF→#8640FF；卡片 gradient #F9EEFF→white；
+//   主紫 #8741FF / 主紫渐变 270deg #B68EFF→#8640FF；卡片白底 + 右上角 #F9EEFF 光晕；
 //   状态徽章配色见上；字体 PingFang SC，数字 32 用 Barlow（与 Figma 一致）。
 // =============================================================================
 
@@ -50,6 +51,7 @@ import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/student_leave_data.dart';
 import '../data/student_repository.dart';
+import 'widgets/smart_campus_page_banner.dart';
 import 'widgets/smart_campus_stat_card.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
@@ -272,42 +274,38 @@ class _StudentLeaveManagementViewState
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final pageLoading = _loading && _records.isEmpty;
-    return Container(
-      color: _kPageBg,
-      child: SingleChildScrollView(
-        padding: EdgeInsets.only(bottom: ui(24)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _LeaveBanner(onBack: widget.onBack),
-            SizedBox(height: ui(12)),
-            MainContentLoadingShell(
-              loading: pageLoading,
-              preserveChrome: true,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _StatsRow(
-                    reviewing: _countOf(_LeaveStatus.reviewing),
-                    approved: _countOf(_LeaveStatus.approved),
-                    rejected: _countOf(_LeaveStatus.rejected),
-                  ),
-                  SizedBox(height: ui(12)),
-                  _TabsAndCreateRow(
-                    tab: _tab,
-                    onTab: (t) => setState(() => _tab = t),
-                    onCreate: _submitting ? null : _showApplyDrawer,
-                  ),
-                  SizedBox(height: ui(12)),
-                  if (_loadError != null)
-                    _ErrorState(message: _loadError!, onRetry: _loadList)
-                  else if (!pageLoading)
-                    _LeaveCardsGrid(records: _visible, onTap: _showDetail),
-                ],
-              ),
+    return SmartCampusSecondaryPageShell(
+      backgroundColor: _kPageBg,
+      header: _LeaveBanner(onBack: widget.onBack),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          MainContentLoadingShell(
+            loading: pageLoading,
+            preserveChrome: true,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _StatsRow(
+                  reviewing: _countOf(_LeaveStatus.reviewing),
+                  approved: _countOf(_LeaveStatus.approved),
+                  rejected: _countOf(_LeaveStatus.rejected),
+                ),
+                SizedBox(height: ui(12)),
+                _TabsAndCreateRow(
+                  tab: _tab,
+                  onTab: (t) => setState(() => _tab = t),
+                  onCreate: _submitting ? null : _showApplyDrawer,
+                ),
+                SizedBox(height: ui(12)),
+                if (_loadError != null)
+                  _ErrorState(message: _loadError!, onRetry: _loadList)
+                else if (!pageLoading)
+                  _LeaveCardsGrid(records: _visible, onTap: _showDetail),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -586,42 +584,35 @@ class _CreateApplyButton extends StatelessWidget {
       child: Opacity(
         opacity: onTap == null ? 0.55 : 1,
         child: Container(
-        height: ui(44),
-        padding: EdgeInsets.symmetric(horizontal: ui(14)),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.centerRight,
-            end: Alignment.centerLeft,
-            colors: [Color(0xFFB68EFF), Color(0xFF8640FF)],
+          padding: EdgeInsets.fromLTRB(ui(12), ui(8), ui(13), ui(8)),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(ui(8)),
+            border: Border.all(color: _kBorderSoft, width: 1),
           ),
-          borderRadius: BorderRadius.circular(ui(8)),
-          boxShadow: [
-            BoxShadow(
-              color: _kPurple.withValues(alpha: 0.18),
-              blurRadius: ui(10),
-              offset: Offset(0, ui(3)),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.edit_document, size: ui(16), color: Colors.white),
-            SizedBox(width: ui(8)),
-            Text(
-              '发起申请',
-              style: TextStyle(
-                fontSize: ui(16),
-                color: Colors.white,
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w500,
-                height: 1,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.asset(
+                AppAssets.studentLeaveCreateApplyIcon,
+                width: ui(16),
+                height: ui(16),
+                fit: BoxFit.contain,
               ),
-            ),
-          ],
+              SizedBox(width: ui(8)),
+              Text(
+                '发起申请',
+                style: TextStyle(
+                  fontSize: ui(16),
+                  color: _kTextDark,
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w500,
+                  height: 12 / 16,
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -751,22 +742,50 @@ class _LeaveCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(ui(12)),
         child: Container(
-          padding: EdgeInsets.all(ui(12)),
+          clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [Color(0xFFF9EEFF), Colors.white],
-            ),
+            color: Colors.white,
             borderRadius: BorderRadius.circular(ui(12)),
             border: Border.all(color: Colors.white),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Stack(
+            clipBehavior: Clip.none,
             children: [
-              _CardHeaderRow(record: record),
-              SizedBox(height: ui(8)),
-              _CardBoardBody(record: record),
+              Positioned(
+                top: 0,
+                right: 0,
+                child: IgnorePointer(
+                  child: Container(
+                    width: ui(64),
+                    height: ui(52),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.only(
+                        topRight: Radius.circular(ui(12)),
+                      ),
+                      gradient: RadialGradient(
+                        center: Alignment.topRight,
+                        radius: 0.38,
+                        colors: [
+                          const Color(0x2EF9EEFF),
+                          const Color(0x00F9EEFF),
+                        ],
+                        stops: const [0.0, 1.0],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: EdgeInsets.all(ui(12)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _CardHeaderRow(record: record),
+                    SizedBox(height: ui(8)),
+                    _CardBoardBody(record: record),
+                  ],
+                ),
+              ),
             ],
           ),
         ),

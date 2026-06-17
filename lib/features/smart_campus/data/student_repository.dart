@@ -53,6 +53,48 @@ class StudentRepository {
     return client.post('$_base/examSeat', data: body);
   }
 
+  /// 我的考试列表（「全部考试」）。`tab`：0 全部 / 1 待考 / 2 已考。
+  ///
+  /// 返回 `data` 为考试数组，每项含 `examStatus`（NOT_STARTED/ONGOING/
+  /// PENDING_SCORE/SCORED）、`uploadProgress`、`subjects[]`（含 `evaluateType`
+  /// 1 在线 / 2 离线、`submitCount`/`maxSubmitCount`/`canSubmit`/`score`）。
+  Future<ApiResponse> myExamList({int tab = 0}) {
+    return client.post('$_base/myExamList?tab=$tab');
+  }
+
+  /// 我的考试详情。`id` 为考试 id。返回各科目含 `classroomName`/`seatNo`、
+  /// 已上传文件 `submitFiles[]`（`path`/`fileType`/`uploadTime`）、`score`/`comment`。
+  Future<ApiResponse> myExamDetail({required String id}) {
+    final body = encodeNumericIdRequestBody(
+      <String, dynamic>{'id': id},
+      numericIdKeys: const {'id'},
+    );
+    if (body == null) return Future.value(ApiResponse.failure('考试 id 格式错误'));
+    return client.post('$_base/myExamDetail', data: body);
+  }
+
+  /// 提交在线考评文件。`filePath` 为 `/app/common/v2/fileUpload` 返回的相对路径；
+  /// `fileType`：`video` / `audio`。后端校验：在线科目（evaluateType=1）、考试
+  /// 时间内、未超过 `maxSubmitCount` 次。
+  Future<ApiResponse> examSubmit({
+    required String examId,
+    required int subjectId,
+    required String filePath,
+    required String fileType,
+  }) {
+    final body = encodeNumericIdRequestBody(
+      <String, dynamic>{
+        'examId': examId,
+        'subjectId': subjectId,
+        'filePath': filePath,
+        'fileType': fileType,
+      },
+      numericIdKeys: const {'examId'},
+    );
+    if (body == null) return Future.value(ApiResponse.failure('考试 id 格式错误'));
+    return client.post('$_base/examSubmit', data: body);
+  }
+
   /// 我的课表。`beginDate` / `endDate` 为 `yyyy-MM-dd`；后端按 token 过滤当前学生。
   Future<ApiResponse> courseList({
     required String beginDate,
@@ -187,10 +229,7 @@ class StudentRepository {
   // ============== 课堂签到（统计 / 记录 / 详情 / 补签） ==============
 
   /// 签到统计：小课应签、大课入册、打卡合计、迟到、准时率等。
-  Future<ApiResponse> courseSignStat({
-    String? beginDate,
-    String? endDate,
-  }) {
+  Future<ApiResponse> courseSignStat({String? beginDate, String? endDate}) {
     return client.post(
       '$_base/courseSignStat',
       data: <String, dynamic>{

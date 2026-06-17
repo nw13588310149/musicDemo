@@ -20,6 +20,7 @@ class TeacherExamSubmission {
     this.score,
     this.comment = '',
     this.path = '',
+    this.submitFiles = const [],
   });
 
   final String studentId;
@@ -36,9 +37,16 @@ class TeacherExamSubmission {
   final String comment;
   final String path;
 
+  /// 学生上传的全部文件路径（`examStudentList` 新增 `submitFiles`）。在线科目可多次
+  /// 上传，老师打分前可逐个查看 / 播放。无 `submitFiles` 时回退到单个 [path]。
+  final List<String> submitFiles;
+
   /// 无任何提交资源（用于评分抽屉里决定是否提供「催交提醒」）。
-  bool get hasNoSubmission => path.trim().isEmpty;
+  bool get hasNoSubmission => path.trim().isEmpty && submitFiles.isEmpty;
 }
+
+/// 提交文件路径 → 介质标签（音频 / 视频 / 图片 / 文件）。
+String teacherSubmitMediaLabel(String path) => _mediumFromPath(path);
 
 class TeacherExamOverviewStats {
   const TeacherExamOverviewStats({
@@ -72,11 +80,7 @@ class TeacherExamOverviewStats {
         'waitScoreCount',
       ]),
       subjects: 1,
-      reviewed: _pickInt(map, [
-        'scoreCount',
-        'reviewedCount',
-        'scoredCount',
-      ]),
+      reviewed: _pickInt(map, ['scoreCount', 'reviewedCount', 'scoredCount']),
       average: _pickDouble(map, ['avgScore', 'averageScore', 'scoreAvg']),
       max: _pickDouble(map, ['maxScore', 'highestScore']),
       min: _pickDouble(map, ['minScore', 'lowestScore']),
@@ -156,41 +160,46 @@ class TeacherExamDetailMetrics {
     required List<TeacherExamSubmission> submissions,
   }) {
     final map = _unwrapApiMap(raw);
-    final reviewed = _pickInt(map, [
-      'scoredCount',
-      'scoreCount',
-      'reviewedCount',
-    ], fallback: submissions
-        .where((s) => s.state == TeacherExamSubmissionState.reviewed)
-        .length);
-    final pending = _pickInt(map, [
-      'unscoredCount',
-      'unScoreCount',
-      'pendingCount',
-      'notScoreCount',
-      'waitScoreCount',
-    ], fallback: submissions
-        .where((s) => s.state == TeacherExamSubmissionState.pending)
-        .length);
+    final reviewed = _pickInt(
+      map,
+      ['scoredCount', 'scoreCount', 'reviewedCount'],
+      fallback: submissions
+          .where((s) => s.state == TeacherExamSubmissionState.reviewed)
+          .length,
+    );
+    final pending = _pickInt(
+      map,
+      [
+        'unscoredCount',
+        'unScoreCount',
+        'pendingCount',
+        'notScoreCount',
+        'waitScoreCount',
+      ],
+      fallback: submissions
+          .where((s) => s.state == TeacherExamSubmissionState.pending)
+          .length,
+    );
     // 提交人数 = 有资源路径者；后端通常不单独返回，回退到本地统计。
     final submitted = _pickInt(map, [
       'submitCount',
       'submittedCount',
     ], fallback: submissions.where((s) => s.path.isNotEmpty).length);
     // 应考人数：stat 未提供时回退为已评 + 未评（即本次科目花名册总数）。
-    final total = _pickInt(map, [
-      'totalCount',
-      'studentCount',
-      'shouldCount',
-    ], fallback: submissions.isNotEmpty ? submissions.length : reviewed + pending);
-    final unsubmitted = _pickInt(map, [
-      'unSubmitCount',
-      'unsubmittedCount',
-      'absentCount',
-      'missingCount',
-    ], fallback: submissions
-        .where((s) => s.state == TeacherExamSubmissionState.missing)
-        .length);
+    final total = _pickInt(
+      map,
+      ['totalCount', 'studentCount', 'shouldCount'],
+      fallback: submissions.isNotEmpty
+          ? submissions.length
+          : reviewed + pending,
+    );
+    final unsubmitted = _pickInt(
+      map,
+      ['unSubmitCount', 'unsubmittedCount', 'absentCount', 'missingCount'],
+      fallback: submissions
+          .where((s) => s.state == TeacherExamSubmissionState.missing)
+          .length,
+    );
     return TeacherExamDetailMetrics(
       attended: _pickInt(map, ['attendCount', 'joinCount'], fallback: total),
       unsubmitted: unsubmitted < 0 ? 0 : unsubmitted,
@@ -344,7 +353,10 @@ int _resolveTeacherExamSubjectId(Map<String, dynamic> row) {
   return 0;
 }
 
-String _resolveTeacherExamSubjectLabel(Map<String, dynamic> row, int subjectId) {
+String _resolveTeacherExamSubjectLabel(
+  Map<String, dynamic> row,
+  int subjectId,
+) {
   final direct = _pickString(row, ['subjectName']);
   if (direct.isNotEmpty) return direct;
 
@@ -451,21 +463,28 @@ List<TeacherExamSeatEntry> parseTeacherExamSeats(dynamic raw) {
   final map = _unwrapApiMap(raw);
   final seats = map['seats'] ?? raw;
   if (seats is! List) return const [];
-  return seats.whereType<Map>().map((e) {
-    final row = e.map((k, v) => MapEntry(k.toString(), v));
-    final rawSeat = row['seatNo'];
-    return TeacherExamSeatEntry(
-      studentId:
-          readSnowflakeId(row['studentId']) ?? _stringValue(row['studentId']),
-      studentNo: _pickString(row, ['no', 'studentNo', 'sno']),
-      studentName: _pickString(row, ['realname', 'realName', 'studentName'],
-          '未命名学生'),
-      className: _pickString(row, ['className']),
-      subjectName: _pickString(row, ['subjectName']),
-      classroomName: _pickString(row, ['classroomName']),
-      seatNo: rawSeat == null ? null : int.tryParse('$rawSeat'),
-    );
-  }).toList(growable: false);
+  return seats
+      .whereType<Map>()
+      .map((e) {
+        final row = e.map((k, v) => MapEntry(k.toString(), v));
+        final rawSeat = row['seatNo'];
+        return TeacherExamSeatEntry(
+          studentId:
+              readSnowflakeId(row['studentId']) ??
+              _stringValue(row['studentId']),
+          studentNo: _pickString(row, ['no', 'studentNo', 'sno']),
+          studentName: _pickString(row, [
+            'realname',
+            'realName',
+            'studentName',
+          ], '未命名学生'),
+          className: _pickString(row, ['className']),
+          subjectName: _pickString(row, ['subjectName']),
+          classroomName: _pickString(row, ['classroomName']),
+          seatNo: rawSeat == null ? null : int.tryParse('$rawSeat'),
+        );
+      })
+      .toList(growable: false);
 }
 
 List<TeacherExamSubmission> parseTeacherExamSubmissionList(
@@ -483,8 +502,13 @@ TeacherExamSubmission _submissionFromRow(
 }) {
   // 对齐 Swagger `TeacherExamStudentRes`：
   //   score(null=未打分) / path(资源路径) / scored(bool) / scoreStatus(0未打分 1已打分)。
+  //   submitFiles(学生上传文件列表，在线科目可多次)。
   // 三态判定：已打分→reviewed；未打分但有提交→pending；未打分且无提交→missing(未交)。
-  final path = _stringValue(row['path']);
+  final submitFiles = _parseSubmitFilePaths(row['submitFiles']);
+  final rawPath = _stringValue(row['path']);
+  final path = rawPath.isNotEmpty
+      ? rawPath
+      : (submitFiles.isNotEmpty ? submitFiles.first : '');
   final scoreRaw = row['score'];
   final score = scoreRaw == null ? null : num.tryParse(scoreRaw.toString());
   final scoreStatus = _pickInt(row, ['scoreStatus'], fallback: -1);
@@ -497,12 +521,9 @@ TeacherExamSubmission _submissionFromRow(
       ? TeacherExamSubmissionState.pending
       : TeacherExamSubmissionState.missing;
 
-  final uploadAt = _formatUploadAt(_pickString(row, [
-    'submitTime',
-    'uploadTime',
-    'createTime',
-    'updateTime',
-  ]));
+  final uploadAt = _formatUploadAt(
+    _pickString(row, ['submitTime', 'uploadTime', 'createTime', 'updateTime']),
+  );
   final action = switch (state) {
     TeacherExamSubmissionState.missing => '录入',
     TeacherExamSubmissionState.reviewed => '查看',
@@ -526,7 +547,29 @@ TeacherExamSubmission _submissionFromRow(
     score: score,
     comment: _pickString(row, ['comment', 'remark']),
     path: path,
+    submitFiles: submitFiles,
   );
+}
+
+/// 解析 `submitFiles`：支持字符串数组或对象数组（取 `path`/`filePath`/`url`）。
+List<String> _parseSubmitFilePaths(dynamic raw) {
+  if (raw is! List) return const [];
+  final out = <String>[];
+  for (final e in raw) {
+    if (e is String) {
+      final s = e.trim();
+      if (s.isNotEmpty && s != 'null') out.add(s);
+    } else if (e is Map) {
+      final p = _pickString(e.map((k, v) => MapEntry(k.toString(), v)), [
+        'path',
+        'filePath',
+        'url',
+        'fileUrl',
+      ]);
+      if (p.isNotEmpty) out.add(p);
+    }
+  }
+  return out;
 }
 
 Map<String, dynamic> _unwrapApiMap(dynamic raw) {
@@ -539,11 +582,7 @@ Map<String, dynamic> _unwrapApiMap(dynamic raw) {
       : const {};
 }
 
-int _pickInt(
-  Map<String, dynamic> map,
-  List<String> keys, {
-  int fallback = 0,
-}) {
+int _pickInt(Map<String, dynamic> map, List<String> keys, {int fallback = 0}) {
   for (final key in keys) {
     final raw = map[key];
     if (raw == null) continue;
@@ -596,9 +635,10 @@ List<String> _readStringList(dynamic raw) {
 
 List<int> _readIntList(dynamic raw) {
   if (raw is List) {
-    return raw.map((e) => int.tryParse(e.toString())).whereType<int>().toList(
-      growable: false,
-    );
+    return raw
+        .map((e) => int.tryParse(e.toString()))
+        .whereType<int>()
+        .toList(growable: false);
   }
   return _csvInts(raw);
 }

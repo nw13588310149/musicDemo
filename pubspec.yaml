@@ -201,7 +201,15 @@ flutter:
     - assets/images/smartCampus/admin/student_management/
     - assets/images/smartCampus/student/homework/
     - assets/images/smartCampus/student/leave/
+    - assets/images/smartCampus/student/my_class/
     - assets/images/smartCampus/teacher/student_roster/
+    - assets/images/smartCampus/home_actions/
+    - assets/images/smartCampus/home_actions/student/
+    - assets/images/smartCampus/home_actions/teacher/
+    - assets/images/smartCampus/home_actions/head_teacher/
+    - assets/images/smartCampus/home_actions/dorm_manager/
+    - assets/images/smartCampus/home_actions/admin/
+    - assets/images/smartCampus/home_actions/shared/
     - assets/web/baidu_map.html
     - assets/images/circle/
     - assets/audio/demo.mid
