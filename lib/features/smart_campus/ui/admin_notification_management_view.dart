@@ -61,6 +61,7 @@ import '../../shell/state/shell_controller.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/admin_notice_data.dart';
 import '../data/admin_repository.dart';
+import 'widgets/smart_campus_stat_card.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // —— 颜色 ————————————————————————————————————————————————————————
@@ -186,7 +187,18 @@ class _NotificationRecord {
   /// 仅 [_NStatus.scheduled] 时使用：定时发布的时间。
   DateTime? scheduledAt;
 
-  String get scopeLabel => scopes.isEmpty ? '全校师生' : scopes.join('、');
+  /// 推送范围展示文案。
+  ///
+  /// 「全选」（包含全部角色，或显式包含「全校师生」，或为空表示默认全员）
+  /// 统一展示为「全校师生及访客端」；否则按角色顿号拼接。
+  String get scopeLabel {
+    final roleLabels = kAdminNoticeScopeLabelToApi.keys;
+    final isAll =
+        scopes.isEmpty ||
+        scopes.contains('全校师生') ||
+        roleLabels.every(scopes.contains);
+    return isAll ? '全校师生及访客端' : scopes.join('、');
+  }
 }
 
 // =============================================================================
@@ -683,143 +695,37 @@ class _StatsRow extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: _StatCard(
+          child: SmartCampusStatCard(
+            backgroundAsset: AppAssets.adminNotificationStatCard1,
             label: '已发布',
             value: published,
-            gradient: const LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [Color(0xFFE7DCFF), Colors.white],
-              stops: [0.0, 0.73],
-            ),
-            icon: Icons.send_rounded,
-            iconColor: _kPurple,
           ),
         ),
         SizedBox(width: ui(12)),
         Expanded(
-          child: _StatCard(
+          child: SmartCampusStatCard(
+            backgroundAsset: AppAssets.adminNotificationStatCard2,
             label: '定时中',
             value: scheduled,
-            gradient: const LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [Color(0xFFFFF0DC), Colors.white],
-              stops: [0.0, 0.73],
-            ),
-            icon: Icons.schedule_rounded,
-            iconColor: _kOrange,
           ),
         ),
         SizedBox(width: ui(12)),
         Expanded(
-          child: _StatCard(
+          child: SmartCampusStatCard(
+            backgroundAsset: AppAssets.adminNotificationStatCard3,
             label: '已撤回',
             value: withdrawn,
-            gradient: const LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [Color(0xFFFFE2DC), Colors.white],
-              stops: [0.0, 0.73],
-            ),
-            icon: Icons.undo_rounded,
-            iconColor: _kRed,
           ),
         ),
         SizedBox(width: ui(12)),
         Expanded(
-          child: _StatCard(
+          child: SmartCampusStatCard(
+            backgroundAsset: AppAssets.adminNotificationStatCard4,
             label: '全部',
             value: total,
-            gradient: const LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [Color(0xFFFFE2DC), Colors.white],
-              stops: [0.0, 0.73],
-            ),
-            icon: Icons.summarize_rounded,
-            iconColor: _kRed,
           ),
         ),
       ],
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.label,
-    required this.value,
-    required this.gradient,
-    required this.icon,
-    required this.iconColor,
-  });
-
-  final String label;
-  final int value;
-  final LinearGradient gradient;
-  final IconData icon;
-  final Color iconColor;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      height: ui(100),
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        gradient: gradient,
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(12)),
-      ),
-      child: Stack(
-        children: [
-          Padding(
-            padding: EdgeInsets.fromLTRB(ui(16), ui(16), ui(16), ui(0)),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: ui(14),
-                    color: Colors.black,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w500,
-                    height: 1.0,
-                  ),
-                ),
-                SizedBox(height: ui(12)),
-                Text(
-                  '$value',
-                  style: TextStyle(
-                    fontSize: ui(32),
-                    color: _kTextDark,
-                    fontFamily: 'Barlow',
-                    fontWeight: FontWeight.w500,
-                    height: 1.0,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Positioned(
-            right: ui(16),
-            top: ui(34),
-            child: Container(
-              width: ui(32),
-              height: ui(32),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(ui(8)),
-                border: Border.all(color: const Color(0xFFE5E7EB), width: 0.5),
-              ),
-              alignment: Alignment.center,
-              child: Icon(icon, size: ui(20), color: iconColor),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -853,7 +759,6 @@ class _ControlBar extends StatelessWidget {
       children: [
         _NotificationFilterField(
           width: ui(160),
-          icon: Icons.category_outlined,
           value: typeValue,
           items: <String>[_kAllType, ..._kNotificationTypes],
           onChanged: onTypeChanged,
@@ -861,7 +766,6 @@ class _ControlBar extends StatelessWidget {
         SizedBox(width: ui(12)),
         _NotificationFilterField(
           width: ui(160),
-          icon: Icons.flag_outlined,
           value: statusValue,
           items: <String>[
             _kAllStatus,
@@ -923,14 +827,12 @@ class _ControlBar extends StatelessWidget {
 class _NotificationFilterField extends StatefulWidget {
   const _NotificationFilterField({
     required this.width,
-    required this.icon,
     required this.value,
     required this.items,
     required this.onChanged,
   });
 
   final double width;
-  final IconData icon;
   final String value;
   final List<String> items;
   final ValueChanged<String> onChanged;
@@ -978,8 +880,6 @@ class _NotificationFilterFieldState extends State<_NotificationFilterField> {
         padding: EdgeInsets.symmetric(horizontal: ui(16)),
         child: Row(
           children: [
-            Icon(widget.icon, size: ui(16), color: const Color(0xFFC6C6C6)),
-            SizedBox(width: ui(10)),
             Expanded(
               child: Text(
                 widget.value,
@@ -998,8 +898,8 @@ class _NotificationFilterFieldState extends State<_NotificationFilterField> {
               duration: const Duration(milliseconds: 160),
               child: Icon(
                 Icons.keyboard_arrow_down_rounded,
-                size: ui(18),
-                color: const Color(0xFFC6C6C6),
+                size: ui(19),
+                color: _kTextDark,
               ),
             ),
           ],
@@ -1276,13 +1176,19 @@ class _PriorityCell extends StatelessWidget {
     final bars = priority.bars;
     return Row(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.end,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        _signalBar(ui(2), ui(4), bars[0] ? priority.color : _kTextDivider),
-        SizedBox(width: ui(2)),
-        _signalBar(ui(2), ui(6), bars[1] ? priority.color : _kTextDivider),
-        SizedBox(width: ui(2)),
-        _signalBar(ui(2), ui(8), bars[2] ? priority.color : _kTextDivider),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            _signalBar(ui(2), ui(4), bars[0] ? priority.color : _kTextDivider),
+            SizedBox(width: ui(2)),
+            _signalBar(ui(2), ui(6), bars[1] ? priority.color : _kTextDivider),
+            SizedBox(width: ui(2)),
+            _signalBar(ui(2), ui(8), bars[2] ? priority.color : _kTextDivider),
+          ],
+        ),
         SizedBox(width: ui(4)),
         Flexible(
           child: Text(

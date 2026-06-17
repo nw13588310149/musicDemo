@@ -1,3 +1,5 @@
+import '../../../core/network/snowflake_id.dart';
+
 double _doubleOf(dynamic value) => value is num
     ? value.toDouble()
     : double.tryParse('$value'.replaceAll('%', '').trim()) ?? 0;
@@ -110,6 +112,7 @@ class StudentExamTrend {
 
 class StudentExamRecord {
   const StudentExamRecord({
+    required this.examId,
     required this.examName,
     required this.examDate,
     required this.totalScore,
@@ -122,6 +125,7 @@ class StudentExamRecord {
 
   factory StudentExamRecord.fromMap(Map<dynamic, dynamic> map) =>
       StudentExamRecord(
+        examId: readSnowflakeId(map['examId']) ?? _stringOf(map['examId']),
         examName: _stringOf(map['examName']),
         examDate: _stringOf(map['examDate']),
         totalScore: _doubleOf(map['totalScore']),
@@ -134,6 +138,8 @@ class StudentExamRecord {
         ).map(StudentExamSubjectScore.fromMap).toList(),
       );
 
+  /// 考试 id（雪花 long，String 形式避免 Web 精度丢失），用于查询考场座位。
+  final String examId;
   final String examName;
   final String examDate;
   final double totalScore;
@@ -205,4 +211,54 @@ class StudentSubjectAverage {
 
   final String subjectName;
   final double score;
+}
+
+/// 学生「我的考场座位」（`student/examSeat` → `StudentExamSeatRes`）。
+class StudentExamSeat {
+  const StudentExamSeat({
+    required this.examName,
+    required this.examDate,
+    required this.remark,
+    required this.seats,
+  });
+
+  factory StudentExamSeat.fromData(dynamic data) {
+    final map = data is Map ? data : const <dynamic, dynamic>{};
+    return StudentExamSeat(
+      examName: _stringOf(map['examName']),
+      examDate: _stringOf(map['examDate']),
+      remark: _stringOf(map['remark']),
+      seats: _mapList(map['seats']).map(StudentExamSeatItem.fromMap).toList(),
+    );
+  }
+
+  final String examName;
+  final String examDate;
+  final String remark;
+  final List<StudentExamSeatItem> seats;
+}
+
+/// 单科目的考场座位（`SubjectSeat`）。未安排时 [classroomName] 为空、[seatNo] 为 null。
+class StudentExamSeatItem {
+  const StudentExamSeatItem({
+    required this.subjectName,
+    required this.classroomName,
+    required this.seatNo,
+  });
+
+  factory StudentExamSeatItem.fromMap(Map<dynamic, dynamic> map) {
+    final rawSeat = map['seatNo'];
+    return StudentExamSeatItem(
+      subjectName: _stringOf(map['subjectName']),
+      classroomName: _stringOf(map['classroomName']),
+      seatNo: rawSeat == null ? null : int.tryParse('$rawSeat'),
+    );
+  }
+
+  final String subjectName;
+  final String classroomName;
+  final int? seatNo;
+
+  /// 是否已编排考场（教室与座位号齐全）。
+  bool get arranged => classroomName.isNotEmpty && seatNo != null;
 }

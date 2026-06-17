@@ -233,6 +233,7 @@ class CourseSignStudent {
     required this.studentId,
     required this.name,
     required this.studentNo,
+    this.headUrl = '',
     this.status,
     this.checkInTime,
     this.checkOutTime,
@@ -245,6 +246,7 @@ class CourseSignStudent {
   final String studentId;
   final String name;
   final String studentNo;
+  final String headUrl;
   CourseSignStatus? status;
   String? checkInTime;
   String? checkOutTime;
@@ -262,6 +264,7 @@ class CourseSignStudent {
       studentId: studentId,
       name: name,
       studentNo: studentNo,
+      headUrl: headUrl,
       status: clearStatus ? null : status ?? this.status,
       checkInTime: checkInTime,
       checkOutTime: checkOutTime,
@@ -279,20 +282,16 @@ class CourseSignStudent {
       'userId',
       'id',
     ], '');
-    final name = _pickString(json, [
-      'realname',
-      'realName',
-      'nickname',
-      'name',
-      'stuName',
-      'studentName',
-    ], '未命名');
+    final name = _pickStudentDisplayName(json);
     final studentNo = _pickString(json, [
       'no',
       'studentNo',
       'stuNo',
       'studentIdNo',
     ], '--');
+    final headUrl = MediaUrl.resolve(
+      _pickString(json, ['headUrl', 'avatar', 'avatarUrl', 'headImg'], ''),
+    );
     final ratingRaw = json['score'] ?? json['rating'] ?? json['star'];
     final rating = ratingRaw == null
         ? null
@@ -301,6 +300,7 @@ class CourseSignStudent {
       studentId: studentId,
       name: name,
       studentNo: studentNo,
+      headUrl: headUrl,
       status: CourseSignStatus.fromApi(
         json['status'] ?? json['signStatus'] ?? json['attendanceStatus'],
       ),
@@ -353,6 +353,8 @@ class CourseSignSession {
     this.courseEndTime = '',
     this.courseType = 0,
     this.lineNum = 0,
+    this.colorHex = '',
+    this.className = '',
   });
 
   final String courseId;
@@ -362,6 +364,8 @@ class CourseSignSession {
   final List<CourseSignStudent> students;
   final String teacherName;
   final String logoUrl;
+  final String colorHex;
+  final String className;
   final String? teacherCheckInTime;
   final String? teacherCheckOutTime;
   final bool adminConfirmed;
@@ -402,13 +406,6 @@ class CourseSignSession {
       'classEndTime',
     ], '');
     final date = _pickString(json, ['date', 'courseDate'], '');
-    var timeRange = _pickString(json, ['timeRange', 'time', 'period'], '');
-    if (timeRange.isEmpty && begin.isNotEmpty) {
-      timeRange = end.isNotEmpty ? '$begin - $end' : begin;
-    }
-    if (timeRange.isEmpty && date.isNotEmpty) {
-      timeRange = date;
-    }
     final classroom = _pickString(json, [
       'classroomName',
       'classroom',
@@ -418,7 +415,11 @@ class CourseSignSession {
     final teacherMap = _asMap(json['teacher'] ?? json['headTeacher']);
     final teacherName = teacherMap != null
         ? _pickString(teacherMap, ['realname', 'realName', 'name'], '')
-        : _pickString(json, ['teacherName', 'teacherRealname'], '');
+        : _pickString(json, [
+            'teacherRealname',
+            'teacherName',
+            'teacherNickname',
+          ], '');
 
     final studentsRaw =
         json['studentList'] ??
@@ -448,6 +449,22 @@ class CourseSignSession {
       'finishTime',
     ], end);
 
+    var timeRange = _pickString(json, ['timeRange', 'time', 'period'], '');
+    if (timeRange.isEmpty && begin.isNotEmpty) {
+      timeRange = end.isNotEmpty ? '$begin - $end' : begin;
+    }
+    if (timeRange.isEmpty) {
+      final startClock = pickCourseClock(courseStartTime);
+      final endClock = pickCourseClock(courseEndTime);
+      if (startClock != null && endClock != null) {
+        timeRange = '$startClock - $endClock';
+      } else if (startClock != null) {
+        timeRange = startClock;
+      } else if (date.isNotEmpty) {
+        timeRange = date;
+      }
+    }
+
     final adminConfirmedRaw =
         json['adminConfirm'] ?? json['adminConfirmed'] ?? json['confirmStatus'];
     final adminConfirmed =
@@ -463,7 +480,9 @@ class CourseSignSession {
       classroom: classroom,
       students: students,
       teacherName: teacherName,
-      logoUrl: MediaUrl.resolve(_pickString(json, ['logo'], '')),
+      logoUrl: resolveCourseLogoUrl(json),
+      colorHex: _pickString(json, ['color'], ''),
+      className: _pickString(json, ['className', 'class'], ''),
       teacherCheckInTime: _pickStringNullable(json, [
         'teacherCheckInTime',
         'teacherSignInTime',
@@ -496,17 +515,23 @@ class CourseSignSession {
     bool? adminConfirmed,
     String? courseStartTime,
     String? courseEndTime,
+    String? timeRange,
+    String? logoUrl,
+    String? colorHex,
+    String? className,
     String? teacherCheckInTime,
     String? teacherCheckOutTime,
   }) {
     return CourseSignSession(
       courseId: courseId,
       courseName: courseName,
-      timeRange: timeRange,
+      timeRange: timeRange ?? this.timeRange,
       classroom: classroom,
       students: students ?? this.students,
       teacherName: teacherName,
-      logoUrl: logoUrl,
+      logoUrl: logoUrl ?? this.logoUrl,
+      colorHex: colorHex ?? this.colorHex,
+      className: className ?? this.className,
       teacherCheckInTime: teacherCheckInTime ?? this.teacherCheckInTime,
       teacherCheckOutTime: teacherCheckOutTime ?? this.teacherCheckOutTime,
       adminConfirmed: adminConfirmed ?? this.adminConfirmed,
@@ -563,6 +588,169 @@ List<CourseSignSession> parseCourseSignSessionList(dynamic raw) {
   if (fromDates.isNotEmpty) return fromDates;
 
   return const [];
+}
+
+/// 节次时间配置（`schoolTimeConfigList`），用于补全课表结束时间。
+class CourseLineTimeConfig {
+  const CourseLineTimeConfig({
+    required this.lineNum,
+    required this.start,
+    required this.end,
+  });
+
+  final int lineNum;
+  final String start;
+  final String end;
+}
+
+const List<CourseLineTimeConfig> kDefaultCourseLineTimeConfigs = [
+  CourseLineTimeConfig(lineNum: 1, start: '08:00', end: '08:40'),
+  CourseLineTimeConfig(lineNum: 2, start: '08:50', end: '09:35'),
+  CourseLineTimeConfig(lineNum: 3, start: '09:50', end: '10:30'),
+  CourseLineTimeConfig(lineNum: 4, start: '10:30', end: '11:25'),
+  CourseLineTimeConfig(lineNum: 5, start: '14:00', end: '14:45'),
+];
+
+List<CourseLineTimeConfig> parseCourseLineTimeConfigs(dynamic raw) {
+  final rows = _unwrapRows(raw);
+  final configs = <CourseLineTimeConfig>[];
+  for (final row in rows) {
+    final lineNumRaw = row['lineNum'];
+    final lineNum = lineNumRaw is int
+        ? lineNumRaw
+        : (int.tryParse(lineNumRaw?.toString() ?? '') ?? 0);
+    if (lineNum < 1) continue;
+    final start = pickCourseClock(
+          _pickString(row, ['timeBegin', 'startTime', 'beginTime', 'start'], ''),
+        ) ??
+        '';
+    final end = pickCourseClock(
+          _pickString(row, ['timeEnd', 'endTime', 'finishTime', 'end'], ''),
+        ) ??
+        '';
+    if (start.isEmpty || end.isEmpty) continue;
+    configs.add(CourseLineTimeConfig(lineNum: lineNum, start: start, end: end));
+  }
+  configs.sort((a, b) => a.lineNum.compareTo(b.lineNum));
+  return configs;
+}
+
+({String start, String end}) resolveCourseSessionClocks(
+  CourseSignSession session,
+  List<CourseLineTimeConfig> configs,
+) {
+  final effectiveConfigs = configs.isNotEmpty
+      ? configs
+      : kDefaultCourseLineTimeConfigs;
+  var start = pickCourseClock(session.courseStartTime) ?? '';
+  var end = pickCourseClock(session.courseEndTime) ?? '';
+
+  if (end.isEmpty && session.lineNum > 0) {
+    CourseLineTimeConfig? matched;
+    for (final config in effectiveConfigs) {
+      if (config.lineNum == session.lineNum) {
+        matched = config;
+        break;
+      }
+    }
+    matched ??= session.lineNum <= effectiveConfigs.length
+        ? effectiveConfigs[session.lineNum - 1]
+        : null;
+    if (matched != null) {
+      end = matched.end;
+      if (start.isEmpty) start = matched.start;
+    }
+  }
+
+  if (start.isEmpty && session.lineNum > 0) {
+    for (final config in effectiveConfigs) {
+      if (config.lineNum == session.lineNum) {
+        start = config.start;
+        break;
+      }
+    }
+  }
+
+  return (start: start, end: end);
+}
+
+List<CourseSignSession> enrichCourseSignSessions(
+  List<CourseSignSession> sessions, {
+  List<CourseLineTimeConfig> timeConfigs = const [],
+}) {
+  return [
+    for (final session in sessions)
+      _enrichCourseSignSession(session, timeConfigs: timeConfigs),
+  ];
+}
+
+CourseSignSession _enrichCourseSignSession(
+  CourseSignSession session, {
+  required List<CourseLineTimeConfig> timeConfigs,
+}) {
+  final clocks = resolveCourseSessionClocks(session, timeConfigs);
+  if (clocks.start.isEmpty && clocks.end.isEmpty) return session;
+
+  final startRaw = session.courseStartTime.isNotEmpty
+      ? session.courseStartTime
+      : clocks.start;
+  final endRaw = session.courseEndTime.isNotEmpty
+      ? session.courseEndTime
+      : clocks.end;
+  final timeRange = clocks.start.isNotEmpty && clocks.end.isNotEmpty
+      ? '${clocks.start} - ${clocks.end}'
+      : (clocks.start.isNotEmpty ? clocks.start : session.timeRange);
+
+  return session.copyWith(
+    courseStartTime: startRaw,
+    courseEndTime: endRaw,
+    timeRange: timeRange,
+  );
+}
+
+int _courseSessionSortKey(CourseSignSession session) {
+  final startDt = parseCourseDateTime(session.courseStartTime);
+  if (startDt != null) return startDt.millisecondsSinceEpoch;
+  if (session.lineNum > 0) return session.lineNum * 60000;
+  return 0;
+}
+
+List<CourseSignSession> sortCourseSignSessions(List<CourseSignSession> sessions) {
+  final sorted = [...sessions]
+    ..sort((a, b) {
+      final byStart = _courseSessionSortKey(a).compareTo(_courseSessionSortKey(b));
+      if (byStart != 0) return byStart;
+      return a.lineNum.compareTo(b.lineNum);
+    });
+  return sorted;
+}
+
+String? pickDefaultCourseSignSessionId(
+  List<CourseSignSession> sessions, {
+  DateTime? now,
+  List<CourseLineTimeConfig> timeConfigs = const [],
+}) {
+  if (sessions.isEmpty) return null;
+  final current = now ?? DateTime.now();
+  CourseSignSession? inProgress;
+  CourseSignSession? upcoming;
+  CourseSignSession? lastEnded;
+
+  for (final session in sessions) {
+    final clocks = resolveCourseSessionClocks(session, timeConfigs);
+    final phase = resolveCourseSlotPhase(current, clocks.start, clocks.end);
+    switch (phase) {
+      case CourseSlotPhase.inProgress:
+        inProgress ??= session;
+      case CourseSlotPhase.upcoming:
+        upcoming ??= session;
+      case CourseSlotPhase.ended:
+        lastEnded = session;
+    }
+  }
+
+  final picked = inProgress ?? upcoming ?? lastEnded ?? sessions.first;
+  return picked.courseId.isNotEmpty ? picked.courseId : null;
 }
 
 List<CourseSignSession> _parseCourseSessionRows(List<dynamic> raw) {
@@ -656,6 +844,7 @@ Map<String, dynamic> _flattenCourseSessionRow(Map<String, dynamic> row) {
     const MapEntry('name', 'className'),
     const MapEntry('className', 'className'),
     const MapEntry('id', 'classId'),
+    const MapEntry('logo', 'logo'),
   ]);
   mergeNested('schoolClassroom', [
     const MapEntry('name', 'classroomName'),
@@ -836,4 +1025,26 @@ String? _pickStringNullable(Map<String, dynamic> json, List<String> keys) {
     if (s.isNotEmpty && s != 'null') return s;
   }
   return null;
+}
+
+String _pickStudentDisplayName(Map<String, dynamic> json) {
+  final realname = _pickStringNullable(json, ['realname', 'realName']);
+  if (realname != null) return realname;
+  final no = _pickString(json, ['no', 'studentNo', 'stuNo', 'studentIdNo'], '');
+  if (no.isNotEmpty && no != '--') return no;
+  return _pickString(json, ['nickname', 'name', 'stuName', 'studentName'], '未命名');
+}
+
+/// 课程/班级 `logo`：顶层或嵌套 `schoolClass` / `classInfo`。
+String resolveCourseLogoUrl(Map<String, dynamic> json) {
+  var raw = _pickString(json, ['logo', 'logoUrl', 'classLogo'], '');
+  if (raw.isEmpty) {
+    for (final key in ['schoolClass', 'classInfo', 'class']) {
+      final nested = _asMap(json[key]);
+      if (nested == null) continue;
+      raw = _pickString(nested, ['logo', 'logoUrl', 'classLogo'], '');
+      if (raw.isNotEmpty) break;
+    }
+  }
+  return raw.isEmpty ? '' : MediaUrl.resolve(raw);
 }

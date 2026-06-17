@@ -186,7 +186,7 @@ class _SchoolView extends StatelessWidget {
         context,
         RoutePaths.consultation,
         arguments: <String, dynamic>{
-          'school': state.schoolId > 0 ? state.schoolId : true,
+          'school': state.schoolId != '0' ? state.schoolId : true,
           'sourceName': state.schoolName,
         },
       ),
@@ -332,7 +332,7 @@ class _QuickActionsBoard extends StatelessWidget {
   });
 
   final List<SchoolQuickAction> actions;
-  final int schoolId;
+  final String schoolId;
   final bool compact;
 
   @override
@@ -376,7 +376,7 @@ class _QuickActionsBoard extends StatelessWidget {
     // 1.0 通过 `state:{school:schoolInfo.id}` 传递校园上下文；这里保留 id 透传，
     // 以便后续若需要按学校做更细粒度的过滤可直接读取；同时它在二级页面会被
     // truthy 化为 schoolMode=true。
-    if (schoolId > 0) {
+    if (schoolId != '0') {
       args['school'] = schoolId;
     } else {
       args['school'] = true;
@@ -523,7 +523,7 @@ class _QuickActionItem extends StatelessWidget {
 class _VoiceInstrumentRow extends StatelessWidget {
   const _VoiceInstrumentRow({required this.schoolId});
 
-  final int schoolId;
+  final String schoolId;
 
   @override
   Widget build(BuildContext context) {
@@ -559,7 +559,7 @@ class _VoiceInstrumentRow extends StatelessWidget {
   ///   - 移除 firstMenu/secondMenu（这里不传即等价于"清空"）
   ///   - 带上 school 标记，让 voice/instrumental 二级页走 schoolTextbookList 接口
   void _go(BuildContext context, String route) {
-    final args = <String, dynamic>{'school': schoolId > 0 ? schoolId : true};
+    final args = <String, dynamic>{'school': schoolId != '0' ? schoolId : true};
     Navigator.pushNamed(context, route, arguments: args);
   }
 }

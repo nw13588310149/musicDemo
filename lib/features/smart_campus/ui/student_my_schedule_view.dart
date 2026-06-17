@@ -36,6 +36,7 @@ import '../../shell/ui/shell_layout.dart';
 import '../data/student_repository.dart';
 import '../data/schedule_course_card_builder.dart';
 import '../data/schedule_slot_time.dart';
+import '../data/schedule_teaching_week.dart';
 import 'widgets/schedule_course_card.dart';
 import 'widgets/schedule_idle_slot.dart';
 import 'widgets/smart_campus_page_banner.dart';
@@ -89,8 +90,7 @@ class StudentMyScheduleView extends ConsumerStatefulWidget {
 
 class _StudentMyScheduleViewState extends ConsumerState<StudentMyScheduleView> {
   late DateTime _weekStart;
-  int _currentWeek = 1;
-  static const int _baseWeek = 1;
+  int _currentWeek = kScheduleCurrentTeachingWeek;
 
   List<_TimeConfig> _timeConfigs = const [];
   List<List<List<ScheduleCourseCardData>>>? _serverCells;
@@ -111,16 +111,12 @@ class _StudentMyScheduleViewState extends ConsumerState<StudentMyScheduleView> {
   String _isoDate(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-  DateTime _mondayOf(DateTime d) {
-    final pure = DateTime(d.year, d.month, d.day);
-    return pure.subtract(Duration(days: pure.weekday - 1));
-  }
-
   @override
   void initState() {
     super.initState();
-    _weekStart = _mondayOf(DateTime.now());
-    _currentWeek = _baseWeek;
+    final anchor = scheduleCurrentTeachingWeekAnchor();
+    _weekStart = anchor.monday;
+    _currentWeek = anchor.week;
     WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrap());
   }
 
@@ -237,7 +233,7 @@ class _StudentMyScheduleViewState extends ConsumerState<StudentMyScheduleView> {
   void _gotoPrev() {
     setState(() {
       _weekStart = _weekStart.subtract(const Duration(days: 7));
-      _currentWeek -= 1;
+      _currentWeek = scheduleTeachingWeekOf(_weekStart);
     });
     _loadSchedule();
   }
@@ -245,15 +241,16 @@ class _StudentMyScheduleViewState extends ConsumerState<StudentMyScheduleView> {
   void _gotoNext() {
     setState(() {
       _weekStart = _weekStart.add(const Duration(days: 7));
-      _currentWeek += 1;
+      _currentWeek = scheduleTeachingWeekOf(_weekStart);
     });
     _loadSchedule();
   }
 
   void _gotoCurrent() {
+    final anchor = scheduleCurrentTeachingWeekAnchor();
     setState(() {
-      _weekStart = _mondayOf(DateTime.now());
-      _currentWeek = _baseWeek;
+      _weekStart = anchor.monday;
+      _currentWeek = anchor.week;
     });
     _loadSchedule();
   }

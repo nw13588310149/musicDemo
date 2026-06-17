@@ -56,7 +56,7 @@ class SchoolRepository {
     );
   }
 
-  Future<ApiResponse> getBannerList({required int schoolId}) {
+  Future<ApiResponse> getBannerList({required String schoolId}) {
     return client.post(
       '/app/user/bannerList',
       data: <String, dynamic>{

@@ -16,15 +16,15 @@ class VideoTutorialRepository {
 
   final ApiClient client;
 
-  Future<ApiResponse> getBannerList({int schoolId = 0}) {
+  Future<ApiResponse> getBannerList({String schoolId = '0'}) {
     final data = <String, dynamic>{'contentType': 1};
-    if (schoolId > 0) {
+    if (schoolId != '0') {
       data['schoolId'] = schoolId;
     }
     return client.post('/app/user/bannerList', data: data);
   }
 
-  Future<ApiResponse> getSchoolBannerList({required int schoolId}) {
+  Future<ApiResponse> getSchoolBannerList({required String schoolId}) {
     return client.post(
       '/app/user/bannerList',
       data: <String, dynamic>{

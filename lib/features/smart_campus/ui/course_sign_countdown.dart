@@ -66,11 +66,11 @@ class _CourseSignCountdownBadgeState extends State<CourseSignCountdownBadge> {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final ended = _snapshot.phase == CourseSlotPhase.ended;
-    return Column(
+    return Row(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.end,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        if (_snapshot.label.isNotEmpty)
+        if (_snapshot.label.isNotEmpty) ...[
           Text(
             _snapshot.label,
             style: TextStyle(
@@ -81,7 +81,8 @@ class _CourseSignCountdownBadgeState extends State<CourseSignCountdownBadge> {
               height: 1,
             ),
           ),
-        if (_snapshot.label.isNotEmpty) SizedBox(height: ui(2)),
+          SizedBox(width: ui(4)),
+        ],
         Text(
           _snapshot.timeText,
           style: TextStyle(
@@ -90,6 +91,8 @@ class _CourseSignCountdownBadgeState extends State<CourseSignCountdownBadge> {
             fontFamily: ended ? 'PingFang SC' : 'Barlow',
             fontWeight: ended ? AppFont.w400 : FontWeight.w600,
             height: 1,
+            // 等宽数字，避免每秒刷新时 HH:MM:SS 宽度抖动。
+            fontFeatures: const [FontFeature.tabularFigures()],
           ),
         ),
       ],

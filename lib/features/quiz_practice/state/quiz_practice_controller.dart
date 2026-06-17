@@ -8,7 +8,7 @@ import '../data/quiz_question_parser.dart';
 import 'quiz_practice_state.dart';
 
 final quizPracticeControllerProvider = StateNotifierProvider.autoDispose
-    .family<QuizPracticeController, QuizPracticeState, int>((ref, schoolId) {
+    .family<QuizPracticeController, QuizPracticeState, String>((ref, schoolId) {
       final repo = ref.watch(quizPracticeRepositoryProvider);
       return QuizPracticeController(repository: repo, schoolId: schoolId);
     });
@@ -16,7 +16,7 @@ final quizPracticeControllerProvider = StateNotifierProvider.autoDispose
 class QuizPracticeController extends StateNotifier<QuizPracticeState> {
   QuizPracticeController({
     required QuizPracticeRepository repository,
-    required int schoolId,
+    required String schoolId,
   }) : _repository = repository,
        _schoolId = schoolId,
        super(QuizPracticeState.initial) {
@@ -24,9 +24,9 @@ class QuizPracticeController extends StateNotifier<QuizPracticeState> {
   }
 
   final QuizPracticeRepository _repository;
-  final int _schoolId;
+  final String _schoolId;
 
-  int get schoolId => _schoolId;
+  String get schoolId => _schoolId;
 
   Future<void> refresh() async {
     state = state.copyWith(loading: true, clearErrorMessage: true);

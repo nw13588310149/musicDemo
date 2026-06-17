@@ -370,12 +370,10 @@ class _PracticeRingCard extends StatelessWidget {
     // 内圆与外环几何中心对齐。
     final innerTop = (ringSize - innerSize) / 2;
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(ui(12)),
-        child: Container(
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
           height: ui(260),
           decoration: BoxDecoration(
             gradient: cardGradient,
@@ -499,7 +497,6 @@ class _PracticeRingCard extends StatelessWidget {
             ],
           ),
         ),
-      ),
     );
   }
 }

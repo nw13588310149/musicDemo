@@ -11,6 +11,7 @@ import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dar
 
 import '../../../app/router/route_paths.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/providers/app_providers.dart';
 import '../../school/state/school_page_controller.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../../quiz_practice/state/quiz_practice_controller.dart';
@@ -23,9 +24,18 @@ import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 class SchoolQuizPracticePage extends ConsumerWidget {
   const SchoolQuizPracticePage({super.key});
 
+  String _resolveSchoolId(WidgetRef ref) {
+    final stored = ref.watch(appStorageProvider).schoolId;
+    if (stored != '0' && stored.isNotEmpty) {
+      return stored;
+    }
+    final fromPage = ref.watch(schoolPageControllerProvider).schoolId;
+    return fromPage != '0' ? fromPage : kPublicQuizSchoolId;
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final schoolId = ref.watch(schoolPageControllerProvider).schoolId;
+    final schoolId = _resolveSchoolId(ref);
     final provider = quizPracticeControllerProvider(schoolId);
     final state = ref.watch(provider);
     final controller = ref.read(provider.notifier);
@@ -62,7 +72,7 @@ class SchoolQuizPracticePage extends ConsumerWidget {
   Future<void> _openSession(
     BuildContext context,
     QuizPracticeController controller,
-    int schoolId,
+    String schoolId,
     QuizPracticeSummary summary,
   ) async {
     if (summary.allCount <= 0) {
@@ -208,12 +218,10 @@ class _PracticeRingCard extends StatelessWidget {
     final pillInnerWidth = ui(66);
     final pillInnerHeight = ui(22);
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(ringSize / 2),
-        child: SizedBox(
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
           height: ringSize + pillHeight / 2,
           child: Stack(
             alignment: Alignment.topCenter,
@@ -306,7 +314,6 @@ class _PracticeRingCard extends StatelessWidget {
             ],
           ),
         ),
-      ),
     );
   }
 }

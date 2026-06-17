@@ -43,6 +43,7 @@ import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/admin_repository.dart';
 import '../data/teacher_leave_data.dart';
+import 'widgets/smart_campus_stat_card.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // —— 颜色 ————————————————————————————————————————————————————————
@@ -395,99 +396,29 @@ class _StatsRow extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: _StatCard(
+          child: SmartCampusStatCard(
+            backgroundAsset: AppAssets.adminStaffLeaveStatCard1,
             label: '待审批',
             value: pendingCount,
-            gradient: const LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [Color(0xFFE7DCFF), Colors.white],
-              stops: [0.0, 0.73],
-            ),
           ),
         ),
         SizedBox(width: ui(12)),
         Expanded(
-          child: _StatCard(
+          child: SmartCampusStatCard(
+            backgroundAsset: AppAssets.adminStaffLeaveStatCard2,
             label: '已通过',
             value: approvedCount,
-            gradient: const LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [Color(0xFFDCFFE7), Colors.white],
-              stops: [0.0, 0.73],
-            ),
           ),
         ),
         SizedBox(width: ui(12)),
         Expanded(
-          child: _StatCard(
+          child: SmartCampusStatCard(
+            backgroundAsset: AppAssets.adminStaffLeaveStatCard3,
             label: '已拒绝',
             value: rejectedCount,
-            gradient: const LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [Color(0xFFFFE2DC), Colors.white],
-              stops: [0.0, 0.73],
-            ),
           ),
         ),
       ],
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.label,
-    required this.value,
-    required this.gradient,
-  });
-
-  final String label;
-  final int value;
-  final LinearGradient gradient;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      height: ui(100),
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        gradient: gradient,
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(12)),
-      ),
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(ui(16), ui(16), ui(16), ui(0)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: ui(14),
-                color: Colors.black,
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w500,
-                height: 1.0,
-              ),
-            ),
-            SizedBox(height: ui(12)),
-            Text(
-              '$value',
-              style: TextStyle(
-                fontSize: ui(32),
-                color: _kTextDark,
-                fontFamily: 'Barlow',
-                fontWeight: FontWeight.w500,
-                height: 1.0,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

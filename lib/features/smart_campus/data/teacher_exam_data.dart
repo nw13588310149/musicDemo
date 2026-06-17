@@ -16,6 +16,7 @@ class TeacherExamSubmission {
     required this.medium,
     required this.uploadAt,
     required this.action,
+    this.studentNo = '',
     this.score,
     this.comment = '',
     this.path = '',
@@ -23,6 +24,9 @@ class TeacherExamSubmission {
 
   final String studentId;
   final String studentName;
+
+  /// 学号（接口 `no`），用于花名册定位。
+  final String studentNo;
   final TeacherExamSubmissionState state;
   final String subject;
   final String medium;
@@ -32,14 +36,8 @@ class TeacherExamSubmission {
   final String comment;
   final String path;
 
-  bool get canRemind =>
-      state == TeacherExamSubmissionState.missing ||
-      (state == TeacherExamSubmissionState.pending && path.isEmpty);
-  bool get canScore =>
-      state == TeacherExamSubmissionState.pending && path.isNotEmpty;
-  bool get canView =>
-      state == TeacherExamSubmissionState.reviewed ||
-      (state == TeacherExamSubmissionState.pending && path.isNotEmpty);
+  /// 无任何提交资源（用于评分抽屉里决定是否提供「催交提醒」）。
+  bool get hasNoSubmission => path.trim().isEmpty;
 }
 
 class TeacherExamOverviewStats {
@@ -125,6 +123,13 @@ class TeacherExamDetailMetrics {
     this.reviewed = 0,
     this.total = 0,
     this.submitted = 0,
+    this.passCount = 0,
+    this.excellentCount = 0,
+    this.passRate = '',
+    this.excellentRate = '',
+    this.avgScore,
+    this.maxScore,
+    this.minScore,
   });
 
   final int attended;
@@ -134,28 +139,30 @@ class TeacherExamDetailMetrics {
   final int total;
   final int submitted;
 
+  /// 及格 / 优秀人数与比率（Swagger `TeacherExamStatRes`：passCount / passRate 等）。
+  final int passCount;
+  final int excellentCount;
+  final String passRate;
+  final String excellentRate;
+  final double? avgScore;
+  final double? maxScore;
+  final double? minScore;
+
+  /// 是否有可展示的成绩聚合（已评 > 0 且有均分）。
+  bool get hasScoreSummary => reviewed > 0 && avgScore != null;
+
   factory TeacherExamDetailMetrics.fromApi(
     dynamic raw, {
     required List<TeacherExamSubmission> submissions,
   }) {
     final map = _unwrapApiMap(raw);
-    final total = _pickInt(map, [
-      'totalCount',
-      'studentCount',
-      'shouldCount',
-      'joinCount',
-    ], fallback: submissions.length);
-    final submitted = _pickInt(map, [
-      'submitCount',
-      'submittedCount',
-      'joinCount',
-    ], fallback: submissions.where((s) => s.path.isNotEmpty).length);
-    final unsubmitted = _pickInt(map, [
-      'unSubmitCount',
-      'unsubmittedCount',
-      'absentCount',
-      'missingCount',
-    ], fallback: total - submitted);
+    final reviewed = _pickInt(map, [
+      'scoredCount',
+      'scoreCount',
+      'reviewedCount',
+    ], fallback: submissions
+        .where((s) => s.state == TeacherExamSubmissionState.reviewed)
+        .length);
     final pending = _pickInt(map, [
       'unscoredCount',
       'unScoreCount',
@@ -165,12 +172,24 @@ class TeacherExamDetailMetrics {
     ], fallback: submissions
         .where((s) => s.state == TeacherExamSubmissionState.pending)
         .length);
-    final reviewed = _pickInt(map, [
-      'scoreCount',
-      'reviewedCount',
-      'scoredCount',
+    // 提交人数 = 有资源路径者；后端通常不单独返回，回退到本地统计。
+    final submitted = _pickInt(map, [
+      'submitCount',
+      'submittedCount',
+    ], fallback: submissions.where((s) => s.path.isNotEmpty).length);
+    // 应考人数：stat 未提供时回退为已评 + 未评（即本次科目花名册总数）。
+    final total = _pickInt(map, [
+      'totalCount',
+      'studentCount',
+      'shouldCount',
+    ], fallback: submissions.isNotEmpty ? submissions.length : reviewed + pending);
+    final unsubmitted = _pickInt(map, [
+      'unSubmitCount',
+      'unsubmittedCount',
+      'absentCount',
+      'missingCount',
     ], fallback: submissions
-        .where((s) => s.state == TeacherExamSubmissionState.reviewed)
+        .where((s) => s.state == TeacherExamSubmissionState.missing)
         .length);
     return TeacherExamDetailMetrics(
       attended: _pickInt(map, ['attendCount', 'joinCount'], fallback: total),
@@ -179,6 +198,13 @@ class TeacherExamDetailMetrics {
       reviewed: reviewed,
       total: total,
       submitted: submitted,
+      passCount: _pickInt(map, ['passCount']),
+      excellentCount: _pickInt(map, ['excellentCount']),
+      passRate: _pickString(map, ['passRate']),
+      excellentRate: _pickString(map, ['excellentRate']),
+      avgScore: _pickDouble(map, ['avgScore', 'averageScore']),
+      maxScore: _pickDouble(map, ['maxScore', 'highestScore']),
+      minScore: _pickDouble(map, ['minScore', 'lowestScore']),
     );
   }
 }
@@ -202,6 +228,11 @@ class TeacherExamItem {
     required this.reviewed,
     required this.submissions,
     required this.publishedRatio,
+    this.passRate = '',
+    this.excellentRate = '',
+    this.avgScore,
+    this.maxScore,
+    this.minScore,
     this.detailLoaded = false,
   });
 
@@ -222,7 +253,17 @@ class TeacherExamItem {
   final int reviewed;
   final List<TeacherExamSubmission> submissions;
   final ({int submitted, int total}) publishedRatio;
+
+  /// 及格率 / 优秀率（如 `75.00%`），来自 `examStudentStat`；未评时为空串。
+  final String passRate;
+  final String excellentRate;
+  final double? avgScore;
+  final double? maxScore;
+  final double? minScore;
   final bool detailLoaded;
+
+  /// 是否有可展示的成绩聚合（已评 > 0 且有均分）。
+  bool get hasScoreSummary => reviewed > 0 && avgScore != null;
 
   TeacherExamItem copyWith({
     int? attended,
@@ -231,6 +272,11 @@ class TeacherExamItem {
     int? reviewed,
     List<TeacherExamSubmission>? submissions,
     ({int submitted, int total})? publishedRatio,
+    String? passRate,
+    String? excellentRate,
+    double? avgScore,
+    double? maxScore,
+    double? minScore,
     bool? detailLoaded,
   }) {
     return TeacherExamItem(
@@ -251,6 +297,11 @@ class TeacherExamItem {
       reviewed: reviewed ?? this.reviewed,
       submissions: submissions ?? this.submissions,
       publishedRatio: publishedRatio ?? this.publishedRatio,
+      passRate: passRate ?? this.passRate,
+      excellentRate: excellentRate ?? this.excellentRate,
+      avgScore: avgScore ?? this.avgScore,
+      maxScore: maxScore ?? this.maxScore,
+      minScore: minScore ?? this.minScore,
       detailLoaded: detailLoaded ?? this.detailLoaded,
     );
   }
@@ -363,8 +414,58 @@ TeacherExamItem applyTeacherExamDetail({
       submitted: metrics.submitted,
       total: metrics.total > 0 ? metrics.total : submissions.length,
     ),
+    passRate: metrics.passRate,
+    excellentRate: metrics.excellentRate,
+    avgScore: metrics.avgScore,
+    maxScore: metrics.maxScore,
+    minScore: metrics.minScore,
     detailLoaded: true,
   );
+}
+
+/// 教师端「考场安排」一条座位记录（`AppSchoolExamSeatVO`）。
+class TeacherExamSeatEntry {
+  const TeacherExamSeatEntry({
+    required this.studentId,
+    required this.studentNo,
+    required this.studentName,
+    required this.className,
+    required this.subjectName,
+    required this.classroomName,
+    required this.seatNo,
+  });
+
+  final String studentId;
+  final String studentNo;
+  final String studentName;
+  final String className;
+  final String subjectName;
+  final String classroomName;
+  final int? seatNo;
+
+  bool get arranged => classroomName.isNotEmpty && seatNo != null;
+}
+
+/// 解析 `examFullDetail` 响应中的 `data.seats` 列表为座位记录。
+List<TeacherExamSeatEntry> parseTeacherExamSeats(dynamic raw) {
+  final map = _unwrapApiMap(raw);
+  final seats = map['seats'] ?? raw;
+  if (seats is! List) return const [];
+  return seats.whereType<Map>().map((e) {
+    final row = e.map((k, v) => MapEntry(k.toString(), v));
+    final rawSeat = row['seatNo'];
+    return TeacherExamSeatEntry(
+      studentId:
+          readSnowflakeId(row['studentId']) ?? _stringValue(row['studentId']),
+      studentNo: _pickString(row, ['no', 'studentNo', 'sno']),
+      studentName: _pickString(row, ['realname', 'realName', 'studentName'],
+          '未命名学生'),
+      className: _pickString(row, ['className']),
+      subjectName: _pickString(row, ['subjectName']),
+      classroomName: _pickString(row, ['classroomName']),
+      seatNo: rawSeat == null ? null : int.tryParse('$rawSeat'),
+    );
+  }).toList(growable: false);
 }
 
 List<TeacherExamSubmission> parseTeacherExamSubmissionList(
@@ -380,25 +481,22 @@ TeacherExamSubmission _submissionFromRow(
   Map<String, dynamic> row, {
   required String subjectName,
 }) {
+  // 对齐 Swagger `TeacherExamStudentRes`：
+  //   score(null=未打分) / path(资源路径) / scored(bool) / scoreStatus(0未打分 1已打分)。
+  // 三态判定：已打分→reviewed；未打分但有提交→pending；未打分且无提交→missing(未交)。
   final path = _stringValue(row['path']);
   final scoreRaw = row['score'];
   final score = scoreRaw == null ? null : num.tryParse(scoreRaw.toString());
-  final scoreStatus = _pickInt(row, ['scoreStatus', 'status']);
-  final absent =
-      row['absent'] == true ||
-      row['isAbsent'] == true ||
-      scoreStatus == 2 ||
-      _pickInt(row, ['submitStatus']) == 0 && path.isEmpty;
-  final scored =
-      row['scored'] == true ||
-      scoreStatus == 1 ||
-      score != null;
-  final missing = absent || (path.isEmpty && !scored);
-  final state = missing
-      ? TeacherExamSubmissionState.missing
-      : scored
+  final scoreStatus = _pickInt(row, ['scoreStatus'], fallback: -1);
+  final scored = row['scored'] == true || scoreStatus == 1 || score != null;
+  final hasSubmission = path.isNotEmpty;
+
+  final state = scored
       ? TeacherExamSubmissionState.reviewed
-      : TeacherExamSubmissionState.pending;
+      : hasSubmission
+      ? TeacherExamSubmissionState.pending
+      : TeacherExamSubmissionState.missing;
+
   final uploadAt = _formatUploadAt(_pickString(row, [
     'submitTime',
     'uploadTime',
@@ -406,15 +504,20 @@ TeacherExamSubmission _submissionFromRow(
     'updateTime',
   ]));
   final action = switch (state) {
-    TeacherExamSubmissionState.missing => '催交/详情',
+    TeacherExamSubmissionState.missing => '录入',
     TeacherExamSubmissionState.reviewed => '查看',
-    TeacherExamSubmissionState.pending =>
-      path.isEmpty ? '催交/详情' : '试听/评分',
+    TeacherExamSubmissionState.pending => '评分',
     TeacherExamSubmissionState.passed => '查看',
   };
   return TeacherExamSubmission(
-    studentId: readSnowflakeId(row['studentId']) ?? _stringValue(row['studentId']),
-    studentName: _pickString(row, ['realname', 'realName', 'studentName'], '未命名学生'),
+    studentId:
+        readSnowflakeId(row['studentId']) ?? _stringValue(row['studentId']),
+    studentNo: _pickString(row, ['no', 'studentNo', 'sno']),
+    studentName: _pickString(row, [
+      'realname',
+      'realName',
+      'studentName',
+    ], '未命名学生'),
     state: state,
     subject: subjectName,
     medium: _mediumFromPath(path),

@@ -191,6 +191,17 @@ flutter:
     - assets/images/xiaoquan/
     - assets/images/smartCampus/
     - assets/images/smartCampus/head_teacher/
+    - assets/images/smartCampus/schedule_edit/
+    - assets/images/smartCampus/dorm_check/
+    - assets/images/smartCampus/admin/class_management/
+    - assets/images/smartCampus/admin/teacher_management/
+    - assets/images/smartCampus/admin/face_library/
+    - assets/images/smartCampus/admin/notification/
+    - assets/images/smartCampus/admin/staff_leave/
+    - assets/images/smartCampus/admin/student_management/
+    - assets/images/smartCampus/student/homework/
+    - assets/images/smartCampus/student/leave/
+    - assets/images/smartCampus/teacher/student_roster/
     - assets/web/baidu_map.html
     - assets/images/circle/
     - assets/audio/demo.mid
@@ -256,6 +267,11 @@ flutter:
           weight: 600
         - asset: assets/fonts/Barlow-SemiBold.ttf
           weight: 700
+    # 智慧校园统计卡数字等：直接绑定 Barlow-SemiBold.ttf
+    - family: Barlow SemiBold
+      fonts:
+        - asset: assets/fonts/Barlow-SemiBold.ttf
+          weight: 600
     # 空白列表等提示文案（设计稿 Inter 16 / 400）
     - family: Inter
       fonts:

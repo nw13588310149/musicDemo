@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_response.dart';
+import '../../../core/network/snowflake_id.dart';
 import '../data/school_repository.dart';
 import 'school_page_state.dart';
 
@@ -34,7 +35,7 @@ class SchoolPageController extends StateNotifier<SchoolPageState> {
     if (!mounted) return;
 
     final schoolMap = _asMap(schoolResponse.data);
-    final schoolId = _toInt(schoolMap['id']);
+    final schoolId = readSnowflakeId(schoolMap['id']) ?? '0';
     final schoolName = schoolMap['name']?.toString() ?? '';
 
     final responses = await Future.wait([
@@ -53,8 +54,8 @@ class SchoolPageController extends StateNotifier<SchoolPageState> {
     final learningItems = _parseLearning(progressResponse.data);
     var newsItems = _parseNews(latestResponse.data);
 
-    if (bannerItems.isEmpty && schoolId != 0) {
-      final fallbackBanner = await _repository.getBannerList(schoolId: 0);
+    if (bannerItems.isEmpty && schoolId != '0') {
+      final fallbackBanner = await _repository.getBannerList(schoolId: '0');
       if (!mounted) return;
       bannerItems = _parseBanners(fallbackBanner.data);
     }

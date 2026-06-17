@@ -46,19 +46,18 @@ import '../../../core/widgets/popup_selector_field.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/dormitory_check_data.dart';
 import '../state/dormitory_manager_controller.dart';
+import 'widgets/smart_campus_stat_card.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // —— 颜色 ————————————————————————————————————————————————————————
 const Color _kPageBg = Color(0xFFEFF3FC);
 const Color _kCardGreyBg = Color(0xFFF5F6FA);
 const Color _kBorderSoft = Color(0xFFF3F2F3);
-const Color _kBorderHair = Color(0xFFE5E7EB);
 const Color _kBorderLine = Color(0xFFCECED1);
 const Color _kTextDark = Color(0xFF0B081A);
 const Color _kTextHint = Color(0xFFB6B5BB);
 const Color _kPurple = Color(0xFF8741FF);
 const Color _kPurpleSoftBg = Color(0xFFE7D9FF);
-const Color _kGreen = Color(0xFF1CD097);
 
 // =============================================================================
 // 顶级视图
@@ -572,151 +571,37 @@ class _StatsRow extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: _StatCard(
+          child: SmartCampusStatCard(
+            backgroundAsset: AppAssets.dormCheckStatCard1,
             label: '在册床位',
             value: beds,
-            gradient: const LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [Color(0x29FFA846), Color(0x00FFFFFF)],
-            ),
-            iconColor: _kGreen,
-            iconKind: _StatIconKind.home,
           ),
         ),
         SizedBox(width: ui(12)),
         Expanded(
-          child: _StatCard(
+          child: SmartCampusStatCard(
+            backgroundAsset: AppAssets.dormCheckStatCard2,
             label: '正常口径',
             value: normal,
-            gradient: const LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [Color(0x1746FF77), Color(0x00FFFFFF)],
-            ),
-            iconColor: _kGreen,
-            iconKind: _StatIconKind.home,
           ),
         ),
         SizedBox(width: ui(12)),
         Expanded(
-          child: _StatCard(
+          child: SmartCampusStatCard(
+            backgroundAsset: AppAssets.dormCheckStatCard3,
             label: '晚归',
             value: lateReturn,
-            gradient: const LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [Color(0x1CFF4646), Color(0x00FFFFFF)],
-            ),
-            iconColor: _kPurple,
-            iconKind: _StatIconKind.alert,
           ),
         ),
         SizedBox(width: ui(12)),
         Expanded(
-          child: _StatCard(
+          child: SmartCampusStatCard(
+            backgroundAsset: AppAssets.dormCheckStatCard4,
             label: '未打卡',
             value: absent,
-            gradient: const LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [Color(0x1CFF4646), Color(0x00FFFFFF)],
-            ),
-            iconColor: _kPurple,
-            iconKind: _StatIconKind.alert,
           ),
         ),
       ],
-    );
-  }
-}
-
-enum _StatIconKind { home, alert }
-
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.label,
-    required this.value,
-    required this.gradient,
-    required this.iconColor,
-    required this.iconKind,
-  });
-
-  final String label;
-  final int value;
-  final LinearGradient gradient;
-  final Color iconColor;
-  final _StatIconKind iconKind;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      height: ui(100),
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        gradient: gradient,
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(12)),
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            left: ui(16),
-            top: ui(16),
-            right: ui(56),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: ui(14),
-                    color: _kTextDark,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w500,
-                    height: 1.0,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                SizedBox(height: ui(12)),
-                Text(
-                  '$value',
-                  style: TextStyle(
-                    fontSize: ui(32),
-                    color: _kTextDark,
-                    fontFamily: 'Barlow',
-                    fontWeight: FontWeight.w500,
-                    height: 1.0,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Positioned(
-            right: ui(16),
-            top: ui(34),
-            child: Container(
-              width: ui(32),
-              height: ui(32),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(ui(8)),
-                border: Border.all(color: _kBorderHair, width: 0.5),
-              ),
-              alignment: Alignment.center,
-              child: Icon(
-                iconKind == _StatIconKind.home
-                    ? Icons.home_rounded
-                    : Icons.error_outline_rounded,
-                size: ui(16),
-                color: iconColor,
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

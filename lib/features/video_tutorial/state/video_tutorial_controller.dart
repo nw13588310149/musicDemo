@@ -390,7 +390,7 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
     final sharePayload = Map<String, dynamic>.from(detail.toShareMap());
     if (_args.schoolMode) {
       sharePayload['schoolMode'] = true;
-      if (_args.schoolId > 0) {
+      if (_args.schoolId != '0') {
         sharePayload['schoolId'] = _args.schoolId;
       }
     }

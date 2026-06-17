@@ -12,6 +12,7 @@ import '../state/dormitory_manager_controller.dart';
 import '../data/teacher_notice_data.dart';
 import '../state/smart_campus_state.dart';
 import 'widgets/role_switcher_buttons.dart';
+import 'widgets/smart_campus_stat_card.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 /// 宿管端 · 智慧校园首页。
@@ -186,13 +187,10 @@ class _DormManagerHomeViewState extends ConsumerState<DormManagerHomeView> {
 // ============================================================================
 
 class _StatItem {
-  const _StatItem(this.value, this.label, {this.bigValue = true});
+  const _StatItem(this.value, this.label);
 
   final String value;
   final String label;
-
-  /// 是否使用大数值字体（24/500）。在寝率 "98%" 用 16/500 小字号。
-  final bool bigValue;
 }
 
 class _QuickAction {
@@ -282,12 +280,10 @@ class _DormStatsRow extends StatelessWidget {
       _StatItem('${index.todayNormalCount}', '今日正常'),
       _StatItem('${index.todayLateCount}', '晚归登记'),
       _StatItem('${index.todayAbsentCount}', '未打卡'),
-      _StatItem(rate, '在寝率', bigValue: false),
+      _StatItem(rate, '在寝率'),
     ];
-    // 用 IntrinsicHeight 让 Row 取「最高子卡」的内在高度作为有界纵向约束，
-    // 所有 stat 卡再用 CrossAxisAlignment.stretch 等高对齐。
-    // 避免写死高度时不同字号 / 字体的实际行高造成 overflow。
-    return IntrinsicHeight(
+    return SizedBox(
+      height: ui(67),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -322,28 +318,29 @@ class _StatCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(ui(16)),
       ),
-      padding: EdgeInsets.symmetric(horizontal: ui(8), vertical: ui(10)),
+      padding: EdgeInsets.symmetric(horizontal: ui(8), vertical: ui(8)),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            item.value,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: item.bigValue ? ui(24) : ui(16),
-              height: 1.2,
-              fontWeight: AppFont.w500,
-              color: const Color(0xFF0B081A),
-              fontFamily: 'PingFang SC',
+          Expanded(
+            child: Center(
+              child: Text(
+                item.value,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: smartCampusStatValueTextStyle(ui),
+              ),
             ),
           ),
-          SizedBox(height: ui(4)),
           Text(
             item.label,
             textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: ui(12),
-              height: 1.2,
+              height: 1.0,
               color: const Color(0xFF6D6B75),
               fontFamily: 'PingFang SC',
             ),
@@ -373,28 +370,32 @@ class _PendingCard extends StatelessWidget {
           color: Colors.white,
           borderRadius: BorderRadius.circular(ui(16)),
         ),
-        padding: EdgeInsets.symmetric(horizontal: ui(8), vertical: ui(10)),
+        padding: EdgeInsets.symmetric(horizontal: ui(8), vertical: ui(8)),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              value,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: ui(24),
-                height: 1.2,
-                fontWeight: AppFont.w500,
-                color: const Color(0xFF8741FF),
-                fontFamily: 'PingFang SC',
+            Expanded(
+              child: Center(
+                child: Text(
+                  value,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: smartCampusStatValueTextStyle(
+                    ui,
+                    color: const Color(0xFF8741FF),
+                  ),
+                ),
               ),
             ),
-            SizedBox(height: ui(4)),
             Text(
               label,
               textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: ui(12),
-                height: 1.2,
+                height: 1.0,
                 color: const Color(0xFF6D6B75),
                 fontFamily: 'PingFang SC',
               ),

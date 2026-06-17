@@ -22,6 +22,7 @@ abstract final class RoutePaths {
   static const consultation = '/consultation';
   static const dictation = '/Dictation';
   static const mock = '/mock';
+  static const schoolWebsite = '/school-website';
   static const musicTheory = '/musicTheory';
   static const sightSinging = '/sightSinging';
   static const store = '/store';

@@ -32,14 +32,32 @@ class CoursewarePickedFile {
   bool get canUpload => hasBytes || hasPath;
 }
 
+/// 是否已有一次选择请求在途。用来串行化系统选择器调用。
+bool _pickInFlight = false;
+
 /// Picks files and returns filename + either bytes (web) or a local path (native).
 ///
 /// - [allowMultiple]：是否允许多选（仅在 web / 图片选择上有意义）。
 /// - [type]：限定可选文件类型。默认 [CoursewarePickType.any] —— 等价
 ///   于历史行为；显式传 [CoursewarePickType.image] 时移动端会直接进相册。
+///
+/// 全局串行化：iOS 的 file_picker 在上一次选择（尤其是大视频，系统仍在
+/// 后台拷贝/转码）尚未结束时再次拉起，会触发原生 `multiple_request`，随后
+/// 首次选择的异步回调调用已被置空的 result block，造成 `EXC_BAD_ACCESS`
+/// 闪退。这里在前一次完成前，把新的选择请求按「未选择」返回空列表，避免
+/// 任何并发拉起。
 Future<List<CoursewarePickedFile>> pickCoursewareFiles({
   required bool allowMultiple,
   CoursewarePickType type = CoursewarePickType.any,
-}) {
-  return pickCoursewareFilesImpl(allowMultiple: allowMultiple, type: type);
+}) async {
+  if (_pickInFlight) return const <CoursewarePickedFile>[];
+  _pickInFlight = true;
+  try {
+    return await pickCoursewareFilesImpl(
+      allowMultiple: allowMultiple,
+      type: type,
+    );
+  } finally {
+    _pickInFlight = false;
+  }
 }

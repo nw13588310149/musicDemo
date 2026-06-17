@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-/// 首页「刷题」入口固定 schoolId；校园课件刷题传真实 schoolId。
-const kPublicQuizSchoolId = 0;
+/// 首页「刷题」入口固定 schoolId；校园课件刷题传真实 schoolId（String 避免 Web 大整数精度丢失）。
+const kPublicQuizSchoolId = '0';
 
 /// 1.0 中的 4 类练习：sequence/random/exam/error。
 enum QuizPracticeType { sequence, random, exam, error }

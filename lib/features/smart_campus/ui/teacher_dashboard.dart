@@ -19,6 +19,7 @@ import '../data/teacher_notice_data.dart';
 import '../data/teacher_repository.dart';
 import '../state/smart_campus_state.dart';
 import 'widgets/role_switcher_buttons.dart';
+import 'widgets/smart_campus_stat_card.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 part 'student_dashboard.dart';
@@ -685,10 +686,10 @@ class _TeacherStatRow extends StatelessWidget {
     }
     final ui = DashboardScaleScope.of(context).ui;
     // 父级（Column / ScrollView）纵向高度通常无界；这里先用 SizedBox 给一个
-    // 有界高度（68），Row 内部就可以安全使用 stretch 让 6 张卡等高铺满。
+    // 有界高度（67），Row 内部就可以安全使用 stretch 让 6 张卡等高铺满。
     return SizedBox(
       width: width.isFinite && width > 0 ? width : null,
-      height: ui(68),
+      height: ui(67),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -711,59 +712,29 @@ class _TeacherStatCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
 
-    // 紫色「下一节 15:30」卡 / 班主任端「待办 9」卡：紫字 24px 在上、灰色 12px 标签在下。
+  // 紫色「下一节 15:30」卡 / 班主任端「待办 9」卡：紫字在上、灰色标签在下。
     final isNextLesson = item.label == '下一节' || item.label == '待办';
-    // 文字型 value（非纯数字）走 16px：避免"周五 / 186天"在 24px 下显得太挤。
-    //   - 老师端："本周课时" → 周五
-    //   - 班主任端："关注学生" → 周五
-    //   - 学生端："月考时间" → 周五；"距离省统考" → 186天
-    final isWeekly =
-        item.label == '本周课时' ||
-        item.label == '关注学生' ||
-        item.label == '月考时间' ||
-        item.label == '距离省统考';
-
-    Widget value;
-    if (isNextLesson) {
-      value = Text(
-        item.value,
-        textAlign: TextAlign.center,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: ui(24),
-          color: const Color(0xFF8741FF),
-          fontWeight: FontWeight.w500,
-          height: 1,
-        ),
-      );
-    } else if (isWeekly) {
-      value = Text(
-        item.value,
-        textAlign: TextAlign.center,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: ui(16),
-          color: const Color(0xFF0B081A),
-          fontWeight: FontWeight.w500,
-          height: 1.1,
-        ),
-      );
-    } else {
-      value = Text(
-        item.value,
-        textAlign: TextAlign.center,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: ui(24),
-          color: const Color(0xFF0B081A),
-          fontWeight: FontWeight.w500,
-          height: 1,
-        ),
-      );
-    }
+    final valueColor = isNextLesson
+        ? const Color(0xFF8741FF)
+        : const Color(0xFF0B081A);
+    // 含中文的值（如「周三」「今天」「已过」）回退到系统字体后，同字号下视觉
+    // 比 Barlow 数字大很多；改用 PingFang SC 并下调字号，使其与数字视觉接近。
+    final isTextValue = RegExp(r'[\u4e00-\u9fff]').hasMatch(item.value);
+    final value = Text(
+      item.value,
+      textAlign: TextAlign.center,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: isTextValue
+          ? TextStyle(
+              fontSize: ui(18),
+              color: valueColor,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w600,
+              height: 1.0,
+            )
+          : smartCampusStatValueTextStyle(ui, color: valueColor),
+    );
 
     return Container(
       padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(8)),

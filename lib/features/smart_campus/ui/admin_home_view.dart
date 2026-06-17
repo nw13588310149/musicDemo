@@ -12,6 +12,7 @@ import '../data/teacher_notice_data.dart';
 import '../state/admin_home_controller.dart';
 import '../state/smart_campus_state.dart';
 import 'widgets/role_switcher_buttons.dart';
+import 'widgets/smart_campus_stat_card.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 /// 管理员智慧校园首页：970×~1100 双栏布局。
@@ -550,13 +551,17 @@ class _StatsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Row(
-      children: [
-        for (var i = 0; i < stats.length; i++) ...[
-          Expanded(child: _StatCard(item: stats[i])),
-          if (i < stats.length - 1) SizedBox(width: ui(16)),
+    return SizedBox(
+      height: ui(67),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < stats.length; i++) ...[
+            Expanded(child: _StatCard(item: stats[i])),
+            if (i < stats.length - 1) SizedBox(width: ui(16)),
+          ],
         ],
-      ],
+      ),
     );
   }
 }
@@ -574,29 +579,34 @@ class _StatCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(ui(16)),
       ),
-      padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(12)),
+      padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(8)),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            item.value,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: ui(24),
-              height: 1.2,
-              fontWeight: AppFont.w500,
-              color: item.highlight
-                  ? const Color(0xFF8741FF)
-                  : const Color(0xFF0B081A),
-              fontFamily: 'PingFang SC',
+          Expanded(
+            child: Center(
+              child: Text(
+                item.value,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: smartCampusStatValueTextStyle(
+                  ui,
+                  color: item.highlight
+                      ? const Color(0xFF8741FF)
+                      : const Color(0xFF0B081A),
+                ),
+              ),
             ),
           ),
-          SizedBox(height: ui(2)),
           Text(
             item.label,
             textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: ui(12),
-              height: 1.2,
+              height: 1.0,
               color: const Color(0xFF6D6B75),
               fontFamily: 'PingFang SC',
             ),

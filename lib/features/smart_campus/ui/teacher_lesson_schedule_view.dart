@@ -55,6 +55,7 @@ import '../data/teacher_repository.dart';
 import '../data/schedule_color_palette.dart';
 import '../data/schedule_course_card_builder.dart';
 import '../data/schedule_slot_time.dart';
+import '../data/schedule_teaching_week.dart';
 import 'widgets/schedule_color_swatch_picker.dart';
 import 'widgets/schedule_course_card.dart';
 import 'widgets/schedule_idle_slot.dart';
@@ -198,9 +199,7 @@ const List<_TimeConfig> _kDefaultTimeConfigs = [
   _TimeConfig(lineNum: 5, start: '14:00', end: '14:45'),
 ];
 
-/// 本学期总教学周数（与 admin 端约定一致：18 周）。"本学期所有教学周"
-/// 复用模式从当前 `currentWeek` 起补到第 [_kTermTotalWeeks] 周。
-const int _kTermTotalWeeks = 18;
+/// 复用模式从当前 `currentWeek` 起补到第 [kScheduleTermTotalWeeks] 周。
 
 // =============================================================================
 // 入口 widget
@@ -221,10 +220,9 @@ class _TeacherLessonScheduleViewState
   /// 当前显示的周一（用于日期范围 / 标签 / API begin/end）。
   late DateTime _weekStart;
 
-  /// "教学周第 N 周" 的展示数字。本地维护：默认 12 周（"本周"），每翻一周 ±1。
-  /// 后端 swagger 没单独返回教学周编号，仅作 UI 展示。
-  int _currentWeek = 12;
-  static const int _baseWeek = 12;
+  /// "教学周第 N 周" 的展示数字。与 [_weekStart] 联动，规则见
+  /// [scheduleTeachingWeekOf] / [scheduleCurrentTeachingWeekAnchor]。
+  int _currentWeek = kScheduleCurrentTeachingWeek;
 
   _ScheduleMode _mode = _ScheduleMode.view;
 
@@ -260,10 +258,7 @@ class _TeacherLessonScheduleViewState
   String _isoDate(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-  DateTime _mondayOf(DateTime d) {
-    final pure = DateTime(d.year, d.month, d.day);
-    return pure.subtract(Duration(days: pure.weekday - 1));
-  }
+  DateTime _mondayOf(DateTime d) => scheduleMondayOf(d);
 
   void _gotoPrev() {
     unawaited(
@@ -284,10 +279,11 @@ class _TeacherLessonScheduleViewState
   }
 
   void _gotoCurrent() {
+    final anchor = scheduleCurrentTeachingWeekAnchor();
     unawaited(
       _loadSchedule(
-        weekStart: _mondayOf(DateTime.now()),
-        weekNumber: _baseWeek,
+        weekStart: anchor.monday,
+        weekNumber: anchor.week,
       ),
     );
   }
@@ -304,11 +300,10 @@ class _TeacherLessonScheduleViewState
     );
     if (picked == null || !mounted) return;
     final newWeekStart = _mondayOf(picked);
-    final delta = newWeekStart.difference(_mondayOf(DateTime.now())).inDays;
     unawaited(
       _loadSchedule(
         weekStart: newWeekStart,
-        weekNumber: _baseWeek + (delta / 7).round(),
+        weekNumber: scheduleTeachingWeekOf(newWeekStart),
       ),
     );
   }
@@ -317,7 +312,9 @@ class _TeacherLessonScheduleViewState
   void initState() {
     super.initState();
     _serverCells = _emptyCells();
-    _weekStart = _mondayOf(DateTime.now());
+    final anchor = scheduleCurrentTeachingWeekAnchor();
+    _weekStart = anchor.monday;
+    _currentWeek = anchor.week;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // 先拉班级列表（驱动 timeConfig 用），再并行拉时间表 + 字典
       // （教室 / 科目，给申请幽灵卡补名字），最后拉课表。字典失败不会
@@ -2090,15 +2087,11 @@ class _ApplySmallLessonButton extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
+            Image.asset(
+              AppAssets.scheduleApplyCourse,
               width: ui(14),
               height: ui(14),
-              alignment: Alignment.center,
-              decoration: const BoxDecoration(
-                color: _kTextHint,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.add_rounded, size: ui(10), color: Colors.white),
+              fit: BoxFit.contain,
             ),
             SizedBox(width: ui(6)),
             Text(
@@ -3028,32 +3021,16 @@ class _ApplySmallLessonDrawerState
 
   /// 根据 `_reuse` 选项展开成多个排课日期：
   ///   - 不复用 → 仅基准日 1 行
-  ///   - 本学期所有教学周 → 从当前周开始补到第 [_kTermTotalWeeks] 周
+  ///   - 本学期所有教学周 → 从当前周开始补到第 [kScheduleTermTotalWeeks] 周
   ///   - 后续 4 周 → 基准日 + 4 个连续周（共 5 行）
   ///   - 后续 8 周 → 基准日 + 8 个连续周（共 9 行）
   List<DateTime> _computeReuseDates() {
     final base = DateTime.tryParse(widget.baseDateIso) ?? DateTime.now();
-    int extraWeeks;
-    switch (_reuse) {
-      case '本学期所有教学周':
-        extraWeeks = (_kTermTotalWeeks - widget.currentWeek).clamp(
-          0,
-          _kTermTotalWeeks,
-        );
-        break;
-      case '后续 4 周':
-        extraWeeks = 4;
-        break;
-      case '后续 8 周':
-        extraWeeks = 8;
-        break;
-      case '不复用':
-      default:
-        extraWeeks = 0;
-    }
-    return [
-      for (var i = 0; i <= extraWeeks; i++) base.add(Duration(days: i * 7)),
-    ];
+    return scheduleReuseDates(
+      base: base,
+      reuseMode: _reuse,
+      currentWeek: widget.currentWeek,
+    );
   }
 
   /// `2026-05-04` 格式（无时间，无时区）。
@@ -3164,14 +3141,17 @@ class _ApplySmallLessonDrawerState
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const _SectionLabel(
-                      icon: Icons.access_time_rounded,
+                    _SectionLabel(
+                      iconAsset: AppAssets.scheduleEditCourseTime,
                       label: '课程时间',
                     ),
                     SizedBox(height: ui(12)),
                     _ReadonlyField(text: widget.slotLabel),
                     SizedBox(height: ui(20)),
-                    const _SectionLabel(label: '班级'),
+                    _SectionLabel(
+                      iconAsset: AppAssets.scheduleEditClass,
+                      label: '班级',
+                    ),
                     SizedBox(height: ui(12)),
                     PopupSelectorField<String>(
                       value: _classId ?? '',
@@ -3194,8 +3174,8 @@ class _ApplySmallLessonDrawerState
                       },
                     ),
                     SizedBox(height: ui(20)),
-                    const _SectionLabel(
-                      icon: Icons.people_outline_rounded,
+                    _SectionLabel(
+                      iconAsset: AppAssets.scheduleEditStudent,
                       label: '参与学生',
                     ),
                     SizedBox(height: ui(12)),
@@ -3207,8 +3187,8 @@ class _ApplySmallLessonDrawerState
                       onToggleAll: _toggleAllStudents,
                     ),
                     SizedBox(height: ui(20)),
-                    const _SectionLabel(
-                      icon: Icons.meeting_room_outlined,
+                    _SectionLabel(
+                      iconAsset: AppAssets.scheduleEditClassroom,
                       label: '教室',
                     ),
                     SizedBox(height: ui(12)),
@@ -3227,8 +3207,8 @@ class _ApplySmallLessonDrawerState
                       onChanged: (v) => setState(() => _classroomId = v),
                     ),
                     SizedBox(height: ui(20)),
-                    const _SectionLabel(
-                      icon: Icons.menu_book_outlined,
+                    _SectionLabel(
+                      iconAsset: AppAssets.scheduleEditSubject,
                       label: '科目',
                     ),
                     SizedBox(height: ui(12)),
@@ -3249,8 +3229,8 @@ class _ApplySmallLessonDrawerState
                       onChanged: (v) => setState(() => _subjectId = v),
                     ),
                     SizedBox(height: ui(20)),
-                    const _SectionLabel(
-                      icon: Icons.palette_outlined,
+                    _SectionLabel(
+                      iconAsset: AppAssets.scheduleEditColor,
                       label: '颜色',
                     ),
                     SizedBox(height: ui(12)),
@@ -3260,8 +3240,8 @@ class _ApplySmallLessonDrawerState
                       onSelect: (c) => setState(() => _color = c),
                     ),
                     SizedBox(height: ui(20)),
-                    const _SectionLabel(
-                      icon: Icons.copy_outlined,
+                    _SectionLabel(
+                      iconAsset: AppAssets.scheduleEditRepeat,
                       label: '是否复用',
                     ),
                     SizedBox(height: ui(12)),
@@ -3346,9 +3326,9 @@ class _DrawerHeader extends StatelessWidget {
 }
 
 class _SectionLabel extends StatelessWidget {
-  const _SectionLabel({this.icon, required this.label});
+  const _SectionLabel({required this.iconAsset, required this.label});
 
-  final IconData? icon;
+  final String iconAsset;
   final String label;
 
   @override
@@ -3358,12 +3338,11 @@ class _SectionLabel extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        SizedBox(
+        Image.asset(
+          iconAsset,
           width: ui(16),
           height: ui(16),
-          child: icon == null
-              ? null
-              : Icon(icon, size: ui(16), color: const Color(0xFF1C274C)),
+          fit: BoxFit.contain,
         ),
         SizedBox(width: ui(8)),
         Text(

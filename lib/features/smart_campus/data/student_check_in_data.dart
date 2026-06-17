@@ -594,12 +594,15 @@ class StudentCheckInStat {
     final rateRaw = map['smallCourseOnTimeRate'] ??
         map['onTimeRate'] ??
         map['punctualityRate'] ??
-        map['onTimePercent'];
+        map['onTimePercent'] ??
+        map['attendanceRate'];
     double rate = 0;
     if (rateRaw != null) {
-      final parsed = double.tryParse(rateRaw.toString());
+      // 兼容 "0%" / "96.5%" / 0.965 等格式。
+      final cleaned = rateRaw.toString().replaceAll('%', '').trim();
+      final parsed = double.tryParse(cleaned);
       if (parsed != null) {
-        rate = parsed <= 1 ? parsed * 100 : parsed;
+        rate = parsed > 0 && parsed <= 1 ? parsed * 100 : parsed;
       }
     }
     return StudentCheckInStat(
@@ -608,6 +611,7 @@ class StudentCheckInStat {
         'smallCourseCount',
         'smallClassShouldCount',
         'shouldSignCount',
+        'totalCount',
       ]),
       bigCourseEnrollCount: _pickInt(map, [
         'bigCourseEnrollCount',
@@ -620,6 +624,7 @@ class StudentCheckInStat {
         'smallCourseSignCount',
         'checkCount',
         'signedCount',
+        'normalCount',
       ]),
       lateCount: _pickInt(map, [
         'lateCount',

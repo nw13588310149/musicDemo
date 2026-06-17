@@ -166,6 +166,7 @@ class SmartCampusState {
   const SmartCampusState({
     this.selectedRole = SmartCampusRole.student,
     this.hasUserSelectedRole = false,
+    this.identityResolved = false,
     this.mainView = SmartCampusMainView.dashboard,
     this.selectedMailboxMessageType = PrincipalMailboxMessageType.suggestion,
     this.isMailboxAnonymous = true,
@@ -190,6 +191,11 @@ class SmartCampusState {
   ///   这之后 `applyBackendRole` 不会再覆盖 `selectedRole`，避免进入「班级
   ///   工作台 / 学生名册 / 作业批改 / 考评管理」等子页再返回时被打回默认。
   final bool hasUserSelectedRole;
+
+  /// 当前登录态下的身份是否已判定完毕（`myInfo` 映射 + 必要时
+  /// `teacherRole` 接口）。为 `false` 时智慧校园入口页应显示 loading，
+  /// 子 dashboard 不得提前发起业务接口。
+  final bool identityResolved;
   final SmartCampusMainView mainView;
   final PrincipalMailboxMessageType selectedMailboxMessageType;
   final bool isMailboxAnonymous;
@@ -200,6 +206,7 @@ class SmartCampusState {
   SmartCampusState copyWith({
     SmartCampusRole? selectedRole,
     bool? hasUserSelectedRole,
+    bool? identityResolved,
     SmartCampusMainView? mainView,
     PrincipalMailboxMessageType? selectedMailboxMessageType,
     bool? isMailboxAnonymous,
@@ -209,6 +216,7 @@ class SmartCampusState {
     return SmartCampusState(
       selectedRole: selectedRole ?? this.selectedRole,
       hasUserSelectedRole: hasUserSelectedRole ?? this.hasUserSelectedRole,
+      identityResolved: identityResolved ?? this.identityResolved,
       mainView: mainView ?? this.mainView,
       selectedMailboxMessageType:
           selectedMailboxMessageType ?? this.selectedMailboxMessageType,

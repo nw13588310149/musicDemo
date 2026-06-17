@@ -168,6 +168,9 @@ class TeacherClassSignDetail {
     required this.students,
     this.teacherSignInTime,
     this.teacherSignOutTime,
+    this.colorHex = '',
+    this.className = '',
+    this.logoUrl = '',
   });
 
   final String courseId;
@@ -177,17 +180,21 @@ class TeacherClassSignDetail {
   final List<CourseSignStudent> students;
   final String? teacherSignInTime;
   final String? teacherSignOutTime;
+  final String colorHex;
+  final String className;
+  final String logoUrl;
 
   factory TeacherClassSignDetail.fromJson(dynamic raw) {
     final map = _unwrapMap(raw) ?? const <String, dynamic>{};
-    final teacherSignIn = _asMap(map['teacherSignIn']);
+    final merged = _mergeCourseDetailMap(map);
+    final teacherSignIn = _asMap(merged['teacherSignIn']);
     return TeacherClassSignDetail(
-      courseId: pickFirstSnowflakeId(map, ['courseId', 'id']) ?? '',
-      courseSignStatus: _pickInt(map, ['courseSignStatus', 'signStatus']),
-      shouldCount: _pickInt(map, ['shouldCount', 'studentCount']),
-      presentCount: _pickInt(map, ['presentCount', 'signedCount']),
+      courseId: pickFirstSnowflakeId(merged, ['courseId', 'id']) ?? '',
+      courseSignStatus: _pickInt(merged, ['courseSignStatus', 'signStatus']),
+      shouldCount: _pickInt(merged, ['shouldCount', 'studentCount']),
+      presentCount: _pickInt(merged, ['presentCount', 'signedCount']),
       students: parseCourseSignStudentList(
-        map['studentList'] ?? map['students'] ?? map['list'],
+        merged['studentList'] ?? merged['students'] ?? merged['list'],
       ),
       teacherSignInTime: teacherSignIn == null
           ? null
@@ -195,8 +202,22 @@ class TeacherClassSignDetail {
       teacherSignOutTime: teacherSignIn == null
           ? null
           : _pickString(teacherSignIn, ['signOutTime', 'teacherSignOutTime']),
+      colorHex: _pickString(merged, ['color']),
+      className: _pickString(merged, ['className', 'class']),
+      logoUrl: resolveCourseLogoUrl(merged),
     );
   }
+}
+
+Map<String, dynamic> _mergeCourseDetailMap(Map<String, dynamic> map) {
+  final merged = Map<String, dynamic>.from(map);
+  final course = _asMap(map['course']);
+  if (course == null) return merged;
+  for (final entry in course.entries) {
+    merged.putIfAbsent(entry.key, () => entry.value);
+  }
+  merged.putIfAbsent('courseId', () => course['id']);
+  return merged;
 }
 
 List<TeacherSignHistoryItem> parseTeacherSignHistoryList(dynamic raw) {

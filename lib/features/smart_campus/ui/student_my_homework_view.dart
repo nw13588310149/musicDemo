@@ -49,6 +49,7 @@ import 'package:the_road_of_music_flutter/core/widgets/app_refresh_indicator.dar
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/constants/app_assets.dart';
 import '../../../core/network/media_url.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
@@ -61,6 +62,7 @@ import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 import '../data/student_repository.dart';
 import '../data/student_academic_data.dart';
 import 'widgets/smart_campus_page_banner.dart';
+import 'widgets/homework_voice_comment.dart';
 
 const Color _kCardBg = Colors.white;
 const Color _kPageBg = Color(0xFFEFF3FC);
@@ -171,6 +173,13 @@ Map<dynamic, dynamic> _flattenStudentHomeworkDetail(Map<dynamic, dynamic> m) {
     }
     if (hsm['studentParam3'] != null) {
       out['studentParam3'] = hsm['studentParam3'];
+    }
+    // 教师语音点评：teacherParam1=文件相对路径 / teacherParam2=时长（秒）。
+    if (hsm['teacherParam1'] != null) {
+      out['teacherParam1'] = hsm['teacherParam1'];
+    }
+    if (hsm['teacherParam2'] != null) {
+      out['teacherParam2'] = hsm['teacherParam2'];
     }
     out['studentSubmitDescription'] = hsm['description']?.toString() ?? '';
   }
@@ -387,20 +396,7 @@ class _StudentMyHomeworkViewState extends ConsumerState<StudentMyHomeworkView> {
                     ),
                     SizedBox(height: ui(10)),
                     if (!_loadingList && _records.isEmpty)
-                      SizedBox(
-                        height: ui(120),
-                        child: Center(
-                          child: Text(
-                            '暂无作业',
-                            style: TextStyle(
-                              fontSize: ui(14),
-                              color: _kTextHint,
-                              fontFamily: 'PingFang SC',
-                              fontWeight: AppFont.w400,
-                            ),
-                          ),
-                        ),
-                      )
+                      _HomeworkEmptyState(tab: _selectedTab)
                     else if (!pageLoading)
                       _HomeworkGrid(
                         records: _records,
@@ -520,16 +516,50 @@ class _OverviewStatsRow extends StatelessWidget {
   }
 }
 
+class _HomeworkStatCardShell extends StatelessWidget {
+  const _HomeworkStatCardShell({
+    required this.backgroundAsset,
+    required this.child,
+  });
+
+  final String backgroundAsset;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(ui(12)),
+      child: SizedBox(
+        height: ui(100),
+        width: double.infinity,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // 背景 PNG 自带圆角留白，放大裁切避免容器边缘露白。
+            Transform.scale(
+              scale: 1.14,
+              child: Image.asset(
+                backgroundAsset,
+                fit: BoxFit.cover,
+                width: double.infinity,
+                height: double.infinity,
+              ),
+            ),
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _AverageScoreCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      height: ui(100),
-      decoration: BoxDecoration(
-        color: _kCardBg,
-        borderRadius: BorderRadius.circular(ui(12)),
-      ),
+    return _HomeworkStatCardShell(
+      backgroundAsset: AppAssets.studentHomeworkStatCard1,
       child: Padding(
         padding: EdgeInsets.fromLTRB(ui(16), ui(16), ui(16), ui(12)),
         child: Stack(
@@ -606,12 +636,7 @@ class _TrendCard extends StatelessWidget {
   const _TrendCard.classRank()
     : title = '最近班级',
       value = '8',
-      gradient = const LinearGradient(
-        begin: Alignment.bottomLeft,
-        end: Alignment.topRight,
-        colors: [Color(0x239346FF), Color(0x00FFFFFF)],
-        stops: [0.0, 1.0],
-      ),
+      backgroundAsset = AppAssets.studentHomeworkStatCard2,
       badgeIcon = null,
       badgeText = '持平',
       badgeColor = _kPurple,
@@ -620,12 +645,7 @@ class _TrendCard extends StatelessWidget {
   const _TrendCard.gradeRank()
     : title = '最近年级',
       value = '62',
-      gradient = const LinearGradient(
-        begin: Alignment.bottomLeft,
-        end: Alignment.topRight,
-        colors: [Color(0x2E46FF77), Color(0x00FFFFFF)],
-        stops: [0.0, 1.0],
-      ),
+      backgroundAsset = AppAssets.studentHomeworkStatCard3,
       badgeIcon = Icons.trending_up_rounded,
       badgeText = '上升3名',
       badgeColor = _kRiseGreen,
@@ -633,7 +653,7 @@ class _TrendCard extends StatelessWidget {
 
   final String title;
   final String value;
-  final Gradient gradient;
+  final String backgroundAsset;
   final IconData? badgeIcon;
   final String badgeText;
   final Color badgeColor;
@@ -642,14 +662,8 @@ class _TrendCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      height: ui(100),
-      decoration: BoxDecoration(
-        gradient: gradient,
-        color: _kCardBg,
-        borderRadius: BorderRadius.circular(ui(12)),
-        border: Border.all(color: Colors.white),
-      ),
+    return _HomeworkStatCardShell(
+      backgroundAsset: backgroundAsset,
       child: Stack(
         children: [
           Positioned(
@@ -742,7 +756,7 @@ class _DualPanelRow extends StatelessWidget {
         final isCompact = c.maxWidth < ui(720);
         if (isCompact) {
           return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _SectionTitle('均分柱形'),
               SizedBox(height: ui(12)),
@@ -780,7 +794,7 @@ class _DualPanelRow extends StatelessWidget {
             Expanded(
               flex: 318,
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _SectionTitle('分数段分布'),
                   SizedBox(height: ui(12)),
@@ -852,6 +866,11 @@ class _BarChart extends StatelessWidget {
   /// Y 轴刻度（自上而下）
   static const _ticks = <int>[100, 95, 90, 85, 80, 0];
 
+  bool get _isEmptyState =>
+      bars.length == 1 &&
+      bars.first.label == '暂无' &&
+      bars.first.value == 0;
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
@@ -884,7 +903,23 @@ class _BarChart extends StatelessWidget {
         final cellW = chartW / bars.length;
 
         return Stack(
+          clipBehavior: Clip.none,
           children: [
+            // 坐标轴 + 横向刻度线
+            Positioned(
+              left: chartLeft,
+              top: 0,
+              width: chartW,
+              height: chartH,
+              child: CustomPaint(
+                painter: _BarChartAxesPainter(
+                  tickCount: tickCount,
+                  tickGap: tickGap,
+                  axisColor: _kBorderHair,
+                  gridColor: _kBorderSoft,
+                ),
+              ),
+            ),
             // Y 轴标签
             for (var i = 0; i < tickCount; i++)
               Positioned(
@@ -903,36 +938,41 @@ class _BarChart extends StatelessWidget {
                   ),
                 ),
               ),
-            // 柱子
+            // 柱子（值为 0 时不绘制柱体，仅保留 X 轴占位）
             for (var i = 0; i < bars.length; i++)
-              Positioned(
-                left: chartLeft + cellW * i + (cellW - barW) / 2,
-                top: yForValue(bars[i].value),
-                width: barW,
-                height: (chartH - yForValue(bars[i].value)).clamp(
-                  0.0,
-                  double.infinity,
-                ),
-                child: _Bar(value: bars[i].value, valueRange: (minVal, maxVal)),
-              ),
-            // 柱顶数值
-            for (var i = 0; i < bars.length; i++)
-              Positioned(
-                left: chartLeft + cellW * i + (cellW - barW) / 2,
-                top: yForValue(bars[i].value) - ui(20),
-                width: barW,
-                child: Text(
-                  '${bars[i].value.toInt()}',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: ui(12),
-                    color: _kTextSecondary,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w500,
-                    height: 1,
+              if (bars[i].value > 0)
+                Positioned(
+                  left: chartLeft + cellW * i + (cellW - barW) / 2,
+                  top: yForValue(bars[i].value),
+                  width: barW,
+                  height: (chartH - yForValue(bars[i].value)).clamp(
+                    0.0,
+                    double.infinity,
+                  ),
+                  child: _Bar(
+                    value: bars[i].value,
+                    valueRange: (minVal, maxVal),
                   ),
                 ),
-              ),
+            // 柱顶数值
+            for (var i = 0; i < bars.length; i++)
+              if (bars[i].value > 0)
+                Positioned(
+                  left: chartLeft + cellW * i + (cellW - barW) / 2,
+                  top: yForValue(bars[i].value) - ui(20),
+                  width: barW,
+                  child: Text(
+                    '${bars[i].value.toInt()}',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: ui(12),
+                      color: _kTextSecondary,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w500,
+                      height: 1,
+                    ),
+                  ),
+                ),
             // X 轴标签
             for (var i = 0; i < bars.length; i++)
               Positioned(
@@ -944,7 +984,7 @@ class _BarChart extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: ui(12),
-                    color: _kTextSecondary,
+                    color: _isEmptyState ? _kTextHint : _kTextSecondary,
                     fontFamily: 'PingFang SC',
                     fontWeight: AppFont.w400,
                     height: 1,
@@ -956,6 +996,49 @@ class _BarChart extends StatelessWidget {
       },
     );
   }
+}
+
+class _BarChartAxesPainter extends CustomPainter {
+  const _BarChartAxesPainter({
+    required this.tickCount,
+    required this.tickGap,
+    required this.axisColor,
+    required this.gridColor,
+  });
+
+  final int tickCount;
+  final double tickGap;
+  final Color axisColor;
+  final Color gridColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final axisPaint = Paint()
+      ..color = axisColor
+      ..strokeWidth = 1;
+    final gridPaint = Paint()
+      ..color = gridColor
+      ..strokeWidth = 1;
+
+    for (var i = 0; i < tickCount; i++) {
+      final y = i * tickGap;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+    }
+
+    canvas.drawLine(Offset.zero, Offset(0, size.height), axisPaint);
+    canvas.drawLine(
+      Offset(0, size.height),
+      Offset(size.width, size.height),
+      axisPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_BarChartAxesPainter oldDelegate) =>
+      tickCount != oldDelegate.tickCount ||
+      tickGap != oldDelegate.tickGap ||
+      axisColor != oldDelegate.axisColor ||
+      gridColor != oldDelegate.gridColor;
 }
 
 class _Bar extends StatelessWidget {
@@ -992,19 +1075,55 @@ class _ScoreDistributionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
+      width: double.infinity,
       height: ui(400),
       padding: EdgeInsets.all(ui(12)),
       decoration: BoxDecoration(
         color: _kCardBg,
         borderRadius: BorderRadius.circular(ui(12)),
       ),
+      child: items.isEmpty
+          ? const _ScoreDistributionEmpty()
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < items.length; i++) ...[
+                  if (i > 0) SizedBox(height: ui(16)),
+                  _ScoreSegmentTile(item: items[i]),
+                ],
+              ],
+            ),
+    );
+  }
+}
+
+class _ScoreDistributionEmpty extends StatelessWidget {
+  const _ScoreDistributionEmpty();
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Center(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          for (var i = 0; i < items.length; i++) ...[
-            if (i > 0) SizedBox(height: ui(16)),
-            _ScoreSegmentTile(item: items[i]),
-          ],
+          Icon(
+            Icons.bar_chart_rounded,
+            size: ui(40),
+            color: _kTextHint,
+          ),
+          SizedBox(height: ui(10)),
+          Text(
+            '暂无分数段数据',
+            style: TextStyle(
+              fontSize: ui(14),
+              color: _kTextSecondary,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w400,
+              height: 16 / 14,
+            ),
+          ),
         ],
       ),
     );
@@ -1156,26 +1275,29 @@ class _StatusTabsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      height: ui(44),
-      padding: EdgeInsets.symmetric(horizontal: ui(4), vertical: ui(4)),
-      decoration: BoxDecoration(
-        color: _kCardBg,
-        borderRadius: BorderRadius.circular(ui(8)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (final (tab, label) in _options) ...[
-            _TabChip(
-              label: label,
-              active: tab == selected,
-              onTap: () => onSelected(tab),
-              activeBg: _kTextDark,
-            ),
-            SizedBox(width: ui(16)),
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        height: ui(44),
+        padding: EdgeInsets.symmetric(horizontal: ui(4), vertical: ui(4)),
+        decoration: BoxDecoration(
+          color: _kCardBg,
+          borderRadius: BorderRadius.circular(ui(8)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < _options.length; i++) ...[
+              if (i > 0) SizedBox(width: ui(16)),
+              _TabChip(
+                label: _options[i].$2,
+                active: _options[i].$1 == selected,
+                onTap: () => onSelected(_options[i].$1),
+                activeBg: _kTextDark,
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -1201,7 +1323,9 @@ class _TabChip extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(ui(6)),
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(10)),
+        height: ui(36),
+        padding: EdgeInsets.symmetric(horizontal: ui(16)),
+        alignment: Alignment.center,
         decoration: BoxDecoration(
           color: active ? activeBg : null,
           borderRadius: BorderRadius.circular(ui(6)),
@@ -1213,9 +1337,60 @@ class _TabChip extends StatelessWidget {
             color: active ? Colors.white : _kTextSecondary,
             fontFamily: 'PingFang SC',
             fontWeight: AppFont.w500,
-            height: 1,
+            height: 16 / 14,
+          ),
+          textHeightBehavior: const TextHeightBehavior(
+            applyHeightToFirstAscent: false,
+            applyHeightToLastDescent: false,
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _HomeworkEmptyState extends StatelessWidget {
+  const _HomeworkEmptyState({required this.tab});
+
+  final _StatusTab tab;
+
+  String get _message => switch (tab) {
+    _StatusTab.all => '暂无作业',
+    _StatusTab.pending => '暂无待提交作业',
+    _StatusTab.submitted => '暂无已提交作业',
+    _StatusTab.reviewed => '暂无已评分作业',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(vertical: ui(48)),
+      decoration: BoxDecoration(
+        color: _kCardBg,
+        borderRadius: BorderRadius.circular(ui(12)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.assignment_outlined,
+            size: ui(48),
+            color: _kTextHint,
+          ),
+          SizedBox(height: ui(12)),
+          Text(
+            _message,
+            style: TextStyle(
+              fontSize: ui(14),
+              color: _kTextSecondary,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w400,
+              height: 16 / 14,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1319,6 +1494,8 @@ class _HomeworkData {
     this.reviewMedia = _ReviewMediaType.none,
     this.reviewMediaDuration,
     this.reviewText,
+    this.voiceCommentPath = '',
+    this.voiceCommentDuration = 0,
     this.requirementText = '',
     this.teacherFeedback = '',
     this.submitTimeDisplay = '',
@@ -1342,6 +1519,12 @@ class _HomeworkData {
   final _ReviewMediaType reviewMedia;
   final String? reviewMediaDuration;
   final String? reviewText;
+
+  /// 教师语音点评文件相对路径（详情接口 `teacherParam1`）。空字符串表示无语音点评。
+  final String voiceCommentPath;
+
+  /// 教师语音点评时长（秒，详情接口 `teacherParam2`）。
+  final int voiceCommentDuration;
 
   /// 教师发布的作业要求（列表或详情接口 `description`）。
   final String requirementText;
@@ -1560,6 +1743,10 @@ class _HomeworkData {
     final p3 = pick('studentParam3').trim();
     final resolvedFile = p1.isNotEmpty ? MediaUrl.resolve(p1) : '';
 
+    // 教师语音点评：teacherParam1=相对路径 / teacherParam2=时长（秒）。
+    final voicePath = pick('teacherParam1').trim();
+    final voiceDur = int.tryParse(pick('teacherParam2').trim()) ?? 0;
+
     // 仅 homeworkStudent 单条详情（无嵌套 homework）时，顶层 `description` 为学生提交说明。
     final studentOnlyFlat =
         pick('title').isEmpty && pick('endTime').isEmpty && p1.isNotEmpty;
@@ -1588,6 +1775,8 @@ class _HomeworkData {
       submitAttachmentName: p2.isNotEmpty ? p2 : null,
       submitTypeTag: p3.isNotEmpty ? p3 : null,
       submitFileUrl: resolvedFile.isNotEmpty ? resolvedFile : null,
+      voiceCommentPath: voicePath.isNotEmpty ? voicePath : null,
+      voiceCommentDuration: voicePath.isNotEmpty ? voiceDur : null,
     );
   }
 
@@ -1604,6 +1793,8 @@ class _HomeworkData {
     _ReviewMediaType? reviewMedia,
     String? reviewMediaDuration,
     String? reviewText,
+    String? voiceCommentPath,
+    int? voiceCommentDuration,
     String? requirementText,
     String? teacherFeedback,
     String? submitTimeDisplay,
@@ -1626,6 +1817,8 @@ class _HomeworkData {
       reviewMedia: reviewMedia ?? this.reviewMedia,
       reviewMediaDuration: reviewMediaDuration ?? this.reviewMediaDuration,
       reviewText: reviewText ?? this.reviewText,
+      voiceCommentPath: voiceCommentPath ?? this.voiceCommentPath,
+      voiceCommentDuration: voiceCommentDuration ?? this.voiceCommentDuration,
       requirementText: requirementText ?? this.requirementText,
       teacherFeedback: teacherFeedback ?? this.teacherFeedback,
       submitTimeDisplay: submitTimeDisplay ?? this.submitTimeDisplay,
@@ -3146,6 +3339,24 @@ class _HomeworkDetailDialogState extends ConsumerState<_HomeworkDetailDialog> {
                 text: _feedback(_d),
                 primary: _feedback(_d) != '无',
               ),
+              if (_d.voiceCommentPath.trim().isNotEmpty) ...[
+                SizedBox(height: ui(8)),
+                Text(
+                  '语音点评',
+                  style: TextStyle(
+                    fontSize: ui(11),
+                    color: _kTextSecondary,
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w400,
+                  ),
+                ),
+                SizedBox(height: ui(6)),
+                HomeworkVoiceCommentBubble(
+                  relativePath: _d.voiceCommentPath,
+                  durationSec: _d.voiceCommentDuration,
+                  scale: ui(1),
+                ),
+              ],
             ],
           ),
         ],

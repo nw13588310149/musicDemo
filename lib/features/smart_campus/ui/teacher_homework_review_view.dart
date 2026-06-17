@@ -43,6 +43,9 @@
 // 字体：PingFang SC（10/11/12/13/14/16/600）+ Barlow（28 数值 + 16 分母）
 // =============================================================================
 
+import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
@@ -51,7 +54,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/network/api_response.dart';
 import '../../../core/network/media_url.dart';
+import '../../../core/network/upload_result.dart';
+import '../../recording_system/audio/recording_capture.dart';
+import '../../recording_system/audio/recording_bytes_loader.dart';
 import '../../courseware/ui/courseware_url_opener.dart';
+import 'widgets/homework_voice_comment.dart';
 import 'student_homework_submission_preview.dart';
 import '../../../core/widgets/app_date_time_pickers.dart';
 import '../../../core/widgets/app_toast.dart';
@@ -3063,6 +3070,10 @@ class _ReviewDrawerState extends ConsumerState<_ReviewDrawer> {
   Map<String, dynamic> _detailExtra = {};
   bool _submitting = false;
 
+  /// 语音点评：已上传文件的相对路径（teacherParam1）与时长（teacherParam2，秒）。
+  String _voicePath = '';
+  int _voiceDuration = 0;
+
   @override
   void initState() {
     super.initState();
@@ -3090,11 +3101,20 @@ class _ReviewDrawerState extends ConsumerState<_ReviewDrawer> {
         .studentHomeworkDetail(id: widget.submission.id);
     if (!mounted) return;
     if (res.isSuccess && res.data is Map) {
-      setState(
-        () => _detailExtra = _mergeStudentHomeworkDetailForReview(
-          res.data as Map<dynamic, dynamic>,
-        ),
+      final merged = _mergeStudentHomeworkDetailForReview(
+        res.data as Map<dynamic, dynamic>,
       );
+      // 回填已发布的语音点评（teacherParam1=路径 / teacherParam2=时长秒）。
+      final existingVoice = merged['teacherParam1']?.toString().trim() ?? '';
+      final existingDur =
+          int.tryParse(merged['teacherParam2']?.toString().trim() ?? '') ?? 0;
+      setState(() {
+        _detailExtra = merged;
+        if (_voicePath.isEmpty && existingVoice.isNotEmpty) {
+          _voicePath = existingVoice;
+          _voiceDuration = existingDur;
+        }
+      });
     }
     setState(() => _loadingDetail = false);
   }
@@ -3113,6 +3133,8 @@ class _ReviewDrawerState extends ConsumerState<_ReviewDrawer> {
           id: widget.submission.id,
           score: score,
           feedback: _commentCtrl.text.trim(),
+          teacherParam1: _voicePath,
+          teacherParam2: _voicePath.isNotEmpty ? '$_voiceDuration' : '',
         );
     if (!mounted) return;
     setState(() => _submitting = false);
@@ -3316,6 +3338,31 @@ class _ReviewDrawerState extends ConsumerState<_ReviewDrawer> {
                       height: ui(100),
                       controller: _commentCtrl,
                     ),
+                    SizedBox(height: ui(16)),
+                    _FieldLabel('语音点评'),
+                    SizedBox(height: ui(8)),
+                    _VoiceCommentField(
+                      key: ValueKey(widget.submission.id),
+                      initialPath: _voicePath,
+                      initialDuration: _voiceDuration,
+                      onUpload: (bytes, filename) async {
+                        final res = await ref
+                            .read(teacherRepositoryProvider)
+                            .uploadHomeworkVoice(
+                              bytes: bytes,
+                              filename: filename,
+                            );
+                        if (!res.isSuccess) return null;
+                        final saved = parseUploadResult(res.data).savable;
+                        return saved.isEmpty ? null : saved;
+                      },
+                      onChanged: (path, duration) {
+                        setState(() {
+                          _voicePath = path;
+                          _voiceDuration = duration;
+                        });
+                      },
+                    ),
                   ],
                 ),
               ),
@@ -3332,6 +3379,379 @@ class _ReviewDrawerState extends ConsumerState<_ReviewDrawer> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// 语音点评录制区（教师批改抽屉内）
+//
+// 三态：
+//   idle      —— "按住录制语音点评" 按钮（长按录音）。
+//   recording —— 红点 + 计秒 + 实时波形；松手停止并上传。
+//   uploading —— loading；上传中。
+//   ready     —— 可播放气泡 [HomeworkVoiceCommentBubble] + 重录 / 删除。
+//
+// 录制结束后立即上传，拿到相对路径后通过 [onChanged] 回传给抽屉，
+// 抽屉在「发布批改」时写入 teacherParam1/2。
+// =============================================================================
+
+typedef _VoiceUploader = Future<String?> Function(
+  Uint8List bytes,
+  String filename,
+);
+
+enum _VoicePhase { idle, recording, uploading, ready }
+
+class _VoiceCommentField extends StatefulWidget {
+  const _VoiceCommentField({
+    super.key,
+    required this.initialPath,
+    required this.initialDuration,
+    required this.onUpload,
+    required this.onChanged,
+  });
+
+  final String initialPath;
+  final int initialDuration;
+  final _VoiceUploader onUpload;
+  final void Function(String path, int duration) onChanged;
+
+  @override
+  State<_VoiceCommentField> createState() => _VoiceCommentFieldState();
+}
+
+class _VoiceCommentFieldState extends State<_VoiceCommentField> {
+  static const int _kMaxSeconds = 120;
+
+  RecordingCapture? _capture;
+  StreamSubscription<double>? _ampSub;
+  Timer? _timer;
+
+  _VoicePhase _phase = _VoicePhase.idle;
+  int _seconds = 0;
+  String _path = '';
+  int _duration = 0;
+  List<double> _wave = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialPath.isNotEmpty) {
+      _path = widget.initialPath;
+      _duration = widget.initialDuration;
+      _phase = _VoicePhase.ready;
+    }
+  }
+
+  @override
+  void dispose() {
+    _ampSub?.cancel();
+    _timer?.cancel();
+    _capture?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _startRecord() async {
+    if (_phase == _VoicePhase.recording || _phase == _VoicePhase.uploading) {
+      return;
+    }
+    final capture = _capture ?? (_capture = createRecordingCapture());
+    final ok = await capture.hasPermission();
+    if (!mounted) return;
+    if (!ok) {
+      AppToast.show(context, '请授权麦克风权限后重试');
+      return;
+    }
+    await _ampSub?.cancel();
+    _timer?.cancel();
+    final path = buildTemporaryRecordingPath();
+    try {
+      await capture.start(path: path);
+    } catch (_) {
+      if (!mounted) return;
+      AppToast.show(context, '无法启动录音，请检查麦克风权限');
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _phase = _VoicePhase.recording;
+      _seconds = 0;
+      _wave = List<double>.filled(40, 0.18);
+    });
+    _ampSub = capture.amplitudes.listen((amp) {
+      if (!mounted || _phase != _VoicePhase.recording) return;
+      final bar = (amp >= 0 && amp <= 1)
+          ? amp.clamp(0.1, 1.0)
+          : ((amp + 50) / 50).clamp(0.1, 1.0);
+      setState(() => _wave = [..._wave.skip(1), bar]);
+    });
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted || _phase != _VoicePhase.recording) return;
+      setState(() {
+        if (_seconds < _kMaxSeconds) {
+          _seconds++;
+        } else {
+          _stopAndUpload();
+        }
+      });
+    });
+  }
+
+  Future<void> _stopAndUpload() async {
+    if (_phase != _VoicePhase.recording) return;
+    final seconds = _seconds;
+    await _ampSub?.cancel();
+    _ampSub = null;
+    _timer?.cancel();
+    _timer = null;
+    String? recPath;
+    try {
+      recPath = await _capture?.stop();
+    } catch (_) {
+      recPath = null;
+    }
+    if (!mounted) return;
+    if (seconds < 1 || recPath == null || recPath.isEmpty) {
+      setState(
+        () => _phase = _path.isNotEmpty ? _VoicePhase.ready : _VoicePhase.idle,
+      );
+      AppToast.show(context, '录音时间太短');
+      return;
+    }
+    setState(() => _phase = _VoicePhase.uploading);
+    try {
+      final bytes = await loadRecordedBytes(recPath);
+      final isWebm = recPath.contains('.webm') || recPath.startsWith('blob:');
+      final ext = isWebm ? 'webm' : 'm4a';
+      final filename =
+          'voice_review_${DateTime.now().millisecondsSinceEpoch}.$ext';
+      final saved = await widget.onUpload(bytes, filename);
+      if (!mounted) return;
+      if (saved == null || saved.isEmpty) {
+        setState(
+          () =>
+              _phase = _path.isNotEmpty ? _VoicePhase.ready : _VoicePhase.idle,
+        );
+        AppToast.show(context, '语音上传失败，请重试');
+        return;
+      }
+      setState(() {
+        _path = saved;
+        _duration = seconds;
+        _phase = _VoicePhase.ready;
+      });
+      widget.onChanged(saved, seconds);
+    } catch (_) {
+      if (!mounted) return;
+      setState(
+        () => _phase = _path.isNotEmpty ? _VoicePhase.ready : _VoicePhase.idle,
+      );
+      AppToast.show(context, '语音上传失败，请重试');
+    }
+  }
+
+  void _delete() {
+    setState(() {
+      _path = '';
+      _duration = 0;
+      _phase = _VoicePhase.idle;
+    });
+    widget.onChanged('', 0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    switch (_phase) {
+      case _VoicePhase.recording:
+        return _buildRecording(ui);
+      case _VoicePhase.uploading:
+        return _buildUploading(ui);
+      case _VoicePhase.ready:
+        return _buildReady(ui);
+      case _VoicePhase.idle:
+        return _buildIdle(ui);
+    }
+  }
+
+  Widget _buildIdle(double Function(double) ui) {
+    return GestureDetector(
+      onTap: _startRecord,
+      child: Container(
+        height: ui(48),
+        decoration: BoxDecoration(
+          color: _kPickGrey,
+          borderRadius: BorderRadius.circular(ui(10)),
+          border: Border.all(color: _kPurple.withValues(alpha: 0.35)),
+        ),
+        alignment: Alignment.center,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.mic_none_rounded, size: ui(18), color: _kPurple),
+            SizedBox(width: ui(8)),
+            Text(
+              '点击录制语音点评',
+              style: TextStyle(
+                fontSize: ui(14),
+                color: _kPurple,
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRecording(double Function(double) ui) {
+    return Container(
+      height: ui(48),
+      padding: EdgeInsets.symmetric(horizontal: ui(12)),
+      decoration: BoxDecoration(
+        color: _kPurple,
+        borderRadius: BorderRadius.circular(ui(10)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: ui(8),
+            height: ui(8),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+            ),
+          ),
+          SizedBox(width: ui(10)),
+          Expanded(
+            child: SizedBox(
+              height: ui(24),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  for (final h in _wave)
+                    Expanded(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(horizontal: ui(0.5)),
+                        child: Container(
+                          height: ui(4 + 18 * h),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.9),
+                            borderRadius: BorderRadius.circular(ui(2)),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          SizedBox(width: ui(10)),
+          Text(
+            '${(_seconds ~/ 60).toString().padLeft(2, '0')}:'
+            '${(_seconds % 60).toString().padLeft(2, '0')}',
+            style: TextStyle(
+              fontSize: ui(13),
+              color: Colors.white,
+              fontFamily: 'Barlow',
+            ),
+          ),
+          SizedBox(width: ui(8)),
+          GestureDetector(
+            onTap: _stopAndUpload,
+            child: Icon(Icons.stop_circle_rounded, size: ui(24),
+                color: Colors.white),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUploading(double Function(double) ui) {
+    return Container(
+      height: ui(48),
+      decoration: BoxDecoration(
+        color: _kPageGrey,
+        borderRadius: BorderRadius.circular(ui(10)),
+      ),
+      alignment: Alignment.center,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: ui(16),
+            height: ui(16),
+            child: const CircularProgressIndicator(strokeWidth: 2),
+          ),
+          SizedBox(width: ui(10)),
+          Text(
+            '语音上传中…',
+            style: TextStyle(
+              fontSize: ui(13),
+              color: _kTextMuted,
+              fontFamily: 'PingFang SC',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReady(double Function(double) ui) {
+    return Row(
+      children: [
+        Expanded(
+          child: HomeworkVoiceCommentBubble(
+            key: ValueKey('$_path-$_duration'),
+            relativePath: _path,
+            durationSec: _duration,
+            scale: ui(1),
+          ),
+        ),
+        SizedBox(width: ui(8)),
+        _VoiceMiniAction(
+          icon: Icons.mic_none_rounded,
+          color: _kPurple,
+          onTap: _startRecord,
+        ),
+        SizedBox(width: ui(6)),
+        _VoiceMiniAction(
+          icon: Icons.delete_outline_rounded,
+          color: _kOrange,
+          onTap: _delete,
+        ),
+      ],
+    );
+  }
+}
+
+class _VoiceMiniAction extends StatelessWidget {
+  const _VoiceMiniAction({
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: ui(36),
+        height: ui(36),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(ui(8)),
+        ),
+        child: Icon(icon, size: ui(18), color: color),
       ),
     );
   }

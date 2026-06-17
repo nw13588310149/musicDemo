@@ -1298,7 +1298,7 @@ class _CloudSearchField extends StatelessWidget {
           prefixIcon: Padding(
             padding: EdgeInsets.only(left: ui(16), right: ui(10)),
             child: Image.asset(
-              AppAssets.cloudSearch,
+              AppAssets.shellV2Search,
               width: ui(18),
               height: ui(18),
               fit: BoxFit.contain,

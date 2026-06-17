@@ -42,6 +42,17 @@ class StudentRepository {
     return client.post('$_base/examRecordList');
   }
 
+  /// 我的考场座位（`examSeat`）。`examId` 为考试雪花 id（字符串）。
+  /// 返回 `data` 为 `StudentExamSeatRes`（含各科目教室 + 座位号）。
+  Future<ApiResponse> examSeat({required String examId}) {
+    final body = encodeNumericIdRequestBody(
+      <String, dynamic>{'id': examId},
+      numericIdKeys: const {'id'},
+    );
+    if (body == null) return Future.value(ApiResponse.failure('考试 id 格式错误'));
+    return client.post('$_base/examSeat', data: body);
+  }
+
   /// 我的课表。`beginDate` / `endDate` 为 `yyyy-MM-dd`；后端按 token 过滤当前学生。
   Future<ApiResponse> courseList({
     required String beginDate,
@@ -222,7 +233,10 @@ class StudentRepository {
     return _postNumericId('$_base/courseSignDetail', id);
   }
 
-  /// 缺勤课程申请补签。Swagger：`courseId`(int64)、`signType`、`reason`、`attachment?`。
+  /// 缺勤课程申请补签。Swagger：`courseId`(int64)、`signType`(string)、`reason`、`attachment?`。
+  ///
+  /// [signType]：`1` 上课签 / `2` 下课签。后端 `signType` 为字符串枚举
+  /// （`上课签` / `下课签`），此处统一在边界做映射。
   Future<ApiResponse> courseSignMakeupSave({
     required String courseId,
     required int signType,
@@ -232,7 +246,7 @@ class StudentRepository {
     final body = encodeNumericIdRequestBody(
       <String, dynamic>{
         'courseId': courseId,
-        'signType': signType,
+        'signType': signType == 2 ? '下课签' : '上课签',
         'reason': reason,
         if (attachment.isNotEmpty) 'attachment': attachment,
       },

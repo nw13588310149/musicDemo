@@ -38,6 +38,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 
+import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_date_time_pickers.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
@@ -460,46 +461,35 @@ class _DormStatsRow extends StatelessWidget {
       children: [
         Expanded(
           child: _DormStatCard(
+            backgroundAsset: AppAssets.dormCheckStatCard1,
             label: '宿舍床位',
             value: dorm,
             valueIsText: true,
-            tintColor: const Color(0xFFFFA846),
-            iconBuilder: (ctx, sz) =>
-                Icon(Icons.apartment_rounded, size: sz, color: _kBlue),
           ),
         ),
         SizedBox(width: ui(12)),
         Expanded(
           child: _DormStatCard(
+            backgroundAsset: AppAssets.dormCheckStatCard2,
             label: '正常打卡',
             value: '$normal',
-            tintColor: const Color(0xFF46FF77),
-            iconBuilder: (ctx, sz) => Icon(
-              Icons.check_circle_outline_rounded,
-              size: sz,
-              color: const Color(0xFF1CD097),
-            ),
           ),
         ),
         SizedBox(width: ui(12)),
         Expanded(
           child: _DormStatCard(
+            backgroundAsset: AppAssets.dormCheckStatCard3,
             label: '异常（未打/晚归）',
             value: '$abnormal',
-            tintColor: const Color(0xFFFF4646),
-            iconBuilder: (ctx, sz) =>
-                Icon(Icons.report_problem_outlined, size: sz, color: _kPurple),
           ),
         ),
         SizedBox(width: ui(12)),
         Expanded(
           child: _DormStatCard(
+            backgroundAsset: AppAssets.dormCheckStatCard4,
             label: '补卡待审',
             value: '$pendingResubmits',
             sublabel: '共$pendingResubmits条申请',
-            tintColor: const Color(0xFF9346FF),
-            iconBuilder: (ctx, sz) =>
-                Icon(Icons.event_repeat_outlined, size: sz, color: _kPurple),
           ),
         ),
       ],
@@ -509,124 +499,96 @@ class _DormStatsRow extends StatelessWidget {
 
 class _DormStatCard extends StatelessWidget {
   const _DormStatCard({
+    required this.backgroundAsset,
     required this.label,
     required this.value,
-    required this.tintColor,
-    required this.iconBuilder,
     this.sublabel,
     this.valueIsText = false,
   });
 
+  final String backgroundAsset;
   final String label;
   final String value;
-  final Color tintColor;
-  final Widget Function(BuildContext, double) iconBuilder;
   final String? sublabel;
   final bool valueIsText;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    // 高度用 ConstrainedBox 而非固定值：Figma 100 高在 PingFang/Barlow 实际
-    // typography metrics 下会出 ~1.6 px 微溢出，给个 minHeight 让容器
-    // 在内容真的更高时也不会触发 RenderFlex overflow。
     return ConstrainedBox(
       constraints: BoxConstraints(minHeight: ui(100)),
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(14)),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topRight,
-            end: Alignment.bottomLeft,
-            colors: [tintColor.withValues(alpha: 0.16), Colors.white],
-            stops: const [0, 1],
-          ),
-          borderRadius: BorderRadius.circular(ui(12)),
-          border: Border.all(color: Colors.white),
-        ),
-        child: Stack(
-          children: [
-            Positioned(
-              right: 0,
-              top: ui(2),
-              child: Container(
-                width: ui(32),
-                height: ui(32),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(ui(8)),
-                  border: Border.all(color: const Color(0xFFE5E7EB)),
-                ),
-                child: iconBuilder(context, ui(20)),
-              ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(ui(12)),
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(14)),
+          decoration: BoxDecoration(
+            image: DecorationImage(
+              image: AssetImage(backgroundAsset),
+              fit: BoxFit.cover,
             ),
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: ui(14),
+                  color: _kTextDark,
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w500,
+                  height: 1,
+                ),
+              ),
+              SizedBox(height: ui(8)),
+              if (valueIsText)
                 Text(
-                  label,
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: ui(14),
+                    fontSize: ui(18),
                     color: _kTextDark,
                     fontFamily: 'PingFang SC',
                     fontWeight: AppFont.w500,
-                    height: 1,
+                    height: 1.1,
                   ),
-                ),
-                SizedBox(height: ui(8)),
-                if (valueIsText)
-                  Padding(
-                    padding: EdgeInsets.only(right: ui(40)),
-                    child: Text(
+                )
+              else
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
                       value,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: ui(18),
+                        fontSize: ui(32),
                         color: _kTextDark,
-                        fontFamily: 'PingFang SC',
-                        fontWeight: AppFont.w500,
-                        height: 1.1,
+                        fontFamily: 'Barlow',
+                        fontWeight: FontWeight.w500,
+                        height: 1.0,
                       ),
                     ),
-                  )
-                else
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        value,
-                        style: TextStyle(
-                          fontSize: ui(32),
-                          color: _kTextDark,
-                          fontFamily: 'Barlow',
-                          fontWeight: FontWeight.w500,
-                          height: 1.0,
-                        ),
-                      ),
-                      if (sublabel != null) ...[
-                        SizedBox(width: ui(8)),
-                        Padding(
-                          padding: EdgeInsets.only(bottom: ui(2)),
-                          child: Text(
-                            sublabel!,
-                            style: TextStyle(
-                              fontSize: ui(12),
-                              color: _kTextHint,
-                              fontFamily: 'PingFang SC',
-                              fontWeight: AppFont.w400,
-                              height: 1,
-                            ),
+                    if (sublabel != null) ...[
+                      SizedBox(width: ui(8)),
+                      Padding(
+                        padding: EdgeInsets.only(bottom: ui(2)),
+                        child: Text(
+                          sublabel!,
+                          style: TextStyle(
+                            fontSize: ui(12),
+                            color: _kTextHint,
+                            fontFamily: 'PingFang SC',
+                            fontWeight: AppFont.w400,
+                            height: 1,
                           ),
                         ),
-                      ],
+                      ),
                     ],
-                  ),
-              ],
-            ),
-          ],
+                  ],
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -660,22 +622,19 @@ class _MainSectionHeader extends StatelessWidget {
         border: Border.all(color: _kBorderSoft),
       ),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            child: _TabPill(
-              label: '查寝记录',
-              active: section == StudentDormitoryListSection.checkRecords,
-              onTap: () => onSection(StudentDormitoryListSection.checkRecords),
-            ),
+          _TabPill(
+            label: '查寝记录',
+            active: section == StudentDormitoryListSection.checkRecords,
+            onTap: () => onSection(StudentDormitoryListSection.checkRecords),
           ),
           SizedBox(width: ui(4)),
-          Expanded(
-            child: _TabPill(
-              label: '补卡申请',
-              active: section == StudentDormitoryListSection.makeupApplications,
-              onTap: () =>
-                  onSection(StudentDormitoryListSection.makeupApplications),
-            ),
+          _TabPill(
+            label: '补卡申请',
+            active: section == StudentDormitoryListSection.makeupApplications,
+            onTap: () =>
+                onSection(StudentDormitoryListSection.makeupApplications),
           ),
         ],
       ),

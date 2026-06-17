@@ -4,9 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/route_paths.dart';
 import '../../../core/network/chat_socket_service.dart';
+import '../../../core/network/snowflake_id.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/storage/app_storage.dart';
 import '../data/shell_repository.dart';
+import '../../smart_campus/state/smart_campus_controller.dart';
 import 'school_binding_controller.dart';
 import 'shell_state.dart';
 
@@ -77,11 +79,15 @@ class ShellController extends StateNotifier<ShellState> {
       unreadCount: 0,
       noticeItems: const [],
       logoUrl: '',
+      isSchoolReady: false,
     );
     // 销毁「绑定学校」轮询单例，下次重新登录时由 ShellScaffold 重新观察
     // 时再创建一个全新实例（带新 token），避免旧 session 的轮询线程或
     // 已经为 true 的 hasSchool 把新账号挡在外面。
     _ref.invalidate(schoolBindingControllerProvider);
+    // 智慧校园身份/子页状态常驻内存，登出时必须销毁，避免下一账号
+    // 继承上一账号的 availableRoles / selectedRole / mainView。
+    _ref.invalidate(smartCampusControllerProvider);
     pausePolling();
   }
 
@@ -189,7 +195,7 @@ class ShellController extends StateNotifier<ShellState> {
       // v2 接口返回的是学校列表，旧版接口返回单 Map；两种结构都兜住，
       // 取首项作为「当前学校」用于顶部 logo 与导航开关判定。
       final data = _firstSchool(schoolResponse.data);
-      await _storage.saveSchoolId(data['id']);
+      await _storage.saveSchoolId(readSnowflakeId(data['id']) ?? data['id']);
       if (data.isNotEmpty) {
         final logo = _readSchoolLogo(data);
         final switchFlag = data['coursewareSwitch'];
@@ -197,14 +203,18 @@ class ShellController extends StateNotifier<ShellState> {
         state = state.copyWith(
           logoUrl: logo,
           schoolCoursewareEnabled: schoolCoursewareEnabled,
+          isSchoolReady: true,
           navItems: buildDefaultNavItems(
             schoolCoursewareEnabled: schoolCoursewareEnabled,
           ),
         );
         _syncCampusBadge(state.unreadCount);
+      } else {
+        state = state.copyWith(isSchoolReady: false);
       }
     } else {
       await _storage.saveSchoolId(0);
+      state = state.copyWith(isSchoolReady: false);
     }
   }
 

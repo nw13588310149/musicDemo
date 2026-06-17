@@ -156,18 +156,18 @@ class _StudentCheckInViewState extends ConsumerState<StudentCheckInView>
       AppToast.show(context, '缺少课程信息，无法申请补签', type: AppToastType.error);
       return;
     }
-    final reason = await showScaledDialog<String>(
+    final result = await showScaledDialog<({int signType, String reason})>(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.18),
       builder: (ctx) => _MakeupReasonDialog(courseName: record.subjectName),
     );
-    if (reason == null || reason.trim().isEmpty || !mounted) return;
+    if (result == null || result.reason.trim().isEmpty || !mounted) return;
     final response = await ref
         .read(studentCheckInControllerProvider.notifier)
         .submitMakeup(
           courseId: record.courseId,
-          signType: 1,
-          reason: reason.trim(),
+          signType: result.signType,
+          reason: result.reason.trim(),
         );
     if (!mounted) return;
     AppToast.show(
@@ -599,13 +599,15 @@ class _TodayClassesPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
+      // 最低高度与右侧"签到操作"面板（274）保持一致。
+      constraints: BoxConstraints(minHeight: ui(274)),
       padding: EdgeInsets.all(ui(12)),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(ui(16)),
-        gradient: const LinearGradient(
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-          colors: [Color(0xFFF9EEFF), Colors.white],
+        image: const DecorationImage(
+          image: AssetImage(AppAssets.adminFaceLibraryEntryCardBg),
+          fit: BoxFit.cover,
         ),
         border: Border.all(color: Colors.white),
       ),
@@ -827,12 +829,12 @@ class _CheckInActionPanel extends StatelessWidget {
     return Container(
       width: double.infinity,
       height: ui(274),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(ui(16)),
-        gradient: const LinearGradient(
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-          colors: [Color(0xFFF9EEFF), Colors.white],
+        image: const DecorationImage(
+          image: AssetImage(AppAssets.adminFaceLibraryEntryCardBg),
+          fit: BoxFit.cover,
         ),
         border: Border.all(color: Colors.white),
       ),
@@ -2873,14 +2875,14 @@ class _CourseCommentDialogState extends State<_CourseCommentDialog> {
 
 List<_StatItem> _statsFromSummary(StudentCheckInStat stat) {
   final rate = stat.smallCourseOnTimeRate;
-  final rateLabel = rate > 0
-      ? (rate % 1 == 0 ? '%' : '%')
-      : '0%';
+  final rateLabel = rate % 1 == 0
+      ? '${rate.toStringAsFixed(0)}%'
+      : '${rate.toStringAsFixed(1)}%';
   return [
-    _StatItem(value: '', label: '小课应签课次'),
-    _StatItem(value: '', label: '大课一键入册'),
-    _StatItem(value: '', label: '小课打卡（合计）'),
-    _StatItem(value: '', label: '迟到'),
+    _StatItem(value: '${stat.smallCourseShouldCount}', label: '小课应签课次'),
+    _StatItem(value: '${stat.bigCourseEnrollCount}', label: '大课一键入册'),
+    _StatItem(value: '${stat.smallCourseCheckCount}', label: '小课打卡（合计）'),
+    _StatItem(value: '${stat.lateCount}', label: '迟到'),
     _StatItem(value: rateLabel, label: '小课准时率', valueColor: _kPurple),
   ];
 }
@@ -2920,84 +2922,129 @@ class _MakeupReasonDialog extends StatefulWidget {
 class _MakeupReasonDialogState extends State<_MakeupReasonDialog> {
   final _controller = TextEditingController();
 
+  /// 补签类型：1-上课签 / 2-下课签（对应后端 signType）。
+  int _signType = 1;
+
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
   }
 
+  Widget _signTypeOption(BuildContext context, int value, String label) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final selected = _signType == value;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _signType = value),
+        child: Container(
+          height: ui(38),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected ? _kPurple : _kInnerGray,
+            borderRadius: BorderRadius.circular(ui(8)),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: ui(13),
+              color: selected ? Colors.white : _kTextSecondary,
+              fontFamily: 'PingFang SC',
+              fontWeight: selected ? AppFont.w600 : AppFont.w400,
+              height: 1,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Dialog(
-      backgroundColor: Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(ui(16)),
+    final canSubmit = _controller.text.trim().isNotEmpty;
+    return GradientHeaderDialog(
+      title: '申请补签',
+      width: 460,
+      actionBar: AppDialogActionBar(
+        confirmLabel: '提交申请',
+        cancelLabel: '取消',
+        confirmEnabled: canSubmit,
+        onCancel: () => Navigator.of(context).pop(),
+        onConfirm: () {
+          final text = _controller.text.trim();
+          if (text.isEmpty) return;
+          Navigator.of(context).pop((signType: _signType, reason: text));
+        },
       ),
-      child: Padding(
-        padding: EdgeInsets.all(ui(20)),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              '申请补签',
-              style: TextStyle(
-                fontSize: ui(16),
-                color: _kTextDark,
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w600,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            widget.courseName,
+            style: TextStyle(
+              fontSize: ui(14),
+              color: _kTextSecondary,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w400,
+              height: 1.4,
+            ),
+          ),
+          SizedBox(height: ui(16)),
+          Text(
+            '补签类型',
+            style: TextStyle(
+              fontSize: ui(13),
+              color: _kTextDark,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w500,
+              height: 1,
+            ),
+          ),
+          SizedBox(height: ui(8)),
+          Row(
+            children: [
+              _signTypeOption(context, 1, '上课签'),
+              SizedBox(width: ui(12)),
+              _signTypeOption(context, 2, '下课签'),
+            ],
+          ),
+          SizedBox(height: ui(16)),
+          Text(
+            '补签原因',
+            style: TextStyle(
+              fontSize: ui(13),
+              color: _kTextDark,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w500,
+              height: 1,
+            ),
+          ),
+          SizedBox(height: ui(8)),
+          TextField(
+            controller: _controller,
+            maxLines: 4,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              hintText: '请填写补签原因',
+              filled: true,
+              fillColor: _kInnerGray,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(ui(8)),
+                borderSide: BorderSide.none,
               ),
+              contentPadding: EdgeInsets.all(ui(12)),
             ),
-            SizedBox(height: ui(8)),
-            Text(
-              widget.courseName,
-              style: TextStyle(
-                fontSize: ui(13),
-                color: _kTextSecondary,
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w400,
-              ),
+            style: TextStyle(
+              fontSize: ui(13),
+              color: _kTextDark,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w400,
+              height: 1.5,
             ),
-            SizedBox(height: ui(12)),
-            TextField(
-              controller: _controller,
-              maxLines: 4,
-              decoration: InputDecoration(
-                hintText: '请填写补签原因',
-                filled: true,
-                fillColor: _kInnerGray,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(ui(8)),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: EdgeInsets.all(ui(12)),
-              ),
-            ),
-            SizedBox(height: ui(16)),
-            Row(
-              children: [
-                Expanded(
-                  child: TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('取消'),
-                  ),
-                ),
-                SizedBox(width: ui(12)),
-                Expanded(
-                  child: FilledButton(
-                    onPressed: () {
-                      final text = _controller.text.trim();
-                      if (text.isEmpty) return;
-                      Navigator.of(context).pop(text);
-                    },
-                    child: const Text('提交申请'),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

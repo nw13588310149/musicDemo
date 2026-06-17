@@ -24,12 +24,26 @@ Future<List<CoursewarePickedFile>> pickCoursewareFilesImpl({
         : (FileType.audio, null),
     CoursewarePickType.any => (FileType.any, null),
   };
-  final result = await FilePicker.platform.pickFiles(
-    allowMultiple: allowMultiple,
-    type: platformType,
-    allowedExtensions: allowedExtensions,
-    withData: false,
-  );
+  // 视频不走压缩：iOS 上 allowCompression=true 会让 PHPicker 以
+  // PHPickerConfigurationAssetRepresentationModeCompatible 对所选视频做
+  // H.264 转码，大视频转码既慢又吃内存，极易在低内存设备上被系统 jetsam
+  // 杀掉（表现为「上传视频闪退」）。改用原始素材直接上传，更快也更稳。
+  // 图片仍保留压缩（HEIC→JPEG）以保证后端/前端兼容性。
+  final allowCompression = type != CoursewarePickType.video;
+  final FilePickerResult? result;
+  try {
+    result = await FilePicker.platform.pickFiles(
+      allowMultiple: allowMultiple,
+      type: platformType,
+      allowedExtensions: allowedExtensions,
+      withData: false,
+      allowCompression: allowCompression,
+    );
+  } catch (_) {
+    // iOS 在并发拉起 / 取消等边界场景会抛 multiple_request 等异常，
+    // 按「未选择」处理即可，交由调用方静默忽略，避免未捕获异常。
+    return const <CoursewarePickedFile>[];
+  }
   final files = result?.files ?? const <PlatformFile>[];
   if (files.isEmpty) {
     return const <CoursewarePickedFile>[];

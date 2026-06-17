@@ -57,6 +57,7 @@ import '../../../core/constants/app_assets.dart';
 import '../../../core/network/api_response.dart';
 import '../../../core/network/media_url.dart';
 import '../../../core/network/snowflake_id.dart';
+import '../../../core/widgets/app_asset_graphic.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/image_gallery_viewer.dart';
 import '../../../core/widgets/popup_selector_field.dart';
@@ -66,6 +67,7 @@ import '../../shell/ui/shell_layout.dart';
 import '../data/admin_repository.dart';
 import 'face_capture/face_camera_registry.dart';
 import 'face_capture/face_image_picker.dart';
+import 'widgets/smart_campus_stat_card.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // —— 颜色 ————————————————————————————————————————————————————————
@@ -1296,143 +1298,37 @@ class _StatsRow extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: _StatCard(
+          child: SmartCampusStatCard(
+            backgroundAsset: AppAssets.adminFaceLibraryStatCard1,
             label: '已生效',
             value: effective,
-            gradient: const LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [Color(0xFFE7DCFF), Colors.white],
-              stops: [0.0, 0.73],
-            ),
-            icon: Icons.verified_rounded,
-            iconColor: const Color(0xFF1CD097),
           ),
         ),
         SizedBox(width: ui(12)),
         Expanded(
-          child: _StatCard(
+          child: SmartCampusStatCard(
+            backgroundAsset: AppAssets.adminFaceLibraryStatCard2,
             label: '待审核',
             value: reviewing,
-            gradient: const LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [Color(0xFFFFF0DC), Colors.white],
-              stops: [0.0, 0.73],
-            ),
-            icon: Icons.history_toggle_off_rounded,
-            iconColor: _kPurple,
           ),
         ),
         SizedBox(width: ui(12)),
         Expanded(
-          child: _StatCard(
+          child: SmartCampusStatCard(
+            backgroundAsset: AppAssets.adminFaceLibraryStatCard3,
             label: '已驳回',
             value: rejected,
-            gradient: const LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [Color(0xFFDCFFE7), Colors.white],
-              stops: [0.0, 0.73],
-            ),
-            icon: Icons.cancel_rounded,
-            iconColor: _kPurple,
           ),
         ),
         SizedBox(width: ui(12)),
         Expanded(
-          child: _StatCard(
+          child: SmartCampusStatCard(
+            backgroundAsset: AppAssets.adminFaceLibraryStatCard4,
             label: '记录总数',
             value: total,
-            gradient: const LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [Color(0xFFFFE2DC), Colors.white],
-              stops: [0.0, 0.73],
-            ),
-            icon: Icons.assignment_rounded,
-            iconColor: _kPurple,
           ),
         ),
       ],
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.label,
-    required this.value,
-    required this.gradient,
-    required this.icon,
-    required this.iconColor,
-  });
-
-  final String label;
-  final int value;
-  final LinearGradient gradient;
-  final IconData icon;
-  final Color iconColor;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      height: ui(100),
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        gradient: gradient,
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(12)),
-      ),
-      child: Stack(
-        children: [
-          Padding(
-            padding: EdgeInsets.fromLTRB(ui(16), ui(16), ui(16), ui(0)),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: ui(14),
-                    color: _kTextDark,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w500,
-                    height: 1.0,
-                  ),
-                ),
-                SizedBox(height: ui(12)),
-                Text(
-                  '$value',
-                  style: TextStyle(
-                    fontSize: ui(32),
-                    color: _kTextDark,
-                    fontFamily: 'Barlow',
-                    fontWeight: FontWeight.w500,
-                    height: 1.0,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Positioned(
-            right: ui(16),
-            top: ui(34),
-            child: Container(
-              width: ui(32),
-              height: ui(32),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(ui(8)),
-                border: Border.all(color: const Color(0xFFE5E7EB), width: 0.5),
-              ),
-              alignment: Alignment.center,
-              child: Icon(icon, size: ui(20), color: iconColor),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -1488,13 +1384,11 @@ class _EnrollCard extends StatelessWidget {
       padding: EdgeInsets.all(ui(12)),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: Colors.white,
-        gradient: const LinearGradient(
-          begin: Alignment.bottomLeft,
-          end: Alignment.topRight,
-          colors: [Colors.white, Color(0xFFF9EDFF)],
-        ),
         borderRadius: BorderRadius.circular(ui(16)),
+        image: const DecorationImage(
+          image: AssetImage(AppAssets.adminFaceLibraryEntryCardBg),
+          fit: BoxFit.cover,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1938,10 +1832,11 @@ class _SearchableOptionPickerDialogState
               ),
               child: Row(
                 children: [
-                  Icon(
-                    Icons.search_rounded,
-                    size: ui(18),
-                    color: const Color(0xFFC6C6C6),
+                  AppAssetGraphic(
+                    AppAssets.shellV2Search,
+                    width: ui(18),
+                    height: ui(18),
+                    fit: BoxFit.contain,
                   ),
                   SizedBox(width: ui(8)),
                   Expanded(
@@ -2741,10 +2636,11 @@ class _LibrarySearchInput extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(
-            Icons.search_rounded,
-            size: ui(18),
-            color: const Color(0xFFC6C6C6),
+          AppAssetGraphic(
+            AppAssets.shellV2Search,
+            width: ui(18),
+            height: ui(18),
+            fit: BoxFit.contain,
           ),
           SizedBox(width: ui(8)),
           Expanded(

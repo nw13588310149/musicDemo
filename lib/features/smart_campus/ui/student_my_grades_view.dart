@@ -47,9 +47,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shell/ui/shell_layout.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
+import '../../../core/constants/app_assets.dart';
+import '../../../core/network/media_url.dart';
+import '../../../core/widgets/scaled_dialog.dart';
 import '../data/student_academic_data.dart';
 import '../data/student_repository.dart';
+import 'student_homework_submission_preview.dart';
 import 'widgets/smart_campus_page_banner.dart';
+import 'widgets/smart_campus_empty_state.dart';
 
 const Color _kCardBg = Colors.white;
 const Color _kPageBg = Color(0xFFEFF3FC);
@@ -1287,9 +1292,10 @@ class _ScoreDistributionCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(ui(12)),
         ),
         alignment: Alignment.center,
-        child: Text(
-          '暂无分数段数据',
-          style: TextStyle(fontSize: ui(14), color: _kTextHint),
+        child: const SmartCampusEmptyState(
+          icon: Icons.bar_chart_rounded,
+          title: '暂无分数段数据',
+          subtitle: '完成更多有成绩的考试后，将自动生成分数段分布。',
         ),
       );
     }
@@ -1430,15 +1436,14 @@ class _ExamRecordsGrid extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     if (records.isEmpty) {
       return Container(
-        height: ui(112),
         decoration: BoxDecoration(
           color: _kCardBg,
           borderRadius: BorderRadius.circular(ui(12)),
         ),
-        alignment: Alignment.center,
-        child: Text(
-          '暂无考试记录',
-          style: TextStyle(fontSize: ui(14), color: _kTextHint),
+        child: const SmartCampusEmptyState(
+          illustration: AppAssets.emptyExamPlaceholder,
+          title: '暂无考试记录',
+          subtitle: '老师发布并公布月考成绩后，你的各科成绩与排名会在这里展示。',
         ),
       );
     }
@@ -1481,17 +1486,27 @@ class _ExamRecordsGrid extends StatelessWidget {
 // 单张考试记录卡
 // =============================================================================
 
-class _ExamRecordCard extends StatefulWidget {
+class _ExamRecordCard extends ConsumerStatefulWidget {
   const _ExamRecordCard({required this.record});
 
   final _ExamRecordData record;
 
   @override
-  State<_ExamRecordCard> createState() => _ExamRecordCardState();
+  ConsumerState<_ExamRecordCard> createState() => _ExamRecordCardState();
 }
 
-class _ExamRecordCardState extends State<_ExamRecordCard> {
+class _ExamRecordCardState extends ConsumerState<_ExamRecordCard> {
   bool _expanded = false;
+
+  void _openSeat() {
+    if (widget.record.examId.isEmpty) return;
+    showExamSeatDialog(
+      context,
+      ref: ref,
+      examId: widget.record.examId,
+      examTitle: widget.record.title,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1510,6 +1525,7 @@ class _ExamRecordCardState extends State<_ExamRecordCard> {
             date: widget.record.date,
             expanded: _expanded,
             onToggle: () => setState(() => _expanded = !_expanded),
+            onOpenSeat: widget.record.examId.isEmpty ? null : _openSeat,
           ),
           SizedBox(height: ui(8)),
           _ExamSummaryRow(record: widget.record),
@@ -1531,12 +1547,14 @@ class _ExamCardHeader extends StatelessWidget {
     required this.date,
     required this.expanded,
     required this.onToggle,
+    this.onOpenSeat,
   });
 
   final String title;
   final String date;
   final bool expanded;
   final VoidCallback onToggle;
+  final VoidCallback? onOpenSeat;
 
   @override
   Widget build(BuildContext context) {
@@ -1565,6 +1583,40 @@ class _ExamCardHeader extends StatelessWidget {
           ),
         ),
         const Spacer(),
+        if (onOpenSeat != null) ...[
+          InkWell(
+            onTap: onOpenSeat,
+            borderRadius: BorderRadius.circular(ui(8)),
+            child: Container(
+              height: ui(32),
+              padding: EdgeInsets.symmetric(horizontal: ui(10)),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(ui(8)),
+                border: Border.all(color: _kBorderSoft),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.event_seat_outlined, size: ui(15), color: _kPurple),
+                  SizedBox(width: ui(4)),
+                  Text(
+                    '考场座位',
+                    style: TextStyle(
+                      fontSize: ui(12),
+                      color: _kTextDark,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w500,
+                      height: 1,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          SizedBox(width: ui(8)),
+        ],
+
         InkWell(
           onTap: onToggle,
           borderRadius: BorderRadius.circular(ui(8)),
@@ -1647,13 +1699,28 @@ class _ExamSummaryRow extends StatelessWidget {
 // 考试卡内的科目子卡
 // =============================================================================
 
-class _ExamSubjectTile extends StatelessWidget {
+class _ExamSubjectTile extends ConsumerWidget {
   const _ExamSubjectTile({required this.data});
 
   final _ExamSubjectData data;
 
+  void _openDetail(BuildContext context, WidgetRef ref) {
+    final url = MediaUrl.resolve(data.resourcePath);
+    if (url.isEmpty) return;
+    final medium = _resourceMediumLabel(data.resourcePath);
+    showStudentHomeworkSubmissionPreview(
+      context,
+      ref: ref,
+      fileUrl: url,
+      title: '${data.subjectName}考试资源',
+      typeTag: medium,
+      mediumLabel: medium,
+      attachmentName: '${data.subjectName}考试资源',
+    );
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
       decoration: BoxDecoration(
@@ -1739,7 +1806,14 @@ class _ExamSubjectTile extends StatelessWidget {
               ),
             ),
           ),
-          Positioned(right: 0, bottom: 0, child: _ViewDetailButton()),
+          Positioned(
+            right: 0,
+            bottom: 0,
+            child: _ViewDetailButton(
+              enabled: data.hasResource,
+              onTap: () => _openDetail(context, ref),
+            ),
+          ),
         ],
       ),
     );
@@ -1839,25 +1913,34 @@ class _MediaTag extends StatelessWidget {
 }
 
 class _ViewDetailButton extends StatelessWidget {
+  const _ViewDetailButton({required this.enabled, required this.onTap});
+
+  final bool enabled;
+  final VoidCallback onTap;
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      width: ui(80),
-      height: ui(32),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(8)),
-      ),
-      child: Text(
-        '查看详情',
-        style: TextStyle(
-          fontSize: ui(12),
-          color: _kTextDark,
-          fontFamily: 'PingFang SC',
-          fontWeight: AppFont.w500,
-          height: 16 / 12,
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.circular(ui(8)),
+      child: Container(
+        width: ui(80),
+        height: ui(32),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: enabled ? Colors.white : const Color(0xFFF1F1F4),
+          borderRadius: BorderRadius.circular(ui(8)),
+        ),
+        child: Text(
+          enabled ? '查看详情' : '暂无回放',
+          style: TextStyle(
+            fontSize: ui(12),
+            color: enabled ? _kTextDark : _kTextHint,
+            fontFamily: 'PingFang SC',
+            fontWeight: AppFont.w500,
+            height: 16 / 12,
+          ),
         ),
       ),
     );
@@ -1876,24 +1959,33 @@ class _ExamSubjectData {
   const _ExamSubjectData({
     required this.teacher,
     required this.subject,
+    required this.subjectName,
     required this.classRank,
     required this.schoolRank,
     required this.comment,
     required this.score,
     required this.media,
+    this.resourcePath = '',
   });
 
   final String teacher;
   final _SubjectKind subject;
+  final String subjectName;
   final int classRank;
   final int schoolRank;
   final String comment;
   final int score;
   final _ReplayMedia media;
+
+  /// 该科目考试资源（录音/录像/图片/文档）相对路径；空表示本场无回放。
+  final String resourcePath;
+
+  bool get hasResource => resourcePath.trim().isNotEmpty;
 }
 
 class _ExamRecordData {
   const _ExamRecordData({
+    required this.examId,
     required this.title,
     required this.date,
     required this.totalAvg,
@@ -1904,6 +1996,7 @@ class _ExamRecordData {
     required this.subjects,
   });
 
+  final String examId;
   final String title;
   final String date;
   final String totalAvg;
@@ -1916,6 +2009,7 @@ class _ExamRecordData {
 
 _ExamRecordData _examRecordFromApi(StudentExamRecord record) {
   return _ExamRecordData(
+    examId: record.examId,
     title: record.examName.isEmpty ? '考试' : record.examName,
     date: record.examDate,
     totalAvg: _scoreLabel(record.totalScore),
@@ -1931,12 +2025,35 @@ _ExamSubjectData _examSubjectFromApi(StudentExamSubjectScore score) {
   return _ExamSubjectData(
     teacher: '任课老师',
     subject: _subjectKindFromName(score.subjectName),
+    subjectName: score.subjectName,
     classRank: score.classRank,
     schoolRank: score.schoolRank,
     comment: score.comment.isEmpty ? '暂无评语' : score.comment,
     score: score.score.round(),
     media: _mediaFromPath(score.path),
+    resourcePath: score.path,
   );
+}
+
+/// 资源相对路径 → 预览用「介质标签」（音频 / 视频 / 图片 / 文档）。
+String _resourceMediumLabel(String path) {
+  final lower = path.toLowerCase();
+  if (lower.endsWith('.mp3') ||
+      lower.endsWith('.wav') ||
+      lower.endsWith('.m4a') ||
+      lower.endsWith('.aac')) {
+    return '音频';
+  }
+  if (lower.endsWith('.mp4') || lower.endsWith('.mov') || lower.endsWith('.webm')) {
+    return '视频';
+  }
+  if (lower.endsWith('.png') ||
+      lower.endsWith('.jpg') ||
+      lower.endsWith('.jpeg') ||
+      lower.endsWith('.webp')) {
+    return '图片';
+  }
+  return '文档';
 }
 
 _SubjectKind _subjectKindFromName(String name) {
@@ -1964,3 +2081,327 @@ _ReplayMedia _mediaFromPath(String path) {
 String _scoreLabel(double score) => score == score.roundToDouble()
     ? '${score.round()}'
     : score.toStringAsFixed(1);
+
+// =============================================================================
+// 我的考场座位弹窗（student/examSeat）
+// =============================================================================
+
+Future<void> showExamSeatDialog(
+  BuildContext context, {
+  required WidgetRef ref,
+  required String examId,
+  required String examTitle,
+}) {
+  return showScaledDialog<void>(
+    context: context,
+    barrierColor: Colors.black.withValues(alpha: 0.2),
+    builder: (_) => _ExamSeatDialog(examId: examId, examTitle: examTitle),
+  );
+}
+
+class _ExamSeatDialog extends ConsumerStatefulWidget {
+  const _ExamSeatDialog({required this.examId, required this.examTitle});
+
+  final String examId;
+  final String examTitle;
+
+  @override
+  ConsumerState<_ExamSeatDialog> createState() => _ExamSeatDialogState();
+}
+
+class _ExamSeatDialogState extends ConsumerState<_ExamSeatDialog> {
+  bool _loading = true;
+  String _error = '';
+  StudentExamSeat? _seat;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = '';
+    });
+    final res = await ref
+        .read(studentRepositoryProvider)
+        .examSeat(examId: widget.examId);
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      if (res.isSuccess) {
+        _seat = StudentExamSeat.fromData(res.data);
+      } else {
+        _error = res.displayMsg.isNotEmpty ? res.displayMsg : '座位信息加载失败';
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return GradientHeaderDialog(
+      title: '我的考场座位',
+      width: 460,
+      actionBar: SizedBox(
+        width: double.infinity,
+        height: ui(44),
+        child: OutlinedButton(
+          style: OutlinedButton.styleFrom(
+            side: const BorderSide(color: _kBorderSoft),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(ui(12)),
+            ),
+          ),
+          onPressed: () => Navigator.of(context).maybePop(),
+          child: Text(
+            '关闭',
+            style: TextStyle(
+              fontSize: ui(14),
+              color: _kTextDark,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w500,
+            ),
+          ),
+        ),
+      ),
+      child: _buildBody(ui),
+    );
+  }
+
+  Widget _buildBody(double Function(double) ui) {
+    if (_loading) {
+      return Padding(
+        padding: EdgeInsets.symmetric(vertical: ui(40)),
+        child: Center(
+          child: SizedBox(
+            width: ui(28),
+            height: ui(28),
+            child: const CircularProgressIndicator(
+              strokeWidth: 2.5,
+              valueColor: AlwaysStoppedAnimation<Color>(_kPurple),
+            ),
+          ),
+        ),
+      );
+    }
+    if (_error.isNotEmpty) {
+      return SmartCampusEmptyState(
+        icon: Icons.cloud_off_rounded,
+        title: '座位信息加载失败',
+        subtitle: _error,
+        actionLabel: '重新加载',
+        onAction: _load,
+      );
+    }
+    final seat = _seat;
+    final items = seat?.seats ?? const <StudentExamSeatItem>[];
+    if (items.isEmpty) {
+      return const SmartCampusEmptyState(
+        icon: Icons.event_seat_outlined,
+        title: '暂未编排考场',
+        subtitle: '教务完成本场考试的考场编排后，你的各科教室与座位号会显示在这里。',
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _SeatExamMeta(
+          name: (seat?.examName.isNotEmpty ?? false)
+              ? seat!.examName
+              : widget.examTitle,
+          date: seat?.examDate ?? '',
+          remark: seat?.remark ?? '',
+        ),
+        SizedBox(height: ui(12)),
+        for (var i = 0; i < items.length; i++) ...[
+          if (i > 0) SizedBox(height: ui(10)),
+          _SeatSubjectCard(item: items[i]),
+        ],
+      ],
+    );
+  }
+}
+
+class _SeatExamMeta extends StatelessWidget {
+  const _SeatExamMeta({
+    required this.name,
+    required this.date,
+    required this.remark,
+  });
+
+  final String name;
+  final String date;
+  final String remark;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                name.isEmpty ? '考试' : name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: ui(15),
+                  color: _kTextDark,
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w600,
+                  height: 1.2,
+                ),
+              ),
+            ),
+            if (date.isNotEmpty) ...[
+              SizedBox(width: ui(8)),
+              Text(
+                date,
+                style: TextStyle(
+                  fontSize: ui(12),
+                  color: _kTextHint,
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w400,
+                  height: 1.2,
+                ),
+              ),
+            ],
+          ],
+        ),
+        if (remark.trim().isNotEmpty) ...[
+          SizedBox(height: ui(6)),
+          Text(
+            remark.trim(),
+            style: TextStyle(
+              fontSize: ui(12),
+              color: _kPurple,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w400,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _SeatSubjectCard extends StatelessWidget {
+  const _SeatSubjectCard({required this.item});
+
+  final StudentExamSeatItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final arranged = item.arranged;
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: ui(14), vertical: ui(12)),
+      decoration: BoxDecoration(
+        color: _kInnerGray,
+        borderRadius: BorderRadius.circular(ui(12)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: ui(40),
+            height: ui(40),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFFB68EFF), Color(0xFF8741FF)],
+              ),
+              borderRadius: BorderRadius.circular(ui(10)),
+            ),
+            alignment: Alignment.center,
+            child: Icon(Icons.event_seat_rounded, size: ui(20),
+                color: Colors.white),
+          ),
+          SizedBox(width: ui(12)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  item.subjectName.isEmpty ? '科目' : item.subjectName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: ui(14),
+                    color: _kTextDark,
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w600,
+                    height: 1.2,
+                  ),
+                ),
+                SizedBox(height: ui(4)),
+                Text(
+                  arranged ? item.classroomName : '尚未编排考场',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: ui(12),
+                    color: arranged ? _kTextHint : const Color(0xFFB6B5BB),
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w400,
+                    height: 1.2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(width: ui(10)),
+          if (arranged)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '${item.seatNo}',
+                  style: TextStyle(
+                    fontSize: ui(24),
+                    color: _kPurple,
+                    fontFamily: 'Barlow',
+                    fontWeight: FontWeight.w700,
+                    height: 1,
+                  ),
+                ),
+                SizedBox(height: ui(2)),
+                Text(
+                  '座位号',
+                  style: TextStyle(
+                    fontSize: ui(10),
+                    color: _kTextHint,
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w400,
+                    height: 1,
+                  ),
+                ),
+              ],
+            )
+          else
+            Text(
+              '待编排',
+              style: TextStyle(
+                fontSize: ui(12),
+                color: const Color(0xFFB6B5BB),
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w400,
+                height: 1,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+

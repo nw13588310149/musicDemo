@@ -17,10 +17,14 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:the_road_of_music_flutter/core/constants/app_assets.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_asset_graphic.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/network/media_url.dart';
+import '../../../core/network/snowflake_id.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/data/shell_repository.dart';
@@ -77,6 +81,23 @@ class _NoticeItem {
 
 // ---- 学生管理数据模型（来自 API）-----------------------------------------
 
+String _studentGenderFromApi(dynamic raw) {
+  final s = raw?.toString().trim() ?? '';
+  switch (s) {
+    case '1':
+    case '男':
+      return '男';
+    case '0':
+    case '2':
+    case '女':
+      return '女';
+    case '':
+      return '—';
+    default:
+      return s;
+  }
+}
+
 class _StudentManageData {
   const _StudentManageData({
     required this.id,
@@ -96,8 +117,8 @@ class _StudentManageData {
     this.avatarUrl,
   });
 
-  /// 后端数值 id，用于调用 studentDetail / studentUpdate 接口。
-  final int id;
+  /// 学生主键（雪花 long 字符串），用于调用 studentDetail / studentUpdate。
+  final String id;
   final String name;
   final String studentId;
   final String? role;
@@ -114,14 +135,27 @@ class _StudentManageData {
   final String? avatarUrl;
 
   factory _StudentManageData.fromMap(Map<dynamic, dynamic> m) {
-    final tagsRaw = m['tags']?.toString() ?? '';
-    final firstTag = tagsRaw.split(',').where((t) => t.trim().isNotEmpty).firstOrNull?.trim();
+    final tagsValue = m['tags'];
+    final tagsRaw = tagsValue == null ? '' : tagsValue.toString().trim();
+    final firstTag = tagsRaw
+        .split(',')
+        .where((t) => t.trim().isNotEmpty)
+        .firstOrNull
+        ?.trim();
+    final bedInfo = m['bedInfo']?.toString().trim() ?? '';
     return _StudentManageData(
-      id: int.tryParse(m['id']?.toString() ?? '') ?? 0,
-      name: m['realname']?.toString() ?? m['nickname']?.toString() ?? '—',
-      studentId: m['studentNo']?.toString() ?? m['code']?.toString() ?? '',
-      gender: m['gender']?.toString() == '1' ? '男' : '女',
-      dorm: m['dormitory']?.toString() ?? m['dorm']?.toString() ?? '—',
+      id: readSnowflakeId(m['id']) ?? '',
+      name: m['realname']?.toString().trim().isNotEmpty == true
+          ? m['realname'].toString()
+          : m['nickname']?.toString() ?? '—',
+      studentId: m['no']?.toString() ??
+          m['studentNo']?.toString() ??
+          m['code']?.toString() ??
+          '',
+      gender: _studentGenderFromApi(m['gender']),
+      dorm: bedInfo.isNotEmpty
+          ? bedInfo
+          : m['dormitory']?.toString() ?? m['dorm']?.toString() ?? '—',
       phone: m['mobile']?.toString() ?? m['phone']?.toString() ?? '—',
       parentName: m['parentName']?.toString() ?? m['guardianName']?.toString() ?? '—',
       parentPhone: m['parentMobile']?.toString() ?? m['guardianMobile']?.toString() ?? '—',
@@ -1788,12 +1822,14 @@ class _WorkbenchAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final raw = avatarUrl.trim();
+    final resolved = raw.isNotEmpty ? MediaUrl.resolve(raw) : '';
     Widget child;
-    if (avatarUrl.isNotEmpty) {
+    if (resolved.isNotEmpty) {
       child = ClipRRect(
         borderRadius: BorderRadius.circular(size / 2),
         child: Image.network(
-          avatarUrl,
+          resolved,
           width: size,
           height: size,
           fit: BoxFit.cover,
@@ -1827,6 +1863,72 @@ class _WorkbenchAvatar extends StatelessWidget {
               ),
             )
           : Icon(Icons.person_rounded, size: ui(22), color: Colors.white),
+    );
+  }
+}
+
+/// 学生管理头像：相对路径经 [MediaUrl.resolve] 补全域名后加载。
+class _StudentManageAvatar extends StatelessWidget {
+  const _StudentManageAvatar({
+    required this.rawHeadUrl,
+    required this.name,
+    required this.size,
+  });
+
+  final String? rawHeadUrl;
+  final String name;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final radius = ui(8);
+    final raw = rawHeadUrl?.trim() ?? '';
+    final url = raw.isNotEmpty ? MediaUrl.resolve(raw) : '';
+    final initial = name.trim().isNotEmpty ? name.characters.first : '';
+
+    Widget child;
+    if (url.isNotEmpty) {
+      child = ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: Image.network(
+          url,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => _fallback(ui, radius, initial),
+        ),
+      );
+    } else {
+      child = _fallback(ui, radius, initial);
+    }
+    return SizedBox(width: size, height: size, child: child);
+  }
+
+  Widget _fallback(
+    double Function(double) ui,
+    double radius,
+    String initial,
+  ) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: _kPurpleSoft,
+        borderRadius: BorderRadius.circular(radius),
+      ),
+      alignment: Alignment.center,
+      child: initial.isNotEmpty
+          ? Text(
+              initial,
+              style: TextStyle(
+                fontSize: ui(size * 0.38),
+                color: Colors.white,
+                fontWeight: FontWeight.w500,
+                height: 1,
+              ),
+            )
+          : Icon(Icons.person_rounded, size: ui(size * 0.5), color: Colors.white),
     );
   }
 }
@@ -2994,7 +3096,10 @@ class _StudentsTabState extends ConsumerState<_StudentsTab> {
     _loadStudents();
   }
 
-  Future<void> _loadStudents() async {
+  Future<void> _loadStudents({bool silent = false}) async {
+    if (!silent) {
+      setState(() => _loading = true);
+    }
     final res = await ref.read(teacherRepositoryProvider).studentList(
       classId: widget.classId,
       size: 1000,
@@ -3010,7 +3115,15 @@ class _StudentsTabState extends ConsumerState<_StudentsTab> {
             .toList();
       }
     }
+    if (!mounted) return;
     setState(() => _loading = false);
+  }
+
+  Future<void> _openStudentDetail(_StudentManageData student) async {
+    final saved = await _showStudentDetail(context, student);
+    if (saved == true) {
+      await _loadStudents(silent: true);
+    }
   }
 
   @override
@@ -3072,7 +3185,7 @@ class _StudentsTabState extends ConsumerState<_StudentsTab> {
                       width: cardW,
                       child: _StudentManageCard(
                         data: s,
-                        onTap: () => _showStudentDetail(context, s),
+                        onTap: () => _openStudentDetail(s),
                       ),
                     ),
                 ],
@@ -3129,10 +3242,11 @@ class _StudentsHeader extends StatelessWidget {
             ),
             child: Row(
               children: [
-                Icon(
-                  Icons.search_rounded,
-                  size: ui(16),
-                  color: const Color(0xFFC6C6C6),
+                AppAssetGraphic(
+                  AppAssets.shellV2Search,
+                  width: ui(16),
+                  height: ui(16),
+                  fit: BoxFit.contain,
                 ),
                 SizedBox(width: ui(8)),
                 Expanded(
@@ -3174,13 +3288,14 @@ class _StudentManageCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final radius = BorderRadius.circular(ui(12));
-    return Material(
-      color: _kPanelBg,
-      borderRadius: radius,
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: radius,
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: _kPanelBg,
+          borderRadius: radius,
+        ),
         child: SizedBox(
           height: ui(156),
           child: Stack(
@@ -3196,23 +3311,10 @@ class _StudentManageCard extends StatelessWidget {
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          width: ui(40),
-                          height: ui(40),
-                          decoration: BoxDecoration(
-                            color: _kPurpleSoft,
-                            borderRadius: BorderRadius.circular(ui(8)),
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            data.name.characters.first,
-                            style: TextStyle(
-                              fontSize: ui(15),
-                              color: Colors.white,
-                              fontWeight: FontWeight.w500,
-                              height: 1,
-                            ),
-                          ),
+                        _StudentManageAvatar(
+                          rawHeadUrl: data.avatarUrl,
+                          name: data.name,
+                          size: ui(40),
                         ),
                         SizedBox(width: ui(8)),
                         Expanded(
@@ -4314,12 +4416,12 @@ class _ScoreChangeCard extends StatelessWidget {
 // 学生档案详情面板（点击学生卡时从右侧滑出，20% 黑底蒙层覆盖左侧）
 // =============================================================================
 
-Future<void> _showStudentDetail(BuildContext context, _StudentManageData data) {
+Future<bool?> _showStudentDetail(BuildContext context, _StudentManageData data) {
   // showGeneralDialog 会把内容挂到根 Navigator 的 overlay 上，那条 widget 树
   // 里没有 DashboardScaleScope；这里先把当前 scale 数据捕获下来，进 dialog
   // 后再用一个新的 DashboardScaleScope 包一层，保证面板里的 ui(...) 仍然可用。
   final scaleData = DashboardScaleScope.of(context);
-  return showGeneralDialog(
+  return showGeneralDialog<bool>(
     context: context,
     barrierDismissible: true,
     barrierLabel: '关闭学生档案',
@@ -4364,6 +4466,7 @@ class _StudentDetailPanelState extends ConsumerState<_StudentDetailPanel> {
 
   late List<String> _selectedTags;
   late final TextEditingController _remarkCtrl;
+  late final TextEditingController _customTagCtrl;
   bool _saving = false;
   bool _loadingDetail = false;
 
@@ -4380,12 +4483,14 @@ class _StudentDetailPanelState extends ConsumerState<_StudentDetailPanel> {
         .where((t) => t.isNotEmpty)
         .toList();
     _remarkCtrl = TextEditingController(text: widget.data.remark ?? '');
-    if (widget.data.id > 0) _loadDetail();
+    _customTagCtrl = TextEditingController();
+    if (widget.data.id.isNotEmpty) _loadDetail();
   }
 
   @override
   void dispose() {
     _remarkCtrl.dispose();
+    _customTagCtrl.dispose();
     super.dispose();
   }
 
@@ -4416,7 +4521,7 @@ class _StudentDetailPanelState extends ConsumerState<_StudentDetailPanel> {
   }
 
   Future<void> _saveChanges() async {
-    if (widget.data.id <= 0) {
+    if (widget.data.id.isEmpty) {
       Navigator.of(context).maybePop();
       return;
     }
@@ -4432,7 +4537,7 @@ class _StudentDetailPanelState extends ConsumerState<_StudentDetailPanel> {
     setState(() => _saving = false);
     if (res.isSuccess) {
       AppToast.show(context, '修改已保存');
-      Navigator.of(context).maybePop();
+      Navigator.of(context).maybePop(true);
     } else {
       AppToast.show(context, res.msg.isNotEmpty ? res.msg : '保存失败，请重试');
     }
@@ -4448,9 +4553,30 @@ class _StudentDetailPanelState extends ConsumerState<_StudentDetailPanel> {
     });
   }
 
+  void _addCustomTag() {
+    final tag = _customTagCtrl.text.trim();
+    if (tag.isEmpty) return;
+    if (tag.length > 20) {
+      AppToast.show(context, '标签最多 20 个字');
+      return;
+    }
+    setState(() {
+      if (!_selectedTags.contains(tag)) {
+        _selectedTags.add(tag);
+      }
+      _customTagCtrl.clear();
+    });
+  }
+
   String _detailField(String apiKey, String fallback) {
     final v = _detailExtra[apiKey]?.toString().trim() ?? '';
     return v.isNotEmpty ? v : fallback;
+  }
+
+  String _avatarRawUrl() {
+    final fromDetail = _detailExtra['headUrl']?.toString().trim() ?? '';
+    if (fromDetail.isNotEmpty) return fromDetail;
+    return widget.data.avatarUrl?.trim() ?? '';
   }
 
   late final String _classRole = widget.data.role ?? '';
@@ -4540,23 +4666,10 @@ class _StudentDetailPanelState extends ConsumerState<_StudentDetailPanel> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Container(
-                      width: ui(40),
-                      height: ui(40),
-                      decoration: BoxDecoration(
-                        color: _kPurpleSoft,
-                        borderRadius: BorderRadius.circular(ui(8)),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        data.name.characters.first,
-                        style: TextStyle(
-                          fontSize: ui(16),
-                          color: Colors.white,
-                          fontWeight: FontWeight.w500,
-                          height: 1,
-                        ),
-                      ),
+                    _StudentManageAvatar(
+                      rawHeadUrl: _avatarRawUrl(),
+                      name: data.name,
+                      size: ui(40),
                     ),
                     SizedBox(width: ui(12)),
                     Column(
@@ -4779,19 +4892,12 @@ class _StudentDetailPanelState extends ConsumerState<_StudentDetailPanel> {
                               ),
                             ],
                             SizedBox(height: ui(16)),
-                            _detailLabel(context, '班主任标签'),
-                            SizedBox(height: ui(8)),
-                            Wrap(
-                              spacing: ui(10),
-                              runSpacing: ui(10),
-                              children: [
-                                for (final tag in _kPresetTags)
-                                  _TeacherTagChip(
-                                    text: tag,
-                                    selected: _selectedTags.contains(tag),
-                                    onTap: () => _toggleTag(tag),
-                                  ),
-                              ],
+                            _StudentTagEditorPanel(
+                              presetTags: _kPresetTags,
+                              selectedTags: _selectedTags,
+                              customTagCtrl: _customTagCtrl,
+                              onToggleTag: _toggleTag,
+                              onAddCustomTag: _addCustomTag,
                             ),
                             SizedBox(height: ui(20)),
                             InkWell(
@@ -4974,15 +5080,157 @@ Widget _detailLabel(BuildContext context, String text) {
   );
 }
 
+/// 班主任标签编辑区：预设 + 自定义标签与输入框合并在同一边框容器内。
+class _StudentTagEditorPanel extends StatelessWidget {
+  const _StudentTagEditorPanel({
+    required this.presetTags,
+    required this.selectedTags,
+    required this.customTagCtrl,
+    required this.onToggleTag,
+    required this.onAddCustomTag,
+  });
+
+  final List<String> presetTags;
+  final List<String> selectedTags;
+  final TextEditingController customTagCtrl;
+  final ValueChanged<String> onToggleTag;
+  final VoidCallback onAddCustomTag;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final customTags =
+        selectedTags.where((t) => !presetTags.contains(t)).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _detailLabel(context, '班主任标签'),
+        SizedBox(height: ui(8)),
+        Container(
+          width: double.infinity,
+          padding: EdgeInsets.fromLTRB(ui(12), ui(10), ui(12), ui(10)),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(ui(8)),
+            border: Border.all(color: const Color(0xFFEDEFF5)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: ui(8),
+                runSpacing: ui(8),
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  for (final tag in presetTags)
+                    _TeacherTagChip(
+                      text: tag,
+                      selected: selectedTags.contains(tag),
+                      compact: true,
+                      onTap: () => onToggleTag(tag),
+                    ),
+                  for (final tag in customTags)
+                    _TeacherTagChip(
+                      text: tag,
+                      selected: true,
+                      compact: true,
+                      removable: true,
+                      onTap: () => onToggleTag(tag),
+                      onRemove: () => onToggleTag(tag),
+                    ),
+                ],
+              ),
+              SizedBox(height: ui(8)),
+              Container(
+                height: ui(36),
+                padding: EdgeInsets.symmetric(horizontal: ui(10)),
+                decoration: BoxDecoration(
+                  color: _kInnerGray,
+                  borderRadius: BorderRadius.circular(ui(8)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.sell_outlined,
+                      size: ui(16),
+                      color: _kTextHint,
+                    ),
+                    SizedBox(width: ui(6)),
+                    Expanded(
+                      child: AppTextField(
+                        controller: customTagCtrl,
+                        cursorColor: _kPurple,
+                        cursorWidth: 1.5,
+                        cursorHeight: ui(14),
+                        style: TextStyle(
+                          fontSize: ui(13),
+                          color: _kTextDark,
+                          fontWeight: FontWeight.w400,
+                          height: 18 / 13,
+                        ),
+                        textInputAction: TextInputAction.done,
+                        onSubmitted: (_) => onAddCustomTag(),
+                        decoration: InputDecoration(
+                          hintText: '输入自定义标签，回车添加',
+                          hintStyle: TextStyle(
+                            fontSize: ui(13),
+                            color: _kTextHint,
+                            fontWeight: FontWeight.w400,
+                          ),
+                          border: InputBorder.none,
+                          isCollapsed: true,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: ui(6)),
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: onAddCustomTag,
+                        borderRadius: BorderRadius.circular(ui(6)),
+                        child: Container(
+                          width: ui(28),
+                          height: ui(28),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: _kPurple,
+                            borderRadius: BorderRadius.circular(ui(6)),
+                          ),
+                          child: Icon(
+                            Icons.add_rounded,
+                            size: ui(18),
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _TeacherTagChip extends StatelessWidget {
   const _TeacherTagChip({
     required this.text,
     this.selected = false,
+    this.compact = false,
+    this.removable = false,
     this.onTap,
+    this.onRemove,
   });
   final String text;
   final bool selected;
+  final bool compact;
+  final bool removable;
   final VoidCallback? onTap;
+  final VoidCallback? onRemove;
 
   @override
   Widget build(BuildContext context) {
@@ -4996,26 +5244,46 @@ class _TeacherTagChip extends StatelessWidget {
       bg = _kInnerGray;
       textColor = _kTextSecondary;
     }
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(ui(8)),
-      // 注意：不要在外层 Container 上设 alignment——alignment 会让 Container
-      // 膨胀填满 Wrap 整行的可用宽度，导致每行只能放一个 chip。
-      // 这里改用「上下 padding 撑高 + 不设 alignment」让 chip 按文本宽度收缩，
-      // 从而能在 Wrap 里一行并排多个。
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(8)),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(ui(8)),
-        ),
-        child: Text(
-          text,
-          style: TextStyle(
-            fontSize: ui(12),
-            color: textColor,
-            fontWeight: FontWeight.w400,
-            height: 15.24 / 12,
+    final hPad = compact ? ui(10) : ui(12);
+    final vPad = compact ? ui(5) : ui(8);
+    final fontSize = compact ? ui(12) : ui(12);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(ui(8)),
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: hPad, vertical: vPad),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(ui(8)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                text,
+                style: TextStyle(
+                  fontSize: fontSize,
+                  color: textColor,
+                  fontWeight: FontWeight.w400,
+                  height: 15.24 / 12,
+                ),
+              ),
+              if (removable && selected) ...[
+                SizedBox(width: ui(4)),
+                GestureDetector(
+                  onTap: onRemove ?? onTap,
+                  behavior: HitTestBehavior.opaque,
+                  child: Icon(
+                    Icons.close_rounded,
+                    size: ui(14),
+                    color: Colors.white.withValues(alpha: 0.9),
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
       ),

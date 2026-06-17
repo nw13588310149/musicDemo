@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_response.dart';
+import '../../school/data/school_repository.dart';
 import '../data/course_sign_data.dart';
 import '../data/teacher_attendance_data.dart';
 import '../data/teacher_repository.dart';
@@ -15,6 +16,7 @@ final teacherAttendanceControllerProvider =
     >((ref) {
       final controller = TeacherAttendanceController(
         repository: ref.watch(teacherRepositoryProvider),
+        schoolRepository: ref.watch(schoolRepositoryProvider),
       );
       ref.onDispose(controller.stopLiveSync);
       return controller;
@@ -22,11 +24,15 @@ final teacherAttendanceControllerProvider =
 
 class TeacherAttendanceController
     extends StateNotifier<TeacherAttendanceState> {
-  TeacherAttendanceController({required TeacherRepository repository})
-    : _repository = repository,
-      super(const TeacherAttendanceState());
+  TeacherAttendanceController({
+    required TeacherRepository repository,
+    required SchoolRepository schoolRepository,
+  }) : _repository = repository,
+       _schoolRepository = schoolRepository,
+       super(const TeacherAttendanceState());
 
   final TeacherRepository _repository;
+  final SchoolRepository _schoolRepository;
   bool _initialized = false;
   Timer? _liveSyncTimer;
   bool _liveSyncActive = false;
@@ -89,6 +95,7 @@ class TeacherAttendanceController
     state = state.copyWith(loadingOverview: true, error: '');
     final today = todayIsoDate();
     final dates = state.range.dates(DateTime.now());
+    final timeConfigsFuture = _loadTimeConfigs();
     final responses = await Future.wait([
       _repository.courseList(beginDate: today, endDate: today),
       _repository.courseAttendanceStat(
@@ -100,18 +107,21 @@ class TeacherAttendanceController
     final courseResponse = responses[0];
     final summaryResponse = responses[1];
     final recentResponse = responses[2];
+    final timeConfigs = await timeConfigsFuture;
     final errors = [
       if (!courseResponse.isSuccess) courseResponse.displayMsg,
       if (!summaryResponse.isSuccess) summaryResponse.displayMsg,
       if (!recentResponse.isSuccess) recentResponse.displayMsg,
     ].where((item) => item.isNotEmpty).toList();
-    final courses = courseResponse.isSuccess
+    final parsedCourses = courseResponse.isSuccess
         ? parseCourseSignSessionList(courseResponse.data)
         : state.todayCourses;
-    final firstCourse = courses
-        .where((course) => course.courseId.isNotEmpty)
-        .firstOrNull;
-    final selectedId = state.selectedCourseId ?? firstCourse?.courseId;
+    final courses = sortCourseSignSessions(
+      enrichCourseSignSessions(parsedCourses, timeConfigs: timeConfigs),
+    );
+    final selectedId =
+        state.selectedCourseId ??
+        pickDefaultCourseSignSessionId(courses, timeConfigs: timeConfigs);
     state = state.copyWith(
       loadingOverview: false,
       todayCourses: courses,
@@ -127,6 +137,22 @@ class TeacherAttendanceController
     if (selectedId != null && selectedId.isNotEmpty) {
       await loadCourseDetail(selectedId);
     }
+  }
+
+  Future<List<CourseLineTimeConfig>> _loadTimeConfigs() async {
+    var configs = kDefaultCourseLineTimeConfigs;
+    final classResp = await _repository.classList();
+    if (!classResp.isSuccess) return configs;
+
+    final classes = parseCourseSignClassList(classResp.data);
+    final classId = classes.isNotEmpty ? classes.first.id : null;
+    if (classId == null || classId.isEmpty) return configs;
+
+    final tcResp = await _schoolRepository.schoolTimeConfigList(classId: classId);
+    if (!tcResp.isSuccess) return configs;
+
+    final parsed = parseCourseLineTimeConfigs(tcResp.data);
+    return parsed.isNotEmpty ? parsed : configs;
   }
 
   Future<void> selectCourse(String courseId) async {
@@ -190,6 +216,15 @@ class TeacherAttendanceController
                 signStatus: detail.courseSignStatus,
                 teacherCheckInTime: detail.teacherSignInTime,
                 teacherCheckOutTime: detail.teacherSignOutTime,
+                colorHex: detail.colorHex.isNotEmpty
+                    ? detail.colorHex
+                    : course.colorHex,
+                className: detail.className.isNotEmpty
+                    ? detail.className
+                    : course.className,
+                logoUrl: detail.logoUrl.isNotEmpty
+                    ? detail.logoUrl
+                    : course.logoUrl,
               )
             else
               course,

@@ -1693,10 +1693,11 @@ class _ClassmateSearchBoxState extends State<_ClassmateSearchBox> {
       ),
       child: Row(
         children: [
-          Icon(
-            Icons.search_rounded,
-            size: ui(16),
-            color: const Color(0xFFC6C6C6),
+          AppAssetGraphic(
+            AppAssets.shellV2Search,
+            width: ui(16),
+            height: ui(16),
+            fit: BoxFit.contain,
           ),
           SizedBox(width: ui(8)),
           Expanded(

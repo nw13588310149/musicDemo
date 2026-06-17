@@ -104,23 +104,44 @@ class SmartCampusPage extends ConsumerStatefulWidget {
 }
 
 class _SmartCampusPageState extends ConsumerState<SmartCampusPage> {
+  bool _bootstrapInFlight = false;
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _ensureMyInfoLoaded());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrapEntry());
   }
 
-  /// 刷新进入智慧校园时，若 Shell 的 `/myInfo` 尚未回包，主动补拉一次。
-  void _ensureMyInfoLoaded() {
-    if (!mounted) return;
-    if (ref.read(shellControllerProvider).user.isMyInfoReady) return;
-    ref.read(shellControllerProvider.notifier).refreshUserAndSchool();
+  /// 进入智慧校园前：补齐 myInfo / schoolList，并完成身份判定后再渲染子页。
+  Future<void> _bootstrapEntry() async {
+    if (!mounted || _bootstrapInFlight) return;
+    _bootstrapInFlight = true;
+    try {
+      final shell = ref.read(shellControllerProvider);
+      final shellNotifier = ref.read(shellControllerProvider.notifier);
+      if (!shell.user.isMyInfoReady || !shell.isSchoolReady) {
+        await shellNotifier.refreshUserAndSchool();
+      }
+      if (!mounted) return;
+      await ref
+          .read(smartCampusControllerProvider.notifier)
+          .ensureIdentityReady();
+    } finally {
+      _bootstrapInFlight = false;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final shellState = ref.watch(shellControllerProvider);
-    if (!shellState.user.isMyInfoReady) {
+    final campusState = ref.watch(smartCampusControllerProvider);
+    final ready =
+        shellState.user.isMyInfoReady &&
+        shellState.isSchoolReady &&
+        campusState.identityResolved;
+
+    if (!ready) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrapEntry());
       return const Center(child: AppLoadingIndicator());
     }
 
@@ -136,17 +157,6 @@ class _SmartCampusPageBody extends ConsumerWidget {
     final state = ref.watch(smartCampusControllerProvider);
     final controller = ref.read(smartCampusControllerProvider.notifier);
     final shellState = ref.watch(shellControllerProvider);
-
-    // 仅 `myInfo.role == teacher` 且非学生身份时，拉取 teacherRole 解析
-    // 校内多重身份；学生端（含 role/identity 判定为学生）不调用。
-    final campusRole = mapBackendRoleToCampus(
-      shellState.user.role,
-      shellState.user.identity,
-    );
-    if (campusRole != SmartCampusRole.student &&
-        shellState.user.role.trim().toLowerCase() == 'teacher') {
-      controller.ensureTeacherRolesLoaded();
-    }
 
     final isTeacherOrHead =
         state.selectedRole == SmartCampusRole.teacher ||

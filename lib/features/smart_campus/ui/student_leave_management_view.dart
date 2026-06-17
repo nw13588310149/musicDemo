@@ -50,6 +50,7 @@ import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/student_leave_data.dart';
 import '../data/student_repository.dart';
+import 'widgets/smart_campus_stat_card.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // —— 颜色 ————————————————————————————————————————————————————————
@@ -434,119 +435,29 @@ class _StatsRow extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: _StatCard(
+          child: SmartCampusStatCard(
+            backgroundAsset: AppAssets.studentLeaveStatCard1,
             label: '待审批',
             value: reviewing,
-            gradient: const LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [Color(0xFFE7DCFF), Colors.white],
-              stops: [0, 0.73],
-            ),
-            decorationColor: const Color(0x33D5BEFF),
           ),
         ),
         SizedBox(width: ui(12)),
         Expanded(
-          child: _StatCard(
+          child: SmartCampusStatCard(
+            backgroundAsset: AppAssets.studentLeaveStatCard2,
             label: '已通过',
             value: approved,
-            gradient: const LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [Color(0xFFDCFFE7), Colors.white],
-              stops: [0, 0.73],
-            ),
-            decorationColor: const Color(0x4DBEFFCB),
           ),
         ),
         SizedBox(width: ui(12)),
         Expanded(
-          child: _StatCard(
+          child: SmartCampusStatCard(
+            backgroundAsset: AppAssets.studentLeaveStatCard3,
             label: '已拒绝',
             value: rejected,
-            gradient: const LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [Color(0xFFFFE2DC), Colors.white],
-              stops: [0, 0.73],
-            ),
-            decorationColor: const Color(0x4DFFC2B5),
           ),
         ),
       ],
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.label,
-    required this.value,
-    required this.gradient,
-    required this.decorationColor,
-  });
-
-  final String label;
-  final int value;
-  final LinearGradient gradient;
-  final Color decorationColor;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      height: ui(100),
-      padding: EdgeInsets.fromLTRB(ui(16), ui(14), ui(16), ui(14)),
-      decoration: BoxDecoration(
-        gradient: gradient,
-        borderRadius: BorderRadius.circular(ui(12)),
-        border: Border.all(color: Colors.white),
-      ),
-      child: Stack(
-        children: [
-          // 右下半透明几何装饰：和 Figma 的 24/54 三角形 + 圆角块对应。
-          Positioned(
-            right: ui(8),
-            bottom: ui(8),
-            child: Container(
-              width: ui(44),
-              height: ui(44),
-              decoration: BoxDecoration(
-                color: decorationColor,
-                borderRadius: BorderRadius.circular(ui(10)),
-              ),
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: ui(14),
-                  color: Colors.black,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w500,
-                  height: 1,
-                ),
-              ),
-              SizedBox(height: ui(8)),
-              Text(
-                '$value',
-                style: TextStyle(
-                  fontSize: ui(32),
-                  color: _kTextDark,
-                  fontFamily: 'Barlow',
-                  fontWeight: FontWeight.w500,
-                  height: 1,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
     );
   }
 }

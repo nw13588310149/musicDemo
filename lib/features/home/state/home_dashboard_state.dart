@@ -144,9 +144,9 @@ List<HomeQuickAction> buildQuickActions(bool _) {
       firstMenu: 5,
     ),
     HomeQuickAction(
-      name: '模考',
-      icon: AppAssets.homeBtn4,
-      route: RoutePaths.mock,
+      name: '微校',
+      icon: AppAssets.homeBtn8,
+      route: RoutePaths.schoolWebsite,
     ),
     HomeQuickAction(
       name: '刷题',
@@ -165,7 +165,7 @@ List<HomeQuickAction> buildQuickActions(bool _) {
     ),
     HomeQuickAction(
       name: '资讯',
-      icon: AppAssets.homeBtn8,
+      icon: AppAssets.homeBtn4,
       route: RoutePaths.consultation,
     ),
     HomeQuickAction(

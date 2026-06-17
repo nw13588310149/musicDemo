@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../../../core/network/snowflake_id.dart';
 import '../data/quiz_html.dart';
 import 'quiz_practice_state.dart';
 
@@ -20,8 +21,8 @@ class QuizSessionPageArgs {
   final int startIndex;
   final int allCount;
 
-  /// 首页刷题固定 `0`；校园课件刷题传真实 schoolId。
-  final int schoolId;
+  /// 首页刷题固定 `'0'`；校园课件刷题传真实 schoolId（String）。
+  final String schoolId;
 
   /// 进入页面后立刻弹出完成弹窗（对应 1.0 的 camp_over 路由）。
   final bool openCompletionDialog;
@@ -37,7 +38,8 @@ class QuizSessionPageArgs {
         practiceId: _toInt(raw['practiceId']),
         startIndex: _toInt(raw['startIndex']) ?? 0,
         allCount: _toInt(raw['allCount']) ?? 0,
-        schoolId: _toInt(raw['schoolId']) ?? kPublicQuizSchoolId,
+        schoolId:
+            readSnowflakeId(raw['schoolId']) ?? kPublicQuizSchoolId,
         openCompletionDialog: raw['openCompletionDialog'] == true,
       );
     }

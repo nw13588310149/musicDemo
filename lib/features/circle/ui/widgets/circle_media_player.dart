@@ -251,7 +251,13 @@ class _CircleMediaPlayerState extends State<CircleMediaPlayer> {
   @override
   Widget build(BuildContext context) {
     return switch (widget.post.mediaKind) {
-      PostMediaKind.image => _ImageBackdrop(url: widget.post.imageUrl),
+      PostMediaKind.image => _ImageBackdrop(
+          url: widget.post.imageUrl,
+          aspectRatioHint: widget.post.hasExplicitAspectRatio
+              ? widget.post.imageAspectRatio
+              : null,
+          adaptOrientation: true,
+        ),
       PostMediaKind.video => _buildVideoBody(),
       PostMediaKind.audio => _buildAudioBody(),
     };
@@ -661,25 +667,123 @@ class _DouyinMediaControlsState extends State<_DouyinMediaControls>
   }
 }
 
-class _ImageBackdrop extends StatelessWidget {
-  const _ImageBackdrop({required this.url});
+/// 沉浸模式图片底图：
+/// - `adaptOrientation == false`（视频/音频封面兜底）：始终 cover 铺满。
+/// - `adaptOrientation == true`（图片帖）：与横/竖版视频一致自动适配——
+///   竖图 cover 铺满；横图纯黑底 + contain 居中留黑边。
+///   真实比例以解码后的图片尺寸为准，解码完成前用接口给出的比例兜底。
+class _ImageBackdrop extends StatefulWidget {
+  const _ImageBackdrop({
+    required this.url,
+    this.aspectRatioHint,
+    this.adaptOrientation = false,
+  });
 
   final String url;
+  final double? aspectRatioHint;
+  final bool adaptOrientation;
+
+  @override
+  State<_ImageBackdrop> createState() => _ImageBackdropState();
+}
+
+class _ImageBackdropState extends State<_ImageBackdrop> {
+  ImageProvider? _provider;
+  ImageStream? _stream;
+  ImageStreamListener? _listener;
+  double? _resolvedAspectRatio;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolveImage();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ImageBackdrop oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.url != widget.url) {
+      _resolvedAspectRatio = null;
+      _resolveImage();
+    }
+  }
+
+  void _resolveImage() {
+    _detach();
+    if (widget.url.isEmpty || !widget.adaptOrientation) {
+      _provider = widget.url.isEmpty ? null : NetworkImage(widget.url);
+      return;
+    }
+    final provider = NetworkImage(widget.url);
+    _provider = provider;
+    final stream = provider.resolve(const ImageConfiguration());
+    final listener = ImageStreamListener(
+      (info, _) {
+        final w = info.image.width;
+        final h = info.image.height;
+        if (!mounted || w <= 0 || h <= 0) return;
+        final aspect = w / h;
+        if (_resolvedAspectRatio == null ||
+            (_resolvedAspectRatio! - aspect).abs() > 0.001) {
+          setState(() => _resolvedAspectRatio = aspect);
+        }
+      },
+      onError: (_, _) {},
+    );
+    _stream = stream;
+    _listener = listener;
+    stream.addListener(listener);
+  }
+
+  void _detach() {
+    final stream = _stream;
+    final listener = _listener;
+    if (stream != null && listener != null) {
+      stream.removeListener(listener);
+    }
+    _stream = null;
+    _listener = null;
+  }
+
+  @override
+  void dispose() {
+    _detach();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (url.isEmpty) {
+    if (widget.url.isEmpty) {
       return const ColoredBox(color: Color(0xFF1B1530));
     }
-    return Image.network(
-      url,
-      fit: BoxFit.cover,
+
+    final aspect = _resolvedAspectRatio ?? widget.aspectRatioHint;
+    // 仅图片帖适配方向；比例未知时先按竖图 cover 兜底，避免黑边闪烁。
+    final isLandscape =
+        widget.adaptOrientation && aspect != null && aspect > 1;
+
+    final image = Image(
+      image: _provider ?? NetworkImage(widget.url),
+      fit: isLandscape ? BoxFit.contain : BoxFit.cover,
       errorBuilder: (context, error, stack) =>
           const ColoredBox(color: Color(0xFF1B1530)),
       loadingBuilder: (context, child, progress) {
         if (progress == null) return child;
-        return const ColoredBox(color: Color(0xFF1B1530));
+        return const SizedBox.expand();
       },
+    );
+
+    if (!isLandscape) {
+      return image;
+    }
+
+    // 横图：纯黑底 + contain 居中留黑边，与横版视频保持一致。
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        const ColoredBox(color: Color(0xFF000000)),
+        image,
+      ],
     );
   }
 }

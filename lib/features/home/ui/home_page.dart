@@ -8,7 +8,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/router/route_paths.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/network/media_url.dart';
-import '../../../core/widgets/scaled_dialog.dart';
 import '../../../core/widgets/seamless_banner_carousel.dart';
 import '../../../core/widgets/smooth_circle_network_avatar.dart';
 import '../state/home_dashboard_controller.dart';
@@ -130,7 +129,7 @@ class _HomePageViewState extends ConsumerState<_HomePageView> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 14),
                       _buildLatestHeader(),
                       const SizedBox(height: 10),
                       _buildNewsRow(state.newsItems),
@@ -415,11 +414,6 @@ class _HomePageViewState extends ConsumerState<_HomePageView> {
   }
 
   void _onQuickActionTap(HomeQuickAction action) {
-    // 模考暂未实装，统一走 2.0 通用单按钮提示弹窗（"暂未开放"）。
-    if (action.route == RoutePaths.mock) {
-      showInfoDialog(context: context, title: '功能暂未开放');
-      return;
-    }
     if (action.route == RoutePaths.smartCampus) {
       _openGroupChat();
       return;

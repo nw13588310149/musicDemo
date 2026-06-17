@@ -67,6 +67,18 @@ def patch_file_picker_ios_phpicker_group
     '    dispatch_group_notify(pickerGroup, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0),^{'
   )
 
+  # 兜底：选择大视频时系统仍在后台处理，若期间来了第二个请求，handleMethodCall
+  # 会把 _result 置空；此时首次选择的异步回调再调用 _result（nil block）就会
+  # EXC_BAD_ACCESS 闪退。这里在真正回调前补上 nil 校验。
+  patched.sub!(
+    "- (void) handleResult:(id) files {\n",
+    "- (void) handleResult:(id) files {\n    if (_result == nil) { return; }\n"
+  )
+  patched.sub!(
+    'self->_result([FlutterError errorWithCode:@"file_picker_error"',
+    'if (self->_result != nil) self->_result([FlutterError errorWithCode:@"file_picker_error"'
+  )
+
   if patched == source
     Pod::UI.warn 'file_picker iOS PHPicker group patch was not applied; plugin source layout may have changed.'
     return

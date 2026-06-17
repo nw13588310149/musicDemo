@@ -68,7 +68,11 @@ enum TeacherDormitoryStatus {
   absent;
 
   static TeacherDormitoryStatus fromApi(dynamic raw) {
-    return switch (raw?.toString().trim()) {
+    final value = raw?.toString().trim() ?? '';
+    if (value.isEmpty || value == 'null') {
+      return TeacherDormitoryStatus.absent;
+    }
+    return switch (value) {
       '正常' => TeacherDormitoryStatus.normal,
       '晚归' || '迟到' => TeacherDormitoryStatus.late,
       _ => TeacherDormitoryStatus.absent,
@@ -102,11 +106,15 @@ class TeacherDormitoryDynamicItem {
   factory TeacherDormitoryDynamicItem.fromJson(Map<String, dynamic> map) {
     return TeacherDormitoryDynamicItem(
       studentId: pickFirstSnowflakeId(map, ['studentId', 'userId']) ?? '',
-      studentName: _pickString(map, ['realname', 'studentName'], '未命名学生'),
-      studentNo: _pickString(map, ['studentNo'], '--'),
-      avatarUrl: _pickString(map, ['headUrl', 'avatarUrl']),
+      studentName: _pickString(
+        map,
+        ['realname', 'nickname', 'studentName'],
+        '未命名学生',
+      ),
+      studentNo: _pickString(map, ['studentNo', 'no'], '--'),
+      avatarUrl: _pickString(map, ['headUrl', 'avatarUrl', 'avatar']),
       dormName: _dormName(map),
-      bedName: _pickString(map, ['bedName']),
+      bedName: _pickString(map, ['bedName', 'bedInfo']),
       checkDate: _pickString(map, ['checkDate']),
       checkTime: _clock(_pickString(map, ['checkTime'])),
       status: TeacherDormitoryStatus.fromApi(map['status']),
@@ -291,8 +299,9 @@ String _pickString(
 }
 
 String _clock(String value) {
+  if (value.isEmpty || value == '--') return '--';
   final match = RegExp(r'(\d{1,2}):(\d{2})').firstMatch(value);
-  if (match == null) return value.isEmpty ? '--' : value;
+  if (match == null) return value;
   return '${match.group(1)!.padLeft(2, '0')}:${match.group(2)}';
 }
 

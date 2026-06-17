@@ -280,6 +280,10 @@ abstract final class AppAssets {
   static const emptyCoursePlaceholder = 'assets/images/404/kc.png';
   /// 我的收藏页空状态插图。
   static const emptyCollectionPlaceholder = 'assets/images/404/sc.png';
+  /// 考评 / 批改类空状态插图（执笔评卷）。
+  static const emptyReviewPlaceholder = 'assets/images/404/st.png';
+  /// 考试 / 成绩类空状态插图（翻开的书本）。
+  static const emptyExamPlaceholder = 'assets/images/404/jp.png';
   static const homeV2InstrumentCardBg =
       'assets/images/home/v2/instrument_card_bg.png';
   static const schoolV2QuickVideo = 'assets/images/home/schoolVideo.png';
@@ -569,6 +573,120 @@ abstract final class AppAssets {
       'assets/images/smartCampus/head_teacher/leave_approval_stat_approved.png';
   static const headTeacherLeaveApprovalStatRejected =
       'assets/images/smartCampus/head_teacher/leave_approval_stat_rejected.png';
+
+  /// 课表 · 编辑/申请小课抽屉 · 字段标题前图标。
+  static const scheduleEditCourseTime =
+      'assets/images/smartCampus/schedule_edit/course_time.png';
+  static const scheduleEditClass =
+      'assets/images/smartCampus/schedule_edit/class.png';
+  static const scheduleEditStudent =
+      'assets/images/smartCampus/schedule_edit/student.png';
+  static const scheduleEditClassroom =
+      'assets/images/smartCampus/schedule_edit/classroom.png';
+  static const scheduleEditSubject =
+      'assets/images/smartCampus/schedule_edit/subject.png';
+  static const scheduleEditTeacher =
+      'assets/images/smartCampus/schedule_edit/teacher.png';
+  static const scheduleEditColor =
+      'assets/images/smartCampus/schedule_edit/color.png';
+  static const scheduleEditRepeat =
+      'assets/images/smartCampus/schedule_edit/repeat.png';
+  static const scheduleApplyCourse =
+      'assets/images/smartCampus/schedule_edit/apply_course.png';
+
+  /// 宿管 · 查寝（按宿舍 / 历史）· 顶部统计卡背景（从左到右）。
+  static const dormCheckStatCard1 =
+      'assets/images/smartCampus/dorm_check/stat_card_1.png';
+  static const dormCheckStatCard2 =
+      'assets/images/smartCampus/dorm_check/stat_card_2.png';
+  static const dormCheckStatCard3 =
+      'assets/images/smartCampus/dorm_check/stat_card_3.png';
+  static const dormCheckStatCard4 =
+      'assets/images/smartCampus/dorm_check/stat_card_4.png';
+
+  /// 管理员 · 班级编组 · 顶部统计卡背景（从左到右）。
+  static const adminClassManagementStatCard1 =
+      'assets/images/smartCampus/admin/class_management/stat_card_1.png';
+  static const adminClassManagementStatCard2 =
+      'assets/images/smartCampus/admin/class_management/stat_card_2.png';
+  static const adminClassManagementStatCard3 =
+      'assets/images/smartCampus/admin/class_management/stat_card_3.png';
+  static const adminClassManagementStatCard4 =
+      'assets/images/smartCampus/admin/class_management/stat_card_4.png';
+
+  /// 管理员 · 教师管理 · 顶部统计卡背景（从左到右）。
+  static const adminTeacherManagementStatCard1 =
+      'assets/images/smartCampus/admin/teacher_management/stat_card_1.png';
+  static const adminTeacherManagementStatCard2 =
+      'assets/images/smartCampus/admin/teacher_management/stat_card_2.png';
+  static const adminTeacherManagementStatCard3 =
+      'assets/images/smartCampus/admin/teacher_management/stat_card_3.png';
+  static const adminTeacherManagementStatCard4 =
+      'assets/images/smartCampus/admin/teacher_management/stat_card_4.png';
+
+  /// 管理员 · 人脸库 · 顶部统计卡背景（从左到右）。
+  static const adminFaceLibraryStatCard1 =
+      'assets/images/smartCampus/admin/face_library/stat_card_1.png';
+  static const adminFaceLibraryStatCard2 =
+      'assets/images/smartCampus/admin/face_library/stat_card_2.png';
+  static const adminFaceLibraryStatCard3 =
+      'assets/images/smartCampus/admin/face_library/stat_card_3.png';
+  static const adminFaceLibraryStatCard4 =
+      'assets/images/smartCampus/admin/face_library/stat_card_4.png';
+  static const adminFaceLibraryEntryCardBg =
+      'assets/images/smartCampus/admin/face_library/entry_card_bg.png';
+
+  /// 管理员 · 通知管理 · 顶部统计卡背景（从左到右）。
+  static const adminNotificationStatCard1 =
+      'assets/images/smartCampus/admin/notification/stat_card_1.png';
+  static const adminNotificationStatCard2 =
+      'assets/images/smartCampus/admin/notification/stat_card_2.png';
+  static const adminNotificationStatCard3 =
+      'assets/images/smartCampus/admin/notification/stat_card_3.png';
+  static const adminNotificationStatCard4 =
+      'assets/images/smartCampus/admin/notification/stat_card_4.png';
+
+  /// 管理员 · 教师/宿管请假审批 · 顶部统计卡背景（从左到右）。
+  static const adminStaffLeaveStatCard1 =
+      'assets/images/smartCampus/admin/staff_leave/stat_card_1.png';
+  static const adminStaffLeaveStatCard2 =
+      'assets/images/smartCampus/admin/staff_leave/stat_card_2.png';
+  static const adminStaffLeaveStatCard3 =
+      'assets/images/smartCampus/admin/staff_leave/stat_card_3.png';
+
+  /// 管理员 · 学生管理 · 顶部统计卡背景（从左到右）。
+  static const adminStudentManagementStatCard1 =
+      'assets/images/smartCampus/admin/student_management/stat_card_1.png';
+  static const adminStudentManagementStatCard2 =
+      'assets/images/smartCampus/admin/student_management/stat_card_2.png';
+  static const adminStudentManagementStatCard3 =
+      'assets/images/smartCampus/admin/student_management/stat_card_3.png';
+  static const adminStudentManagementStatCard4 =
+      'assets/images/smartCampus/admin/student_management/stat_card_4.png';
+
+  /// 学生 · 我的作业 · 顶部统计卡背景（从左到右）。
+  static const studentHomeworkStatCard1 =
+      'assets/images/smartCampus/student/homework/stat_card_1.png';
+  static const studentHomeworkStatCard2 =
+      'assets/images/smartCampus/student/homework/stat_card_2.png';
+  static const studentHomeworkStatCard3 =
+      'assets/images/smartCampus/student/homework/stat_card_3.png';
+
+  /// 学生 · 我的请假 · 顶部统计卡背景（从左到右）。
+  static const studentLeaveStatCard1 =
+      'assets/images/smartCampus/student/leave/stat_card_1.png';
+  static const studentLeaveStatCard2 =
+      'assets/images/smartCampus/student/leave/stat_card_2.png';
+  static const studentLeaveStatCard3 =
+      'assets/images/smartCampus/student/leave/stat_card_3.png';
+
+  /// 任课老师 / 班主任 · 学生名册 · 顶部统计卡背景（当前列表 / 男 / 女）。
+  static const teacherStudentRosterStatCard1 =
+      'assets/images/smartCampus/teacher/student_roster/stat_card_1.png';
+  static const teacherStudentRosterStatCard2 =
+      'assets/images/smartCampus/teacher/student_roster/stat_card_2.png';
+  static const teacherStudentRosterStatCard3 =
+      'assets/images/smartCampus/teacher/student_roster/stat_card_3.png';
 
   // 智慧校园群聊
   static const groupChatBg = 'assets/images/groupChat/bg.png';

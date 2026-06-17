@@ -50,13 +50,17 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
   /// 缓存命中即直接复用 [SmartCampusState.availableRoles]，避免每次进入
   /// 智慧校园都打一次接口。
   ///
-  /// 由 [applyBackendRole] 在 shell 端 role 变化时（换号 / 登出登入）自动
-  /// 重置；同时配合 [_teacherRolesLoading] 做并发去重。
+  /// 由 [applyBackendRole] 在 shell 端 userId / role 变化时（换号 /
+  /// 登出登入）自动重置；同时配合 [_teacherRolesLoading] 做并发去重。
   bool _teacherRolesLoaded = false;
   bool _teacherRolesLoading = false;
 
+  /// 最近一次 [applyBackendRole] 命中的 shell userId，作为缓存失效信号：
+  /// 同 role 换号（例如两个老师账号）也必须重新拉取多重身份。
+  String _lastUserId = '';
+
   /// 最近一次 [applyBackendRole] 命中的 shell role，作为缓存失效信号：
-  /// 切号会导致 myInfo.role 变化，对应的「老师多重身份」缓存需要重新拉取。
+  /// 同一账号 role 变化时，对应的「老师多重身份」缓存需要重新拉取。
   String _lastBackendRole = '';
 
   /// 最近一次 [applyBackendRole] 解析出的智慧校园身份，供
@@ -138,13 +142,22 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
     if (userId.trim().isEmpty) {
       return;
     }
-    // shell role 变化（换号 / 登出登入）→ 失效本地「老师多重身份」缓存，
-    // 下次 ensureTeacherRolesLoaded 会重新调接口。
-    if (_lastBackendRole != role) {
+
+    final userChanged = _lastUserId != userId;
+    if (userChanged) {
+      _lastUserId = userId;
       _teacherRolesLoaded = false;
       _teacherRolesLoading = false;
-      _lastBackendRole = role;
+      _lastBackendRole = '';
+      // 换号：清空上一账号残留的身份、子页与手动切换标记。
+      state = const SmartCampusState();
+    } else if (_lastBackendRole != role) {
+      // 同一账号 role 变化（少见，但 myInfo 轮询可能推送）→ 失效老师多重身份缓存。
+      _teacherRolesLoaded = false;
+      _teacherRolesLoading = false;
+      state = state.copyWith(identityResolved: false);
     }
+    _lastBackendRole = role;
 
     // 已经从 teacherRole 接口拿到了权威的多重身份集合时，不再让 myInfo
     // 的 30s 轮询通过 identity 字段的微小抖动把 availableRoles 打回单
@@ -184,6 +197,38 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
       selectedRole: nextSelected,
       availableRoles: available,
     );
+
+    if (!_needsTeacherRoleApi(role, mapped)) {
+      _markIdentityResolved();
+    }
+  }
+
+  /// 进入智慧校园前调用：确保 `myInfo` 身份映射完成，并在
+  /// `myInfo.role == teacher` 时等待 `teacherRole` 接口返回后再放行
+  /// 子 dashboard 的业务请求。
+  Future<void> ensureIdentityReady() async {
+    if (state.identityResolved) {
+      return;
+    }
+    if (_lastUserId.trim().isEmpty) {
+      return;
+    }
+    if (_needsTeacherRoleApi(_lastBackendRole, _mappedBackendRole)) {
+      await ensureTeacherRolesLoaded();
+    }
+    _markIdentityResolved();
+  }
+
+  bool _needsTeacherRoleApi(String role, SmartCampusRole mapped) {
+    return role.trim().toLowerCase() == 'teacher' &&
+        mapped != SmartCampusRole.student;
+  }
+
+  void _markIdentityResolved() {
+    if (state.identityResolved) {
+      return;
+    }
+    state = state.copyWith(identityResolved: true);
   }
 
   /// 当 `myInfo.role == 'teacher'` 时，拉取

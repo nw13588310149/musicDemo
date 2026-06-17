@@ -43,9 +43,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 
 import '../../../core/constants/app_assets.dart';
+import '../../../core/widgets/app_asset_graphic.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
 import '../data/course_sign_data.dart';
+import '../data/schedule_color_palette.dart';
 import '../data/teacher_attendance_data.dart';
 import '../data/teacher_repository.dart';
 import '../state/teacher_attendance_controller.dart';
@@ -64,14 +66,11 @@ const Color _kTextSection = Color(0xFF1A1A1A);
 const Color _kTextSecondary = Color(0xFF6D6B75);
 const Color _kTextHint = Color(0xFFB6B5BB);
 const Color _kPurple = Color(0xFF8741FF);
-const Color _kPurpleLight = Color(0xFFA773FF);
 const Color _kPurpleSoftHint = Color(0xFFF0E8FC); // 大班签到提示带 bg
 const Color _kPurpleSoftBg = Color(0xFFEAE5FF); // "进行中"角标 bg
 const Color _kPurpleSoftRing = Color(0xFFF7F2FF); // 时间轴外环
 const Color _kInProgressCardBg = Color(0xFFF4F4FF); // 今日课程"进行中"卡 bg
 const Color _kEndedTagBg = Color(0xFFE6E9F1);
-const Color _kCourseTagBg = Color(0xFFDFFCF0); // 古筝课 tag 绿底
-const Color _kCourseTagFg = Color(0xFF0CAC40);
 const Color _kStatusPresent = Color(0xFF0CAC40); // 实到
 const Color _kStatusLate = Color(0xFFFF323C); // 迟到 / 缺课 / 未到
 const Color _kStatusLeave = Color(0xFF325BFF); // 请假
@@ -94,6 +93,7 @@ class _StudentAttend {
     this.studentId = '',
     required this.name,
     this.studentNo = '--',
+    this.headUrl = '',
     required this.status,
     this.remark = '',
   });
@@ -101,6 +101,7 @@ class _StudentAttend {
   final String studentId;
   final String name;
   final String studentNo;
+  final String headUrl;
   _AttendStatus status;
   final String remark;
 }
@@ -123,6 +124,9 @@ class _AttendClass {
     this.teacherCheckInTime,
     this.teacherCheckOutTime,
     this.singleStudent,
+    this.logoUrl = '',
+    this.colorHex = '',
+    this.className = '',
   });
 
   final String courseId;
@@ -139,6 +143,9 @@ class _AttendClass {
   final String signStatusLabel;
   final String? teacherCheckInTime;
   final String? teacherCheckOutTime;
+  final String logoUrl;
+  final String colorHex;
+  final String className;
 
   /// 班级学生名单（大课用）。小课时通常仅 1 项，但保持同字段方便共享。
   final List<_StudentAttend> students;
@@ -227,6 +234,10 @@ class _TeacherClassAttendanceViewState
   /// 双列右侧 active class 索引；默认指向"进行中"那节课。
   int _activeClassIdx = 0;
 
+  /// 用户是否手动点过某节课。未手动选择时，默认选中"接下来时间第一节"
+  /// （即第一节尚未结束的课），而不是列表第一节。
+  bool _userPickedCourse = false;
+
   /// 是否切到「历史记录」子页面（banner 右上"历史记录"按钮 / "查看全部"
   /// 链接触发）。子页面 banner 的返回按钮把它置回 false，回到本主页。
   bool _showHistory = false;
@@ -270,8 +281,11 @@ class _TeacherClassAttendanceViewState
   }
 
   void _selectClass(int idx, List<_AttendClass> classes) {
-    if (_activeClassIdx == idx) return;
-    setState(() => _activeClassIdx = idx);
+    if (_activeClassIdx == idx && _userPickedCourse) return;
+    setState(() {
+      _activeClassIdx = idx;
+      _userPickedCourse = true;
+    });
     final course = classes[idx];
     if (course.courseId.isNotEmpty) {
       unawaited(
@@ -341,9 +355,16 @@ class _TeacherClassAttendanceViewState
         .map(_attendClassFromSession)
         .toList();
     final selectedId = attendance.selectedCourseId;
+    // 默认选中"接下来时间第一节"（第一节未结束的课）；用户手动点过后用其选择。
+    var defaultActiveIdx = classes.indexWhere(
+      (item) => item.runState != _ClassRunState.ended,
+    );
+    if (defaultActiveIdx < 0) defaultActiveIdx = 0;
     var activeIdx = classes.isEmpty
         ? 0
-        : _activeClassIdx.clamp(0, classes.length - 1);
+        : (_userPickedCourse
+              ? _activeClassIdx.clamp(0, classes.length - 1)
+              : defaultActiveIdx);
     if (selectedId != null && selectedId.isNotEmpty) {
       final matched = classes.indexWhere((item) => item.courseId == selectedId);
       if (matched >= 0) {
@@ -394,7 +415,7 @@ class _TeacherClassAttendanceViewState
             ),
             SizedBox(height: ui(12)),
             _StatsRow(stats: stats),
-            SizedBox(height: ui(24)),
+            SizedBox(height: ui(16)),
             _SectionHeaderRow(
               title: '最近签课记录',
               trailingLabel: '查看全部',
@@ -405,7 +426,7 @@ class _TeacherClassAttendanceViewState
               _AttendanceEmptyPanel(loading: false, message: '暂无最近签课记录')
             else
               _RecentRecordsRow(records: recentRecords),
-            SizedBox(height: ui(28)),
+            SizedBox(height: ui(16)),
             // 双列：今日课程 + 签到操作
             if (classes.isEmpty)
               _AttendanceEmptyPanel(
@@ -430,7 +451,7 @@ class _TeacherClassAttendanceViewState
                           activeIdx: activeIdx,
                           onSelect: (idx) => _selectClass(idx, classes),
                         ),
-                        SizedBox(height: ui(20)),
+                        SizedBox(height: ui(16)),
                         _SectionTitle('签到操作'),
                         SizedBox(height: ui(12)),
                         _ActionPanelSwitcher(
@@ -708,7 +729,7 @@ class _StatsRow extends StatelessWidget {
         for (var i = 0; i < stats.length; i++) ...[
           if (i > 0) SizedBox(width: ui(12)),
           Expanded(
-            child: _StatCard(item: stats[i], showAccent: i == 0),
+            child: _StatCard(item: stats[i]),
           ),
         ],
       ],
@@ -717,12 +738,9 @@ class _StatsRow extends StatelessWidget {
 }
 
 class _StatCard extends StatelessWidget {
-  const _StatCard({required this.item, this.showAccent = false});
+  const _StatCard({required this.item});
 
   final _StatItem item;
-
-  /// 第一张卡（签课节次数）右上贴一组紫色渐变装饰圈（与 Figma 一致）。
-  final bool showAccent;
 
   @override
   Widget build(BuildContext context) {
@@ -734,61 +752,7 @@ class _StatCard extends StatelessWidget {
         color: _kCardBg,
         borderRadius: BorderRadius.circular(ui(12)),
       ),
-      child: Stack(
-        clipBehavior: Clip.hardEdge,
-        children: [
-          if (showAccent)
-            Positioned(
-              right: ui(0),
-              top: ui(0),
-              child: SizedBox(
-                width: ui(72),
-                height: ui(72),
-                child: Stack(
-                  children: [
-                    Positioned(
-                      left: 0,
-                      top: 0,
-                      child: Container(
-                        width: ui(54),
-                        height: ui(51),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              _kPurpleLight.withValues(alpha: 0.18),
-                              Colors.white.withValues(alpha: 0.02),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      right: ui(8),
-                      top: ui(34),
-                      child: Container(
-                        width: ui(18),
-                        height: ui(18),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              _kPurpleLight.withValues(alpha: 0.20),
-                              Colors.white.withValues(alpha: 0.02),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          Column(
+      child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -808,13 +772,11 @@ class _StatCard extends StatelessWidget {
                   fontSize: ui(32),
                   color: _kTextDark,
                   fontFamily: 'Barlow',
-                  fontWeight: FontWeight.w500,
+                  fontWeight: AppFont.w500,
                   height: 1,
                 ),
               ),
             ],
-          ),
-        ],
       ),
     );
   }
@@ -904,15 +866,23 @@ class _RecentRecordsRow extends StatelessWidget {
 
   final List<_RecentRecord> records;
 
+  /// 固定一行 3 列：每列等宽（1/3）。不足 3 条用空位占位，卡片不拉伸，
+  /// 因此只有 2 条时占据 2/3 宽度，最后一列留空。
+  static const int _slots = 3;
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (var i = 0; i < records.length; i++) ...[
+        for (var i = 0; i < _slots; i++) ...[
           if (i > 0) SizedBox(width: ui(16)),
-          Expanded(child: _RecentRecordCard(record: records[i])),
+          Expanded(
+            child: i < records.length
+                ? _RecentRecordCard(record: records[i])
+                : const SizedBox.shrink(),
+          ),
         ],
       ],
     );
@@ -959,6 +929,45 @@ class _RecentRecordCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return _TeacherSignRecordCard(
+      time: record.time,
+      headerTrailing: record.date,
+      courseName: record.courseName,
+      kind: record.kind,
+      subtitle: record.periodLabel,
+      avatarSeed: record.teacherName,
+      expected: record.expected,
+      present: record.present,
+      method: record.method,
+    );
+  }
+}
+
+class _TeacherSignRecordCard extends StatelessWidget {
+  const _TeacherSignRecordCard({
+    required this.time,
+    required this.headerTrailing,
+    required this.courseName,
+    required this.kind,
+    required this.subtitle,
+    required this.avatarSeed,
+    required this.expected,
+    required this.present,
+    required this.method,
+  });
+
+  final String time;
+  final String headerTrailing;
+  final String courseName;
+  final _ClassKind kind;
+  final String subtitle;
+  final String avatarSeed;
+  final int expected;
+  final int present;
+  final String method;
+
+  @override
+  Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
       padding: EdgeInsets.all(ui(12)),
@@ -970,12 +979,11 @@ class _RecentRecordCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // 时间 + 日期
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Text(
-                record.time,
+                time,
                 style: TextStyle(
                   fontSize: ui(18),
                   color: _kTextSection,
@@ -986,7 +994,7 @@ class _RecentRecordCard extends StatelessWidget {
               ),
               const Spacer(),
               Text(
-                record.date,
+                headerTrailing,
                 style: TextStyle(
                   fontSize: ui(12),
                   color: _kTextHint,
@@ -998,10 +1006,12 @@ class _RecentRecordCard extends StatelessWidget {
             ],
           ),
           SizedBox(height: ui(12)),
-          // 课名 + tag + 节次（左）+ 头像（右）
+          // 头像与课名/节次同行：头像在左，课名+标签/节次在右。
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              _Avatar(seed: avatarSeed, size: ui(40)),
+              SizedBox(width: ui(6)),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1009,24 +1019,31 @@ class _RecentRecordCard extends StatelessWidget {
                   children: [
                     Row(
                       mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Text(
-                          record.courseName,
-                          style: TextStyle(
-                            fontSize: ui(14),
-                            color: _kTextDark,
-                            fontFamily: 'PingFang SC',
-                            fontWeight: AppFont.w600,
-                            height: 1,
+                        Flexible(
+                          child: Text(
+                            courseName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: ui(14),
+                              color: _kTextDark,
+                              fontFamily: 'PingFang SC',
+                              fontWeight: AppFont.w600,
+                              height: 1,
+                            ),
                           ),
                         ),
                         SizedBox(width: ui(4)),
-                        _ClassKindTag(kind: record.kind),
+                        _AttendanceInlineTag.classKind(kind: kind),
                       ],
                     ),
                     SizedBox(height: ui(4)),
                     Text(
-                      record.periodLabel,
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: ui(12),
                         color: _kTextHint,
@@ -1038,32 +1055,52 @@ class _RecentRecordCard extends StatelessWidget {
                   ],
                 ),
               ),
-              SizedBox(width: ui(8)),
-              _Avatar(seed: record.teacherName, size: ui(40)),
             ],
           ),
           SizedBox(height: ui(12)),
-          // 底部统计：应到 / 实到 / 签到方式。
-          // 不写死 50 高 —— Figma 50 高在 1.0 文字缩放下勉强容下 12+5+12，
-          // 但只要稍微放大字体就会底部溢出 ~10px。改为 padding 自然撑高。
-          Container(
-            width: double.infinity,
-            padding: EdgeInsets.symmetric(vertical: ui(10), horizontal: ui(8)),
-            decoration: BoxDecoration(
-              color: _kInnerGray,
-              borderRadius: BorderRadius.circular(ui(8)),
-            ),
-            child: IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(child: _RecordStatCol('应到', '${record.expected}人')),
-                  Expanded(child: _RecordStatCol('实到', '${record.present}人')),
-                  Expanded(child: _RecordStatCol('签到方式', record.method)),
-                ],
-              ),
-            ),
+          _SignRecordStatsPanel(
+            expected: expected,
+            present: present,
+            method: method,
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SignRecordStatsPanel extends StatelessWidget {
+  const _SignRecordStatsPanel({
+    required this.expected,
+    required this.present,
+    required this.method,
+  });
+
+  final int expected;
+  final int present;
+  final String method;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final expectedText = expected < 0 ? '' : '$expected\u4eba';
+    final presentText = present < 0 ? '' : '$present\u4eba';
+    return Container(
+      width: double.infinity,
+      constraints: BoxConstraints(minHeight: ui(50)),
+      padding: EdgeInsets.only(top: ui(11), bottom: ui(10)),
+      decoration: BoxDecoration(
+        color: _kInnerGray,
+        borderRadius: BorderRadius.circular(ui(8)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(child: _RecordStatCol('应到', expectedText)),
+          SizedBox(width: ui(12)),
+          Expanded(child: _RecordStatCol('实到', presentText)),
+          SizedBox(width: ui(12)),
+          Expanded(child: _RecordStatCol('签到方式', method)),
         ],
       ),
     );
@@ -1079,6 +1116,8 @@ class _RecordStatCol extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final hasValue = value.trim().isNotEmpty;
+    final displayValue = hasValue ? value : '--';
     return Column(
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.center,
@@ -1086,25 +1125,27 @@ class _RecordStatCol extends StatelessWidget {
       children: [
         Text(
           label,
+          textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: ui(12),
             color: _kTextHint,
             fontFamily: 'PingFang SC',
             fontWeight: AppFont.w400,
-            height: 1.2,
+            height: 1,
           ),
         ),
-        SizedBox(height: ui(4)),
+        SizedBox(height: ui(5)),
         Text(
-          value,
+          displayValue,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: ui(12),
-            color: _kTextDark,
+            color: hasValue ? _kTextDark : _kTextHint,
             fontFamily: 'PingFang SC',
             fontWeight: AppFont.w400,
-            height: 1.2,
+            height: 1,
           ),
         ),
       ],
@@ -1113,48 +1154,94 @@ class _RecordStatCol extends StatelessWidget {
 }
 
 // =============================================================================
-// 大/小课 tag（白底浅边 + 4 圆 + 6×6 dot + 11/400 文字）
+// 签课页 inline 标签：科目 + 大/小课，统一 18 高 × 11 字 × 1 边框盒模型
 // =============================================================================
 
-class _ClassKindTag extends StatelessWidget {
-  const _ClassKindTag({required this.kind});
+// 科目标签与大/小课标签统一高度（保持完全一致）。
+const double _kAttendanceTagDesignHeight = 18;
+const double _kAttendanceTagDesignHPad = 4;
+const double _kAttendanceTagDesignRadius = 4;
+const double _kAttendanceTagDesignFontSize = 11;
 
-  final _ClassKind kind;
+class _AttendanceInlineTag extends StatelessWidget {
+  const _AttendanceInlineTag({
+    required this.label,
+    required this.backgroundColor,
+    required this.borderColor,
+    required this.labelColor,
+    this.leading,
+  });
+
+  final String label;
+  final Color backgroundColor;
+  final Color borderColor;
+  final Color labelColor;
+  final Widget? leading;
+
+  factory _AttendanceInlineTag.subject({
+    required String label,
+    required String colorHex,
+  }) {
+    final bg = parseScheduleHexColor(colorHex) ?? scheduleDefaultPickerColor;
+    return _AttendanceInlineTag(
+      label: label,
+      backgroundColor: bg,
+      borderColor: bg,
+      labelColor: scheduleTitleColorForBackground(bg),
+    );
+  }
+
+  factory _AttendanceInlineTag.classKind({required _ClassKind kind}) {
+    final isSmall = kind == _ClassKind.small;
+    return _AttendanceInlineTag(
+      label: isSmall ? '小课' : '大课',
+      backgroundColor: Colors.white,
+      // 边框用更可见的 #E6E9F1：在灰底今日课程卡 / 白底面板上都能读出完整
+      // 外框，避免与紫色科目标签产生“看起来更矮”的视觉差。
+      borderColor: _kBorderHair,
+      labelColor: _kTextDark,
+      leading: _ClassKindDot(isSmall: isSmall),
+    );
+  }
+
+  TextStyle _textStyle(double Function(double) ui) {
+    return TextStyle(
+      fontSize: ui(_kAttendanceTagDesignFontSize),
+      color: labelColor,
+      fontFamily: 'PingFang SC',
+      fontWeight: AppFont.w400,
+      // 均匀分配行内 leading，让文字在标签内上下居中。
+      leadingDistribution: TextLeadingDistribution.even,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final isSmall = kind == _ClassKind.small;
-    // 不写死 height —— 11px 字形 + vertical padding 会超出 16，导致下半截被裁切。
+    final tagHeight = ui(_kAttendanceTagDesignHeight);
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: ui(4), vertical: ui(3)),
+      height: tagHeight,
+      padding: EdgeInsets.symmetric(horizontal: ui(_kAttendanceTagDesignHPad)),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(4)),
-        border: Border.all(color: _kBorderSoft, width: 1),
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(ui(_kAttendanceTagDesignRadius)),
+        border: Border.all(color: borderColor, width: 1),
       ),
+      alignment: Alignment.center,
       child: Row(
         mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Container(
-            width: ui(6),
-            height: ui(6),
-            decoration: BoxDecoration(
-              color: isSmall ? _kStatusPresent : _kBigClassDot,
-              shape: BoxShape.circle,
-            ),
-          ),
-          SizedBox(width: ui(4)),
+          if (leading != null) ...[
+            leading!,
+            SizedBox(width: ui(4)),
+          ],
           Text(
-            isSmall ? '小课' : '大课',
-            style: TextStyle(
-              fontSize: ui(11),
-              color: _kTextDark,
-              fontFamily: 'PingFang SC',
-              fontWeight: AppFont.w400,
-              height: 1.2,
-            ),
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: _textStyle(ui),
           ),
         ],
       ),
@@ -1162,31 +1249,49 @@ class _ClassKindTag extends StatelessWidget {
   }
 }
 
-class _CourseGreenTag extends StatelessWidget {
-  const _CourseGreenTag({required this.courseName});
+class _ClassKindDot extends StatelessWidget {
+  const _ClassKindDot({required this.isSmall});
 
-  final String courseName;
+  final bool isSmall;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: ui(4), vertical: ui(3)),
+      width: ui(6),
+      height: ui(6),
       decoration: BoxDecoration(
-        color: _kCourseTagBg,
-        borderRadius: BorderRadius.circular(ui(4)),
+        color: isSmall ? _kStatusPresent : _kBigClassDot,
+        shape: BoxShape.circle,
       ),
-      child: Text(
-        courseName,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: ui(11),
-          color: _kCourseTagFg,
-          fontFamily: 'PingFang SC',
-          fontWeight: AppFont.w400,
-          height: 1.2,
-        ),
+    );
+  }
+}
+
+class _AttendanceInlineTagPair extends StatelessWidget {
+  const _AttendanceInlineTagPair({
+    required this.courseName,
+    required this.colorHex,
+    required this.kind,
+  });
+
+  final String courseName;
+  final String colorHex;
+  final _ClassKind kind;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return SizedBox(
+      height: ui(_kAttendanceTagDesignHeight),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _AttendanceInlineTag.subject(label: courseName, colorHex: colorHex),
+          SizedBox(width: ui(4)),
+          _AttendanceInlineTag.classKind(kind: kind),
+        ],
       ),
     );
   }
@@ -1234,14 +1339,26 @@ class _TodayClassesPanel extends StatelessWidget {
             ),
           ),
           SizedBox(height: ui(12)),
-          for (var i = 0; i < classes.length; i++) ...[
-            if (i > 0) SizedBox(height: ui(8)),
-            _TodayClassCard(
-              data: classes[i],
-              isActive: i == activeIdx,
-              onTap: () => onSelect(i),
+          // 最多展示 5 个课程卡（104 高 + 8 间距），多余的滚动查看。
+          ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: ui(104) * 5 + ui(8) * 4),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (var i = 0; i < classes.length; i++) ...[
+                    if (i > 0) SizedBox(height: ui(8)),
+                    _TodayClassCard(
+                      data: classes[i],
+                      isActive: i == activeIdx,
+                      onTap: () => onSelect(i),
+                    ),
+                  ],
+                ],
+              ),
             ),
-          ],
+          ),
         ],
       ),
     );
@@ -1311,6 +1428,10 @@ class _TodayClassCard extends StatelessWidget {
     final mainStudent =
         data.singleStudent ??
         (data.students.isNotEmpty ? data.students.first.name : '');
+    final displayName = data.className.isNotEmpty
+        ? data.className
+        : (mainStudent.isNotEmpty ? mainStudent : data.courseName);
+    final avatarSeed = displayName.isNotEmpty ? displayName : data.courseName;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(ui(12)),
@@ -1368,7 +1489,11 @@ class _TodayClassCard extends StatelessWidget {
                 Positioned(
                   left: ui(16),
                   top: ui(48),
-                  child: _Avatar(seed: mainStudent, size: ui(40)),
+                  child: _Avatar(
+                    seed: avatarSeed,
+                    size: ui(40),
+                    imageUrl: data.logoUrl,
+                  ),
                 ),
                 // 学生信息
                 Positioned(
@@ -1382,20 +1507,26 @@ class _TodayClassCard extends StatelessWidget {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            mainStudent,
-                            style: TextStyle(
-                              fontSize: ui(14),
-                              color: _kTextDark,
-                              fontFamily: 'PingFang SC',
-                              fontWeight: AppFont.w600,
-                              height: 1,
+                          Flexible(
+                            child: Text(
+                              displayName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: ui(14),
+                                color: _kTextDark,
+                                fontFamily: 'PingFang SC',
+                                fontWeight: AppFont.w600,
+                                height: 1,
+                              ),
                             ),
                           ),
                           SizedBox(width: ui(4)),
-                          _CourseGreenTag(courseName: data.courseName),
-                          SizedBox(width: ui(4)),
-                          _ClassKindTag(kind: data.kind),
+                          _AttendanceInlineTagPair(
+                            courseName: data.courseName,
+                            colorHex: data.colorHex,
+                            kind: data.kind,
+                          ),
                         ],
                       ),
                       SizedBox(height: ui(4)),
@@ -1440,14 +1571,41 @@ class _ActionPanelSwitcher extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (data.kind == _ClassKind.big) {
-      return _BigClassActionPanel(
-        data: data,
-        onPickStudentStatus: onPickStudentStatus,
-        onBulkSign: onBulkSign,
-      );
-    }
-    return _SmallClassActionPanel(data: data);
+    final ui = DashboardScaleScope.of(context).ui;
+    final isSmall = data.kind == _ClassKind.small;
+    final panel = isSmall
+        ? _SmallClassActionPanel(data: data)
+        : _BigClassActionPanel(
+            data: data,
+            onPickStudentStatus: onPickStudentStatus,
+            onBulkSign: onBulkSign,
+          );
+    return _SignInActionShell(
+      fixedHeight: isSmall ? ui(312) : null,
+      child: panel,
+    );
+  }
+}
+
+/// 签到操作外框：与学生端 [StudentCheckInView] 的 `_CheckInActionPanel` 一致。
+class _SignInActionShell extends StatelessWidget {
+  const _SignInActionShell({this.fixedHeight, required this.child});
+
+  final double? fixedHeight;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      width: double.infinity,
+      height: fixedHeight,
+      decoration: BoxDecoration(
+        color: _kCardBg,
+        borderRadius: BorderRadius.circular(ui(16)),
+      ),
+      child: child,
+    );
   }
 }
 
@@ -1473,70 +1631,82 @@ class _BigClassActionPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final bulkSignCompleted = _isBigClassBulkSignCompleted(data);
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: _kCardBg,
-        borderRadius: BorderRadius.circular(ui(16)),
-      ),
+    return Padding(
       padding: EdgeInsets.all(ui(12)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // 顶部：第N节·HH:MM-HH:MM（时间紫色）+ 右上角倒计时
+          // 顶部：第N节·HH:MM-HH:MM（时间紫色）+ 右上角倒计时 / 已结束角标
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: RichText(
-                  text: TextSpan(
-                    style: TextStyle(
-                      fontSize: ui(16),
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w500,
-                      height: 1,
-                    ),
-                    children: [
-                      TextSpan(
-                        text: '第${data.periodIndex}节·',
-                        style: const TextStyle(color: _kTextSection),
-                      ),
-                      TextSpan(
-                        text: '${data.startTime}-${data.endTime}',
-                        style: const TextStyle(color: _kPurple),
-                      ),
-                    ],
+                child: Text(
+                  '第${data.periodIndex}节·${data.startTime}-${data.endTime}',
+                  style: TextStyle(
+                    fontSize: ui(16),
+                    color: _kTextSection,
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w500,
+                    height: 1,
                   ),
                 ),
               ),
-              CourseSignCountdownBadge(
-                startTime: data.startTime,
-                endTime: data.endTime,
-              ),
+              if (data.runState == _ClassRunState.ended)
+                const _SignActionEndedBadge()
+              else
+                CourseSignCountdownBadge(
+                  startTime: data.startTime,
+                  endTime: data.endTime,
+                ),
             ],
           ),
-          SizedBox(height: ui(20)),
-          // 教师信息行：头像 + 姓名 + 时长·教室 + 课程 tag
+          SizedBox(height: ui(10)),
+          // 教师信息行：头像 + 姓名（后接科目/大小课标签）+ 时长·教室
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              _Avatar(seed: data.teacherName, size: ui(40)),
+              _Avatar(
+                seed: data.className.isNotEmpty
+                    ? data.className
+                    : data.teacherName,
+                size: ui(40),
+                imageUrl: data.logoUrl,
+              ),
               SizedBox(width: ui(6)),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      data.teacherName,
-                      style: TextStyle(
-                        fontSize: ui(14),
-                        color: _kTextDark,
-                        fontFamily: 'PingFang SC',
-                        fontWeight: AppFont.w600,
-                        height: 1,
-                      ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            data.className.isNotEmpty
+                                ? data.className
+                                : data.teacherName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: ui(14),
+                              color: _kTextDark,
+                              fontFamily: 'PingFang SC',
+                              fontWeight: AppFont.w600,
+                              height: 1,
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: ui(4)),
+                        _AttendanceInlineTagPair(
+                          courseName: data.courseName,
+                          colorHex: data.colorHex,
+                          kind: data.kind,
+                        ),
+                      ],
                     ),
                     SizedBox(height: ui(4)),
                     Text(
@@ -1552,14 +1722,13 @@ class _BigClassActionPanel extends StatelessWidget {
                   ],
                 ),
               ),
-              _CourseGreenTag(courseName: data.courseName),
             ],
           ),
           SizedBox(height: ui(16)),
           // 班级学生（灰底面板）
           Container(
             width: double.infinity,
-            padding: EdgeInsets.fromLTRB(ui(12), ui(14), ui(12), ui(16)),
+            padding: EdgeInsets.fromLTRB(ui(12), ui(12), ui(12), ui(16)),
             decoration: BoxDecoration(
               color: _kInnerGray,
               borderRadius: BorderRadius.circular(ui(12)),
@@ -1584,7 +1753,7 @@ class _BigClassActionPanel extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      '点击头像选择签到状态',
+                      '点击头像可更改状态',
                       style: TextStyle(
                         fontSize: ui(12),
                         color: _kTextHint,
@@ -1595,7 +1764,7 @@ class _BigClassActionPanel extends StatelessWidget {
                     ),
                   ],
                 ),
-                SizedBox(height: ui(12)),
+                SizedBox(height: ui(8)),
                 // 6 状态 chip（应到/实到/迟到/请假/缺课/未到）
                 Wrap(
                   spacing: ui(8),
@@ -1604,7 +1773,7 @@ class _BigClassActionPanel extends StatelessWidget {
                     _StatusChip(
                       label: '应到',
                       count: data.students.length,
-                      dotColor: const Color(0xFFD9D9D9),
+                      dotColor: _kInnerGray,
                     ),
                     _StatusChip(
                       label: '实到',
@@ -1633,7 +1802,7 @@ class _BigClassActionPanel extends StatelessWidget {
                     ),
                   ],
                 ),
-                SizedBox(height: ui(16)),
+                SizedBox(height: ui(12)),
                 // 学生网格：8 列，自动分行
                 _StudentAttendGrid(
                   students: data.students,
@@ -1674,7 +1843,7 @@ class _BigClassActionPanel extends StatelessWidget {
                       color: _kTextSecondary,
                       fontFamily: 'PingFang SC',
                       fontWeight: AppFont.w400,
-                      height: 14 / 11,
+                      height: 12 / 11,
                     ),
                   ),
                 ],
@@ -1692,9 +1861,10 @@ class _BigClassActionPanel extends StatelessWidget {
                   gradient: const LinearGradient(
                     begin: Alignment.centerRight,
                     end: Alignment.centerLeft,
-                    colors: [Color(0xFFB68EFF), Color(0xFF8640FF)],
+                    colors: [Color(0xFFB58EFF), Color(0xFF853FFF)],
                   ),
                   borderRadius: BorderRadius.circular(ui(12)),
+                  border: Border.all(color: _kBorderSoft, width: 1),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -1758,6 +1928,33 @@ class _BigClassActionPanel extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// 签到操作面板右上角「已结束」状态角标（课程结束后替换倒计时）。
+class _SignActionEndedBadge extends StatelessWidget {
+  const _SignActionEndedBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: ui(8), vertical: ui(4)),
+      decoration: BoxDecoration(
+        color: _kEndedTagBg,
+        borderRadius: BorderRadius.circular(ui(8)),
+      ),
+      child: Text(
+        '已结束',
+        style: TextStyle(
+          fontSize: ui(12),
+          color: _kTextSecondary,
+          fontFamily: 'PingFang SC',
+          fontWeight: AppFont.w400,
+          height: 1,
+        ),
       ),
     );
   }
@@ -1906,13 +2103,17 @@ class _StudentAttendCell extends StatelessWidget {
             Stack(
               clipBehavior: Clip.none,
               children: [
-                _Avatar(seed: student.name, size: ui(36)),
+                _Avatar(
+                  seed: student.name,
+                  size: ui(36),
+                  imageUrl: student.headUrl,
+                ),
                 Positioned(
-                  right: ui(-2),
-                  bottom: ui(-2),
+                  right: ui(-1),
+                  bottom: ui(-1),
                   child: Container(
-                    width: ui(10),
-                    height: ui(10),
+                    width: ui(8),
+                    height: ui(8),
                     decoration: BoxDecoration(
                       color: _dotColorFor(student.status),
                       shape: BoxShape.circle,
@@ -2047,12 +2248,9 @@ class _SmallClassActionPanelState
     final mainStudent =
         data.singleStudent ??
         (data.students.isNotEmpty ? data.students.first.name : '学生');
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: _kCardBg,
-        borderRadius: BorderRadius.circular(ui(16)),
-      ),
+    final studentHeadUrl =
+        data.students.isNotEmpty ? data.students.first.headUrl : '';
+    return Padding(
       padding: EdgeInsets.all(ui(12)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2062,24 +2260,14 @@ class _SmallClassActionPanelState
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: RichText(
-                  text: TextSpan(
-                    style: TextStyle(
-                      fontSize: ui(16),
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w500,
-                      height: 1,
-                    ),
-                    children: [
-                      TextSpan(
-                        text: '第${data.periodIndex}节·',
-                        style: const TextStyle(color: _kTextSection),
-                      ),
-                      TextSpan(
-                        text: '${data.startTime}-${data.endTime}',
-                        style: const TextStyle(color: _kPurple),
-                      ),
-                    ],
+                child: Text(
+                  '第${data.periodIndex}节·${data.startTime}-${data.endTime}',
+                  style: TextStyle(
+                    fontSize: ui(16),
+                    color: _kTextSection,
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w500,
+                    height: 1,
                   ),
                 ),
               ),
@@ -2106,7 +2294,11 @@ class _SmallClassActionPanelState
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    _Avatar(seed: mainStudent, size: ui(40)),
+                    _Avatar(
+                      seed: mainStudent,
+                      size: ui(40),
+                      imageUrl: studentHeadUrl,
+                    ),
                     SizedBox(width: ui(10)),
                     Expanded(
                       child: Column(
@@ -2115,6 +2307,7 @@ class _SmallClassActionPanelState
                         children: [
                           Row(
                             mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
                               Text(
                                 mainStudent,
@@ -2127,9 +2320,11 @@ class _SmallClassActionPanelState
                                 ),
                               ),
                               SizedBox(width: ui(4)),
-                              _CourseGreenTag(courseName: data.courseName),
-                              SizedBox(width: ui(4)),
-                              _ClassKindTag(kind: data.kind),
+                              _AttendanceInlineTagPair(
+                                courseName: data.courseName,
+                                colorHex: data.colorHex,
+                                kind: data.kind,
+                              ),
                             ],
                           ),
                           SizedBox(height: ui(4)),
@@ -2191,9 +2386,11 @@ class _SmallClassActionPanelState
                         signedTime: teacherEndSigned,
                         onSign: () => _onSignEnd(),
                         actionLabel: '下课签',
+                        // 按后端流程：必须等学生上课签到（signStatus=2）后，
+                        // 教师才能下课签到；否则后端会返回流程错误。
                         enabled:
                             data.signStatus >=
-                                CourseSignFlowStatus.teacherStart.code &&
+                                CourseSignFlowStatus.studentStart.code &&
                             data.signStatus <
                                 CourseSignFlowStatus.teacherEnd.code &&
                             !_signingEnd,
@@ -2201,11 +2398,82 @@ class _SmallClassActionPanelState
                     ),
                   ],
                 ),
+                SizedBox(height: ui(12)),
+                _SmallClassFlowHintLine(signStatus: data.signStatus),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// 小课签到流程状态提示：明确「老师上课签→学生上课签→老师下课签→学生下课签」
+/// 当前进行到哪一步，避免老师在学生尚未上课签时误点下课签。
+class _SmallClassFlowHintLine extends StatelessWidget {
+  const _SmallClassFlowHintLine({required this.signStatus});
+
+  final int signStatus;
+
+  ({IconData icon, Color color, String text}) _resolve() {
+    if (signStatus < CourseSignFlowStatus.teacherStart.code) {
+      return (
+        icon: Icons.touch_app_outlined,
+        color: _kPurple,
+        text: '请先完成教师上课签到',
+      );
+    }
+    if (signStatus < CourseSignFlowStatus.studentStart.code) {
+      return (
+        icon: Icons.hourglass_top_rounded,
+        color: _kTextSecondary,
+        text: '已上课签，等待学生上课签到后方可下课签',
+      );
+    }
+    if (signStatus < CourseSignFlowStatus.teacherEnd.code) {
+      return (
+        icon: Icons.touch_app_outlined,
+        color: _kPurple,
+        text: '学生已上课签，请教师完成下课签到',
+      );
+    }
+    if (signStatus < CourseSignFlowStatus.studentEnd.code) {
+      return (
+        icon: Icons.hourglass_top_rounded,
+        color: _kTextSecondary,
+        text: '已下课签，等待学生下课签到',
+      );
+    }
+    return (
+      icon: Icons.check_circle_rounded,
+      color: _kStatusPresent,
+      text: '本节签到流程已完成',
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final hint = _resolve();
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(hint.icon, size: ui(14), color: hint.color),
+        SizedBox(width: ui(6)),
+        Flexible(
+          child: Text(
+            hint.text,
+            style: TextStyle(
+              fontSize: ui(12),
+              color: hint.color,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w400,
+              height: 1.2,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -2342,10 +2610,15 @@ class _TimelineDot extends StatelessWidget {
 // =============================================================================
 
 class _Avatar extends StatelessWidget {
-  const _Avatar({required this.seed, required this.size});
+  const _Avatar({
+    required this.seed,
+    required this.size,
+    this.imageUrl = '',
+  });
 
   final String seed;
   final double size;
+  final String imageUrl;
 
   static const List<List<Color>> _palettes = [
     [Color(0xFFC1A6FF), Color(0xFF8741FF)],
@@ -2356,11 +2629,9 @@ class _Avatar extends StatelessWidget {
     [Color(0xFFFFD589), Color(0xFFD8851A)],
   ];
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _fallback(String initial) {
     final hash = seed.codeUnits.fold<int>(0, (a, b) => a + b);
     final palette = _palettes[hash % _palettes.length];
-    final initial = seed.isEmpty ? '?' : seed.characters.first.toUpperCase();
     return Container(
       width: size,
       height: size,
@@ -2382,6 +2653,24 @@ class _Avatar extends StatelessWidget {
           fontWeight: AppFont.w600,
           height: 1,
         ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final initial = seed.isEmpty ? '?' : seed.characters.first.toUpperCase();
+    final url = imageUrl.trim();
+    if (url.isEmpty) {
+      return _fallback(initial);
+    }
+    return ClipOval(
+      child: Image.network(
+        url,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => _fallback(initial),
       ),
     );
   }
@@ -2410,6 +2699,7 @@ _AttendClass _attendClassFromSession(CourseSignSession session) {
           studentId: student.studentId,
           name: student.name,
           studentNo: student.studentNo,
+          headUrl: student.headUrl,
           status: switch (student.status) {
             CourseSignStatus.present => _AttendStatus.present,
             CourseSignStatus.late => _AttendStatus.late,
@@ -2438,6 +2728,9 @@ _AttendClass _attendClassFromSession(CourseSignSession session) {
     signStatusLabel: CourseSignFlowStatus.labelFor(session.signStatus),
     teacherCheckInTime: session.teacherCheckInTime,
     teacherCheckOutTime: session.teacherCheckOutTime,
+    logoUrl: session.logoUrl,
+    colorHex: session.colorHex,
+    className: session.className,
     students: students,
     singleStudent: isSmallCourseType(session.courseType) && students.isNotEmpty
         ? students.first.name
@@ -2841,10 +3134,11 @@ class _HistorySearchFieldState extends State<_HistorySearchField> {
       ),
       child: Row(
         children: [
-          Icon(
-            Icons.search_rounded,
-            size: ui(18),
-            color: const Color(0xFFC6C6C6),
+          AppAssetGraphic(
+            AppAssets.shellV2Search,
+            width: ui(18),
+            height: ui(18),
+            fit: BoxFit.contain,
           ),
           SizedBox(width: ui(8)),
           Expanded(
@@ -2927,107 +3221,16 @@ class _HistoryRecordCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      padding: EdgeInsets.all(ui(12)),
-      decoration: BoxDecoration(
-        color: _kCardBg,
-        borderRadius: BorderRadius.circular(ui(16)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // 时间 + 节次
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Text(
-                record.time,
-                style: TextStyle(
-                  fontSize: ui(18),
-                  color: _kTextSection,
-                  fontFamily: 'Barlow',
-                  fontWeight: FontWeight.w600,
-                  height: 1,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                record.periodLabel,
-                style: TextStyle(
-                  fontSize: ui(12),
-                  color: _kTextHint,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w400,
-                  height: 1,
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: ui(12)),
-          // 大/小课 tag 单独一行
-          _ClassKindTag(kind: record.kind),
-          SizedBox(height: ui(12)),
-          // 课名 + 教室（左）+ 头像（右）
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      record.courseName,
-                      style: TextStyle(
-                        fontSize: ui(14),
-                        color: _kTextDark,
-                        fontFamily: 'PingFang SC',
-                        fontWeight: AppFont.w600,
-                        height: 1,
-                      ),
-                    ),
-                    SizedBox(height: ui(4)),
-                    Text(
-                      record.location,
-                      style: TextStyle(
-                        fontSize: ui(12),
-                        color: _kTextHint,
-                        fontFamily: 'PingFang SC',
-                        fontWeight: AppFont.w400,
-                        height: 1,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(width: ui(8)),
-              _Avatar(seed: record.teacherName, size: ui(40)),
-            ],
-          ),
-          SizedBox(height: ui(12)),
-          // 底部统计：应到 / 实到 / 签到方式
-          Container(
-            width: double.infinity,
-            padding: EdgeInsets.symmetric(vertical: ui(10), horizontal: ui(8)),
-            decoration: BoxDecoration(
-              color: _kInnerGray,
-              borderRadius: BorderRadius.circular(ui(8)),
-            ),
-            child: IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(child: _RecordStatCol('应到', '${record.expected}人')),
-                  Expanded(child: _RecordStatCol('实到', '${record.present}人')),
-                  Expanded(child: _RecordStatCol('签到方式', record.method)),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
+    return _TeacherSignRecordCard(
+      time: record.time,
+      headerTrailing: record.periodLabel,
+      courseName: record.courseName,
+      kind: record.kind,
+      subtitle: record.location,
+      avatarSeed: record.teacherName,
+      expected: record.expected,
+      present: record.present,
+      method: record.method,
     );
   }
 }

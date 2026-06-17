@@ -63,6 +63,10 @@ class CircleListView extends StatelessWidget {
     }
     return Container(
       color: const Color(0xFFEFF3FC),
+      // 外层 AnimatedSwitcher 默认按 center 对齐子节点；列表内容不满一屏时
+      // SingleChildScrollView 会收缩到内容高度并被垂直居中，导致渲染完成后
+      // 顶部凭空多出一段间距。这里强制铺满并顶对齐，让首张卡片紧贴顶部。
+      alignment: Alignment.topCenter,
       child: AppRefreshIndicator(
         onRefresh: () => controller.refreshPosts(),
         child: LayoutBuilder(

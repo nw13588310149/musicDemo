@@ -163,6 +163,7 @@ class ShellState {
     this.unreadCount = 0,
     this.noticeItems = const [],
     this.schoolCoursewareEnabled = false,
+    this.isSchoolReady = false,
   });
 
   final List<ShellNavItem> navItems;
@@ -177,6 +178,10 @@ class ShellState {
   final List<ShellNoticeItem> noticeItems;
   final bool schoolCoursewareEnabled;
 
+  /// `/myInfo` 并行拉取的 `schoolList` 已成功写入本地 `schoolId`。
+  /// 智慧校园等业务在 `false` 时不应发起带 `schoolId` 头的请求。
+  final bool isSchoolReady;
+
   bool get isAuthenticated => true;
 
   ShellState copyWith({
@@ -189,6 +194,7 @@ class ShellState {
     int? unreadCount,
     List<ShellNoticeItem>? noticeItems,
     bool? schoolCoursewareEnabled,
+    bool? isSchoolReady,
   }) {
     return ShellState(
       navItems: navItems ?? this.navItems,
@@ -201,6 +207,7 @@ class ShellState {
       noticeItems: noticeItems ?? this.noticeItems,
       schoolCoursewareEnabled:
           schoolCoursewareEnabled ?? this.schoolCoursewareEnabled,
+      isSchoolReady: isSchoolReady ?? this.isSchoolReady,
     );
   }
 }

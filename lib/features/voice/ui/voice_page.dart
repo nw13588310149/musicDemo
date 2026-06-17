@@ -373,7 +373,7 @@ class _VoiceSearchPill extends StatelessWidget {
           prefixIcon: Padding(
             padding: EdgeInsets.only(left: ui(12), right: ui(6)),
             child: Image.asset(
-              AppAssets.homeSearchIcon,
+              AppAssets.shellV2Search,
               width: iconSize,
               height: iconSize,
               fit: BoxFit.contain,

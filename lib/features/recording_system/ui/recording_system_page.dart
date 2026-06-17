@@ -986,7 +986,7 @@ class _RecordingSearchField extends StatelessWidget {
           prefixIcon: Padding(
             padding: EdgeInsets.only(left: ui(12), right: ui(8)),
             child: Image.asset(
-              AppAssets.cloudSearch,
+              AppAssets.shellV2Search,
               width: ui(16),
               height: ui(16),
               fit: BoxFit.contain,

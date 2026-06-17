@@ -11,11 +11,13 @@ import '../../../core/constants/app_assets.dart';
 import '../../../core/network/api_response.dart';
 import '../../../core/network/media_url.dart';
 import '../../../core/network/snowflake_id.dart';
+import '../../../core/widgets/app_asset_graphic.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/popup_selector_field.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/admin_repository.dart';
 import '../data/admin_class_summary.dart';
+import 'widgets/smart_campus_stat_card.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // ============================================================================
@@ -1493,117 +1495,40 @@ class _StatsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final cards = <_StatCard>[
-      _StatCard(
-        label: '大班数量',
-        value: bigClassCount,
-        gradientStart: const Color(0xFFE7DCFF),
-        icon: Icons.dashboard_outlined,
-        iconColor: const Color(0xFFA985FF),
-      ),
-      _StatCard(
-        label: '小班数量',
-        value: smallClassCount,
-        gradientStart: const Color(0xFFFFF0DC),
-        icon: Icons.people_alt_outlined,
-        iconColor: const Color(0xFFFFB85C),
-      ),
-      _StatCard(
-        label: '学生数量',
-        value: studentCount,
-        gradientStart: const Color(0xFFDCFFE7),
-        icon: Icons.shuffle_rounded,
-        iconColor: const Color(0xFF52C49A),
-      ),
-      _StatCard(
-        label: '未分配学生',
-        value: unassignedStudentCount,
-        gradientStart: const Color(0xFFFFE2DC),
-        icon: Icons.receipt_long_outlined,
-        iconColor: const Color(0xFFFF8A75),
-      ),
-    ];
     return Row(
       children: [
-        for (var i = 0; i < cards.length; i++) ...[
-          Expanded(child: cards[i]),
-          if (i < cards.length - 1) SizedBox(width: ui(12)),
-        ],
-      ],
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.label,
-    required this.value,
-    required this.gradientStart,
-    required this.icon,
-    required this.iconColor,
-  });
-
-  final String label;
-  final int value;
-  final Color gradientStart;
-  final IconData icon;
-  final Color iconColor;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      height: ui(100),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-          colors: [gradientStart, Colors.white],
-          stops: const [0, 0.73],
+        Expanded(
+          child: SmartCampusStatCard(
+            backgroundAsset: AppAssets.adminClassManagementStatCard1,
+            label: '大班数量',
+            value: bigClassCount,
+          ),
         ),
-        borderRadius: BorderRadius.circular(ui(12)),
-        border: Border.all(color: Colors.white, width: 1),
-      ),
-      padding: EdgeInsets.fromLTRB(ui(16), ui(16), ui(12), ui(12)),
-      child: Stack(
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: ui(14),
-                  height: 1.2,
-                  fontWeight: AppFont.w500,
-                  color: Colors.black,
-                  fontFamily: 'PingFang SC',
-                ),
-              ),
-              SizedBox(height: ui(8)),
-              Text(
-                '$value',
-                style: TextStyle(
-                  fontSize: ui(32),
-                  height: 1.0,
-                  fontWeight: FontWeight.w500,
-                  color: _kTextPrimary,
-                  fontFamily: 'Barlow',
-                ),
-              ),
-            ],
+        SizedBox(width: ui(12)),
+        Expanded(
+          child: SmartCampusStatCard(
+            backgroundAsset: AppAssets.adminClassManagementStatCard2,
+            label: '小班数量',
+            value: smallClassCount,
           ),
-          Positioned(
-            right: 0,
-            bottom: 0,
-            child: Icon(
-              icon,
-              size: ui(54),
-              color: iconColor.withValues(alpha: 0.35),
-            ),
+        ),
+        SizedBox(width: ui(12)),
+        Expanded(
+          child: SmartCampusStatCard(
+            backgroundAsset: AppAssets.adminClassManagementStatCard3,
+            label: '学生数量',
+            value: studentCount,
           ),
-        ],
-      ),
+        ),
+        SizedBox(width: ui(12)),
+        Expanded(
+          child: SmartCampusStatCard(
+            backgroundAsset: AppAssets.adminClassManagementStatCard4,
+            label: '未分配学生',
+            value: unassignedStudentCount,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -3550,7 +3475,12 @@ class _SearchBar extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: ui(16)),
       child: Row(
         children: [
-          Icon(Icons.search, size: ui(16), color: const Color(0xFFC6C6C6)),
+          AppAssetGraphic(
+            AppAssets.shellV2Search,
+            width: ui(16),
+            height: ui(16),
+            fit: BoxFit.contain,
+          ),
           SizedBox(width: ui(10)),
           Expanded(
             child: AppTextField(

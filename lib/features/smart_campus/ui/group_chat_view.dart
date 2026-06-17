@@ -1768,7 +1768,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
       );
     }
     // 空列表时不再「整页占位」，仍按双栏布局渲染：左栏给 _ConversationListPane
-    // 内置的「暂无群聊」占位，右栏给一个无群可聊的友好状态（无 header /
+    // 内置的「暂无班级」占位，右栏给一个无群可聊的友好状态（无 header /
     // 输入栏禁用），方便用户看清楚整体页面结构。
     final selectedId = convs.isEmpty ? '' : (_selectedConvId ?? convs.first.id);
     final currentConv = convs.isEmpty
@@ -1885,7 +1885,7 @@ class _EmptyConversationsHint extends StatelessWidget {
           ),
           SizedBox(height: ui(8)),
           Text(
-            '暂无群聊',
+            '暂无班级',
             style: TextStyle(
               color: _kTextSecondary,
               fontSize: ui(13),

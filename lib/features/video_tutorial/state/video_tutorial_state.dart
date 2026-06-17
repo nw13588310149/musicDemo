@@ -1,10 +1,10 @@
 class VideoTutorialPageArgs {
-  const VideoTutorialPageArgs({this.schoolMode = false, this.schoolId = 0});
+  const VideoTutorialPageArgs({this.schoolMode = false, this.schoolId = '0'});
 
   static const public = VideoTutorialPageArgs();
 
   final bool schoolMode;
-  final int schoolId;
+  final String schoolId;
 
   @override
   bool operator ==(Object other) =>

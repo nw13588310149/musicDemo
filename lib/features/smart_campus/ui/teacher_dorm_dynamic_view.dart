@@ -35,6 +35,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_assets.dart';
+import '../../../core/network/media_url.dart';
+import '../../../core/widgets/app_asset_graphic.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/teacher_dormitory_data.dart';
@@ -128,22 +130,24 @@ class _StudentRecord {
   const _StudentRecord({
     required this.studentName,
     required this.studentNo,
+    required this.avatarUrl,
     required this.status,
     required this.dormName,
     required this.date,
     required this.requiredTime,
     required this.punchTime,
-    required this.note,
+    required this.bedName,
   });
 
   final String studentName;
   final String studentNo;
+  final String avatarUrl;
   final _StudentStatus status;
   final String dormName;
   final String date;
   final String requiredTime;
   final String punchTime;
-  final String note;
+  final String bedName;
 }
 
 class _DormRecord {
@@ -350,6 +354,7 @@ List<_StudentRecord> _studentRecords(List<TeacherDormitoryDynamicItem> items) {
       _StudentRecord(
         studentName: item.studentName,
         studentNo: item.studentNo,
+        avatarUrl: item.avatarUrl,
         status: switch (item.status) {
           TeacherDormitoryStatus.normal => _StudentStatus.normal,
           TeacherDormitoryStatus.late => _StudentStatus.late_,
@@ -359,7 +364,7 @@ List<_StudentRecord> _studentRecords(List<TeacherDormitoryDynamicItem> items) {
         date: item.checkDate.isEmpty ? '--' : item.checkDate,
         requiredTime: '--',
         punchTime: item.checkTime,
-        note: item.bedName.isEmpty ? '无' : item.bedName,
+        bedName: item.bedName.isEmpty ? '无' : item.bedName,
       ),
   ];
 }
@@ -664,10 +669,11 @@ class _TabsRow extends StatelessWidget {
           padding: EdgeInsets.symmetric(horizontal: ui(24), vertical: ui(12)),
           child: Row(
             children: [
-              Icon(
-                Icons.search_rounded,
-                size: ui(16),
-                color: const Color(0xFFC6C6C6),
+              AppAssetGraphic(
+                AppAssets.shellV2Search,
+                width: ui(16),
+                height: ui(16),
+                fit: BoxFit.contain,
               ),
               SizedBox(width: ui(8)),
               Expanded(
@@ -931,6 +937,69 @@ BoxDecoration _cardDecoration(double radius) => BoxDecoration(
   borderRadius: BorderRadius.circular(radius),
 );
 
+/// 查寝动态学生头像：相对路径经 [MediaUrl.resolve] 补全后加载。
+class _DormStudentAvatar extends StatelessWidget {
+  const _DormStudentAvatar({
+    required this.rawHeadUrl,
+    required this.name,
+    required this.size,
+  });
+
+  final String rawHeadUrl;
+  final String name;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final radius = ui(8);
+    final raw = rawHeadUrl.trim();
+    final url = raw.isNotEmpty ? MediaUrl.resolve(raw) : '';
+    final initial = name.trim().isNotEmpty ? name.characters.first : '';
+
+    Widget child;
+    if (url.isNotEmpty) {
+      child = ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: Image.network(
+          url,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => _fallback(ui, radius, initial),
+        ),
+      );
+    } else {
+      child = _fallback(ui, radius, initial);
+    }
+    return SizedBox(width: size, height: size, child: child);
+  }
+
+  Widget _fallback(double Function(double) ui, double radius, String initial) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: const Color(0xFFA773FF),
+        borderRadius: BorderRadius.circular(radius),
+      ),
+      alignment: Alignment.center,
+      child: initial.isNotEmpty
+          ? Text(
+              initial,
+              style: TextStyle(
+                fontSize: ui(size * 0.38),
+                color: Colors.white,
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w500,
+                height: 1,
+              ),
+            )
+          : Icon(Icons.person_rounded, size: ui(size * 0.5), color: Colors.white),
+    );
+  }
+}
+
 // —— 学生口径卡 ——————————————————————————————————————————————————
 
 class _StudentCard extends StatelessWidget {
@@ -951,17 +1020,10 @@ class _StudentCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Container(
-                width: ui(40),
-                height: ui(40),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(ui(8)),
-                  image: const DecorationImage(
-                    image: AssetImage('assets/images/schoolA/18.png'),
-                    fit: BoxFit.cover,
-                  ),
-                ),
+              _DormStudentAvatar(
+                rawHeadUrl: record.avatarUrl,
+                name: record.studentName,
+                size: ui(40),
               ),
               SizedBox(width: ui(8)),
               Expanded(
@@ -1059,7 +1121,7 @@ class _StudentCard extends StatelessWidget {
           ),
           SizedBox(height: ui(10)),
           Text(
-            '备注：${record.note}',
+            '床位：${record.bedName}',
             style: TextStyle(
               fontSize: ui(12),
               color: _kTextHint,
@@ -1675,92 +1737,101 @@ List<_StudentRecord> _demoStudents() => const [
   _StudentRecord(
     studentName: '王晴',
     studentNo: 'G3030201',
+    avatarUrl: '',
     status: _StudentStatus.normal,
     dormName: '男生公寓 B-310',
     date: '2026-04-02',
     requiredTime: '07:20前',
     punchTime: '07:18',
-    note: '无',
+    bedName: '无',
   ),
   _StudentRecord(
     studentName: '王晴',
     studentNo: 'G3030201',
+    avatarUrl: '',
     status: _StudentStatus.absent,
     dormName: '男生公寓 B-310',
     date: '2026-04-02',
     requiredTime: '07:20前',
     punchTime: '07:18',
-    note: '无',
+    bedName: '无',
   ),
   _StudentRecord(
     studentName: '王晴',
     studentNo: 'G3030201',
+    avatarUrl: '',
     status: _StudentStatus.normal,
     dormName: '男生公寓 B-310',
     date: '2026-04-02',
     requiredTime: '07:20前',
     punchTime: '07:18',
-    note: '无',
+    bedName: '无',
   ),
   _StudentRecord(
     studentName: '王晴',
     studentNo: 'G3030201',
+    avatarUrl: '',
     status: _StudentStatus.normal,
     dormName: '男生公寓 B-310',
     date: '2026-04-02',
     requiredTime: '07:20前',
     punchTime: '07:18',
-    note: '无',
+    bedName: '无',
   ),
   _StudentRecord(
     studentName: '王晴',
     studentNo: 'G3030201',
+    avatarUrl: '',
     status: _StudentStatus.absent,
     dormName: '男生公寓 B-310',
     date: '2026-04-02',
     requiredTime: '07:20前',
     punchTime: '07:18',
-    note: '无',
+    bedName: '无',
   ),
   _StudentRecord(
     studentName: '王晴',
     studentNo: 'G3030201',
+    avatarUrl: '',
     status: _StudentStatus.normal,
     dormName: '男生公寓 B-310',
     date: '2026-04-02',
     requiredTime: '07:20前',
     punchTime: '07:18',
-    note: '无',
+    bedName: '无',
   ),
   _StudentRecord(
     studentName: '王晴',
     studentNo: 'G3030201',
+    avatarUrl: '',
     status: _StudentStatus.normal,
     dormName: '男生公寓 B-310',
     date: '2026-04-02',
     requiredTime: '07:20前',
     punchTime: '07:18',
-    note: '无',
+    bedName: '无',
   ),
   _StudentRecord(
     studentName: '王晴',
     studentNo: 'G3030201',
+    avatarUrl: '',
     status: _StudentStatus.absent,
     dormName: '男生公寓 B-310',
     date: '2026-04-02',
     requiredTime: '07:20前',
     punchTime: '07:18',
-    note: '无',
+    bedName: '无',
   ),
   _StudentRecord(
     studentName: '王晴',
     studentNo: 'G3030201',
+    avatarUrl: '',
     status: _StudentStatus.normal,
     dormName: '男生公寓 B-310',
     date: '2026-04-02',
     requiredTime: '07:20前',
     punchTime: '07:18',
-    note: '无',
+    bedName: '无',
   ),
 ];
 

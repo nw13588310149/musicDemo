@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_client.dart';
@@ -581,19 +583,25 @@ class TeacherRepository {
   }
 
   /// 编辑学生信息。仅允许班主任修改 `remark`（备注）和 `tags`（标签，逗号分隔）。
+  /// `studentId` 为雪花 long，须以字符串传入并由 [encodeNumericIdRequestBody]
+  /// 写入请求体，避免 Web 端 JS Number 精度丢失。
   Future<ApiResponse> studentUpdate({
-    required int studentId,
+    required String studentId,
     String remark = '',
     String tags = '',
   }) {
-    return client.post(
-      '$_base/studentUpdate',
-      data: <String, dynamic>{
+    final body = encodeNumericIdRequestBody(
+      <String, dynamic>{
         'studentId': studentId,
         'remark': remark,
         'tags': tags,
       },
+      numericIdKeys: const {'studentId'},
     );
+    if (body == null) {
+      return Future.value(ApiResponse.failure('学生 id 格式错误'));
+    }
+    return client.post('$_base/studentUpdate', data: body);
   }
 
   /// 学生详情。`id` 为学生主键（雪花 long 请用 String 传入，避免 Web 端精度丢失）。
@@ -710,6 +718,17 @@ class TeacherRepository {
     return client.post('$_base/examStudentRemind', data: body);
   }
 
+  /// 考试完整详情（含全部学生考场座位）。`examId` 为考试雪花 id。
+  /// 返回 `data` 为 `TeacherExamFullDetailRes`（`exam` + `seats[]`）。
+  Future<ApiResponse> examFullDetail({required String examId}) {
+    final body = encodeNumericIdRequestBody(
+      <String, dynamic>{'id': examId},
+      numericIdKeys: const {'id'},
+    );
+    if (body == null) return Future.value(ApiResponse.failure('考试 id 格式错误'));
+    return client.post('$_base/examFullDetail', data: body);
+  }
+
   // ============== 作业管理（任课老师端） ==============
 
   /// 作业数据汇总。返回待批改人次、发布数、均分、最高/最低分等聚合指标。
@@ -786,6 +805,10 @@ class TeacherRepository {
 
   /// 批改作业。`id` 为学生作业记录 ID（studentHomeworkDetail 返回的 id），
   /// `score` 为分数（0-100），`feedback` 为文字评语。
+  ///
+  /// 语音点评约定（与学生端解析对齐）：
+  ///   - `teacherParam1`：语音文件相对路径（fileUpload 返回的 `path`）；
+  ///   - `teacherParam2`：语音时长（秒，字符串）。
   Future<ApiResponse> teacherHomeworkCorrect({
     required String id,
     required int score,
@@ -805,6 +828,29 @@ class TeacherRepository {
         if (teacherParam3.isNotEmpty) 'teacherParam3': teacherParam3,
       },
     );
+  }
+
+  /// 上传语音点评文件，返回上传结果（`data.path` / `data.url`）。
+  ///
+  /// 复用全局文件上传端点 `/app/common/v2/fileUpload`，与群聊语音、录音系统
+  /// 一致；调用方拿到 `path` 后写入 [teacherHomeworkCorrect] 的 `teacherParam1`。
+  Future<ApiResponse> uploadHomeworkVoice({
+    required Uint8List bytes,
+    required String filename,
+  }) {
+    final lower = filename.toLowerCase();
+    final DioMediaType mime;
+    if (lower.endsWith('.webm')) {
+      mime = DioMediaType('audio', 'webm');
+    } else if (lower.endsWith('.wav')) {
+      mime = DioMediaType('audio', 'wav');
+    } else {
+      mime = DioMediaType('audio', 'mp4'); // .m4a / .aac
+    }
+    final form = FormData.fromMap(<String, dynamic>{
+      'file': MultipartFile.fromBytes(bytes, filename: filename, contentType: mime),
+    });
+    return client.postFormData('/app/common/v2/fileUpload', data: form);
   }
 
   /// 删除作业。

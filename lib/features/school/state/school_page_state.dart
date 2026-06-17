@@ -73,7 +73,7 @@ class SchoolNewsItem {
 class SchoolPageState {
   const SchoolPageState({
     this.loading = true,
-    this.schoolId = 0,
+    this.schoolId = '0',
     this.schoolName = '',
     this.quickActions = const [],
     this.bannerItems = const [],
@@ -83,7 +83,7 @@ class SchoolPageState {
   });
 
   final bool loading;
-  final int schoolId;
+  final String schoolId;
   final String schoolName;
   final List<SchoolQuickAction> quickActions;
   final List<SchoolBannerItem> bannerItems;
@@ -93,7 +93,7 @@ class SchoolPageState {
 
   SchoolPageState copyWith({
     bool? loading,
-    int? schoolId,
+    String? schoolId,
     String? schoolName,
     List<SchoolQuickAction>? quickActions,
     List<SchoolBannerItem>? bannerItems,

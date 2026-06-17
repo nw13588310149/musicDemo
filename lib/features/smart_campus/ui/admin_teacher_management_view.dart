@@ -12,6 +12,7 @@ import '../../../core/widgets/popup_selector_field.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/admin_repository.dart';
+import 'widgets/smart_campus_stat_card.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // ============================================================================
@@ -738,118 +739,40 @@ class _StatsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final cards = <_StatGradientCard>[
-      _StatGradientCard(
-        label: '在岗',
-        value: onDuty,
-        gradientStart: const Color(0xFFE7DCFF),
-        icon: Icons.badge_outlined,
-        iconColor: const Color(0xFFA985FF),
-      ),
-      _StatGradientCard(
-        label: '请假',
-        value: onLeave,
-        gradientStart: const Color(0xFFFFF0DC),
-        icon: Icons.event_busy_outlined,
-        iconColor: const Color(0xFFFFB85C),
-      ),
-      _StatGradientCard(
-        label: '班主任',
-        value: headTeachers,
-        gradientStart: const Color(0xFFDCFFE7),
-        icon: Icons.workspace_premium_outlined,
-        iconColor: const Color(0xFF52C49A),
-      ),
-      _StatGradientCard(
-        label: '名册总数',
-        value: total,
-        gradientStart: const Color(0xFFFFE2DC),
-        icon: Icons.menu_book_outlined,
-        iconColor: const Color(0xFFFF8A75),
-      ),
-    ];
-
     return Row(
       children: [
-        for (var i = 0; i < cards.length; i++) ...[
-          Expanded(child: cards[i]),
-          if (i < cards.length - 1) SizedBox(width: ui(12)),
-        ],
-      ],
-    );
-  }
-}
-
-class _StatGradientCard extends StatelessWidget {
-  const _StatGradientCard({
-    required this.label,
-    required this.value,
-    required this.gradientStart,
-    required this.icon,
-    required this.iconColor,
-  });
-
-  final String label;
-  final int value;
-  final Color gradientStart;
-  final IconData icon;
-  final Color iconColor;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      height: ui(100),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-          colors: [gradientStart, Colors.white],
-          stops: const [0, 0.73],
+        Expanded(
+          child: SmartCampusStatCard(
+            backgroundAsset: AppAssets.adminTeacherManagementStatCard1,
+            label: '在岗',
+            value: onDuty,
+          ),
         ),
-        borderRadius: BorderRadius.circular(ui(12)),
-        border: Border.all(color: Colors.white, width: 1),
-      ),
-      padding: EdgeInsets.fromLTRB(ui(16), ui(16), ui(12), ui(12)),
-      child: Stack(
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: ui(14),
-                  height: 1.2,
-                  fontWeight: AppFont.w500,
-                  color: Colors.black,
-                  fontFamily: 'PingFang SC',
-                ),
-              ),
-              SizedBox(height: ui(8)),
-              Text(
-                '$value',
-                style: TextStyle(
-                  fontSize: ui(32),
-                  height: 1.0,
-                  fontWeight: FontWeight.w500,
-                  color: _kTextPrimary,
-                  fontFamily: 'Barlow',
-                ),
-              ),
-            ],
+        SizedBox(width: ui(12)),
+        Expanded(
+          child: SmartCampusStatCard(
+            backgroundAsset: AppAssets.adminTeacherManagementStatCard2,
+            label: '请假',
+            value: onLeave,
           ),
-          Positioned(
-            right: 0,
-            bottom: 0,
-            child: Icon(
-              icon,
-              size: ui(54),
-              color: iconColor.withValues(alpha: 0.35),
-            ),
+        ),
+        SizedBox(width: ui(12)),
+        Expanded(
+          child: SmartCampusStatCard(
+            backgroundAsset: AppAssets.adminTeacherManagementStatCard3,
+            label: '班主任',
+            value: headTeachers,
           ),
-        ],
-      ),
+        ),
+        SizedBox(width: ui(12)),
+        Expanded(
+          child: SmartCampusStatCard(
+            backgroundAsset: AppAssets.adminTeacherManagementStatCard4,
+            label: '名册总数',
+            value: total,
+          ),
+        ),
+      ],
     );
   }
 }

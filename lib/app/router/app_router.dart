@@ -27,6 +27,7 @@ import '../../features/recording_system/ui/recording_system_page.dart'
 import '../../features/school/ui/school_courseware_page.dart';
 import '../../features/school/ui/school_quiz_practice_page.dart';
 import '../../features/school/ui/school_video_tutorial_page.dart';
+import '../../features/school_website/ui/school_website_page.dart';
 import '../../features/shell/ui/shell_scaffold.dart';
 import '../../features/feedback/ui/app_feedback_page.dart';
 import '../../features/smart_campus/ui/smart_campus_page.dart';
@@ -47,6 +48,10 @@ class AppRouter {
       return _buildPublicRoute(routeName, settings);
     }
 
+    if (_isShelllessRoute(routeName)) {
+      return _buildShelllessRoute(_buildShelllessContent(routeName), settings);
+    }
+
     return _buildProtectedRoute(
       ShellScaffold(
         currentRoute: routeName,
@@ -65,6 +70,23 @@ class AppRouter {
 
   static bool _isPublicRoute(String routeName) {
     return isAuthRoute(routeName) || routeName == RoutePaths.xieyi2;
+  }
+
+  /// 需登录但不在 Shell 侧栏/顶栏内展示的全屏页。
+  static bool _isShelllessRoute(String routeName) {
+    return routeName == RoutePaths.schoolWebsite;
+  }
+
+  static Widget _buildShelllessContent(String routeName) {
+    switch (routeName) {
+      case RoutePaths.schoolWebsite:
+        return const SchoolWebsitePage();
+      default:
+        return LegacyPlaceholderContent(
+          routeName: routeName,
+          title: _legacyPageTitle(routeName),
+        );
+    }
   }
 
   static Route<dynamic> _buildPublicRoute(
@@ -173,6 +195,21 @@ class AppRouter {
     }
   }
 
+  static Route<dynamic> _buildShelllessRoute(
+    Widget page,
+    RouteSettings settings,
+  ) {
+    return PageRouteBuilder<dynamic>(
+      settings: settings,
+      opaque: true,
+      fullscreenDialog: true,
+      barrierColor: Colors.white,
+      transitionDuration: Duration.zero,
+      reverseTransitionDuration: Duration.zero,
+      pageBuilder: (context, animation, secondaryAnimation) => page,
+    );
+  }
+
   static MaterialPageRoute<dynamic> _buildRoute(
     Widget page,
     RouteSettings settings,
@@ -214,6 +251,7 @@ class AppRouter {
       RoutePaths.consultation: '学习资讯',
       RoutePaths.dictation: '听写练习',
       RoutePaths.mock: '模拟考试',
+      RoutePaths.schoolWebsite: '微校',
       RoutePaths.musicTheory: '乐理练习',
       RoutePaths.sightSinging: '视唱练习',
       RoutePaths.store: '商城',
