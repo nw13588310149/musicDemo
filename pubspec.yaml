@@ -194,6 +194,7 @@ flutter:
     - assets/images/smartCampus/schedule_edit/
     - assets/images/smartCampus/dorm_check/
     - assets/images/smartCampus/admin/class_management/
+    - assets/images/smartCampus/admin/sign_management/
     - assets/images/smartCampus/admin/teacher_management/
     - assets/images/smartCampus/admin/face_library/
     - assets/images/smartCampus/admin/notification/
@@ -203,6 +204,7 @@ flutter:
     - assets/images/smartCampus/student/leave/
     - assets/images/smartCampus/student/my_class/
     - assets/images/smartCampus/teacher/student_roster/
+    - assets/images/smartCampus/teacher/homework/
     - assets/images/smartCampus/home_actions/
     - assets/images/smartCampus/home_actions/student/
     - assets/images/smartCampus/home_actions/teacher/
@@ -210,6 +212,12 @@ flutter:
     - assets/images/smartCampus/home_actions/dorm_manager/
     - assets/images/smartCampus/home_actions/admin/
     - assets/images/smartCampus/home_actions/shared/
+    - assets/images/new/智慧校园/学生端/
+    - assets/images/new/智慧校园/任课老师端/
+    - assets/images/new/智慧校园/班主任端/
+    - assets/images/new/智慧校园/宿管端/
+    - assets/images/new/智慧校园/管理员/
+    - assets/images/new/管理员/
     - assets/web/baidu_map.html
     - assets/images/circle/
     - assets/audio/demo.mid

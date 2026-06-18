@@ -1640,7 +1640,7 @@ class _ExamRecordsGrid extends StatelessWidget {
           title: filteredEmpty ? '该学期暂无成绩记录' : '暂无考试记录',
           subtitle: filteredEmpty
               ? '切换到其他学期查看，或等待老师公布本学期成绩。'
-              : '老师发布并公布月考成绩后，你的各科成绩与排名会在这里展示。',
+              : '',
         ),
       );
     }
@@ -2708,7 +2708,6 @@ class _AllExamsSection extends StatelessWidget {
             child: const SmartCampusEmptyState(
               illustration: AppAssets.emptyExamPlaceholder,
               title: '暂无考试',
-              subtitle: '该分类下暂时没有考试安排，切换筛选或稍后再来看看。',
             ),
           )
         else

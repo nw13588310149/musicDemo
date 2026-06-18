@@ -1112,6 +1112,7 @@ class _TeacherLessonScheduleViewState
 
     return SmartCampusSchedulePageShell(
       backgroundColor: _kCardBg,
+      bodyScrollable: false,
       header: _TeacherScheduleHeader(
         onBack: widget.onBack,
         mode: _mode,
@@ -1132,14 +1133,16 @@ class _TeacherLessonScheduleViewState
               onPickDate: _pickDate,
             ),
           ),
-          Padding(
-            padding: EdgeInsets.fromLTRB(ui(20), ui(0), ui(20), ui(20)),
-            child: _ScheduleGrid(
-              mode: _mode,
-              slots: slots,
-              days: days,
-              cells: cells,
-              onApplySmallLesson: _onApplySmallLesson,
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(ui(20), ui(0), ui(20), ui(20)),
+              child: _ScheduleGrid(
+                mode: _mode,
+                slots: slots,
+                days: days,
+                cells: cells,
+                onApplySmallLesson: _onApplySmallLesson,
+              ),
             ),
           ),
         ],
@@ -1568,7 +1571,7 @@ class _ChevronButton extends StatelessWidget {
 // 网格主体：时间列（左，冻结）+ 日期区（右，横滚动）
 // =============================================================================
 
-class _ScheduleGrid extends StatelessWidget {
+class _ScheduleGrid extends StatefulWidget {
   const _ScheduleGrid({
     required this.mode,
     required this.slots,
@@ -1584,58 +1587,107 @@ class _ScheduleGrid extends StatelessWidget {
   final void Function(int dayIdx, int slotIdx) onApplySmallLesson;
 
   @override
+  State<_ScheduleGrid> createState() => _ScheduleGridState();
+}
+
+class _ScheduleGridState extends State<_ScheduleGrid> {
+  final ScrollController _verticalController = ScrollController();
+  final ScrollController _horizontalController = ScrollController();
+  final ScrollController _headerHorizontalController = ScrollController();
+  bool _syncingHorizontal = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _horizontalController.addListener(_syncHeaderHorizontalScroll);
+  }
+
+  void _syncHeaderHorizontalScroll() {
+    if (_syncingHorizontal || !_headerHorizontalController.hasClients) return;
+    _syncingHorizontal = true;
+    _headerHorizontalController.jumpTo(_horizontalController.offset);
+    _syncingHorizontal = false;
+  }
+
+  @override
+  void dispose() {
+    _horizontalController.removeListener(_syncHeaderHorizontalScroll);
+    _verticalController.dispose();
+    _horizontalController.dispose();
+    _headerHorizontalController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final totalHeight =
-        ui(_kHeaderHeight) + slots.fold<double>(0, (s, e) => s + ui(e.height));
-    return SizedBox(
-      height: totalHeight,
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(ui(12)),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _TimeColumn(slots: slots),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: SizedBox(
-                        width: ui(_kDayColWidth) * days.length,
-                        child: _DaysArea(
-                          mode: mode,
-                          slots: slots,
-                          days: days,
-                          cells: cells,
-                          onApplySmallLesson: onApplySmallLesson,
+    final daysWidth = ui(_kDayColWidth) * widget.days.length;
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(ui(12)),
+        border: Border.all(color: _kBorderSoft),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(ui(12)),
+        child: Column(
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: ui(_kTimeColWidth),
+                  child: const _TimeHeader(),
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    controller: _headerHorizontalController,
+                    physics: const NeverScrollableScrollPhysics(),
+                    child: SizedBox(
+                      width: daysWidth,
+                      child: _DaysHeaderRow(days: widget.days),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                controller: _verticalController,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _TimeColumnBody(slots: widget.slots),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        controller: _horizontalController,
+                        child: SizedBox(
+                          width: daysWidth,
+                          child: _DaysBodyArea(
+                            mode: widget.mode,
+                            slots: widget.slots,
+                            days: widget.days,
+                            cells: widget.cells,
+                            onApplySmallLesson: widget.onApplySmallLesson,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Positioned.fill(
-            child: IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(ui(12)),
-                  border: Border.all(color: _kBorderSoft),
+                  ],
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
-class _TimeColumn extends StatelessWidget {
-  const _TimeColumn({required this.slots});
+class _TimeColumnBody extends StatelessWidget {
+  const _TimeColumnBody({required this.slots});
 
   final List<_TimeSlotData> slots;
 
@@ -1646,7 +1698,6 @@ class _TimeColumn extends StatelessWidget {
       width: ui(_kTimeColWidth),
       child: Column(
         children: [
-          const _TimeHeader(),
           for (final slot in slots)
             Container(
               width: double.infinity,
@@ -1772,8 +1823,8 @@ class _TimeRange extends StatelessWidget {
   }
 }
 
-class _DaysArea extends StatelessWidget {
-  const _DaysArea({
+class _DaysBodyArea extends StatelessWidget {
+  const _DaysBodyArea({
     required this.mode,
     required this.slots,
     required this.days,
@@ -1791,7 +1842,6 @@ class _DaysArea extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        _DaysHeaderRow(days: days),
         for (var slotIdx = 0; slotIdx < slots.length; slotIdx++)
           _DayBodyRow(
             slotIdx: slotIdx,

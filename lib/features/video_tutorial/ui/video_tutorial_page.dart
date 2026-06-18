@@ -274,76 +274,75 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
     final ui = scale.ui;
     _preloadImages(state);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(16)),
-      ),
-      child: Column(
-        children: [
-          // ── 固定头部：仅一级分类（不随列表滚动）─────────────
-          Padding(
-            padding: EdgeInsets.fromLTRB(ui(16), ui(16), ui(16), ui(12)),
-            child: _VideoCategoryHeader(
-              scale: scale,
-              menus: state.menus,
-              selectedMenuId: state.selectedMenuId,
-              onSelectMenu: _selectMenu,
-              searchController: _searchController,
-              onSearchSubmitted: _submitSearch,
+    return PageInitLoadingShell(
+      loading: state.loading && state.videoList.isEmpty,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(ui(16)),
+        ),
+        child: Column(
+          children: [
+            // ── 固定头部：仅一级分类（不随列表滚动）─────────────
+            Padding(
+              padding: EdgeInsets.fromLTRB(ui(16), ui(16), ui(16), ui(12)),
+              child: _VideoCategoryHeader(
+                scale: scale,
+                menus: state.menus,
+                selectedMenuId: state.selectedMenuId,
+                onSelectMenu: _selectMenu,
+                searchController: _searchController,
+                onSearchSubmitted: _submitSearch,
+              ),
             ),
-          ),
-          // ── 视频列表区：仅此区域可滚动 ──────────────────────────────────
-          Expanded(
-            child: AppRefreshIndicator(
-              onRefresh: () => ref
-                  .read(videoTutorialControllerProvider(_pageArgs).notifier)
-                  .refresh(),
-              child: CustomScrollView(
-                key: const PageStorageKey<String>('video_tutorial_scroll'),
-                controller: _scrollController,
-                physics: const AlwaysScrollableScrollPhysics(),
-                scrollCacheExtent: ScrollCacheExtent.pixels(ui(420)),
-                slivers: [
-                  // Banner + 最新视频：并入滚动区域
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(ui(16), 0, ui(16), ui(16)),
-                      child: _BannerAndLatestSection(
-                        scale: scale,
-                        banners: state.banners,
-                        activeIndex: _bannerIndex,
-                        loading: state.loading,
-                        // 右侧"最新视频"：直接取下方网格列表的前三条
-                        latestVideos: state.videoList.take(3).toList(),
-                        resolveUrl: _resolveUrl,
-                        onBannerChanged: (i) {
-                          if (!mounted || _bannerIndex == i) return;
-                          setState(() => _bannerIndex = i);
-                        },
-                        onOpenVideo: _openVideoDetail,
+            // ── 视频列表区：仅此区域可滚动 ──────────────────────────────────
+            Expanded(
+              child: AppRefreshIndicator(
+                onRefresh: () => ref
+                    .read(videoTutorialControllerProvider(_pageArgs).notifier)
+                    .refresh(),
+                child: CustomScrollView(
+                  key: const PageStorageKey<String>('video_tutorial_scroll'),
+                  controller: _scrollController,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  scrollCacheExtent: ScrollCacheExtent.pixels(ui(420)),
+                  slivers: [
+                    // Banner + 最新视频：并入滚动区域
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(ui(16), 0, ui(16), ui(16)),
+                        child: _BannerAndLatestSection(
+                          scale: scale,
+                          banners: state.banners,
+                          activeIndex: _bannerIndex,
+                          loading: state.loading,
+                          // 右侧"最新视频"：直接取下方网格列表的前三条
+                          latestVideos: state.videoList.take(3).toList(),
+                          resolveUrl: _resolveUrl,
+                          onBannerChanged: (i) {
+                            if (!mounted || _bannerIndex == i) return;
+                            setState(() => _bannerIndex = i);
+                          },
+                          onOpenVideo: _openVideoDetail,
+                        ),
                       ),
                     ),
-                  ),
-                  // 二级目录：紧跟 banner 下方，一起滚动
-                  // 与下方视频网格的间距 = 16（Figma 规格）
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(ui(16), 0, ui(16), ui(16)),
-                      child: _SubCategoryBar(
-                        scale: scale,
-                        items: state.selectedMenu?.children ?? const [],
-                        selectedId: state.selectedChildId,
-                        onSelect: _selectChildMenu,
+                    // 二级目录：紧跟 banner 下方，一起滚动
+                    // 与下方视频网格的间距 = 16（Figma 规格）
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(ui(16), 0, ui(16), ui(16)),
+                        child: _SubCategoryBar(
+                          scale: scale,
+                          items: state.selectedMenu?.children ?? const [],
+                          selectedId: state.selectedChildId,
+                          onSelect: _selectChildMenu,
+                        ),
                       ),
                     ),
-                  ),
-                  if (state.loading && state.videoList.isEmpty)
-                    const SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: Center(child: AppLoadingIndicator()),
-                    )
-                  else if (state.videoList.isEmpty)
+                    if (state.loading && state.videoList.isEmpty)
+                      const SliverToBoxAdapter(child: SizedBox.shrink())
+                    else if (state.videoList.isEmpty)
                     SliverFillRemaining(
                       hasScrollBody: false,
                       child: Center(
@@ -424,6 +423,7 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
             ),
           ),
         ],
+      ),
       ),
     );
   }

@@ -77,10 +77,32 @@ class AppLoadingIndicator extends StatelessWidget {
   }
 }
 
+/// 页面初次进入 loading：相对 [child] 主容器全区域居中蒙层（保留 header/tab 等），
+/// 不依据下方列表/网格渲染区定位。
+class PageInitLoadingShell extends StatelessWidget {
+  const PageInitLoadingShell({
+    super.key,
+    required this.loading,
+    required this.child,
+  });
+
+  final bool loading;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return MainContentLoadingShell(
+      loading: loading,
+      preserveChrome: true,
+      child: child,
+    );
+  }
+}
+
 /// 主内容区统一 loading：整区只显示一个指示器，避免多个列表/分区各自转圈。
 ///
 /// [preserveChrome] 为 true 时 loading 期间仍渲染 [child]（保留 banner/tab 等），
-/// 并在其上覆盖半透明蒙层 + 居中 loading。
+/// 并在其上覆盖半透明蒙层 + 居中 loading。初次进入请优先 [PageInitLoadingShell]。
 class MainContentLoadingShell extends StatelessWidget {
   const MainContentLoadingShell({
     super.key,

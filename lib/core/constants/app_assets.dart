@@ -616,6 +616,18 @@ abstract final class AppAssets {
   static const adminClassManagementStatCard4 =
       'assets/images/smartCampus/admin/class_management/stat_card_4.png';
 
+  /// 管理员 · 签课管理 · 顶部统计卡背景（从左到右）。
+  static const adminSignManagementStatCard1 =
+      'assets/images/smartCampus/admin/sign_management/stat_card_1.png';
+  static const adminSignManagementStatCard2 =
+      'assets/images/smartCampus/admin/sign_management/stat_card_2.png';
+  static const adminSignManagementStatCard3 =
+      'assets/images/smartCampus/admin/sign_management/stat_card_3.png';
+  static const adminSignManagementStatCard4 =
+      'assets/images/smartCampus/admin/sign_management/stat_card_4.png';
+  static const adminSignManagementMakeupAuditIcon =
+      'assets/images/smartCampus/admin/sign_management/icon_lishi.png';
+
   /// 管理员 · 教师管理 · 顶部统计卡背景（从左到右）。
   static const adminTeacherManagementStatCard1 =
       'assets/images/smartCampus/admin/teacher_management/stat_card_1.png';
@@ -695,6 +707,12 @@ abstract final class AppAssets {
       'assets/images/smartCampus/teacher/student_roster/stat_card_2.png';
   static const teacherStudentRosterStatCard3 =
       'assets/images/smartCampus/teacher/student_roster/stat_card_3.png';
+
+  /// 任课老师 · 作业与批改 · banner 右上角操作图标。
+  static const teacherHomeworkHistoryIcon =
+      'assets/images/smartCampus/teacher/homework/history_icon.png';
+  static const teacherHomeworkPublishIcon =
+      'assets/images/smartCampus/teacher/homework/publish_icon.png';
 
   // 智慧校园群聊
   static const groupChatBg = 'assets/images/groupChat/bg.png';

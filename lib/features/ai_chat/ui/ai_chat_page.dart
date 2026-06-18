@@ -845,31 +845,33 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
         !state.messages.any(
           (item) => item.type == AiChatMessageType.ai && item.streaming,
         );
-    return Column(
-      mainAxisSize: MainAxisSize.max,
-      children: [
-        Container(
-          height: _conversationHeaderHeight,
-          alignment: Alignment.center,
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            border: Border(bottom: BorderSide(color: _border)),
-          ),
-          child: Text(
-            _activeTitle(state),
-            style: TextStyle(
-              color: Color(0xFF000000),
-              fontSize: 15,
-              fontFamily: 'PingFang SC',
-              fontWeight: AppFont.w500,
-              height: 1.45,
+    return PageInitLoadingShell(
+      loading: state.messagesLoading && state.messages.isEmpty,
+      child: Column(
+        mainAxisSize: MainAxisSize.max,
+        children: [
+          Container(
+            height: _conversationHeaderHeight,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              border: Border(bottom: BorderSide(color: _border)),
+            ),
+            child: Text(
+              _activeTitle(state),
+              style: TextStyle(
+                color: Color(0xFF000000),
+                fontSize: 15,
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w500,
+                height: 1.45,
+              ),
             ),
           ),
-        ),
-        Expanded(
-          child: state.messagesLoading && state.messages.isEmpty
-              ? const Center(child: AppLoadingIndicator())
-              : Listener(
+          Expanded(
+            child: state.messagesLoading && state.messages.isEmpty
+                ? const SizedBox.shrink()
+                : Listener(
                   // 用户手指压下 / 抬起时同步 _userTouchingList。压下后立刻把
                   // 还没执行完的「贴底滚动」级联取消，避免它在用户拖拽过程中
                   // 抢走 ScrollPosition 的 activity。
@@ -935,6 +937,7 @@ class _AiChatPageState extends ConsumerState<AiChatPage> {
         _buildDisclaimer(),
         SizedBox(height: _conversationBottomInset),
       ],
+      ),
     );
   }
 

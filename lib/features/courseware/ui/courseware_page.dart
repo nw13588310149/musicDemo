@@ -808,9 +808,11 @@ class _CloudContentArea extends StatelessWidget {
         : (visibleFolders.isEmpty ? '当前分类下还没有文件夹' : null);
     final showPageEmpty = emptyMessage != null;
 
-    return Padding(
-      padding: EdgeInsets.fromLTRB(ui(30), ui(28), ui(20), ui(16)),
-      child: Stack(
+    return PageInitLoadingShell(
+      loading: state.loading && state.categories.isEmpty,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(ui(30), ui(28), ui(20), ui(16)),
+        child: Stack(
         children: [
           // 与录音系统一致：空状态按整个右侧内容区（含标题/搜索栏）居中。
           if (showPageEmpty)
@@ -888,8 +890,6 @@ class _CloudContentArea extends StatelessWidget {
               Expanded(
                 child: showPageEmpty
                     ? const SizedBox.shrink()
-                    : state.loading
-                    ? const Center(child: AppLoadingIndicator())
                     : state.isFolderView
                     ? _CloudFilesGrid(
                         items: visibleFiles,
@@ -933,6 +933,7 @@ class _CloudContentArea extends StatelessWidget {
             ),
           ),
         ],
+      ),
       ),
     );
   }

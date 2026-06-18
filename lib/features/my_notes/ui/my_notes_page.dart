@@ -594,22 +594,24 @@ class _NotesContentArea extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(ui(20), ui(18), ui(20), ui(16)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _NotesTabBar(active: state.activeFilter, onChanged: onSelectFilter),
-          SizedBox(height: ui(16)),
-          Expanded(
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: state.loading
-                      ? const Center(child: AppLoadingIndicator())
-                      : state.visibleNotes.isEmpty
-                      ? const _EmptyPanel()
-                      : GridView.builder(
+    return PageInitLoadingShell(
+      loading: state.loading && state.visibleNotes.isEmpty,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(ui(20), ui(18), ui(20), ui(16)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _NotesTabBar(active: state.activeFilter, onChanged: onSelectFilter),
+            SizedBox(height: ui(16)),
+            Expanded(
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: state.loading && state.visibleNotes.isEmpty
+                        ? const SizedBox.shrink()
+                        : state.visibleNotes.isEmpty
+                        ? const _EmptyPanel()
+                        : GridView.builder(
                           padding: EdgeInsets.only(bottom: ui(64)),
                           gridDelegate:
                               SliverGridDelegateWithFixedCrossAxisCount(
@@ -638,6 +640,7 @@ class _NotesContentArea extends StatelessWidget {
             ),
           ),
         ],
+      ),
       ),
     );
   }

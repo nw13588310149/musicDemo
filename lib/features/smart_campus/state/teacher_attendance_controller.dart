@@ -161,8 +161,10 @@ class TeacherAttendanceController
     await loadCourseDetail(courseId);
   }
 
-  Future<void> _loadSummary() async {
-    state = state.copyWith(loadingOverview: true, error: '');
+  Future<void> _loadSummary({bool silent = false}) async {
+    if (!silent) {
+      state = state.copyWith(loadingOverview: true, error: '');
+    }
     final dates = state.range.dates(DateTime.now());
     final response = await _repository.courseAttendanceStat(
       beginDate: dates.beginDate,
@@ -265,6 +267,61 @@ class TeacherAttendanceController
       );
       await _loadSummary();
     }
+    return response;
+  }
+
+  Future<ApiResponse> teacherSignIn(String courseId) async {
+    if (state.submittingCourseIds.contains(courseId)) {
+      return ApiResponse.failure('正在提交签到，请稍候');
+    }
+    final course = _courseById(courseId);
+    if (course == null || course.courseId.isEmpty) {
+      return ApiResponse.failure('当前课程缺少课表记录');
+    }
+    if (course.signStatus >= CourseSignFlowStatus.teacherStart.code) {
+      return ApiResponse.failure('已完成上课签到');
+    }
+    state = state.copyWith(
+      submittingCourseIds: {...state.submittingCourseIds, courseId},
+    );
+    final response = await _repository.courseTeacherSignIn(courseId: courseId);
+    if (response.isSuccess) {
+      await loadCourseDetail(courseId, silent: true);
+      await _loadSummary(silent: true);
+      await _loadRecent();
+    }
+    state = state.copyWith(
+      submittingCourseIds: {...state.submittingCourseIds}..remove(courseId),
+    );
+    return response;
+  }
+
+  Future<ApiResponse> teacherSignOut(String courseId) async {
+    if (state.submittingCourseIds.contains(courseId)) {
+      return ApiResponse.failure('正在提交签到，请稍候');
+    }
+    final course = _courseById(courseId);
+    if (course == null || course.courseId.isEmpty) {
+      return ApiResponse.failure('当前课程缺少课表记录');
+    }
+    if (course.signStatus < CourseSignFlowStatus.studentStart.code) {
+      return ApiResponse.failure('请等待学生完成上课签到');
+    }
+    if (course.signStatus >= CourseSignFlowStatus.teacherEnd.code) {
+      return ApiResponse.failure('已完成下课签到');
+    }
+    state = state.copyWith(
+      submittingCourseIds: {...state.submittingCourseIds, courseId},
+    );
+    final response = await _repository.courseTeacherSignOut(courseId: courseId);
+    if (response.isSuccess) {
+      await loadCourseDetail(courseId, silent: true);
+      await _loadSummary(silent: true);
+      await _loadRecent();
+    }
+    state = state.copyWith(
+      submittingCourseIds: {...state.submittingCourseIds}..remove(courseId),
+    );
     return response;
   }
 

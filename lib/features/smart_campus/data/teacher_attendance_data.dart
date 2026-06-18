@@ -27,52 +27,74 @@ extension TeacherAttendanceRangeX on TeacherAttendanceRange {
 
 class TeacherAttendanceSummary {
   const TeacherAttendanceSummary({
-    this.signedCourseCount = 0,
-    this.bigClassSignCount = 0,
-    this.smallClassCompleteCount = 0,
-    this.lateCount = 0,
+    this.totalCount = 0,
+    this.normalCount = 0,
     this.absentCount = 0,
+    this.lateCount = 0,
+    this.leaveCount = 0,
+    this.attendanceRate = 0,
   });
 
-  final int signedCourseCount;
-  final int bigClassSignCount;
-  final int smallClassCompleteCount;
-  final int lateCount;
+  /// 签课总次数。
+  final int totalCount;
+
+  /// 正常签到次数。
+  final int normalCount;
+
+  /// 缺勤人次。
   final int absentCount;
+
+  /// 迟到人次。
+  final int lateCount;
+
+  /// 请假人次。
+  final int leaveCount;
+
+  /// 出勤率，0–100 百分比数值（展示时自行补 %）。
+  final double attendanceRate;
 
   factory TeacherAttendanceSummary.fromJson(dynamic raw) {
     final map = _unwrapMap(raw);
     if (map == null) return const TeacherAttendanceSummary();
+    final rateRaw = map['attendanceRate'] ??
+        map['onTimeRate'] ??
+        map['punctualityRate'] ??
+        map['rate'];
+    var rate = 0.0;
+    if (rateRaw != null) {
+      final cleaned = rateRaw.toString().replaceAll('%', '').trim();
+      final parsed = double.tryParse(cleaned);
+      if (parsed != null) {
+        rate = parsed > 0 && parsed <= 1 ? parsed * 100 : parsed;
+      }
+    }
     return TeacherAttendanceSummary(
-      signedCourseCount: _pickInt(map, [
+      totalCount: _pickInt(map, [
+        'totalCount',
         'signedCourseCount',
         'courseSignCount',
         'signCourseCount',
         'courseCount',
-        'totalCount',
       ]),
-      bigClassSignCount: _pickInt(map, [
-        'bigClassSignCount',
-        'classSignCount',
-        'bigCourseSignCount',
-        'oneClickSignCount',
-      ]),
-      smallClassCompleteCount: _pickInt(map, [
-        'smallClassCompleteCount',
-        'smallCourseCompleteCount',
-        'smallClassSignCount',
-        'smallCourseSignCount',
-      ]),
-      lateCount: _pickInt(map, [
-        'lateCount',
-        'studentLateCount',
-        'lateStudentCount',
+      normalCount: _pickInt(map, [
+        'normalCount',
+        'presentCount',
+        'signedCount',
       ]),
       absentCount: _pickInt(map, [
         'absentCount',
         'studentAbsentCount',
         'absenceCount',
+        'absentNum',
       ]),
+      lateCount: _pickInt(map, [
+        'lateCount',
+        'studentLateCount',
+        'lateStudentCount',
+        'lateNum',
+      ]),
+      leaveCount: _pickInt(map, ['leaveCount', 'leaveNum']),
+      attendanceRate: rate,
     );
   }
 }
@@ -85,11 +107,18 @@ class TeacherSignHistoryItem {
     required this.courseName,
     required this.courseType,
     required this.lineNum,
-    required this.teacherName,
-    required this.classroom,
-    required this.shouldCount,
-    required this.presentCount,
-    required this.method,
+    required this.className,
+    required this.logoUrl,
+    required this.signStatus,
+    this.signInTime = '',
+    this.signOutTime = '',
+    this.canMakeup = false,
+    this.makeupStatus,
+    this.teacherName = '',
+    this.classroom = '',
+    this.shouldCount = 0,
+    this.presentCount = 0,
+    this.method = '',
   });
 
   final String courseId;
@@ -98,27 +127,66 @@ class TeacherSignHistoryItem {
   final String courseName;
   final int courseType;
   final int lineNum;
+  final String className;
+  final String logoUrl;
+  final int signStatus;
+  final String signInTime;
+  final String signOutTime;
+  final bool canMakeup;
+  final int? makeupStatus;
   final String teacherName;
   final String classroom;
   final int shouldCount;
   final int presentCount;
   final String method;
 
+  String get signStatusLabel => CourseSignFlowStatus.labelFor(signStatus);
+
+  String get signInClock =>
+      signInTime.trim().isEmpty ? '' : _clock(signInTime);
+
+  String get signOutClock =>
+      signOutTime.trim().isEmpty ? '' : _clock(signOutTime);
+
+  String get avatarSeed {
+    if (className.isNotEmpty && className != '--') return className;
+    if (courseName.isNotEmpty) return courseName;
+    return teacherName.isEmpty ? '?' : teacherName;
+  }
+
+  String get subtitle {
+    final classLabel = className.isNotEmpty && className != '--'
+        ? className
+        : (classroom.isNotEmpty && classroom != '--' ? classroom : '');
+    if (classLabel.isEmpty) return signStatusLabel;
+    return '$classLabel·$signStatusLabel';
+  }
+
+  bool get hasAttendanceCounts => shouldCount > 0 || presentCount > 0;
+
   factory TeacherSignHistoryItem.fromJson(Map<String, dynamic> json) {
     final flat = _flattenHistoryMap(json);
     final type = _pickInt(flat, ['type', 'courseType', 'classType']);
+    final signInRaw = _pickString(flat, [
+      'signInTime',
+      'teacherSignInTime',
+      'timeBegin',
+      'beginTime',
+    ]);
+    final signOutRaw = _pickString(flat, [
+      'signOutTime',
+      'teacherSignOutTime',
+      'timeEnd',
+      'endTime',
+    ]);
+    final makeupRaw = flat['makeupStatus'];
+    final makeupStatus = makeupRaw == null
+        ? null
+        : int.tryParse(makeupRaw.toString());
     return TeacherSignHistoryItem(
       courseId: pickFirstSnowflakeId(flat, ['courseId', 'id']) ?? '',
       date: _pickString(flat, ['date', 'courseDate', 'signDate', 'createTime']),
-      time: _clock(
-        _pickString(flat, [
-          'signInTime',
-          'teacherSignInTime',
-          'timeBegin',
-          'beginTime',
-          'createTime',
-        ]),
-      ),
+      time: signInRaw.isEmpty ? '' : _clock(signInRaw),
       courseName: _pickString(flat, [
         'courseName',
         'subjectName',
@@ -127,6 +195,18 @@ class TeacherSignHistoryItem {
       ], fallback: '未命名课程'),
       courseType: type,
       lineNum: _pickInt(flat, ['lineNum', 'periodIndex', 'sectionNum']),
+      className: _pickString(flat, [
+        'className',
+        'class',
+        'classTitle',
+        'gradeClassName',
+      ], fallback: '--'),
+      logoUrl: resolveCourseLogoUrl(flat),
+      signStatus: _pickInt(flat, ['signStatus', 'courseSignStatus']),
+      signInTime: signInRaw,
+      signOutTime: signOutRaw,
+      canMakeup: flat['canMakeup'] == true,
+      makeupStatus: makeupStatus,
       teacherName: _pickString(flat, [
         'teacherName',
         'teacherRealname',
@@ -250,6 +330,21 @@ Map<String, dynamic> _flattenHistoryMap(Map<String, dynamic> source) {
   merge(source['subject'], const {'name': 'subjectName'});
   merge(source['teacher'], const {'realname': 'teacherRealname'});
   merge(source['classroom'], const {'name': 'classroomName'});
+  merge(source['class'], const {
+    'name': 'className',
+    'className': 'className',
+    'logo': 'logo',
+  });
+  merge(source['schoolClass'], const {
+    'name': 'className',
+    'className': 'className',
+    'logo': 'logo',
+  });
+  merge(source['classInfo'], const {
+    'name': 'className',
+    'className': 'className',
+    'logo': 'logo',
+  });
   return result;
 }
 

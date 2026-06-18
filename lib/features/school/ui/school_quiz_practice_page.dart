@@ -47,25 +47,28 @@ class SchoolQuizPracticePage extends ConsumerWidget {
       AppToast.show(context, msg);
     });
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SizedBox(height: ui(240), child: const _CampBanner()),
-        SizedBox(height: ui(12)),
-        Expanded(
-          child: ShellPageSurface(
-            padding: EdgeInsets.symmetric(horizontal: ui(25)),
-            child: state.loading && state.summaries.isEmpty
-                ? const Center(child: AppLoadingIndicator())
-                : _PracticeRingRow(
-                    summaries: state.summaries,
-                    onSelect: (summary) =>
-                        _openSession(context, controller, schoolId, summary),
-                    onRefresh: controller.refresh,
-                  ),
+    return PageInitLoadingShell(
+      loading: state.loading && state.summaries.isEmpty,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(height: ui(240), child: const _CampBanner()),
+          SizedBox(height: ui(12)),
+          Expanded(
+            child: ShellPageSurface(
+              padding: EdgeInsets.symmetric(horizontal: ui(25)),
+              child: state.loading && state.summaries.isEmpty
+                  ? const SizedBox.shrink()
+                  : _PracticeRingRow(
+                      summaries: state.summaries,
+                      onSelect: (summary) =>
+                          _openSession(context, controller, schoolId, summary),
+                      onRefresh: controller.refresh,
+                    ),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 

@@ -141,8 +141,10 @@ class StudentCheckInController extends StateNotifier<StudentCheckInState> {
     await refresh();
   }
 
-  Future<void> refresh() async {
-    state = state.copyWith(loading: true, error: '');
+  Future<void> refresh({bool silent = false}) async {
+    if (!silent) {
+      state = state.copyWith(loading: true, error: '');
+    }
     final today = DateTime.now();
     final todayIso = todayIsoDate();
     final semester = studentCheckInSemesterDates(today);
@@ -308,7 +310,7 @@ class StudentCheckInController extends StateNotifier<StudentCheckInState> {
       courseId: courseId,
     );
     if (response.isSuccess) {
-      await refresh();
+      await refresh(silent: true);
     }
     state = state.copyWith(submitting: false);
     return response;
@@ -323,7 +325,7 @@ class StudentCheckInController extends StateNotifier<StudentCheckInState> {
       courseId: courseId,
     );
     if (response.isSuccess) {
-      await refresh();
+      await refresh(silent: true);
     }
     state = state.copyWith(submitting: false);
     return response;

@@ -3286,7 +3286,12 @@ class _HomeworkDetailDialogState extends ConsumerState<_HomeworkDetailDialog> {
     return GradientHeaderDialog(
       title: '作业详情',
       width: 428,
-      contentPadding: EdgeInsets.fromLTRB(ui(24), ui(60), ui(24), ui(20)),
+      contentPadding: EdgeInsets.fromLTRB(
+        ui(24),
+        ui(kAppDialogTitlePaddingTop),
+        ui(24),
+        ui(20),
+      ),
       actionBar: AppDialogActionBar(
         cancelLabel: '取消',
         confirmLabel: '确认',

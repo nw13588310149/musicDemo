@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../../core/widgets/app_loading_indicator.dart';
+import '../../../core/widgets/course_subject_tag.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/route_paths.dart';
@@ -435,7 +436,7 @@ class _NoticeEmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Text(
-        '暂无排课',
+        '今日暂无排课',
         style: TextStyle(
           fontSize: 14,
           color: Color(0xFFB6B5BB),
@@ -724,7 +725,7 @@ class _CourseNoticeCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 6),
-                _CourseSubjectTag(name: notice.subjectName),
+                CourseSubjectTag(name: notice.subjectName),
               ],
             ),
           ),
@@ -797,72 +798,6 @@ class _CourseNoticeCard extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// 课程科目标签 12px PingFang SC w400，按学科分类切换配色：
-/// • 视唱/听音/乐理/钢琴等理论与基础类  → 紫（#EAE5FF / #8741FF）
-/// • 笛/箫/笙/胡/筝/吉他等器乐类        → 绿（#DFFCF0 / #0CAC40）
-class _CourseSubjectTag extends StatelessWidget {
-  const _CourseSubjectTag({required this.name});
-
-  final String name;
-
-  /// 仅用于器乐类匹配的关键字（按设计稿"竹笛课"等绿色样式归类）
-  /// 注：钢琴归到默认紫色（属于"基础键盘类"）
-  static const List<String> _instrumentKeywords = <String>[
-    '笛',
-    '箫',
-    '笙',
-    '胡',
-    '筝',
-    '阮',
-    '琵琶',
-    '吉他',
-    '提琴',
-    '萨克斯',
-    '单簧',
-    '双簧',
-    '长号',
-    '小号',
-    '圆号',
-    '手风琴',
-    '竖琴',
-    '葫芦丝',
-    '陶笛',
-    '口琴',
-    '鼓',
-    '木琴',
-  ];
-
-  bool get _isInstrument => _instrumentKeywords.any((kw) => name.contains(kw));
-
-  @override
-  Widget build(BuildContext context) {
-    final bg = _isInstrument
-        ? const Color(0xFFDFFCF0)
-        : const Color(0xFFEAE5FF);
-    final fg = _isInstrument
-        ? const Color(0xFF0CAC40)
-        : const Color(0xFF8741FF);
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(
-        name,
-        style: TextStyle(
-          fontSize: 12,
-          color: fg,
-          fontFamily: 'PingFang SC',
-          fontWeight: AppFont.w400,
-          height: 15.24 / 12,
-        ),
       ),
     );
   }

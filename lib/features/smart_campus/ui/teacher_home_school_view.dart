@@ -31,7 +31,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 
 import '../../../core/constants/app_assets.dart';
@@ -89,7 +88,6 @@ class _TeacherHomeSchoolViewState extends ConsumerState<TeacherHomeSchoolView> {
 
   HomeSchoolChatStat _stat = HomeSchoolChatStat.zero;
   List<HomeSchoolConversation> _conversations = const [];
-  bool _loading = false;
   String? _loadError;
   int _listToken = 0;
 
@@ -119,7 +117,6 @@ class _TeacherHomeSchoolViewState extends ConsumerState<TeacherHomeSchoolView> {
   Future<void> _loadList() async {
     final token = ++_listToken;
     setState(() {
-      _loading = true;
       _loadError = null;
     });
     final resp = await ref.read(teacherRepositoryProvider).chatConversationList(
@@ -133,7 +130,6 @@ class _TeacherHomeSchoolViewState extends ConsumerState<TeacherHomeSchoolView> {
     if (!resp.isSuccess) {
       setState(() {
         _conversations = const [];
-        _loading = false;
         _loadError = resp.displayMsg;
       });
       return;
@@ -141,7 +137,6 @@ class _TeacherHomeSchoolViewState extends ConsumerState<TeacherHomeSchoolView> {
 
     setState(() {
       _conversations = parseHomeSchoolConversationList(resp.data);
-      _loading = false;
       _loadError = null;
     });
   }
@@ -183,7 +178,6 @@ class _TeacherHomeSchoolViewState extends ConsumerState<TeacherHomeSchoolView> {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final initialLoading = _loading && _conversations.isEmpty;
     return Container(
       color: _kPageBg,
       child: AppRefreshIndicator(
@@ -196,37 +190,33 @@ class _TeacherHomeSchoolViewState extends ConsumerState<TeacherHomeSchoolView> {
             children: [
               _Banner(onBack: widget.onBack),
               SizedBox(height: ui(16)),
-              MainContentLoadingShell(
-                loading: initialLoading,
-                preserveChrome: true,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _StatsRow(
-                      unread: _stat.unreadCount,
-                      pending: _stat.waitingReplyCount,
-                      total: _stat.totalCount,
-                      onTabChanged: _onTabChanged,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _StatsRow(
+                    unread: _stat.unreadCount,
+                    pending: _stat.waitingReplyCount,
+                    total: _stat.totalCount,
+                    onTabChanged: _onTabChanged,
+                  ),
+                  SizedBox(height: ui(16)),
+                  _TabsAndSearchRow(
+                    current: _tab,
+                    query: _query,
+                    onTabChanged: _onTabChanged,
+                    onQueryChanged: _onQueryChanged,
+                  ),
+                  SizedBox(height: ui(16)),
+                  if (_loadError != null)
+                    _ErrorHint(message: _loadError!, onRetry: _reloadAll)
+                  else if (_conversations.isEmpty)
+                    _EmptyHint(query: _query, tab: _tab)
+                  else if (_conversations.isNotEmpty)
+                    _ConversationGrid(
+                      items: _conversations,
+                      onTap: _openConversation,
                     ),
-                    SizedBox(height: ui(16)),
-                    _TabsAndSearchRow(
-                      current: _tab,
-                      query: _query,
-                      onTabChanged: _onTabChanged,
-                      onQueryChanged: _onQueryChanged,
-                    ),
-                    SizedBox(height: ui(16)),
-                    if (_loadError != null)
-                      _ErrorHint(message: _loadError!, onRetry: _reloadAll)
-                    else if (_conversations.isEmpty && !_loading)
-                      _EmptyHint(query: _query, tab: _tab)
-                    else if (_conversations.isNotEmpty)
-                      _ConversationGrid(
-                        items: _conversations,
-                        onTap: _openConversation,
-                      ),
-                  ],
-                ),
+                ],
               ),
             ],
           ),
@@ -1152,7 +1142,7 @@ class _ChatDetailDialogState extends ConsumerState<_ChatDetailDialog> {
                   child: Padding(
                     padding: EdgeInsets.fromLTRB(ui(24), ui(8), ui(24), ui(0)),
                     child: _loading
-                        ? Center(child: AppLoadingIndicator(size: ui(28)))
+                        ? const SizedBox.shrink()
                         : _messages.isEmpty
                         ? Center(
                             child: Text(

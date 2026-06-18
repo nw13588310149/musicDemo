@@ -148,7 +148,10 @@ class _SmartCampusPageState extends ConsumerState<SmartCampusPage> {
 
     if (!ready) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrapEntry());
-      return const Center(child: AppLoadingIndicator());
+      return const PageInitLoadingShell(
+        loading: true,
+        child: SizedBox.expand(),
+      );
     }
 
     return const _SmartCampusPageBody();
@@ -289,6 +292,7 @@ class _SmartCampusPageBody extends ConsumerWidget {
           onOpenHomeSchool: controller.openHomeSchoolCommunication,
           onOpenGroupChat: controller.openGroupChat,
           onOpenDormHistory: controller.openDormHistory,
+          onOpenPrincipalMailbox: controller.openPrincipalMailbox,
         );
       }
       if (state.mainView == SmartCampusMainView.principalMailbox) {

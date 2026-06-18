@@ -878,15 +878,21 @@ class TeacherRepository {
   /// 学生请假列表（`AppSchoolStudentLeaveTeacherListBO`）。
   ///
   /// `status`: 0-待家长审批 / 1-家长同意 / 2-家长拒绝 / 3-老师同意 /
-  /// 4-老师拒绝；[kHeadTeacherPendingLeaveFilterStatus] = 待批筛选。
+  /// 4-老师拒绝；**空字符串 `''` 表示全部**（与后端约定：全部时传入 `""`，
+  /// 勿省略字段）。
   Future<ApiResponse> headTeacherStudentLeaveList({
     int current = 1,
     int size = 200,
-    int? status,
+    Object? status,
   }) {
-    final body = <String, dynamic>{'current': current, 'size': size};
-    if (status != null) body['status'] = status;
-    return client.post('$_base/headTeacherStudentLeaveList', data: body);
+    return client.post(
+      '$_base/headTeacherStudentLeaveList',
+      data: <String, dynamic>{
+        'current': current,
+        'size': size,
+        'status': status ?? '',
+      },
+    );
   }
 
   /// 学生请假审批：`status` 3=同意 / 4=拒绝。

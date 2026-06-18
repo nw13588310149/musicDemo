@@ -7,20 +7,16 @@
 //
 // 视觉（Figma 970 设计宽）：
 //   1. banner（62 高, 紫白渐变 #F9EDFF→white, 圆角 16, 顶部居中 "查寝历史
-//      记录" 16/600 + 副标题 12/#B6B5BB「按自然日查看本班住宿生晚查寝、晨查寝
+//      记录" 16/600 + 副标题 12/#B6B5BB「按自然日查看本班住宿生晚查寝
 //      打卡汇总；数据与「查寝动态」演示同源。查寝老师打卡在专用端完成。」；
 //      左 12 返回 32×32 白底 outline #F3F2F3）。
 //   2. 日期条卡（970×110，圆角 16，白底）：
 //      - 顶部 12,12 处 `2026-04-17` 14/500 + 下拉小箭头（演示）；
 //      - 右侧 `应统计 N 人，当日流水 M 条。` 12 hint；
-//      - 底部 14 个 58×59 圆角 8 灰底 cells（顶部 `星期` 12 hint /
+//      - 底部 14 个正方形圆角 8 灰底 cells（顶部 `星期` 12 hint /
 //        底部 `日期` 16 Barlow/600），第 7 个 "日 / 今" 紫底白字。
-//   3. 4 张统计卡（白底圆角 12）：标题 + 大号数字与灰色说明同一行，
-//      如「晚查寝 · 已归寝口径」+ `10` + `正常/免检/补卡过`。
-//   4. Tabs row（44 高）：白底圆角 8 + 2 pills：晚查寝（active 黑底白字）/
-//      晨查寝（灰字）。无搜索框。
-//   5. 卡片网格 3 列（每张 312 宽，padding 12，背景 207deg #FAF0FF→white
-//      渐变，圆角 16，gap 16）：
+//   3. 2 张统计卡（白底圆角 12）：晚查寝已归寝 / 晚查寝待关注。
+//   4. 卡片网格 3 列（每张 312 宽，padding 12，白底，圆角 16，gap 16）：
 //      - 宿舍口径卡：晨查寝 / 晚查寝 18 Barlow/600 标题 + 大色块状态徽章
 //        正常 #A773FF / 未打卡 #FF323C / 迟到 #325BFF 全为白字；下行
 //        宿舍 13/#6D6B75 + 日期；灰底块同；底部 备注。
@@ -56,15 +52,6 @@ const Color _kRed = Color(0xFFFF323C);
 const Color _kRedSoftBg = Color(0xFFFEE4E8);
 const Color _kBlue = Color(0xFF325BFF);
 const Color _kCalendarHint = Color(0xFFE6E9F1);
-
-// —— 顶部 tab 枚举（晚查寝 / 晨查寝）—————————————————————————————
-enum _SessionTab {
-  evening('晚查寝'),
-  morning('晨查寝');
-
-  const _SessionTab(this.label);
-  final String label;
-}
 
 // —— 学生口径状态（仅出现 正常 / 未打卡 两种） ——————————————————————
 enum _StudentStatus {
@@ -168,8 +155,6 @@ class TeacherDormHistoryView extends ConsumerStatefulWidget {
 
 class _TeacherDormHistoryViewState
     extends ConsumerState<TeacherDormHistoryView> {
-  _SessionTab _tab = _SessionTab.evening;
-
   @override
   void initState() {
     super.initState();
@@ -204,11 +189,8 @@ class _TeacherDormHistoryViewState
       (day) => teacherDormitoryIsoDate(day.date) == state.selectedDate,
     );
     final students = _historyStudentRecords(state.historyItems);
-    final activeSession = _tab == _SessionTab.evening
-        ? _Session.evening
-        : _Session.morning;
     final filteredStudents = students
-        .where((record) => record.session == activeSession)
+        .where((record) => record.session == _Session.evening)
         .toList(growable: false);
     final exceptionCount = state.stat.lateCount + state.stat.absentCount;
     return Container(
@@ -219,8 +201,6 @@ class _TeacherDormHistoryViewState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _Banner(onBack: widget.onBack),
-            if (state.loading || state.loadingHistory)
-              const LinearProgressIndicator(minHeight: 2),
             SizedBox(height: ui(12)),
             _DateStripCard(
               days: days,
@@ -236,11 +216,7 @@ class _TeacherDormHistoryViewState
             _StatsRow(
               eveningReturned: state.stat.normalCount,
               eveningWatch: exceptionCount,
-              morningArrived: state.stat.normalCount,
-              morningWatch: exceptionCount,
             ),
-            SizedBox(height: ui(16)),
-            _TabsRow(current: _tab, onTap: (t) => setState(() => _tab = t)),
             SizedBox(height: ui(16)),
             _CardsGrid(
               dormRecords: const [],
@@ -351,7 +327,7 @@ class _Banner extends StatelessWidget {
                   ),
                   SizedBox(height: ui(2)),
                   Text(
-                    '按自然日查看本班住宿生晚查寝、晨查寝打卡汇总；数据与「查寝动态」演示同源。查寝老师打卡在专用端完成。',
+                    '按自然日查看本班住宿生晚查寝打卡汇总；数据与「查寝动态」演示同源。查寝老师打卡在专用端完成。',
                     style: TextStyle(
                       fontSize: ui(12),
                       color: _kTextHint,
@@ -442,7 +418,7 @@ class _DateStripCard extends StatelessWidget {
               const gap = 6.0;
               final scaledGap = ui(gap);
               final totalGap = scaledGap * (cellCount - 1);
-              final cellWidth = (constraints.maxWidth - totalGap) / cellCount;
+              final cellSize = (constraints.maxWidth - totalGap) / cellCount;
               return Row(
                 children: List.generate(cellCount, (i) {
                   final day = days[i];
@@ -452,7 +428,8 @@ class _DateStripCard extends StatelessWidget {
                       right: i == cellCount - 1 ? 0 : scaledGap,
                     ),
                     child: SizedBox(
-                      width: cellWidth,
+                      width: cellSize,
+                      height: cellSize,
                       child: _CalendarCell(
                         day: day,
                         selected: selected,
@@ -491,7 +468,8 @@ class _CalendarCell extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(ui(8)),
       child: Container(
-        height: ui(59),
+        width: double.infinity,
+        height: double.infinity,
         decoration: BoxDecoration(
           color: bg,
           borderRadius: BorderRadius.circular(ui(8)),
@@ -533,14 +511,10 @@ class _StatsRow extends StatelessWidget {
   const _StatsRow({
     required this.eveningReturned,
     required this.eveningWatch,
-    required this.morningArrived,
-    required this.morningWatch,
   });
 
   final int eveningReturned;
   final int eveningWatch;
-  final int morningArrived;
-  final int morningWatch;
 
   @override
   Widget build(BuildContext context) {
@@ -559,22 +533,6 @@ class _StatsRow extends StatelessWidget {
           child: _StatCard(
             title: '晚查寝 · 待关注',
             value: eveningWatch,
-            subtitle: '晚归/未打卡',
-          ),
-        ),
-        SizedBox(width: ui(12)),
-        Expanded(
-          child: _StatCard(
-            title: '晨查寝 · 已到位口径',
-            value: morningArrived,
-            subtitle: '正常/免检/补卡过',
-          ),
-        ),
-        SizedBox(width: ui(12)),
-        Expanded(
-          child: _StatCard(
-            title: '晨查寝 · 待关注',
-            value: morningWatch,
             subtitle: '晚归/未打卡',
           ),
         ),
@@ -652,80 +610,6 @@ class _StatCard extends StatelessWidget {
             ],
           ),
         ],
-      ),
-    );
-  }
-}
-
-// —— Tabs ————————————————————————————————————————————————————————
-
-class _TabsRow extends StatelessWidget {
-  const _TabsRow({required this.current, required this.onTap});
-
-  final _SessionTab current;
-  final ValueChanged<_SessionTab> onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      padding: EdgeInsets.all(ui(4)),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(8)),
-        border: Border.all(color: _kBorderSoft, width: 1),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (final t in _SessionTab.values) ...[
-            _TabPill(
-              label: t.label,
-              active: current == t,
-              onTap: () => onTap(t),
-            ),
-            if (t != _SessionTab.values.last) SizedBox(width: ui(8)),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _TabPill extends StatelessWidget {
-  const _TabPill({
-    required this.label,
-    required this.active,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(ui(6)),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(8)),
-        decoration: BoxDecoration(
-          color: active ? _kTextDark : Colors.transparent,
-          borderRadius: BorderRadius.circular(ui(6)),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: ui(14),
-            color: active ? Colors.white : _kTextSecondary,
-            fontFamily: 'PingFang SC',
-            fontWeight: AppFont.w500,
-            height: 1.2,
-          ),
-        ),
       ),
     );
   }
@@ -818,13 +702,8 @@ class _DormCard extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(ui(12)),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-          colors: [Color(0xFFFAF0FF), Colors.white],
-        ),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(ui(16)),
-        border: Border.all(color: Colors.white, width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -940,13 +819,8 @@ class _StudentCard extends StatelessWidget {
       child: Container(
       padding: EdgeInsets.all(ui(12)),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-          colors: [Color(0xFFFAF0FF), Colors.white],
-        ),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(ui(16)),
-        border: Border.all(color: Colors.white, width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

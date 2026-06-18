@@ -510,7 +510,7 @@ const _kFallbackClassOptions = <_ClassFilterOption>[_ClassFilterOption.all];
 ///    转学 / 毕业，黑底白字 active）；右侧并排 [PopupSelectorField]
 ///    「全部班级」+ 324×44 搜索框（占位 "搜索姓名、学号、手机、宿舍、家长"）。
 /// 4. **结果条**：「当前结果 X 人」12 #0B081A。
-/// 5. **学生卡 3 列网格**（315×78 白卡，12 gap）：左 40 头像 + 右上学号 +
+/// 5. **学生卡 3 列网格**（315×88 白卡，12 gap）：左 40 头像 + 右上学号 +
 ///    名字 + 一句话班级·专业 + 灰色住宿。右上角 38×22 紫色「在籍」徽章
 ///    （cut-corner 形状，根据状态着色）。
 ///
@@ -564,7 +564,6 @@ class _AdminStudentManagementViewState
   int _sumAbnormal = -1;
   int _sumTotal = -1;
 
-  bool _loadingStudents = true;
   // 防抖：搜索框输入时用 token 控制最近一次请求；过期请求结果丢弃。
   int _searchToken = 0;
 
@@ -628,7 +627,6 @@ class _AdminStudentManagementViewState
 
   Future<void> _loadStudents() async {
     final token = ++_searchToken;
-    setState(() => _loadingStudents = true);
 
     try {
       final repo = ref.read(adminRepositoryProvider);
@@ -643,10 +641,7 @@ class _AdminStudentManagementViewState
       if (!mounted || token != _searchToken) return;
 
       if (!resp.isSuccess || resp.data == null) {
-        setState(() {
-          _serverStudents = const [];
-          _loadingStudents = false;
-        });
+        setState(() => _serverStudents = const []);
         return;
       }
 
@@ -660,16 +655,10 @@ class _AdminStudentManagementViewState
       }
 
       if (!mounted || token != _searchToken) return;
-      setState(() {
-        _serverStudents = parsed;
-        _loadingStudents = false;
-      });
+      setState(() => _serverStudents = parsed);
     } catch (_) {
       if (!mounted || token != _searchToken) return;
-      setState(() {
-        _serverStudents = const [];
-        _loadingStudents = false;
-      });
+      setState(() => _serverStudents = const []);
     }
   }
 
@@ -732,24 +721,17 @@ class _AdminStudentManagementViewState
               },
             ),
             SizedBox(height: ui(20)),
-            if (_loadingStudents && list.isEmpty)
-              SizedBox(
-                height: ui(280),
-                child: const Center(child: AppLoadingIndicator()),
-              )
-            else ...[
-              Text(
-                '当前结果 ${list.length}人',
-                style: TextStyle(
-                  fontSize: ui(12),
-                  height: 1.2,
-                  color: _kTextPrimary,
-                  fontFamily: 'PingFang SC',
-                ),
+            Text(
+              '当前结果 ${list.length}人',
+              style: TextStyle(
+                fontSize: ui(12),
+                height: 1.2,
+                color: _kTextPrimary,
+                fontFamily: 'PingFang SC',
               ),
-              SizedBox(height: ui(12)),
-              _StudentGrid(students: list, onTap: _openProfile),
-            ],
+            ),
+            SizedBox(height: ui(12)),
+            _StudentGrid(students: list, onTap: _openProfile),
           ],
         ),
       ),
@@ -1221,13 +1203,14 @@ class _StudentCard extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
-        height: ui(78),
+        height: ui(88),
         decoration: BoxDecoration(
           color: _kCardBg,
           borderRadius: BorderRadius.circular(ui(12)),
         ),
         clipBehavior: Clip.antiAlias,
         child: Stack(
+          alignment: Alignment.center,
           children: [
             Padding(
               padding: EdgeInsets.fromLTRB(ui(12), ui(8), ui(46), ui(8)),
@@ -1276,7 +1259,7 @@ class _StudentCard extends StatelessWidget {
                             ],
                           ],
                         ),
-                        SizedBox(height: ui(4)),
+                        SizedBox(height: ui(6)),
                         Text(
                           student.classInfo,
                           maxLines: 1,
@@ -1288,7 +1271,7 @@ class _StudentCard extends StatelessWidget {
                             fontFamily: 'PingFang SC',
                           ),
                         ),
-                        SizedBox(height: ui(4)),
+                        SizedBox(height: ui(6)),
                         Text(
                           student.dormInfo,
                           maxLines: 1,

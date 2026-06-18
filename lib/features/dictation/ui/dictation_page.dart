@@ -158,26 +158,28 @@ class _ContentPanel extends StatelessWidget {
     final category = _resolveCategoryLabel(state);
     final autoPlayNext = _menuPrefersAutoPlayNext(state);
 
-    return Container(
-      color: Colors.white,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (hasChildren)
-            Padding(
-              padding: EdgeInsets.fromLTRB(ui(20), ui(20), ui(20), ui(4)),
-              child: _ChildSegmented(
-                items: state.selectedChildren,
-                selectedId: state.selectedChildId,
-                onSelect: onSelectChild,
+    return PageInitLoadingShell(
+      loading: state.loading && state.lessonGroups.isEmpty,
+      child: Container(
+        color: Colors.white,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (hasChildren)
+              Padding(
+                padding: EdgeInsets.fromLTRB(ui(20), ui(20), ui(20), ui(4)),
+                child: _ChildSegmented(
+                  items: state.selectedChildren,
+                  selectedId: state.selectedChildId,
+                  onSelect: onSelectChild,
+                ),
               ),
-            ),
-          Expanded(
-            child: state.loading && state.lessonGroups.isEmpty
-                ? const Center(child: AppLoadingIndicator())
-                : state.lessonGroups.isEmpty
-                ? CourseEmptyPlaceholder(schoolMode: state.schoolMode)
-                : Padding(
+            Expanded(
+              child: state.loading && state.lessonGroups.isEmpty
+                  ? const SizedBox.shrink()
+                  : state.lessonGroups.isEmpty
+                  ? CourseEmptyPlaceholder(schoolMode: state.schoolMode)
+                  : Padding(
                     padding: EdgeInsets.symmetric(vertical: ui(12)),
                     child: AppRefreshIndicator(
                       onRefresh: onRefresh,
@@ -224,8 +226,9 @@ class _ContentPanel extends StatelessWidget {
                       ),
                     ),
                   ),
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }

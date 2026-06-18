@@ -145,92 +145,82 @@ class _TeacherExamReviewViewState extends ConsumerState<TeacherExamReviewView> {
         ? 0
         : examState.activeIdx.clamp(0, visibleItems.length - 1);
     final active = visibleItems.isEmpty ? null : visibleItems[activeIdx];
-    final initialLoading = examState.loading && examState.exams.isEmpty;
+    final listLoading = examState.loading && examState.exams.isEmpty;
 
-    return Container(
-      color: _kPageBg,
-      padding: EdgeInsets.symmetric(horizontal: ui(0)),
-      child: SingleChildScrollView(
-        padding: EdgeInsets.only(bottom: ui(24)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _ExamBanner(
-              onBack: widget.onBack,
-              onOpenHistory: _openHistoryDrawer,
-            ),
-            SizedBox(height: ui(16)),
-            MainContentLoadingShell(
-              loading: initialLoading,
-              preserveChrome: true,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _StatusTabsRow(
-                    tabs: _kStatusTabs,
-                    activeIdx: examState.statusTab,
-                    onTap: (i) => ref
-                        .read(teacherExamControllerProvider.notifier)
-                        .selectStatusTab(i),
-                  ),
-                  SizedBox(height: ui(12)),
-                  _StatsPanel(
-                    stats: examState.overviewStats,
-                    classFilter: examState.classFilter,
-                    classOptions: examState.classOptions,
-                    onClassChanged: (value) => ref
-                        .read(teacherExamControllerProvider.notifier)
-                        .selectClass(value),
-                  ),
-                  SizedBox(height: ui(16)),
-                  if (!initialLoading && active == null)
-                    Container(
-                      width: double.infinity,
-                      padding: EdgeInsets.symmetric(vertical: ui(12)),
-                      decoration: BoxDecoration(
-                        color: _kCardBg,
-                        borderRadius: BorderRadius.circular(ui(16)),
-                      ),
-                      child: examState.error.isNotEmpty
-                          ? SmartCampusEmptyState(
-                              icon: Icons.cloud_off_rounded,
-                              title: '考试列表加载失败',
-                              subtitle: examState.error,
-                              actionLabel: '重新加载',
-                              onAction: () => ref
-                                  .read(teacherExamControllerProvider.notifier)
-                                  .loadExamList(
-                                    classId: examState
-                                        .classIdByLabel[examState.classFilter],
-                                  ),
-                            )
-                          : SmartCampusEmptyState(
-                              illustration: AppAssets.emptyReviewPlaceholder,
-                              title: examState.statusTab == 0
-                                  ? '暂无可批改的考试'
-                                  : '该状态下暂无考试',
-                              subtitle: examState.statusTab == 0
-                                  ? '当教务发布与你任教科目关联的月考后，将自动出现在这里。'
-                                  : '试试切换上方的状态筛选查看其他考试。',
-                            ),
-                    )
-                  else if (!initialLoading)
-                    _BodyRow(
-                      items: visibleItems,
-                      activeIdx: activeIdx,
-                      loadingDetail: examState.loadingDetail,
-                      onSelect: (i) => ref
-                          .read(teacherExamControllerProvider.notifier)
-                          .selectExam(i),
-                      active: active!,
-                      onOpenScore: (s) => _openScoreDrawer(active, s),
-                      onOpenSeatPlan: () => _openSeatPlanDrawer(active),
+    return SmartCampusSecondaryPageShell(
+      backgroundColor: _kPageBg,
+      header: _ExamBanner(
+        onBack: widget.onBack,
+        onOpenHistory: _openHistoryDrawer,
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _StatusTabsRow(
+            tabs: _kStatusTabs,
+            activeIdx: examState.statusTab,
+            onTap: (i) => ref
+                .read(teacherExamControllerProvider.notifier)
+                .selectStatusTab(i),
+          ),
+          SizedBox(height: ui(12)),
+          _StatsPanel(
+            stats: examState.overviewStats,
+            classFilter: examState.classFilter,
+            classOptions: examState.classOptions,
+            onClassChanged: (value) => ref
+                .read(teacherExamControllerProvider.notifier)
+                .selectClass(value),
+          ),
+          SizedBox(height: ui(16)),
+          listLoading
+              ? const SizedBox.shrink()
+              : active == null
+              ? Container(
+                    width: double.infinity,
+                    padding: EdgeInsets.symmetric(vertical: ui(12)),
+                    decoration: BoxDecoration(
+                      color: _kCardBg,
+                      borderRadius: BorderRadius.circular(ui(16)),
                     ),
-                ],
-              ),
-            ),
-          ],
-        ),
+                    child: examState.error.isNotEmpty
+                        ? SmartCampusEmptyState(
+                            icon: Icons.cloud_off_rounded,
+                            title: '考试列表加载失败',
+                            subtitle: examState.error,
+                            actionLabel: '重新加载',
+                            onAction: () => ref
+                                .read(teacherExamControllerProvider.notifier)
+                                .loadExamList(
+                                  classId: examState
+                                      .classIdByLabel[examState.classFilter],
+                                ),
+                          )
+                        : SmartCampusEmptyState(
+                            illustration: AppAssets.emptyReviewPlaceholder,
+                            title: examState.statusTab == 0
+                                ? '暂无可批改的考试'
+                                : '该状态下暂无考试',
+                          ),
+                  )
+                : _BodyRow(
+                    items: visibleItems,
+                    activeIdx: activeIdx,
+                    loadingDetail: examState.loadingDetail,
+                    onSelect: (i) => ref
+                        .read(teacherExamControllerProvider.notifier)
+                        .selectExam(i),
+                    active: active,
+                    onOpenScore: (s) {
+                      if (s.state == TeacherExamSubmissionState.missing) {
+                        _remindStudent(active, s);
+                      } else {
+                        _openScoreDrawer(active, s);
+                      }
+                    },
+                    onOpenSeatPlan: () => _openSeatPlanDrawer(active),
+                  ),
+        ],
       ),
     );
   }
@@ -295,7 +285,24 @@ class _TeacherExamReviewViewState extends ConsumerState<TeacherExamReviewView> {
     );
   }
 
+  Future<void> _remindStudent(_ExamItem item, _Submission submission) async {
+    final response = await ref
+        .read(teacherExamControllerProvider.notifier)
+        .remindStudent(
+          examId: item.id,
+          subjectId: item.subjectId,
+          studentId: submission.studentId,
+        );
+    if (!mounted) return;
+    AppToast.show(
+      context,
+      response.isSuccess ? '催交提醒已发送' : response.displayMsg,
+      type: response.isSuccess ? AppToastType.success : AppToastType.error,
+    );
+  }
+
   void _openScoreDrawer(_ExamItem item, _Submission submission) {
+    if (submission.state == TeacherExamSubmissionState.missing) return;
     final scale = DashboardScaleScope.of(context);
     showGeneralDialog<void>(
       context: context,
@@ -1714,15 +1721,19 @@ class _ColHeader extends StatelessWidget {
   }
 }
 
-class _SubmissionRow extends StatelessWidget {
+class _SubmissionRow extends ConsumerWidget {
   const _SubmissionRow({required this.item, required this.onOpenScore});
 
   final _Submission item;
   final VoidCallback onOpenScore;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final ui = DashboardScaleScope.of(context).ui;
+    final isMissing = item.state == TeacherExamSubmissionState.missing;
+    final isReminding =
+        ref.watch(teacherExamControllerProvider).remindingStudentId ==
+        item.studentId;
     return Container(
       padding: EdgeInsets.symmetric(vertical: ui(12)),
       decoration: const BoxDecoration(
@@ -1765,20 +1776,23 @@ class _SubmissionRow extends StatelessWidget {
           SizedBox(
             width: ui(90),
             child: InkWell(
-              onTap: onOpenScore,
+              onTap: isReminding ? null : onOpenScore,
               borderRadius: BorderRadius.circular(ui(8)),
               child: Container(
                 height: ui(32),
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: _kTextDark,
+                  color: isMissing ? _kOrangeBg : _kTextDark,
                   borderRadius: BorderRadius.circular(ui(8)),
+                  border: isMissing
+                      ? Border.all(color: _kOrange.withValues(alpha: 0.35))
+                      : null,
                 ),
                 child: Text(
-                  item.action,
+                  isMissing && isReminding ? '发送中…' : item.action,
                   style: TextStyle(
                     fontSize: ui(13),
-                    color: Colors.white,
+                    color: isMissing ? _kOrange : Colors.white,
                     fontFamily: 'PingFang SC',
                     fontWeight: AppFont.w400,
                     height: 1.4,
@@ -1968,7 +1982,6 @@ class _HistoryDrawer extends StatelessWidget {
                         child: SmartCampusEmptyState(
                           icon: Icons.history_rounded,
                           title: '暂无历史月考',
-                          subtitle: '已结束并归档的月考会在这里按时间倒序展示。',
                         ),
                       )
                     : ListView.separated(
@@ -2104,9 +2117,6 @@ class _ScoreDrawerState extends ConsumerState<_ScoreDrawer> {
   late final TextEditingController _scoreCtrl;
   late final TextEditingController _commentCtrl;
   bool _submitting = false;
-  bool _reminding = false;
-
-  bool get _isMissing => widget.submission.hasNoSubmission;
 
   @override
   void initState() {
@@ -2222,29 +2232,15 @@ class _ScoreDrawerState extends ConsumerState<_ScoreDrawer> {
               left: ui(20),
               right: ui(20),
               bottom: ui(20),
-              child: Row(
-                children: [
-                  if (_isMissing) ...[
-                    _GhostButton(
-                      icon: Icons.notifications_active_outlined,
-                      label: _reminding ? '发送中…' : '催交提醒',
-                      onTap: _reminding ? null : _remind,
-                    ),
-                    SizedBox(width: ui(12)),
-                  ],
-                  Expanded(
-                    child: _PrimaryGradientButton(
-                      icon: Icons.check_circle_outline_rounded,
-                      label: _submitting
-                          ? '提交中...'
-                          : (widget.submission.state ==
-                                    TeacherExamSubmissionState.reviewed
-                                ? '更新评分'
-                                : '提交评分'),
-                      onTap: _submit,
-                    ),
-                  ),
-                ],
+              child: _PrimaryGradientButton(
+                icon: Icons.check_circle_outline_rounded,
+                label: _submitting
+                    ? '提交中...'
+                    : (widget.submission.state ==
+                              TeacherExamSubmissionState.reviewed
+                          ? '更新评分'
+                          : '提交评分'),
+                onTap: _submit,
               ),
             ),
           ],
@@ -2253,27 +2249,12 @@ class _ScoreDrawerState extends ConsumerState<_ScoreDrawer> {
     );
   }
 
-  Future<void> _remind() async {
-    if (_reminding) return;
-    setState(() => _reminding = true);
-    final response = await ref
-        .read(teacherExamControllerProvider.notifier)
-        .remindStudent(
-          examId: widget.item.id,
-          subjectId: widget.item.subjectId,
-          studentId: widget.submission.studentId,
-        );
-    if (!mounted) return;
-    setState(() => _reminding = false);
-    AppToast.show(
-      context,
-      response.isSuccess ? '催交提醒已发送' : response.displayMsg,
-      type: response.isSuccess ? AppToastType.success : AppToastType.error,
-    );
-  }
-
   Future<void> _submit() async {
     if (_submitting) return;
+    if (widget.submission.hasNoSubmission) {
+      AppToast.show(context, '该学生尚未提交作品，请先催交', type: AppToastType.error);
+      return;
+    }
     final score = num.tryParse(_scoreCtrl.text.trim());
     if (score == null || score < 0 || score > 100) {
       AppToast.show(context, '请输入 0-100 的分数', type: AppToastType.error);

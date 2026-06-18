@@ -44,41 +44,42 @@ class MyCollectionPage extends ConsumerWidget {
             color: Colors.white,
             borderRadius: BorderRadius.circular(ui(16)),
           ),
-          child: Stack(
-            children: [
-              // 与录音/云盘一致：空状态按整个页面容器（含顶部 Tab）居中。
-              if (showPageEmpty)
-                const Positioned.fill(
-                  child: CourseEmptyPlaceholder(
-                    message: '暂无收藏',
-                    imageAsset: AppAssets.emptyCollectionPlaceholder,
+          child: PageInitLoadingShell(
+            loading: state.loading && state.items.isEmpty,
+            child: Stack(
+              children: [
+                // 与录音/云盘一致：空状态按整个页面容器（含顶部 Tab）居中。
+                if (showPageEmpty)
+                  const Positioned.fill(
+                    child: CourseEmptyPlaceholder(
+                      message: '暂无收藏',
+                      imageAsset: AppAssets.emptyCollectionPlaceholder,
+                    ),
+                  ),
+                Positioned(
+                  left: ui(20),
+                  top: ui(20),
+                  child: _CollectionTabs(
+                    tabs: state.tabs,
+                    activeType: state.activeType,
+                    onSelect: controller.selectType,
                   ),
                 ),
-              Positioned(
-                left: ui(20),
-                top: ui(20),
-                child: _CollectionTabs(
-                  tabs: state.tabs,
-                  activeType: state.activeType,
-                  onSelect: controller.selectType,
+                Positioned.fill(
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(ui(20), ui(82), ui(20), ui(20)),
+                    child: showPageEmpty || (state.loading && state.items.isEmpty)
+                        ? const SizedBox.shrink()
+                        : _CollectionGrid(
+                            state: state,
+                            onOpenItem: (item) => _openItem(context, item),
+                            onRemove: (item) => _removeItem(context, ref, item),
+                            onShare: (item) => _openShare(context, ref, item),
+                          ),
+                  ),
                 ),
-              ),
-              Positioned.fill(
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(ui(20), ui(82), ui(20), ui(20)),
-                  child: showPageEmpty
-                      ? const SizedBox.shrink()
-                      : state.loading && state.items.isEmpty
-                      ? const Center(child: AppLoadingIndicator())
-                      : _CollectionGrid(
-                          state: state,
-                          onOpenItem: (item) => _openItem(context, item),
-                          onRemove: (item) => _removeItem(context, ref, item),
-                          onShare: (item) => _openShare(context, ref, item),
-                        ),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         if (state.busy && state.shareTarget == null)

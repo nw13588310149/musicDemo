@@ -229,18 +229,24 @@ class ScheduleCourseCard extends StatelessWidget {
   }
 }
 
-/// 课表编辑模式：左滑课程卡露出右侧删除入口（iPad 触控）。
+/// 左滑卡片露出右侧删除入口（课表编辑、作业列表等 iPad 触控场景）。
 class ScheduleCourseSwipeDelete extends StatefulWidget {
   const ScheduleCourseSwipeDelete({
     super.key,
     required this.child,
-    required this.cardHeight,
     required this.onDelete,
+    this.cardHeight,
+    this.widthDesign = 176,
+    this.borderRadiusDesign = 8,
   });
 
   final Widget child;
-  final double cardHeight;
   final VoidCallback onDelete;
+  /// 设计稿高度；为 null 时随 [child] 自适应。
+  final double? cardHeight;
+  /// 设计稿宽度；为 null 时占满父级宽度。
+  final double? widthDesign;
+  final double borderRadiusDesign;
 
   @override
   State<ScheduleCourseSwipeDelete> createState() =>
@@ -257,12 +263,13 @@ class _ScheduleCourseSwipeDeleteState extends State<ScheduleCourseSwipeDelete> {
     final ui = DashboardScaleScope.of(context).ui;
     final actionWidth = ui(_actionWidthDesign);
     final isOpen = _offset < 0;
+    final width = widget.widthDesign == null
+        ? double.infinity
+        : ui(widget.widthDesign!);
+    final borderRadius = BorderRadius.circular(ui(widget.borderRadiusDesign));
 
-    return SizedBox(
-      width: ui(176),
-      height: ui(widget.cardHeight),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(ui(8)),
+    final swipeBody = ClipRRect(
+        borderRadius: borderRadius,
         child: Stack(
           children: [
             Positioned(
@@ -308,7 +315,15 @@ class _ScheduleCourseSwipeDeleteState extends State<ScheduleCourseSwipeDelete> {
             ),
           ],
         ),
-      ),
+      );
+
+    if (widget.cardHeight == null) {
+      return SizedBox(width: width, child: swipeBody);
+    }
+    return SizedBox(
+      width: width,
+      height: ui(widget.cardHeight!),
+      child: swipeBody,
     );
   }
 

@@ -1759,14 +1759,7 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
 
   @override
   Widget build(BuildContext context) {
-    final convs = _conversations;
-    if (convs == null) {
-      return Container(
-        color: _kPageBg,
-        alignment: Alignment.center,
-        child: const AppLoadingIndicator(),
-      );
-    }
+    final convs = _conversations ?? const <_Conversation>[];
     // 空列表时不再「整页占位」，仍按双栏布局渲染：左栏给 _ConversationListPane
     // 内置的「暂无班级」占位，右栏给一个无群可聊的友好状态（无 header /
     // 输入栏禁用），方便用户看清楚整体页面结构。
@@ -1792,44 +1785,44 @@ class _GroupChatViewState extends ConsumerState<GroupChatView>
       // 直接占满父容器，不再保留任何顶部辅助 row（任课老师 / 管理群聊
       // 等下拉按钮已下线，群信息走 header bar 上的 menu icon 入口）。
       child: _ChatLayout(
-        conversations: convs,
-        selectedConvId: selectedId,
-        hasSelection: convs.isNotEmpty,
-        onSelectConv: _selectConversation,
-        messages: _messages,
-        loadingMessages: _loadingMessages,
-        loadingOlder: _loadingOlder,
-        hasMoreOlder: _hasMoreOlder,
-        messagesController: _messagesController,
-        currentUserId: widget.currentUserId,
-        playingVoiceId: _playingVoiceId,
-        playingFraction: _playingFraction,
-        onToggleVoice: _toggleVoicePlay,
-        inputController: _inputController,
-        onSend: _send,
-        onBack: widget.onBack,
-        currentConv: currentConv,
-        memberCount: memberCount,
-        announcement: _announcement,
-        announcementUpdatedAt: _announcementUpdatedAt,
-        canEditAnnouncement: _canEditAnnouncement,
-        onEditAnnouncement: _editAnnouncement,
-        onRecallMessage: _recallMessage,
-        muted: _muted,
-        pinned: _pinned,
-        onToggleMute: _toggleMute,
-        onTogglePin: _togglePin,
-        onUploadImage: _pickAndSendImage,
-        voiceMode: _voiceMode,
-        recording: _recording,
-        willCancel: _willCancel,
-        liveWaveform: _liveWaveform,
-        onToggleVoiceMode: _toggleVoiceMode,
-        onRecordPressStart: _onRecordPressStart,
-        onRecordPressMove: _onRecordPressMove,
-        onRecordPressEnd: _onRecordPressEnd,
-        onShowDetail: _openGroupDetailDrawer,
-      ),
+          conversations: convs,
+          selectedConvId: selectedId,
+          hasSelection: convs.isNotEmpty,
+          onSelectConv: _selectConversation,
+          messages: _messages,
+          loadingMessages: _loadingMessages,
+          loadingOlder: _loadingOlder,
+          hasMoreOlder: _hasMoreOlder,
+          messagesController: _messagesController,
+          currentUserId: widget.currentUserId,
+          playingVoiceId: _playingVoiceId,
+          playingFraction: _playingFraction,
+          onToggleVoice: _toggleVoicePlay,
+          inputController: _inputController,
+          onSend: _send,
+          onBack: widget.onBack,
+          currentConv: currentConv,
+          memberCount: memberCount,
+          announcement: _announcement,
+          announcementUpdatedAt: _announcementUpdatedAt,
+          canEditAnnouncement: _canEditAnnouncement,
+          onEditAnnouncement: _editAnnouncement,
+          onRecallMessage: _recallMessage,
+          muted: _muted,
+          pinned: _pinned,
+          onToggleMute: _toggleMute,
+          onTogglePin: _togglePin,
+          onUploadImage: _pickAndSendImage,
+          voiceMode: _voiceMode,
+          recording: _recording,
+          willCancel: _willCancel,
+          liveWaveform: _liveWaveform,
+          onToggleVoiceMode: _toggleVoiceMode,
+          onRecordPressStart: _onRecordPressStart,
+          onRecordPressMove: _onRecordPressMove,
+          onRecordPressEnd: _onRecordPressEnd,
+          onShowDetail: _openGroupDetailDrawer,
+        ),
     );
   }
 }
@@ -3993,8 +3986,8 @@ class _ChatBodyBoard extends StatelessWidget {
             Expanded(
               child: !hasSelection
                   ? const _NoSelectionHint()
-                  : loading
-                  ? const Center(child: AppLoadingIndicator())
+                  : loading && messages.isEmpty
+                  ? const SizedBox.shrink()
                   : messages.isEmpty
                   ? Center(
                       child: Text(

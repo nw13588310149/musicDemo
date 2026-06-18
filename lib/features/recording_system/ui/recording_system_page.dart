@@ -736,9 +736,11 @@ class _RecordingContentArea extends StatelessWidget {
         : (visibleFolders.isEmpty ? '当前分类下还没有文件夹' : null);
     final showPageEmpty = emptyMessage != null;
 
-    return Padding(
-      padding: EdgeInsets.fromLTRB(ui(30), ui(28), ui(20), ui(16)),
-      child: Stack(
+    return PageInitLoadingShell(
+      loading: state.loading && state.categories.isEmpty,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(ui(30), ui(28), ui(20), ui(16)),
+        child: Stack(
         children: [
           // 空状态按整个右侧内容区（含标题/搜索栏）居中，而不是仅列表 Expanded 区域。
           if (showPageEmpty)
@@ -797,8 +799,6 @@ class _RecordingContentArea extends StatelessWidget {
               Expanded(
                 child: showPageEmpty
                     ? const SizedBox.shrink()
-                    : state.loading
-                    ? const Center(child: AppLoadingIndicator())
                     : isInsideFolder
                     ? _RecordingFilesGrid(
                         items: visibleFiles,
@@ -840,6 +840,7 @@ class _RecordingContentArea extends StatelessWidget {
             ),
           ),
         ],
+      ),
       ),
     );
   }

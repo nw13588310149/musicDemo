@@ -57,8 +57,10 @@ class TeacherExamController extends StateNotifier<TeacherExamState> {
     );
   }
 
-  Future<void> loadExamList({String? classId}) async {
-    state = state.copyWith(loading: true, error: '');
+  Future<void> loadExamList({String? classId, bool silent = false}) async {
+    if (!silent) {
+      state = state.copyWith(loading: true, error: '');
+    }
     final response = await _repository.examList(classId: classId);
     if (!response.isSuccess) {
       state = state.copyWith(
@@ -90,7 +92,12 @@ class TeacherExamController extends StateNotifier<TeacherExamState> {
 
     final active = state.activeExam;
     if (active != null) {
-      await loadExamDetail(active.id, active.subjectId);
+      await loadExamDetail(
+        active.id,
+        active.subjectId,
+        silent: silent,
+        force: silent,
+      );
     }
   }
 
@@ -111,14 +118,19 @@ class TeacherExamController extends StateNotifier<TeacherExamState> {
   Future<void> selectClass(String label) async {
     if (!state.classIdByLabel.containsKey(label)) return;
     state = state.copyWith(classFilter: label, activeIdx: 0);
-    await loadExamList(classId: state.classIdByLabel[label]);
+    await loadExamList(
+      classId: state.classIdByLabel[label],
+      silent: true,
+    );
   }
 
   void selectStatusTab(int index) {
     state = state.copyWith(statusTab: index, activeIdx: 0);
     final active = state.activeExam;
     if (active != null && !active.detailLoaded) {
-      unawaited(loadExamDetail(active.id, active.subjectId));
+      unawaited(
+        loadExamDetail(active.id, active.subjectId, silent: true),
+      );
     }
   }
 
@@ -135,13 +147,17 @@ class TeacherExamController extends StateNotifier<TeacherExamState> {
     String examId,
     int subjectId, {
     bool force = false,
+    bool silent = false,
   }) async {
-    if (examId.isEmpty || subjectId == 0 || state.loadingDetail) return;
+    if (examId.isEmpty || subjectId == 0) return;
+    if (!silent && state.loadingDetail) return;
     final cached = state.exams.where(
       (item) => item.id == examId && item.subjectId == subjectId,
     );
     if (!force && cached.any((item) => item.detailLoaded)) return;
-    state = state.copyWith(loadingDetail: true);
+    if (!silent) {
+      state = state.copyWith(loadingDetail: true);
+    }
     final listResponse = await _repository.examStudentList(
       examId: examId,
       subjectId: subjectId,

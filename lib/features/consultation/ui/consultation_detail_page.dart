@@ -62,23 +62,24 @@ class _ConsultationDetailPageState
       padding: EdgeInsets.zero,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(ui(16)),
-        child: state.loading && state.detail == null
-            ? const Center(child: AppLoadingIndicator())
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _DetailHeader(
-                    onBack: () =>
-                        GroupChatReturnNavigator.pop(context, ref: ref),
-                    onShare: controller.openShareDialog,
-                  ),
-                  Expanded(
-                    child: state.detail == null
-                        ? const Center(child: Text('暂无资讯'))
-                        : _DetailBody(detail: state.detail!),
-                  ),
-                ],
+        child: PageInitLoadingShell(
+          loading: state.loading && state.detail == null,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _DetailHeader(
+                onBack: () =>
+                    GroupChatReturnNavigator.pop(context, ref: ref),
+                onShare: controller.openShareDialog,
               ),
+              Expanded(
+                child: state.detail == null
+                    ? const Center(child: Text('暂无资讯'))
+                    : _DetailBody(detail: state.detail!),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

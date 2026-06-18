@@ -52,45 +52,42 @@ class _VoicePageState extends ConsumerState<VoicePage> {
       borderRadius: BorderRadius.circular(ui(16)),
       child: ColoredBox(
         color: Colors.white,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _VoiceHeader(
-              menus: state.menus,
-              selectedId: state.selectedMenuId,
-              onSelect: (id) {
-                if (id == state.selectedMenuId) return;
-                _resetSearch();
-                controller.selectMenu(id);
-              },
-              searchController: _searchController,
-              query: _query,
-              onQueryChanged: (value) => setState(() => _query = value),
-              onClearQuery: _resetSearch,
-            ),
-            Expanded(
-              child: _VoiceBody(
-                loading: state.loading,
-                hasAnyLessons: state.flatLessons.isNotEmpty,
-                lessons: filteredLessons,
+        child: PageInitLoadingShell(
+          loading: state.loading && state.flatLessons.isEmpty,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _VoiceHeader(
+                menus: state.menus,
+                selectedId: state.selectedMenuId,
+                onSelect: (id) {
+                  if (id == state.selectedMenuId) return;
+                  _resetSearch();
+                  controller.selectMenu(id);
+                },
+                searchController: _searchController,
                 query: _query,
-                errorMessage: state.errorMessage,
-                schoolMode: state.schoolMode,
-                onOpenLesson: (lesson) => _openLesson(state, lesson),
-                onRefresh: controller.refreshLessons,
-                // 同一个 widget 同时承载「声乐」与「器乐」两个二级页：
-                // [InstrumentalPage] 内部就是 const VoicePage(config: instrumental)。
-                // 因此卡片封面要按 config.key 分流：
-                //   voice        → fm.png  「VOCAL MUSIC / 声乐」
-                //   instrumental → fm2.png 「INSTRUMENTAL MUSIC / 器乐」
-                // 其它 key 不会经过此页面，留 fm.png 兜底，避免未来加新 config
-                // 时漏改导致空白。
-                coverAsset: state.config.key == 'instrumental'
-                    ? AppAssets.homeFm2Cover
-                    : AppAssets.homeFmCover,
+                onQueryChanged: (value) => setState(() => _query = value),
+                onClearQuery: _resetSearch,
               ),
-            ),
-          ],
+              Expanded(
+                child: state.loading && state.flatLessons.isEmpty
+                    ? const SizedBox.shrink()
+                    : _VoiceBody(
+                  hasAnyLessons: state.flatLessons.isNotEmpty,
+                  lessons: filteredLessons,
+                  query: _query,
+                  errorMessage: state.errorMessage,
+                  schoolMode: state.schoolMode,
+                  onOpenLesson: (lesson) => _openLesson(state, lesson),
+                  onRefresh: controller.refreshLessons,
+                  coverAsset: state.config.key == 'instrumental'
+                      ? AppAssets.homeFm2Cover
+                      : AppAssets.homeFmCover,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -428,7 +425,6 @@ class _VoiceSearchPill extends StatelessWidget {
 /// 网格区域：5 列卡片，根据本地过滤后的 lessons 渲染。
 class _VoiceBody extends StatelessWidget {
   const _VoiceBody({
-    required this.loading,
     required this.hasAnyLessons,
     required this.lessons,
     required this.query,
@@ -439,7 +435,6 @@ class _VoiceBody extends StatelessWidget {
     required this.coverAsset,
   });
 
-  final bool loading;
   final bool hasAnyLessons;
   final List<StudyCatalogLesson> lessons;
   final String query;
@@ -454,9 +449,6 @@ class _VoiceBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
 
-    if (loading && !hasAnyLessons) {
-      return const Center(child: AppLoadingIndicator());
-    }
     if (!hasAnyLessons) {
       return CourseEmptyPlaceholder(schoolMode: schoolMode);
     }

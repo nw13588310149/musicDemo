@@ -40,22 +40,25 @@ class ConsultationPage extends ConsumerWidget {
       child: ClipRRect(
         // 与 ShellPageSurface 默认 panelRadius=16 保持一致，避免 header 顶角溢出。
         borderRadius: BorderRadius.circular(ui(16)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _ConsultationHeader(onBack: () => Navigator.of(context).maybePop()),
-            Expanded(
-              child: state.loading && state.items.isEmpty
-                  ? const Center(child: AppLoadingIndicator())
-                  : state.items.isEmpty
-                  ? const _ConsultationEmpty()
-                  : _ConsultationBody(
-                      state: state,
-                      sourceName: args.sourceName,
-                      onLoadMore: controller.loadMore,
-                    ),
-            ),
-          ],
+        child: PageInitLoadingShell(
+          loading: state.loading && state.items.isEmpty,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _ConsultationHeader(onBack: () => Navigator.of(context).maybePop()),
+              Expanded(
+                child: state.loading && state.items.isEmpty
+                    ? const SizedBox.shrink()
+                    : state.items.isEmpty
+                    ? const _ConsultationEmpty()
+                    : _ConsultationBody(
+                        state: state,
+                        sourceName: args.sourceName,
+                        onLoadMore: controller.loadMore,
+                      ),
+              ),
+            ],
+          ),
         ),
       ),
     );

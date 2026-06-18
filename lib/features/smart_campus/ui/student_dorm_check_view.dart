@@ -234,9 +234,17 @@ class _StudentDormCheckViewState extends ConsumerState<StudentDormCheckView> {
             .read(studentDormitoryControllerProvider.notifier)
             .selectListSection(section),
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+      body: PageInitLoadingShell(
+        loading: state.loading &&
+            ((state.listSection ==
+                        StudentDormitoryListSection.checkRecords &&
+                    records.isEmpty) ||
+                (state.listSection !=
+                        StudentDormitoryListSection.checkRecords &&
+                    state.makeupItems.isEmpty)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
           if (state.error.isNotEmpty)
             Padding(
               padding: EdgeInsets.only(top: ui(8)),
@@ -259,10 +267,7 @@ class _StudentDormCheckViewState extends ConsumerState<StudentDormCheckView> {
                   (state.listSection !=
                           StudentDormitoryListSection.checkRecords &&
                       state.makeupItems.isEmpty)))
-            Padding(
-              padding: EdgeInsets.symmetric(vertical: ui(40)),
-              child: const Center(child: AppLoadingIndicator()),
-            )
+            const SizedBox.shrink()
           else if (state.listSection ==
               StudentDormitoryListSection.checkRecords) ...[
             _SectionHeader(tab: _tab, onTab: (t) => setState(() => _tab = t)),
@@ -279,6 +284,7 @@ class _StudentDormCheckViewState extends ConsumerState<StudentDormCheckView> {
               onTap: (item) => unawaited(_showMakeupDetail(item)),
             ),
         ],
+      ),
       ),
     );
   }

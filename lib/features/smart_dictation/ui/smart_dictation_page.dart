@@ -166,53 +166,55 @@ class SmartDictationV2Page extends ConsumerWidget {
 
     final inSession = state.session != null;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(16)),
-      ),
-      padding: EdgeInsets.zero,
-      child: Row(
-        children: [
-          if (!inSession) ...[
-            Container(
-              width: ui(180),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.horizontal(
-                  left: Radius.circular(ui(16)),
+    return PageInitLoadingShell(
+      loading: state.bootstrapping,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(ui(16)),
+        ),
+        padding: EdgeInsets.zero,
+        child: Row(
+          children: [
+            if (!inSession) ...[
+              Container(
+                width: ui(180),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.horizontal(
+                    left: Radius.circular(ui(16)),
+                  ),
+                  border: Border(
+                    right: BorderSide(
+                      color: const Color(0xFFF3F2F3),
+                      width: ui(1),
+                    ),
+                  ),
                 ),
-                border: Border(
-                  right: BorderSide(
-                    color: const Color(0xFFF3F2F3),
-                    width: ui(1),
+                child: Padding(
+                  padding: EdgeInsets.all(ui(8)),
+                  child: _TrackRail(
+                    ui: ui,
+                    state: state,
+                    onSelect: (track, mode) {
+                      controller.setTrack(track);
+                      controller.setMode(mode);
+                    },
                   ),
                 ),
               ),
+              SizedBox(width: ui(12)),
+            ],
+            Expanded(
               child: Padding(
-                padding: EdgeInsets.all(ui(8)),
-                child: _TrackRail(
-                  ui: ui,
-                  state: state,
-                  onSelect: (track, mode) {
-                    controller.setTrack(track);
-                    controller.setMode(mode);
-                  },
-                ),
-              ),
-            ),
-            SizedBox(width: ui(12)),
-          ],
-          Expanded(
-            child: Padding(
-              padding: EdgeInsets.only(right: inSession ? 0 : ui(12)),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: state.bootstrapping
-                        ? const Center(child: AppLoadingIndicator())
-                        : _Content(
+                padding: EdgeInsets.only(right: inSession ? 0 : ui(12)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: state.bootstrapping
+                          ? const SizedBox.shrink()
+                          : _Content(
                             ui: ui,
                             state: state,
                             onStartLesson: controller.startStageLesson,
@@ -252,6 +254,7 @@ class SmartDictationV2Page extends ConsumerWidget {
             ),
           ),
         ],
+      ),
       ),
     );
   }

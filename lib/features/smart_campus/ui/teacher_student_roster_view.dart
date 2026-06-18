@@ -18,7 +18,6 @@ import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -30,10 +29,12 @@ import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../data/teacher_repository.dart';
 import '../../shell/ui/shell_layout.dart';
+import 'widgets/smart_campus_page_banner.dart';
 import 'widgets/smart_campus_stat_card.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // ---- 配色 -------------------------------------------------------------------
+const Color _kPageBg = Color(0xFFEFF3FC);
 const Color _kCardBg = Colors.white;
 const Color _kBorderSoft = Color(0xFFF3F2F3);
 const Color _kTextDark = Color(0xFF0B081A);
@@ -389,7 +390,6 @@ class _TeacherStudentRosterViewState extends ConsumerState<TeacherStudentRosterV
 
   List<_Student> _all = [];
   int _listTotal = 0;
-  bool _loadingClasses = true;
   bool _loadingStudents = false;
 
   @override
@@ -405,7 +405,6 @@ class _TeacherStudentRosterViewState extends ConsumerState<TeacherStudentRosterV
   }
 
   Future<void> _loadClasses() async {
-    setState(() => _loadingClasses = true);
     final res = await ref.read(teacherRepositoryProvider).classList(isClassTeacher: 1);
     if (!mounted) return;
     final opts = <_RosterClassOption>[
@@ -426,7 +425,6 @@ class _TeacherStudentRosterViewState extends ConsumerState<TeacherStudentRosterV
     }
     setState(() {
       _classOptions = opts;
-      _loadingClasses = false;
     });
     await _loadStudents();
   }
@@ -492,53 +490,42 @@ class _TeacherStudentRosterViewState extends ConsumerState<TeacherStudentRosterV
     final maleCount = list.where((s) => s.isMale).length;
     final femaleCount = list.length - maleCount;
     final totalForStats = _listTotal > 0 ? _listTotal : list.length;
-    final pageLoading = _loadingClasses || (_loadingStudents && list.isEmpty);
 
-    return SingleChildScrollView(
-      padding: EdgeInsets.only(bottom: ui(24)),
-      child: Column(
+    return SmartCampusSecondaryPageShell(
+      backgroundColor: _kPageBg,
+      header: _RosterBanner(onBack: widget.onBack),
+      body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _RosterBanner(onBack: widget.onBack),
-          SizedBox(height: ui(16)),
-          MainContentLoadingShell(
-            loading: pageLoading,
-            preserveChrome: true,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _FilterRow(
-                  classOptions: _classOptions,
-                  selectedLabel: _selectedClassLabel,
-                  onClassPicked: _onClassPicked,
-                  query: _query,
-                  onQueryChanged: _onQueryChanged,
-                ),
-                SizedBox(height: ui(16)),
-                _StatsRow(
-                  total: totalForStats,
-                  male: maleCount,
-                  female: femaleCount,
-                ),
-                SizedBox(height: ui(20)),
-                if (!_loadingStudents && list.isEmpty)
-                  Center(
-                    child: Padding(
-                      padding: EdgeInsets.only(top: ui(48)),
-                      child: Text(
-                        '暂无学生数据',
-                        style: TextStyle(fontSize: ui(14), color: _kTextHint),
-                      ),
-                    ),
-                  )
-                else if (!pageLoading)
-                  _StudentCardsGrid(
-                    students: list,
-                    onTap: _openProfile,
-                  ),
-              ],
-            ),
+          _FilterRow(
+            classOptions: _classOptions,
+            selectedLabel: _selectedClassLabel,
+            onClassPicked: _onClassPicked,
+            query: _query,
+            onQueryChanged: _onQueryChanged,
           ),
+          SizedBox(height: ui(16)),
+          _StatsRow(
+            total: totalForStats,
+            male: maleCount,
+            female: femaleCount,
+          ),
+          SizedBox(height: ui(20)),
+          if (!_loadingStudents && list.isEmpty)
+            Center(
+              child: Padding(
+                padding: EdgeInsets.only(top: ui(48)),
+                child: Text(
+                  '暂无学生数据',
+                  style: TextStyle(fontSize: ui(14), color: _kTextHint),
+                ),
+              ),
+            )
+          else if (list.isNotEmpty)
+            _StudentCardsGrid(
+              students: list,
+              onTap: _openProfile,
+            ),
         ],
       ),
     );
@@ -1134,7 +1121,7 @@ class _StudentCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(ui(12)),
         ),
         clipBehavior: Clip.antiAlias,
-        padding: EdgeInsets.all(ui(8)),
+        padding: EdgeInsets.fromLTRB(ui(12), ui(8), ui(12), ui(8)),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1167,11 +1154,7 @@ class _StudentCard extends StatelessWidget {
                               ),
                             ),
                             SizedBox(width: ui(4)),
-                            Icon(
-                              Icons.chat_bubble_outline_rounded,
-                              size: ui(14),
-                              color: _kMsgBlue,
-                            ),
+                            _MessageIcon(size: ui(14), color: _kMsgBlue),
                           ],
                         ),
                       ),
@@ -1193,7 +1176,7 @@ class _StudentCard extends StatelessWidget {
                       ),
                     ],
                   ),
-                  SizedBox(height: ui(6)),
+                  SizedBox(height: ui(8)),
                   Text(
                     _dormLine,
                     maxLines: 1,
@@ -1205,7 +1188,7 @@ class _StudentCard extends StatelessWidget {
                       fontFamily: 'PingFang SC',
                     ),
                   ),
-                  SizedBox(height: ui(5)),
+                  SizedBox(height: ui(6)),
                   Text(
                     student.studentId.isEmpty ? '—' : student.studentId,
                     maxLines: 1,
@@ -1217,7 +1200,7 @@ class _StudentCard extends StatelessWidget {
                       fontFamily: 'PingFang SC',
                     ),
                   ),
-                  SizedBox(height: ui(8)),
+                  SizedBox(height: ui(6)),
                   _RosterTagRow(tags: _buildTags()),
                 ],
               ),
@@ -1341,6 +1324,57 @@ class _Avatar extends StatelessWidget {
   }
 }
 
+/// 姓名右侧「发消息」图标：两枚描边气泡（右上小 + 左下主），对齐设计
+/// 14×14 #325BFF outline 结构。用 CustomPaint 还原，避免引入新资源。
+class _MessageIcon extends StatelessWidget {
+  const _MessageIcon({required this.size, required this.color});
+
+  final double size;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(painter: _MessageIconPainter(color: color)),
+    );
+  }
+}
+
+class _MessageIconPainter extends CustomPainter {
+  _MessageIconPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // 设计坐标基于 14×14，按实际尺寸缩放后绘制。
+    final s = size.width / 14.0;
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2 * s
+      ..strokeJoin = StrokeJoin.round
+      ..strokeCap = StrokeCap.round;
+
+    final small = RRect.fromRectAndRadius(
+      Rect.fromLTWH(8.4 * s, 1.6 * s, 4.0 * s, 3.1 * s),
+      Radius.circular(1.4 * s),
+    );
+    final big = RRect.fromRectAndRadius(
+      Rect.fromLTWH(1.7 * s, 4.4 * s, 7.6 * s, 6.4 * s),
+      Radius.circular(2.1 * s),
+    );
+    canvas.drawRRect(small, paint);
+    canvas.drawRRect(big, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _MessageIconPainter oldDelegate) =>
+      oldDelegate.color != color;
+}
+
 // =============================================================================
 // 学生档案右侧抽屉
 //
@@ -1407,7 +1441,6 @@ class _StudentDetailDrawerState extends ConsumerState<_StudentDetailDrawer> {
   List<String> _scoreSubjects = const [];
   Map<String, List<double>> _scoresBySubject = const {};
   Map<String, List<String>> _periodsBySubject = const {};
-  bool _detailLoading = false;
 
   @override
   void initState() {
@@ -1418,7 +1451,6 @@ class _StudentDetailDrawerState extends ConsumerState<_StudentDetailDrawer> {
   Future<void> _loadDetail() async {
     final id = widget.data.userId.trim();
     if (id.isEmpty) return;
-    setState(() => _detailLoading = true);
     final repo = ref.read(teacherRepositoryProvider);
     final results = await Future.wait([
       repo.studentDetail(id: id),
@@ -1432,7 +1464,6 @@ class _StudentDetailDrawerState extends ConsumerState<_StudentDetailDrawer> {
         : const _StudentScoreSeries();
     if (res.isSuccess && res.data is Map) {
       setState(() {
-        _detailLoading = false;
         _detail = _mapDataToStringKeyed(res.data);
         _scoreSubjects = scoreData.subjects;
         _scoresBySubject = scoreData.scores;
@@ -1440,7 +1471,6 @@ class _StudentDetailDrawerState extends ConsumerState<_StudentDetailDrawer> {
         _subjectIdx = 0;
       });
     } else {
-      setState(() => _detailLoading = false);
       if (!res.isSuccess) {
         AppToast.show(
           context,
@@ -1466,12 +1496,6 @@ class _StudentDetailDrawerState extends ConsumerState<_StudentDetailDrawer> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (_detailLoading)
-                  LinearProgressIndicator(
-                    minHeight: ui(2),
-                    color: _kPurple,
-                    backgroundColor: _kPageBgChip,
-                  ),
                 Expanded(
                   child: SingleChildScrollView(
                     padding: EdgeInsets.only(bottom: ui(24)),

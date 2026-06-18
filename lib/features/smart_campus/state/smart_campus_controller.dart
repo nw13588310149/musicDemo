@@ -349,11 +349,25 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
     state = state.copyWith(selectedRole: role, hasUserSelectedRole: true);
   }
 
-  void openPrincipalMailbox() {
-    if (state.mainView == SmartCampusMainView.principalMailbox) {
+  /// 从非 dashboard 的中间页（如「班级工作台」）进入子路由时，记录
+  /// [returnMainView]，以便子页返回时回到来源页而非 dashboard。
+  void _openWithReturn(SmartCampusMainView target) {
+    if (state.mainView == target) {
       return;
     }
-    state = state.copyWith(mainView: SmartCampusMainView.principalMailbox);
+    final SmartCampusMainView? returnTo =
+        state.mainView == SmartCampusMainView.dashboard
+            ? null
+            : state.mainView;
+    state = state.copyWith(
+      mainView: target,
+      returnMainView: returnTo,
+      clearReturnMainView: returnTo == null,
+    );
+  }
+
+  void openPrincipalMailbox() {
+    _openWithReturn(SmartCampusMainView.principalMailbox);
   }
 
   void openMyClass() {
@@ -433,10 +447,7 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
   ///   - 右 chat 区（紫色渐变 header + 群公告 + 系统提示 + 文本/图片/语音/文件
   ///     消息气泡 + 输入栏：附件 + 语音 + 表情 + 发送）
   void openGroupChat() {
-    if (state.mainView == SmartCampusMainView.groupChat) {
-      return;
-    }
-    state = state.copyWith(mainView: SmartCampusMainView.groupChat);
+    _openWithReturn(SmartCampusMainView.groupChat);
   }
 
   /// 学生端「查寝管理」入口：进入个人查寝/补卡页面。
@@ -516,10 +527,7 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
   ///     规定/打卡时间双列 + 备注）+ 宿舍口径卡（晨查寝/晚查寝 18 Barlow
   ///     标题 + 大色块状态徽章 正常/未打卡/迟到 + 灰底时间双列 + 备注）。
   void openDormDynamic() {
-    if (state.mainView == SmartCampusMainView.dormDynamic) {
-      return;
-    }
-    state = state.copyWith(mainView: SmartCampusMainView.dormDynamic);
+    _openWithReturn(SmartCampusMainView.dormDynamic);
   }
 
   /// 班主任端「查寝历史」入口：按自然日查看本班住宿生晚查寝、晨查寝
@@ -531,10 +539,7 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
   ///   - 晚查寝 / 晨查寝 二选一 tabs
   ///   - 卡片网格：宿舍口径 (晨/晚查寝标题) + 学生口径 (姓名/学号)。
   void openDormHistory() {
-    if (state.mainView == SmartCampusMainView.dormHistory) {
-      return;
-    }
-    state = state.copyWith(mainView: SmartCampusMainView.dormHistory);
+    _openWithReturn(SmartCampusMainView.dormHistory);
   }
 
   /// 班主任端「家校沟通」入口：与本班学生家长就请假、成绩、心理等进行
@@ -544,10 +549,7 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
   ///   - 家长对话卡 3 列网格（头像 / 学生姓名+学号 / 标签 / 家长发言预览
   ///     / 时间戳 / 未送达提示），点击卡片打开对话详情弹窗。
   void openHomeSchoolCommunication() {
-    if (state.mainView == SmartCampusMainView.homeSchool) {
-      return;
-    }
-    state = state.copyWith(mainView: SmartCampusMainView.homeSchool);
+    _openWithReturn(SmartCampusMainView.homeSchool);
   }
 
   /// 班主任端「请假审批」入口：进入审批本班学生请假申请的页面。
@@ -560,10 +562,7 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
   ///     审批中卡片底部有"通过 / 驳回"按钮，"驳回"打开 GradientHeaderDialog
   ///     形式的"驳回申请"弹窗。
   void openLeaveApproval() {
-    if (state.mainView == SmartCampusMainView.leaveApproval) {
-      return;
-    }
-    state = state.copyWith(mainView: SmartCampusMainView.leaveApproval);
+    _openWithReturn(SmartCampusMainView.leaveApproval);
   }
 
   /// 任课老师 / 班主任 / 宿管「我的请假」入口：查看本人请假记录并发起新申请。
@@ -732,6 +731,14 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
   }
 
   void backToDashboard() {
+    final returnTo = state.returnMainView;
+    if (returnTo != null) {
+      state = state.copyWith(
+        mainView: returnTo,
+        clearReturnMainView: true,
+      );
+      return;
+    }
     if (state.mainView == SmartCampusMainView.dashboard) {
       return;
     }

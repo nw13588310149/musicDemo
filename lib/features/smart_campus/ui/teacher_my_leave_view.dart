@@ -1,14 +1,14 @@
 // =============================================================================
-// 任课老师 / 班主任「我的请假」独立页面
+// 任课老师 / 班主任 / 宿管「我的请假」独立页面
 //
 // 入口：dashboard 快捷区「我的请假」→ controller.openMyTeacherLeave()
 //      → mainView == myTeacherLeave → SmartCampusPage 路由到本视图。
 //
 // 视觉：
 //   1. banner（62 高，背景图 xiaoquan/bg.png，标题「我的请假」）
-//   2. 3 张统计卡：待审批 / 已通过 / 已拒绝
-//   3. 控制条：4 状态 tabs + 右侧紫渐变「发起请假」按钮（无搜索框）
-//   4. 双列卡片网格（只读，展示本人请假记录）
+//   2. 3 张统计卡（背景图与学生端一致）：待审批 / 已通过 / 已拒绝
+//   3. 控制条：4 状态 tabs + 右侧白底「发起请假」按钮（无搜索框）
+//   4. 双列卡片网格（白底 + 右上角淡紫光晕，展示本人请假记录）
 //   5. 点击「发起请假」→ 右侧抽屉表单（600 宽，与 APP 其他抽屉一致）
 // =============================================================================
 
@@ -16,7 +16,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 
 import '../../../core/constants/app_assets.dart';
@@ -27,6 +26,8 @@ import '../../../core/widgets/popup_selector_field.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/teacher_leave_data.dart';
 import '../data/teacher_repository.dart';
+import 'widgets/smart_campus_page_banner.dart';
+import 'widgets/smart_campus_stat_card.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // —— 颜色 ————————————————————————————————————————————————————————
@@ -100,7 +101,6 @@ class _TeacherMyLeaveViewState extends ConsumerState<TeacherMyLeaveView> {
   int _pendingCount = 0;
   int _approvedCount = 0;
   int _rejectedCount = 0;
-  bool _loading = false;
   String? _loadError;
   int _listToken = 0;
 
@@ -136,7 +136,6 @@ class _TeacherMyLeaveViewState extends ConsumerState<TeacherMyLeaveView> {
   Future<void> _loadList() async {
     final token = ++_listToken;
     setState(() {
-      _loading = true;
       _loadError = null;
     });
     final repo = ref.read(teacherRepositoryProvider);
@@ -150,7 +149,6 @@ class _TeacherMyLeaveViewState extends ConsumerState<TeacherMyLeaveView> {
     if (!resp.isSuccess) {
       setState(() {
         _records = const [];
-        _loading = false;
         _loadError = resp.displayMsg;
       });
       return;
@@ -158,7 +156,6 @@ class _TeacherMyLeaveViewState extends ConsumerState<TeacherMyLeaveView> {
 
     setState(() {
       _records = parseTeacherLeaveList(resp.data);
-      _loading = false;
       _loadError = null;
     });
   }
@@ -235,58 +232,48 @@ class _TeacherMyLeaveViewState extends ConsumerState<TeacherMyLeaveView> {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      color: _kPageBg,
-      child: SingleChildScrollView(
-        padding: EdgeInsets.only(bottom: ui(20)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _Banner(onBack: widget.onBack),
-            SizedBox(height: ui(16)),
-            _StatsRow(
-              pendingCount: _pendingCount,
-              approvedCount: _approvedCount,
-              rejectedCount: _rejectedCount,
-            ),
-            SizedBox(height: ui(8)),
-            Padding(
-              padding: EdgeInsets.only(left: ui(8)),
-              child: Text(
-                '提交后由教务管理员审批；审批结果将同步至本页。',
-                style: TextStyle(
-                  fontSize: ui(12),
-                  color: _kTextHint,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w400,
-                  height: 1.5,
-                ),
+    return SmartCampusSecondaryPageShell(
+      backgroundColor: _kPageBg,
+      header: _Banner(onBack: widget.onBack),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _StatsRow(
+            pendingCount: _pendingCount,
+            approvedCount: _approvedCount,
+            rejectedCount: _rejectedCount,
+          ),
+          SizedBox(height: ui(8)),
+          Padding(
+            padding: EdgeInsets.only(left: ui(8)),
+            child: Text(
+              '提交后由教务管理员审批；审批结果将同步至本页。',
+              style: TextStyle(
+                fontSize: ui(12),
+                color: _kTextHint,
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w400,
+                height: 1.5,
               ),
             ),
-            SizedBox(height: ui(16)),
-            _ControlBar(
-              current: _tab,
-              onTap: (t) {
-                if (_tab == t) return;
-                setState(() => _tab = t);
-                unawaited(_loadList());
-              },
-              onCreate: _showApplyDrawer,
-            ),
-            SizedBox(height: ui(16)),
-            if (_loading && _records.isEmpty)
-              Padding(
-                padding: EdgeInsets.symmetric(vertical: ui(40)),
-                child: const Center(child: AppLoadingIndicator()),
-              )
-            else
-              _CardsGrid(
-                records: _records,
-                onOpen: _showLeaveDetail,
-                emptyMessage: _loadError ?? '暂无相关申请',
-              ),
-          ],
-        ),
+          ),
+          SizedBox(height: ui(16)),
+          _ControlBar(
+            current: _tab,
+            onTap: (t) {
+              if (_tab == t) return;
+              setState(() => _tab = t);
+              unawaited(_loadList());
+            },
+            onCreate: _showApplyDrawer,
+          ),
+          SizedBox(height: ui(16)),
+          _CardsGrid(
+            records: _records,
+            onOpen: _showLeaveDetail,
+            emptyMessage: _loadError ?? '暂无相关申请',
+          ),
+        ],
       ),
     );
   }
@@ -381,99 +368,29 @@ class _StatsRow extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: _StatCard(
+          child: SmartCampusStatCard(
+            backgroundAsset: AppAssets.studentLeaveStatCard1,
             label: '待审批',
             value: pendingCount,
-            gradient: const LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [Color(0xFFE7DCFF), Colors.white],
-              stops: [0.0, 0.73],
-            ),
           ),
         ),
         SizedBox(width: ui(12)),
         Expanded(
-          child: _StatCard(
+          child: SmartCampusStatCard(
+            backgroundAsset: AppAssets.studentLeaveStatCard2,
             label: '已通过',
             value: approvedCount,
-            gradient: const LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [Color(0xFFDCFFE7), Colors.white],
-              stops: [0.0, 0.73],
-            ),
           ),
         ),
         SizedBox(width: ui(12)),
         Expanded(
-          child: _StatCard(
+          child: SmartCampusStatCard(
+            backgroundAsset: AppAssets.studentLeaveStatCard3,
             label: '已拒绝',
             value: rejectedCount,
-            gradient: const LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [Color(0xFFFFE2DC), Colors.white],
-              stops: [0.0, 0.73],
-            ),
           ),
         ),
       ],
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.label,
-    required this.value,
-    required this.gradient,
-  });
-
-  final String label;
-  final int value;
-  final LinearGradient gradient;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      height: ui(100),
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        gradient: gradient,
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(12)),
-      ),
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(ui(16), ui(16), ui(16), ui(0)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: ui(14),
-                color: Colors.black,
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w500,
-                height: 1.0,
-              ),
-            ),
-            SizedBox(height: ui(12)),
-            Text(
-              '$value',
-              style: TextStyle(
-                fontSize: ui(32),
-                color: _kTextDark,
-                fontFamily: 'Barlow',
-                fontWeight: FontWeight.w500,
-                height: 1.0,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -497,24 +414,26 @@ class _ControlBar extends StatelessWidget {
     return Row(
       children: [
         Container(
-          constraints: BoxConstraints(minHeight: ui(44)),
-          padding: EdgeInsets.fromLTRB(ui(4), ui(4), ui(3), ui(4)),
+          height: ui(44),
+          padding: EdgeInsets.all(ui(4)),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(ui(8)),
-            border: Border.all(color: _kBorderSoft, width: 1),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              for (var i = 0; i < _StatusTab.values.length; i++) ...[
-                if (i != 0) SizedBox(width: ui(8)),
-                _TabPill(
-                  label: _StatusTab.values[i].label,
-                  active: _StatusTab.values[i] == current,
-                  onTap: () => onTap(_StatusTab.values[i]),
+              for (var i = 0; i < _StatusTab.values.length; i++)
+                Padding(
+                  padding: EdgeInsets.only(
+                    right: i == _StatusTab.values.length - 1 ? 0 : ui(4),
+                  ),
+                  child: _TabPill(
+                    label: _StatusTab.values[i].label,
+                    active: _StatusTab.values[i] == current,
+                    onTap: () => onTap(_StatusTab.values[i]),
+                  ),
                 ),
-              ],
             ],
           ),
         ),
@@ -543,10 +462,12 @@ class _TabPill extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(ui(6)),
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: ui(14), vertical: ui(7)),
+        height: ui(36),
+        padding: EdgeInsets.symmetric(horizontal: ui(16)),
+        alignment: Alignment.center,
         decoration: BoxDecoration(
           color: active ? _kTextDark : Colors.transparent,
-          borderRadius: BorderRadius.circular(ui(active ? 6 : 8)),
+          borderRadius: BorderRadius.circular(ui(6)),
         ),
         child: Text(
           label,
@@ -555,7 +476,7 @@ class _TabPill extends StatelessWidget {
             color: active ? Colors.white : _kTextSecondary,
             fontFamily: 'PingFang SC',
             fontWeight: AppFont.w500,
-            height: 1.2,
+            height: 1,
           ),
         ),
       ),
@@ -575,37 +496,30 @@ class _CreateLeaveButton extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(ui(8)),
       child: Container(
-        height: ui(44),
-        padding: EdgeInsets.symmetric(horizontal: ui(14)),
-        alignment: Alignment.center,
+        padding: EdgeInsets.fromLTRB(ui(12), ui(8), ui(13), ui(8)),
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.centerRight,
-            end: Alignment.centerLeft,
-            colors: [Color(0xFFB68EFF), Color(0xFF8640FF)],
-          ),
+          color: Colors.white,
           borderRadius: BorderRadius.circular(ui(8)),
-          boxShadow: [
-            BoxShadow(
-              color: _kPurple.withValues(alpha: 0.18),
-              blurRadius: ui(10),
-              offset: Offset(0, ui(3)),
-            ),
-          ],
+          border: Border.all(color: _kBorderSoft, width: 1),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.edit_document, size: ui(16), color: Colors.white),
+            Image.asset(
+              AppAssets.studentLeaveCreateApplyIcon,
+              width: ui(16),
+              height: ui(16),
+              fit: BoxFit.contain,
+            ),
             SizedBox(width: ui(8)),
             Text(
               '发起请假',
               style: TextStyle(
                 fontSize: ui(16),
-                color: Colors.white,
+                color: _kTextDark,
                 fontFamily: 'PingFang SC',
                 fontWeight: AppFont.w500,
-                height: 1,
+                height: 12 / 16,
               ),
             ),
           ],
@@ -677,83 +591,121 @@ class _LeaveCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(ui(12)),
-      child: Container(
-      padding: EdgeInsets.all(ui(12)),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-          colors: [Color(0xFFF9EEFF), Colors.white],
-        ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(ui(12)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+        child: Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(ui(12)),
+            border: Border.all(color: Colors.white),
+          ),
+          child: Stack(
+            clipBehavior: Clip.none,
             children: [
-              Text(
-                record.leaveType,
-                style: TextStyle(
-                  fontSize: ui(16),
-                  color: _kTextDark,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w500,
-                  height: 1.1,
+              Positioned(
+                top: 0,
+                right: 0,
+                child: IgnorePointer(
+                  child: Container(
+                    width: ui(64),
+                    height: ui(52),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.only(
+                        topRight: Radius.circular(ui(12)),
+                      ),
+                      gradient: RadialGradient(
+                        center: Alignment.topRight,
+                        radius: 0.38,
+                        colors: [
+                          const Color(0x2EF9EEFF),
+                          const Color(0x00F9EEFF),
+                        ],
+                        stops: const [0.0, 1.0],
+                      ),
+                    ),
+                  ),
                 ),
               ),
-              SizedBox(width: ui(12)),
-              Text(
-                record.durationLabel,
-                style: TextStyle(
-                  fontSize: ui(12),
-                  color: _kTextSecondary,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w400,
-                  height: 1.1,
+              Padding(
+                padding: EdgeInsets.all(ui(12)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          record.leaveType,
+                          style: TextStyle(
+                            fontSize: ui(16),
+                            color: Colors.black,
+                            fontFamily: 'PingFang SC',
+                            fontWeight: AppFont.w500,
+                            height: 1.1,
+                          ),
+                        ),
+                        SizedBox(width: ui(12)),
+                        Text(
+                          record.durationLabel,
+                          style: TextStyle(
+                            fontSize: ui(12),
+                            color: _kTextSecondary,
+                            fontFamily: 'PingFang SC',
+                            fontWeight: AppFont.w400,
+                            height: 1.1,
+                          ),
+                        ),
+                        const Spacer(),
+                        _StatusBadge(status: record.status),
+                      ],
+                    ),
+                    SizedBox(height: ui(8)),
+                    Container(
+                      width: double.infinity,
+                      padding: EdgeInsets.all(ui(16)),
+                      decoration: BoxDecoration(
+                        color: _kBoardBg,
+                        borderRadius: BorderRadius.circular(ui(12)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _InfoLine(label: '请假时间：', value: record.timeRange),
+                          SizedBox(height: ui(6)),
+                          _InfoLine(label: '请假事由：', value: record.reason),
+                          SizedBox(height: ui(6)),
+                          _InfoLine(label: '申请时间：', value: record.appliedAt),
+                          SizedBox(height: ui(6)),
+                          _InfoLine(label: '交接说明：', value: record.handoff),
+                          if (record.status != TeacherLeaveStatus.pending) ...[
+                            if (record.auditTime.isNotEmpty) ...[
+                              SizedBox(height: ui(6)),
+                              _InfoLine(
+                                label: '审批时间：',
+                                value: record.auditTime,
+                              ),
+                            ],
+                            if (record.auditReason != null &&
+                                record.auditReason!.isNotEmpty) ...[
+                              SizedBox(height: ui(6)),
+                              _InfoLine(
+                                label: '审批意见：',
+                                value: record.auditReason!,
+                              ),
+                            ],
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const Spacer(),
-              _StatusBadge(status: record.status),
             ],
           ),
-          SizedBox(height: ui(8)),
-          Container(
-            width: double.infinity,
-            padding: EdgeInsets.all(ui(16)),
-            decoration: BoxDecoration(
-              color: _kBoardBg,
-              borderRadius: BorderRadius.circular(ui(12)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _InfoLine(label: '请假时间：', value: record.timeRange),
-                SizedBox(height: ui(6)),
-                _InfoLine(label: '请假事由：', value: record.reason),
-                SizedBox(height: ui(6)),
-                _InfoLine(label: '申请时间：', value: record.appliedAt),
-                SizedBox(height: ui(6)),
-                _InfoLine(label: '交接说明：', value: record.handoff),
-                if (record.status != TeacherLeaveStatus.pending) ...[
-                  if (record.auditTime.isNotEmpty) ...[
-                    SizedBox(height: ui(6)),
-                    _InfoLine(label: '审批时间：', value: record.auditTime),
-                  ],
-                  if (record.auditReason != null &&
-                      record.auditReason!.isNotEmpty) ...[
-                    SizedBox(height: ui(6)),
-                    _InfoLine(label: '审批意见：', value: record.auditReason!),
-                  ],
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
+        ),
       ),
     );
   }

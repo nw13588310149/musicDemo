@@ -345,11 +345,13 @@ class _StudentMyScheduleViewState extends ConsumerState<StudentMyScheduleView> {
       ),
       body: Padding(
         padding: EdgeInsets.fromLTRB(ui(20), ui(11), ui(20), ui(20)),
-        child: _ScheduleGrid(
-          slots: slots,
-          days: days,
-          cells: cells,
-          loading: _scheduleLoading,
+        child: PageInitLoadingShell(
+          loading: _scheduleLoading && _serverCells == null,
+          child: _ScheduleGrid(
+            slots: slots,
+            days: days,
+            cells: cells,
+          ),
         ),
       ),
     );
@@ -660,7 +662,6 @@ class _ScheduleGrid extends StatefulWidget {
     required this.slots,
     required this.days,
     required this.cells,
-    this.loading = false,
   });
 
   final List<_TimeSlotData> slots;
@@ -671,7 +672,6 @@ class _ScheduleGrid extends StatefulWidget {
   /// 7 列 × N 行的格子数据。`cells[dayIndex][slotIndex]` 是该格的课卡列表
   /// （0、1 或 2 张；2 张时纵向堆叠，需要对应 slot 的高度足以容纳）。
   final List<List<List<ScheduleCourseCardData>>> cells;
-  final bool loading;
 
   @override
   State<_ScheduleGrid> createState() => _ScheduleGridState();
@@ -708,9 +708,6 @@ class _ScheduleGridState extends State<_ScheduleGrid> {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    if (widget.loading) {
-      return const Center(child: AppLoadingIndicator());
-    }
 
     final daysWidth = ui(_kDayColWidth) * widget.days.length;
 

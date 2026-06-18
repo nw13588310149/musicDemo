@@ -32,6 +32,7 @@ import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dar
 import '../../../core/constants/app_assets.dart';
 import '../../../core/network/media_url.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/course_subject_tag.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/student_check_in_data.dart';
@@ -58,8 +59,10 @@ const Color _kPurpleSoftRing = Color(0xFFF7F2FF);
 const Color _kStatusGreen = Color(0xFF0CAC40);
 const Color _kStatusYellow = Color(0xFFDBEE49);
 const Color _kAttendRed = Color(0xFFFF323C);
-const Color _kCourseTagGreenBg = Color(0xFFDFFCF0);
 const Color _kEndedTagBg = Color(0xFFE6E9F1);
+
+/// 学生端是否展示「申请补签」入口（缺勤记录卡片右下角按钮）。
+const bool _kStudentMakeupSignEnabled = false;
 
 class StudentCheckInView extends ConsumerStatefulWidget {
   const StudentCheckInView({super.key, required this.onBack});
@@ -202,13 +205,11 @@ class _StudentCheckInViewState extends ConsumerState<StudentCheckInView>
         onBack: widget.onBack,
         onOpenHistory: _openHistoryDrawer,
       ),
-      // 首次加载只居中显示 loading，不渲染空骨架，也不叠加白色遮罩。
-      bodyScrollable: !checkIn.loading,
-      body: checkIn.loading
-          ? const Center(child: AppLoadingIndicator())
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+      body: PageInitLoadingShell(
+        loading: checkIn.loading,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
                 _StatsRow(stats: _statsFromSummary(checkIn.stats)),
                 SizedBox(height: ui(24)),
                 // 双列：今日课程 + 签到操作
@@ -322,27 +323,30 @@ class _StudentCheckInViewState extends ConsumerState<StudentCheckInView>
                 else
                   _RecentRecordsGrid(
                     records: recentRecords,
-                    onApplyMakeup: (record) {
-                      StudentSignRecordItem? item;
-                      for (final r in checkIn.recentRecords) {
-                        if (r.courseId == record.courseId) {
-                          item = r;
-                          break;
-                        }
-                      }
-                      if (item == null) {
-                        AppToast.show(
-                          context,
-                          '缺少课程信息，无法申请补签',
-                          type: AppToastType.error,
-                        );
-                        return;
-                      }
-                      unawaited(_applyMakeup(item));
-                    },
+                    onApplyMakeup: _kStudentMakeupSignEnabled
+                        ? (record) {
+                            StudentSignRecordItem? item;
+                            for (final r in checkIn.recentRecords) {
+                              if (r.courseId == record.courseId) {
+                                item = r;
+                                break;
+                              }
+                            }
+                            if (item == null) {
+                              AppToast.show(
+                                context,
+                                '缺少课程信息，无法申请补签',
+                                type: AppToastType.error,
+                              );
+                              return;
+                            }
+                            unawaited(_applyMakeup(item));
+                          }
+                        : null,
                   ),
               ],
             ),
+      ),
     );
   }
 
@@ -788,7 +792,7 @@ class _TodayClassCard extends StatelessWidget {
                           ),
                         ),
                         SizedBox(width: ui(4)),
-                        _CourseGreenTag(label: course.subjectName),
+                        CourseSubjectTag(name: course.subjectName),
                         SizedBox(width: ui(4)),
                         const _SmallClassTag(palette: _TagPalette.green),
                       ],
@@ -974,7 +978,7 @@ class _CheckInActionPanel extends StatelessWidget {
                                       ),
                                     ),
                                     SizedBox(width: ui(4)),
-                                    _CourseGreenTag(label: data.subjectName),
+                                    CourseSubjectTag(name: data.subjectName),
                                     SizedBox(width: ui(4)),
                                     const _SmallClassTag(
                                       palette: _TagPalette.green,
@@ -1644,7 +1648,7 @@ class _RecentRecordCard extends StatelessWidget {
             ),
           ),
           // 缺勤：右下角"申请补签"按钮（课表日期图标 + 按钮风格）
-          if (isAbsent) ...[
+          if (isAbsent && onApplyMakeup != null) ...[
             SizedBox(height: ui(10)),
             Align(
               alignment: Alignment.centerRight,
@@ -1783,36 +1787,6 @@ class _StatColumn extends StatelessWidget {
 // =============================================================================
 // 通用：tag、头像、段标题
 // =============================================================================
-
-class _CourseGreenTag extends StatelessWidget {
-  const _CourseGreenTag({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: ui(4), vertical: ui(2)),
-      decoration: BoxDecoration(
-        color: _kCourseTagGreenBg,
-        borderRadius: BorderRadius.circular(ui(4)),
-      ),
-      child: Text(
-        label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: ui(11),
-          color: _kStatusGreen,
-          fontFamily: 'PingFang SC',
-          fontWeight: AppFont.w400,
-          height: 14 / 11,
-        ),
-      ),
-    );
-  }
-}
 
 class _SmallClassTag extends StatelessWidget {
   const _SmallClassTag({required this.palette, this.label = '小课'});
@@ -2107,9 +2081,11 @@ class _CheckInHistoryDrawerState extends ConsumerState<_CheckInHistoryDrawer> {
               absent: absentCount,
             ),
             Expanded(
-              child: checkIn.loadingHistory
-                  ? const Center(child: AppLoadingIndicator())
-                  : filtered.isEmpty
+              child: PageInitLoadingShell(
+                loading: checkIn.loadingHistory && filtered.isEmpty,
+                child: checkIn.loadingHistory && filtered.isEmpty
+                    ? const SizedBox.shrink()
+                    : filtered.isEmpty
                   ? _HistoryEmpty(
                       message: checkIn.historyError.isNotEmpty
                           ? checkIn.historyError
@@ -2129,12 +2105,15 @@ class _CheckInHistoryDrawerState extends ConsumerState<_CheckInHistoryDrawer> {
                         final item = checkIn.historyRecords[i];
                         return _RecentRecordCard(
                           data: card,
-                          onApplyMakeup: card.status == _AttendanceStatus.absent
+                          onApplyMakeup:
+                              _kStudentMakeupSignEnabled &&
+                                  card.status == _AttendanceStatus.absent
                               ? () => widget.onApplyMakeup(item)
                               : null,
                         );
                       },
                     ),
+              ),
             ),
           ] else ...[
             _MakeupFilterBar(
@@ -2146,9 +2125,11 @@ class _CheckInHistoryDrawerState extends ConsumerState<_CheckInHistoryDrawer> {
             ),
             _MakeupSummaryBar(total: makeupItems.length),
             Expanded(
-              child: checkIn.loadingMakeup
-                  ? const Center(child: AppLoadingIndicator())
-                  : makeupItems.isEmpty
+              child: PageInitLoadingShell(
+                loading: checkIn.loadingMakeup && makeupItems.isEmpty,
+                child: checkIn.loadingMakeup && makeupItems.isEmpty
+                    ? const SizedBox.shrink()
+                    : makeupItems.isEmpty
                   ? _HistoryEmpty(
                       message: checkIn.makeupError.isNotEmpty
                           ? checkIn.makeupError
@@ -2171,6 +2152,7 @@ class _CheckInHistoryDrawerState extends ConsumerState<_CheckInHistoryDrawer> {
                         );
                       },
                     ),
+              ),
             ),
           ],
         ],

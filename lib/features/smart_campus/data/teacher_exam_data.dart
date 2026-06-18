@@ -41,7 +41,7 @@ class TeacherExamSubmission {
   /// 上传，老师打分前可逐个查看 / 播放。无 `submitFiles` 时回退到单个 [path]。
   final List<String> submitFiles;
 
-  /// 无任何提交资源（用于评分抽屉里决定是否提供「催交提醒」）。
+  /// 无任何提交资源（未交态：列表展示「催交」，不可打分）。
   bool get hasNoSubmission => path.trim().isEmpty && submitFiles.isEmpty;
 }
 
@@ -525,7 +525,7 @@ TeacherExamSubmission _submissionFromRow(
     _pickString(row, ['submitTime', 'uploadTime', 'createTime', 'updateTime']),
   );
   final action = switch (state) {
-    TeacherExamSubmissionState.missing => '录入',
+    TeacherExamSubmissionState.missing => '催交',
     TeacherExamSubmissionState.reviewed => '查看',
     TeacherExamSubmissionState.pending => '评分',
     TeacherExamSubmissionState.passed => '查看',

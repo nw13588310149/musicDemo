@@ -168,6 +168,7 @@ class SmartCampusState {
     this.hasUserSelectedRole = false,
     this.identityResolved = false,
     this.mainView = SmartCampusMainView.dashboard,
+    this.returnMainView,
     this.selectedMailboxMessageType = PrincipalMailboxMessageType.suggestion,
     this.isMailboxAnonymous = true,
     this.teacherScheduleMode = TeacherScheduleMode.view,
@@ -197,6 +198,11 @@ class SmartCampusState {
   /// 子 dashboard 不得提前发起业务接口。
   final bool identityResolved;
   final SmartCampusMainView mainView;
+
+  /// 子页返回目标：从「班级工作台」等中间页进入子路由时记录来源，
+  /// `backToDashboard()` 优先回到此处而非 dashboard。
+  final SmartCampusMainView? returnMainView;
+
   final PrincipalMailboxMessageType selectedMailboxMessageType;
   final bool isMailboxAnonymous;
   final TeacherScheduleMode teacherScheduleMode;
@@ -208,6 +214,8 @@ class SmartCampusState {
     bool? hasUserSelectedRole,
     bool? identityResolved,
     SmartCampusMainView? mainView,
+    SmartCampusMainView? returnMainView,
+    bool clearReturnMainView = false,
     PrincipalMailboxMessageType? selectedMailboxMessageType,
     bool? isMailboxAnonymous,
     TeacherScheduleMode? teacherScheduleMode,
@@ -218,6 +226,8 @@ class SmartCampusState {
       hasUserSelectedRole: hasUserSelectedRole ?? this.hasUserSelectedRole,
       identityResolved: identityResolved ?? this.identityResolved,
       mainView: mainView ?? this.mainView,
+      returnMainView:
+          clearReturnMainView ? null : (returnMainView ?? this.returnMainView),
       selectedMailboxMessageType:
           selectedMailboxMessageType ?? this.selectedMailboxMessageType,
       isMailboxAnonymous: isMailboxAnonymous ?? this.isMailboxAnonymous,

@@ -16,7 +16,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 
 import '../../../core/constants/app_assets.dart';
@@ -230,37 +229,34 @@ class _TeacherLeaveApprovalViewState
           children: [
             _Banner(onBack: widget.onBack),
             SizedBox(height: ui(16)),
-            MainContentLoadingShell(
-              loading: pageLoading,
-              preserveChrome: true,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _StatsRow(
-                    pendingCount: _pendingCount,
-                    reviewingCount: _reviewingCount,
-                    approvedCount: _approvedCount,
-                    rejectedCount: _rejectedCount,
-                  ),
-                  SizedBox(height: ui(16)),
-                  _TabsRow(
-                    current: _tab,
-                    onTap: (t) {
-                      if (_tab == t) return;
-                      setState(() => _tab = t);
-                      unawaited(_loadList());
-                    },
-                  ),
-                  SizedBox(height: ui(16)),
-                  if (!pageLoading)
-                    _CardsGrid(
-                      records: _requests,
-                      emptyMessage: _loadError ?? '暂无相关申请',
-                      onApprove: _onApprove,
-                      onReject: _onReject,
-                    ),
-                ],
-              ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _StatsRow(
+                  pendingCount: _pendingCount,
+                  reviewingCount: _reviewingCount,
+                  approvedCount: _approvedCount,
+                  rejectedCount: _rejectedCount,
+                ),
+                SizedBox(height: ui(16)),
+                _TabsRow(
+                  current: _tab,
+                  onTap: (t) {
+                    if (_tab == t) return;
+                    setState(() => _tab = t);
+                    unawaited(_loadList());
+                  },
+                ),
+                SizedBox(height: ui(16)),
+                _CardsGrid(
+                  records: _requests,
+                  emptyMessage: pageLoading
+                      ? ''
+                      : (_loadError ?? '暂无相关申请'),
+                  onApprove: _onApprove,
+                  onReject: _onReject,
+                ),
+              ],
             ),
           ],
         ),

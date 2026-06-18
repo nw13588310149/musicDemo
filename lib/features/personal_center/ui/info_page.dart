@@ -32,9 +32,10 @@ class InfoPage extends ConsumerWidget {
     return ShellPageSurface(
       padding: EdgeInsets.zero,
       color: const Color(0xFFEFF3FC),
-      child: state.loading && state.user.isEmpty
-          ? const Center(child: AppLoadingIndicator())
-          : _InfoCard(state: state, controller: controller),
+      child: PageInitLoadingShell(
+        loading: state.loading && state.user.isEmpty,
+        child: _InfoCard(state: state, controller: controller),
+      ),
     );
   }
 }

@@ -109,9 +109,11 @@ class _DormManagerHomeViewState extends ConsumerState<DormManagerHomeView> {
     final managerState = ref.watch(dormitoryManagerControllerProvider);
     final index = managerState.index;
 
-    return SingleChildScrollView(
-      padding: EdgeInsets.only(bottom: ui(20)),
-      child: Row(
+    return PageInitLoadingShell(
+      loading: managerState.loadingHome,
+      child: SingleChildScrollView(
+        padding: EdgeInsets.only(bottom: ui(20)),
+        child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
@@ -178,6 +180,7 @@ class _DormManagerHomeViewState extends ConsumerState<DormManagerHomeView> {
           ),
         ],
       ),
+      ),
     );
   }
 }
@@ -203,31 +206,31 @@ class _QuickAction {
 const _dormQuickActions = <_QuickAction>[
   _QuickAction(
     '按宿舍查寝',
-    'assets/images/smartCampus/home_actions/dorm_manager/dorm_check_by_room.png',
+    'assets/images/new/智慧校园/宿管端/按宿舍查寝.png',
   ),
   _QuickAction(
     '查寝历史',
-    'assets/images/smartCampus/home_actions/dorm_manager/dorm_history.png',
+    'assets/images/new/智慧校园/宿管端/查寝历史.png',
   ),
   _QuickAction(
     '打卡管理',
-    'assets/images/smartCampus/home_actions/dorm_manager/punch_management.png',
+    'assets/images/new/智慧校园/宿管端/打卡管理.png',
   ),
   _QuickAction(
     '宿管请假',
-    'assets/images/smartCampus/home_actions/dorm_manager/dorm_leave.png',
+    'assets/images/new/智慧校园/宿管端/宿管请假.png',
   ),
   _QuickAction(
     '校圈',
-    'assets/images/smartCampus/home_actions/dorm_manager/school_circle.png',
+    'assets/images/new/智慧校园/宿管端/校圈.png',
   ),
   _QuickAction(
     '群聊',
-    'assets/images/smartCampus/home_actions/dorm_manager/group_chat.png',
+    'assets/images/new/智慧校园/宿管端/群聊.png',
   ),
   _QuickAction(
     '校长信箱',
-    'assets/images/smartCampus/home_actions/dorm_manager/principal_mailbox.png',
+    'assets/images/new/智慧校园/宿管端/校长信箱.png',
   ),
 ];
 

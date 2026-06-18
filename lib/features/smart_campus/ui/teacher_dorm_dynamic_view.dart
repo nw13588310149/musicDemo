@@ -18,8 +18,7 @@
 //   3. Tabs row（44 高）：白底圆角 8 + 2 个 pill：本班查纪 / 补卡审核
 //      （后者带 22×15 #F04545 红底徽章 "10+"）；右侧搜索框 324×44。
 //   4. Sub-toolbar：「全部异常记录 N 条」(N 紫色) + 全部 / 异常 toggle。
-//   5. 卡片网格 3 列（每张 312×width，padding 12，背景 207deg #FAF0FF→
-//      white 渐变，圆角 16，gap 16）：
+//   5. 卡片网格 3 列（每张 312×width，padding 12，白底，圆角 16，gap 16）：
 //      · 学生口径卡：头像 40 + 姓名 14/500 + 学号 12/#B6B5BB + "查寝"
 //        12/#6D6B75 + 状态徽章 16 高（正常 #DAD2FF/#8741FF / 未打卡
 //        #FEE4E8/#FF323C / 迟到 #DBE2FF/#325BFF）；下行 宿舍 12 + 日期；
@@ -250,7 +249,6 @@ class _TeacherDormDynamicViewState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _Banner(onBack: widget.onBack),
-            if (state.loading) const LinearProgressIndicator(minHeight: 2),
             SizedBox(height: ui(12)),
             _StatsRow(
               residentCount: state.overview.enrolledDormCount != 0
@@ -816,14 +814,27 @@ class _FilterToolbar extends StatelessWidget {
           ),
         ),
         SizedBox(width: ui(12)),
-        for (var i = 0; i < _FilterTab.values.length; i++) ...[
-          if (i != 0) SizedBox(width: ui(12)),
-          _FilterPill(
-            tab: _FilterTab.values[i],
-            active: _FilterTab.values[i] == current,
-            onTap: () => onTap(_FilterTab.values[i]),
+        Container(
+          padding: EdgeInsets.fromLTRB(ui(4), ui(4), ui(3), ui(4)),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(ui(8)),
+            border: Border.all(color: _kBorderSoft, width: 1),
           ),
-        ],
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < _FilterTab.values.length; i++) ...[
+                if (i != 0) SizedBox(width: ui(12)),
+                _FilterPill(
+                  tab: _FilterTab.values[i],
+                  active: _FilterTab.values[i] == current,
+                  onTap: () => onTap(_FilterTab.values[i]),
+                ),
+              ],
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -845,21 +856,20 @@ class _FilterPill extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(ui(8)),
+      borderRadius: BorderRadius.circular(ui(6)),
       child: Container(
         padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(7)),
         decoration: BoxDecoration(
-          color: active ? _kTextDark : Colors.white,
-          borderRadius: BorderRadius.circular(ui(8)),
+          color: active ? _kTextDark : Colors.transparent,
+          borderRadius: BorderRadius.circular(ui(active ? 6 : 8)),
         ),
-        alignment: Alignment.center,
         child: Text(
           tab.label,
           style: TextStyle(
             fontSize: ui(14),
-            color: active ? Colors.white : _kTextDark,
+            color: active ? Colors.white : _kTextSecondary,
             fontFamily: 'PingFang SC',
-            fontWeight: AppFont.w400,
+            fontWeight: AppFont.w500,
             height: 1.2,
           ),
         ),
@@ -929,11 +939,7 @@ class _CardsGrid extends StatelessWidget {
 // —— 卡片背景（共用）—————————————————————————————————————————————
 
 BoxDecoration _cardDecoration(double radius) => BoxDecoration(
-  gradient: const LinearGradient(
-    begin: Alignment.topRight,
-    end: Alignment.bottomLeft,
-    colors: [Color(0xFFFAF0FF), Colors.white],
-  ),
+  color: Colors.white,
   borderRadius: BorderRadius.circular(radius),
 );
 
@@ -1481,24 +1487,27 @@ class _PunchAuditCard extends StatelessWidget {
                                     height: 1.2,
                                   ),
                                 ),
-                                SizedBox(width: ui(4)),
-                                Text(
-                                  record.studentNo,
-                                  style: TextStyle(
-                                    fontSize: ui(12),
-                                    color: _kTextHint,
-                                    fontFamily: 'PingFang SC',
-                                    fontWeight: AppFont.w400,
-                                    height: 1.2,
+                                if (record.studentNo.isNotEmpty &&
+                                    record.studentNo != '--') ...[
+                                  SizedBox(width: ui(4)),
+                                  Text(
+                                    record.studentNo,
+                                    style: TextStyle(
+                                      fontSize: ui(12),
+                                      color: _kTextHint,
+                                      fontFamily: 'PingFang SC',
+                                      fontWeight: AppFont.w400,
+                                      height: 1.2,
+                                    ),
                                   ),
-                                ),
+                                ],
                               ],
                             ),
                           ),
                         ),
                         SizedBox(width: ui(8)),
                         Text(
-                          '查寝',
+                          '补卡',
                           style: TextStyle(
                             fontSize: ui(12),
                             color: _kTextSecondary,
@@ -1546,78 +1555,122 @@ class _PunchAuditCard extends StatelessWidget {
               ),
             ],
           ),
-          SizedBox(height: ui(10)),
-          // 说明：xxxx —— 起头"说明："为灰色 hint，正文为深色。
+          SizedBox(height: ui(12)),
+          // 补卡说明：与时间块同款灰底圆角信息块，限制 2 行保持卡片等高。
+          _ReasonBlock(reason: record.reason),
+          SizedBox(height: ui(12)),
+          // 底部操作：左侧"查看详情"链接；待审核时右侧显示 驳回 / 通过，
+          // 已通过/已驳回时仅保留详情链接，使各状态卡片底部高度一致。
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                '说明：',
-                style: TextStyle(
-                  fontSize: ui(12),
-                  color: _kTextHint,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w400,
-                  height: 1.6,
-                ),
-              ),
-              Expanded(
-                child: Text(
-                  record.reason,
-                  style: TextStyle(
-                    fontSize: ui(12),
-                    color: _kTextDark,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w400,
-                    height: 1.6,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: ui(10)),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton(
-              onPressed: onDetail,
-              style: TextButton.styleFrom(
-                padding: EdgeInsets.zero,
-                minimumSize: Size(ui(48), ui(28)),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              child: Text(
-                '查看详情',
-                style: TextStyle(
-                  fontSize: ui(12),
-                  color: _kPurple,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w500,
-                ),
-              ),
-            ),
-          ),
-          // 仅"待审核"显示通过/驳回；已通过/已驳回时按钮自动隐藏。
-          if (isPending)
-            Row(
-              children: [
-                Expanded(
-                  child: _PunchActionButton(
-                    label: '通过',
-                    isPrimary: true,
-                    onTap: onApprove,
-                  ),
-                ),
-                SizedBox(width: ui(12)),
-                Expanded(
+              _DetailLink(onTap: onDetail),
+              const Spacer(),
+              if (isPending) ...[
+                SizedBox(
+                  width: ui(72),
                   child: _PunchActionButton(
                     label: '驳回',
                     isPrimary: false,
                     onTap: onReject,
                   ),
                 ),
+                SizedBox(width: ui(12)),
+                SizedBox(
+                  width: ui(72),
+                  child: _PunchActionButton(
+                    label: '通过',
+                    isPrimary: true,
+                    onTap: onApprove,
+                  ),
+                ),
               ],
-            ),
+            ],
+          ),
         ],
+      ),
+    );
+  }
+}
+
+// 补卡说明块：复用学生卡灰底块视觉语言（#F5F6FA + 圆角 8）。
+class _ReasonBlock extends StatelessWidget {
+  const _ReasonBlock({required this.reason});
+
+  final String reason;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final text = reason.trim().isEmpty ? '无' : reason.trim();
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(10)),
+      decoration: BoxDecoration(
+        color: _kCardGreyBg,
+        borderRadius: BorderRadius.circular(ui(8)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '补卡说明',
+            style: TextStyle(
+              fontSize: ui(12),
+              color: _kTextHint,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w400,
+              height: 1.2,
+            ),
+          ),
+          SizedBox(height: ui(6)),
+          Text(
+            text,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: ui(12),
+              color: _kTextDark,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w400,
+              height: 1.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// "查看详情"幽灵链接：紫字 + 右箭头，无边框。
+class _DetailLink extends StatelessWidget {
+  const _DetailLink({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(ui(6)),
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: ui(4), vertical: ui(8)),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '查看详情',
+              style: TextStyle(
+                fontSize: ui(12),
+                color: _kPurple,
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w500,
+                height: 1.2,
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, size: ui(14), color: _kPurple),
+          ],
+        ),
       ),
     );
   }
@@ -1653,7 +1706,7 @@ class _PunchAuditStatusBadge extends StatelessWidget {
   }
 }
 
-// 通过/驳回按钮：通过为紫渐变实底白字，驳回为白底深色字 + 浅边框。
+// 通过/驳回按钮：通过为紫渐变实底白字，驳回为白底次级字 + 浅边框。
 class _PunchActionButton extends StatelessWidget {
   const _PunchActionButton({
     required this.label,
@@ -1672,7 +1725,7 @@ class _PunchActionButton extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(ui(8)),
       child: Container(
-        height: ui(40),
+        height: ui(36),
         alignment: Alignment.center,
         decoration: BoxDecoration(
           gradient: isPrimary
@@ -1684,15 +1737,15 @@ class _PunchActionButton extends StatelessWidget {
               : null,
           color: isPrimary ? null : Colors.white,
           borderRadius: BorderRadius.circular(ui(8)),
-          border: Border.all(color: _kBorderSoft, width: 1),
+          border: isPrimary ? null : Border.all(color: _kBorderSoft, width: 1),
         ),
         child: Text(
           label,
           style: TextStyle(
-            fontSize: ui(14),
-            color: isPrimary ? Colors.white : _kTextDark,
+            fontSize: ui(13),
+            color: isPrimary ? Colors.white : _kTextSecondary,
             fontFamily: 'PingFang SC',
-            fontWeight: AppFont.w400,
+            fontWeight: AppFont.w500,
             height: 1.2,
           ),
         ),

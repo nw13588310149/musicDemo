@@ -187,11 +187,13 @@ class _DormManagerCheckByRoomViewState
     final rooms = state.roomChecks;
     return Container(
       color: _kPageBg,
-      child: SingleChildScrollView(
-        padding: EdgeInsets.only(bottom: ui(20)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      child: PageInitLoadingShell(
+        loading: state.loadingRoomChecks && rooms.isEmpty,
+        child: SingleChildScrollView(
+          padding: EdgeInsets.only(bottom: ui(20)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
             _Banner(onBack: widget.onBack),
             SizedBox(height: ui(16)),
             _FilterRow(
@@ -226,11 +228,8 @@ class _DormManagerCheckByRoomViewState
               absent: stat.notCheckedCount,
             ),
             SizedBox(height: ui(16)),
-            if (state.loadingRoomChecks)
-              Padding(
-                padding: EdgeInsets.symmetric(vertical: ui(40)),
-                child: const Center(child: AppLoadingIndicator()),
-              )
+            if (state.loadingRoomChecks && rooms.isEmpty)
+              const SizedBox.shrink()
             else if (state.roomCheckError.isNotEmpty)
               _LoadErrorHint(message: state.roomCheckError, onRetry: _reloadAll)
             else if (rooms.isEmpty)
@@ -250,6 +249,7 @@ class _DormManagerCheckByRoomViewState
                 ),
               ],
           ],
+        ),
         ),
       ),
     );

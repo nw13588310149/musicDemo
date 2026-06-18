@@ -52,6 +52,7 @@ import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_assets.dart';
+import '../../../core/widgets/app_asset_graphic.dart';
 import '../../../core/network/api_response.dart';
 import '../../../core/network/media_url.dart';
 import '../../../core/network/upload_result.dart';
@@ -67,6 +68,8 @@ import '../../../core/widgets/scaled_dialog.dart';
 import '../../school/data/school_repository.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/teacher_repository.dart';
+import 'widgets/schedule_course_card.dart';
+import 'widgets/smart_campus_page_banner.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // ---- 日期时间（与后端约定 `yyyy-MM-dd HH:mm:ss`）----------------------------
@@ -84,6 +87,13 @@ String _formatYmdHms(DateTime d) {
       '${d.month.toString().padLeft(2, '0')}-'
       '${d.day.toString().padLeft(2, '0')} '
       '${d.hour.toString().padLeft(2, '0')}:'
+      '${d.minute.toString().padLeft(2, '0')}:'
+      '${d.second.toString().padLeft(2, '0')}';
+}
+
+/// 格式：`17:11:00`（作业详情学生提交时间列）
+String _formatHms(DateTime d) {
+  return '${d.hour.toString().padLeft(2, '0')}:'
       '${d.minute.toString().padLeft(2, '0')}:'
       '${d.second.toString().padLeft(2, '0')}';
 }
@@ -214,6 +224,7 @@ Map<dynamic, dynamic> _flattenHomeworkPayload(Map<dynamic, dynamic> m) {
 }
 
 // ---- 配色 -------------------------------------------------------------------
+const Color _kPageBg = Color(0xFFEFF3FC);
 const Color _kCardBg = Colors.white;
 const Color _kPageGrey = Color(0xFFF5F6FA);
 const Color _kPickGrey = Color(0xFFF4F4FF);
@@ -226,6 +237,9 @@ const Color _kTextMuted = Color(0xFF71717A);
 const Color _kPurple = Color(0xFF8741FF);
 const Color _kPurpleEnd = Color(0xFFB68EFF);
 const Color _kPurpleStart = Color(0xFF8640FF);
+const Color _kPurpleLight = Color(0xFFB48BFF);
+const Color _kRecordRed = Color(0xFFFF323C);
+const Color _kRecordRedLight = Color(0xFFFF7A7A);
 const Color _kOrange = Color(0xFFFF6A00);
 const Color _kOrangeBg = Color(0xFFFFEDD3);
 const Color _kGreen = Color(0xFF12CE51);
@@ -311,7 +325,9 @@ class _Submission {
         ? submitRaw
         : (m['createTime']?.toString() ?? '');
     final parsed = _tryParseFlexibleDateTime(raw);
-    final uploadAt = parsed != null ? _formatYmdHms(parsed) : (raw.isNotEmpty ? raw : '—');
+    final uploadAt = parsed != null
+        ? _formatHms(parsed)
+        : (raw.isNotEmpty ? raw : '—');
 
     final extForMedium = fromTop('expectedExt').isNotEmpty ? fromTop('expectedExt') : expectedExt;
     final mediumLabel = _expectedExtDisplay(extForMedium);
@@ -572,7 +588,6 @@ class _TeacherHomeworkReviewViewState
   List<Map> _classList = [];
 
   List<_HomeworkItem> _all = [];
-  bool _loadingList = true;
 
   _HomeworkItem? _activeDetail;
   bool _loadingDetail = false;
@@ -581,7 +596,6 @@ class _TeacherHomeworkReviewViewState
   final Map<int, String> _subjectNameById = <int, String>{};
 
   _HomeworkStats? _stats;
-  bool _loadingStats = false;
 
   @override
   void initState() {
@@ -591,7 +605,10 @@ class _TeacherHomeworkReviewViewState
 
   Future<void> _init() async {
     await _loadClassList();
-    await Future.wait([_loadHomeworkList(), _loadStats()]);
+    await Future.wait([
+      _loadHomeworkList(),
+      _loadStats(),
+    ]);
   }
 
   Future<void> _loadClassList() async {
@@ -627,9 +644,8 @@ class _TeacherHomeworkReviewViewState
     });
   }
 
-  Future<void> _loadHomeworkList() async {
+  Future<void> _loadHomeworkList({bool silent = false}) async {
     if (!mounted) return;
-    setState(() => _loadingList = true);
     await _loadSubjectNameCatalog(_classId);
     final Object statusParam = switch (_statusTab) {
       0 => '',
@@ -652,18 +668,18 @@ class _TeacherHomeworkReviewViewState
           _all = items;
           _activeHomeworkIdx = 0;
           _activeDetail = null;
-          _loadingList = false;
         });
-        if (_all.isNotEmpty) await _loadHomeworkDetail(_all[0].id);
+        if (_all.isNotEmpty) {
+          await _loadHomeworkDetail(_all[0].id, silent: silent);
+        }
         return;
       }
     }
-    if (mounted) setState(() => _loadingList = false);
   }
 
-  Future<void> _loadHomeworkDetail(String id) async {
+  Future<void> _loadHomeworkDetail(String id, {bool silent = false}) async {
     if (!mounted || id.isEmpty) return;
-    setState(() => _loadingDetail = true);
+    if (!silent) setState(() => _loadingDetail = true);
     final res = await ref
         .read(teacherRepositoryProvider)
         .teacherHomeworkDetail(id: id);
@@ -697,7 +713,6 @@ class _TeacherHomeworkReviewViewState
 
   Future<void> _loadStats() async {
     if (!mounted) return;
-    setState(() => _loadingStats = true);
     final now = DateTime.now();
     DateTime begin;
     switch (_rangeTab) {
@@ -717,10 +732,7 @@ class _TeacherHomeworkReviewViewState
     if (res.isSuccess && res.data is Map) {
       setState(() {
         _stats = _HomeworkStats.fromMap(res.data as Map);
-        _loadingStats = false;
       });
-    } else {
-      setState(() => _loadingStats = false);
     }
   }
 
@@ -763,89 +775,70 @@ class _TeacherHomeworkReviewViewState
           .map((m) => m['name']?.toString() ?? '')
           .where((s) => s.isNotEmpty),
     ];
-    final initialLoading =
-        (_loadingList && _all.isEmpty) ||
-        (_loadingStats && _stats == null && _loadingList);
 
-    return SingleChildScrollView(
-      padding: EdgeInsets.only(bottom: ui(24)),
-      child: Column(
+    return SmartCampusSecondaryPageShell(
+      backgroundColor: _kPageBg,
+      header: _ReviewBanner(
+        onBack: widget.onBack,
+        onOpenHistory: () => _openHistoryDrawer(),
+        onOpenPublish: () => _openPublishDrawer(),
+      ),
+      body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _ReviewBanner(
-            onBack: widget.onBack,
-            onOpenHistory: () => _openHistoryDrawer(),
-            onOpenPublish: () => _openPublishDrawer(),
+          _StatusTabsRow(
+            tabs: _kStatusTabs,
+            activeIdx: _statusTab,
+            onTap: (i) {
+              setState(() => _statusTab = i);
+              _loadHomeworkList();
+            },
+          ),
+          SizedBox(height: ui(12)),
+          _StatsPanel(
+            classFilter: _classFilter,
+            classOptions: classNames,
+            onClassChanged: (v) {
+              Map? found;
+              for (final m in _classList) {
+                if (m['name']?.toString() == v) {
+                  found = m;
+                  break;
+                }
+              }
+              setState(() {
+                _classFilter = v;
+                _classId = found != null
+                    ? (found['id']?.toString() ??
+                          found['classId']?.toString() ??
+                          '0')
+                    : '0';
+              });
+              _loadHomeworkList(silent: true);
+              _loadStats();
+            },
+            rangeIdx: _rangeTab,
+            onRangeChanged: (i) {
+              setState(() => _rangeTab = i);
+              _loadStats();
+            },
+            stats: _stats,
           ),
           SizedBox(height: ui(16)),
-          MainContentLoadingShell(
-            loading: initialLoading,
-            preserveChrome: true,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _StatusTabsRow(
-                  tabs: _kStatusTabs,
-                  activeIdx: _statusTab,
-                  onTap: (i) {
-                    setState(() => _statusTab = i);
-                    _loadHomeworkList();
-                  },
-                ),
-                SizedBox(height: ui(12)),
-                _StatsPanel(
-                  classFilter: _classFilter,
-                  classOptions: classNames,
-                  onClassChanged: (v) {
-                    Map? found;
-                    for (final m in _classList) {
-                      if (m['name']?.toString() == v) {
-                        found = m;
-                        break;
-                      }
-                    }
-                    setState(() {
-                      _classFilter = v;
-                      _classId = found != null
-                          ? (found['id']?.toString() ??
-                                found['classId']?.toString() ??
-                                '0')
-                          : '0';
-                    });
-                    _loadHomeworkList();
-                    _loadStats();
-                  },
-                  rangeIdx: _rangeTab,
-                  onRangeChanged: (i) {
-                    setState(() => _rangeTab = i);
-                    _loadStats();
-                  },
-                  stats: _stats,
-                  loadingStats: initialLoading ? false : _loadingStats,
-                ),
-                SizedBox(height: ui(16)),
-                if (_loadingList && !initialLoading)
-                  Center(
-                    child: Padding(
-                      padding: EdgeInsets.only(top: ui(60)),
-                      child: AppLoadingIndicator(),
-                    ),
-                  )
-                else if (_all.isEmpty)
-                  Center(
-                    child: Padding(
-                      padding: EdgeInsets.only(top: ui(60)),
-                      child: Text(
-                        '暂无作业数据',
-                        style: TextStyle(
-                          color: _kTextHint,
-                          fontSize: ui(14),
-                        ),
+          _all.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: EdgeInsets.only(top: ui(60)),
+                    child: Text(
+                      '暂无作业数据',
+                      style: TextStyle(
+                        color: _kTextHint,
+                        fontSize: ui(14),
                       ),
                     ),
-                  )
-                else
-                  _BodyRow(
+                  ),
+                )
+              : _BodyRow(
                     items: _all,
                     activeIdx: _activeHomeworkIdx,
                     onSelect: (i) {
@@ -862,9 +855,6 @@ class _TeacherHomeworkReviewViewState
                     onOpenReview: (s) => _openReviewDrawer(active, s),
                     onDelete: (item) => _deleteHomework(item),
                   ),
-              ],
-            ),
-          ),
         ],
       ),
     );
@@ -1047,13 +1037,13 @@ class _ReviewBanner extends StatelessWidget {
             child: Row(
               children: [
                 _BannerActionButton(
-                  icon: Icons.notifications_none_rounded,
+                  assetIcon: AppAssets.teacherHomeworkHistoryIcon,
                   label: '历史作业',
                   onTap: onOpenHistory,
                 ),
                 SizedBox(width: ui(8)),
                 _BannerActionButton(
-                  icon: Icons.edit_note_rounded,
+                  assetIcon: AppAssets.teacherHomeworkPublishIcon,
                   label: '发布作业',
                   onTap: onOpenPublish,
                 ),
@@ -1068,12 +1058,12 @@ class _ReviewBanner extends StatelessWidget {
 
 class _BannerActionButton extends StatelessWidget {
   const _BannerActionButton({
-    required this.icon,
+    required this.assetIcon,
     required this.label,
     required this.onTap,
   });
 
-  final IconData icon;
+  final String assetIcon;
   final String label;
   final VoidCallback onTap;
 
@@ -1094,7 +1084,12 @@ class _BannerActionButton extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: ui(16), color: _kPurple),
+            AppAssetGraphic(
+              assetIcon,
+              width: ui(16),
+              height: ui(16),
+              fit: BoxFit.contain,
+            ),
             SizedBox(width: ui(4)),
             Text(
               label,
@@ -1211,7 +1206,6 @@ class _StatsPanel extends StatelessWidget {
     required this.rangeIdx,
     required this.onRangeChanged,
     this.stats,
-    this.loadingStats = false,
   });
 
   final String classFilter;
@@ -1220,7 +1214,6 @@ class _StatsPanel extends StatelessWidget {
   final int rangeIdx;
   final ValueChanged<int> onRangeChanged;
   final _HomeworkStats? stats;
-  final bool loadingStats;
 
   @override
   Widget build(BuildContext context) {
@@ -1275,22 +1268,14 @@ class _StatsPanel extends StatelessWidget {
             ],
           ),
           SizedBox(height: ui(12)),
-          if (loadingStats)
-            Center(
-              child: Padding(
-                padding: EdgeInsets.symmetric(vertical: ui(8)),
-                child: AppLoadingIndicator(),
-              ),
-            )
-          else
-            Row(
-              children: [
-                Expanded(
-                  child: _StatCell(
-                    value: '${s?.pendingCount ?? 0}',
-                    label: '待批改人次',
-                  ),
+          Row(
+            children: [
+              Expanded(
+                child: _StatCell(
+                  value: '${s?.pendingCount ?? 0}',
+                  label: '待批改人次',
                 ),
+              ),
                 _StatGap(),
                 Expanded(
                   child: _StatCell(
@@ -1538,98 +1523,90 @@ class _HomeworkListCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final bg = active ? _kPickGrey : _kPageGrey;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(ui(12)),
-      child: Stack(
-        children: [
-          Container(
-            constraints: BoxConstraints(minHeight: ui(104)),
-            padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(10)),
-            decoration: BoxDecoration(
-              color: bg,
-              borderRadius: BorderRadius.circular(ui(12)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '截止 ${item.deadline}',
-                  style: TextStyle(
-                    fontSize: ui(10),
-                    color: _kTextHint,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w400,
-                    height: 1.2,
+    final card = Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(ui(12)),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              width: double.infinity,
+              constraints: BoxConstraints(minHeight: ui(104)),
+              padding:
+                  EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(10)),
+              decoration: BoxDecoration(
+                color: bg,
+                borderRadius: BorderRadius.circular(ui(12)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '截止 ${item.deadline}',
+                    style: TextStyle(
+                      fontSize: ui(10),
+                      color: _kTextHint,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w400,
+                      height: 1.2,
+                    ),
                   ),
-                ),
-                SizedBox(height: ui(4)),
-                Text(
-                  item.classLabel,
-                  style: TextStyle(
-                    fontSize: ui(12),
-                    color: _kTextSecondary,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w400,
-                    height: 1.2,
+                  SizedBox(height: ui(4)),
+                  Text(
+                    item.classLabel,
+                    style: TextStyle(
+                      fontSize: ui(12),
+                      color: _kTextSecondary,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w400,
+                      height: 1.2,
+                    ),
                   ),
-                ),
-                SizedBox(height: ui(6)),
-                Row(
-                  children: [
-                    _SubjectTag(label: subjectDisplay),
-                    SizedBox(width: ui(4)),
-                    if (item.pendingReview > 0)
-                      _PendingReviewTag(count: item.pendingReview),
-                  ],
-                ),
-                SizedBox(height: ui(8)),
-                Text(
-                  item.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: ui(16),
-                    color: _kTextBlack,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w500,
-                    height: 1.2,
+                  SizedBox(height: ui(6)),
+                  Row(
+                    children: [
+                      _SubjectTag(label: subjectDisplay),
+                      SizedBox(width: ui(4)),
+                      if (item.pendingReview > 0)
+                        _PendingReviewTag(count: item.pendingReview),
+                    ],
                   ),
-                ),
-              ],
-            ),
-          ),
-          Positioned(
-            right: 0,
-            top: 0,
-            child: _CornerLabel(label: item.cornerLabel, kind: item.cornerKind),
-          ),
-          if (onDelete != null)
-            Positioned(
-              right: ui(4),
-              bottom: ui(4),
-              child: InkWell(
-                onTap: onDelete,
-                borderRadius: BorderRadius.circular(ui(6)),
-                child: Container(
-                  width: ui(22),
-                  height: ui(22),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.80),
-                    borderRadius: BorderRadius.circular(ui(6)),
+                  SizedBox(height: ui(8)),
+                  Text(
+                    item.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: ui(16),
+                      color: _kTextBlack,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w500,
+                      height: 1.2,
+                    ),
                   ),
-                  child: Icon(
-                    Icons.delete_outline_rounded,
-                    size: ui(14),
-                    color: _kTextSecondary,
-                  ),
-                ),
+                ],
               ),
             ),
-        ],
+            Positioned(
+              right: 0,
+              top: 0,
+              child: _CornerLabel(label: item.cornerLabel, kind: item.cornerKind),
+            ),
+          ],
+        ),
       ),
+    );
+
+    if (onDelete == null) return card;
+
+    return ScheduleCourseSwipeDelete(
+      widthDesign: null,
+      borderRadiusDesign: 12,
+      onDelete: onDelete!,
+      child: card,
     );
   }
 }
@@ -3104,13 +3081,20 @@ class _ReviewDrawerState extends ConsumerState<_ReviewDrawer> {
       final merged = _mergeStudentHomeworkDetailForReview(
         res.data as Map<dynamic, dynamic>,
       );
-      // 回填已发布的语音点评（teacherParam1=路径 / teacherParam2=时长秒）。
       final existingVoice = merged['teacherParam1']?.toString().trim() ?? '';
       final existingDur =
           int.tryParse(merged['teacherParam2']?.toString().trim() ?? '') ?? 0;
+      final score = int.tryParse(merged['score']?.toString() ?? '');
+      final feedback = merged['feedback']?.toString();
       setState(() {
         _detailExtra = merged;
-        if (_voicePath.isEmpty && existingVoice.isNotEmpty) {
+        if (score != null) {
+          _scoreCtrl.text = '$score';
+        }
+        if (feedback != null) {
+          _commentCtrl.text = feedback;
+        }
+        if (existingVoice.isNotEmpty) {
           _voicePath = existingVoice;
           _voiceDuration = existingDur;
         }
@@ -3215,9 +3199,19 @@ class _ReviewDrawerState extends ConsumerState<_ReviewDrawer> {
     return '${bytes}B';
   }
 
+  bool get _isReviewed {
+    if (widget.submission.state == _SubmissionState.reviewed) return true;
+    final statusRaw = _detailExtra['status'];
+    final statusInt = statusRaw is int
+        ? statusRaw
+        : int.tryParse(statusRaw?.toString() ?? '');
+    return statusInt == 2;
+  }
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final bottomPad = _isReviewed ? ui(20) : ui(80);
 
     return Material(
       color: Colors.white,
@@ -3227,7 +3221,7 @@ class _ReviewDrawerState extends ConsumerState<_ReviewDrawer> {
         child: Stack(
           children: [
             Padding(
-              padding: EdgeInsets.fromLTRB(ui(20), ui(20), ui(20), ui(80)),
+              padding: EdgeInsets.fromLTRB(ui(20), ui(20), ui(20), bottomPad),
               child: SingleChildScrollView(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -3329,7 +3323,10 @@ class _ReviewDrawerState extends ConsumerState<_ReviewDrawer> {
                     SizedBox(height: ui(16)),
                     _FieldLabel('分数/100'),
                     SizedBox(height: ui(8)),
-                    _ScoreInput(controller: _scoreCtrl),
+                    _ScoreInput(
+                      controller: _scoreCtrl,
+                      readOnly: _isReviewed,
+                    ),
                     SizedBox(height: ui(16)),
                     _FieldLabel('点评'),
                     SizedBox(height: ui(8)),
@@ -3337,14 +3334,18 @@ class _ReviewDrawerState extends ConsumerState<_ReviewDrawer> {
                       hint: '请输入对该次作业的点评内容…',
                       height: ui(100),
                       controller: _commentCtrl,
+                      readOnly: _isReviewed,
                     ),
                     SizedBox(height: ui(16)),
                     _FieldLabel('语音点评'),
                     SizedBox(height: ui(8)),
                     _VoiceCommentField(
-                      key: ValueKey(widget.submission.id),
+                      key: ValueKey(
+                        'voice-${widget.submission.id}-$_voicePath-$_voiceDuration',
+                      ),
                       initialPath: _voicePath,
                       initialDuration: _voiceDuration,
+                      readOnly: _isReviewed,
                       onUpload: (bytes, filename) async {
                         final res = await ref
                             .read(teacherRepositoryProvider)
@@ -3367,16 +3368,17 @@ class _ReviewDrawerState extends ConsumerState<_ReviewDrawer> {
                 ),
               ),
             ),
-            Positioned(
-              left: ui(20),
-              right: ui(20),
-              bottom: ui(20),
-              child: _PrimaryGradientButton(
-                icon: Icons.check_circle_outline_rounded,
-                label: _submitting ? '提交中…' : '发布批改',
-                onTap: _submitting ? null : _submitReview,
+            if (!_isReviewed)
+              Positioned(
+                left: ui(20),
+                right: ui(20),
+                bottom: ui(20),
+                child: _PrimaryGradientButton(
+                  icon: Icons.check_circle_outline_rounded,
+                  label: _submitting ? '提交中…' : '发布批改',
+                  onTap: _submitting ? null : _submitReview,
+                ),
               ),
-            ),
           ],
         ),
       ),
@@ -3387,14 +3389,9 @@ class _ReviewDrawerState extends ConsumerState<_ReviewDrawer> {
 // =============================================================================
 // 语音点评录制区（教师批改抽屉内）
 //
-// 三态：
-//   idle      —— "按住录制语音点评" 按钮（长按录音）。
-//   recording —— 红点 + 计秒 + 实时波形；松手停止并上传。
-//   uploading —— loading；上传中。
-//   ready     —— 可播放气泡 [HomeworkVoiceCommentBubble] + 重录 / 删除。
-//
-// 录制结束后立即上传，拿到相对路径后通过 [onChanged] 回传给抽屉，
-// 抽屉在「发布批改」时写入 teacherParam1/2。
+// 交互与群聊「按住说话」一致：长按录制、松手上传、上滑取消；
+// 录制中显示浮层波形 + 「松开发送 上滑取消」提示。
+// 已有语音（teacherParam1/2）回显为可播放气泡，可重录 / 删除。
 // =============================================================================
 
 typedef _VoiceUploader = Future<String?> Function(
@@ -3411,12 +3408,14 @@ class _VoiceCommentField extends StatefulWidget {
     required this.initialDuration,
     required this.onUpload,
     required this.onChanged,
+    this.readOnly = false,
   });
 
   final String initialPath;
   final int initialDuration;
   final _VoiceUploader onUpload;
   final void Function(String path, int duration) onChanged;
+  final bool readOnly;
 
   @override
   State<_VoiceCommentField> createState() => _VoiceCommentFieldState();
@@ -3424,16 +3423,19 @@ class _VoiceCommentField extends StatefulWidget {
 
 class _VoiceCommentFieldState extends State<_VoiceCommentField> {
   static const int _kMaxSeconds = 120;
+  static const int _kLiveWaveLen = 56;
+  static const double _kCancelThresholdY = -56;
 
   RecordingCapture? _capture;
   StreamSubscription<double>? _ampSub;
   Timer? _timer;
 
   _VoicePhase _phase = _VoicePhase.idle;
+  bool _willCancel = false;
   int _seconds = 0;
   String _path = '';
   int _duration = 0;
-  List<double> _wave = const [];
+  List<double> _liveWaveform = List<double>.filled(_kLiveWaveLen, 0.18);
 
   @override
   void initState() {
@@ -3453,7 +3455,12 @@ class _VoiceCommentFieldState extends State<_VoiceCommentField> {
     super.dispose();
   }
 
-  Future<void> _startRecord() async {
+  double _normalizeAmplitude(double amp) {
+    if (amp >= 0.0 && amp <= 1.0) return amp.clamp(0.1, 1.0);
+    return ((amp + 50.0) / 50.0).clamp(0.1, 1.0);
+  }
+
+  Future<void> _onRecordPressStart() async {
     if (_phase == _VoicePhase.recording || _phase == _VoicePhase.uploading) {
       return;
     }
@@ -3477,15 +3484,16 @@ class _VoiceCommentFieldState extends State<_VoiceCommentField> {
     if (!mounted) return;
     setState(() {
       _phase = _VoicePhase.recording;
+      _willCancel = false;
       _seconds = 0;
-      _wave = List<double>.filled(40, 0.18);
+      _liveWaveform = List<double>.filled(_kLiveWaveLen, 0.18);
     });
     _ampSub = capture.amplitudes.listen((amp) {
       if (!mounted || _phase != _VoicePhase.recording) return;
-      final bar = (amp >= 0 && amp <= 1)
-          ? amp.clamp(0.1, 1.0)
-          : ((amp + 50) / 50).clamp(0.1, 1.0);
-      setState(() => _wave = [..._wave.skip(1), bar]);
+      final bar = _normalizeAmplitude(amp);
+      setState(() {
+        _liveWaveform = [..._liveWaveform.skip(1), bar];
+      });
     });
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted || _phase != _VoicePhase.recording) return;
@@ -3493,9 +3501,46 @@ class _VoiceCommentFieldState extends State<_VoiceCommentField> {
         if (_seconds < _kMaxSeconds) {
           _seconds++;
         } else {
-          _stopAndUpload();
+          unawaited(_stopAndUpload());
         }
       });
+    });
+  }
+
+  void _onRecordPressMove(double offsetDy) {
+    if (_phase != _VoicePhase.recording) return;
+    final cancel = offsetDy < _kCancelThresholdY;
+    if (cancel != _willCancel) {
+      setState(() => _willCancel = cancel);
+    }
+  }
+
+  Future<void> _onRecordPressEnd() async {
+    if (_phase != _VoicePhase.recording) return;
+    if (_willCancel) {
+      _abortRecording();
+      return;
+    }
+    if (_seconds < 1) {
+      _abortRecording();
+      if (mounted) AppToast.show(context, '录音时间太短');
+      return;
+    }
+    await _stopAndUpload();
+  }
+
+  void _abortRecording() {
+    _ampSub?.cancel();
+    _ampSub = null;
+    _timer?.cancel();
+    _timer = null;
+    unawaited(_capture?.cancel());
+    if (!mounted) return;
+    if (_phase != _VoicePhase.recording) return;
+    setState(() {
+      _phase = _path.isNotEmpty ? _VoicePhase.ready : _VoicePhase.idle;
+      _willCancel = false;
+      _seconds = 0;
     });
   }
 
@@ -3520,7 +3565,10 @@ class _VoiceCommentFieldState extends State<_VoiceCommentField> {
       AppToast.show(context, '录音时间太短');
       return;
     }
-    setState(() => _phase = _VoicePhase.uploading);
+    setState(() {
+      _phase = _VoicePhase.uploading;
+      _willCancel = false;
+    });
     try {
       final bytes = await loadRecordedBytes(recPath);
       final isWebm = recPath.contains('.webm') || recPath.startsWith('blob:');
@@ -3564,110 +3612,62 @@ class _VoiceCommentFieldState extends State<_VoiceCommentField> {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    if (widget.readOnly) {
+      if (_path.isEmpty) {
+        return Container(
+          height: ui(48),
+          alignment: Alignment.centerLeft,
+          padding: EdgeInsets.symmetric(horizontal: ui(16)),
+          decoration: BoxDecoration(
+            color: _kPageGrey,
+            borderRadius: BorderRadius.circular(ui(10)),
+          ),
+          child: Text(
+            '无语音点评',
+            style: TextStyle(
+              fontSize: ui(13),
+              color: _kTextHint,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w400,
+            ),
+          ),
+        );
+      }
+      return HomeworkVoiceCommentBubble(
+        key: ValueKey('$_path-$_duration'),
+        relativePath: _path,
+        durationSec: _duration,
+        scale: ui(1),
+      );
+    }
     switch (_phase) {
-      case _VoicePhase.recording:
-        return _buildRecording(ui);
       case _VoicePhase.uploading:
         return _buildUploading(ui);
       case _VoicePhase.ready:
         return _buildReady(ui);
+      case _VoicePhase.recording:
       case _VoicePhase.idle:
-        return _buildIdle(ui);
-    }
-  }
-
-  Widget _buildIdle(double Function(double) ui) {
-    return GestureDetector(
-      onTap: _startRecord,
-      child: Container(
-        height: ui(48),
-        decoration: BoxDecoration(
-          color: _kPickGrey,
-          borderRadius: BorderRadius.circular(ui(10)),
-          border: Border.all(color: _kPurple.withValues(alpha: 0.35)),
-        ),
-        alignment: Alignment.center,
-        child: Row(
+        return Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Icon(Icons.mic_none_rounded, size: ui(18), color: _kPurple),
-            SizedBox(width: ui(8)),
-            Text(
-              '点击录制语音点评',
-              style: TextStyle(
-                fontSize: ui(14),
-                color: _kPurple,
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w500,
+            if (_phase == _VoicePhase.recording) ...[
+              _HomeworkRecordingHintCard(
+                waveform: _liveWaveform,
+                willCancel: _willCancel,
               ),
+              SizedBox(height: ui(12)),
+            ],
+            _HomeworkVoiceHoldBar(
+              recording: _phase == _VoicePhase.recording,
+              willCancel: _willCancel,
+              onPressStart: _onRecordPressStart,
+              onPressMove: _onRecordPressMove,
+              onPressEnd: _onRecordPressEnd,
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRecording(double Function(double) ui) {
-    return Container(
-      height: ui(48),
-      padding: EdgeInsets.symmetric(horizontal: ui(12)),
-      decoration: BoxDecoration(
-        color: _kPurple,
-        borderRadius: BorderRadius.circular(ui(10)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: ui(8),
-            height: ui(8),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-            ),
-          ),
-          SizedBox(width: ui(10)),
-          Expanded(
-            child: SizedBox(
-              height: ui(24),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  for (final h in _wave)
-                    Expanded(
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(horizontal: ui(0.5)),
-                        child: Container(
-                          height: ui(4 + 18 * h),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.9),
-                            borderRadius: BorderRadius.circular(ui(2)),
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-          SizedBox(width: ui(10)),
-          Text(
-            '${(_seconds ~/ 60).toString().padLeft(2, '0')}:'
-            '${(_seconds % 60).toString().padLeft(2, '0')}',
-            style: TextStyle(
-              fontSize: ui(13),
-              color: Colors.white,
-              fontFamily: 'Barlow',
-            ),
-          ),
-          SizedBox(width: ui(8)),
-          GestureDetector(
-            onTap: _stopAndUpload,
-            child: Icon(Icons.stop_circle_rounded, size: ui(24),
-                color: Colors.white),
-          ),
-        ],
-      ),
-    );
+        );
+    }
   }
 
   Widget _buildUploading(double Function(double) ui) {
@@ -3715,7 +3715,7 @@ class _VoiceCommentFieldState extends State<_VoiceCommentField> {
         _VoiceMiniAction(
           icon: Icons.mic_none_rounded,
           color: _kPurple,
-          onTap: _startRecord,
+          onTap: () => setState(() => _phase = _VoicePhase.idle),
         ),
         SizedBox(width: ui(6)),
         _VoiceMiniAction(
@@ -3725,6 +3725,162 @@ class _VoiceCommentFieldState extends State<_VoiceCommentField> {
         ),
       ],
     );
+  }
+}
+
+/// 作业点评抽屉内「按住说话」按钮（视觉与群聊 [_VoiceHoldBar] 一致）。
+class _HomeworkVoiceHoldBar extends StatelessWidget {
+  const _HomeworkVoiceHoldBar({
+    required this.recording,
+    required this.willCancel,
+    required this.onPressStart,
+    required this.onPressMove,
+    required this.onPressEnd,
+  });
+
+  final bool recording;
+  final bool willCancel;
+  final VoidCallback onPressStart;
+  final ValueChanged<double> onPressMove;
+  final VoidCallback onPressEnd;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final useRed = recording && willCancel;
+    final gradColors = useRed
+        ? const [_kRecordRed, _kRecordRedLight]
+        : const [_kPurple, _kPurpleLight];
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onLongPressStart: (_) => onPressStart(),
+      onLongPressMoveUpdate: (d) => onPressMove(d.localOffsetFromOrigin.dy),
+      onLongPressEnd: (_) => onPressEnd(),
+      onLongPressCancel: onPressEnd,
+      child: Container(
+        height: ui(48),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            colors: gradColors,
+          ),
+          borderRadius: BorderRadius.circular(ui(10)),
+          boxShadow: [
+            BoxShadow(
+              color: (useRed ? _kRecordRed : _kPurple).withValues(alpha: 0.18),
+              blurRadius: ui(8),
+              offset: Offset(0, ui(2)),
+            ),
+          ],
+        ),
+        child: Text(
+          '按住说话',
+          style: TextStyle(
+            fontSize: ui(14),
+            color: Colors.white,
+            fontFamily: 'PingFang SC',
+            fontWeight: AppFont.w500,
+            height: 1,
+            letterSpacing: 0.4,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 录音中浮层：实时波形 + 「松开发送 上滑取消」提示（同群聊 [_RecordingHintCard]）。
+class _HomeworkRecordingHintCard extends StatelessWidget {
+  const _HomeworkRecordingHintCard({
+    required this.waveform,
+    required this.willCancel,
+  });
+
+  final List<double> waveform;
+  final bool willCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final color = willCancel ? _kRecordRed : _kPurple;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: double.infinity,
+          height: ui(74),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(ui(12)),
+            border: Border.all(color: _kBorderSoft),
+          ),
+          child: _HomeworkLiveBigWaveform(heights: waveform, color: color),
+        ),
+        SizedBox(height: ui(12)),
+        Text(
+          willCancel ? '松开取消' : '松开发送 上滑取消',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: ui(13),
+            color: _kTextDark,
+            fontFamily: 'PingFang SC',
+            fontWeight: AppFont.w400,
+            height: 24 / 13,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _HomeworkLiveBigWaveform extends StatelessWidget {
+  const _HomeworkLiveBigWaveform({required this.heights, required this.color});
+
+  final List<double> heights;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final bars = _sampleBars(heights, 34);
+    final maxHeight = ui(36);
+    final base = ui(3);
+    final barW = ui(2);
+    final gap = ui(2);
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < bars.length; i++) ...[
+          Container(
+            width: barW,
+            height: base + bars[i] * (maxHeight - base),
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(barW),
+            ),
+          ),
+          if (i < bars.length - 1) SizedBox(width: gap),
+        ],
+      ],
+    );
+  }
+
+  List<double> _sampleBars(List<double> source, int targetCount) {
+    if (source.isEmpty) {
+      return List<double>.filled(targetCount, 0.2);
+    }
+    if (source.length == targetCount) {
+      return source.map((v) => v.clamp(0.08, 1).toDouble()).toList();
+    }
+    return List<double>.generate(targetCount, (i) {
+      final sourceIndex = (i * (source.length - 1) / (targetCount - 1)).round();
+      return source[sourceIndex].clamp(0.08, 1).toDouble();
+    });
   }
 }
 
@@ -4008,9 +4164,13 @@ class _GhostButton extends StatelessWidget {
 }
 
 class _ScoreInput extends StatelessWidget {
-  const _ScoreInput({required this.controller});
+  const _ScoreInput({
+    required this.controller,
+    this.readOnly = false,
+  });
 
   final TextEditingController controller;
+  final bool readOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -4019,6 +4179,7 @@ class _ScoreInput extends StatelessWidget {
       height: ui(48),
       padding: EdgeInsets.symmetric(horizontal: ui(16)),
       decoration: BoxDecoration(
+        color: readOnly ? _kPageGrey : null,
         borderRadius: BorderRadius.circular(ui(8)),
         border: Border.all(color: _kPageGrey),
       ),
@@ -4027,6 +4188,7 @@ class _ScoreInput extends StatelessWidget {
           Expanded(
             child: AppTextField(
               controller: controller,
+              readOnly: readOnly,
               keyboardType: TextInputType.number,
               cursorColor: _kPurple,
               cursorWidth: 1.5,
@@ -4192,11 +4354,13 @@ class _PlainTextArea extends StatefulWidget {
     required this.hint,
     required this.height,
     this.controller,
+    this.readOnly = false,
   });
 
   final String hint;
   final double height;
   final TextEditingController? controller;
+  final bool readOnly;
 
   @override
   State<_PlainTextArea> createState() => _PlainTextAreaState();
@@ -4221,11 +4385,13 @@ class _PlainTextAreaState extends State<_PlainTextArea> {
       height: widget.height,
       padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(12)),
       decoration: BoxDecoration(
+        color: widget.readOnly ? _kPageGrey : null,
         borderRadius: BorderRadius.circular(ui(8)),
         border: Border.all(color: _kPageGrey),
       ),
       child: AppTextField(
         controller: _ctrl,
+        readOnly: widget.readOnly,
         maxLines: null,
         expands: true,
         textAlignVertical: TextAlignVertical.top,

@@ -213,29 +213,23 @@ class _AdminDormLeaveApprovalViewState
               ),
             ),
             SizedBox(height: ui(16)),
+            _ControlBar(
+              current: _tab,
+              onTap: (t) {
+                if (_tab == t) return;
+                setState(() => _tab = t);
+                unawaited(_loadList());
+              },
+            ),
+            SizedBox(height: ui(16)),
             MainContentLoadingShell(
               loading: _loading && _requests.isEmpty,
-              preserveChrome: true,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _ControlBar(
-                    current: _tab,
-                    onTap: (t) {
-                      if (_tab == t) return;
-                      setState(() => _tab = t);
-                      unawaited(_loadList());
-                    },
-                  ),
-                  SizedBox(height: ui(16)),
-                  if (!(_loading && _requests.isEmpty))
-                    _CardsGrid(
-                      records: _requests,
-                      emptyMessage: _loadError ?? '暂无相关申请',
-                      onApprove: _onApprove,
-                      onReject: _onReject,
-                    ),
-                ],
+              minHeight: ui(200),
+              child: _CardsGrid(
+                records: _requests,
+                emptyMessage: _loadError ?? '暂无相关申请',
+                onApprove: _onApprove,
+                onReject: _onReject,
               ),
             ),
           ],

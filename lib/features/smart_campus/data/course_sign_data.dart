@@ -344,6 +344,7 @@ class CourseSignSession {
     required this.students,
     this.teacherName = '',
     this.logoUrl = '',
+    this.teacherHeadUrl = '',
     this.teacherCheckInTime,
     this.teacherCheckOutTime,
     this.adminConfirmed = false,
@@ -364,6 +365,7 @@ class CourseSignSession {
   final List<CourseSignStudent> students;
   final String teacherName;
   final String logoUrl;
+  final String teacherHeadUrl;
   final String colorHex;
   final String className;
   final String? teacherCheckInTime;
@@ -412,14 +414,23 @@ class CourseSignSession {
       'roomName',
       'address',
     ], '--');
-    final teacherMap = _asMap(json['teacher'] ?? json['headTeacher']);
-    final teacherName = teacherMap != null
-        ? _pickString(teacherMap, ['realname', 'realName', 'name'], '')
-        : _pickString(json, [
-            'teacherRealname',
-            'teacherName',
-            'teacherNickname',
-          ], '');
+    final teacherMap = _asMap(
+      json['teacher'] ?? json['headTeacher'] ?? json['teacherSign'],
+    );
+    var teacherName = _pickString(json, [
+      'teacherRealname',
+      'teacherRealname',
+      'teacherNickname',
+      'teacherName',
+    ], '');
+    if (teacherName.isEmpty && teacherMap != null) {
+      teacherName = _pickString(teacherMap, [
+        'realname',
+        'realName',
+        'nickname',
+        'name',
+      ], '');
+    }
 
     final studentsRaw =
         json['studentList'] ??
@@ -481,6 +492,7 @@ class CourseSignSession {
       students: students,
       teacherName: teacherName,
       logoUrl: resolveCourseLogoUrl(json),
+      teacherHeadUrl: resolveCourseTeacherHeadUrl(json, teacherMap: teacherMap),
       colorHex: _pickString(json, ['color'], ''),
       className: _pickString(json, ['className', 'class'], ''),
       teacherCheckInTime: _pickStringNullable(json, [
@@ -517,6 +529,7 @@ class CourseSignSession {
     String? courseEndTime,
     String? timeRange,
     String? logoUrl,
+    String? teacherHeadUrl,
     String? colorHex,
     String? className,
     String? teacherCheckInTime,
@@ -530,6 +543,7 @@ class CourseSignSession {
       students: students ?? this.students,
       teacherName: teacherName,
       logoUrl: logoUrl ?? this.logoUrl,
+      teacherHeadUrl: teacherHeadUrl ?? this.teacherHeadUrl,
       colorHex: colorHex ?? this.colorHex,
       className: className ?? this.className,
       teacherCheckInTime: teacherCheckInTime ?? this.teacherCheckInTime,
@@ -836,6 +850,14 @@ Map<String, dynamic> _flattenCourseSessionRow(Map<String, dynamic> row) {
     const MapEntry('nickname', 'teacherNickname'),
     const MapEntry('name', 'teacherName'),
   ]);
+  mergeNested('teacherSign', [
+    const MapEntry('signInTime', 'teacherSignInTime'),
+    const MapEntry('signOutTime', 'teacherSignOutTime'),
+    const MapEntry('nickname', 'teacherNickname'),
+    const MapEntry('realname', 'teacherRealname'),
+    const MapEntry('realName', 'teacherRealname'),
+    const MapEntry('headUrl', 'teacherHeadUrl'),
+  ]);
   mergeNested('subject', [
     const MapEntry('name', 'subjectName'),
     const MapEntry('subjectName', 'subjectName'),
@@ -1027,12 +1049,22 @@ String? _pickStringNullable(Map<String, dynamic> json, List<String> keys) {
   return null;
 }
 
-String _pickStudentDisplayName(Map<String, dynamic> json) {
-  final realname = _pickStringNullable(json, ['realname', 'realName']);
+String _pickPersonDisplayName(
+  Map<String, dynamic> json, {
+  List<String> realnameKeys = const ['realname', 'realName'],
+  List<String> nicknameKeys = const ['nickname', 'name'],
+  String fallback = '未命名',
+}) {
+  final realname = _pickStringNullable(json, realnameKeys);
   if (realname != null) return realname;
-  final no = _pickString(json, ['no', 'studentNo', 'stuNo', 'studentIdNo'], '');
-  if (no.isNotEmpty && no != '--') return no;
-  return _pickString(json, ['nickname', 'name', 'stuName', 'studentName'], '未命名');
+  return _pickString(json, nicknameKeys, fallback);
+}
+
+String _pickStudentDisplayName(Map<String, dynamic> json) {
+  return _pickPersonDisplayName(
+    json,
+    nicknameKeys: const ['nickname', 'name', 'stuName', 'studentName'],
+  );
 }
 
 /// 课程/班级 `logo`：顶层或嵌套 `schoolClass` / `classInfo`。
@@ -1044,6 +1076,34 @@ String resolveCourseLogoUrl(Map<String, dynamic> json) {
       if (nested == null) continue;
       raw = _pickString(nested, ['logo', 'logoUrl', 'classLogo'], '');
       if (raw.isNotEmpty) break;
+    }
+  }
+  return raw.isEmpty ? '' : MediaUrl.resolve(raw);
+}
+
+/// 任课老师头像：`teacher/courseList` 顶层 `teacherHeadUrl` 或嵌套 `teacher`。
+String resolveCourseTeacherHeadUrl(
+  Map<String, dynamic> json, {
+  Map<String, dynamic>? teacherMap,
+}) {
+  var raw = _pickString(json, [
+    'teacherHeadUrl',
+    'teacherHead',
+    'headUrl',
+    'avatar',
+    'avatarUrl',
+    'headImg',
+  ], '');
+  if (raw.isEmpty) {
+    final nested = teacherMap ?? _asMap(json['teacher'] ?? json['headTeacher']);
+    if (nested != null) {
+      raw = _pickString(nested, [
+        'headUrl',
+        'avatar',
+        'avatarUrl',
+        'headImg',
+        'teacherHeadUrl',
+      ], '');
     }
   }
   return raw.isEmpty ? '' : MediaUrl.resolve(raw);

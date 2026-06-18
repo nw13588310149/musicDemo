@@ -214,6 +214,7 @@ class TeacherClassWorkbenchView extends ConsumerStatefulWidget {
     this.onOpenHomeSchool,
     this.onOpenGroupChat,
     this.onOpenDormHistory,
+    this.onOpenPrincipalMailbox,
   });
 
   final VoidCallback onBack;
@@ -222,6 +223,7 @@ class TeacherClassWorkbenchView extends ConsumerStatefulWidget {
   final VoidCallback? onOpenHomeSchool;
   final VoidCallback? onOpenGroupChat;
   final VoidCallback? onOpenDormHistory;
+  final VoidCallback? onOpenPrincipalMailbox;
 
   @override
   ConsumerState<TeacherClassWorkbenchView> createState() =>
@@ -294,19 +296,6 @@ class _TeacherClassWorkbenchViewState
       onBack: widget.onBack,
     );
 
-    if (_loadingClass) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          banner,
-          SizedBox(height: ui(80)),
-          Center(
-            child: AppLoadingIndicator(),
-          ),
-        ],
-      );
-    }
-
     if (_classError.isNotEmpty) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -331,22 +320,26 @@ class _TeacherClassWorkbenchViewState
           banner,
           SizedBox(height: ui(16)),
           // 不同 Tab 的主体——保持 banner 一致，下方切换内容。
-          switch (_tab) {
-            _WorkbenchTab.overview =>
-              _OverviewTab(
-                classId: _classId,
-                index: _index,
-                selectedClassIndex: _selectedClassIndex,
-                onClassChanged: _selectClass,
-                onOpenLeaveApproval: widget.onOpenLeaveApproval,
-                onOpenDormDynamic: widget.onOpenDormDynamic,
-                onOpenHomeSchool: widget.onOpenHomeSchool,
-                onOpenGroupChat: widget.onOpenGroupChat,
-                onOpenDormHistory: widget.onOpenDormHistory,
-              ),
-            _WorkbenchTab.students => _StudentsTab(classId: _classId),
-            _WorkbenchTab.grades => const _GradesTab(),
-          },
+          if (_loadingClass)
+            const SizedBox.shrink()
+          else
+            switch (_tab) {
+              _WorkbenchTab.overview =>
+                _OverviewTab(
+                  classId: _classId,
+                  index: _index,
+                  selectedClassIndex: _selectedClassIndex,
+                  onClassChanged: _selectClass,
+                  onOpenLeaveApproval: widget.onOpenLeaveApproval,
+                  onOpenDormDynamic: widget.onOpenDormDynamic,
+                  onOpenHomeSchool: widget.onOpenHomeSchool,
+                    onOpenGroupChat: widget.onOpenGroupChat,
+                    onOpenDormHistory: widget.onOpenDormHistory,
+                    onOpenPrincipalMailbox: widget.onOpenPrincipalMailbox,
+                  ),
+              _WorkbenchTab.students => _StudentsTab(classId: _classId),
+              _WorkbenchTab.grades => const _GradesTab(),
+            },
         ],
       ),
     );
@@ -508,6 +501,7 @@ class _OverviewTab extends StatelessWidget {
     this.onOpenHomeSchool,
     this.onOpenGroupChat,
     this.onOpenDormHistory,
+    this.onOpenPrincipalMailbox,
   });
 
   final String classId;
@@ -519,6 +513,7 @@ class _OverviewTab extends StatelessWidget {
   final VoidCallback? onOpenHomeSchool;
   final VoidCallback? onOpenGroupChat;
   final VoidCallback? onOpenDormHistory;
+  final VoidCallback? onOpenPrincipalMailbox;
 
   @override
   Widget build(BuildContext context) {
@@ -623,6 +618,7 @@ class _OverviewTab extends StatelessWidget {
           onOpenHomeSchool: onOpenHomeSchool,
           onOpenGroupChat: onOpenGroupChat,
           onOpenDormHistory: onOpenDormHistory,
+          onOpenPrincipalMailbox: onOpenPrincipalMailbox,
         ),
       ),
       SizedBox(height: ui(20)),
@@ -649,7 +645,12 @@ class _OverviewTab extends StatelessWidget {
       SizedBox(height: ui(20)),
       const _SectionTitle('班级捷径'),
       SizedBox(height: ui(12)),
-      _ShortcutStatGrid(index: index),
+      _ShortcutStatGrid(
+        index: index,
+        onOpenLeaveApproval: onOpenLeaveApproval,
+        onOpenDormDynamic: onOpenDormDynamic,
+        onOpenHomeSchool: onOpenHomeSchool,
+      ),
       SizedBox(height: ui(20)),
       const _SectionTitle('本周出勤'),
       SizedBox(height: ui(12)),
@@ -659,16 +660,24 @@ class _OverviewTab extends StatelessWidget {
 
   List<Widget> _buildRightColumn(double Function(double) ui) {
     return [
-      const _SectionTitleWithAction(
+      _SectionTitleWithAction(
         title: '待批请假',
         actionLabel: '全部',
+        onActionTap: onOpenLeaveApproval,
       ),
       SizedBox(height: ui(12)),
-      const _LeaveListCard(),
+      _LeaveListCard(onOpenAll: onOpenLeaveApproval),
       SizedBox(height: ui(20)),
       const _SectionTitle('班级捷径'),
       SizedBox(height: ui(12)),
-      const _QuickActionGrid(),
+      _QuickActionGrid(
+        onOpenLeaveApproval: onOpenLeaveApproval,
+        onOpenDormDynamic: onOpenDormDynamic,
+        onOpenHomeSchool: onOpenHomeSchool,
+        onOpenGroupChat: onOpenGroupChat,
+        onOpenDormHistory: onOpenDormHistory,
+        onOpenPrincipalMailbox: onOpenPrincipalMailbox,
+      ),
       SizedBox(height: ui(20)),
       const _SectionTitle('重点关注'),
       SizedBox(height: ui(12)),
@@ -875,20 +884,7 @@ class _NoticeSectionState extends ConsumerState<_NoticeSection> {
             borderRadius: BorderRadius.circular(ui(16)),
           ),
           child: _loading
-              ? Padding(
-                  padding: EdgeInsets.symmetric(vertical: ui(20)),
-                  child: Center(
-                    child: Text(
-                      '加载中…',
-                      style: TextStyle(
-                        fontSize: ui(13),
-                        color: _kTextHint,
-                        fontFamily: 'PingFang SC',
-                        fontWeight: AppFont.w400,
-                      ),
-                    ),
-                  ),
-                )
+              ? const SizedBox.shrink()
               : _notices.isEmpty
               ? Padding(
                   padding: EdgeInsets.symmetric(vertical: ui(20)),
@@ -2190,6 +2186,7 @@ class _QuickActionGrid extends StatelessWidget {
     this.onOpenHomeSchool,
     this.onOpenGroupChat,
     this.onOpenDormHistory,
+    this.onOpenPrincipalMailbox,
   });
 
   final bool fillHeight;
@@ -2198,12 +2195,13 @@ class _QuickActionGrid extends StatelessWidget {
   final VoidCallback? onOpenHomeSchool;
   final VoidCallback? onOpenGroupChat;
   final VoidCallback? onOpenDormHistory;
+  final VoidCallback? onOpenPrincipalMailbox;
 
   static const List<_QuickActionData> _items = [
     _QuickActionData(
-      label: '班级工作台',
+      label: '校长信箱',
       imagePath:
-          'assets/images/smartCampus/home_actions/head_teacher/class_workbench.png',
+          'assets/images/smartCampus/home_actions/head_teacher/principal_mailbox.png',
     ),
     _QuickActionData(
       label: '请假审批',
@@ -2234,7 +2232,7 @@ class _QuickActionGrid extends StatelessWidget {
 
   VoidCallback? _onTapForLabel(String label) {
     return switch (label) {
-      '班级工作台' => null,
+      '校长信箱' => onOpenPrincipalMailbox,
       '请假审批' => onOpenLeaveApproval,
       '查寝动态' => onOpenDormDynamic,
       '家校沟通' => onOpenHomeSchool,
@@ -2745,7 +2743,7 @@ class _LeaveListCardState extends ConsumerState<_LeaveListCard> {
     final resp = await ref.read(teacherRepositoryProvider).headTeacherStudentLeaveList(
       current: 1,
       size: 10,
-      status: kHeadTeacherPendingLeaveFilterStatus,
+      status: '',
     );
     if (!mounted) return;
     if (!resp.isSuccess) {
@@ -2818,7 +2816,7 @@ class _LeaveListCardState extends ConsumerState<_LeaveListCard> {
         borderRadius: BorderRadius.circular(ui(16)),
       ),
       child: _loading
-          ? const Center(child: AppLoadingIndicator())
+          ? const SizedBox.shrink()
           : _items.isEmpty
               ? Center(
                   child: Text(
@@ -3175,11 +3173,8 @@ class _StudentsTabState extends ConsumerState<_StudentsTab> {
           onQueryChanged: (v) => setState(() => _query = v),
         ),
         SizedBox(height: ui(16)),
-        if (pageLoading)
-          Padding(
-            padding: EdgeInsets.only(top: ui(40)),
-            child: const Center(child: AppLoadingIndicator()),
-          )
+        if (pageLoading && _allStudents.isEmpty)
+          const SizedBox.shrink()
         else if (filtered.isEmpty)
           Center(
             child: Padding(

@@ -1,5 +1,4 @@
 ﻿import 'package:flutter/material.dart';
-import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -431,7 +430,7 @@ const _kFallbackClassOptions = <_ClassFilterOption>[_ClassFilterOption.all];
 /// 3. **筛选行**：[PopupSelectorField]「全部班级」+ 324×44 搜索框
 ///    （占位 "搜索姓名、工号、任课方向"），不带状态 tab。
 /// 4. **结果条**：「当前结果 X 人」12 #0B081A。
-/// 5. **教师卡 3 列网格**（315×78 白卡，12 gap）：左 40 头像 + 右上工号 +
+/// 5. **教师卡 3 列网格**（315×88 白卡，12 gap）：左 40 头像 + 右上工号 +
 ///    名字 + 一句话部门·学科 + 灰色「任课·班主任·班级」/「任课」。
 ///    左下「班主任」黄色徽章 (#DBEE49)；右上 cut-corner 状态徽章
 ///    （在岗 #DFFCF0 + #0CAC40，请假/产假 #F3F2F3 + #B6B5BB），
@@ -473,7 +472,6 @@ class _AdminTeacherManagementViewState
   /// 但是空数组」做区分（前者不渲染统计/卡片，后者落到「暂无教师」空态）。
   List<_Teacher>? _serverTeachers;
 
-  bool _loadingTeachers = true;
   int _searchToken = 0;
 
   @override
@@ -530,7 +528,6 @@ class _AdminTeacherManagementViewState
 
   Future<void> _loadTeachers() async {
     final token = ++_searchToken;
-    setState(() => _loadingTeachers = true);
 
     final repo = ref.read(adminRepositoryProvider);
     final resp = await repo.teacherList(
@@ -540,10 +537,7 @@ class _AdminTeacherManagementViewState
     if (!mounted || token != _searchToken) return;
 
     if (!resp.isSuccess || resp.data == null) {
-      setState(() {
-        _serverTeachers = const [];
-        _loadingTeachers = false;
-      });
+      setState(() => _serverTeachers = const []);
       return;
     }
 
@@ -554,10 +548,7 @@ class _AdminTeacherManagementViewState
       } catch (_) {}
     }
 
-    setState(() {
-      _serverTeachers = parsed;
-      _loadingTeachers = false;
-    });
+    setState(() => _serverTeachers = parsed);
   }
 
   /// 当前生效的教师列表。`null` → 还没回包；空数组 → 接口返回 0 条。
@@ -612,24 +603,17 @@ class _AdminTeacherManagementViewState
               },
             ),
             SizedBox(height: ui(20)),
-            if (_loadingTeachers && list.isEmpty)
-              SizedBox(
-                height: ui(280),
-                child: const Center(child: AppLoadingIndicator()),
-              )
-            else ...[
-              Text(
-                '当前结果 ${list.length}人',
-                style: TextStyle(
-                  fontSize: ui(12),
-                  height: 1.2,
-                  color: _kTextPrimary,
-                  fontFamily: 'PingFang SC',
-                ),
+            Text(
+              '当前结果 ${list.length}人',
+              style: TextStyle(
+                fontSize: ui(12),
+                height: 1.2,
+                color: _kTextPrimary,
+                fontFamily: 'PingFang SC',
               ),
-              SizedBox(height: ui(12)),
-              _TeacherGrid(teachers: list, onTap: _openProfile),
-            ],
+            ),
+            SizedBox(height: ui(12)),
+            _TeacherGrid(teachers: list, onTap: _openProfile),
           ],
         ),
       ),
@@ -1031,16 +1015,19 @@ class _TeacherCard extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
-        height: ui(78),
+        height: ui(88),
         decoration: BoxDecoration(
           color: _kCardBg,
           borderRadius: BorderRadius.circular(ui(12)),
         ),
         clipBehavior: Clip.antiAlias,
         child: Stack(
+          alignment: Alignment.center,
           children: [
             Padding(
-              padding: EdgeInsets.fromLTRB(ui(12), ui(8), ui(54), ui(8)),
+              // 内容列右侧放宽到距卡片右边框 ui(12)，让底部标签滚动区更宽；
+              // 姓名行/摘要行单独保留 ui(42) 右内边距，避开右上状态徽章。
+              padding: EdgeInsets.fromLTRB(ui(12), ui(8), ui(12), ui(8)),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1051,55 +1038,66 @@ class _TeacherCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Flexible(
-                              child: Text(
-                                teacher.name,
+                        Padding(
+                          padding: EdgeInsets.only(right: ui(42)),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      teacher.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      textHeightBehavior:
+                                          const TextHeightBehavior(
+                                        applyHeightToFirstAscent: false,
+                                        applyHeightToLastDescent: false,
+                                      ),
+                                      style: TextStyle(
+                                        fontSize: ui(14),
+                                        height: 1.0,
+                                        fontWeight: AppFont.w500,
+                                        color: _kTextPrimary,
+                                        fontFamily: 'PingFang SC',
+                                      ),
+                                    ),
+                                  ),
+                                  if (teacher.teacherId.isNotEmpty) ...[
+                                    SizedBox(width: ui(8)),
+                                    Text(
+                                      teacher.teacherId,
+                                      style: TextStyle(
+                                        fontSize: ui(12),
+                                        height: 1.2,
+                                        color: _kTextHint,
+                                        fontFamily: 'PingFang SC',
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              SizedBox(height: ui(6)),
+                              Text(
+                                teacher.summaryInfo,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                textHeightBehavior: const TextHeightBehavior(
-                                  applyHeightToFirstAscent: false,
-                                  applyHeightToLastDescent: false,
-                                ),
                                 style: TextStyle(
-                                  fontSize: ui(14),
-                                  height: 1.0,
-                                  fontWeight: AppFont.w500,
+                                  fontSize: ui(12),
+                                  height: 1.2,
                                   color: _kTextPrimary,
                                   fontFamily: 'PingFang SC',
                                 ),
                               ),
-                            ),
-                            if (teacher.teacherId.isNotEmpty) ...[
-                              SizedBox(width: ui(8)),
-                              Text(
-                                teacher.teacherId,
-                                style: TextStyle(
-                                  fontSize: ui(12),
-                                  height: 1.2,
-                                  color: _kTextHint,
-                                  fontFamily: 'PingFang SC',
-                                ),
-                              ),
                             ],
-                          ],
-                        ),
-                        SizedBox(height: ui(4)),
-                        Text(
-                          teacher.summaryInfo,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: ui(12),
-                            height: 1.2,
-                            color: _kTextPrimary,
-                            fontFamily: 'PingFang SC',
                           ),
                         ),
                         if (teacher.roleLabels.isNotEmpty) ...[
-                          SizedBox(height: ui(4)),
+                          SizedBox(height: ui(6)),
+                          // 标签滚动区使用内容列整宽，右边界距卡片右边框 ui(12)
                           SingleChildScrollView(
                             scrollDirection: Axis.horizontal,
                             physics: const BouncingScrollPhysics(),

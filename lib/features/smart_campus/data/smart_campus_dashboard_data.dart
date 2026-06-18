@@ -188,7 +188,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _purpleSoft,
             foreground: _purple,
             imagePath:
-                'assets/images/smartCampus/home_actions/student/my_class.png',
+                'assets/images/new/智慧校园/学生端/我的班级.png',
           ),
           SmartCampusQuickActionData(
             label: '我的课表',
@@ -196,7 +196,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _purpleSoft,
             foreground: _purple,
             imagePath:
-                'assets/images/smartCampus/home_actions/student/my_schedule.png',
+                'assets/images/new/智慧校园/学生端/我的课表.png',
           ),
           SmartCampusQuickActionData(
             label: '课堂签到',
@@ -204,7 +204,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _purpleSoft,
             foreground: _purple,
             imagePath:
-                'assets/images/smartCampus/home_actions/student/class_check_in.png',
+                'assets/images/new/智慧校园/学生端/课堂签到.png',
           ),
           SmartCampusQuickActionData(
             label: '我的作业',
@@ -212,7 +212,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _blueSoft,
             foreground: _blue,
             imagePath:
-                'assets/images/smartCampus/home_actions/student/my_homework.png',
+                'assets/images/new/智慧校园/学生端/我的作业.png',
           ),
           SmartCampusQuickActionData(
             label: '我的考试',
@@ -220,7 +220,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _orangeSoft,
             foreground: _orange,
             imagePath:
-                'assets/images/smartCampus/home_actions/student/my_grades.png',
+                'assets/images/new/智慧校园/学生端/我的成绩.png',
           ),
           SmartCampusQuickActionData(
             label: '群聊',
@@ -228,7 +228,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _pinkSoft,
             foreground: _pink,
             imagePath:
-                'assets/images/smartCampus/home_actions/student/group_chat.png',
+                'assets/images/new/智慧校园/学生端/群聊.png',
           ),
           SmartCampusQuickActionData(
             label: '校圈',
@@ -236,7 +236,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _blueSoft,
             foreground: _blue,
             imagePath:
-                'assets/images/smartCampus/home_actions/student/school_circle.png',
+                'assets/images/new/智慧校园/学生端/校圈.png',
           ),
           SmartCampusQuickActionData(
             label: '我的请假',
@@ -244,7 +244,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _greenSoft,
             foreground: _green,
             imagePath:
-                'assets/images/smartCampus/home_actions/student/leave_management.png',
+                'assets/images/new/智慧校园/学生端/请假管理.png',
           ),
           SmartCampusQuickActionData(
             label: '我的查寝',
@@ -252,7 +252,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _purpleSoft,
             foreground: _purple,
             imagePath:
-                'assets/images/smartCampus/home_actions/student/dorm_check.png',
+                'assets/images/new/智慧校园/学生端/查寝管理.png',
           ),
           SmartCampusQuickActionData(
             label: '校长信箱',
@@ -260,7 +260,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _purpleSoft,
             foreground: _purple,
             imagePath:
-                'assets/images/smartCampus/home_actions/student/principal_mailbox.png',
+                'assets/images/new/智慧校园/学生端/校长信箱.png',
           ),
         ],
         profile: const SmartCampusProfileData(
@@ -397,7 +397,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _purpleSoft,
             foreground: _purple,
             imagePath:
-                'assets/images/smartCampus/home_actions/teacher/lesson_schedule.png',
+                'assets/images/new/智慧校园/任课老师端/授课课表.png',
           ),
           SmartCampusQuickActionData(
             label: '签课管理',
@@ -405,7 +405,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _purpleSoft,
             foreground: _purple,
             imagePath:
-                'assets/images/smartCampus/home_actions/teacher/class_check_in.png',
+                'assets/images/new/智慧校园/任课老师端/课堂签到.png',
           ),
           SmartCampusQuickActionData(
             label: '学生名册',
@@ -413,7 +413,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _blueSoft,
             foreground: _blue,
             imagePath:
-                'assets/images/smartCampus/home_actions/teacher/student_roster.png',
+                'assets/images/new/智慧校园/任课老师端/学生名册.png',
           ),
           SmartCampusQuickActionData(
             label: '作业批改',
@@ -421,7 +421,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _orangeSoft,
             foreground: _orange,
             imagePath:
-                'assets/images/smartCampus/home_actions/teacher/homework_review.png',
+                'assets/images/new/智慧校园/任课老师端/作业批改.png',
           ),
           SmartCampusQuickActionData(
             label: '考评管理',
@@ -429,7 +429,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _pinkSoft,
             foreground: _pink,
             imagePath:
-                'assets/images/smartCampus/home_actions/teacher/evaluation_management.png',
+                'assets/images/new/智慧校园/任课老师端/考评管理.png',
           ),
           SmartCampusQuickActionData(
             label: '我的请假',
@@ -445,7 +445,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _purpleSoft,
             foreground: _purple,
             imagePath:
-                'assets/images/smartCampus/home_actions/teacher/group_chat.png',
+                'assets/images/new/智慧校园/任课老师端/群聊.png',
           ),
           SmartCampusQuickActionData(
             label: '校圈',
@@ -453,7 +453,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _greenSoft,
             foreground: _green,
             imagePath:
-                'assets/images/smartCampus/home_actions/teacher/school_circle.png',
+                'assets/images/new/智慧校园/任课老师端/校圈.png',
           ),
           SmartCampusQuickActionData(
             label: '校长信箱',
@@ -461,7 +461,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _purpleSoft,
             foreground: _purple,
             imagePath:
-                'assets/images/smartCampus/home_actions/teacher/principal_mailbox.png',
+                'assets/images/new/智慧校园/任课老师端/校长信箱.png',
           ),
         ],
         profile: const SmartCampusProfileData(
@@ -590,7 +590,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _purpleSoft,
             foreground: _purple,
             imagePath:
-                'assets/images/smartCampus/home_actions/head_teacher/class_workbench.png',
+                'assets/images/new/智慧校园/班主任端/班级工作台.png',
           ),
           SmartCampusQuickActionData(
             label: '请假审批',
@@ -598,7 +598,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _purpleSoft,
             foreground: _purple,
             imagePath:
-                'assets/images/smartCampus/home_actions/head_teacher/leave_approval.png',
+                'assets/images/new/智慧校园/班主任端/请假审批.png',
           ),
           SmartCampusQuickActionData(
             label: '我的请假',
@@ -614,7 +614,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _purpleSoft,
             foreground: _purple,
             imagePath:
-                'assets/images/smartCampus/home_actions/head_teacher/dorm_dynamic.png',
+                'assets/images/new/智慧校园/班主任端/查寝动态.png',
           ),
           SmartCampusQuickActionData(
             label: '查寝历史',
@@ -622,7 +622,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _purpleSoft,
             foreground: _purple,
             imagePath:
-                'assets/images/smartCampus/home_actions/head_teacher/dorm_history.png',
+                'assets/images/new/智慧校园/班主任端/查寝历史.png',
           ),
           SmartCampusQuickActionData(
             label: '家校沟通',
@@ -630,7 +630,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _purpleSoft,
             foreground: _purple,
             imagePath:
-                'assets/images/smartCampus/home_actions/head_teacher/home_school_communication.png',
+                'assets/images/new/智慧校园/班主任端/家校沟通.png',
           ),
           SmartCampusQuickActionData(
             label: '群聊',
@@ -638,7 +638,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _purpleSoft,
             foreground: _purple,
             imagePath:
-                'assets/images/smartCampus/home_actions/head_teacher/group_chat.png',
+                'assets/images/new/智慧校园/班主任端/群聊.png',
           ),
           SmartCampusQuickActionData(
             label: '校圈',
@@ -646,7 +646,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _purpleSoft,
             foreground: _purple,
             imagePath:
-                'assets/images/smartCampus/home_actions/head_teacher/school_circle.png',
+                'assets/images/new/智慧校园/班主任端/校圈.png',
           ),
           SmartCampusQuickActionData(
             label: '校长信箱',
@@ -654,7 +654,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _purpleSoft,
             foreground: _purple,
             imagePath:
-                'assets/images/smartCampus/home_actions/head_teacher/principal_mailbox.png',
+                'assets/images/new/智慧校园/班主任端/校长信箱.png',
           ),
         ],
         profile: const SmartCampusProfileData(
@@ -783,7 +783,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _purpleSoft,
             foreground: _purple,
             imagePath:
-                'assets/images/smartCampus/home_actions/dorm_manager/dorm_check_by_room.png',
+                'assets/images/new/智慧校园/宿管端/按宿舍查寝.png',
           ),
           SmartCampusQuickActionData(
             label: '查寝历史',
@@ -791,7 +791,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _blueSoft,
             foreground: _blue,
             imagePath:
-                'assets/images/smartCampus/home_actions/dorm_manager/dorm_history.png',
+                'assets/images/new/智慧校园/宿管端/查寝历史.png',
           ),
           SmartCampusQuickActionData(
             label: '宿管请假',
@@ -799,7 +799,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _pinkSoft,
             foreground: _pink,
             imagePath:
-                'assets/images/smartCampus/home_actions/dorm_manager/dorm_leave.png',
+                'assets/images/new/智慧校园/宿管端/宿管请假.png',
           ),
           SmartCampusQuickActionData(
             label: '校圈',
@@ -807,7 +807,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _greenSoft,
             foreground: _green,
             imagePath:
-                'assets/images/smartCampus/home_actions/dorm_manager/school_circle.png',
+                'assets/images/new/智慧校园/宿管端/校圈.png',
           ),
           SmartCampusQuickActionData(
             label: '群聊',
@@ -815,7 +815,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _purpleSoft,
             foreground: _purple,
             imagePath:
-                'assets/images/smartCampus/home_actions/dorm_manager/group_chat.png',
+                'assets/images/new/智慧校园/宿管端/群聊.png',
           ),
           SmartCampusQuickActionData(
             label: '校长信箱',
@@ -823,7 +823,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _purpleSoft,
             foreground: _purple,
             imagePath:
-                'assets/images/smartCampus/home_actions/dorm_manager/principal_mailbox.png',
+                'assets/images/new/智慧校园/宿管端/校长信箱.png',
           ),
         ],
         profile: const SmartCampusProfileData(
@@ -945,7 +945,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _purpleSoft,
             foreground: _purple,
             imagePath:
-                'assets/images/smartCampus/home_actions/admin/student_management.png',
+                'assets/images/new/管理员/学生管理.png',
           ),
           SmartCampusQuickActionData(
             label: '教师管理',
@@ -953,7 +953,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _purpleSoft,
             foreground: _purple,
             imagePath:
-                'assets/images/smartCampus/home_actions/admin/teacher_management.png',
+                'assets/images/new/管理员/教师管理.png',
           ),
           SmartCampusQuickActionData(
             label: '班级编辑',
@@ -961,7 +961,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _purpleSoft,
             foreground: _purple,
             imagePath:
-                'assets/images/smartCampus/home_actions/admin/class_management.png',
+                'assets/images/new/管理员/班级编辑.png',
           ),
           SmartCampusQuickActionData(
             label: '排课与课表',
@@ -969,7 +969,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _purpleSoft,
             foreground: _purple,
             imagePath:
-                'assets/images/smartCampus/home_actions/admin/schedule_management.png',
+                'assets/images/new/管理员/排课与课表.png',
           ),
           SmartCampusQuickActionData(
             label: '宿管请假审批',
@@ -977,7 +977,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _orangeSoft,
             foreground: _orange,
             imagePath:
-                'assets/images/smartCampus/home_actions/admin/dorm_leave_approval.png',
+                'assets/images/new/管理员/宿管请假审批.png',
           ),
           SmartCampusQuickActionData(
             label: '人脸库',
@@ -985,7 +985,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _blueSoft,
             foreground: _blue,
             imagePath:
-                'assets/images/smartCampus/home_actions/admin/face_library.png',
+                'assets/images/new/管理员/人脸库.png',
           ),
           SmartCampusQuickActionData(
             label: '通知管理',
@@ -993,7 +993,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _pinkSoft,
             foreground: _pink,
             imagePath:
-                'assets/images/smartCampus/home_actions/admin/notification_management.png',
+                'assets/images/new/管理员/通知管理.png',
           ),
           SmartCampusQuickActionData(
             label: '群聊',
@@ -1001,7 +1001,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _purpleSoft,
             foreground: _purple,
             imagePath:
-                'assets/images/smartCampus/home_actions/admin/group_chat.png',
+                'assets/images/new/管理员/群聊.png',
           ),
           SmartCampusQuickActionData(
             label: '校长信箱',
@@ -1009,7 +1009,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _purpleSoft,
             foreground: _purple,
             imagePath:
-                'assets/images/smartCampus/home_actions/admin/principal_mailbox.png',
+                'assets/images/new/管理员/校长信箱.png',
           ),
           SmartCampusQuickActionData(
             label: '校园治理',
@@ -1017,7 +1017,7 @@ SmartCampusDashboardData smartCampusDashboardDataForRole(SmartCampusRole role) {
             background: _greenSoft,
             foreground: _green,
             imagePath:
-                'assets/images/smartCampus/home_actions/admin/campus_governance.png',
+                'assets/images/new/管理员/校圈治理.png',
           ),
         ],
         profile: const SmartCampusProfileData(

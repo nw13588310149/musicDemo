@@ -10,6 +10,7 @@ import '../../../core/widgets/smooth_circle_network_avatar.dart';
 import '../../school/data/school_repository.dart';
 import '../../shell/state/shell_state.dart';
 import '../../shell/ui/shell_layout.dart';
+import '../data/course_sign_data.dart';
 import '../data/course_teacher_index_data.dart';
 import '../data/head_teacher_index_data.dart';
 import '../data/schedule_course_card_builder.dart';
@@ -1327,12 +1328,12 @@ List<String> _studentInfoLines(
   String display(String value) =>
       value.trim().isEmpty ? '—' : value.trim();
   final lines = <String>[
+    '性别：${display(user.gender)}',
     '学校：${display(user.school)}',
     '目标院校：${display(user.targetSchool)}',
-    '性别：${display(user.gender)}',
   ];
   if (dormBedLabel != null) {
-    lines.insert(0, '宿舍床位：${display(dormBedLabel)}');
+    lines.add('宿舍床位：${display(dormBedLabel)}');
   }
   return lines;
 }
@@ -1621,7 +1622,6 @@ class _TeacherNoticePanel extends ConsumerStatefulWidget {
 
 class _TeacherNoticePanelState extends ConsumerState<_TeacherNoticePanel> {
   List<TeacherNoticeListItem> _notices = const [];
-  bool _loading = false;
 
   bool get _usesNoticeApi =>
       widget.role == SmartCampusRole.teacher ||
@@ -1646,7 +1646,6 @@ class _TeacherNoticePanelState extends ConsumerState<_TeacherNoticePanel> {
 
   Future<void> _loadNotices() async {
     if (!_usesNoticeApi) return;
-    setState(() => _loading = true);
     try {
       final ApiResponse resp;
       if (widget.role == SmartCampusRole.student) {
@@ -1661,19 +1660,16 @@ class _TeacherNoticePanelState extends ConsumerState<_TeacherNoticePanel> {
       if (!resp.isSuccess) {
         setState(() {
           _notices = const [];
-          _loading = false;
         });
         return;
       }
       setState(() {
         _notices = parseTeacherNoticeList(resp.data);
-        _loading = false;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _notices = const [];
-        _loading = false;
       });
     }
   }
@@ -1711,18 +1707,6 @@ class _TeacherNoticePanelState extends ConsumerState<_TeacherNoticePanel> {
   @override
   Widget build(BuildContext context) {
     if (_usesNoticeApi) {
-      if (_loading) {
-        return Center(
-          child: Text(
-            '加载中…',
-            style: TextStyle(
-              fontSize: 12,
-              color: const Color(0xFFB6B5BB),
-              fontFamily: 'PingFang SC',
-            ),
-          ),
-        );
-      }
       return _TeacherNoticeList(
         items: _notices,
         scrollable: widget.scrollable,
@@ -2101,12 +2085,15 @@ class _LessonRowData {
     required this.tagDotColor,
     required this.hint,
     this.avatarUrl = '',
+    this.preferLogoOverAvatar = false,
   });
 
   final String avatarSeed;
   final String logoUrl;
-  /// 任课老师头像；非空时优先于 [logoUrl]（学生端课表）。
+  /// 任课老师头像；学生端课表优先展示；教师端在无 logo 时作回退。
   final String avatarUrl;
+  /// true：先 [logoUrl] 再 [avatarUrl]；false：先 [avatarUrl] 再 [logoUrl]。
+  final bool preferLogoOverAvatar;
   final String teacherName;
   final String courseName;
   final Color courseColor;
@@ -2176,6 +2163,7 @@ class _TeacherScheduleSection extends ConsumerStatefulWidget {
 class _TeacherScheduleSectionState extends ConsumerState<_TeacherScheduleSection> {
   _LessonScheduleData? _currentLesson;
   List<_LessonScheduleData> _todayLessons = const [];
+  int _scheduleLoadGen = 0;
 
   @override
   void initState() {
@@ -2183,14 +2171,15 @@ class _TeacherScheduleSectionState extends ConsumerState<_TeacherScheduleSection
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (widget.courseTeacherIndex != null) {
         _applyCourseTeacherIndex(widget.courseTeacherIndex);
-      } else {
-        _loadSchedule();
       }
+      // 任课老师首页由父级统一拉 courseTeacherIndex；此处不再并行请求
+      // courseList，避免两路数据短暂不一致。
     });
   }
 
   Future<void> _applyCourseTeacherIndex(CourseTeacherIndexRes? index) async {
     if (!mounted || index == null) return;
+    final gen = ++_scheduleLoadGen;
     final teacherRepo = ref.read(teacherRepositoryProvider);
     final schoolRepo = ref.read(schoolRepositoryProvider);
     try {
@@ -2201,13 +2190,13 @@ class _TeacherScheduleSectionState extends ConsumerState<_TeacherScheduleSection
         timeConfigs: _kDefaultDashboardTimeConfigs,
         now: DateTime.now(),
       );
-      if (!mounted) return;
+      if (!mounted || gen != _scheduleLoadGen) return;
       setState(() {
         _currentLesson = built.current;
         _todayLessons = built.today;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || gen != _scheduleLoadGen) return;
       setState(() {
         _currentLesson = null;
         _todayLessons = const [];
@@ -2222,90 +2211,6 @@ class _TeacherScheduleSectionState extends ConsumerState<_TeacherScheduleSection
       _applyCourseTeacherIndex(widget.courseTeacherIndex);
     }
   }
-
-  Future<void> _loadSchedule() async {
-    if (!mounted) return;
-
-    final teacherRepo = ref.read(teacherRepositoryProvider);
-    final schoolRepo = ref.read(schoolRepositoryProvider);
-    final today = DateTime.now();
-    final todayIso = _isoDate(today);
-
-    var timeConfigs = _kDefaultDashboardTimeConfigs;
-    try {
-      if (widget.courseTeacherIndex != null) {
-        final built = await _buildScheduleFromCourseTeacherIndex(
-          index: widget.courseTeacherIndex!,
-          schoolRepo: schoolRepo,
-          teacherRepo: teacherRepo,
-          timeConfigs: timeConfigs,
-          now: today,
-        );
-        if (!mounted) return;
-        setState(() {
-          _currentLesson = built.current;
-          _todayLessons = built.today;
-        });
-        return;
-      }
-
-      final classResp = await teacherRepo.classList(isClassTeacher: 1);
-      if (classResp.isSuccess) {
-        String? classId;
-        for (final m in _scheduleExtractList(classResp)) {
-          final id = _schedulePickString(m, ['id', 'classId'], '');
-          if (id.isNotEmpty) {
-            classId = id;
-            break;
-          }
-        }
-        if (classId != null && classId.isNotEmpty) {
-          final tcResp =
-              await schoolRepo.schoolTimeConfigList(classId: classId);
-          if (tcResp.isSuccess) {
-            final parsed = _parseDashboardTimeConfigs(tcResp);
-            if (parsed.isNotEmpty) timeConfigs = parsed;
-          }
-        }
-      }
-
-      final courseResp = await teacherRepo.courseList(
-        beginDate: todayIso,
-        endDate: todayIso,
-      );
-      if (!mounted) return;
-
-      if (!courseResp.isSuccess) {
-        if (courseResp.msg.isNotEmpty) {
-          AppToast.show(context, courseResp.msg);
-        }
-        setState(() {
-          _currentLesson = null;
-          _todayLessons = const [];
-        });
-        return;
-      }
-
-      final built = _buildDashboardSchedule(
-        courseResp: courseResp,
-        timeConfigs: timeConfigs,
-        now: today,
-      );
-      setState(() {
-        _currentLesson = built.current;
-        _todayLessons = built.today;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _currentLesson = null;
-        _todayLessons = const [];
-      });
-    }
-  }
-
-  String _isoDate(DateTime d) =>
-      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   @override
   Widget build(BuildContext context) {
@@ -2469,6 +2374,9 @@ _BuiltDashboardSchedule _buildDashboardScheduleFromIndex({
 
   final currentId = index.currentCourse?['id']?.toString();
   final nextId = index.nextCourse?['id']?.toString();
+  // 仅排除「当前课程」卡已展示的那一节；有 currentCourse 时 nextCourse 仍应出现在今日课表。
+  final shownInCurrentId =
+      index.currentCourse != null ? currentId : nextId;
 
   _LessonScheduleData? current;
   if (index.currentCourse != null) {
@@ -2480,121 +2388,26 @@ _BuiltDashboardSchedule _buildDashboardScheduleFromIndex({
     current = lessonFromRow(index.nextCourse!, _LessonSlotPhase.upcoming);
   }
 
-  final today = <_LessonScheduleData>[];
+  final todayEntries = <({int sortKey, _LessonScheduleData lesson})>[];
   for (final row in index.todayCourseList) {
     final id = row['id']?.toString();
-    if (id != null && id.isNotEmpty && (id == currentId || id == nextId)) {
+    if (id != null &&
+        id.isNotEmpty &&
+        shownInCurrentId != null &&
+        id == shownInCurrentId) {
       continue;
     }
     final times = _resolveRowTimes(row, timeConfigs);
     final phase = _slotPhase(now, times.start, times.end);
-    today.add(lessonFromRow(row, phase));
+    todayEntries.add((
+      sortKey: _dashboardCourseSortKey(row, times.start),
+      lesson: lessonFromRow(row, phase),
+    ));
   }
+  todayEntries.sort((a, b) => a.sortKey.compareTo(b.sortKey));
+  final today = todayEntries.map((e) => e.lesson).toList(growable: false);
 
   return _BuiltDashboardSchedule(current: current, today: today);
-}
-
-_BuiltDashboardSchedule _buildDashboardSchedule({
-  required ApiResponse courseResp,
-  required List<_DashboardTimeConfig> timeConfigs,
-  required DateTime now,
-}) {
-  final rows = _extractDashboardCourseRows(courseResp);
-  if (rows.isEmpty) {
-    return const _BuiltDashboardSchedule(today: []);
-  }
-
-  final groups = <String, _DashboardSlotGroup>{};
-  for (final row in rows) {
-    final times = _resolveRowTimes(row, timeConfigs);
-    if (times.start.isEmpty || times.end.isEmpty) continue;
-    final key = '${times.lineNum}|${times.start}|${times.end}';
-    groups.putIfAbsent(
-      key,
-      () => _DashboardSlotGroup(
-        lineNum: times.lineNum,
-        start: times.start,
-        end: times.end,
-        sortKey: _hmSortKey(times.start),
-      ),
-    ).rows.add(row);
-  }
-
-  final sorted = groups.values.toList()
-    ..sort((a, b) {
-      final byStart = a.sortKey.compareTo(b.sortKey);
-      if (byStart != 0) return byStart;
-      return a.lineNum.compareTo(b.lineNum);
-    });
-
-  final allLessons = <_LessonScheduleData>[];
-  final phases = <_LessonSlotPhase>[];
-
-  for (final group in sorted) {
-    final phase = _slotPhase(now, group.start, group.end);
-    final style = _statusStyle(phase);
-    allLessons.add(
-      _LessonScheduleData(
-        time: '${group.start} - ${group.end}',
-        status: style.label,
-        statusColor: style.foreground,
-        statusBg: style.background,
-        isPast: phase == _LessonSlotPhase.ended,
-        teachers: [
-          for (final row in group.rows)
-            _lessonRowFromCourse(row, group.start, group.end),
-        ],
-      ),
-    );
-    phases.add(phase);
-  }
-
-  var currentIdx = -1;
-  for (var i = 0; i < phases.length; i++) {
-    if (phases[i] == _LessonSlotPhase.inProgress) {
-      currentIdx = i;
-      break;
-    }
-  }
-  if (currentIdx < 0) {
-    for (var i = 0; i < phases.length; i++) {
-      if (phases[i] == _LessonSlotPhase.upcoming) {
-        currentIdx = i;
-        break;
-      }
-    }
-  }
-  if (currentIdx < 0) {
-    for (var i = phases.length - 1; i >= 0; i--) {
-      if (phases[i] == _LessonSlotPhase.ended) {
-        currentIdx = i;
-        break;
-      }
-    }
-  }
-
-  final current = currentIdx >= 0 ? allLessons[currentIdx] : null;
-  final today = <_LessonScheduleData>[
-    for (var i = 0; i < allLessons.length; i++)
-      if (i != currentIdx) allLessons[i],
-  ];
-
-  return _BuiltDashboardSchedule(current: current, today: today);
-}
-
-class _DashboardSlotGroup {
-  _DashboardSlotGroup({
-    required this.lineNum,
-    required this.start,
-    required this.end,
-    required this.sortKey,
-  });
-
-  final int lineNum;
-  final String start;
-  final String end;
-  final int sortKey;
-  final List<Map<String, dynamic>> rows = [];
 }
 
 class _ResolvedRowTimes {
@@ -2609,6 +2422,29 @@ class _ResolvedRowTimes {
   final String end;
 }
 
+class _DashboardSlotGroup {
+  _DashboardSlotGroup({
+    required this.lineNum,
+    required this.start,
+    required this.end,
+    required this.sortKey,
+  });
+
+  final int lineNum;
+  final String start;
+  final String end;
+  final int sortKey;
+  final List<Map<String, dynamic>> rows = <Map<String, dynamic>>[];
+}
+
+int _dashboardCourseSortKey(Map<String, dynamic> row, String startHm) {
+  final startDt = parseCourseDateTime(
+    _schedulePickString(row, ['courseStartTime'], ''),
+  );
+  if (startDt != null) return startDt.millisecondsSinceEpoch;
+  return _hmSortKey(startHm);
+}
+
 _ResolvedRowTimes _resolveRowTimes(
   Map<String, dynamic> row,
   List<_DashboardTimeConfig> configs,
@@ -2618,43 +2454,57 @@ _ResolvedRowTimes _resolveRowTimes(
       ? lineNumRaw
       : (int.tryParse(lineNumRaw?.toString() ?? '') ?? 0);
 
-  if (lineNum > 0) {
+  var start = pickCourseClock(
+        _schedulePickString(row, [
+          'courseStartTime',
+          'timeBegin',
+          'startTime',
+          'beginTime',
+          'start',
+        ], ''),
+      ) ??
+      '';
+  var end = pickCourseClock(
+        _schedulePickString(row, [
+          'courseEndTime',
+          'timeEnd',
+          'endTime',
+          'finishTime',
+          'end',
+        ], ''),
+      ) ??
+      '';
+
+  _DashboardTimeConfig? configForLineNum() {
+    if (lineNum <= 0) return null;
     for (final c in configs) {
-      if (c.lineNum == lineNum) {
-        return _ResolvedRowTimes(
-          lineNum: lineNum,
-          start: c.start,
-          end: c.end,
-        );
-      }
+      if (c.lineNum == lineNum) return c;
     }
-    if (lineNum <= configs.length) {
-      final c = configs[lineNum - 1];
-      return _ResolvedRowTimes(
-        lineNum: lineNum,
-        start: c.start,
-        end: c.end,
-      );
+    if (lineNum <= configs.length) return configs[lineNum - 1];
+    return null;
+  }
+
+  if (end.isEmpty) {
+    final matched = configForLineNum();
+    if (matched != null) {
+      end = matched.end;
+      if (start.isEmpty) start = matched.start;
     }
   }
 
-  final start = _trimDashboardHm(
-    _schedulePickString(row, [
-      'timeBegin',
-      'startTime',
-      'beginTime',
-      'start',
-    ], ''),
+  if (start.isEmpty) {
+    final matched = configForLineNum();
+    if (matched != null) {
+      start = matched.start;
+      if (end.isEmpty) end = matched.end;
+    }
+  }
+
+  return _ResolvedRowTimes(
+    lineNum: lineNum,
+    start: _trimDashboardHm(start),
+    end: _trimDashboardHm(end),
   );
-  final end = _trimDashboardHm(
-    _schedulePickString(row, [
-      'timeEnd',
-      'endTime',
-      'finishTime',
-      'end',
-    ], ''),
-  );
-  return _ResolvedRowTimes(lineNum: lineNum, start: start, end: end);
 }
 
 _LessonRowData _lessonRowFromCourse(
@@ -2719,6 +2569,8 @@ _LessonRowData _lessonRowFromCourse(
   return _LessonRowData(
     avatarSeed: avatarSeed,
     logoUrl: resolveScheduleLogoUrl(row),
+    avatarUrl: resolveScheduleTeacherHeadUrl(row),
+    preferLogoOverAvatar: true,
     teacherName: displayName,
     courseName: subjectName,
     courseColor: courseColor,
@@ -2757,30 +2609,6 @@ List<_DashboardTimeConfig> _parseDashboardTimeConfigs(ApiResponse resp) {
     list.add(_DashboardTimeConfig(lineNum: lineNum, start: start, end: end));
   }
   list.sort((a, b) => a.lineNum.compareTo(b.lineNum));
-  return list;
-}
-
-List<Map<String, dynamic>> _extractDashboardCourseRows(ApiResponse resp) {
-  final raw = resp.data;
-  final list = <Map<String, dynamic>>[];
-  if (raw is Map) {
-    for (final entry in raw.entries) {
-      final v = entry.value;
-      if (v is List) {
-        for (final item in v) {
-          if (item is Map) {
-            list.add(Map<String, dynamic>.from(item));
-          }
-        }
-      }
-    }
-  } else if (raw is List) {
-    for (final item in raw) {
-      if (item is Map) {
-        list.add(Map<String, dynamic>.from(item));
-      }
-    }
-  }
   return list;
 }
 
@@ -3199,6 +3027,7 @@ class _LessonTeacherRow extends StatelessWidget {
             seed: data.avatarSeed,
             logoUrl: data.logoUrl,
             avatarUrl: data.avatarUrl,
+            preferLogoOverAvatar: data.preferLogoOverAvatar,
             size: ui(40),
           ),
         ),
@@ -3313,16 +3142,20 @@ class _LessonSeedAvatar extends StatelessWidget {
     required this.logoUrl,
     required this.size,
     this.avatarUrl = '',
+    this.preferLogoOverAvatar = false,
   });
 
   final String seed;
   final String logoUrl;
   final String avatarUrl;
+  final bool preferLogoOverAvatar;
   final double size;
 
   @override
   Widget build(BuildContext context) {
-    final url = avatarUrl.isNotEmpty ? avatarUrl : logoUrl;
+    final url = preferLogoOverAvatar
+        ? (logoUrl.isNotEmpty ? logoUrl : avatarUrl)
+        : (avatarUrl.isNotEmpty ? avatarUrl : logoUrl);
     return SmoothCircleNetworkAvatar(
       url: url,
       size: size,
