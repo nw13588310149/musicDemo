@@ -230,7 +230,7 @@ class _ConsultationBodyState extends ConsumerState<_ConsultationBody> {
                 crossAxisCount: columns,
                 crossAxisSpacing: gap,
                 mainAxisSpacing: gap,
-                mainAxisExtent: ui(116),
+                mainAxisExtent: ui(94),
               ),
               delegate: SliverChildBuilderDelegate(
                 (context, index) {
@@ -431,12 +431,12 @@ class _CardThumbnail extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final cacheWidth =
-        (ui(92) * MediaQuery.devicePixelRatioOf(context)).round();
+        (ui(70) * MediaQuery.devicePixelRatioOf(context)).round();
     return ClipRRect(
       borderRadius: BorderRadius.circular(ui(6)),
       child: SizedBox(
-        width: ui(92),
-        height: ui(92),
+        width: ui(70),
+        height: ui(70),
         child: url.isEmpty
             ? const _ThumbnailPlaceholder()
             : Image.network(

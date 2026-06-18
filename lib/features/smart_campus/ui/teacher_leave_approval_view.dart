@@ -112,6 +112,7 @@ class TeacherLeaveApprovalView extends ConsumerStatefulWidget {
 class _TeacherLeaveApprovalViewState
     extends ConsumerState<TeacherLeaveApprovalView> {
   _StatusTab _tab = _StatusTab.all;
+  String _searchQuery = '';
   List<StudentLeaveRecord> _requests = const [];
   int _pendingCount = 0;
   int _reviewingCount = 0;
@@ -185,6 +186,27 @@ class _TeacherLeaveApprovalViewState
     });
   }
 
+  List<StudentLeaveRecord> _filterSearch(List<StudentLeaveRecord> source) {
+    final q = _searchQuery.trim();
+    if (q.isEmpty) return source;
+    final lower = q.toLowerCase();
+    bool hit(String value) {
+      if (value.isEmpty || value == '—') return false;
+      return value.toLowerCase().contains(lower);
+    }
+
+    return source
+        .where(
+          (r) =>
+              hit(r.studentName) ||
+              hit(r.studentNo) ||
+              hit(r.leaveType) ||
+              hit(r.reason) ||
+              hit(r.note),
+        )
+        .toList();
+  }
+
   List<StudentLeaveRecord> _filterTab(List<StudentLeaveRecord> source) {
     return switch (_tab) {
       _StatusTab.all => source,
@@ -220,6 +242,7 @@ class _TeacherLeaveApprovalViewState
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final pageLoading = _loading && _requests.isEmpty;
+    final displayRecords = _filterSearch(_requests);
     return Container(
       color: _kPageBg,
       child: SingleChildScrollView(
@@ -241,6 +264,8 @@ class _TeacherLeaveApprovalViewState
                 SizedBox(height: ui(16)),
                 _TabsRow(
                   current: _tab,
+                  searchValue: _searchQuery,
+                  onSearchChanged: (v) => setState(() => _searchQuery = v),
                   onTap: (t) {
                     if (_tab == t) return;
                     setState(() => _tab = t);
@@ -249,10 +274,13 @@ class _TeacherLeaveApprovalViewState
                 ),
                 SizedBox(height: ui(16)),
                 _CardsGrid(
-                  records: _requests,
+                  records: displayRecords,
                   emptyMessage: pageLoading
                       ? ''
-                      : (_loadError ?? '暂无相关申请'),
+                      : (_loadError ??
+                            (_searchQuery.trim().isNotEmpty && _requests.isNotEmpty
+                                ? '未找到匹配申请'
+                                : '暂无相关申请')),
                   onApprove: _onApprove,
                   onReject: _onReject,
                 ),
@@ -521,10 +549,17 @@ class _StatCard extends StatelessWidget {
 // —— Tabs row + 搜索框 ——————————————————————————————————————————————
 
 class _TabsRow extends StatelessWidget {
-  const _TabsRow({required this.current, required this.onTap});
+  const _TabsRow({
+    required this.current,
+    required this.onTap,
+    required this.searchValue,
+    required this.onSearchChanged,
+  });
 
   final _StatusTab current;
   final ValueChanged<_StatusTab> onTap;
+  final String searchValue;
+  final ValueChanged<String> onSearchChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -572,14 +607,9 @@ class _TabsRow extends StatelessWidget {
               ),
               SizedBox(width: ui(8)),
               Expanded(
-                child: Text(
-                  '搜索姓名、学号、手机、宿舍、家长',
-                  style: TextStyle(
-                    fontSize: ui(14),
-                    color: _kTextPlaceholder,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w400,
-                  ),
+                child: _LeaveApprovalSearchField(
+                  value: searchValue,
+                  onChanged: onSearchChanged,
                 ),
               ),
             ],
@@ -623,6 +653,79 @@ class _TabPill extends StatelessWidget {
             height: 1.2,
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _LeaveApprovalSearchField extends StatefulWidget {
+  const _LeaveApprovalSearchField({
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_LeaveApprovalSearchField> createState() =>
+      _LeaveApprovalSearchFieldState();
+}
+
+class _LeaveApprovalSearchFieldState extends State<_LeaveApprovalSearchField> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.value);
+  }
+
+  @override
+  void didUpdateWidget(covariant _LeaveApprovalSearchField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.value != _controller.text) {
+      _controller.text = widget.value;
+      _controller.selection = TextSelection.collapsed(
+        offset: widget.value.length,
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return AppTextField(
+      controller: _controller,
+      onChanged: widget.onChanged,
+      cursorColor: _kPurple,
+      cursorWidth: 1.5,
+      cursorHeight: ui(16),
+      style: TextStyle(
+        fontSize: ui(14),
+        color: _kTextDark,
+        fontFamily: 'PingFang SC',
+        fontWeight: AppFont.w400,
+        height: 1.2,
+      ),
+      decoration: InputDecoration(
+        hintText: '搜索姓名、学号、手机、宿舍、家长',
+        hintStyle: TextStyle(
+          fontSize: ui(14),
+          color: _kTextPlaceholder,
+          fontFamily: 'PingFang SC',
+          fontWeight: AppFont.w400,
+          height: 1.2,
+        ),
+        isCollapsed: true,
+        contentPadding: EdgeInsets.zero,
+        border: InputBorder.none,
       ),
     );
   }
@@ -939,14 +1042,19 @@ class _InfoLine extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: ui(12),
-            color: _kTextHint,
-            fontFamily: 'PingFang SC',
-            fontWeight: AppFont.w400,
-            height: 1.5,
+        SizedBox(
+          width: ui(64),
+          child: Text(
+            label,
+            maxLines: 1,
+            softWrap: false,
+            style: TextStyle(
+              fontSize: ui(12),
+              color: _kTextHint,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w400,
+              height: 1.5,
+            ),
           ),
         ),
         Expanded(

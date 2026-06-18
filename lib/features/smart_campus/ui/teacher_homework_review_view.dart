@@ -247,6 +247,9 @@ const Color _kGreenBg = Color(0xFFE4FFED);
 const Color _kSubjectBg = Colors.white;
 const Color _kPillIconColor = Color(0xFF1C274C);
 
+/// 页面各板块之间的固定间距。
+const double _kSectionGap = 14;
+
 // ---- 数据模型 ---------------------------------------------------------------
 
 enum _SubmissionState { passed, pending, missing, reviewed }
@@ -778,6 +781,7 @@ class _TeacherHomeworkReviewViewState
 
     return SmartCampusSecondaryPageShell(
       backgroundColor: _kPageBg,
+      bodyScrollable: false,
       header: _ReviewBanner(
         onBack: widget.onBack,
         onOpenHistory: () => _openHistoryDrawer(),
@@ -794,7 +798,7 @@ class _TeacherHomeworkReviewViewState
               _loadHomeworkList();
             },
           ),
-          SizedBox(height: ui(12)),
+          SizedBox(height: ui(_kSectionGap)),
           _StatsPanel(
             classFilter: _classFilter,
             classOptions: classNames,
@@ -824,11 +828,10 @@ class _TeacherHomeworkReviewViewState
             },
             stats: _stats,
           ),
-          SizedBox(height: ui(16)),
-          _all.isEmpty
-              ? Center(
-                  child: Padding(
-                    padding: EdgeInsets.only(top: ui(60)),
+          SizedBox(height: ui(_kSectionGap)),
+          Expanded(
+            child: _all.isEmpty
+                ? Center(
                     child: Text(
                       '暂无作业数据',
                       style: TextStyle(
@@ -836,9 +839,8 @@ class _TeacherHomeworkReviewViewState
                         fontSize: ui(14),
                       ),
                     ),
-                  ),
-                )
-              : _BodyRow(
+                  )
+                : _BodyRow(
                     items: _all,
                     activeIdx: _activeHomeworkIdx,
                     onSelect: (i) {
@@ -855,6 +857,7 @@ class _TeacherHomeworkReviewViewState
                     onOpenReview: (s) => _openReviewDrawer(active, s),
                     onDelete: (item) => _deleteHomework(item),
                   ),
+          ),
         ],
       ),
     );
@@ -1127,7 +1130,8 @@ class _StatusTabsRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: ui(4), vertical: ui(4)),
+      height: ui(44),
+      padding: EdgeInsets.all(ui(4)),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(ui(8)),
@@ -1136,7 +1140,7 @@ class _StatusTabsRow extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           for (var i = 0; i < tabs.length; i++) ...[
-            if (i > 0) SizedBox(width: ui(8)),
+            if (i > 0) SizedBox(width: ui(4)),
             _SegmentChip(
               label: tabs[i],
               active: i == activeIdx,
@@ -1171,10 +1175,9 @@ class _SegmentChip extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(ui(6)),
       child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: ui(compact ? 12 : 16),
-          vertical: ui(10),
-        ),
+        height: ui(36),
+        padding: EdgeInsets.symmetric(horizontal: ui(compact ? 12 : 16)),
+        alignment: Alignment.center,
         decoration: BoxDecoration(
           color: active ? _kTextDark : Colors.transparent,
           borderRadius: BorderRadius.circular(ui(6)),
@@ -1186,7 +1189,7 @@ class _SegmentChip extends StatelessWidget {
             color: active ? Colors.white : _kTextSecondary,
             fontFamily: 'PingFang SC',
             fontWeight: AppFont.w500,
-            height: 1.2,
+            height: 1,
           ),
         ),
       ),
@@ -1233,6 +1236,7 @@ class _StatsPanel extends StatelessWidget {
             children: [
               SizedBox(
                 width: ui(180),
+                height: ui(42),
                 child: PopupSelectorField<String>(
                   value: classFilter,
                   items: classOptions.isEmpty
@@ -1240,10 +1244,12 @@ class _StatsPanel extends StatelessWidget {
                       : classOptions,
                   itemLabel: (sv) => sv,
                   onChanged: onClassChanged,
+                  fieldHeight: 42,
                 ),
               ),
               const Spacer(),
               Container(
+                height: ui(44),
                 padding: EdgeInsets.all(ui(4)),
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -1267,7 +1273,7 @@ class _StatsPanel extends StatelessWidget {
               ),
             ],
           ),
-          SizedBox(height: ui(12)),
+          SizedBox(height: ui(_kSectionGap)),
           Row(
             children: [
               Expanded(
@@ -1325,7 +1331,7 @@ class _StatGap extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return SizedBox(width: ui(16));
+    return SizedBox(width: ui(_kSectionGap));
   }
 }
 
@@ -1405,41 +1411,37 @@ class _BodyRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: ui(340),
-            child: _HomeworkListPanel(
-              items: items,
-              activeIdx: activeIdx,
-              onSelect: onSelect,
-              onDelete: onDelete,
-              subjectResolvedFor: subjectResolvedFor,
-            ),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          width: ui(340),
+          child: _HomeworkListPanel(
+            items: items,
+            activeIdx: activeIdx,
+            onSelect: onSelect,
+            onDelete: onDelete,
+            subjectResolvedFor: subjectResolvedFor,
           ),
-          SizedBox(width: ui(16)),
-          Expanded(
-            child: loadingDetail
-                ? Container(
-                    decoration: BoxDecoration(
-                      color: _kCardBg,
-                      borderRadius: BorderRadius.circular(ui(16)),
-                    ),
-                    padding: EdgeInsets.symmetric(vertical: ui(60)),
-                    child: Center(
-                      child: AppLoadingIndicator(),
-                    ),
-                  )
-                : _HomeworkDetailPanel(
-                    item: active,
-                    homeworkSubjectDisplay: subjectResolvedFor(active),
-                    onOpenReview: onOpenReview,
+        ),
+        SizedBox(width: ui(_kSectionGap)),
+        Expanded(
+          child: loadingDetail
+              ? Container(
+                  decoration: BoxDecoration(
+                    color: _kCardBg,
+                    borderRadius: BorderRadius.circular(ui(16)),
                   ),
-          ),
-        ],
-      ),
+                  alignment: Alignment.center,
+                  child: AppLoadingIndicator(),
+                )
+              : _HomeworkDetailPanel(
+                  item: active,
+                  homeworkSubjectDisplay: subjectResolvedFor(active),
+                  onOpenReview: onOpenReview,
+                ),
+        ),
+      ],
     );
   }
 }
@@ -1472,7 +1474,6 @@ class _HomeworkListPanel extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
         children: [
           Padding(
             padding: EdgeInsets.symmetric(vertical: ui(4)),
@@ -1488,16 +1489,25 @@ class _HomeworkListPanel extends StatelessWidget {
             ),
           ),
           SizedBox(height: ui(8)),
-          for (var i = 0; i < items.length; i++) ...[
-            if (i > 0) SizedBox(height: ui(8)),
-            _HomeworkListCard(
-              item: items[i],
-              subjectDisplay: subjectResolvedFor(items[i]),
-              active: i == activeIdx,
-              onTap: () => onSelect(i),
-              onDelete: () => onDelete(items[i]),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (var i = 0; i < items.length; i++) ...[
+                    if (i > 0) SizedBox(height: ui(8)),
+                    _HomeworkListCard(
+                      item: items[i],
+                      subjectDisplay: subjectResolvedFor(items[i]),
+                      active: i == activeIdx,
+                      onTap: () => onSelect(i),
+                      onDelete: () => onDelete(items[i]),
+                    ),
+                  ],
+                ],
+              ),
             ),
-          ],
+          ),
         ],
       ),
     );
@@ -1729,48 +1739,56 @@ class _HomeworkDetailPanel extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Text(
-                  item.title,
-                  style: TextStyle(
-                    fontSize: ui(16),
-                    color: _kTextBlack,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w500,
-                    height: 1.2,
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          item.title,
+                          style: TextStyle(
+                            fontSize: ui(16),
+                            color: _kTextBlack,
+                            fontFamily: 'PingFang SC',
+                            fontWeight: AppFont.w500,
+                            height: 1.2,
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: ui(12)),
+                      Text(
+                        '截止 ${item.deadline}',
+                        style: TextStyle(
+                          fontSize: ui(12),
+                          color: _kTextSecondary,
+                          fontFamily: 'PingFang SC',
+                          fontWeight: AppFont.w400,
+                          height: 1,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
+                  SizedBox(height: ui(_kSectionGap)),
+                  _SuggestedBlock(
+                    suggested: item.suggested,
+                    description: item.suggestedDesc,
+                  ),
+                  SizedBox(height: ui(_kSectionGap)),
+                  _ProgressMetrics(item: item),
+                  SizedBox(height: ui(_kSectionGap)),
+                  _SubmissionsTable(
+                    submissions: item.submissions,
+                    homeworkSubjectDisplay: homeworkSubjectDisplay,
+                    onOpenReview: onOpenReview,
+                  ),
+                ],
               ),
-              SizedBox(width: ui(12)),
-              Text(
-                '截止 ${item.deadline}',
-                style: TextStyle(
-                  fontSize: ui(12),
-                  color: _kTextSecondary,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w400,
-                  height: 1,
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: ui(12)),
-          _SuggestedBlock(
-            suggested: item.suggested,
-            description: item.suggestedDesc,
-          ),
-          SizedBox(height: ui(12)),
-          _ProgressMetrics(item: item),
-          SizedBox(height: ui(12)),
-          _SubmissionsTable(
-            submissions: item.submissions,
-            homeworkSubjectDisplay: homeworkSubjectDisplay,
-            onOpenReview: onOpenReview,
+            ),
           ),
         ],
       ),

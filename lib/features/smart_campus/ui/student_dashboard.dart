@@ -84,6 +84,7 @@ class _StudentDashboardLayoutState extends ConsumerState<StudentDashboardLayout>
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final data = smartCampusDashboardDataForRole(SmartCampusRole.student);
+    final institutionName = ref.watch(shellControllerProvider).schoolName;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -127,11 +128,11 @@ class _StudentDashboardLayoutState extends ConsumerState<StudentDashboardLayout>
                 SizedBox(height: ui(16)),
                 _TeacherSidebar(
                   data: data,
-                  width: cw,
                   shellDisplayName: widget.shellUser.displayName,
                   avatarUrl: widget.shellUser.avatarUrl,
                   shellUser: widget.shellUser,
                   studentDormBedLabel: _studentDormBedLabel,
+                  institutionName: institutionName,
                   fillHeight: false,
                 ),
               ],
@@ -171,11 +172,11 @@ class _StudentDashboardLayoutState extends ConsumerState<StudentDashboardLayout>
               width: sidebarWidth,
               child: _TeacherSidebar(
                 data: data,
-                width: sidebarWidth,
                 shellDisplayName: widget.shellUser.displayName,
                 avatarUrl: widget.shellUser.avatarUrl,
                 shellUser: widget.shellUser,
                 studentDormBedLabel: _studentDormBedLabel,
+                institutionName: institutionName,
                 fillHeight: true,
               ),
             ),
@@ -371,9 +372,10 @@ class _StudentDashboardScheduleSectionState
       title,
       style: TextStyle(
         fontSize: ui(18),
+        height: 1.2,
         color: const Color(0xFF1A1A1A),
-        fontWeight: FontWeight.w500,
-        height: 1,
+        fontWeight: AppFont.w500,
+        fontFamily: 'PingFang SC',
       ),
     );
 
@@ -394,21 +396,18 @@ class _StudentDashboardScheduleSectionState
         final stackVertically = !cw.isFinite || cw < ui(690);
 
         if (stackVertically) {
-          return Padding(
-            padding: EdgeInsets.only(top: ui(12)),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                sectionTitle('当前课程'),
-                SizedBox(height: ui(20)),
-                currentPanel,
-                SizedBox(height: ui(20)),
-                sectionTitle('今日课表'),
-                SizedBox(height: ui(20)),
-                todayPanel,
-              ],
-            ),
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              sectionTitle('当前课程'),
+              SizedBox(height: ui(12)),
+              currentPanel,
+              SizedBox(height: ui(16)),
+              sectionTitle('今日课表'),
+              SizedBox(height: ui(12)),
+              todayPanel,
+            ],
           );
         }
 
@@ -421,27 +420,24 @@ class _StudentDashboardScheduleSectionState
           ],
         );
 
-        return Padding(
-          padding: EdgeInsets.only(top: ui(12)),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: widget.fillRemaining ? MainAxisSize.max : MainAxisSize.min,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: sectionTitle('当前课程')),
-                  SizedBox(width: ui(16)),
-                  Expanded(child: sectionTitle('今日课表')),
-                ],
-              ),
-              SizedBox(height: ui(20)),
-              if (widget.fillRemaining)
-                Expanded(child: cardsRow)
-              else
-                IntrinsicHeight(child: cardsRow),
-            ],
-          ),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: widget.fillRemaining ? MainAxisSize.max : MainAxisSize.min,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: sectionTitle('当前课程')),
+                SizedBox(width: ui(16)),
+                Expanded(child: sectionTitle('今日课表')),
+              ],
+            ),
+            SizedBox(height: ui(12)),
+            if (widget.fillRemaining)
+              Expanded(child: cardsRow)
+            else
+              IntrinsicHeight(child: cardsRow),
+          ],
         );
       },
     );

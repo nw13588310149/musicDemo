@@ -23,7 +23,7 @@
 //      · 右 614 宽 "签到操作" 面板：根据 active class 类型渲染：
 //          - 大课：614×465 白底 16 圆角，顶部"第N节·HH:MM-HH:MM"（时间紫
 //            色）+ 教师 + 课名 + 课时·教室；中部 #F5F6FA 灰底"班级学生"
-//            块（6 状态 chip + 8 列 × 2 行学生网格，点击头像弹窗选择状态）；
+//            块（4 状态 chip：出勤/缺勤/迟到/请假 + 8 列 × 2 行学生网格，点击头像弹窗选择状态）；
 //            下方 #F0E8FC
 //            提示带（"待完成大班一键签到" + 说明文案）；最底紫色渐变
 //            "一键完成全班签到" CTA 按钮。
@@ -371,6 +371,7 @@ class _TeacherClassAttendanceViewState
       context,
       studentName: student.name,
       studentNo: student.studentNo,
+      headUrl: student.headUrl,
       current: _courseSignStatusOf(student.status),
     );
     if (picked == null || !mounted) return;
@@ -1949,40 +1950,30 @@ class _BigClassActionPanel extends StatelessWidget {
                   ],
                 ),
                 SizedBox(height: ui(8)),
-                // 6 状态 chip（应到/实到/迟到/请假/缺课/未到）
+                // 4 状态 chip（出勤/缺勤/迟到/请假，与后端 status 0–3 一致）
                 Wrap(
                   spacing: ui(8),
                   runSpacing: ui(8),
                   children: [
                     _StatusChip(
-                      label: '应到',
-                      count: data.students.length,
-                      dotColor: _kInnerGray,
-                    ),
-                    _StatusChip(
-                      label: '实到',
+                      label: CourseSignStatus.present.label,
                       count: _countOf(_AttendStatus.present),
-                      dotColor: _kStatusPresent,
+                      dotColor: courseSignStatusFg(CourseSignStatus.present),
                     ),
                     _StatusChip(
-                      label: '迟到',
-                      count: _countOf(_AttendStatus.late),
-                      dotColor: _kStatusLate,
-                    ),
-                    _StatusChip(
-                      label: '请假',
-                      count: _countOf(_AttendStatus.leave),
-                      dotColor: _kStatusLeave,
-                    ),
-                    _StatusChip(
-                      label: '缺课',
+                      label: CourseSignStatus.absent.label,
                       count: _countOf(_AttendStatus.absent),
-                      dotColor: _kStatusLate,
+                      dotColor: courseSignStatusFg(CourseSignStatus.absent),
                     ),
                     _StatusChip(
-                      label: '未到',
-                      count: _countOf(_AttendStatus.missing),
-                      dotColor: _kStatusLate,
+                      label: CourseSignStatus.late.label,
+                      count: _countOf(_AttendStatus.late),
+                      dotColor: courseSignStatusFg(CourseSignStatus.late),
+                    ),
+                    _StatusChip(
+                      label: CourseSignStatus.leave.label,
+                      count: _countOf(_AttendStatus.leave),
+                      dotColor: courseSignStatusFg(CourseSignStatus.leave),
                     ),
                   ],
                 ),
@@ -2261,16 +2252,13 @@ class _StudentAttendCell extends StatelessWidget {
   final VoidCallback onTap;
 
   Color _dotColorFor(_AttendStatus s) {
-    switch (s) {
-      case _AttendStatus.present:
-        return _kStatusPresent;
-      case _AttendStatus.leave:
-        return _kStatusLeave;
-      case _AttendStatus.late:
-      case _AttendStatus.absent:
-      case _AttendStatus.missing:
-        return _kStatusLate;
-    }
+    return switch (s) {
+      _AttendStatus.present => courseSignStatusFg(CourseSignStatus.present),
+      _AttendStatus.absent => courseSignStatusFg(CourseSignStatus.absent),
+      _AttendStatus.late => courseSignStatusFg(CourseSignStatus.late),
+      _AttendStatus.leave => courseSignStatusFg(CourseSignStatus.leave),
+      _AttendStatus.missing => _kTextHint,
+    };
   }
 
   @override

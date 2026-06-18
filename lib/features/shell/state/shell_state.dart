@@ -59,6 +59,8 @@ class ShellUser {
     this.role = '',
     this.identity = '',
     this.gender = '',
+    this.primary = '',
+    this.secondary = '',
     this.school = '',
     this.targetSchool = '',
     this.vipExpireDate,
@@ -85,6 +87,12 @@ class ShellUser {
 
   /// `myInfo.user.gender`，如「男 / 女」。
   final String gender;
+
+  /// `myInfo.user.primary` 专业主项。
+  final String primary;
+
+  /// `myInfo.user.secondary` 专业副项。
+  final String secondary;
 
   /// `myInfo.user.school` 就读学校。
   final String school;
@@ -132,6 +140,8 @@ class ShellUser {
     String? role,
     String? identity,
     String? gender,
+    String? primary,
+    String? secondary,
     String? school,
     String? targetSchool,
     DateTime? vipExpireDate,
@@ -145,6 +155,8 @@ class ShellUser {
       role: role ?? this.role,
       identity: identity ?? this.identity,
       gender: gender ?? this.gender,
+      primary: primary ?? this.primary,
+      secondary: secondary ?? this.secondary,
       school: school ?? this.school,
       targetSchool: targetSchool ?? this.targetSchool,
       vipExpireDate: vipExpireDate ?? this.vipExpireDate,
@@ -159,6 +171,7 @@ class ShellState {
     this.collapsed = false,
     this.showFloatingMenu = false,
     this.logoUrl = '',
+    this.schoolName = '',
     this.user = const ShellUser(),
     this.unreadCount = 0,
     this.noticeItems = const [],
@@ -173,6 +186,9 @@ class ShellState {
   final bool collapsed;
   final bool showFloatingMenu;
   final String logoUrl;
+
+  /// `/schoolList` 首条记录的 `name`，即当前绑定机构名称。
+  final String schoolName;
   final ShellUser user;
   final int unreadCount;
   final List<ShellNoticeItem> noticeItems;
@@ -190,6 +206,7 @@ class ShellState {
     bool? collapsed,
     bool? showFloatingMenu,
     String? logoUrl,
+    String? schoolName,
     ShellUser? user,
     int? unreadCount,
     List<ShellNoticeItem>? noticeItems,
@@ -202,6 +219,7 @@ class ShellState {
       collapsed: collapsed ?? this.collapsed,
       showFloatingMenu: showFloatingMenu ?? this.showFloatingMenu,
       logoUrl: logoUrl ?? this.logoUrl,
+      schoolName: schoolName ?? this.schoolName,
       user: user ?? this.user,
       unreadCount: unreadCount ?? this.unreadCount,
       noticeItems: noticeItems ?? this.noticeItems,

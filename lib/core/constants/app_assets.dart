@@ -615,6 +615,10 @@ abstract final class AppAssets {
       'assets/images/smartCampus/admin/class_management/stat_card_3.png';
   static const adminClassManagementStatCard4 =
       'assets/images/smartCampus/admin/class_management/stat_card_4.png';
+  static const adminClassManagementCreateClassIcon =
+      'assets/images/smartCampus/admin/class_management/create_class_icon.png';
+  static const adminClassManagementTransferClassIcon =
+      'assets/images/smartCampus/admin/class_management/transfer_class_icon.png';
 
   /// 管理员 · 签课管理 · 顶部统计卡背景（从左到右）。
   static const adminSignManagementStatCard1 =
@@ -659,6 +663,8 @@ abstract final class AppAssets {
       'assets/images/smartCampus/admin/notification/stat_card_3.png';
   static const adminNotificationStatCard4 =
       'assets/images/smartCampus/admin/notification/stat_card_4.png';
+  static const adminNotificationCreateNoticeIcon =
+      'assets/images/smartCampus/admin/notification/create_notice_icon.png';
 
   /// 管理员 · 教师/宿管请假审批 · 顶部统计卡背景（从左到右）。
   static const adminStaffLeaveStatCard1 =

@@ -66,6 +66,13 @@ const List<String> kAdminNoticeAllScopeApiKeys = <String>[
   'parent',
 ];
 
+/// 右侧通知列表预览文案：有正文时「标题：正文」，否则仅标题。
+String formatNoticePreviewText(String title, String content) {
+  final body = content.trim();
+  if (body.isEmpty) return title;
+  return '$title：$body';
+}
+
 class AdminNoticeRecord {
   const AdminNoticeRecord({
     required this.id,

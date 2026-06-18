@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show ValueListenable, debugPrint;
@@ -48,9 +49,13 @@ class RecordingSystemPage extends ConsumerStatefulWidget {
 
 class _RecordingSystemPageState extends ConsumerState<RecordingSystemPage>
     with WidgetsBindingObserver {
+  /// Cached so [dispose] can stop playback without touching [ref] after unmount.
+  late final RecordingSystemController _controller;
+
   @override
   void initState() {
     super.initState();
+    _controller = ref.read(recordingSystemControllerProvider.notifier);
     WidgetsBinding.instance.addObserver(this);
     // 进入页面立即把视图归位：哪怕全局 state 还停在 record / preview，
     // initState 调用 enterListHome 之后 build 就会渲染列表首页。
@@ -60,7 +65,7 @@ class _RecordingSystemPageState extends ConsumerState<RecordingSystemPage>
       if (!mounted) {
         return;
       }
-      ref.read(recordingSystemControllerProvider.notifier).enterListHome();
+      _controller.enterListHome();
     });
   }
 
@@ -70,7 +75,7 @@ class _RecordingSystemPageState extends ConsumerState<RecordingSystemPage>
     // 这里不能 await：State.dispose 是同步的。controller.abandonActiveSession
     // 内部全部包了 try-catch，且对 stream / timer 的 cancel 不需要等待回执，
     // 把它当成"发出指令立刻返回"即可。
-    ref.read(recordingSystemControllerProvider.notifier).abandonActiveSession();
+    unawaited(_controller.abandonActiveSession());
     super.dispose();
   }
 
@@ -84,9 +89,7 @@ class _RecordingSystemPageState extends ConsumerState<RecordingSystemPage>
         state == AppLifecycleState.inactive ||
         state == AppLifecycleState.hidden ||
         state == AppLifecycleState.detached) {
-      ref
-          .read(recordingSystemControllerProvider.notifier)
-          .abandonActiveSession();
+      unawaited(_controller.abandonActiveSession());
     }
   }
 

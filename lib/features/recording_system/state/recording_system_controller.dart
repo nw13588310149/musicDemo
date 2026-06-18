@@ -612,8 +612,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
 
     final player = _player;
     if (player != null) {
-      await _safeAsync(player.pause);
-      await _safeAsync(() => player.seek(0));
+      await _safeAsync(player.stop);
     }
     _preparedPlayerSource = null;
     if (mounted && state.previewPlaying) {
@@ -1349,8 +1348,7 @@ class RecordingSystemController extends StateNotifier<RecordingSystemState> {
   Future<void> _stopPreviewPlayback() async {
     final player = _player;
     if (player == null) return;
-    await _safeAsync(player.pause);
-    await _safeAsync(() => player.seek(0));
+    await _safeAsync(player.stop);
     if (mounted && state.previewPlaying) {
       state = state.copyWith(previewPlaying: false);
     }

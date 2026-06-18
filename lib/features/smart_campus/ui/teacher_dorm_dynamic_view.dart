@@ -37,6 +37,7 @@ import '../../../core/constants/app_assets.dart';
 import '../../../core/network/media_url.dart';
 import '../../../core/widgets/app_asset_graphic.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/app_text_field.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/teacher_dormitory_data.dart';
 import '../state/teacher_dormitory_controller.dart';
@@ -205,6 +206,7 @@ class _TeacherDormDynamicViewState
     extends ConsumerState<TeacherDormDynamicView> {
   _TopTab _topTab = _TopTab.classRoster;
   _FilterTab _filterTab = _FilterTab.all;
+  String _searchQuery = '';
 
   @override
   void initState() {
@@ -266,6 +268,8 @@ class _TeacherDormDynamicViewState
             _TabsRow(
               current: _topTab,
               pendingPunchCount: pendingPunchCount,
+              searchValue: _searchQuery,
+              onSearchChanged: (v) => setState(() => _searchQuery = v),
               onTap: (t) => setState(() => _topTab = t),
             ),
             SizedBox(height: ui(16)),
@@ -281,10 +285,18 @@ class _TeacherDormDynamicViewState
               _CardsGrid(
                 students: _filteredStudents(students),
                 dormRecords: _filteredDormRecords(dormRecords),
+                emptyMessage: _searchQuery.trim().isNotEmpty &&
+                        (students.isNotEmpty || dormRecords.isNotEmpty)
+                    ? '未找到匹配记录'
+                    : '暂无相关记录',
               ),
             ] else ...[
               _PunchAuditGrid(
-                records: punchAudits,
+                records: _filteredPunchAudits(punchAudits),
+                emptyMessage: _searchQuery.trim().isNotEmpty &&
+                        punchAudits.isNotEmpty
+                    ? '未找到匹配记录'
+                    : '暂无补卡申请',
                 onDetail: (record) => unawaited(_showMakeupDetail(record)),
                 onApprove: _onApprovePunchAudit,
                 onReject: _onRejectPunchAudit,
@@ -305,18 +317,63 @@ class _TeacherDormDynamicViewState
     return s + d;
   }
 
-  List<_StudentRecord> _filteredStudents(List<_StudentRecord> students) {
-    if (_filterTab == _FilterTab.exception) {
-      return students.where((r) => r.status.isException).toList();
+  bool _matchesSearch(Iterable<String> fields) {
+    final q = _searchQuery.trim();
+    if (q.isEmpty) return true;
+    final lower = q.toLowerCase();
+    for (final field in fields) {
+      if (field.isEmpty || field == '--' || field == '—') continue;
+      if (field.toLowerCase().contains(lower)) return true;
     }
-    return students;
+    return false;
+  }
+
+  List<_StudentRecord> _filteredStudents(List<_StudentRecord> students) {
+    var result = students;
+    if (_filterTab == _FilterTab.exception) {
+      result = result.where((r) => r.status.isException).toList();
+    }
+    return result
+        .where(
+          (r) => _matchesSearch([
+            r.studentName,
+            r.studentNo,
+            r.dormName,
+            r.bedName,
+          ]),
+        )
+        .toList();
   }
 
   List<_DormRecord> _filteredDormRecords(List<_DormRecord> dormRecords) {
+    var result = dormRecords;
     if (_filterTab == _FilterTab.exception) {
-      return dormRecords.where((r) => r.status.isException).toList();
+      result = result.where((r) => r.status.isException).toList();
     }
-    return dormRecords;
+    return result
+        .where(
+          (r) => _matchesSearch([
+            r.title,
+            r.dormName,
+            r.note,
+          ]),
+        )
+        .toList();
+  }
+
+  List<_PunchAuditRecord> _filteredPunchAudits(
+    List<_PunchAuditRecord> punchAudits,
+  ) {
+    return punchAudits
+        .where(
+          (r) => _matchesSearch([
+            r.studentName,
+            r.studentNo,
+            r.dormName,
+            r.reason,
+          ]),
+        )
+        .toList();
   }
 
   Future<void> _onApprovePunchAudit(_PunchAuditRecord record) async {
@@ -619,11 +676,15 @@ class _TabsRow extends StatelessWidget {
     required this.current,
     required this.pendingPunchCount,
     required this.onTap,
+    required this.searchValue,
+    required this.onSearchChanged,
   });
 
   final _TopTab current;
   final int pendingPunchCount;
   final ValueChanged<_TopTab> onTap;
+  final String searchValue;
+  final ValueChanged<String> onSearchChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -675,21 +736,87 @@ class _TabsRow extends StatelessWidget {
               ),
               SizedBox(width: ui(8)),
               Expanded(
-                child: Text(
-                  '搜索姓名、学号、手机、宿舍、家长',
-                  style: TextStyle(
-                    fontSize: ui(14),
-                    color: _kTextPlaceholder,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w400,
-                    height: 1.2,
-                  ),
+                child: _DormDynamicSearchField(
+                  value: searchValue,
+                  onChanged: onSearchChanged,
                 ),
               ),
             ],
           ),
         ),
       ],
+    );
+  }
+}
+
+class _DormDynamicSearchField extends StatefulWidget {
+  const _DormDynamicSearchField({
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_DormDynamicSearchField> createState() => _DormDynamicSearchFieldState();
+}
+
+class _DormDynamicSearchFieldState extends State<_DormDynamicSearchField> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.value);
+  }
+
+  @override
+  void didUpdateWidget(covariant _DormDynamicSearchField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.value != _controller.text) {
+      _controller.text = widget.value;
+      _controller.selection = TextSelection.collapsed(
+        offset: widget.value.length,
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return AppTextField(
+      controller: _controller,
+      onChanged: widget.onChanged,
+      cursorColor: _kPurple,
+      cursorWidth: 1.5,
+      cursorHeight: ui(16),
+      style: TextStyle(
+        fontSize: ui(14),
+        color: _kTextDark,
+        fontFamily: 'PingFang SC',
+        fontWeight: AppFont.w400,
+        height: 1.2,
+      ),
+      decoration: InputDecoration(
+        hintText: '搜索姓名、学号、手机、宿舍、家长',
+        hintStyle: TextStyle(
+          fontSize: ui(14),
+          color: _kTextPlaceholder,
+          fontFamily: 'PingFang SC',
+          fontWeight: AppFont.w400,
+          height: 1.2,
+        ),
+        isCollapsed: true,
+        contentPadding: EdgeInsets.zero,
+        border: InputBorder.none,
+      ),
     );
   }
 }
@@ -881,10 +1008,15 @@ class _FilterPill extends StatelessWidget {
 // —— 卡片网格 ——————————————————————————————————————————————————————
 
 class _CardsGrid extends StatelessWidget {
-  const _CardsGrid({required this.students, required this.dormRecords});
+  const _CardsGrid({
+    required this.students,
+    required this.dormRecords,
+    required this.emptyMessage,
+  });
 
   final List<_StudentRecord> students;
   final List<_DormRecord> dormRecords;
+  final String emptyMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -895,7 +1027,7 @@ class _CardsGrid extends StatelessWidget {
         padding: EdgeInsets.symmetric(vertical: ui(40)),
         child: Center(
           child: Text(
-            '暂无相关记录',
+            emptyMessage,
             style: TextStyle(
               fontSize: ui(14),
               color: _kTextHint,
@@ -1363,12 +1495,14 @@ class _TimeColumn extends StatelessWidget {
 class _PunchAuditGrid extends StatelessWidget {
   const _PunchAuditGrid({
     required this.records,
+    required this.emptyMessage,
     required this.onDetail,
     required this.onApprove,
     required this.onReject,
   });
 
   final List<_PunchAuditRecord> records;
+  final String emptyMessage;
   final ValueChanged<_PunchAuditRecord> onDetail;
   final ValueChanged<_PunchAuditRecord> onApprove;
   final ValueChanged<_PunchAuditRecord> onReject;
@@ -1381,7 +1515,7 @@ class _PunchAuditGrid extends StatelessWidget {
         padding: EdgeInsets.symmetric(vertical: ui(40)),
         child: Center(
           child: Text(
-            '暂无补卡申请',
+            emptyMessage,
             style: TextStyle(
               fontSize: ui(14),
               color: _kTextHint,

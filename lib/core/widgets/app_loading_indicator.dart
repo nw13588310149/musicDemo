@@ -4,7 +4,7 @@ import '../constants/app_assets.dart';
 import '../theme/app_theme.dart';
 
 /// 与首页 [HomePage] 对齐的全局 loading 尺寸（逻辑像素）。
-const double kAppLoadingIndicatorSize = 40;
+const double kAppLoadingIndicatorSize = 45;
 
 /// 全局统一的 loading 环粗细（仅 determinate 进度环使用）。
 const double kAppLoadingIndicatorStrokeWidth = 2;

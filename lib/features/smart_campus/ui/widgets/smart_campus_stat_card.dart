@@ -43,6 +43,7 @@ class SmartCampusStatCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(ui(12)),
+        border: Border.all(color: Colors.white, width: 1),
         image: DecorationImage(
           image: AssetImage(backgroundAsset),
           fit: BoxFit.cover,

@@ -15,7 +15,7 @@
 //   2. 4 张统计卡（100 高，flex 1 1 0，间距 12，196deg 渐变白底，圆角 12）：
 //      A. 「已生效」紫渐变 #E7DCFF→white 73%   值 12（人）。
 //      B. 「待审核」橙渐变 #FFF0DC→white 73%   值 10。
-//      C. 「已驳回」绿渐变 #DCFFE7→white 73%   值 2。
+//      C. 「待补录」绿渐变 #DCFFE7→white 73%   值来自 userFaceNotRecordedCount。
 //      D. 「记录总数」红渐变 #FFE2DC→white 73% 值 1。
 //      数值 32 Barlow / 标签 14/500 black。
 //   3. 「录入人脸」分节标题 18/500。
@@ -64,9 +64,11 @@ import '../../../core/widgets/popup_selector_field.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../courseware/state/cloud_drive_controller.dart';
 import '../../shell/ui/shell_layout.dart';
+import '../data/admin_home_data.dart';
 import '../data/admin_repository.dart';
 import 'face_capture/face_camera_registry.dart';
 import 'face_capture/face_image_picker.dart';
+import 'widgets/smart_campus_page_banner.dart';
 import 'widgets/smart_campus_stat_card.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
@@ -517,12 +519,13 @@ class _AdminFaceLibraryViewState extends ConsumerState<AdminFaceLibraryView> {
   // —— 统计卡 ————————————————————————————————————————————————————
   int _sumEffective = 0;
   int _sumPending = 0;
-  int _sumRejected = 0;
+  int _sumRejectedRecords = 0;
+  int _sumNotRecorded = 0;
 
   /// `userId` → 名册展示信息，列表 / 详情补全姓名班级用。
   Map<String, _StudentProfile> _studentProfiles = const {};
 
-  int get _sumTotal => _sumEffective + _sumPending + _sumRejected;
+  int get _sumTotal => _sumEffective + _sumPending + _sumRejectedRecords;
 
   @override
   void initState() {
@@ -578,18 +581,37 @@ class _AdminFaceLibraryViewState extends ConsumerState<AdminFaceLibraryView> {
   Future<void> _loadFaceSum() async {
     final repo = ref.read(adminRepositoryProvider);
     try {
-      final resp = await repo.schoolUserFaceSum();
-      if (!mounted || !resp.isSuccess || resp.data is! Map) return;
-      final m = (resp.data as Map).cast<String, dynamic>();
+      final results = await Future.wait([
+        repo.schoolUserFaceSum(),
+        repo.indexSum(),
+      ]);
+      if (!mounted) return;
+      final faceSumResp = results[0];
+      final indexSumResp = results[1];
       int n(dynamic v) {
         if (v is int) return v;
         if (v is num) return v.toInt();
         return int.tryParse(v?.toString() ?? '') ?? 0;
       }
+      var pending = 0;
+      var effective = 0;
+      var rejectedRecords = 0;
+      var notRecorded = 0;
+      if (faceSumResp.isSuccess && faceSumResp.data is Map) {
+        final m = (faceSumResp.data as Map).cast<String, dynamic>();
+        pending = n(m['status0Count']);
+        effective = n(m['status1Count']);
+        rejectedRecords = n(m['status2Count']);
+      }
+      if (indexSumResp.isSuccess) {
+        notRecorded = AdminHomeSummary.fromJson(indexSumResp.data)
+            .userFaceNotRecordedCount;
+      }
       setState(() {
-        _sumPending = n(m['status0Count']);
-        _sumEffective = n(m['status1Count']);
-        _sumRejected = n(m['status2Count']);
+        _sumPending = pending;
+        _sumEffective = effective;
+        _sumRejectedRecords = rejectedRecords;
+        _sumNotRecorded = notRecorded;
       });
     } catch (_) {
       // 统计失败保持 0。
@@ -981,29 +1003,26 @@ class _AdminFaceLibraryViewState extends ConsumerState<AdminFaceLibraryView> {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      color: _kPageBg,
-      child: SingleChildScrollView(
-        padding: EdgeInsets.only(bottom: ui(20)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _Banner(
-              onBack: widget.onBack,
-              currentTab: _tab,
-              onSelectTab: (t) {
-                setState(() => _tab = t);
-                if (t == _FaceTab.library) {
-                  unawaited(_loadFaceSum());
-                  unawaited(_loadFaceList());
-                }
-              },
-            ),
-            SizedBox(height: ui(16)),
-            _StatsRow(
+    return SmartCampusSecondaryPageShell(
+      backgroundColor: _kPageBg,
+      header: _Banner(
+        onBack: widget.onBack,
+        currentTab: _tab,
+        onSelectTab: (t) {
+          setState(() => _tab = t);
+          if (t == _FaceTab.library) {
+            unawaited(_loadFaceSum());
+            unawaited(_loadFaceList());
+          }
+        },
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _StatsRow(
               effective: _sumEffective,
               reviewing: _sumPending,
-              rejected: _sumRejected,
+              notRecorded: _sumNotRecorded,
               total: _sumTotal,
             ),
             SizedBox(height: ui(24)),
@@ -1061,8 +1080,7 @@ class _AdminFaceLibraryViewState extends ConsumerState<AdminFaceLibraryView> {
                 ),
               ),
             ],
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -1283,13 +1301,13 @@ class _StatsRow extends StatelessWidget {
   const _StatsRow({
     required this.effective,
     required this.reviewing,
-    required this.rejected,
+    required this.notRecorded,
     required this.total,
   });
 
   final int effective;
   final int reviewing;
-  final int rejected;
+  final int notRecorded;
   final int total;
 
   @override
@@ -1316,8 +1334,8 @@ class _StatsRow extends StatelessWidget {
         Expanded(
           child: SmartCampusStatCard(
             backgroundAsset: AppAssets.adminFaceLibraryStatCard3,
-            label: '已驳回',
-            value: rejected,
+            label: '待补录',
+            value: notRecorded,
           ),
         ),
         SizedBox(width: ui(12)),
@@ -1537,7 +1555,7 @@ class _StepCell extends StatelessWidget {
               label,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: ui(14),
+                fontSize: ui(12),
                 color: _kTextSecondary,
                 fontFamily: 'PingFang SC',
                 fontWeight: AppFont.w400,

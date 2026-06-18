@@ -185,6 +185,8 @@ class ShellController extends StateNotifier<ShellState> {
           role: role,
           identity: userMap['identity']?.toString() ?? '',
           gender: userMap['gender']?.toString() ?? '',
+          primary: userMap['primary']?.toString() ?? '',
+          secondary: userMap['secondary']?.toString() ?? '',
           school: userMap['school']?.toString() ?? '',
           targetSchool: userMap['targetSchool']?.toString() ?? '',
           vipExpireDate: _parseVipExpireDate(userMap['vipExpireDate']),
@@ -202,10 +204,12 @@ class ShellController extends StateNotifier<ShellState> {
       await _storage.saveSchoolId(readSnowflakeId(data['id']) ?? data['id']);
       if (data.isNotEmpty) {
         final logo = _readSchoolLogo(data);
+        final schoolName = data['name']?.toString().trim() ?? '';
         final switchFlag = data['coursewareSwitch'];
         final schoolCoursewareEnabled = switchFlag == true || switchFlag == 1;
         state = state.copyWith(
           logoUrl: logo,
+          schoolName: schoolName,
           schoolCoursewareEnabled: schoolCoursewareEnabled,
           isSchoolReady: true,
           navItems: buildDefaultNavItems(
@@ -305,6 +309,8 @@ class ShellController extends StateNotifier<ShellState> {
         avatarUrl: avatarUrl,
         province: userMap['province']?.toString() ?? state.user.province,
         gender: userMap['gender']?.toString() ?? state.user.gender,
+        primary: userMap['primary']?.toString() ?? state.user.primary,
+        secondary: userMap['secondary']?.toString() ?? state.user.secondary,
         school: userMap['school']?.toString() ?? state.user.school,
         targetSchool:
             userMap['targetSchool']?.toString() ?? state.user.targetSchool,

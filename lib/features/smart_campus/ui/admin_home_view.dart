@@ -10,8 +10,12 @@ import '../../shell/ui/shell_layout.dart';
 import '../data/admin_home_data.dart';
 import '../data/teacher_notice_data.dart';
 import '../state/admin_home_controller.dart';
+import '../state/admin_home_state.dart';
 import '../state/smart_campus_state.dart';
 import 'widgets/role_switcher_buttons.dart';
+import 'widgets/smart_campus_avatar_role_badge.dart';
+import 'widgets/smart_campus_home_card.dart';
+import 'widgets/smart_campus_quick_actions_card.dart';
 import 'widgets/smart_campus_stat_card.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
@@ -21,7 +25,7 @@ import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 /// 1. **8 项数据统计**：分两行各 4 卡，白底 + 24/500 数值（今日待办 4
 ///    用 `#8741FF` 紫高亮） + 12/PingFang 灰色标签。
 /// 2. **管理端 10 项快捷入口卡**（697×255）：5×2 网格，每个 cell
-///    `43.73 #EAE5FF` 圆角底 + `assets/images/new/管理员/*.png`
+///    `43.73 #EAE5FF` 圆角底 + `assets/images/new/智慧校园/管理员/*.png`
 ///    + 14/PingFang/500 文案；学生管理(1) → 教师管理(2) → 班级编辑(3) →
 ///    排课与课表(4) → 教师请假审批(5) → 人脸库(6) → 通知管理(7) →
 ///    群聊(8) → 校长信箱(9) → 校圈治理(10)。
@@ -31,10 +35,10 @@ import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 ///    - 四端职能：4 tab（学生端/任课老师/班主任/宿管端）+ 滚动文案；
 ///    - 工作提醒：3 条预警卡，红色「预警」徽章 + 标题 + 副标题 + 灰小点。
 ///
-/// 右栏（256 宽）固定为单张白卡：
+/// 整页主内容区统一滚动（左主栏 + 右栏同步），不再由中间左栏单独滚动。
 /// - 顶部 72 圆形头像 + 姓名 16/500 + 绿点「运行中」+ 黄底「管理员」徽章；
 /// - 「岗位 / 部门 / 权限」3 行键值；
-/// - 「校级通知」title + 滚动通知列表，每条卡含分类徽章
+/// - 「校级通知」title + 通知列表，每条卡含分类徽章
 ///   （教研室 / 场地 / 大师课）+ 内容 + 时间 + 红 / 灰未读点。
 ///
 /// 不带 `onBack` —— 这就是 admin 角色下 `mainView == dashboard` 的根视图，
@@ -156,93 +160,150 @@ class _AdminHomeViewState extends ConsumerState<AdminHomeView> {
     _StatItem('${summary.postStatus0Count}', '今日校圈'),
   ];
 
+  Widget _buildMainColumn(AdminHomeState homeState, double Function(double) ui) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _StatsRow(stats: _statsRow1(homeState.summary)),
+        SizedBox(height: ui(12)),
+        _StatsRow(stats: _statsRow2(homeState.summary)),
+        SizedBox(height: ui(16)),
+        _QuickActionsCard(
+          selectedRole: widget.selectedRole,
+          onOpenGroupChat: widget.onOpenGroupChat,
+          onOpenPrincipalMailbox: widget.onOpenPrincipalMailbox,
+          onOpenSchoolCircle: widget.onOpenSchoolCircle,
+          onOpenStudentManagement: widget.onOpenStudentManagement,
+          onOpenTeacherManagement: widget.onOpenTeacherManagement,
+          onOpenClassManagement: widget.onOpenClassManagement,
+          onOpenScheduleManagement: widget.onOpenScheduleManagement,
+          onOpenDormLeaveApproval: widget.onOpenDormLeaveApproval,
+          onOpenFaceLibrary: widget.onOpenFaceLibrary,
+          onOpenNotificationManagement: widget.onOpenNotificationManagement,
+          onOpenSignManagement: widget.onOpenSignManagement,
+        ),
+        SizedBox(height: ui(16)),
+        const _SectionTitle(
+          title: '数据看板',
+          trailing: '统计最近七日内学校使用人数',
+        ),
+        SizedBox(height: ui(12)),
+        _DataDashboardCard(chart: homeState.loginChart),
+        SizedBox(height: ui(16)),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  _SectionTitle(title: '四端职能'),
+                  SizedBox(height: 12),
+                  _FourEndsCard(),
+                ],
+              ),
+            ),
+            SizedBox(width: ui(16)),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  _SectionTitle(title: '工作提醒'),
+                  SizedBox(height: 12),
+                  _WorkRemindersCard(),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSidePanel(AdminHomeState homeState, {required bool fillHeight}) {
+    return _AdminSidePanel(
+      fillHeight: fillHeight,
+      displayName: widget.shellDisplayName,
+      avatarUrl: widget.avatarUrl,
+      availableRoles: widget.availableRoles,
+      selectedRole: widget.selectedRole,
+      onSelectRole: widget.onSelectRole,
+      notices: homeState.notices,
+      noticesLoading: homeState.loading,
+      noticeError: homeState.noticeError,
+      onRefreshNotices: ref.read(adminHomeControllerProvider.notifier).refresh,
+      onOpenNotices: widget.onOpenNotificationManagement,
+      onNoticeTap: (item) => unawaited(_openNoticeDetail(item)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final homeState = ref.watch(adminHomeControllerProvider);
 
-    return SingleChildScrollView(
-      padding: EdgeInsets.only(bottom: ui(20)),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _StatsRow(stats: _statsRow1(homeState.summary)),
-                SizedBox(height: ui(12)),
-                _StatsRow(stats: _statsRow2(homeState.summary)),
-                SizedBox(height: ui(16)),
-                _QuickActionsCard(
-                  selectedRole: widget.selectedRole,
-                  onOpenGroupChat: widget.onOpenGroupChat,
-                  onOpenPrincipalMailbox: widget.onOpenPrincipalMailbox,
-                  onOpenSchoolCircle: widget.onOpenSchoolCircle,
-                  onOpenStudentManagement: widget.onOpenStudentManagement,
-                  onOpenTeacherManagement: widget.onOpenTeacherManagement,
-                  onOpenClassManagement: widget.onOpenClassManagement,
-                  onOpenScheduleManagement: widget.onOpenScheduleManagement,
-                  onOpenDormLeaveApproval: widget.onOpenDormLeaveApproval,
-                  onOpenFaceLibrary: widget.onOpenFaceLibrary,
-                  onOpenNotificationManagement: widget.onOpenNotificationManagement,
-                  onOpenSignManagement: widget.onOpenSignManagement,
-                ),
-                SizedBox(height: ui(24)),
-                const _SectionTitle(title: '数据看板'),
-                SizedBox(height: ui(12)),
-                const _DataDashboardCard(),
-                SizedBox(height: ui(24)),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          _SectionTitle(title: '四端职能'),
-                          SizedBox(height: 12),
-                          _FourEndsCard(),
-                        ],
-                      ),
-                    ),
-                    SizedBox(width: ui(16)),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          _SectionTitle(title: '工作提醒'),
-                          SizedBox(height: 12),
-                          _WorkRemindersCard(),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        var cw = constraints.maxWidth;
+        if (!cw.isFinite || cw == double.infinity || cw < 2) {
+          final w = MediaQuery.sizeOf(context).width;
+          cw = (w - ui(ShellLayoutSpec.sidebarWidth) - ui(16) * 2).clamp(
+            240.0,
+            20000.0,
+          );
+        }
+        final isCompact = cw < ui(900);
+        final sidebarWidth = ui(256);
+        final contentGap = ui(16);
+        final maxH = constraints.maxHeight.isFinite ? constraints.maxHeight : null;
+
+        if (isCompact) {
+          return SmartCampusHomeCard(
+            height: maxH,
+            color: Colors.transparent,
+            child: SingleChildScrollView(
+              physics: const ClampingScrollPhysics(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildMainColumn(homeState, ui),
+                  SizedBox(height: contentGap),
+                  _buildSidePanel(homeState, fillHeight: false),
+                ],
+              ),
+            ),
+          );
+        }
+
+        final mainWidth = math.max(0.0, cw - sidebarWidth - contentGap);
+
+        // 宽屏：主内容区整体滚动，左主栏与右栏同步上移；透明圆角容器裁切。
+        return SmartCampusHomeCard(
+          height: maxH,
+          color: Colors.transparent,
+          child: SingleChildScrollView(
+            physics: const ClampingScrollPhysics(),
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(
+                    width: mainWidth,
+                    child: _buildMainColumn(homeState, ui),
+                  ),
+                  SizedBox(width: contentGap),
+                  SizedBox(
+                    width: sidebarWidth,
+                    child: _buildSidePanel(homeState, fillHeight: true),
+                  ),
+                ],
+              ),
             ),
           ),
-          SizedBox(width: ui(16)),
-          SizedBox(
-            width: ui(256),
-            child: _AdminSidePanel(
-              displayName: widget.shellDisplayName,
-              avatarUrl: widget.avatarUrl,
-              availableRoles: widget.availableRoles,
-              selectedRole: widget.selectedRole,
-              onSelectRole: widget.onSelectRole,
-              notices: homeState.notices,
-              noticesLoading: homeState.loading,
-              noticeError: homeState.noticeError,
-              onRefreshNotices: ref
-                  .read(adminHomeControllerProvider.notifier)
-                  .refresh,
-              onOpenNotices: widget.onOpenNotificationManagement,
-              onNoticeTap: (item) => unawaited(_openNoticeDetail(item)),
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -278,53 +339,53 @@ class _QuickAction {
 const _quickActions = <_QuickAction>[
   _QuickAction(
     '学生管理',
-    'assets/images/new/管理员/学生管理.png',
+    'assets/images/new/智慧校园/管理员/学生管理.png',
   ),
   _QuickAction(
     '教师管理',
-    'assets/images/new/管理员/教师管理.png',
+    'assets/images/new/智慧校园/管理员/教师管理.png',
   ),
   _QuickAction(
     '班级编辑',
-    'assets/images/new/管理员/班级编辑.png',
+    'assets/images/new/智慧校园/管理员/班级编辑.png',
   ),
   _QuickAction(
     '排课与课表',
-    'assets/images/new/管理员/排课与课表.png',
+    'assets/images/new/智慧校园/管理员/排课与课表.png',
   ),
   _QuickAction(
     '签课管理',
-    'assets/images/new/管理员/排课与课表.png',
+    'assets/images/new/智慧校园/管理员/排课与课表.png',
   ),
   _QuickAction(
     '教师请假审批',
-    'assets/images/new/管理员/宿管请假审批.png',
+    'assets/images/new/智慧校园/管理员/宿管请假审批.png',
   ),
   _QuickAction(
     '人脸库',
-    'assets/images/new/管理员/人脸库.png',
+    'assets/images/new/智慧校园/管理员/人脸库.png',
   ),
   _QuickAction(
     '通知管理',
-    'assets/images/new/管理员/通知管理.png',
+    'assets/images/new/智慧校园/管理员/通知管理.png',
   ),
   _QuickAction(
     '群聊',
-    'assets/images/new/管理员/群聊.png',
+    'assets/images/new/智慧校园/管理员/群聊.png',
   ),
   _QuickAction(
     '校长信箱',
-    'assets/images/new/管理员/校长信箱.png',
+    'assets/images/new/智慧校园/管理员/校长信箱.png',
   ),
   _QuickAction(
     '校圈治理',
-    'assets/images/new/管理员/校圈治理.png',
+    'assets/images/new/智慧校园/管理员/校圈.png',
   ),
 ];
 
 const _mailboxQuickAction = _QuickAction(
   '校长信箱',
-  'assets/images/new/管理员/校长信箱.png',
+  'assets/images/new/智慧校园/管理员/校长信箱.png',
 );
 
 List<_QuickAction> _quickActionsForRole(SmartCampusRole role) {
@@ -341,6 +402,8 @@ class _WorkReminder {
   final String title;
   final String subtitle;
 }
+
+const _overviewTwinCardHeight = 243.0;
 
 const _workReminders = <_WorkReminder>[
   _WorkReminder('高三音乐实验班·昨晚查寝1人未打卡未闭环', '宿管端已登记，待确认是否转晚归备案。'),
@@ -364,14 +427,15 @@ const _managerEndContent = '学籍 / 排课与课表 / 人脸库 / 校圈治理 
 // ============================================================================
 
 class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({required this.title});
+  const _SectionTitle({required this.title, this.trailing});
 
   final String title;
+  final String? trailing;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Text(
+    final titleWidget = Text(
       title,
       style: TextStyle(
         fontSize: ui(18),
@@ -380,6 +444,24 @@ class _SectionTitle extends StatelessWidget {
         color: const Color(0xFF1A1A1A),
         fontFamily: 'PingFang SC',
       ),
+    );
+    if (trailing == null) {
+      return titleWidget;
+    }
+    return Row(
+      children: [
+        titleWidget,
+        const Spacer(),
+        Text(
+          trailing!,
+          style: TextStyle(
+            fontSize: ui(12),
+            height: 1.2,
+            color: const Color(0xFF6D6B75),
+            fontFamily: 'PingFang SC',
+          ),
+        ),
+      ],
     );
   }
 }
@@ -447,127 +529,17 @@ class _QuickActionsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
     final actions = _quickActionsForRole(selectedRole);
-    // 11 items → 5 + 5 + 1（末行左对齐，其余列用空白 Expanded 补位）
-    const rowSize = 5;
-    final rowCount = (actions.length / rowSize).ceil();
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(16)),
-      ),
-      padding: EdgeInsets.symmetric(horizontal: ui(24), vertical: ui(28)),
-      child: Column(
-        children: [
-          for (var ri = 0; ri < rowCount; ri++) ...[
-            if (ri > 0) SizedBox(height: ui(24)),
-            Row(
-              children: [
-                for (var ci = 0; ci < rowSize; ci++) ...[
-                  if (ci > 0) SizedBox(width: ui(12)),
-                  Expanded(
-                    child: () {
-                      final idx = ri * rowSize + ci;
-                      if (idx < actions.length) {
-                        return _QuickActionCell(
-                          action: actions[idx],
-                          onTap: _resolveTap(actions[idx].label),
-                        );
-                      }
-                      return const SizedBox();
-                    }(),
-                  ),
-                ],
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _QuickActionCell extends StatelessWidget {
-  const _QuickActionCell({required this.action, this.onTap});
-
-  final _QuickAction action;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Padding(
-        padding: EdgeInsets.symmetric(vertical: ui(4)),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: ui(48),
-              height: ui(48),
-              child: Stack(
-                clipBehavior: Clip.none,
-                alignment: Alignment.center,
-                children: [
-                  Container(
-                    width: ui(44),
-                    height: ui(44),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEAE5FF),
-                      borderRadius: BorderRadius.circular(ui(8)),
-                    ),
-                  ),
-                  Image.asset(
-                    action.iconAsset,
-                    width: ui(28),
-                    height: ui(28),
-                    fit: BoxFit.contain,
-                  ),
-                  if (action.badge != null)
-                    Positioned(
-                      right: -ui(2),
-                      top: -ui(2),
-                      child: Container(
-                        height: ui(15),
-                        padding: EdgeInsets.symmetric(horizontal: ui(5)),
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF04545),
-                          borderRadius: BorderRadius.circular(ui(20)),
-                        ),
-                        child: Text(
-                          action.badge!,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: ui(10),
-                            height: 1.0,
-                            fontWeight: FontWeight.w800,
-                            fontFamily: 'Manrope',
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            SizedBox(height: ui(8)),
-            Text(
-              action.label,
-              style: TextStyle(
-                fontSize: ui(14),
-                height: 1.2,
-                fontWeight: AppFont.w500,
-                color: const Color(0xFF1A1A1A),
-                fontFamily: 'PingFang SC',
-              ),
-            ),
-          ],
-        ),
-      ),
+    return SmartCampusQuickActionsCard(
+      items: [
+        for (final action in actions)
+          SmartCampusQuickActionItem(
+            label: action.label,
+            assetPath: action.iconAsset,
+            badgeLabel: action.badge,
+            onTap: _resolveTap(action.label),
+          ),
+      ],
     );
   }
 }
@@ -607,11 +579,7 @@ class _StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(16)),
-      ),
+    return SmartCampusHomeCard(
       padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(8)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -655,31 +623,29 @@ class _StatCard extends StatelessWidget {
 // ============================================================================
 
 class _DataDashboardCard extends StatelessWidget {
-  const _DataDashboardCard();
+  const _DataDashboardCard({required this.chart});
+
+  final AdminHomeLoginChart chart;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final values = chart.values;
+    final xLabels = chart.xLabels;
+    final maxY = adminHomeLoginChartMaxY(values);
+    final yLabels = buildAdminHomeLoginChartYLabels(maxY);
 
-    const yLabels = ['100', '95', '90', '85', '80', '0'];
-    const xLabels = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-    const values = [85.0, 95.0, 87.0, 95.0, 89.0, 99.0, 95.0];
-
-    return Container(
+    return SmartCampusHomeCard(
       height: ui(261),
       padding: EdgeInsets.fromLTRB(ui(12), ui(20), ui(12), ui(16)),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(16)),
-      ),
       child: Column(
         children: [
           Expanded(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Padding(
-                  padding: EdgeInsets.only(right: ui(8)),
+                SizedBox(
+                  width: ui(28),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.end,
@@ -697,9 +663,21 @@ class _DataDashboardCard extends StatelessWidget {
                     ],
                   ),
                 ),
+                SizedBox(width: ui(8)),
                 Expanded(
                   child: CustomPaint(
-                    painter: _LineChartPainter(values: values),
+                    painter: _LineChartPainter(
+                      values: values,
+                      maxY: maxY,
+                      topPadding: ui(16),
+                      valueLabelStyle: TextStyle(
+                        fontSize: ui(11),
+                        height: 1.0,
+                        color: const Color(0xFF8741FF),
+                        fontWeight: FontWeight.w500,
+                        fontFamily: 'PingFang SC',
+                      ),
+                    ),
                     child: const SizedBox.expand(),
                   ),
                 ),
@@ -733,50 +711,46 @@ class _DataDashboardCard extends StatelessWidget {
   }
 }
 
-/// 7 点平滑曲线 + 浅紫渐变填充 + 紫色描边 + 白点紫边圆点。
+/// 7 点折线 + 浅紫渐变填充 + 紫色描边 + 白点紫边圆点 + 数值标注。
 class _LineChartPainter extends CustomPainter {
-  _LineChartPainter({required this.values});
+  _LineChartPainter({
+    required this.values,
+    required this.maxY,
+    required this.topPadding,
+    required this.valueLabelStyle,
+  });
 
   final List<double> values;
+  final double maxY;
+  final double topPadding;
+  final TextStyle valueLabelStyle;
 
   @override
   void paint(Canvas canvas, Size size) {
     if (values.isEmpty) return;
 
-    // y 轴：100 → top, 80 → 5 行刻度等距，0 → 底（最后一段大跨）
-    // 简化：把 [80, 100] 映射到 [chartHeight*0.8, 0]（顶部 80% 区域），
-    // 底部 20% 留给「0」标签。
-    const minV = 80.0;
-    const maxV = 100.0;
-    final chartTop = 0.0;
-    final chartBottom = size.height * 0.78;
-    final stride = size.width / (values.length - 1);
+    final maxV = maxY <= 0 ? 10.0 : maxY;
+    final chartTop = topPadding;
+    final chartBottom = size.height;
+    final plotHeight = math.max(chartBottom - chartTop, 1.0);
+    final stride = values.length <= 1
+        ? 0.0
+        : size.width / (values.length - 1);
 
     Offset pointAt(int i) {
-      final v = values[i].clamp(minV, maxV);
-      final ratio = (v - minV) / (maxV - minV);
-      final y = chartBottom - ratio * (chartBottom - chartTop);
-      return Offset(stride * i, y);
+      final v = values[i].clamp(0.0, maxV);
+      final ratio = maxV == 0 ? 0.0 : v / maxV;
+      final y = chartBottom - ratio * plotHeight;
+      final x = values.length <= 1 ? size.width / 2 : stride * i;
+      return Offset(x, y);
     }
 
     final pts = [for (var i = 0; i < values.length; i++) pointAt(i)];
 
-    // 1. 平滑路径（cardinal-ish via cubic）
+    // 1. 折线路径（离散日数据用直线，避免 0 被平滑曲线抬高）
     final linePath = Path()..moveTo(pts.first.dx, pts.first.dy);
-    for (var i = 0; i < pts.length - 1; i++) {
-      final p0 = i == 0 ? pts[0] : pts[i - 1];
-      final p1 = pts[i];
-      final p2 = pts[i + 1];
-      final p3 = i == pts.length - 2 ? pts[i + 1] : pts[i + 2];
-      final c1 = Offset(
-        p1.dx + (p2.dx - p0.dx) / 6,
-        p1.dy + (p2.dy - p0.dy) / 6,
-      );
-      final c2 = Offset(
-        p2.dx - (p3.dx - p1.dx) / 6,
-        p2.dy - (p3.dy - p1.dy) / 6,
-      );
-      linePath.cubicTo(c1.dx, c1.dy, c2.dx, c2.dy, p2.dx, p2.dy);
+    for (var i = 1; i < pts.length; i++) {
+      linePath.lineTo(pts[i].dx, pts[i].dy);
     }
 
     // 2. 填充：闭合到底部
@@ -802,18 +776,29 @@ class _LineChartPainter extends CustomPainter {
       ..strokeJoin = StrokeJoin.round;
     canvas.drawPath(linePath, strokePaint);
 
-    // 4. 圆点
+    // 4. 圆点 + 数值标注
     final dotFill = Paint()..color = Colors.white;
     final dotStroke = Paint()
       ..color = const Color(0xFF8741FF)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5;
-    for (final p in pts) {
+    for (var i = 0; i < pts.length; i++) {
+      final p = pts[i];
       canvas.drawCircle(p, 4, dotFill);
       canvas.drawCircle(p, 4, dotStroke);
+
+      final label = values[i].round().toString();
+      final textPainter = TextPainter(
+        text: TextSpan(text: label, style: valueLabelStyle),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      textPainter.paint(
+        canvas,
+        Offset(p.dx - textPainter.width / 2, p.dy - textPainter.height - 6),
+      );
     }
 
-    // 5. 底部 dashed baseline 轻提示（可选）
+    // 5. 底部 baseline
     final base = Paint()
       ..color = const Color(0xFFF1ECFF)
       ..strokeWidth = 1;
@@ -830,7 +815,10 @@ class _LineChartPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _LineChartPainter old) => old.values != values;
+  bool shouldRepaint(covariant _LineChartPainter old) =>
+      old.values != values ||
+      old.maxY != maxY ||
+      old.topPadding != topPadding;
 }
 
 // ============================================================================
@@ -852,13 +840,9 @@ class _FourEndsCardState extends State<_FourEndsCard> {
     final ui = DashboardScaleScope.of(context).ui;
     final content = _fourEndsContent[_activeTab]!;
 
-    return Container(
-      height: ui(243),
+    return SmartCampusHomeCard(
+      height: ui(_overviewTwinCardHeight),
       padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(12)),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(16)),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -975,18 +959,18 @@ class _WorkRemindersCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      height: ui(243),
+    return SmartCampusHomeCard(
+      height: ui(_overviewTwinCardHeight),
       padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(12)),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(16)),
-      ),
-      child: ListView.separated(
-        padding: EdgeInsets.zero,
-        itemCount: _workReminders.length,
-        separatorBuilder: (_, _) => SizedBox(height: ui(8)),
-        itemBuilder: (context, i) => _WorkReminderCard(item: _workReminders[i]),
+      child: Column(
+        children: [
+          for (var i = 0; i < _workReminders.length; i++) ...[
+            if (i > 0) SizedBox(height: ui(8)),
+            Expanded(
+              child: _WorkReminderCard(item: _workReminders[i]),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -1001,6 +985,8 @@ class _WorkReminderCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
+      width: double.infinity,
+      height: double.infinity,
       padding: EdgeInsets.fromLTRB(ui(12), ui(12), ui(20), ui(12)),
       decoration: BoxDecoration(
         color: const Color(0xFFF5F6FA),
@@ -1085,6 +1071,7 @@ class _WorkReminderCard extends StatelessWidget {
 
 class _AdminSidePanel extends StatelessWidget {
   const _AdminSidePanel({
+    required this.fillHeight,
     required this.displayName,
     required this.avatarUrl,
     required this.availableRoles,
@@ -1098,6 +1085,7 @@ class _AdminSidePanel extends StatelessWidget {
     this.onNoticeTap,
   });
 
+  final bool fillHeight;
   final String displayName;
   final String avatarUrl;
   final List<SmartCampusRole> availableRoles;
@@ -1118,91 +1106,102 @@ class _AdminSidePanel extends StatelessWidget {
     // 自己"的无意义按钮。
     final showRoleSwitcher =
         onSelectRole != null && availableRoles.length > 1;
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(16)),
-      ),
-      padding: EdgeInsets.fromLTRB(ui(16), ui(14), ui(16), ui(20)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _ProfileHeader(
-            displayName: displayName,
-            avatarUrl: avatarUrl,
-            roleBadge: selectedRole == SmartCampusRole.principal ? '校长' : '管理员',
-          ),
+    final panel = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: fillHeight ? MainAxisSize.max : MainAxisSize.min,
+      children: [
+        _ProfileHeader(
+          displayName: displayName,
+          avatarUrl: avatarUrl,
+          roleBadge: selectedRole == SmartCampusRole.principal ? '校长' : '管理员',
+        ),
+        SizedBox(height: ui(20)),
+        const _ProfileInfoRows(),
+        if (showRoleSwitcher) ...[
           SizedBox(height: ui(20)),
-          const _ProfileInfoRows(),
-          if (showRoleSwitcher) ...[
-            SizedBox(height: ui(20)),
-            Text(
-              '身份切换',
-              style: TextStyle(
-                fontSize: ui(14),
-                height: 1.2,
-                fontWeight: AppFont.w500,
-                color: const Color(0xFF1A1A1A),
-                fontFamily: 'PingFang SC',
-              ),
+          Text(
+            '身份切换',
+            style: TextStyle(
+              fontSize: ui(14),
+              height: 1.2,
+              fontWeight: AppFont.w500,
+              color: const Color(0xFF1A1A1A),
+              fontFamily: 'PingFang SC',
             ),
-            SizedBox(height: ui(10)),
-            RoleSwitcherButtons(
-              availableRoles: availableRoles,
-              selectedRole: selectedRole,
-              onSelectRole: onSelectRole!,
-            ),
-          ],
-          SizedBox(height: ui(24)),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '校级通知',
-                  style: TextStyle(
-                    fontSize: ui(16),
-                    height: 1.2,
-                    fontWeight: AppFont.w500,
-                    color: const Color(0xFF1A1A1A),
-                    fontFamily: 'PingFang SC',
-                  ),
-                ),
-              ),
-              if (onOpenNotices != null)
-                TextButton(
-                  onPressed: onOpenNotices,
-                  style: TextButton.styleFrom(
-                    foregroundColor: const Color(0xFF6D6B75),
-                    padding: EdgeInsets.zero,
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  child: Text(
-                    '查看全部',
-                    style: TextStyle(
-                      fontSize: ui(11),
-                      color: const Color(0xFF6D6B75),
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w400,
-                    ),
-                  ),
-                ),
-            ],
           ),
-          SizedBox(height: ui(12)),
-          SizedBox(
-            height: ui(620),
-            child: _SchoolNoticeList(
-              notices: notices,
-              loading: noticesLoading,
-              error: noticeError,
-              onRefresh: onRefreshNotices,
-              onNoticeTap: onNoticeTap,
-            ),
+          SizedBox(height: ui(10)),
+          RoleSwitcherButtons(
+            availableRoles: availableRoles,
+            selectedRole: selectedRole,
+            onSelectRole: onSelectRole!,
           ),
         ],
-      ),
+        SizedBox(height: ui(24)),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                '校级通知',
+                style: TextStyle(
+                  fontSize: ui(16),
+                  height: 1.2,
+                  fontWeight: AppFont.w500,
+                  color: const Color(0xFF1A1A1A),
+                  fontFamily: 'PingFang SC',
+                ),
+              ),
+            ),
+            if (onOpenNotices != null)
+              TextButton(
+                onPressed: onOpenNotices,
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFF6D6B75),
+                  padding: EdgeInsets.zero,
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(
+                  '查看全部',
+                  style: TextStyle(
+                    fontSize: ui(11),
+                    color: const Color(0xFF6D6B75),
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w400,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        SizedBox(height: ui(12)),
+        if (fillHeight)
+          Expanded(
+            child: SingleChildScrollView(
+              physics: const ClampingScrollPhysics(),
+              child: _SchoolNoticeList(
+                notices: notices,
+                loading: noticesLoading,
+                error: noticeError,
+                onRefresh: onRefreshNotices,
+                onNoticeTap: onNoticeTap,
+              ),
+            ),
+          )
+        else
+          _SchoolNoticeList(
+            notices: notices,
+            loading: noticesLoading,
+            error: noticeError,
+            onRefresh: onRefreshNotices,
+            onNoticeTap: onNoticeTap,
+          ),
+      ],
     );
+
+    final card = SmartCampusHomeCard(
+      padding: EdgeInsets.fromLTRB(ui(16), ui(14), ui(16), ui(20)),
+      child: panel,
+    );
+    return fillHeight ? SizedBox.expand(child: card) : card;
   }
 }
 
@@ -1225,37 +1224,49 @@ class _SchoolNoticeList extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     if (loading && notices.isEmpty) {
-      return Center(
-        child: Text(
-          '加载中…',
-          style: TextStyle(fontSize: ui(12), color: const Color(0xFFB6B5BB)),
+      return Padding(
+        padding: EdgeInsets.symmetric(vertical: ui(24)),
+        child: Center(
+          child: Text(
+            '加载中…',
+            style: TextStyle(fontSize: ui(12), color: const Color(0xFFB6B5BB)),
+          ),
         ),
       );
     }
     if (error.isNotEmpty && notices.isEmpty) {
-      return Center(
-        child: TextButton(
-          onPressed: onRefresh,
-          child: Text('通知加载失败，点击重试', style: TextStyle(fontSize: ui(12))),
+      return Padding(
+        padding: EdgeInsets.symmetric(vertical: ui(24)),
+        child: Center(
+          child: TextButton(
+            onPressed: onRefresh,
+            child: Text('通知加载失败，点击重试', style: TextStyle(fontSize: ui(12))),
+          ),
         ),
       );
     }
     if (notices.isEmpty) {
-      return Center(
-        child: Text(
-          '暂无已发布通知',
-          style: TextStyle(fontSize: ui(12), color: const Color(0xFFB6B5BB)),
+      return Padding(
+        padding: EdgeInsets.symmetric(vertical: ui(24)),
+        child: Center(
+          child: Text(
+            '暂无已发布通知',
+            style: TextStyle(fontSize: ui(12), color: const Color(0xFFB6B5BB)),
+          ),
         ),
       );
     }
-    return ListView.separated(
-      padding: EdgeInsets.zero,
-      itemCount: notices.length,
-      separatorBuilder: (_, _) => SizedBox(height: ui(8)),
-      itemBuilder: (_, i) => _SchoolNoticeCard(
-        item: notices[i],
-        onTap: onNoticeTap == null ? null : () => onNoticeTap!(notices[i]),
-      ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < notices.length; i++) ...[
+          if (i > 0) SizedBox(height: ui(8)),
+          _SchoolNoticeCard(
+            item: notices[i],
+            onTap: onNoticeTap == null ? null : () => onNoticeTap!(notices[i]),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -1378,28 +1389,7 @@ class _ProfileHeader extends StatelessWidget {
             ),
           ],
         ),
-        // 「管理员」身份徽章：贴在头像底部中间
-        Positioned(
-          left: ui(18),
-          top: ui(60),
-          child: Container(
-            padding: EdgeInsets.symmetric(horizontal: ui(7), vertical: ui(2)),
-            decoration: BoxDecoration(
-              color: const Color(0xFFEAE5FF),
-              borderRadius: BorderRadius.circular(ui(10)),
-              border: Border.all(color: Colors.white, width: 1),
-            ),
-            child: Text(
-              roleBadge,
-              style: TextStyle(
-                fontSize: ui(11),
-                height: 1.2,
-                color: const Color(0xFF0B081A),
-                fontFamily: 'PingFang SC',
-              ),
-            ),
-          ),
-        ),
+        SmartCampusAvatarRoleBadge(label: roleBadge),
       ],
     );
   }
@@ -1523,16 +1513,19 @@ class _SchoolNoticeCard extends StatelessWidget {
                 ],
               ),
               SizedBox(height: ui(6)),
-              SizedBox(
-                width: double.infinity,
-                child: Text(
-                  item.time,
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                    fontSize: ui(12),
-                    height: 1.2,
-                    color: const Color(0xFFCECED1),
-                    fontFamily: 'Source Han Sans SC',
+              Transform.translate(
+                offset: Offset(0, ui(4)),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: Text(
+                    item.time,
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                      fontSize: ui(12),
+                      height: 1.2,
+                      color: const Color(0xFFCECED1),
+                      fontFamily: 'Source Han Sans SC',
+                    ),
                   ),
                 ),
               ),

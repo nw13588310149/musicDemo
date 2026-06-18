@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/network/media_url.dart';
 import '../../../../core/widgets/scaled_dialog.dart';
 import '../../data/course_sign_data.dart';
 import '../../../shell/ui/shell_layout.dart';
@@ -22,6 +23,7 @@ Future<CourseSignStatus?> showCourseSignStatusPicker(
   BuildContext context, {
   required String studentName,
   required String studentNo,
+  String headUrl = '',
   required CourseSignStatus? current,
 }) {
   return showScaledDialog<CourseSignStatus>(
@@ -58,29 +60,85 @@ Future<CourseSignStatus?> showCourseSignStatusPicker(
                     color: _kPageBg,
                     borderRadius: BorderRadius.circular(ui(12)),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Text(
-                        studentName,
-                        style: TextStyle(
-                          fontSize: ui(16),
-                          color: _kTextDark,
-                          fontFamily: 'PingFang SC',
-                          fontWeight: AppFont.w600,
-                          height: 1.2,
-                        ),
+                      _StudentInfoAvatar(
+                        seed: studentName,
+                        size: ui(48),
+                        imageUrl: headUrl,
                       ),
-                      SizedBox(height: ui(4)),
-                      Text(
-                        '学号 $studentNo',
-                        style: TextStyle(
-                          fontSize: ui(12),
-                          color: _kTextHint,
-                          fontFamily: 'PingFang SC',
-                          fontWeight: AppFont.w400,
-                          height: 1.2,
+                      SizedBox(width: ui(12)),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              studentName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: ui(16),
+                                color: _kTextDark,
+                                fontFamily: 'PingFang SC',
+                                fontWeight: AppFont.w600,
+                                height: 1.2,
+                              ),
+                            ),
+                            SizedBox(height: ui(4)),
+                            Text(
+                              studentNo.isEmpty || studentNo == '--'
+                                  ? '学号 --'
+                                  : '学号 $studentNo',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: ui(12),
+                                color: _kTextHint,
+                                fontFamily: 'PingFang SC',
+                                fontWeight: AppFont.w400,
+                                height: 1.2,
+                              ),
+                            ),
+                            SizedBox(height: ui(8)),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '当前状态',
+                                  style: TextStyle(
+                                    fontSize: ui(12),
+                                    color: _kTextHint,
+                                    fontFamily: 'PingFang SC',
+                                    fontWeight: AppFont.w400,
+                                    height: 1,
+                                  ),
+                                ),
+                                SizedBox(width: ui(6)),
+                                Container(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: ui(8),
+                                    vertical: ui(3),
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: courseSignStatusBg(current),
+                                    borderRadius: BorderRadius.circular(ui(6)),
+                                  ),
+                                  child: Text(
+                                    courseSignStatusLabel(current),
+                                    style: TextStyle(
+                                      fontSize: ui(12),
+                                      color: courseSignStatusFg(current),
+                                      fontFamily: 'PingFang SC',
+                                      fontWeight: AppFont.w500,
+                                      height: 1,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -164,6 +222,60 @@ class _SignStatusListTile extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _StudentInfoAvatar extends StatelessWidget {
+  const _StudentInfoAvatar({
+    required this.seed,
+    required this.size,
+    this.imageUrl = '',
+  });
+
+  final String seed;
+  final double size;
+  final String imageUrl;
+
+  Widget _fallback(String initial) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: const BoxDecoration(
+        color: Color(0xFFB98FFF),
+        shape: BoxShape.circle,
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        initial,
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: size * 0.38,
+          fontFamily: 'PingFang SC',
+          fontWeight: AppFont.w500,
+          height: 1,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final initial = seed.isEmpty ? '?' : seed.characters.first.toUpperCase();
+    final resolved = imageUrl.trim().isEmpty
+        ? ''
+        : MediaUrl.resolve(imageUrl.trim());
+    if (resolved.isNotEmpty) {
+      return ClipOval(
+        child: Image.network(
+          resolved,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => _fallback(initial),
+        ),
+      );
+    }
+    return _fallback(initial);
   }
 }
 

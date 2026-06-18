@@ -177,6 +177,7 @@ class _DormManagerCheckByRoomViewState
       AppToast.show(context, resp.displayMsg);
       return;
     }
+    AppToast.show(context, '已经修改');
   }
 
   @override
@@ -359,7 +360,6 @@ class _FilterRow extends StatelessWidget {
           value: selectedBuilding,
           items: buildingOptions,
           itemLabel: (o) => o.label,
-          icon: Icons.apartment_outlined,
           width: ui(220),
           menuWidth: ui(280),
           onChanged: onBuildingChanged,
@@ -369,7 +369,6 @@ class _FilterRow extends StatelessWidget {
           value: selectedFloor,
           items: floorOptions,
           itemLabel: (o) => o.label,
-          icon: Icons.layers_outlined,
           width: ui(220),
           menuWidth: ui(280),
           enabled: floorEnabled,
@@ -386,7 +385,6 @@ class _DormitorySelectField<T> extends StatefulWidget {
     required this.value,
     required this.items,
     required this.itemLabel,
-    required this.icon,
     required this.width,
     required this.menuWidth,
     required this.onChanged,
@@ -396,7 +394,6 @@ class _DormitorySelectField<T> extends StatefulWidget {
   final T value;
   final List<T> items;
   final String Function(T) itemLabel;
-  final IconData icon;
   final double width;
   final double menuWidth;
   final ValueChanged<T> onChanged;
@@ -446,8 +443,6 @@ class _DormitorySelectFieldState<T> extends State<_DormitorySelectField<T>> {
         padding: EdgeInsets.symmetric(horizontal: ui(16)),
         child: Row(
           children: [
-            Icon(widget.icon, size: ui(16), color: const Color(0xFFC6C6C6)),
-            SizedBox(width: ui(10)),
             Expanded(
               child: Text(
                 widget.itemLabel(widget.value),

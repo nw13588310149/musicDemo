@@ -69,6 +69,7 @@ const Color _kTextSecondary = Color(0xFF6D6B75);
 const Color _kTextHint = Color(0xFFB6B5BB);
 const Color _kTextDivider = Color(0xFFCECED1);
 const Color _kPurple = Color(0xFF8741FF);
+const Color _kRedBadge = Color(0xFFF04545);
 
 const Color _kStatusGreen = Color(0xFF0CAC40);
 const Color _kStatusPurple = Color(0xFFA773FF);
@@ -1394,14 +1395,103 @@ class _AdminTabSegment extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SegmentToggle(
-      selectedIndex: tab == _AdminScheduleTab.schedule ? 0 : 1,
-      options: [
-        const SegmentToggleOption(label: '周课表与排课'),
-        SegmentToggleOption(label: '小课申请审核', badge: _applyBadgeText),
-      ],
-      onChanged: (i) => onChanged(
-        i == 0 ? _AdminScheduleTab.schedule : _AdminScheduleTab.applyAudit,
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      padding: EdgeInsets.all(ui(4)),
+      decoration: BoxDecoration(
+        color: _kInnerGray,
+        borderRadius: BorderRadius.circular(ui(8)),
+        border: Border.all(color: _kBorderSoft),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _AdminTabChip(
+            label: '周课表与排课',
+            active: tab == _AdminScheduleTab.schedule,
+            onTap: () => onChanged(_AdminScheduleTab.schedule),
+          ),
+          SizedBox(width: ui(4)),
+          _AdminTabChip(
+            label: '小课申请审核',
+            active: tab == _AdminScheduleTab.applyAudit,
+            badge: _applyBadgeText,
+            onTap: () => onChanged(_AdminScheduleTab.applyAudit),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AdminTabChip extends StatelessWidget {
+  const _AdminTabChip({
+    required this.label,
+    required this.active,
+    required this.onTap,
+    this.badge,
+  });
+
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+  final String? badge;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(ui(6)),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: ui(14), vertical: ui(7)),
+            decoration: BoxDecoration(
+              color: active ? _kTextDark : Colors.transparent,
+              borderRadius: BorderRadius.circular(ui(6)),
+            ),
+            child: Text(
+              label,
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.visible,
+              style: TextStyle(
+                fontSize: ui(14),
+                color: active ? Colors.white : _kTextSecondary,
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w500,
+                height: 1.2,
+              ),
+            ),
+          ),
+          if (badge != null)
+            Positioned(
+              right: ui(-4),
+              top: ui(-4),
+              child: Container(
+                constraints: BoxConstraints(minWidth: ui(16)),
+                height: ui(15),
+                padding: EdgeInsets.symmetric(horizontal: ui(5)),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: _kRedBadge,
+                  borderRadius: BorderRadius.circular(ui(20)),
+                ),
+                child: Text(
+                  badge!,
+                  style: TextStyle(
+                    fontSize: ui(10),
+                    color: Colors.white,
+                    fontFamily: 'Manrope',
+                    fontWeight: FontWeight.w800,
+                    height: 1.0,
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -1480,12 +1570,6 @@ class _ScheduleClassFilterFieldState extends State<_ScheduleClassFilterField> {
         padding: EdgeInsets.symmetric(horizontal: ui(16)),
         child: Row(
           children: [
-            Icon(
-              Icons.school_outlined,
-              size: ui(16),
-              color: const Color(0xFFC6C6C6),
-            ),
-            SizedBox(width: ui(10)),
             Expanded(
               child: Text(
                 _label,

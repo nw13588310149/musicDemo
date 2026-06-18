@@ -568,37 +568,41 @@ class _LargeClassTabState extends ConsumerState<_LargeClassTab> {
     final pageLoading =
         _loadingClasses || (_loadingData && _sessions.isEmpty);
 
-    return PageInitLoadingShell(
-      loading: pageLoading,
-      child: SingleChildScrollView(
-        padding: EdgeInsets.zero,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _LargeClassStatsRow(
-              stats: _stats,
-              pendingMakeupCount: widget.pendingMakeupCount,
+    return SingleChildScrollView(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _LargeClassStatsRow(
+            stats: _stats,
+            pendingMakeupCount: widget.pendingMakeupCount,
+          ),
+          SizedBox(height: ui(16)),
+          _FilterBar(
+            selectedClassId: _selectedClassId,
+            selectedDate: _selectedDate,
+            classOptions: _classOptions,
+            loading: _loadingClasses,
+            onClassChanged: (id) {
+              if (id == _selectedClassId) return;
+              setState(() => _selectedClassId = id);
+              unawaited(_loadSignData());
+            },
+            onDateChanged: (v) {
+              setState(() => _selectedDate = v);
+              unawaited(_loadSignData());
+            },
+          ),
+          SizedBox(height: ui(16)),
+          MainContentLoadingShell(
+            loading: pageLoading,
+            minHeight: ui(200),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: _buildListSection(context),
             ),
-            SizedBox(height: ui(16)),
-            _FilterBar(
-              selectedClassId: _selectedClassId,
-              selectedDate: _selectedDate,
-              classOptions: _classOptions,
-              loading: _loadingClasses,
-              onClassChanged: (id) {
-                if (id == _selectedClassId) return;
-                setState(() => _selectedClassId = id);
-                unawaited(_loadSignData());
-              },
-              onDateChanged: (v) {
-                setState(() => _selectedDate = v);
-                unawaited(_loadSignData());
-              },
-            ),
-            SizedBox(height: ui(16)),
-            ..._buildListSection(context),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -1043,6 +1047,7 @@ class _StudentSignRow extends StatelessWidget {
                 context,
                 studentName: student.name,
                 studentNo: student.studentNo,
+                headUrl: student.headUrl,
                 current: student.status,
               );
               if (picked != null) onChangeStatus(picked);
@@ -1236,36 +1241,40 @@ class _SmallClassTabState extends ConsumerState<_SmallClassTab> {
     final pageLoading =
         _loadingClasses || (_loadingData && _sessions.isEmpty);
 
-    return PageInitLoadingShell(
-      loading: pageLoading,
-      child: SingleChildScrollView(
-        padding: EdgeInsets.zero,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _SmallClassStatsRow(stats: _stats),
-            SizedBox(height: ui(16)),
-            _SmallClassFlowHint(),
-            SizedBox(height: ui(16)),
-            _FilterBar(
-              selectedClassId: _selectedClassId,
-              selectedDate: _selectedDate,
-              classOptions: _classOptions,
-              loading: _loadingClasses,
-              onClassChanged: (id) {
-                if (id == _selectedClassId) return;
-                setState(() => _selectedClassId = id);
-                unawaited(_loadSignData());
-              },
-              onDateChanged: (v) {
-                setState(() => _selectedDate = v);
-                unawaited(_loadSignData());
-              },
+    return SingleChildScrollView(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _SmallClassStatsRow(stats: _stats),
+          SizedBox(height: ui(16)),
+          _SmallClassFlowHint(),
+          SizedBox(height: ui(16)),
+          _FilterBar(
+            selectedClassId: _selectedClassId,
+            selectedDate: _selectedDate,
+            classOptions: _classOptions,
+            loading: _loadingClasses,
+            onClassChanged: (id) {
+              if (id == _selectedClassId) return;
+              setState(() => _selectedClassId = id);
+              unawaited(_loadSignData());
+            },
+            onDateChanged: (v) {
+              setState(() => _selectedDate = v);
+              unawaited(_loadSignData());
+            },
+          ),
+          SizedBox(height: ui(16)),
+          MainContentLoadingShell(
+            loading: pageLoading,
+            minHeight: ui(200),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: _buildListSection(context),
             ),
-            SizedBox(height: ui(16)),
-            ..._buildListSection(context),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -2987,12 +2996,6 @@ class _ClassFilterFieldState extends State<_ClassFilterField> {
         padding: EdgeInsets.symmetric(horizontal: ui(16)),
         child: Row(
           children: [
-            Icon(
-              Icons.school_outlined,
-              size: ui(16),
-              color: const Color(0xFFC6C6C6),
-            ),
-            SizedBox(width: ui(10)),
             Expanded(
               child: Text(
                 _label,
@@ -3191,7 +3194,6 @@ class _SignStatCard extends StatelessWidget {
         height: ui(100),
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          color: Colors.white,
           borderRadius: BorderRadius.circular(ui(12)),
           image: DecorationImage(
             image: AssetImage(backgroundAsset),

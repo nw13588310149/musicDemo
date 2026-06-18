@@ -22,6 +22,29 @@ void main() {
     );
   });
 
+  test('encodes class mutation ids as quoted JSON strings', () {
+    const classId = '1798658711795392514';
+    const classroomId = '2066711506812092417';
+    const studentId = '1795667363756507137';
+    final body = encodeClassMutationRequestBody(
+      <String, dynamic>{
+        'id': classId,
+        'classroomId': classroomId,
+        'headTeacherId': '1788178798952914945',
+        'campusId': 0,
+        'studentIds': [studentId],
+        'name': '一班',
+      },
+    );
+
+    expect(body, isNotNull);
+    expect(body!, contains('"id":"$classId"'));
+    expect(body, contains('"classroomId":"$classroomId"'));
+    expect(body, contains('"studentIds":["$studentId"]'));
+    expect(body, isNot(contains('2066711506812092400')));
+    expect(body, isNot(contains('"id":$classId')));
+  });
+
   test('rejects invalid numeric id fields', () {
     final body = encodeNumericIdRequestBody(
       <String, dynamic>{'examId': 'not-an-id'},

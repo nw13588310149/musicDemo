@@ -311,6 +311,9 @@ class DormitoryManagerController extends StateNotifier<DormitoryManagerState> {
               statusLabel: record.statusLabel,
               remark: remark.isEmpty ? record.remark : remark,
               handleStatus: handleStatus,
+              avatarUrl: record.avatarUrl,
+              mobile: record.mobile,
+              gender: record.gender,
             )
           else
             record,

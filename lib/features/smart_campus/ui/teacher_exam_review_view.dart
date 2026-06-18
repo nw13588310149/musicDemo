@@ -51,7 +51,6 @@ import '../../shell/ui/shell_layout.dart';
 import 'student_homework_submission_preview.dart';
 import 'widgets/smart_campus_page_banner.dart';
 import 'widgets/smart_campus_empty_state.dart';
-import '../../../core/constants/app_assets.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // ---- 配色 -------------------------------------------------------------------
@@ -73,6 +72,9 @@ const Color _kOrangeBg = Color(0xFFFFEDD3);
 const Color _kGreen = Color(0xFF12CE51);
 const Color _kGreenBg = Color(0xFFE4FFED);
 const Color _kPillIconColor = Color(0xFF1C274C);
+
+/// 页面各板块之间的固定间距。
+const double _kSectionGap = 14;
 
 // ---- 数据模型 ---------------------------------------------------------------
 
@@ -145,10 +147,10 @@ class _TeacherExamReviewViewState extends ConsumerState<TeacherExamReviewView> {
         ? 0
         : examState.activeIdx.clamp(0, visibleItems.length - 1);
     final active = visibleItems.isEmpty ? null : visibleItems[activeIdx];
-    final listLoading = examState.loading && examState.exams.isEmpty;
 
     return SmartCampusSecondaryPageShell(
       backgroundColor: _kPageBg,
+      bodyScrollable: false,
       header: _ExamBanner(
         onBack: widget.onBack,
         onOpenHistory: _openHistoryDrawer,
@@ -163,7 +165,7 @@ class _TeacherExamReviewViewState extends ConsumerState<TeacherExamReviewView> {
                 .read(teacherExamControllerProvider.notifier)
                 .selectStatusTab(i),
           ),
-          SizedBox(height: ui(12)),
+          SizedBox(height: ui(_kSectionGap)),
           _StatsPanel(
             stats: examState.overviewStats,
             classFilter: examState.classFilter,
@@ -172,36 +174,19 @@ class _TeacherExamReviewViewState extends ConsumerState<TeacherExamReviewView> {
                 .read(teacherExamControllerProvider.notifier)
                 .selectClass(value),
           ),
-          SizedBox(height: ui(16)),
-          listLoading
-              ? const SizedBox.shrink()
-              : active == null
-              ? Container(
-                    width: double.infinity,
-                    padding: EdgeInsets.symmetric(vertical: ui(12)),
-                    decoration: BoxDecoration(
-                      color: _kCardBg,
-                      borderRadius: BorderRadius.circular(ui(16)),
+          SizedBox(height: ui(_kSectionGap)),
+          Expanded(
+            child: active == null
+                ? Center(
+                    child: Text(
+                      examState.error.isNotEmpty
+                          ? examState.error
+                          : '暂无考试数据',
+                      style: TextStyle(
+                        color: _kTextHint,
+                        fontSize: ui(14),
+                      ),
                     ),
-                    child: examState.error.isNotEmpty
-                        ? SmartCampusEmptyState(
-                            icon: Icons.cloud_off_rounded,
-                            title: '考试列表加载失败',
-                            subtitle: examState.error,
-                            actionLabel: '重新加载',
-                            onAction: () => ref
-                                .read(teacherExamControllerProvider.notifier)
-                                .loadExamList(
-                                  classId: examState
-                                      .classIdByLabel[examState.classFilter],
-                                ),
-                          )
-                        : SmartCampusEmptyState(
-                            illustration: AppAssets.emptyReviewPlaceholder,
-                            title: examState.statusTab == 0
-                                ? '暂无可批改的考试'
-                                : '该状态下暂无考试',
-                          ),
                   )
                 : _BodyRow(
                     items: visibleItems,
@@ -220,6 +205,7 @@ class _TeacherExamReviewViewState extends ConsumerState<TeacherExamReviewView> {
                     },
                     onOpenSeatPlan: () => _openSeatPlanDrawer(active),
                   ),
+          ),
         ],
       ),
     );
@@ -491,7 +477,8 @@ class _StatusTabsRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: ui(4), vertical: ui(4)),
+      height: ui(44),
+      padding: EdgeInsets.all(ui(4)),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(ui(8)),
@@ -500,7 +487,7 @@ class _StatusTabsRow extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           for (var i = 0; i < tabs.length; i++) ...[
-            if (i > 0) SizedBox(width: ui(8)),
+            if (i > 0) SizedBox(width: ui(4)),
             _SegmentChip(
               label: tabs[i],
               active: i == activeIdx,
@@ -531,7 +518,9 @@ class _SegmentChip extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(ui(6)),
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(10)),
+        height: ui(36),
+        padding: EdgeInsets.symmetric(horizontal: ui(16)),
+        alignment: Alignment.center,
         decoration: BoxDecoration(
           color: active ? _kTextDark : Colors.transparent,
           borderRadius: BorderRadius.circular(ui(6)),
@@ -543,7 +532,7 @@ class _SegmentChip extends StatelessWidget {
             color: active ? Colors.white : _kTextSecondary,
             fontFamily: 'PingFang SC',
             fontWeight: AppFont.w500,
-            height: 1.2,
+            height: 1,
           ),
         ),
       ),
@@ -585,16 +574,18 @@ class _StatsPanel extends StatelessWidget {
             children: [
               SizedBox(
                 width: ui(180),
+                height: ui(42),
                 child: PopupSelectorField<String>(
                   value: classFilter,
                   items: classOptions,
                   itemLabel: (s) => s,
                   onChanged: onClassChanged,
+                  fieldHeight: 42,
                 ),
               ),
             ],
           ),
-          SizedBox(height: ui(12)),
+          SizedBox(height: ui(_kSectionGap)),
           Row(
             children: [
               Expanded(
@@ -634,7 +625,7 @@ class _StatGap extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return SizedBox(width: ui(16));
+    return SizedBox(width: ui(_kSectionGap));
   }
 }
 
@@ -712,29 +703,35 @@ class _BodyRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: ui(340),
-            child: _ExamListPanel(
-              items: items,
-              activeIdx: activeIdx,
-              onSelect: onSelect,
-            ),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          width: ui(340),
+          child: _ExamListPanel(
+            items: items,
+            activeIdx: activeIdx,
+            onSelect: onSelect,
           ),
-          SizedBox(width: ui(16)),
-          Expanded(
-            child: _ExamDetailPanel(
-              item: active,
-              onOpenScore: onOpenScore,
-              onOpenSeatPlan: onOpenSeatPlan,
-              loadingDetail: loadingDetail,
-            ),
-          ),
-        ],
-      ),
+        ),
+        SizedBox(width: ui(_kSectionGap)),
+        Expanded(
+          child: loadingDetail
+              ? Container(
+                  decoration: BoxDecoration(
+                    color: _kCardBg,
+                    borderRadius: BorderRadius.circular(ui(16)),
+                  ),
+                  alignment: Alignment.center,
+                  child: AppLoadingIndicator(),
+                )
+              : _ExamDetailPanel(
+                  item: active,
+                  onOpenScore: onOpenScore,
+                  onOpenSeatPlan: onOpenSeatPlan,
+                ),
+        ),
+      ],
     );
   }
 }
@@ -763,7 +760,6 @@ class _ExamListPanel extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
         children: [
           Padding(
             padding: EdgeInsets.symmetric(vertical: ui(4)),
@@ -779,14 +775,23 @@ class _ExamListPanel extends StatelessWidget {
             ),
           ),
           SizedBox(height: ui(8)),
-          for (var i = 0; i < items.length; i++) ...[
-            if (i > 0) SizedBox(height: ui(8)),
-            _ExamListCard(
-              item: items[i],
-              active: i == activeIdx,
-              onTap: () => onSelect(i),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (var i = 0; i < items.length; i++) ...[
+                    if (i > 0) SizedBox(height: ui(8)),
+                    _ExamListCard(
+                      item: items[i],
+                      active: i == activeIdx,
+                      onTap: () => onSelect(i),
+                    ),
+                  ],
+                ],
+              ),
             ),
-          ],
+          ),
         ],
       ),
     );
@@ -814,6 +819,7 @@ class _ExamListCard extends StatelessWidget {
       child: Stack(
         children: [
           Container(
+            width: double.infinity,
             constraints: BoxConstraints(minHeight: ui(104)),
             padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(10)),
             decoration: BoxDecoration(
@@ -1014,13 +1020,11 @@ class _ExamDetailPanel extends StatelessWidget {
     required this.item,
     required this.onOpenScore,
     required this.onOpenSeatPlan,
-    this.loadingDetail = false,
   });
 
   final _ExamItem item;
   final ValueChanged<_Submission> onOpenScore;
   final VoidCallback onOpenSeatPlan;
-  final bool loadingDetail;
 
   @override
   Widget build(BuildContext context) {
@@ -1033,72 +1037,74 @@ class _ExamDetailPanel extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Text(
-                  item.title,
-                  style: TextStyle(
-                    fontSize: ui(16),
-                    color: _kTextBlack,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w500,
-                    height: 1.2,
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          item.title,
+                          style: TextStyle(
+                            fontSize: ui(16),
+                            color: _kTextBlack,
+                            fontFamily: 'PingFang SC',
+                            fontWeight: AppFont.w500,
+                            height: 1.2,
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: ui(12)),
+                      _BannerActionButton(
+                        icon: Icons.event_seat_outlined,
+                        label: '考场安排',
+                        onTap: onOpenSeatPlan,
+                      ),
+                      SizedBox(width: ui(12)),
+                      Text(
+                        '截止 ${item.deadline}',
+                        style: TextStyle(
+                          fontSize: ui(12),
+                          color: _kTextSecondary,
+                          fontFamily: 'PingFang SC',
+                          fontWeight: AppFont.w400,
+                          height: 1,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
+                  SizedBox(height: ui(8)),
+                  Text(
+                    item.syncNote,
+                    style: TextStyle(
+                      fontSize: ui(12),
+                      color: _kPurple,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w400,
+                      height: 1.4,
+                    ),
+                  ),
+                  SizedBox(height: ui(_kSectionGap)),
+                  _OfficialBlock(description: item.officialDesc),
+                  SizedBox(height: ui(_kSectionGap)),
+                  _ProgressMetrics(item: item),
+                  if (item.hasScoreSummary) ...[
+                    SizedBox(height: ui(_kSectionGap)),
+                    _ScoreSummaryStrip(item: item),
+                  ],
+                  SizedBox(height: ui(_kSectionGap)),
+                  _SubmissionsTable(
+                    submissions: item.submissions,
+                    onOpenScore: onOpenScore,
+                  ),
+                ],
               ),
-              SizedBox(width: ui(12)),
-              _BannerActionButton(
-                icon: Icons.event_seat_outlined,
-                label: '考场安排',
-                onTap: onOpenSeatPlan,
-              ),
-              SizedBox(width: ui(12)),
-              Text(
-                '截止 ${item.deadline}',
-                style: TextStyle(
-                  fontSize: ui(12),
-                  color: _kTextSecondary,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w400,
-                  height: 1.2,
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: ui(8)),
-          Text(
-            item.syncNote,
-            style: TextStyle(
-              fontSize: ui(12),
-              color: _kPurple,
-              fontFamily: 'PingFang SC',
-              fontWeight: AppFont.w400,
-              height: 1.4,
             ),
           ),
-          SizedBox(height: ui(12)),
-          _OfficialBlock(description: item.officialDesc),
-          SizedBox(height: ui(12)),
-          _ProgressMetrics(item: item),
-          if (item.hasScoreSummary) ...[
-            SizedBox(height: ui(12)),
-            _ScoreSummaryStrip(item: item),
-          ],
-          SizedBox(height: ui(12)),
-          if (loadingDetail && item.submissions.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
-              child: Center(child: AppLoadingIndicator()),
-            )
-          else
-            _SubmissionsTable(
-              submissions: item.submissions,
-              onOpenScore: onOpenScore,
-            ),
         ],
       ),
     );
@@ -1685,16 +1691,8 @@ class _SubmissionsTable extends StatelessWidget {
             ],
           ),
         ),
-        if (submissions.isEmpty)
-          const SmartCampusEmptyState(
-            compact: true,
-            icon: Icons.group_off_rounded,
-            title: '暂无学生提交记录',
-            subtitle: '该科目还没有可评分的学生，待学生提交后即可在此评分。',
-          )
-        else
-          for (final s in submissions)
-            _SubmissionRow(item: s, onOpenScore: () => onOpenScore(s)),
+        for (final s in submissions)
+          _SubmissionRow(item: s, onOpenScore: () => onOpenScore(s)),
       ],
     );
   }

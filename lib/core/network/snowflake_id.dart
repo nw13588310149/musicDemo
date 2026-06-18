@@ -58,6 +58,41 @@ String encodeSnowflakeSafeRequestBody(Map<String, dynamic> body) {
   return '{${entries.join(',')}}';
 }
 
+/// 班级新增/编辑（`classSave` / `classUpdate`）：`id`、`headTeacherId`、
+/// `classroomId`、`campusId` 与 `studentIds[]` 一律写入 **带引号的 JSON 字符串**，
+/// 避免 Web 端把 int64 当作 number 解析后末位被截断。
+String? encodeClassMutationRequestBody(Map<String, dynamic> body) {
+  final entries = <String>[];
+  for (final entry in body.entries) {
+    final value = entry.value;
+    if (value == null) continue;
+    final key = entry.key;
+    final encodedKey = jsonEncode(key);
+
+    if (key == 'studentIds') {
+      if (value is! Iterable) return null;
+      final encodedIds = <String>[];
+      for (final item in value) {
+        final id = readSnowflakeId(item);
+        if (id == null || !RegExp(r'^\d+$').hasMatch(id)) return null;
+        encodedIds.add(jsonEncode(id));
+      }
+      entries.add('$encodedKey:[${encodedIds.join(',')}]');
+      continue;
+    }
+
+    if (isSnowflakeJsonKey(key)) {
+      final id = readSnowflakeId(value);
+      if (id == null || id.isEmpty) return null;
+      entries.add('$encodedKey:${jsonEncode(id)}');
+      continue;
+    }
+
+    entries.add('$encodedKey:${jsonEncode(value)}');
+  }
+  return '{${entries.join(',')}}';
+}
+
 const Set<String> snowflakeJsonKeys = {
   'id',
   'classId',

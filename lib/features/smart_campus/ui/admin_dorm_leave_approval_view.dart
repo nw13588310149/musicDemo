@@ -43,6 +43,7 @@ import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/admin_repository.dart';
 import '../data/teacher_leave_data.dart';
+import 'widgets/smart_campus_page_banner.dart';
 import 'widgets/smart_campus_stat_card.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
@@ -184,16 +185,13 @@ class _AdminDormLeaveApprovalViewState
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      color: _kPageBg,
-      child: SingleChildScrollView(
-        padding: EdgeInsets.only(bottom: ui(20)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _Banner(onBack: widget.onBack),
-            SizedBox(height: ui(16)),
-            _StatsRow(
+    return SmartCampusSecondaryPageShell(
+      backgroundColor: _kPageBg,
+      header: _Banner(onBack: widget.onBack),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _StatsRow(
               pendingCount: _pendingCount,
               approvedCount: _approvedCount,
               rejectedCount: _rejectedCount,
@@ -232,8 +230,7 @@ class _AdminDormLeaveApprovalViewState
                 onReject: _onReject,
               ),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }

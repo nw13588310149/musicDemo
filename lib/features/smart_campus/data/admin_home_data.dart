@@ -54,9 +54,7 @@ class AdminHomeNotice {
   final bool highlighted;
 
   factory AdminHomeNotice.fromRecord(AdminNoticeRecord record) {
-    final text = record.content.trim().isEmpty
-        ? record.title
-        : '${record.title}：${record.content.trim()}';
+    final text = formatNoticePreviewText(record.title, record.content);
     return AdminHomeNotice(
       id: record.id,
       tag: record.type.trim().isEmpty ? '通知' : record.type,
@@ -72,6 +70,132 @@ List<AdminHomeNotice> parseAdminHomeNotices(dynamic raw) {
       .where((record) => record.status == AdminNoticeStatus.published)
       .map(AdminHomeNotice.fromRecord)
       .toList(growable: false);
+}
+
+/// 管理员首页「数据看板」近 7 日登录曲线。
+class AdminHomeLoginChart {
+  const AdminHomeLoginChart({this.points = const []});
+
+  final List<AdminHomeLoginChartPoint> points;
+
+  List<double> get values =>
+      points.map((point) => point.count.toDouble()).toList(growable: false);
+
+  List<String> get xLabels =>
+      points.map((point) => point.weekdayLabel).toList(growable: false);
+}
+
+class AdminHomeLoginChartPoint {
+  const AdminHomeLoginChartPoint({
+    required this.loginDate,
+    required this.count,
+    required this.weekdayLabel,
+  });
+
+  final String loginDate;
+  final int count;
+  final String weekdayLabel;
+}
+
+const _adminHomeWeekdayLabels = [
+  '周一',
+  '周二',
+  '周三',
+  '周四',
+  '周五',
+  '周六',
+  '周日',
+];
+
+AdminHomeLoginChart parseAdminHomeLoginChart(
+  dynamic raw, {
+  required String startDate,
+  required String endDate,
+}) {
+  final start = _parseAdminHomeIsoDate(startDate);
+  final end = _parseAdminHomeIsoDate(endDate);
+  if (start == null || end == null || start.isAfter(end)) {
+    return const AdminHomeLoginChart();
+  }
+
+  final countByDate = <String, int>{};
+  for (final row in _coerceLoginChartRows(raw)) {
+    final date = row['loginDate']?.toString().trim() ?? '';
+    if (date.isEmpty) continue;
+    countByDate[date] = _readInt(row['count']);
+  }
+
+  final points = <AdminHomeLoginChartPoint>[];
+  for (var day = start; !day.isAfter(end); day = day.add(const Duration(days: 1))) {
+    final iso = formatAdminHomeIsoDate(day);
+    points.add(
+      AdminHomeLoginChartPoint(
+        loginDate: iso,
+        count: countByDate[iso] ?? 0,
+        weekdayLabel: _adminHomeWeekdayLabels[day.weekday - 1],
+      ),
+    );
+  }
+  return AdminHomeLoginChart(points: points);
+}
+
+/// 登录人数 Y 轴上限：全 0 时默认 10，否则向上取整到 5 的倍数。
+double adminHomeLoginChartMaxY(List<double> values) {
+  if (values.isEmpty) return 10;
+  final max = values.reduce((a, b) => a > b ? a : b);
+  if (max <= 0) return 10;
+  return ((max / 5).ceil() * 5).toDouble();
+}
+
+List<String> buildAdminHomeLoginChartYLabels(double maxY) {
+  final top = maxY <= 0 ? 10 : maxY;
+  final step = top / 5;
+  return [
+    for (var i = 5; i >= 0; i--)
+      i == 0 ? '0' : (step * i).round().toString(),
+  ];
+}
+
+List<Map<String, dynamic>> _coerceLoginChartRows(dynamic raw) {
+  dynamic list = raw;
+  if (list is Map && list['data'] is List) {
+    list = list['data'];
+  }
+  if (list is! List) return const [];
+
+  return [
+    for (final item in list)
+      if (item is Map) Map<String, dynamic>.from(item),
+  ];
+}
+
+DateTime? _parseAdminHomeIsoDate(String raw) {
+  final parts = raw.trim().split('-');
+  if (parts.length != 3) return null;
+  final year = int.tryParse(parts[0]);
+  final month = int.tryParse(parts[1]);
+  final day = int.tryParse(parts[2]);
+  if (year == null || month == null || day == null) return null;
+  return DateTime(year, month, day);
+}
+
+String formatAdminHomeIsoDate(DateTime date) {
+  return '${date.year.toString().padLeft(4, '0')}-'
+      '${date.month.toString().padLeft(2, '0')}-'
+      '${date.day.toString().padLeft(2, '0')}';
+}
+
+/// 数据看板查询区间：含今天在内共 7 天（`startDate` … `endDate`）。
+({String startDate, String endDate}) adminHomeLast7DaysDateRange({
+  DateTime? anchor,
+}) {
+  final end = anchor ?? DateTime.now();
+  final endDate = DateTime(end.year, end.month, end.day);
+  final startDate = endDate.subtract(const Duration(days: 6));
+  return (
+    startDate: formatAdminHomeIsoDate(startDate),
+    endDate: formatAdminHomeIsoDate(endDate),
+  );
 }
 
 int _readInt(dynamic raw) {

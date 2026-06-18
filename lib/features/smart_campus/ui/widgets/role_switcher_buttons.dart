@@ -5,10 +5,9 @@ import '../../state/smart_campus_state.dart';
 
 /// 智慧校园右侧栏「身份切换」按钮组。
 ///
-/// 按 [availableRoles] 顺序为每个身份渲染一颗按钮，命中 [selectedRole]
-/// 的那颗紫底白字，其它白底深色字 + 1px `#F3F2F3` 边框。视觉与教师
-/// dashboard 原先的「任课老师 / 班主任」tab (`_TeacherRoleTabButton`)
-/// 保持一致，确保 admin / 班主任 / 任课老师 等多端右栏的视觉语言统一。
+/// 命中 [selectedRole] 的那颗紫渐变底白字，其它白底深色字 + 1px
+/// `#F3F2F3` 边框。视觉与教师 dashboard 原先的「任课老师 / 班主任」
+/// tab (`_TeacherRoleTabButton`) 保持一致，确保 admin / 班主任 / 任课老师 等多端右栏的视觉语言统一。
 ///
 /// `Wrap` 布局：256 宽的 sidebar 里 4-5 颗按钮会自然换到第二行，无需提
 /// 前判断行数。`label` 走 [SmartCampusRoleX.label]（学生端 / 任课老师 /
@@ -72,20 +71,28 @@ class _RoleSwitcherButton extends StatelessWidget {
       child: Container(
         padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(8)),
         decoration: BoxDecoration(
-          color: active ? const Color(0xFF8741FF) : Colors.white,
+          gradient: active
+              ? const LinearGradient(
+                  begin: Alignment.centerRight,
+                  end: Alignment.centerLeft,
+                  colors: [Color(0xFFB68EFF), Color(0xFF8640FF)],
+                )
+              : null,
+          color: active ? null : Colors.white,
           borderRadius: BorderRadius.circular(ui(8)),
           border: Border.all(color: const Color(0xFFF3F2F3)),
         ),
         alignment: Alignment.center,
         child: Text(
           label,
+          textAlign: TextAlign.center,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            fontSize: ui(12),
+            fontSize: ui(11),
             color: active ? Colors.white : const Color(0xFF0B081A),
             fontWeight: FontWeight.w400,
-            height: 1,
+            height: 12 / 11,
           ),
         ),
       ),

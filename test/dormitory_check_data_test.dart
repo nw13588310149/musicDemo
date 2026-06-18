@@ -52,6 +52,88 @@ void main() {
     );
   });
 
+  test('parses history records with nested user info', () {
+    final items = parseDormitoryCheckHistoryList({
+      'records': [
+        {
+          'id': '13',
+          'userId': '2066817059806724098',
+          'studentName': null,
+          'studentNo': null,
+          'checkDate': '2026-06-18',
+          'status': '正常',
+          'checkTime': '2026-06-18 22:01:06',
+          'buildingName': '宿舍1号楼',
+          'floorName': '1层',
+          'roomName': '101',
+          'bedName': '2',
+          'handleStatus': null,
+          'user': {
+            'id': '2066817059806724098',
+            'mobile': '173******91',
+            'headUrl':
+                'app/upload/2066817059806724098/2026-06-16/2066889412830023682.jpg',
+            'nickname': '宁为学生',
+            'gender': '男',
+            'realname': null,
+          },
+        },
+        {
+          'id': '10',
+          'userId': '2066715685123211265',
+          'studentName': null,
+          'studentNo': null,
+          'checkDate': '2026-06-18',
+          'status': '正常',
+          'checkTime': '2026-06-18 21:56:59',
+          'buildingName': '宿舍1号楼',
+          'floorName': '1层',
+          'roomName': '101',
+          'bedName': '1号床',
+          'user': {
+            'nickname': '安同学',
+            'headUrl':
+                'app/upload/2066715685123211265/2026-06-16/2066716284145319937.jpeg',
+            'gender': '男',
+          },
+        },
+      ],
+    });
+
+    expect(items, hasLength(2));
+    expect(items[0].studentName, '宁为学生');
+    expect(items[0].studentSubtitle, '173******91');
+    expect(items[0].dormName, '宿舍1号楼 · 1层 · 101');
+    expect(items[0].bedLabel, '2床');
+    expect(items[0].avatarUrl, contains('2066889412830023682.jpg'));
+    expect(items[1].studentName, '安同学');
+    expect(items[1].bedLabel, '1号床');
+  });
+
+  test('parses check detail fields from nested user info', () {
+    final fields = parseDormitoryCheckDetailFields({
+      'studentName': null,
+      'studentNo': null,
+      'checkDate': '2026-06-18',
+      'status': '正常',
+      'buildingName': '宿舍1号楼',
+      'floorName': '1层',
+      'roomName': '101',
+      'bedName': '2',
+      'checkTime': '2026-06-18 22:01:06',
+      'user': {
+        'nickname': '宁为学生',
+        'mobile': '173******91',
+        'realname': null,
+      },
+    });
+    final fieldMap = {for (final field in fields) field.label: field.value};
+    expect(fieldMap['学生'], '宁为学生');
+    expect(fieldMap['手机号'], '173******91');
+    expect(fieldMap['宿舍'], '宿舍1号楼 · 1层 · 101');
+    expect(fieldMap['床位'], '2床');
+  });
+
   test('calculates selected history result statistics', () {
     final items = parseDormitoryCheckHistoryList({
       'records': [
@@ -98,7 +180,7 @@ void main() {
     final checkMap = {
       for (final field in checkFields) field.label: field.value,
     };
-    expect(checkMap['异常原因'], '排练晚归');
+    expect(checkMap['备注'], '排练晚归');
     expect(checkMap['处理状态'], '已处理');
 
     final makeupFields = parseDormitoryMakeupDetailFields({

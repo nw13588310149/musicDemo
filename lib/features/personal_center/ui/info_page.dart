@@ -194,7 +194,7 @@ class _InfoRows extends StatelessWidget {
         ),
         const _RowDivider(),
         _InfoRow(
-          title: '昵称',
+          title: '姓名',
           value: user['nickname']?.toString() ?? '',
           onTap: () => _editNickname(context, controller, user),
         ),
@@ -203,6 +203,18 @@ class _InfoRows extends StatelessWidget {
           title: '邮箱',
           value: user['email']?.toString() ?? '',
           onTap: () => _editEmail(context, controller, user),
+        ),
+        const _RowDivider(),
+        _InfoRow(
+          title: '主项',
+          value: user['primary']?.toString() ?? '',
+          onTap: () => _editPrimary(context, controller, user),
+        ),
+        const _RowDivider(),
+        _InfoRow(
+          title: '副项',
+          value: user['secondary']?.toString() ?? '',
+          onTap: () => _editSecondary(context, controller, user),
         ),
         const _RowDivider(),
         _InfoRow(
@@ -553,8 +565,9 @@ Future<void> _editNickname(
 ) async {
   final value = await showTextInputDialog(
     context: context,
-    title: '修改昵称',
-    hintText: '请输入新昵称',
+    title: '修改姓名',
+    subtitle: '为方便学校管理，请如实填写你的真实姓名',
+    hintText: '请输入真实姓名',
     initialValue: user['nickname']?.toString() ?? '',
     maxLength: 30,
   );
@@ -563,6 +576,50 @@ Future<void> _editNickname(
   }
   final err = await controller.updateProfileFields(<String, dynamic>{
     'nickname': value,
+  });
+  if (!context.mounted) return;
+  _toast(context, err ?? '修改成功！');
+}
+
+Future<void> _editPrimary(
+  BuildContext context,
+  PersonalCenterController controller,
+  Map<String, dynamic> user,
+) async {
+  final value = await showTextInputDialog(
+    context: context,
+    title: '修改主项',
+    hintText: '请输入主项',
+    initialValue: user['primary']?.toString() ?? '',
+    maxLength: 30,
+  );
+  if (value == null || value.isEmpty || !context.mounted) {
+    return;
+  }
+  final err = await controller.updateProfileFields(<String, dynamic>{
+    'primary': value,
+  });
+  if (!context.mounted) return;
+  _toast(context, err ?? '修改成功！');
+}
+
+Future<void> _editSecondary(
+  BuildContext context,
+  PersonalCenterController controller,
+  Map<String, dynamic> user,
+) async {
+  final value = await showTextInputDialog(
+    context: context,
+    title: '修改副项',
+    hintText: '请输入副项',
+    initialValue: user['secondary']?.toString() ?? '',
+    maxLength: 30,
+  );
+  if (value == null || value.isEmpty || !context.mounted) {
+    return;
+  }
+  final err = await controller.updateProfileFields(<String, dynamic>{
+    'secondary': value,
   });
   if (!context.mounted) return;
   _toast(context, err ?? '修改成功！');
@@ -666,7 +723,7 @@ String? _normalizeGender(String? raw) {
   return null;
 }
 
-/// 性别选择弹窗：样式与修改昵称等 [GradientHeaderDialog] 弹窗一致。
+/// 性别选择弹窗：样式与修改姓名等 [GradientHeaderDialog] 弹窗一致。
 Future<String?> _showGenderPickerDialog({
   required BuildContext context,
   String? initial,

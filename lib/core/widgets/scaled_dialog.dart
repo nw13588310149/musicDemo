@@ -464,6 +464,8 @@ Future<String?> showTextInputDialog({
   required BuildContext context,
   required String title,
   String hintText = '',
+  /// 标题与输入框之间的小字说明（如资料填写提示）。
+  String? subtitle,
   String initialValue = '',
   String confirmLabel = '确认',
   String cancelLabel = '取消',
@@ -498,20 +500,45 @@ Future<String?> showTextInputDialog({
             rootNavigator: true,
           ).pop(controller.text.trim()),
         ),
-        child: AppDialogTextField(
-          controller: controller,
-          focusNode: focusNode,
-          autofocus: true,
-          hintText: hintText,
-          maxLength: maxLength,
-          multiline: multiline,
-          multilineHeight: multilineHeight,
-          onSubmitted: multiline
-              ? null
-              : (_) => Navigator.of(
-                  dialogContext,
-                  rootNavigator: true,
-                ).pop(controller.text.trim()),
+        child: Builder(
+          builder: (fieldContext) {
+            final ui = DashboardScaleScope.of(fieldContext).ui;
+            final resolvedSubtitle = subtitle?.trim();
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                if (resolvedSubtitle != null && resolvedSubtitle.isNotEmpty) ...[
+                  Text(
+                    resolvedSubtitle,
+                    style: TextStyle(
+                      fontSize: ui(12),
+                      color: const Color(0xFF6D6B75),
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w400,
+                      height: 18 / 12,
+                    ),
+                  ),
+                  SizedBox(height: ui(8)),
+                ],
+                AppDialogTextField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  autofocus: true,
+                  hintText: hintText,
+                  maxLength: maxLength,
+                  multiline: multiline,
+                  multilineHeight: multilineHeight,
+                  onSubmitted: multiline
+                      ? null
+                      : (_) => Navigator.of(
+                          dialogContext,
+                          rootNavigator: true,
+                        ).pop(controller.text.trim()),
+                ),
+              ],
+            );
+          },
         ),
       );
     },

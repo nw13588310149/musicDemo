@@ -278,6 +278,17 @@ class _ShellScaffoldState extends ConsumerState<ShellScaffold> {
       AppToast.show(context, '请先开通会员');
       return;
     }
+    // 离开录音系统前先停掉试听/播放：controller 是全局 Riverpod 单例，
+    // 仅靠 RecordingSystemPage.dispose 里的 ref.read 不够稳（dispose 阶段
+    // ref 可能已失效），这里在路由切换前主动收掉播放器。
+    if (widget.currentRoute == RoutePaths.recording &&
+        route != RoutePaths.recording) {
+      unawaited(
+        ref
+            .read(recordingSystemControllerProvider.notifier)
+            .abandonActiveSession(),
+      );
+    }
     Navigator.pushReplacementNamed(context, route);
   }
 }

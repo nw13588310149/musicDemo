@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,6 +13,9 @@ import '../state/dormitory_manager_controller.dart';
 import '../data/teacher_notice_data.dart';
 import '../state/smart_campus_state.dart';
 import 'widgets/role_switcher_buttons.dart';
+import 'widgets/smart_campus_avatar_role_badge.dart';
+import 'widgets/smart_campus_home_card.dart';
+import 'widgets/smart_campus_quick_actions_card.dart';
 import 'widgets/smart_campus_stat_card.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
@@ -22,8 +26,8 @@ import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 /// 左主栏（约 697 宽）自上而下：
 /// 1. **顶部统计行**：5 张小白卡（今日批次 / 待审补卡 / 晚归登记 / 异常未闭环 /
 ///    在寝率 98%）+ 1 张「待处理 12」紫色高亮卡，共占 697 宽。
-/// 2. **宿管 6 项快捷入口卡**（697×255）：5+1 网格，每格 44×44 `#EAE5FF`
-///    圆角底 + 28×28 图标 + 14/500 文案。
+/// 2. **宿管 6 项快捷入口卡**（697×255）：5+1 网格，每格 43×43 图标
+///    （图片占满，无代码底色）+ 14/500 文案。
 ///    - 按宿舍查寝（16.png）/ 查寝历史（17.png）/ 宿管请假（19.png）/
 ///      校圈（home_actions/dorm_manager/school_circle.png）
 ///    - 群聊（home_actions/dorm_manager/group_chat.png）/ 校长信箱（principal_mailbox.png）
@@ -111,76 +115,245 @@ class _DormManagerHomeViewState extends ConsumerState<DormManagerHomeView> {
 
     return PageInitLoadingShell(
       loading: managerState.loadingHome,
-      child: SingleChildScrollView(
-        padding: EdgeInsets.only(bottom: ui(20)),
-        child: Row(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          var cw = constraints.maxWidth;
+          if (!cw.isFinite || cw == double.infinity || cw < 2) {
+            final w = MediaQuery.sizeOf(context).width;
+            cw = (w - ui(ShellLayoutSpec.sidebarWidth) - ui(16) * 2).clamp(
+              240.0,
+              20000.0,
+            );
+          }
+          final isCompact = cw < ui(900);
+          final sidebarWidth = ui(256);
+          final contentGap = ui(16);
+          final mainWidth = isCompact
+              ? cw
+              : math.max(0.0, cw - sidebarWidth - contentGap);
+
+          final mainColumn = _DormMainColumn(
+            index: index,
+            fillRemaining: !isCompact,
+            onOpenPending: widget.onOpenDormMakeupAudit,
+            onOpenGroupChat: widget.onOpenGroupChat,
+            onOpenPrincipalMailbox: widget.onOpenPrincipalMailbox,
+            onOpenSchoolCircle: widget.onOpenSchoolCircle,
+            onOpenDormCheckByRoom: widget.onOpenDormCheckByRoom,
+            onOpenDormCheckHistory: widget.onOpenDormCheckHistory,
+            onOpenCheckInManagement: widget.onOpenCheckInManagement,
+            onOpenDormManagerLeave: widget.onOpenDormManagerLeave,
+          );
+
+          final sidePanel = _DormManagerSidePanel(
+            fillHeight: !isCompact,
+            displayName: widget.shellDisplayName,
+            avatarUrl: widget.avatarUrl,
+            availableRoles: widget.availableRoles,
+            selectedRole: widget.selectedRole,
+            onSelectRole: widget.onSelectRole,
+            managedAreas: index.managedAreas,
+          );
+
+          if (isCompact) {
+            return SingleChildScrollView(
+              padding: EdgeInsets.only(bottom: ui(20)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  mainColumn,
+                  SizedBox(height: contentGap),
+                  sidePanel,
+                ],
+              ),
+            );
+          }
+
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned(
+                left: 0,
+                top: 0,
+                bottom: 0,
+                width: mainWidth,
+                child: mainColumn,
+              ),
+              Positioned(
+                right: 0,
+                top: 0,
+                bottom: 0,
+                width: sidebarWidth,
+                child: sidePanel,
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// 宿管端主列：统计行 + 快捷入口 + 当前事项 / 今日值班（宽屏下底部撑满）。
+class _DormMainColumn extends StatelessWidget {
+  const _DormMainColumn({
+    required this.index,
+    required this.fillRemaining,
+    this.onOpenPending,
+    this.onOpenGroupChat,
+    this.onOpenPrincipalMailbox,
+    this.onOpenSchoolCircle,
+    this.onOpenDormCheckByRoom,
+    this.onOpenDormCheckHistory,
+    this.onOpenCheckInManagement,
+    this.onOpenDormManagerLeave,
+  });
+
+  final DormitoryIndexOverview index;
+  final bool fillRemaining;
+  final VoidCallback? onOpenPending;
+  final VoidCallback? onOpenGroupChat;
+  final VoidCallback? onOpenPrincipalMailbox;
+  final VoidCallback? onOpenSchoolCircle;
+  final VoidCallback? onOpenDormCheckByRoom;
+  final VoidCallback? onOpenDormCheckHistory;
+  final VoidCallback? onOpenCheckInManagement;
+  final VoidCallback? onOpenDormManagerLeave;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final dutySection = _DormDutySection(
+      fillRemaining: fillRemaining,
+      currentTask: index.currentTask,
+      todayDutyTasks: index.todayDutyTasks,
+      onOpenDormCheckByRoom: onOpenDormCheckByRoom,
+    );
+
+    if (fillRemaining) {
+      return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.max,
         children: [
-          Expanded(
-            child: Column(
+          _DormStatsRow(index: index, onOpenPending: onOpenPending),
+          SizedBox(height: ui(16)),
+          _DormQuickActionsCard(
+            onOpenGroupChat: onOpenGroupChat,
+            onOpenPrincipalMailbox: onOpenPrincipalMailbox,
+            onOpenSchoolCircle: onOpenSchoolCircle,
+            onOpenDormCheckByRoom: onOpenDormCheckByRoom,
+            onOpenDormCheckHistory: onOpenDormCheckHistory,
+            onOpenCheckInManagement: onOpenCheckInManagement,
+            onOpenDormManagerLeave: onOpenDormManagerLeave,
+          ),
+          SizedBox(height: ui(16)),
+          Expanded(child: dutySection),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _DormStatsRow(index: index, onOpenPending: onOpenPending),
+        SizedBox(height: ui(16)),
+        _DormQuickActionsCard(
+          onOpenGroupChat: onOpenGroupChat,
+          onOpenPrincipalMailbox: onOpenPrincipalMailbox,
+          onOpenSchoolCircle: onOpenSchoolCircle,
+          onOpenDormCheckByRoom: onOpenDormCheckByRoom,
+          onOpenDormCheckHistory: onOpenDormCheckHistory,
+          onOpenCheckInManagement: onOpenCheckInManagement,
+          onOpenDormManagerLeave: onOpenDormManagerLeave,
+        ),
+        SizedBox(height: ui(16)),
+        dutySection,
+      ],
+    );
+  }
+}
+
+/// 当前事项 + 今日值班双卡区域；宽屏下与右栏底部对齐。
+class _DormDutySection extends StatelessWidget {
+  const _DormDutySection({
+    required this.fillRemaining,
+    this.currentTask,
+    this.todayDutyTasks = const [],
+    this.onOpenDormCheckByRoom,
+  });
+
+  final bool fillRemaining;
+  final DormitoryDutyTask? currentTask;
+  final List<DormitoryDutyTask> todayDutyTasks;
+  final VoidCallback? onOpenDormCheckByRoom;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final currentPanel = _CurrentTaskCard(
+      task: currentTask,
+      fillHeight: fillRemaining,
+    );
+    final todayPanel = _TodayDutyCard(
+      tasks: todayDutyTasks,
+      fillHeight: fillRemaining,
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cw = constraints.maxWidth;
+        final stackVertically = !cw.isFinite || cw < ui(690);
+
+        if (stackVertically) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const _SectionTitle(title: '当前事项'),
+              SizedBox(height: ui(12)),
+              currentPanel,
+              SizedBox(height: ui(16)),
+              _TodayDutyHeader(onOpenDormCheckByRoom: onOpenDormCheckByRoom),
+              SizedBox(height: ui(12)),
+              todayPanel,
+            ],
+          );
+        }
+
+        final cardsRow = Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: currentPanel),
+            SizedBox(width: ui(16)),
+            Expanded(child: todayPanel),
+          ],
+        );
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: fillRemaining ? MainAxisSize.max : MainAxisSize.min,
+          children: [
+            Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _DormStatsRow(
-                  index: index,
-                  onOpenPending: widget.onOpenDormMakeupAudit,
-                ),
-                SizedBox(height: ui(16)),
-                _DormQuickActionsCard(
-                  onOpenGroupChat: widget.onOpenGroupChat,
-                  onOpenPrincipalMailbox: widget.onOpenPrincipalMailbox,
-                  onOpenSchoolCircle: widget.onOpenSchoolCircle,
-                  onOpenDormCheckByRoom: widget.onOpenDormCheckByRoom,
-                  onOpenDormCheckHistory: widget.onOpenDormCheckHistory,
-                  onOpenCheckInManagement: widget.onOpenCheckInManagement,
-                  onOpenDormManagerLeave: widget.onOpenDormManagerLeave,
-                ),
-                SizedBox(height: ui(16)),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const _SectionTitle(title: '当前事项'),
-                          SizedBox(height: ui(12)),
-                          _CurrentTaskCard(task: index.currentTask),
-                        ],
-                      ),
-                    ),
-                    SizedBox(width: ui(16)),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _TodayDutyHeader(
-                            onOpenDormCheckByRoom: widget.onOpenDormCheckByRoom,
-                          ),
-                          SizedBox(height: ui(12)),
-                          _TodayDutyCard(tasks: index.todayDutyTasks),
-                        ],
-                      ),
-                    ),
-                  ],
+                const Expanded(child: _SectionTitle(title: '当前事项')),
+                SizedBox(width: ui(16)),
+                Expanded(
+                  child: _TodayDutyHeader(
+                    onOpenDormCheckByRoom: onOpenDormCheckByRoom,
+                  ),
                 ),
               ],
             ),
-          ),
-          SizedBox(width: ui(16)),
-          SizedBox(
-            width: ui(256),
-            child: _DormManagerSidePanel(
-              displayName: widget.shellDisplayName,
-              avatarUrl: widget.avatarUrl,
-              availableRoles: widget.availableRoles,
-              selectedRole: widget.selectedRole,
-              onSelectRole: widget.onSelectRole,
-              managedAreas: index.managedAreas,
-            ),
-          ),
-        ],
-      ),
-      ),
+            SizedBox(height: ui(12)),
+            if (fillRemaining)
+              Expanded(child: cardsRow)
+            else
+              IntrinsicHeight(child: cardsRow),
+          ],
+        );
+      },
     );
   }
 }
@@ -206,31 +379,31 @@ class _QuickAction {
 const _dormQuickActions = <_QuickAction>[
   _QuickAction(
     '按宿舍查寝',
-    'assets/images/new/智慧校园/宿管端/按宿舍查寝.png',
+    'assets/images/new/智慧校园/宿管/按宿舍查寝.png',
   ),
   _QuickAction(
     '查寝历史',
-    'assets/images/new/智慧校园/宿管端/查寝历史.png',
+    'assets/images/new/智慧校园/宿管/查寝历史.png',
   ),
   _QuickAction(
     '打卡管理',
-    'assets/images/new/智慧校园/宿管端/打卡管理.png',
+    'assets/images/new/智慧校园/宿管/打卡管理.png',
   ),
   _QuickAction(
     '宿管请假',
-    'assets/images/new/智慧校园/宿管端/宿管请假.png',
+    'assets/images/new/智慧校园/宿管/宿管请假.png',
   ),
   _QuickAction(
     '校圈',
-    'assets/images/new/智慧校园/宿管端/校圈.png',
+    'assets/images/new/智慧校园/宿管/校圈.png',
   ),
   _QuickAction(
     '群聊',
-    'assets/images/new/智慧校园/宿管端/群聊.png',
+    'assets/images/new/智慧校园/宿管/群聊.png',
   ),
   _QuickAction(
     '校长信箱',
-    'assets/images/new/智慧校园/宿管端/校长信箱.png',
+    'assets/images/new/智慧校园/宿管/校长信箱.png',
   ),
 ];
 
@@ -337,11 +510,7 @@ class _StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(16)),
-      ),
+    return SmartCampusHomeCard(
       padding: EdgeInsets.symmetric(horizontal: ui(8), vertical: ui(8)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -389,11 +558,7 @@ class _PendingCard extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(ui(16)),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(ui(16)),
-        ),
+      child: SmartCampusHomeCard(
         padding: EdgeInsets.symmetric(horizontal: ui(8), vertical: ui(8)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -476,101 +641,15 @@ class _DormQuickActionsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    const rowSize = 5;
-    final rowCount = (_dormQuickActions.length / rowSize).ceil();
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(16)),
-      ),
-      padding: EdgeInsets.symmetric(horizontal: ui(24), vertical: ui(28)),
-      child: Column(
-        children: [
-          for (var ri = 0; ri < rowCount; ri++) ...[
-            if (ri > 0) SizedBox(height: ui(24)),
-            Row(
-              children: [
-                for (var ci = 0; ci < rowSize; ci++) ...[
-                  if (ci > 0) SizedBox(width: ui(12)),
-                  Expanded(
-                    child: () {
-                      final idx = ri * rowSize + ci;
-                      if (idx < _dormQuickActions.length) {
-                        return _QuickActionCell(
-                          action: _dormQuickActions[idx],
-                          onTap: _resolveTap(_dormQuickActions[idx].label),
-                        );
-                      }
-                      return const SizedBox();
-                    }(),
-                  ),
-                ],
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _QuickActionCell extends StatelessWidget {
-  const _QuickActionCell({required this.action, this.onTap});
-
-  final _QuickAction action;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Padding(
-        padding: EdgeInsets.symmetric(vertical: ui(4)),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: ui(48),
-              height: ui(48),
-              child: Stack(
-                clipBehavior: Clip.none,
-                alignment: Alignment.center,
-                children: [
-                  Container(
-                    width: ui(44),
-                    height: ui(44),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEAE5FF),
-                      borderRadius: BorderRadius.circular(ui(8)),
-                    ),
-                  ),
-                  Image.asset(
-                    action.iconAsset,
-                    width: ui(28),
-                    height: ui(28),
-                    fit: BoxFit.contain,
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(height: ui(8)),
-            Text(
-              action.label,
-              style: TextStyle(
-                fontSize: ui(14),
-                height: 1.2,
-                fontWeight: AppFont.w500,
-                color: const Color(0xFF1A1A1A),
-                fontFamily: 'PingFang SC',
-              ),
-            ),
-          ],
-        ),
-      ),
+    return SmartCampusQuickActionsCard(
+      items: [
+        for (final action in _dormQuickActions)
+          SmartCampusQuickActionItem(
+            label: action.label,
+            assetPath: action.iconAsset,
+            onTap: _resolveTap(action.label),
+          ),
+      ],
     );
   }
 }
@@ -580,9 +659,10 @@ class _QuickActionCell extends StatelessWidget {
 // ============================================================================
 
 class _CurrentTaskCard extends StatelessWidget {
-  const _CurrentTaskCard({this.task});
+  const _CurrentTaskCard({this.task, this.fillHeight = false});
 
   final DormitoryDutyTask? task;
+  final bool fillHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -595,15 +675,12 @@ class _CurrentTaskCard extends StatelessWidget {
             timeTo: '--',
           )
         : _mapDutyTask(task!);
-    return Container(
-      height: ui(340),
+    final card = SmartCampusHomeCard(
+      height: fillHeight ? null : ui(340),
       padding: EdgeInsets.all(ui(12)),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(16)),
-      ),
       child: _DutyTaskTile(task: duty),
     );
+    return fillHeight ? SizedBox.expand(child: card) : card;
   }
 }
 
@@ -653,9 +730,10 @@ class _TodayDutyHeader extends StatelessWidget {
 }
 
 class _TodayDutyCard extends StatelessWidget {
-  const _TodayDutyCard({required this.tasks});
+  const _TodayDutyCard({required this.tasks, this.fillHeight = false});
 
   final List<DormitoryDutyTask> tasks;
+  final bool fillHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -664,19 +742,15 @@ class _TodayDutyCard extends StatelessWidget {
         ? const [
             _DutyTask(
               tag: '值班',
-              title: '接口暂未提供今日值班安排',
+              title: '暂无',
               timeFrom: '--',
               timeTo: '--',
             ),
           ]
         : tasks.map(_mapDutyTask).toList(growable: false);
-    return Container(
-      height: ui(340),
+    final card = SmartCampusHomeCard(
+      height: fillHeight ? null : ui(340),
       padding: EdgeInsets.all(ui(12)),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(16)),
-      ),
       child: ListView.separated(
         padding: EdgeInsets.zero,
         itemCount: dutyTasks.length,
@@ -684,6 +758,7 @@ class _TodayDutyCard extends StatelessWidget {
         itemBuilder: (_, i) => _DutyTaskTile(task: dutyTasks[i]),
       ),
     );
+    return fillHeight ? SizedBox.expand(child: card) : card;
   }
 }
 
@@ -773,6 +848,7 @@ class _DutyTaskTile extends StatelessWidget {
 
 class _DormManagerSidePanel extends StatelessWidget {
   const _DormManagerSidePanel({
+    required this.fillHeight,
     required this.displayName,
     required this.avatarUrl,
     required this.availableRoles,
@@ -781,6 +857,7 @@ class _DormManagerSidePanel extends StatelessWidget {
     this.managedAreas = const [],
   });
 
+  final bool fillHeight;
   final String displayName;
   final String avatarUrl;
   final List<SmartCampusRole> availableRoles;
@@ -793,53 +870,56 @@ class _DormManagerSidePanel extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     // 多身份用户才显示「身份切换」区块；单身份宿管直接隐藏。
     final showRoleSwitcher = onSelectRole != null && availableRoles.length > 1;
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(16)),
-      ),
-      padding: EdgeInsets.fromLTRB(ui(16), ui(14), ui(16), ui(20)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _ProfileHeader(displayName: displayName, avatarUrl: avatarUrl),
-          SizedBox(height: ui(16)),
-          _ProfileAreaRows(areas: managedAreas),
-          if (showRoleSwitcher) ...[
-            SizedBox(height: ui(20)),
-            Text(
-              '身份切换',
-              style: TextStyle(
-                fontSize: ui(14),
-                height: 1.2,
-                fontWeight: AppFont.w500,
-                color: const Color(0xFF1A1A1A),
-                fontFamily: 'PingFang SC',
-              ),
-            ),
-            SizedBox(height: ui(10)),
-            RoleSwitcherButtons(
-              availableRoles: availableRoles,
-              selectedRole: selectedRole,
-              onSelectRole: onSelectRole!,
-            ),
-          ],
-          SizedBox(height: ui(24)),
+    final panel = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: fillHeight ? MainAxisSize.max : MainAxisSize.min,
+      children: [
+        _ProfileHeader(displayName: displayName, avatarUrl: avatarUrl),
+        SizedBox(height: ui(16)),
+        _ProfileAreaRows(areas: managedAreas),
+        if (showRoleSwitcher) ...[
+          SizedBox(height: ui(20)),
           Text(
-            '通知',
+            '身份切换',
             style: TextStyle(
-              fontSize: ui(16),
+              fontSize: ui(14),
               height: 1.2,
               fontWeight: AppFont.w500,
               color: const Color(0xFF1A1A1A),
               fontFamily: 'PingFang SC',
             ),
           ),
-          SizedBox(height: ui(12)),
-          SizedBox(height: ui(500), child: const _DormNoticePanel()),
+          SizedBox(height: ui(10)),
+          RoleSwitcherButtons(
+            availableRoles: availableRoles,
+            selectedRole: selectedRole,
+            onSelectRole: onSelectRole!,
+          ),
         ],
-      ),
+        SizedBox(height: ui(24)),
+        Text(
+          '通知',
+          style: TextStyle(
+            fontSize: ui(16),
+            height: 1.2,
+            fontWeight: AppFont.w500,
+            color: const Color(0xFF1A1A1A),
+            fontFamily: 'PingFang SC',
+          ),
+        ),
+        SizedBox(height: ui(12)),
+        if (fillHeight)
+          const Expanded(child: _DormNoticePanel())
+        else
+          const _DormNoticePanel(),
+      ],
     );
+
+    final card = SmartCampusHomeCard(
+      padding: EdgeInsets.fromLTRB(ui(16), ui(14), ui(16), ui(20)),
+      child: panel,
+    );
+    return fillHeight ? SizedBox.expand(child: card) : card;
   }
 }
 
@@ -966,28 +1046,7 @@ class _ProfileHeader extends StatelessWidget {
             ),
           ],
         ),
-        // 蓝色「宿管老师」徽章：贴在头像底部
-        Positioned(
-          left: ui(18),
-          top: ui(60),
-          child: Container(
-            padding: EdgeInsets.symmetric(horizontal: ui(7), vertical: ui(2)),
-            decoration: BoxDecoration(
-              color: const Color(0xFFEAE5FF),
-              borderRadius: BorderRadius.circular(ui(10)),
-              border: Border.all(color: Colors.white, width: 1),
-            ),
-            child: Text(
-              '宿管老师',
-              style: TextStyle(
-                fontSize: ui(11),
-                height: 1.0,
-                color: const Color(0xFF0B081A),
-                fontFamily: 'PingFang SC',
-              ),
-            ),
-          ),
-        ),
+        const SmartCampusAvatarRoleBadge(label: '宿管老师'),
       ],
     );
   }
@@ -1332,7 +1391,7 @@ class _SchoolNoticeCard extends StatelessWidget {
                   SizedBox(width: ui(6)),
                   Expanded(
                     child: Text(
-                      item.title,
+                      item.previewText,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -1346,16 +1405,19 @@ class _SchoolNoticeCard extends StatelessWidget {
                 ],
               ),
               SizedBox(height: ui(6)),
-              SizedBox(
-                width: double.infinity,
-                child: Text(
-                  item.time,
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                    fontSize: ui(12),
-                    height: 1.2,
-                    color: const Color(0xFFCECED1),
-                    fontFamily: 'Source Han Sans SC',
+              Transform.translate(
+                offset: Offset(0, ui(4)),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: Text(
+                    item.time,
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                      fontSize: ui(12),
+                      height: 1.2,
+                      color: const Color(0xFFCECED1),
+                      fontFamily: 'Source Han Sans SC',
+                    ),
                   ),
                 ),
               ),

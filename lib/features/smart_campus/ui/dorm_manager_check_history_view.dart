@@ -460,7 +460,6 @@ class _FilterRow extends StatelessWidget {
           value: selectedBuilding,
           items: buildingOptions,
           itemLabel: (o) => o.label,
-          icon: Icons.apartment_outlined,
           width: ui(220),
           menuWidth: ui(280),
           onChanged: onBuildingChanged,
@@ -470,7 +469,6 @@ class _FilterRow extends StatelessWidget {
           value: selectedFloor,
           items: floorOptions,
           itemLabel: (o) => o.label,
-          icon: Icons.layers_outlined,
           width: ui(220),
           menuWidth: ui(280),
           enabled: floorEnabled,
@@ -486,7 +484,6 @@ class _DormitorySelectField<T> extends StatefulWidget {
     required this.value,
     required this.items,
     required this.itemLabel,
-    required this.icon,
     required this.width,
     required this.menuWidth,
     required this.onChanged,
@@ -496,7 +493,6 @@ class _DormitorySelectField<T> extends StatefulWidget {
   final T value;
   final List<T> items;
   final String Function(T) itemLabel;
-  final IconData icon;
   final double width;
   final double menuWidth;
   final ValueChanged<T> onChanged;
@@ -546,8 +542,6 @@ class _DormitorySelectFieldState<T> extends State<_DormitorySelectField<T>> {
         padding: EdgeInsets.symmetric(horizontal: ui(16)),
         child: Row(
           children: [
-            Icon(widget.icon, size: ui(16), color: const Color(0xFFC6C6C6)),
-            SizedBox(width: ui(10)),
             Expanded(
               child: Text(
                 widget.itemLabel(widget.value),
@@ -874,7 +868,13 @@ class _HistoryTable extends StatelessWidget {
                 Expanded(flex: 12, child: const _HeaderText('状态')),
                 Expanded(flex: 16, child: const _HeaderText('查寝日期')),
                 Expanded(flex: 14, child: const _HeaderText('打卡时间')),
-                Expanded(flex: 14, child: const _HeaderText('操作')),
+                Expanded(
+                  flex: 14,
+                  child: const _HeaderText(
+                    '操作',
+                    alignment: Alignment.centerRight,
+                  ),
+                ),
               ],
             ),
           ),
@@ -925,16 +925,29 @@ class _HistoryTableRow extends StatelessWidget {
             children: [
               Expanded(
                 flex: 22,
-                child: _TwoLineCell(
-                  primary: item.studentName,
-                  secondary: item.studentNo != '—' ? item.studentNo : null,
+                child: Row(
+                  children: [
+                    _StudentAvatar(
+                      name: item.studentName,
+                      url: item.avatarUrl,
+                    ),
+                    SizedBox(width: ui(8)),
+                    Expanded(
+                      child: _TwoLineCell(
+                        primary: item.studentName,
+                        secondary: item.studentSubtitle.isNotEmpty
+                            ? item.studentSubtitle
+                            : null,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               Expanded(
                 flex: 28,
                 child: _TwoLineCell(
                   primary: item.dormName.isEmpty ? '—' : item.dormName,
-                  secondary: item.bedName.isNotEmpty ? '${item.bedName}床' : null,
+                  secondary: item.bedName.isNotEmpty ? item.bedLabel : null,
                 ),
               ),
               Expanded(
@@ -1025,6 +1038,56 @@ class _TwoLineCell extends StatelessWidget {
   }
 }
 
+class _StudentAvatar extends StatelessWidget {
+  const _StudentAvatar({required this.name, required this.url});
+
+  final String name;
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final size = ui(36);
+    final radius = ui(8);
+    final initial = name.isEmpty ? '·' : name.characters.first;
+
+    Widget fallback() {
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: const Color(0xFFE7D9FF),
+          borderRadius: BorderRadius.circular(radius),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          initial,
+          style: TextStyle(
+            fontSize: ui(14),
+            color: _kPurple,
+            fontFamily: 'PingFang SC',
+            fontWeight: AppFont.w500,
+            height: 1.0,
+          ),
+        ),
+      );
+    }
+
+    if (url.isEmpty) return fallback();
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: Image.network(
+        url,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => fallback(),
+      ),
+    );
+  }
+}
+
 class _StatusBadge extends StatelessWidget {
   const _StatusBadge({required this.text, required this.bg});
 
@@ -1068,12 +1131,14 @@ class _RowActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    Widget action;
     if (item.needsExceptionHandle) {
-      return TextButton(
+      action = TextButton(
         style: TextButton.styleFrom(
-          padding: EdgeInsets.symmetric(horizontal: ui(8)),
+          padding: EdgeInsets.zero,
           minimumSize: Size.zero,
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          visualDensity: VisualDensity.compact,
         ),
         onPressed: () => onHandleException(item),
         child: Text(
@@ -1086,9 +1151,8 @@ class _RowActions extends StatelessWidget {
           ),
         ),
       );
-    }
-    if (item.handleStatus > 0) {
-      return Text(
+    } else if (item.handleStatus > 0) {
+      action = Text(
         '已处理',
         style: TextStyle(
           fontSize: ui(11),
@@ -1096,44 +1160,54 @@ class _RowActions extends StatelessWidget {
           fontFamily: 'PingFang SC',
         ),
       );
-    }
-    return TextButton(
-      style: TextButton.styleFrom(
-        padding: EdgeInsets.symmetric(horizontal: ui(8)),
-        minimumSize: Size.zero,
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      ),
-      onPressed: item.id.isEmpty ? null : () => onTapDetail(item),
-      child: Text(
-        '详情',
-        style: TextStyle(
-          fontSize: ui(12),
-          color: _kTextSecondary,
-          fontFamily: 'PingFang SC',
+    } else {
+      action = TextButton(
+        style: TextButton.styleFrom(
+          padding: EdgeInsets.zero,
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          visualDensity: VisualDensity.compact,
         ),
-      ),
+        onPressed: item.id.isEmpty ? null : () => onTapDetail(item),
+        child: Text(
+          '详情',
+          style: TextStyle(
+            fontSize: ui(12),
+            color: _kTextSecondary,
+            fontFamily: 'PingFang SC',
+          ),
+        ),
+      );
+    }
+    return Align(
+      alignment: Alignment.centerRight,
+      child: action,
     );
   }
 }
 
 class _HeaderText extends StatelessWidget {
-  const _HeaderText(this.text);
+  const _HeaderText(this.text, {this.alignment = Alignment.centerLeft});
 
   final String text;
+  final Alignment alignment;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Text(
-      text,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: TextStyle(
-        fontSize: ui(12),
-        color: _kTextSecondary,
-        fontFamily: 'PingFang SC',
-        fontWeight: AppFont.w500,
-        height: 1.2,
+    return Align(
+      alignment: alignment,
+      child: Text(
+        text,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: ui(12),
+          color: _kTextSecondary,
+          fontFamily: 'PingFang SC',
+          fontWeight: AppFont.w500,
+          height: 1.2,
+        ),
       ),
     );
   }

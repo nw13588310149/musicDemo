@@ -101,12 +101,16 @@ class PopupSelectorField<T> extends StatefulWidget {
     required this.items,
     required this.itemLabel,
     required this.onChanged,
+    this.fieldHeight = 48,
   });
 
   final T value;
   final List<T> items;
   final String Function(T) itemLabel;
   final ValueChanged<T> onChanged;
+
+  /// 触发器高度（设计宽逻辑像素）。默认 48；统计筛选等紧凑行可用 44。
+  final double fieldHeight;
 
   @override
   State<PopupSelectorField<T>> createState() => _PopupSelectorFieldState<T>();
@@ -139,7 +143,7 @@ class _PopupSelectorFieldState<T> extends State<PopupSelectorField<T>> {
       onTap: _openMenu,
       borderRadius: BorderRadius.circular(ui(8)),
       child: Container(
-        height: ui(48),
+        height: ui(widget.fieldHeight),
         padding: EdgeInsets.symmetric(horizontal: ui(16)),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(ui(8)),

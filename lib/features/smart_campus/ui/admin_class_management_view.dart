@@ -14,9 +14,11 @@ import '../../../core/network/snowflake_id.dart';
 import '../../../core/widgets/app_asset_graphic.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/popup_selector_field.dart';
+import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/admin_repository.dart';
 import '../data/admin_class_summary.dart';
+import 'widgets/smart_campus_page_banner.dart';
 import 'widgets/smart_campus_stat_card.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
@@ -294,8 +296,9 @@ class _ClassroomOption {
   const _ClassroomOption({required this.id, required this.name});
 
   factory _ClassroomOption.fromJson(Map<String, dynamic> json) {
-    final rawId = json['id'] ?? json['classroomId'] ?? json['roomId'];
-    final id = rawId is int ? rawId : int.tryParse('${rawId ?? ''}') ?? 0;
+    final id =
+        readSnowflakeId(json['id'] ?? json['classroomId'] ?? json['roomId']) ??
+        '';
     return _ClassroomOption(
       id: id,
       name: _pickString(json, [
@@ -307,14 +310,12 @@ class _ClassroomOption {
     );
   }
 
-  final int id;
+  final String id;
   final String name;
 }
 
 /// 校区下拉选项。后端 `campusList` 返回的 id 在示例中是 "0" / "1111" 这种
-/// 较小的整数字符串；统一存为 [int]（与 `_ClassroomOption` 一致），缺省 0。
-/// 若未来出现 snowflake long 形式的 campusId，再切到 String 透传以避免
-/// 53bit 精度截断。
+/// 较小的整数字符串；统一存为 [int]，缺省 0。
 class _CampusOption {
   const _CampusOption({required this.id, required this.name});
 
@@ -353,14 +354,17 @@ class _ClassEntry {
     this.mute = 0,
     this.serverStudentCount = 0,
     this.students = const [],
+    this.listStudentIds = const [],
   });
 
   factory _ClassEntry.fromJson(
     Map<String, dynamic> json, {
     int fallbackIdx = 0,
   }) {
-    // id 为雪花 long，使用字符串避免 JS number 精度丢失。
-    final id = _pickString(json, ['id', 'classId', 'cId'], 'srv-$fallbackIdx');
+    // id 为雪花 long，全程以 String 存储 / 透传。
+    final id =
+        readSnowflakeId(json['id'] ?? json['classId'] ?? json['cId']) ??
+        'srv-$fallbackIdx';
     final name = _pickString(json, [
       'name',
       'className',
@@ -426,14 +430,9 @@ class _ClassEntry {
         ? _pickString(classroomMap, ['name', 'classroomName', 'roomName'], '')
         : _pickString(json, ['classroomName', 'roomName'], '');
 
-    int? classroomId;
-    final rawRoom =
-        classroomMap?['id'] ?? json['classroomId'] ?? json['roomId'];
-    if (rawRoom is int) {
-      classroomId = rawRoom;
-    } else if (rawRoom != null) {
-      classroomId = int.tryParse('$rawRoom');
-    }
+    final classroomId = readSnowflakeId(
+      classroomMap?['id'] ?? json['classroomId'] ?? json['roomId'],
+    );
 
     int? campusId;
     final rawCampus = json['campusId'];
@@ -443,13 +442,12 @@ class _ClassEntry {
       campusId = int.tryParse('$rawCampus');
     }
 
-    final headTeacherId = _pickString(json, [
-      'headTeacherId',
-      'classTeacherId',
-      'masterId',
-    ], '');
+    final headTeacherId = readSnowflakeId(
+      json['headTeacherId'] ?? json['classTeacherId'] ?? json['masterId'],
+    );
 
     final teacherIdsRaw = _pickString(json, ['teacherIds', 'teacherId'], '');
+    final listStudentIds = _parseSnowflakeIdList(json['studentIds']);
     final rawLogo = _pickString(json, ['logo', 'logoUrl', 'classLogo'], '');
     final logoUrl = rawLogo.isEmpty ? '' : MediaUrl.resolve(rawLogo);
 
@@ -485,7 +483,7 @@ class _ClassEntry {
       headTeacherMobile: headTeacherMobile,
       headTeacherGender: headTeacherGender,
       headTeacherIntroduce: headTeacherIntroduce,
-      headTeacherId: headTeacherId.isEmpty ? null : headTeacherId,
+      headTeacherId: headTeacherId,
       classroom: classroom,
       classroomId: classroomId,
       campusId: campusId,
@@ -493,6 +491,7 @@ class _ClassEntry {
       announcement: _pickString(json, ['announcement', 'notice'], ''),
       mute: mute,
       serverStudentCount: serverStudentCount,
+      listStudentIds: listStudentIds,
     );
   }
 
@@ -511,7 +510,7 @@ class _ClassEntry {
   final String headTeacherIntroduce;
   final String? headTeacherId;
   final String classroom;
-  final int? classroomId;
+  final String? classroomId;
   final int? campusId;
   final String? teacherIds;
   final String announcement;
@@ -523,6 +522,9 @@ class _ClassEntry {
   /// 才能填出数字。
   final int serverStudentCount;
   final List<_StudentRecord> students;
+
+  /// `classList` 接口下发的 `studentIds`（未展开班级时用于 classUpdate 回传）。
+  final List<String> listStudentIds;
 
   /// 副标题：「编码·班主任·教室」单行展示，按字段是否齐备动态拼接，
   /// 不再硬塞「高三 / 艺术楼」等假上下文。当三项都为空时回落到「—」。
@@ -539,6 +541,46 @@ class _ClassEntry {
   /// 即时变更）；否则回落到接口的 `studentCount`。
   int get studentCount =>
       students.isNotEmpty ? students.length : serverStudentCount;
+
+  /// 组装 `classUpdate` 请求体：字段均来自列表/缓存中的班级数据，仅按需覆盖。
+  Map<String, dynamic>? toClassUpdateBody({
+    String? name,
+    List<_StudentRecord>? students,
+    String? teacherIds,
+  }) {
+    final classId = readSnowflakeId(id);
+    if (classId == null || classId.isEmpty || classId.startsWith('srv-')) {
+      return null;
+    }
+    final studentIdList = students != null
+        ? [
+            for (final s in students)
+              if (s.id.isNotEmpty) s.id,
+          ]
+        : this.students.isNotEmpty
+        ? [
+            for (final s in this.students)
+              if (s.id.isNotEmpty) s.id,
+          ]
+        : listStudentIds;
+    final headId =
+        (headTeacherId != null && headTeacherId!.isNotEmpty)
+        ? (readSnowflakeId(headTeacherId) ?? headTeacherId!)
+        : '0';
+
+    return <String, dynamic>{
+      'id': classId,
+      'campusId': campusId ?? 0,
+      'name': name ?? this.name,
+      'classCode': code,
+      'headTeacherId': headId,
+      'classroomId': (classroomId != null && classroomId!.isNotEmpty)
+          ? classroomId!
+          : '0',
+      'teacherIds': teacherIds ?? this.teacherIds ?? '',
+      'studentIds': studentIdList,
+    };
+  }
 
   _ClassEntry copyWith({List<_StudentRecord>? students, String? name}) {
     return _ClassEntry(
@@ -562,8 +604,19 @@ class _ClassEntry {
       mute: mute,
       serverStudentCount: serverStudentCount,
       students: students ?? this.students,
+      listStudentIds: listStudentIds,
     );
   }
+}
+
+List<String> _parseSnowflakeIdList(dynamic raw) {
+  if (raw is! List) return const [];
+  final ids = <String>[];
+  for (final item in raw) {
+    final id = readSnowflakeId(item);
+    if (id != null && id.isNotEmpty) ids.add(id);
+  }
+  return ids;
 }
 
 String _pickString(
@@ -1075,12 +1128,20 @@ class _AdminClassManagementViewState
   }
 
   Future<void> _promptRenameClass(_ClassEntry entry) async {
-    final newName = await showDialog<String>(
+    final newName = await showTextInputDialog(
       context: context,
-      builder: (ctx) => _RenameClassDialog(initialName: entry.name),
+      title: '修改班级名称',
+      hintText: '请输入班级名称',
+      initialValue: entry.name,
+      confirmLabel: '保存',
+      maxLength: 50,
     );
     if (!mounted || newName == null) return;
-    await _submitClassNameUpdate(target: entry, newName: newName);
+    final latest = _classes.firstWhere(
+      (c) => c.id == entry.id,
+      orElse: () => entry,
+    );
+    await _submitClassNameUpdate(target: latest, newName: newName);
   }
 
   Future<bool> _submitClassNameUpdate({
@@ -1098,11 +1159,14 @@ class _AdminClassManagementViewState
     }
     if (name == target.name) return true;
 
+    final body = target.toClassUpdateBody(name: name);
+    if (body == null) {
+      AppToast.show(context, '班级 id 不可用');
+      return false;
+    }
+
     final repo = ref.read(adminRepositoryProvider);
-    final resp = await repo.classUpdate(<String, dynamic>{
-      'id': target.id,
-      'name': name,
-    });
+    final resp = await repo.classUpdate(body);
     if (!mounted) return false;
     if (!resp.isSuccess) {
       AppToast.show(context, resp.displayMsg);
@@ -1151,9 +1215,12 @@ class _AdminClassManagementViewState
               headTeacher.id.isNotEmpty)
           ? headTeacher.id
           : 0,
-      'classroomId': (kind == _ClassKind.largeClass && classroom != null)
+      'classroomId':
+          (kind == _ClassKind.largeClass &&
+              classroom != null &&
+              classroom.id.isNotEmpty)
           ? classroom.id
-          : 0,
+          : '0',
       'teacherIds': teacherIds,
       // 学生 id 是雪花算法生成的 long（如 1795667363756507137）；用 int
       // 序列化会被 JS / JSON number 精度截断，必须按 string 发送。
@@ -1192,24 +1259,14 @@ class _AdminClassManagementViewState
         .map((t) => t.id)
         .where((id) => id.isNotEmpty)
         .join(',');
-    final body = <String, dynamic>{
-      // 同 studentList：班级 id 用 string，避免雪花 long 被精度截断。
-      'id': target.id,
-      'campusId': target.campusId ?? 0,
-      'name': target.name,
-      'classCode': target.code,
-      'headTeacherId':
-          (target.headTeacherId != null && target.headTeacherId!.isNotEmpty)
-          ? target.headTeacherId
-          : 0,
-      'classroomId': target.classroomId ?? 0,
-      'teacherIds': teacherIds,
-      // 同 classSave：学生 id 用 string，避免雪花 long 被精度截断。
-      'studentIds': [
-        for (final s in students)
-          if (s.id.isNotEmpty) s.id,
-      ],
-    };
+    final body = target.toClassUpdateBody(
+      students: students,
+      teacherIds: teacherIds,
+    );
+    if (body == null) {
+      AppToast.show(context, '班级 id 不可用');
+      return false;
+    }
 
     final repo = ref.read(adminRepositoryProvider);
     final resp = await repo.classUpdate(body);
@@ -1229,58 +1286,54 @@ class _AdminClassManagementViewState
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
 
-    return Container(
-      color: _kBg,
-      child: SingleChildScrollView(
-        padding: EdgeInsets.symmetric(vertical: ui(16)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _Banner(
-              onBack: widget.onBack,
-              onCreateClass: _openCreateClassDrawer,
-              onTransferClass: _openTransferClassDrawer,
-            ),
-            SizedBox(height: ui(16)),
-            _StatsRow(
-              bigClassCount: _summary.bigClassCount,
-              smallClassCount: _summary.smallClassCount,
-              studentCount: _summary.studentCount,
-              unassignedStudentCount: _summary.unassignedStudentCount,
-            ),
-            SizedBox(height: ui(20)),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Text(
-                  '行政班一览',
-                  style: TextStyle(
-                    fontSize: ui(18),
-                    height: 1.2,
-                    fontWeight: AppFont.w500,
-                    color: _kTextSection,
-                    fontFamily: 'PingFang SC',
-                  ),
+    return SmartCampusSecondaryPageShell(
+      backgroundColor: _kBg,
+      header: _Banner(
+        onBack: widget.onBack,
+        onCreateClass: _openCreateClassDrawer,
+        onTransferClass: _openTransferClassDrawer,
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _StatsRow(
+            bigClassCount: _summary.bigClassCount,
+            smallClassCount: _summary.smallClassCount,
+            studentCount: _summary.studentCount,
+            unassignedStudentCount: _summary.unassignedStudentCount,
+          ),
+          SizedBox(height: ui(20)),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(
+                '行政班一览',
+                style: TextStyle(
+                  fontSize: ui(18),
+                  height: 1.2,
+                  fontWeight: AppFont.w500,
+                  color: _kTextSection,
+                  fontFamily: 'PingFang SC',
                 ),
-              ],
-            ),
-            SizedBox(height: ui(12)),
-            if (!_loading && _classes.isEmpty)
-              _EmptyState(label: '暂无班级数据')
-            else
-              for (final c in _classes) ...[
-                _ClassCard(
-                  entry: c,
-                  expanded: _expanded.contains(c.id),
-                  loadingStudents: _classStudentsLoading.contains(c.id),
-                  onToggle: () => _toggle(c.id),
-                  onOpenDetail: () => _openClassDetailDrawer(c),
-                  onRename: () => _promptRenameClass(c),
-                ),
-                SizedBox(height: ui(12)),
-              ],
-          ],
-        ),
+              ),
+            ],
+          ),
+          SizedBox(height: ui(12)),
+          if (!_loading && _classes.isEmpty)
+            _EmptyState(label: '暂无班级数据')
+          else
+            for (final c in _classes) ...[
+              _ClassCard(
+                entry: c,
+                expanded: _expanded.contains(c.id),
+                loadingStudents: _classStudentsLoading.contains(c.id),
+                onToggle: () => _toggle(c.id),
+                onOpenDetail: () => _openClassDetailDrawer(c),
+                onRename: () => _promptRenameClass(c),
+              ),
+              SizedBox(height: ui(12)),
+            ],
+        ],
       ),
     );
   }
@@ -1405,15 +1458,13 @@ class _Banner extends StatelessWidget {
               children: [
                 _BannerActionButton(
                   label: '创建班级',
-                  icon: Icons.dashboard_customize_outlined,
-                  iconColor: _kTextPrimary,
+                  iconAsset: AppAssets.adminClassManagementCreateClassIcon,
                   onTap: onCreateClass,
                 ),
                 SizedBox(width: ui(8)),
                 _BannerActionButton(
                   label: '人员调班',
-                  icon: Icons.swap_horiz,
-                  iconColor: _kPurple,
+                  iconAsset: AppAssets.adminClassManagementTransferClassIcon,
                   onTap: onTransferClass,
                 ),
               ],
@@ -1428,14 +1479,12 @@ class _Banner extends StatelessWidget {
 class _BannerActionButton extends StatelessWidget {
   const _BannerActionButton({
     required this.label,
-    required this.icon,
-    required this.iconColor,
+    required this.iconAsset,
     required this.onTap,
   });
 
   final String label;
-  final IconData icon;
-  final Color iconColor;
+  final String iconAsset;
   final VoidCallback onTap;
 
   @override
@@ -1446,26 +1495,31 @@ class _BannerActionButton extends StatelessWidget {
       onTap: onTap,
       child: Container(
         height: ui(34),
-        padding: EdgeInsets.symmetric(horizontal: ui(12)),
+        padding: EdgeInsets.symmetric(horizontal: ui(10)),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(ui(8)),
-          border: Border.all(color: _kBorder, width: 1),
+          border: Border.all(color: const Color(0xFFF3F2F3)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Icon(icon, size: ui(16), color: iconColor),
+            Image.asset(
+              iconAsset,
+              width: ui(20),
+              height: ui(20),
+              fit: BoxFit.contain,
+            ),
             SizedBox(width: ui(4)),
             Text(
               label,
               style: TextStyle(
+                color: const Color(0xFF0B081A),
                 fontSize: ui(12),
-                height: 1.2,
-                fontWeight: AppFont.w600,
-                color: Colors.black,
                 fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w500,
+                height: 1,
               ),
             ),
           ],
@@ -1676,10 +1730,11 @@ class _ClassHeader extends StatelessWidget {
                         onTap: onRename,
                         child: Padding(
                           padding: EdgeInsets.all(ui(2)),
-                          child: Icon(
-                            Icons.edit_outlined,
-                            size: ui(14),
-                            color: _kPurple,
+                          child: Image.asset(
+                            AppAssets.homeRename,
+                            width: ui(16),
+                            height: ui(16),
+                            fit: BoxFit.contain,
                           ),
                         ),
                       ),
@@ -3871,6 +3926,7 @@ class _ClassDetailDrawerState extends State<_ClassDetailDrawer> {
                         SizedBox(height: ui(24)),
                         _ClassDetailSection(
                           title: '班级信息',
+                          titleGap: 0,
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -4033,11 +4089,13 @@ class _ClassDetailSection extends StatelessWidget {
     required this.title,
     required this.child,
     this.loading = false,
+    this.titleGap,
   });
 
   final String title;
   final Widget child;
   final bool loading;
+  final double? titleGap;
 
   @override
   Widget build(BuildContext context) {
@@ -4047,15 +4105,6 @@ class _ClassDetailSection extends StatelessWidget {
       children: [
         Row(
           children: [
-            Container(
-              width: ui(3.25),
-              height: ui(14.85),
-              decoration: BoxDecoration(
-                color: _kPurple,
-                borderRadius: BorderRadius.circular(ui(6)),
-              ),
-            ),
-            SizedBox(width: ui(6)),
             Text(
               title,
               style: TextStyle(
@@ -4072,7 +4121,7 @@ class _ClassDetailSection extends StatelessWidget {
             ],
           ],
         ),
-        SizedBox(height: ui(12)),
+        SizedBox(height: titleGap ?? ui(8)),
         child,
       ],
     );
@@ -4085,12 +4134,14 @@ class _ClassDetailRow extends StatelessWidget {
     required this.value,
     this.multiline = false,
     this.onEdit,
+    this.labelWidth,
   });
 
   final String label;
   final String value;
   final bool multiline;
   final VoidCallback? onEdit;
+  final double? labelWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -4103,7 +4154,7 @@ class _ClassDetailRow extends StatelessWidget {
             : CrossAxisAlignment.center,
         children: [
           SizedBox(
-            width: ui(84),
+            width: labelWidth ?? ui(84),
             child: Text(
               label,
               style: TextStyle(
@@ -4115,33 +4166,55 @@ class _ClassDetailRow extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: Text(
-              value,
-              style: TextStyle(
-                fontSize: ui(13),
-                height: 1.4,
-                color: _kTextPrimary,
-                fontFamily: 'PingFang SC',
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: multiline
+                  ? CrossAxisAlignment.start
+                  : CrossAxisAlignment.center,
+              children: [
+                Flexible(
+                  child: Text(
+                    value,
+                    style: TextStyle(
+                      fontSize: ui(13),
+                      height: 1.4,
+                      color: _kTextPrimary,
+                      fontFamily: 'PingFang SC',
+                    ),
+                  ),
+                ),
+                if (onEdit != null)
+                  TextButton(
+                    onPressed: onEdit,
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.symmetric(horizontal: ui(8)),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Image.asset(
+                          AppAssets.homeRename,
+                          width: ui(16),
+                          height: ui(16),
+                          fit: BoxFit.contain,
+                        ),
+                        SizedBox(width: ui(4)),
+                        Text(
+                          '修改',
+                          style: TextStyle(
+                            fontSize: ui(12),
+                            color: _kPurple,
+                            fontFamily: 'PingFang SC',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
             ),
           ),
-          if (onEdit != null)
-            TextButton(
-              onPressed: onEdit,
-              style: TextButton.styleFrom(
-                padding: EdgeInsets.symmetric(horizontal: ui(8)),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              child: Text(
-                '修改',
-                style: TextStyle(
-                  fontSize: ui(12),
-                  color: _kPurple,
-                  fontFamily: 'PingFang SC',
-                ),
-              ),
-            ),
         ],
       ),
     );
@@ -4239,16 +4312,25 @@ class _HeadTeacherCard extends StatelessWidget {
                     ],
                   ],
                 ),
-                SizedBox(height: ui(8)),
+                SizedBox(height: ui(4)),
                 if (entry.headTeacherGender.isNotEmpty)
-                  _ClassDetailRow(label: '性别：', value: entry.headTeacherGender),
+                  _ClassDetailRow(
+                    label: '性别：',
+                    value: entry.headTeacherGender,
+                    labelWidth: ui(42),
+                  ),
                 if (entry.headTeacherMobile.isNotEmpty)
-                  _ClassDetailRow(label: '手机：', value: entry.headTeacherMobile),
+                  _ClassDetailRow(
+                    label: '手机：',
+                    value: entry.headTeacherMobile,
+                    labelWidth: ui(42),
+                  ),
                 if (entry.headTeacherIntroduce.isNotEmpty)
                   _ClassDetailRow(
                     label: '简介：',
                     value: entry.headTeacherIntroduce,
                     multiline: true,
+                    labelWidth: ui(42),
                   ),
               ],
             ),
@@ -4395,57 +4477,6 @@ class _TeacherMiniCard extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _RenameClassDialog extends StatefulWidget {
-  const _RenameClassDialog({required this.initialName});
-
-  final String initialName;
-
-  @override
-  State<_RenameClassDialog> createState() => _RenameClassDialogState();
-}
-
-class _RenameClassDialogState extends State<_RenameClassDialog> {
-  late final TextEditingController _controller = TextEditingController(
-    text: widget.initialName,
-  );
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('修改班级名称'),
-      content: TextField(
-        controller: _controller,
-        autofocus: true,
-        maxLength: 50,
-        decoration: const InputDecoration(
-          hintText: '请输入班级名称',
-          border: OutlineInputBorder(),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
-        ),
-        TextButton(
-          onPressed: () {
-            final name = _controller.text.trim();
-            if (name.isEmpty) return;
-            Navigator.of(context).pop(name);
-          },
-          child: const Text('保存'),
-        ),
-      ],
     );
   }
 }

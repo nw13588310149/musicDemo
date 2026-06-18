@@ -447,7 +447,7 @@ class _NicknameColumn extends StatelessWidget {
                 width: 16,
                 height: 16,
                 child: Image.asset(
-                  AppAssets.infoPencilLine,
+                  AppAssets.homeRename,
                   width: 16,
                   height: 16,
                   fit: BoxFit.contain,

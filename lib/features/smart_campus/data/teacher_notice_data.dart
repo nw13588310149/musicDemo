@@ -35,6 +35,9 @@ class TeacherNoticeListItem {
   ({Color foreground, Color background}) get tagStyle =>
       teacherNoticeTagStyle(tag);
 
+  /// 与管理员首页右侧通知列表一致的预览文案。
+  String get previewText => formatNoticePreviewText(title, content);
+
   factory TeacherNoticeListItem.fromRecord(AdminNoticeRecord record) {
     final author = record.deptName.isNotEmpty
         ? '${record.deptName} · ${record.author}'

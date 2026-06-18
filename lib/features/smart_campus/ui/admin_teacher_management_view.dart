@@ -11,6 +11,7 @@ import '../../../core/widgets/popup_selector_field.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/admin_repository.dart';
+import 'widgets/smart_campus_page_banner.dart';
 import 'widgets/smart_campus_stat_card.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
@@ -574,16 +575,13 @@ class _AdminTeacherManagementViewState
     final headTeachers = _sumHeadTeacher >= 0 ? _sumHeadTeacher : 0;
     final total = _sumTotal >= 0 ? _sumTotal : 0;
 
-    return Container(
-      color: _kBg,
-      child: SingleChildScrollView(
-        padding: EdgeInsets.symmetric(vertical: ui(16)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _Banner(onBack: widget.onBack),
-            SizedBox(height: ui(16)),
-            _StatsRow(
+    return SmartCampusSecondaryPageShell(
+      backgroundColor: _kBg,
+      header: _Banner(onBack: widget.onBack),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _StatsRow(
               onDuty: onDuty,
               onLeave: onLeave,
               headTeachers: headTeachers,
@@ -613,9 +611,8 @@ class _AdminTeacherManagementViewState
               ),
             ),
             SizedBox(height: ui(12)),
-            _TeacherGrid(teachers: list, onTap: _openProfile),
-          ],
-        ),
+          _TeacherGrid(teachers: list, onTap: _openProfile),
+        ],
       ),
     );
   }
@@ -823,12 +820,6 @@ class _ClassFilterFieldState extends State<_ClassFilterField> {
         padding: EdgeInsets.symmetric(horizontal: ui(16)),
         child: Row(
           children: [
-            Icon(
-              Icons.school_outlined,
-              size: ui(16),
-              color: const Color(0xFFC6C6C6),
-            ),
-            SizedBox(width: ui(10)),
             Expanded(
               child: Text(
                 _selected.label,

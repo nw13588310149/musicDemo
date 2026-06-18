@@ -1,6 +1,7 @@
 /// 宿管端「按宿舍查寝」API 数据模型与 JSON 解析。
 library;
 
+import '../../../core/network/media_url.dart';
 import '../../../core/network/snowflake_id.dart';
 import 'student_dormitory_data.dart' show DormitoryDetailField;
 
@@ -211,18 +212,24 @@ List<DormitoryRoomStudent> _parseUserList(dynamic raw) {
         m['studentId']?.toString() ??
         '';
     if (userId.isEmpty) continue;
+    final rawAvatar = _pickString(
+      m,
+      ['studentHeadUrl', 'headUrl', 'avatar'],
+      '',
+    );
     parsed.add(
       DormitoryRoomStudent(
         userId: userId,
         name: _pickString(m, [
           'realname',
+          'nickname',
           'studentName',
           'name',
           'userName',
         ], '未命名'),
         studentNo: _pickString(m, ['studentNo', 'userNo'], '—'),
         bedName: _pickString(m, ['bedName', 'bedInfo'], '—'),
-        avatarUrl: _pickString(m, ['studentHeadUrl', 'headUrl', 'avatar'], ''),
+        avatarUrl: rawAvatar.isNotEmpty ? MediaUrl.resolve(rawAvatar) : '',
         status: DormitoryStudentCheckStatus.fromApi(
           _pickString(m, ['status', 'checkStatus'], '未打卡'),
         ),
@@ -379,6 +386,9 @@ class DormitoryCheckHistoryItem {
     required this.statusLabel,
     required this.remark,
     required this.handleStatus,
+    this.avatarUrl = '',
+    this.mobile = '',
+    this.gender = '',
   });
 
   final String id;
@@ -395,11 +405,23 @@ class DormitoryCheckHistoryItem {
   final String statusLabel;
   final String remark;
   final int handleStatus;
+  final String avatarUrl;
+  final String mobile;
+  final String gender;
+
+  String get bedLabel => _formatBedLabel(bedName);
+
+  String get studentSubtitle {
+    if (studentNo.isNotEmpty && studentNo != '—') return studentNo;
+    if (mobile.isNotEmpty) return mobile;
+    if (gender.isNotEmpty) return gender;
+    return '';
+  }
 
   String get locationLabel {
     final parts = <String>[
       if (dormName.isNotEmpty) dormName,
-      if (bedName.isNotEmpty) '$bedName床',
+      if (bedName.isNotEmpty) bedLabel,
     ];
     return parts.isEmpty ? '—' : parts.join(' · ');
   }
@@ -408,22 +430,19 @@ class DormitoryCheckHistoryItem {
       status != DormitoryStudentCheckStatus.normal && handleStatus == 0;
 
   factory DormitoryCheckHistoryItem.fromJson(Map<String, dynamic> map) {
+    final user = _pickNestedUserMap(map);
     final bedName = _pickString(map, ['bedName', 'bedInfo']);
     final statusLabel = _pickString(map, ['status', 'checkStatus'], '未打卡');
-    final rawName = map['studentName'] ?? map['realname'] ?? map['userName'];
-    final trimmedName = rawName?.toString().trim() ?? '';
-    final studentName = trimmedName.isNotEmpty && trimmedName != 'null'
-        ? trimmedName
-        : (bedName.isNotEmpty ? '$bedName（未登记）' : '未登记学生');
     return DormitoryCheckHistoryItem(
       id: readSnowflakeId(map['id']) ?? map['id']?.toString() ?? '',
       userId:
           readSnowflakeId(map['userId']) ??
           readSnowflakeId(map['studentId']) ??
+          readSnowflakeId(user['id']) ??
           map['userId']?.toString() ??
           '',
-      studentName: studentName,
-      studentNo: _pickString(map, ['studentNo', 'userNo'], '—'),
+      studentName: _historyStudentName(map, bedName: bedName),
+      studentNo: _historyStudentNo(map, user),
       dormName: _historyDormName(map),
       bedName: bedName,
       checkDate: _pickString(map, ['checkDate', 'date']),
@@ -438,6 +457,9 @@ class DormitoryCheckHistoryItem {
       statusLabel: statusLabel,
       remark: _pickString(map, ['anomalyReason', 'remark', 'note']),
       handleStatus: _asInt(map['handleStatus']) ?? 0,
+      avatarUrl: _historyAvatarUrl(map, user),
+      mobile: _pickString(user, ['mobile', 'phone']),
+      gender: _pickString(user, ['gender', 'sex']),
     );
   }
 }
@@ -622,6 +644,54 @@ String _historyDormName(Map<String, dynamic> map) {
   ].where((value) => value.isNotEmpty).join(' · ');
 }
 
+Map<String, dynamic> _pickNestedUserMap(Map<String, dynamic> map) {
+  final user = map['user'];
+  if (user is Map) return Map<String, dynamic>.from(user);
+  return const {};
+}
+
+String _historyStudentName(Map<String, dynamic> map, {String bedName = ''}) {
+  final user = _pickNestedUserMap(map);
+  final topLevel = _pickString(map, ['studentName', 'realname', 'userName']);
+  if (topLevel.isNotEmpty) return topLevel;
+  final realname = _pickString(user, ['realname', 'realName']);
+  if (realname.isNotEmpty) return realname;
+  final nickname = _pickString(user, ['nickname', 'nickName']);
+  if (nickname.isNotEmpty) return nickname;
+  if (bedName.isNotEmpty) return '$bedName（未登记）';
+  return '未登记学生';
+}
+
+String _historyStudentNo(
+  Map<String, dynamic> map,
+  Map<String, dynamic> user,
+) {
+  final no = _pickString(map, ['studentNo', 'userNo']);
+  if (no.isNotEmpty) return no;
+  final fromUser = _pickString(user, ['studentNo', 'no', 'userNo']);
+  return fromUser.isNotEmpty ? fromUser : '—';
+}
+
+String _historyAvatarUrl(
+  Map<String, dynamic> map,
+  Map<String, dynamic> user,
+) {
+  final raw = _pickString(map, ['studentHeadUrl', 'headUrl', 'avatar']);
+  if (raw.isEmpty) {
+    final fromUser = _pickString(user, ['headUrl', 'avatar', 'avatarUrl']);
+    if (fromUser.isEmpty) return '';
+    return MediaUrl.resolve(fromUser);
+  }
+  return MediaUrl.resolve(raw);
+}
+
+String _formatBedLabel(String bedName) {
+  final trimmed = bedName.trim();
+  if (trimmed.isEmpty) return '';
+  if (trimmed.endsWith('床')) return trimmed;
+  return '$trimmed床';
+}
+
 String _historyClock(String value) {
   final match = RegExp(r'(\d{1,2}):(\d{2})').firstMatch(value);
   if (match == null) return value.isEmpty ? '—' : value;
@@ -644,18 +714,25 @@ List<DormitoryDetailField> parseDormitoryCheckDetailFields(dynamic raw) {
     _pickString(map, ['status', 'checkStatus'], '未打卡'),
   );
   final handleStatus = _asInt(map['handleStatus']) ?? 0;
+  final user = _pickNestedUserMap(map);
   final bedName = _pickString(map, ['bedName', 'bedInfo']);
-  final rawName = map['studentName'] ?? map['realname'] ?? map['userName'];
-  final trimmedName = rawName?.toString().trim() ?? '';
-  final studentDisplay = trimmedName.isNotEmpty && trimmedName != 'null'
-      ? trimmedName
-      : (bedName.isNotEmpty ? '$bedName（未登记）' : '未登记学生');
+  final studentDisplay = _historyStudentName(map, bedName: bedName);
+  final studentNo = _historyStudentNo(map, user);
+  final mobile = _pickString(user, ['mobile', 'phone']);
   return [
     DormitoryDetailField('学生', studentDisplay),
-    DormitoryDetailField('学号', _pickString(map, ['studentNo', 'userNo'], '—')),
+    DormitoryDetailField(
+      '学号',
+      studentNo != '—' ? studentNo : '—',
+    ),
+    if (studentNo == '—' && mobile.isNotEmpty)
+      DormitoryDetailField('手机号', mobile),
     DormitoryDetailField('查寝日期', _pickString(map, ['checkDate', 'date'])),
     DormitoryDetailField('宿舍', _historyDormName(map)),
-    DormitoryDetailField('床位', _pickString(map, ['bedName', 'bedInfo'], '—')),
+    DormitoryDetailField(
+      '床位',
+      bedName.isEmpty ? '—' : _formatBedLabel(bedName),
+    ),
     DormitoryDetailField(
       '打卡时间',
       _pickString(map, ['checkTime', 'stampTime'], '—'),

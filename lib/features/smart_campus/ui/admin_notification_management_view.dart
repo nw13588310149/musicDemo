@@ -60,6 +60,7 @@ import '../../shell/state/shell_controller.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/admin_notice_data.dart';
 import '../data/admin_repository.dart';
+import 'widgets/smart_campus_page_banner.dart';
 import 'widgets/smart_campus_stat_card.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
@@ -114,6 +115,47 @@ extension _NPriorityX on _NPriority {
     _NPriority.important => const [true, true, false],
     _NPriority.urgent => const [true, true, true],
   };
+}
+
+/// 优先级信号条（列表 / 表单 / 详情共用，保证尺寸一致）。
+class _PrioritySignalBars extends StatelessWidget {
+  const _PrioritySignalBars({
+    required this.bars,
+    required this.activeColor,
+  });
+
+  final List<bool> bars;
+  final Color activeColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return SizedBox(
+      height: ui(8),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          _bar(ui(2), ui(4), bars[0] ? activeColor : _kTextDivider),
+          SizedBox(width: ui(2)),
+          _bar(ui(2), ui(6), bars[1] ? activeColor : _kTextDivider),
+          SizedBox(width: ui(2)),
+          _bar(ui(2), ui(8), bars[2] ? activeColor : _kTextDivider),
+        ],
+      ),
+    );
+  }
+
+  Widget _bar(double w, double h, Color c) {
+    return Container(
+      width: w,
+      height: h,
+      decoration: BoxDecoration(
+        color: c,
+        borderRadius: BorderRadius.circular(12),
+      ),
+    );
+  }
 }
 
 enum _NStatus { published, scheduled, withdrawn }
@@ -470,47 +512,38 @@ class _AdminNotificationManagementViewState
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final list = _filtered;
-    return Container(
-      color: _kPageBg,
-      child: SingleChildScrollView(
-        padding: EdgeInsets.only(bottom: ui(20)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _Banner(onBack: widget.onBack, onCreate: _openCreateDrawer),
-            SizedBox(height: ui(16)),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _StatsRow(
-                  published: _countOf(_NStatus.published),
-                  scheduled: _countOf(_NStatus.scheduled),
-                  withdrawn: _countOf(_NStatus.withdrawn),
-                  total: _records.length,
-                ),
-                SizedBox(height: ui(16)),
-                _ControlBar(
-                  typeValue: _typeFilter,
-                  statusValue: _statusFilter,
-                  onTypeChanged: (v) {
-                    setState(() => _typeFilter = v);
-                    unawaited(_loadRecords());
-                  },
-                  onStatusChanged: (v) => setState(() => _statusFilter = v),
-                  searchCtrl: _searchCtrl,
-                  onSearchChanged: _onSearchChanged,
-                ),
-                SizedBox(height: ui(12)),
-                _NotificationTable(
-                  records: list,
-                  onView: _onViewRecord,
-                  onEdit: _openEditDrawer,
-                  onDelete: _onDeleteRecord,
-                ),
-              ],
-            ),
-          ],
-        ),
+    return SmartCampusSecondaryPageShell(
+      backgroundColor: _kPageBg,
+      header: _Banner(onBack: widget.onBack, onCreate: _openCreateDrawer),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _StatsRow(
+            published: _countOf(_NStatus.published),
+            scheduled: _countOf(_NStatus.scheduled),
+            withdrawn: _countOf(_NStatus.withdrawn),
+            total: _records.length,
+          ),
+          SizedBox(height: ui(16)),
+          _ControlBar(
+            typeValue: _typeFilter,
+            statusValue: _statusFilter,
+            onTypeChanged: (v) {
+              setState(() => _typeFilter = v);
+              unawaited(_loadRecords());
+            },
+            onStatusChanged: (v) => setState(() => _statusFilter = v),
+            searchCtrl: _searchCtrl,
+            onSearchChanged: _onSearchChanged,
+          ),
+          SizedBox(height: ui(12)),
+          _NotificationTable(
+            records: list,
+            onView: _onViewRecord,
+            onEdit: _openEditDrawer,
+            onDelete: _onDeleteRecord,
+          ),
+        ],
       ),
     );
   }
@@ -618,34 +651,36 @@ class _CreateButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return InkWell(
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: onTap,
-      borderRadius: BorderRadius.circular(ui(8)),
       child: Container(
-        height: ui(32),
-        padding: EdgeInsets.symmetric(horizontal: ui(12)),
+        height: ui(34),
+        padding: EdgeInsets.symmetric(horizontal: ui(10)),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(ui(8)),
-          border: Border.all(color: _kBorderSoft, width: 1),
+          border: Border.all(color: const Color(0xFFF3F2F3)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Icon(
-              Icons.grid_view_rounded,
-              size: ui(14),
-              color: const Color(0xFF1C274C),
+            Image.asset(
+              AppAssets.adminNotificationCreateNoticeIcon,
+              width: ui(20),
+              height: ui(20),
+              fit: BoxFit.contain,
             ),
             SizedBox(width: ui(4)),
             Text(
               '新建通知',
               style: TextStyle(
+                color: const Color(0xFF0B081A),
                 fontSize: ui(12),
-                color: Colors.black,
                 fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w600,
-                height: 1.2,
+                fontWeight: AppFont.w500,
+                height: 1,
               ),
             ),
           ],
@@ -881,7 +916,7 @@ class _NotificationFilterFieldState extends State<_NotificationFilterField> {
               duration: const Duration(milliseconds: 160),
               child: Icon(
                 Icons.keyboard_arrow_down_rounded,
-                size: ui(19),
+                size: ui(21),
                 color: _kTextDark,
               ),
             ),
@@ -1156,22 +1191,11 @@ class _PriorityCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final bars = priority.bars;
     return Row(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            _signalBar(ui(2), ui(4), bars[0] ? priority.color : _kTextDivider),
-            SizedBox(width: ui(2)),
-            _signalBar(ui(2), ui(6), bars[1] ? priority.color : _kTextDivider),
-            SizedBox(width: ui(2)),
-            _signalBar(ui(2), ui(8), bars[2] ? priority.color : _kTextDivider),
-          ],
-        ),
+        _PrioritySignalBars(bars: priority.bars, activeColor: priority.color),
         SizedBox(width: ui(4)),
         Flexible(
           child: Text(
@@ -1188,17 +1212,6 @@ class _PriorityCell extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _signalBar(double w, double h, Color c) {
-    return Container(
-      width: w,
-      height: h,
-      decoration: BoxDecoration(
-        color: c,
-        borderRadius: BorderRadius.circular(12),
-      ),
     );
   }
 }
@@ -1360,11 +1373,7 @@ class _NotificationDetailBody extends StatelessWidget {
         ),
         SizedBox(height: ui(16)),
         _DetailRow(label: '类型', value: record.type),
-        _DetailRow(
-          label: '优先级',
-          value: record.priority.label,
-          valueColor: record.priority.color,
-        ),
+        _DetailPriorityRow(priority: record.priority),
         _DetailRow(label: '推送范围', value: record.scopeLabel),
         _DetailRow(label: '时间', value: record.time, isLast: true),
         SizedBox(height: ui(12)),
@@ -1403,17 +1412,73 @@ class _NotificationDetailBody extends StatelessWidget {
   }
 }
 
+class _DetailPriorityRow extends StatelessWidget {
+  const _DetailPriorityRow({required this.priority});
+
+  final _NPriority priority;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      padding: EdgeInsets.symmetric(vertical: ui(10)),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: _kHairline)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: ui(72),
+            child: Text(
+              '优先级',
+              style: TextStyle(
+                fontSize: ui(13),
+                color: _kTextSecondary,
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w400,
+                height: 20 / 13,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                _PrioritySignalBars(
+                  bars: priority.bars,
+                  activeColor: priority.color,
+                ),
+                SizedBox(width: ui(4)),
+                Text(
+                  priority.label,
+                  style: TextStyle(
+                    fontSize: ui(13),
+                    color: priority.color,
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w500,
+                    height: 20 / 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _DetailRow extends StatelessWidget {
   const _DetailRow({
     required this.label,
     required this.value,
-    this.valueColor,
     this.isLast = false,
   });
 
   final String label;
   final String value;
-  final Color? valueColor;
   final bool isLast;
 
   @override
@@ -1447,7 +1512,7 @@ class _DetailRow extends StatelessWidget {
               value,
               style: TextStyle(
                 fontSize: ui(13),
-                color: valueColor ?? _kTextDark,
+                color: _kTextDark,
                 fontFamily: 'PingFang SC',
                 fontWeight: AppFont.w500,
                 height: 20 / 13,
@@ -1741,7 +1806,6 @@ class _NotificationFormDrawerState extends State<_NotificationFormDrawer> {
                     ),
                     SizedBox(width: ui(12)),
                     Expanded(
-                      flex: 2,
                       child: _PrimaryButton(
                         label: _submitLabel(),
                         onTap: _submitting ? null : _onSubmit,
@@ -1940,14 +2004,10 @@ class _PrioritySegment extends StatelessWidget {
                 alignment: Alignment.center,
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.end,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    _bar(ui(2), ui(4), p.bars[0] ? p.color : _kTextDivider),
-                    SizedBox(width: ui(2)),
-                    _bar(ui(2), ui(6), p.bars[1] ? p.color : _kTextDivider),
-                    SizedBox(width: ui(2)),
-                    _bar(ui(2), ui(8), p.bars[2] ? p.color : _kTextDivider),
-                    SizedBox(width: ui(6)),
+                    _PrioritySignalBars(bars: p.bars, activeColor: p.color),
+                    SizedBox(width: ui(4)),
                     Text(
                       p.label,
                       style: TextStyle(
@@ -1955,7 +2015,7 @@ class _PrioritySegment extends StatelessWidget {
                         color: value == p ? p.color : _kTextSecondary,
                         fontFamily: 'PingFang SC',
                         fontWeight: AppFont.w500,
-                        height: 1.2,
+                        height: 20 / 13,
                       ),
                     ),
                   ],
@@ -1966,17 +2026,6 @@ class _PrioritySegment extends StatelessWidget {
           if (p != _NPriority.values.last) SizedBox(width: ui(8)),
         ],
       ],
-    );
-  }
-
-  Widget _bar(double w, double h, Color c) {
-    return Container(
-      width: w,
-      height: h,
-      decoration: BoxDecoration(
-        color: c,
-        borderRadius: BorderRadius.circular(12),
-      ),
     );
   }
 }
@@ -2063,7 +2112,7 @@ class _PublishModeSegment extends StatelessWidget {
               borderRadius: BorderRadius.circular(ui(10)),
               child: Container(
                 height: ui(44),
-                alignment: Alignment.center,
+                clipBehavior: Clip.antiAlias,
                 decoration: BoxDecoration(
                   color: value == m
                       ? _kPurple.withValues(alpha: 0.10)
@@ -2073,6 +2122,7 @@ class _PublishModeSegment extends StatelessWidget {
                       ? Border.all(color: _kPurple, width: 1)
                       : null,
                 ),
+                alignment: Alignment.center,
                 child: Text(
                   m.label,
                   style: TextStyle(

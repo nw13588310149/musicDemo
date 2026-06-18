@@ -9,9 +9,10 @@ import '../../features/shell/ui/shell_layout.dart';
 ///
 /// 尺寸与首页右侧课程卡一致；在 [DashboardScaleScope] 下按 ui 缩放。
 class CourseSubjectTag extends StatelessWidget {
-  const CourseSubjectTag({super.key, required this.name});
+  const CourseSubjectTag({super.key, required this.name, this.muted = false});
 
   final String name;
+  final bool muted;
 
   /// 仅用于器乐类匹配的关键字（钢琴归默认紫色）。
   static const List<String> instrumentKeywords = <String>[
@@ -48,8 +49,12 @@ class CourseSubjectTag extends StatelessWidget {
     double ui(double value) => scale?.ui(value) ?? value;
 
     final isInstrument = isInstrumentSubject(name);
-    final bg = isInstrument ? const Color(0xFFDFFCF0) : const Color(0xFFEAE5FF);
-    final fg = isInstrument ? const Color(0xFF0CAC40) : const Color(0xFF8741FF);
+    final bg = muted
+        ? const Color(0xFFE6E9F1)
+        : (isInstrument ? const Color(0xFFDFFCF0) : const Color(0xFFEAE5FF));
+    final fg = muted
+        ? const Color(0xFFB6B5BB)
+        : (isInstrument ? const Color(0xFF0CAC40) : const Color(0xFF8741FF));
 
     return Container(
       padding: EdgeInsets.symmetric(horizontal: ui(4), vertical: ui(2)),

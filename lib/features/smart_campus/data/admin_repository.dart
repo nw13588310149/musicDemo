@@ -21,6 +21,7 @@ import '../../../core/providers/app_providers.dart';
 ///   - `schoolSmallCourseApplyDetail` 小班课申请详情
 ///   - `schoolSmallCourseApplyList`  小班课申请列表
 ///   - `indexSum`                  管理员首页统计汇总
+///   - `websocketLoginCount`       管理员首页数据看板（近 7 日在线登录）
 ///   - `studentList`               学生下拉列表
 ///   - `teacherList`               教师下拉列表
 ///
@@ -59,6 +60,33 @@ class AdminRepository {
   /// ```
   Future<ApiResponse> indexSum() {
     return client.post('$_base/indexSum');
+  }
+
+  /// 管理员首页数据看板：近 7 日 WebSocket 在线登录统计（`WebsocketLoginCountRes`）。
+  ///
+  /// 请求体：
+  /// ```json
+  /// { "startDate": "2026-06-01", "endDate": "2026-06-13" }
+  /// ```
+  ///
+  /// 返回 `data` 为按日列表，缺失日期由前端补 0：
+  /// ```json
+  /// [
+  ///   { "loginDate": "2026-06-16", "count": 24 },
+  ///   { "loginDate": "2026-06-17", "count": 22 }
+  /// ]
+  /// ```
+  Future<ApiResponse> websocketLoginCount({
+    required String startDate,
+    required String endDate,
+  }) {
+    return client.post(
+      '$_base/websocketLoginCount',
+      data: <String, dynamic>{
+        'startDate': startDate,
+        'endDate': endDate,
+      },
+    );
   }
 
   // ============== 下拉 / 列表 ==============
@@ -231,10 +259,14 @@ class AdminRepository {
   /// 注：`headTeacherId` / `teacherIds` 后端实际接收 string；
   /// `studentIds` 是 int 数组；`type` 数字标识大班(1) / 小班(2) 等。
   Future<ApiResponse> classSave(Map<String, dynamic> body) {
-    return client.post('$_base/classSave', data: body);
+    final encoded = encodeClassMutationRequestBody(body);
+    if (encoded == null) {
+      return Future.value(ApiResponse.failure('班级参数 id 格式错误'));
+    }
+    return client.post('$_base/classSave', data: encoded);
   }
 
-  /// 编辑班级。
+  /// 编辑班级（完整字段更新 / 人员调班 / 修改名称等）。
   ///
   /// 期望字段（与后端 swagger 对齐）：
   /// ```json
@@ -251,19 +283,12 @@ class AdminRepository {
   /// ```
   ///
   /// `id` 必填；其它字段允许部分更新（调用方按需传）。
+  ///
+  /// 雪花 id（`id` / `headTeacherId` / `classroomId` / `campusId` /
+  /// `studentIds[]`）须以 String 传入调用层，由 [encodeClassMutationRequestBody]
+  /// 写成 **带引号的 JSON 字符串**，避免 Web 端 number 精度截断。
   Future<ApiResponse> classUpdate(Map<String, dynamic> body) {
-    final encoded = encodeNumericIdRequestBody(
-      body,
-      numericIdKeys: const {
-        'id',
-        'headTeacherId',
-        'classroomId',
-        'campusId',
-      },
-      numericIdArrayKeys: body.containsKey('studentIds')
-          ? const {'studentIds'}
-          : const {},
-    );
+    final encoded = encodeClassMutationRequestBody(body);
     if (encoded == null) {
       return Future.value(ApiResponse.failure('班级 id 格式错误'));
     }
@@ -419,7 +444,8 @@ class AdminRepository {
     return client.post('$_base/schoolUserFaceList', data: body);
   }
 
-  /// 人脸库统计：`status0Count` / `status1Count` / `status2Count`。
+  /// 人脸库统计：`status0Count` / `status1Count` / `status2Count` /
+  /// `userFaceNotRecordedCount`（待补录，亦可从 `indexSum` 读取）。
   Future<ApiResponse> schoolUserFaceSum() {
     return client.post('$_base/schoolUserFaceSum');
   }

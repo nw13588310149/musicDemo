@@ -27,22 +27,43 @@ class AdminHomeController extends StateNotifier<AdminHomeState> {
 
   Future<void> refresh() async {
     if (state.loading) return;
-    state = state.copyWith(loading: true, summaryError: '', noticeError: '');
+    state = state.copyWith(
+      loading: true,
+      summaryError: '',
+      loginChartError: '',
+      noticeError: '',
+    );
+    final loginChartRange = adminHomeLast7DaysDateRange();
     final responses = await Future.wait([
       _repository.indexSum(),
+      _repository.websocketLoginCount(
+        startDate: loginChartRange.startDate,
+        endDate: loginChartRange.endDate,
+      ),
       _repository.noticeManageList(current: 1, size: 20, status: 1),
     ]);
     final summaryResponse = responses[0];
-    final noticeResponse = responses[1];
+    final loginChartResponse = responses[1];
+    final noticeResponse = responses[2];
     state = state.copyWith(
       loading: false,
       summary: summaryResponse.isSuccess
           ? AdminHomeSummary.fromJson(summaryResponse.data)
           : state.summary,
+      loginChart: loginChartResponse.isSuccess
+          ? parseAdminHomeLoginChart(
+              loginChartResponse.data,
+              startDate: loginChartRange.startDate,
+              endDate: loginChartRange.endDate,
+            )
+          : state.loginChart,
       notices: noticeResponse.isSuccess
           ? parseAdminHomeNotices(noticeResponse.data)
           : state.notices,
       summaryError: summaryResponse.isSuccess ? '' : summaryResponse.displayMsg,
+      loginChartError: loginChartResponse.isSuccess
+          ? ''
+          : loginChartResponse.displayMsg,
       noticeError: noticeResponse.isSuccess ? '' : noticeResponse.displayMsg,
     );
   }
