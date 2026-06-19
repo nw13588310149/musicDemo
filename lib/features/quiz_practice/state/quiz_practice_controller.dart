@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/quiz_practice_repository.dart';
 import '../data/quiz_question_parser.dart';
 import 'quiz_practice_state.dart';
+import 'quiz_session_state.dart';
 
 final quizPracticeControllerProvider = StateNotifierProvider.autoDispose
     .family<QuizPracticeController, QuizPracticeState, String>((ref, schoolId) {
@@ -50,10 +51,52 @@ class QuizPracticeController extends StateNotifier<QuizPracticeState> {
     final missing = summaries
         .where((s) => !s.statusInitialized && s.type != QuizPracticeType.error)
         .toList(growable: false);
-    if (missing.isEmpty) return;
+    // 1.0 行为：随机练习做完一轮后重新 create 生成新题库。
+    final randomDone = summaries
+        .where((s) => s.type == QuizPracticeType.random && s.isRoundCompleted)
+        .toList(growable: false);
+    final toCreate = <QuizPracticeType>{
+      ...missing.map((s) => s.type),
+      ...randomDone.map((s) => s.type),
+    };
+    if (toCreate.isEmpty) return;
     await Future.wait(
-      missing.map((s) => _initializePractice(s.type)),
+      toCreate.map(_initializePractice),
       eagerError: false,
+    );
+  }
+
+  /// 进入做题页前确保 summary 可用；随机练习已做完则先生成新题库。
+  Future<QuizSessionPageArgs?> buildSessionArgs(QuizPracticeSummary summary) async {
+    var fresh = summary;
+    if (summary.type == QuizPracticeType.random && summary.isRoundCompleted) {
+      final response = await _repository.createPractice(
+        schoolId: _schoolId,
+        practiceType: summary.type.apiKey,
+      );
+      if (!mounted) return null;
+      if (!response.isSuccess) {
+        state = state.copyWith(
+          errorMessage: response.msg.isEmpty ? '生成新题库失败' : response.msg,
+        );
+        return null;
+      }
+      final updated = _parseSinglePractice(summary.type, response.data);
+      if (updated == null) return null;
+      final next = state.summaries
+          .map((s) => s.type == summary.type ? updated : s)
+          .toList(growable: false);
+      state = state.copyWith(summaries: next, clearErrorMessage: true);
+      fresh = updated;
+    }
+
+    if (fresh.allCount <= 0) return null;
+    return QuizSessionPageArgs(
+      practiceType: fresh.type,
+      practiceId: fresh.practiceId,
+      startIndex: fresh.doneCount,
+      allCount: fresh.allCount,
+      schoolId: _schoolId,
     );
   }
 

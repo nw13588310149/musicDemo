@@ -31,10 +31,20 @@ class CircleController extends StateNotifier<CircleState> {
   // ── 模式切换 ────────────────────────────────────────────────────────
   void setMode(CircleMode mode) {
     if (state.mode == mode) return;
+    final leavingImmersive =
+        state.mode == CircleMode.immersive && mode == CircleMode.list;
     state = state.copyWith(
       mode: mode,
       commentPanelOpen: mode == CircleMode.list ? false : state.commentPanelOpen,
+      mediaStopEpoch: leavingImmersive
+          ? state.mediaStopEpoch + 1
+          : state.mediaStopEpoch,
     );
+  }
+
+  /// 退出校圈或路由 pop 前调用，让沉浸播放器在页面动画结束前立刻静音并释放。
+  void stopMediaPlayback() {
+    state = state.copyWith(mediaStopEpoch: state.mediaStopEpoch + 1);
   }
 
   // ── 搜索框：300ms 防抖后向后端发起 keyword 查询 ───────────────────

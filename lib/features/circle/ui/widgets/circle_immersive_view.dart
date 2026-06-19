@@ -22,11 +22,13 @@ class CircleImmersiveView extends StatefulWidget {
     required this.state,
     required this.controller,
     required this.permissions,
+    required this.mediaStopEpoch,
   });
 
   final CircleState state;
   final CircleController controller;
   final CirclePermissions permissions;
+  final int mediaStopEpoch;
 
   @override
   State<CircleImmersiveView> createState() => _CircleImmersiveViewState();
@@ -165,6 +167,7 @@ class _CircleImmersiveViewState extends State<CircleImmersiveView> {
               return _ImmersiveSlide(
                 post: post,
                 isActive: index == state.immersiveIndex,
+                mediaStopEpoch: widget.mediaStopEpoch,
                 canDeletePost: widget.permissions.canDeletePost(post),
                 onDeletePost: widget.permissions.canDeletePost(post)
                     ? () => _confirmDeletePost(context, post)
@@ -217,6 +220,7 @@ class _ImmersiveSlide extends StatelessWidget {
   const _ImmersiveSlide({
     required this.post,
     required this.isActive,
+    required this.mediaStopEpoch,
     required this.onLike,
     required this.onComment,
     required this.onFavorite,
@@ -226,6 +230,7 @@ class _ImmersiveSlide extends StatelessWidget {
 
   final CirclePost post;
   final bool isActive;
+  final int mediaStopEpoch;
   final VoidCallback onLike;
   final VoidCallback onComment;
   final VoidCallback onFavorite;
@@ -246,6 +251,7 @@ class _ImmersiveSlide extends StatelessWidget {
           child: CircleMediaPlayer(
             post: post,
             isActive: isActive,
+            mediaStopEpoch: mediaStopEpoch,
           ),
         ),
 

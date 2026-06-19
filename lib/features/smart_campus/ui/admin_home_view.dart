@@ -633,7 +633,10 @@ class _DataDashboardCard extends StatelessWidget {
     final values = chart.values;
     final xLabels = chart.xLabels;
     final maxY = adminHomeLoginChartMaxY(values);
-    final yLabels = buildAdminHomeLoginChartYLabels(maxY);
+    final topPadding = ui(16);
+    final yAxisWidth = ui(28);
+    final chartGap = ui(8);
+    final plotLeft = yAxisWidth + chartGap;
 
     return SmartCampusHomeCard(
       height: ui(261),
@@ -641,52 +644,37 @@ class _DataDashboardCard extends StatelessWidget {
       child: Column(
         children: [
           Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SizedBox(
-                  width: ui(28),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      for (final l in yLabels)
-                        Text(
-                          l,
-                          style: TextStyle(
-                            fontSize: ui(12),
-                            height: 1.0,
-                            color: const Color(0xFFB6B5BB),
-                            fontFamily: 'PingFang SC',
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                SizedBox(width: ui(8)),
-                Expanded(
-                  child: CustomPaint(
-                    painter: _LineChartPainter(
-                      values: values,
-                      maxY: maxY,
-                      topPadding: ui(16),
-                      valueLabelStyle: TextStyle(
-                        fontSize: ui(11),
-                        height: 1.0,
-                        color: const Color(0xFF8741FF),
-                        fontWeight: FontWeight.w500,
-                        fontFamily: 'PingFang SC',
-                      ),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return CustomPaint(
+                  painter: _LineChartPainter(
+                    values: values,
+                    maxY: maxY,
+                    topPadding: topPadding,
+                    plotLeft: plotLeft,
+                    yAxisWidth: yAxisWidth,
+                    yLabelStyle: TextStyle(
+                      fontSize: ui(12),
+                      height: 1.0,
+                      color: const Color(0xFFB6B5BB),
+                      fontFamily: 'PingFang SC',
                     ),
-                    child: const SizedBox.expand(),
+                    valueLabelStyle: TextStyle(
+                      fontSize: ui(11),
+                      height: 1.0,
+                      color: const Color(0xFF8741FF),
+                      fontWeight: FontWeight.w500,
+                      fontFamily: 'PingFang SC',
+                    ),
                   ),
-                ),
-              ],
+                  child: const SizedBox.expand(),
+                );
+              },
             ),
           ),
           SizedBox(height: ui(12)),
           Padding(
-            padding: EdgeInsets.only(left: ui(28)),
+            padding: EdgeInsets.only(left: plotLeft),
             child: Row(
               children: [
                 for (final x in xLabels)
@@ -711,37 +699,101 @@ class _DataDashboardCard extends StatelessWidget {
   }
 }
 
-/// 7 点折线 + 浅紫渐变填充 + 紫色描边 + 白点紫边圆点 + 数值标注。
+/// 7 点折线 + Y 轴刻度 + 浅紫渐变填充 + 紫色描边 + 白点紫边圆点 + 数值标注。
 class _LineChartPainter extends CustomPainter {
   _LineChartPainter({
     required this.values,
     required this.maxY,
     required this.topPadding,
+    required this.plotLeft,
+    required this.yAxisWidth,
+    required this.yLabelStyle,
     required this.valueLabelStyle,
   });
 
   final List<double> values;
   final double maxY;
   final double topPadding;
+  final double plotLeft;
+  final double yAxisWidth;
+  final TextStyle yLabelStyle;
   final TextStyle valueLabelStyle;
+
+  double _yForValue(double value, double height) {
+    return adminHomeLoginChartYForValue(
+      value: value,
+      height: height,
+      topPadding: topPadding,
+      maxY: maxY,
+    );
+  }
+
+  void _paintYAxisGrid(Canvas canvas, Size size) {
+    final maxV = maxY <= 0 ? 10.0 : maxY;
+    final tickStep = maxV / 5;
+    final gridPaint = Paint()
+      ..color = const Color(0xFFF1ECFF)
+      ..strokeWidth = 1;
+
+    for (var i = 5; i >= 0; i--) {
+      final tickValue = i == 0 ? 0.0 : tickStep * i;
+      final y = _yForValue(tickValue, size.height);
+
+      if (i == 0) {
+        final dash = 4.0;
+        var x = plotLeft;
+        while (x < size.width) {
+          canvas.drawLine(
+            Offset(x, y),
+            Offset(math.min(x + dash, size.width), y),
+            gridPaint,
+          );
+          x += dash * 2;
+        }
+      } else {
+        canvas.drawLine(Offset(plotLeft, y), Offset(size.width, y), gridPaint);
+      }
+    }
+  }
+
+  void _paintYAxisLabels(Canvas canvas, Size size) {
+    final maxV = maxY <= 0 ? 10.0 : maxY;
+    final tickStep = maxV / 5;
+
+    for (var i = 5; i >= 0; i--) {
+      final tickValue = i == 0 ? 0.0 : tickStep * i;
+      final y = _yForValue(tickValue, size.height);
+      final label = i == 0 ? '0' : (tickStep * i).round().toString();
+
+      final textPainter = TextPainter(
+        text: TextSpan(text: label, style: yLabelStyle),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      textPainter.paint(
+        canvas,
+        Offset(yAxisWidth - textPainter.width, y - textPainter.height / 2),
+      );
+    }
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
     if (values.isEmpty) return;
 
-    final maxV = maxY <= 0 ? 10.0 : maxY;
-    final chartTop = topPadding;
+    _paintYAxisGrid(canvas, size);
+
     final chartBottom = size.height;
-    final plotHeight = math.max(chartBottom - chartTop, 1.0);
-    final stride = values.length <= 1
-        ? 0.0
-        : size.width / (values.length - 1);
+    final plotWidth = math.max(size.width - plotLeft, 1.0);
+    final pointCount = values.length;
 
     Offset pointAt(int i) {
-      final v = values[i].clamp(0.0, maxV);
-      final ratio = maxV == 0 ? 0.0 : v / maxV;
-      final y = chartBottom - ratio * plotHeight;
-      final x = values.length <= 1 ? size.width / 2 : stride * i;
+      final y = _yForValue(values[i], size.height);
+      final x = adminHomeLoginChartXForIndex(
+        index: i,
+        count: pointCount,
+        plotLeft: plotLeft,
+        plotWidth: plotWidth,
+      );
       return Offset(x, y);
     }
 
@@ -764,7 +816,7 @@ class _LineChartPainter extends CustomPainter {
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
         colors: [Color(0xFFE7D9FF), Color(0x00E7D9FF)],
-      ).createShader(Rect.fromLTWH(0, 0, size.width, chartBottom));
+      ).createShader(Rect.fromLTWH(plotLeft, 0, plotWidth, chartBottom));
     canvas.drawPath(fillPath, fillPaint);
 
     // 3. 描边
@@ -798,27 +850,15 @@ class _LineChartPainter extends CustomPainter {
       );
     }
 
-    // 5. 底部 baseline
-    final base = Paint()
-      ..color = const Color(0xFFF1ECFF)
-      ..strokeWidth = 1;
-    final dash = 4.0;
-    var x = 0.0;
-    while (x < size.width) {
-      canvas.drawLine(
-        Offset(x, chartBottom),
-        Offset(math.min(x + dash, size.width), chartBottom),
-        base,
-      );
-      x += dash * 2;
-    }
+    _paintYAxisLabels(canvas, size);
   }
 
   @override
   bool shouldRepaint(covariant _LineChartPainter old) =>
       old.values != values ||
       old.maxY != maxY ||
-      old.topPadding != topPadding;
+      old.topPadding != topPadding ||
+      old.plotLeft != plotLeft;
 }
 
 // ============================================================================

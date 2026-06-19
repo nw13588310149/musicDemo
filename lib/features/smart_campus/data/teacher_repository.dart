@@ -471,6 +471,14 @@ class TeacherRepository {
     );
   }
 
+  /// 删除班级通知。`id` 为通知主键。
+  Future<ApiResponse> schoolClassNoticeDel({required String id}) {
+    return client.post(
+      '$_base/schoolClassNoticeDel',
+      data: <String, dynamic>{'id': id},
+    );
+  }
+
   // ============== 校级通知（任课老师端） ==============
 
   /// 任课老师首页通知列表。
@@ -880,18 +888,26 @@ class TeacherRepository {
   /// `status`: 0-待家长审批 / 1-家长同意 / 2-家长拒绝 / 3-老师同意 /
   /// 4-老师拒绝；**空字符串 `''` 表示全部**（与后端约定：全部时传入 `""`，
   /// 勿省略字段）。
+  ///
+  /// `statusList` 与 `status` 二选一；传入 `statusList` 时不再发送 `status`。
   Future<ApiResponse> headTeacherStudentLeaveList({
     int current = 1,
     int size = 200,
     Object? status,
+    List<int>? statusList,
   }) {
+    final data = <String, dynamic>{
+      'current': current,
+      'size': size,
+    };
+    if (statusList != null) {
+      data['statusList'] = statusList;
+    } else {
+      data['status'] = status ?? '';
+    }
     return client.post(
       '$_base/headTeacherStudentLeaveList',
-      data: <String, dynamic>{
-        'current': current,
-        'size': size,
-        'status': status ?? '',
-      },
+      data: data,
     );
   }
 

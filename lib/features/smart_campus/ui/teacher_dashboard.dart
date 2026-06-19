@@ -51,13 +51,10 @@ void _showActionPending(BuildContext context, String label) {
 ///   - 本地 `_localTab`：负责立刻切换 UI（任何账号都能点），由 `_selectTab`
 ///     的 `setState` 立即写入。
 ///   - 全局 `onSelectRole = controller.selectRole`：负责持久化身份。
-///     - admin：`availableRoles` 含 5 个，`selectRole` 写入 state，从而
-///       进出「班级工作台 / 学生名册 / 作业批改 / 考评管理」等子页再
-///       返回 dashboard 时，依靠 controller 的 `hasUserSelectedRole`
-///       标记保持「班主任」视角不被 `applyBackendRole` 覆盖。
-///     - 普通教师：`selectRole` 会被 ignore，`state.selectedRole` 保持不变，
-///       但本地 `_localTab` 已经切到 headTeacher，UI 仍然给出班主任视图的
-///       本地预览（一次性，重新进入 dashboard 后会回到自身角色）。
+///     - 多身份教师（任课 + 班主任）：`selectRole` 写入 state，进出子页
+///       再返回仍保持当前 tab；进入子页前会再次同步本地 tab。
+///     - 仅单身份教师：`selectRole` 对无权限身份会被 ignore，本地 tab
+///       仅作一次性预览，重新进入 dashboard 后回到自身角色。
 ///   - `didUpdateWidget` 仅在 `widget.selectedRole` 真正发生变化时才把
 ///     `_localTab` 同步为 `widget.selectedRole`，避免没变化时把已经切到的
 ///     本地预览打回去。
@@ -225,7 +222,62 @@ class _TeacherDashboardLayoutState
       _localTab = _coerceRole(widget.selectedRole);
       _syncPlaceholderData();
       _loadHomeData();
+      return;
     }
+    // teacherRole 接口晚于用户点「任课老师」时，selectRole 曾因
+    // availableRoles 未就绪被忽略；身份列表补齐后把本地 tab 写回全局，
+    // 避免进子页再返回后被 initState 拉回班主任。
+    if (!_sameTeacherRoleList(
+      oldWidget.availableRoles,
+      widget.availableRoles,
+    )) {
+      _persistLocalTabToGlobal();
+    }
+  }
+
+  bool _sameTeacherRoleList(
+    List<SmartCampusRole> a,
+    List<SmartCampusRole> b,
+  ) {
+    if (identical(a, b)) {
+      return true;
+    }
+    if (a.length != b.length) {
+      return false;
+    }
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /// 把 dashboard 内当前 tab（任课 / 班主任）同步到
+  /// [SmartCampusController.selectedRole]，供子页返回后仍能恢复。
+  void _persistLocalTabToGlobal() {
+    final role = _localTab;
+    if (!widget.availableRoles.contains(role)) {
+      return;
+    }
+    if (widget.selectedRole == role) {
+      return;
+    }
+    widget.onSelectRole?.call(role);
+  }
+
+  VoidCallback _guardedNav(VoidCallback action) {
+    return () {
+      _persistLocalTabToGlobal();
+      action();
+    };
+  }
+
+  VoidCallback? _guardedNavOptional(VoidCallback? action) {
+    if (action == null) {
+      return null;
+    }
+    return _guardedNav(action);
   }
 
   // 仅允许 tab 在 teacher / headTeacher 之间切换；其他角色容错回退到 teacher。
@@ -257,6 +309,8 @@ class _TeacherDashboardLayoutState
       _syncPlaceholderData();
     });
     widget.onSelectRole?.call(role);
+    // teacherRole 尚未返回时 selectRole 可能暂时无效，待 availableRoles
+    // 更新后由 didUpdateWidget 再次持久化。
     _loadHomeData();
   }
 
@@ -391,6 +445,38 @@ class _TeacherDashboardLayoutState
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final data = smartCampusDashboardDataForRole(_localTab);
+    final onOpenPrincipalMailbox = _guardedNav(widget.onOpenPrincipalMailbox);
+    final onOpenMyClass = _guardedNav(widget.onOpenMyClass);
+    final onOpenClassWorkbench = _guardedNav(widget.onOpenClassWorkbench);
+    final onOpenMySchedule = _guardedNav(widget.onOpenMySchedule);
+    final onOpenCheckIn = _guardedNavOptional(widget.onOpenCheckIn);
+    final onOpenMyHomework = _guardedNavOptional(widget.onOpenMyHomework);
+    final onOpenMyGrades = _guardedNavOptional(widget.onOpenMyGrades);
+    final onOpenGroupChat = _guardedNavOptional(widget.onOpenGroupChat);
+    final onOpenSchoolCircle = _guardedNavOptional(widget.onOpenSchoolCircle);
+    final onOpenLeaveManagement = _guardedNavOptional(
+      widget.onOpenLeaveManagement,
+    );
+    final onOpenDormCheck = _guardedNavOptional(widget.onOpenDormCheck);
+    final onOpenClassAttendance = _guardedNavOptional(
+      widget.onOpenClassAttendance,
+    );
+    final onOpenStudentRoster = _guardedNavOptional(
+      widget.onOpenStudentRoster,
+    );
+    final onOpenHomeworkReview = _guardedNavOptional(
+      widget.onOpenHomeworkReview,
+    );
+    final onOpenExamReview = _guardedNavOptional(widget.onOpenExamReview);
+    final onOpenMyTeacherLeave = _guardedNavOptional(
+      widget.onOpenMyTeacherLeave,
+    );
+    final onOpenLeaveApproval = _guardedNavOptional(
+      widget.onOpenLeaveApproval,
+    );
+    final onOpenDormDynamic = _guardedNavOptional(widget.onOpenDormDynamic);
+    final onOpenDormHistory = _guardedNavOptional(widget.onOpenDormHistory);
+    final onOpenHomeSchool = _guardedNavOptional(widget.onOpenHomeSchool);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -431,26 +517,26 @@ class _TeacherDashboardLayoutState
                   headTeacherRecent: _headTeacherRecent,
                   width: mainWidth,
                   fillRemaining: false,
-                  onOpenPrincipalMailbox: widget.onOpenPrincipalMailbox,
-                  onOpenMyClass: widget.onOpenMyClass,
-                  onOpenClassWorkbench: widget.onOpenClassWorkbench,
-                  onOpenMySchedule: widget.onOpenMySchedule,
-                  onOpenCheckIn: widget.onOpenCheckIn,
-                  onOpenMyHomework: widget.onOpenMyHomework,
-                  onOpenMyGrades: widget.onOpenMyGrades,
-                  onOpenGroupChat: widget.onOpenGroupChat,
-                  onOpenSchoolCircle: widget.onOpenSchoolCircle,
-                  onOpenLeaveManagement: widget.onOpenLeaveManagement,
-                  onOpenDormCheck: widget.onOpenDormCheck,
-                  onOpenClassAttendance: widget.onOpenClassAttendance,
-                  onOpenStudentRoster: widget.onOpenStudentRoster,
-                  onOpenHomeworkReview: widget.onOpenHomeworkReview,
-                  onOpenExamReview: widget.onOpenExamReview,
-                  onOpenMyTeacherLeave: widget.onOpenMyTeacherLeave,
-                  onOpenLeaveApproval: widget.onOpenLeaveApproval,
-                  onOpenDormDynamic: widget.onOpenDormDynamic,
-                  onOpenDormHistory: widget.onOpenDormHistory,
-                  onOpenHomeSchool: widget.onOpenHomeSchool,
+                  onOpenPrincipalMailbox: onOpenPrincipalMailbox,
+                  onOpenMyClass: onOpenMyClass,
+                  onOpenClassWorkbench: onOpenClassWorkbench,
+                  onOpenMySchedule: onOpenMySchedule,
+                  onOpenCheckIn: onOpenCheckIn,
+                  onOpenMyHomework: onOpenMyHomework,
+                  onOpenMyGrades: onOpenMyGrades,
+                  onOpenGroupChat: onOpenGroupChat,
+                  onOpenSchoolCircle: onOpenSchoolCircle,
+                  onOpenLeaveManagement: onOpenLeaveManagement,
+                  onOpenDormCheck: onOpenDormCheck,
+                  onOpenClassAttendance: onOpenClassAttendance,
+                  onOpenStudentRoster: onOpenStudentRoster,
+                  onOpenHomeworkReview: onOpenHomeworkReview,
+                  onOpenExamReview: onOpenExamReview,
+                  onOpenMyTeacherLeave: onOpenMyTeacherLeave,
+                  onOpenLeaveApproval: onOpenLeaveApproval,
+                  onOpenDormDynamic: onOpenDormDynamic,
+                  onOpenDormHistory: onOpenDormHistory,
+                  onOpenHomeSchool: onOpenHomeSchool,
                 ),
                 SizedBox(height: ui(16)),
                 _TeacherSidebar(
@@ -484,26 +570,26 @@ class _TeacherDashboardLayoutState
                 headTeacherRecent: _headTeacherRecent,
                 width: mainWidth,
                 fillRemaining: true,
-                onOpenPrincipalMailbox: widget.onOpenPrincipalMailbox,
-                onOpenMyClass: widget.onOpenMyClass,
-                onOpenClassWorkbench: widget.onOpenClassWorkbench,
-                onOpenMySchedule: widget.onOpenMySchedule,
-                onOpenCheckIn: widget.onOpenCheckIn,
-                onOpenMyHomework: widget.onOpenMyHomework,
-                onOpenMyGrades: widget.onOpenMyGrades,
-                onOpenGroupChat: widget.onOpenGroupChat,
-                onOpenSchoolCircle: widget.onOpenSchoolCircle,
-                onOpenLeaveManagement: widget.onOpenLeaveManagement,
-                onOpenDormCheck: widget.onOpenDormCheck,
-                onOpenClassAttendance: widget.onOpenClassAttendance,
-                onOpenStudentRoster: widget.onOpenStudentRoster,
-                onOpenHomeworkReview: widget.onOpenHomeworkReview,
-                onOpenExamReview: widget.onOpenExamReview,
-                onOpenMyTeacherLeave: widget.onOpenMyTeacherLeave,
-                onOpenLeaveApproval: widget.onOpenLeaveApproval,
-                onOpenDormDynamic: widget.onOpenDormDynamic,
-                onOpenDormHistory: widget.onOpenDormHistory,
-                onOpenHomeSchool: widget.onOpenHomeSchool,
+                onOpenPrincipalMailbox: onOpenPrincipalMailbox,
+                onOpenMyClass: onOpenMyClass,
+                onOpenClassWorkbench: onOpenClassWorkbench,
+                onOpenMySchedule: onOpenMySchedule,
+                onOpenCheckIn: onOpenCheckIn,
+                onOpenMyHomework: onOpenMyHomework,
+                onOpenMyGrades: onOpenMyGrades,
+                onOpenGroupChat: onOpenGroupChat,
+                onOpenSchoolCircle: onOpenSchoolCircle,
+                onOpenLeaveManagement: onOpenLeaveManagement,
+                onOpenDormCheck: onOpenDormCheck,
+                onOpenClassAttendance: onOpenClassAttendance,
+                onOpenStudentRoster: onOpenStudentRoster,
+                onOpenHomeworkReview: onOpenHomeworkReview,
+                onOpenExamReview: onOpenExamReview,
+                onOpenMyTeacherLeave: onOpenMyTeacherLeave,
+                onOpenLeaveApproval: onOpenLeaveApproval,
+                onOpenDormDynamic: onOpenDormDynamic,
+                onOpenDormHistory: onOpenDormHistory,
+                onOpenHomeSchool: onOpenHomeSchool,
               ),
             ),
             Positioned(
@@ -2249,31 +2335,15 @@ _BuiltDashboardSchedule _buildDashboardScheduleFromIndex({
     );
   }
 
-  final currentId = index.currentCourse?['id']?.toString();
-  final nextId = index.nextCourse?['id']?.toString();
-  // 仅排除「当前课程」卡已展示的那一节；有 currentCourse 时 nextCourse 仍应出现在今日课表。
-  final shownInCurrentId =
-      index.currentCourse != null ? currentId : nextId;
-
   _LessonScheduleData? current;
-  if (index.currentCourse != null) {
-    current = lessonFromRow(
-      index.currentCourse!,
-      _LessonSlotPhase.inProgress,
-    );
-  } else if (index.nextCourse != null) {
-    current = lessonFromRow(index.nextCourse!, _LessonSlotPhase.upcoming);
+  if (index.nextCourse != null) {
+    final times = _resolveRowTimes(index.nextCourse!, timeConfigs);
+    final phase = _slotPhase(now, times.start, times.end);
+    current = lessonFromRow(index.nextCourse!, phase);
   }
 
   final todayEntries = <({int sortKey, _LessonScheduleData lesson})>[];
   for (final row in index.todayCourseList) {
-    final id = row['id']?.toString();
-    if (id != null &&
-        id.isNotEmpty &&
-        shownInCurrentId != null &&
-        id == shownInCurrentId) {
-      continue;
-    }
     final times = _resolveRowTimes(row, timeConfigs);
     final phase = _slotPhase(now, times.start, times.end);
     todayEntries.add((

@@ -601,7 +601,7 @@ class _OverviewTab extends StatelessWidget {
       ),
       SizedBox(height: ui(20)),
       section(
-        leftTitle: const _SectionTitle('班级捷径'),
+        leftTitle: const _SectionTitle('班级数据'),
         rightTitle: const _SectionTitle('班级捷径'),
         bodyHeight: 176,
         leftBody: _ShortcutStatGrid(
@@ -982,8 +982,22 @@ class _NoticeSectionState extends ConsumerState<_NoticeSection> {
         );
       },
     );
-    if (ok == true && mounted) {
+    if (ok != true || !mounted) return;
+    if (notice.id.isEmpty) {
+      if (ctx.mounted) {
+        AppToast.show(ctx, '通知 id 无效，无法删除');
+      }
+      return;
+    }
+    final res = await ref
+        .read(teacherRepositoryProvider)
+        .schoolClassNoticeDel(id: notice.id);
+    if (!mounted || !ctx.mounted) return;
+    if (res.isSuccess) {
       setState(() => _notices.removeWhere((n) => n.id == notice.id));
+      AppToast.show(ctx, '班级通知已删除');
+    } else {
+      AppToast.show(ctx, res.msg.isNotEmpty ? res.msg : '删除失败，请重试');
     }
   }
 }
@@ -2743,7 +2757,7 @@ class _LeaveListCardState extends ConsumerState<_LeaveListCard> {
     final resp = await ref.read(teacherRepositoryProvider).headTeacherStudentLeaveList(
       current: 1,
       size: 10,
-      status: '',
+      statusList: const [0, 1],
     );
     if (!mounted) return;
     if (!resp.isSuccess) {

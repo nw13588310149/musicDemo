@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/constants/app_assets.dart';
 import '../../../../core/widgets/app_toast.dart';
 import '../../../../core/widgets/scaled_dialog.dart';
 import '../../../courseware/state/cloud_drive_controller.dart';
@@ -19,6 +20,34 @@ const Color _kBg = Color(0xFFF5F6FA);
 const Color _kBorder = Color(0xFFCECED1);
 const Color _kHint = Color(0xFFB6B5BB);
 const Color _kText = Color(0xFF0B081A);
+
+String _publishTabIconAsset(PostMediaKind kind, {required bool selected}) {
+  switch (kind) {
+    case PostMediaKind.image:
+      return selected
+          ? AppAssets.circlePublishTabImageSelected
+          : AppAssets.circlePublishTabImage;
+    case PostMediaKind.video:
+      return selected
+          ? AppAssets.circlePublishTabVideoSelected
+          : AppAssets.circlePublishTabVideo;
+    case PostMediaKind.audio:
+      return selected
+          ? AppAssets.circlePublishTabAudioSelected
+          : AppAssets.circlePublishTabAudio;
+  }
+}
+
+String _publishPickIconAsset(PostMediaKind kind) {
+  switch (kind) {
+    case PostMediaKind.image:
+      return AppAssets.circlePublishPickImage;
+    case PostMediaKind.video:
+      return AppAssets.circlePublishPickVideo;
+    case PostMediaKind.audio:
+      return AppAssets.circlePublishPickAudio;
+  }
+}
 
 /// 弹出「发布动态」对话框。返回 `true` 表示发布成功；其它情况返回 false /
 /// null（用户主动取消）。
@@ -483,19 +512,15 @@ class _KindTabItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final IconData icon;
     final String label;
     switch (kind) {
       case PostMediaKind.image:
-        icon = Icons.image_outlined;
         label = '图片+文字';
         break;
       case PostMediaKind.video:
-        icon = Icons.videocam_outlined;
         label = '视频+文字';
         break;
       case PostMediaKind.audio:
-        icon = Icons.music_note_outlined;
         label = '音频+文字';
         break;
     }
@@ -513,10 +538,11 @@ class _KindTabItem extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              icon,
-              size: ui(16),
-              color: selected ? Colors.white : _kHint,
+            Image.asset(
+              _publishTabIconAsset(kind, selected: selected),
+              width: ui(16),
+              height: ui(16),
+              fit: BoxFit.contain,
             ),
             SizedBox(width: ui(4)),
             Text(
@@ -697,22 +723,18 @@ class _PickPlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final IconData icon;
     final String label;
     final String hint;
     switch (kind) {
       case PostMediaKind.image:
-        icon = Icons.add_photo_alternate_outlined;
         label = '点击上传图片';
         hint = '支持 jpg / png / gif / webp 等格式';
         break;
       case PostMediaKind.video:
-        icon = Icons.video_call_outlined;
         label = '点击上传视频';
         hint = '支持 mp4 / mov / webm 等格式';
         break;
       case PostMediaKind.audio:
-        icon = Icons.library_music_outlined;
         label = '点击上传音频';
         hint = '支持 mp3 / m4a / wav 等格式';
         break;
@@ -734,7 +756,12 @@ class _PickPlaceholder extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: ui(38), color: _kPurple),
+            Image.asset(
+              _publishPickIconAsset(kind),
+              width: ui(38),
+              height: ui(38),
+              fit: BoxFit.contain,
+            ),
             SizedBox(height: ui(8)),
             Text(
               label,
@@ -872,10 +899,11 @@ class _CoverPickPlaceholder extends StatelessWidget {
                 color: const Color(0xFFEFEAFF),
                 borderRadius: BorderRadius.circular(ui(8)),
               ),
-              child: Icon(
-                Icons.add_photo_alternate_outlined,
-                size: ui(28),
-                color: _kPurple,
+              child: Image.asset(
+                AppAssets.circlePublishPickImage,
+                width: ui(28),
+                height: ui(28),
+                fit: BoxFit.contain,
               ),
             ),
             SizedBox(width: ui(12)),
@@ -1050,24 +1078,17 @@ class _MediaThumbnail extends StatelessWidget {
         fit: BoxFit.cover,
       );
     } else {
-      final IconData icon;
-      switch (kind) {
-        case PostMediaKind.image:
-          icon = Icons.image_outlined;
-          break;
-        case PostMediaKind.video:
-          icon = Icons.movie_creation_outlined;
-          break;
-        case PostMediaKind.audio:
-          icon = Icons.audiotrack_outlined;
-          break;
-      }
       child = Container(
         width: size,
         height: size,
         alignment: Alignment.center,
         color: const Color(0xFFEFEAFF),
-        child: Icon(icon, size: ui(28), color: _kPurple),
+        child: Image.asset(
+          _publishPickIconAsset(kind),
+          width: ui(28),
+          height: ui(28),
+          fit: BoxFit.contain,
+        ),
       );
     }
     return ClipRRect(

@@ -16,7 +16,6 @@ import '../../school/state/school_page_controller.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../../quiz_practice/state/quiz_practice_controller.dart';
 import '../../quiz_practice/state/quiz_practice_state.dart';
-import '../../quiz_practice/state/quiz_session_state.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 // ── 页面入口 ────────────────────────────────────────────────────────────────
@@ -78,17 +77,12 @@ class SchoolQuizPracticePage extends ConsumerWidget {
     String schoolId,
     QuizPracticeSummary summary,
   ) async {
-    if (summary.allCount <= 0) {
+    final args = await controller.buildSessionArgs(summary);
+    if (!context.mounted) return;
+    if (args == null) {
       AppToast.show(context, '暂无可练习题目');
       return;
     }
-    final args = QuizSessionPageArgs(
-      practiceType: summary.type,
-      practiceId: summary.practiceId,
-      startIndex: summary.doneCount,
-      allCount: summary.allCount,
-      schoolId: schoolId,
-    );
     await Navigator.pushNamed(context, RoutePaths.campAnswer, arguments: args);
     if (!context.mounted) return;
     await controller.refresh();

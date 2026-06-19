@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 
+import 'school_website_html_utils.dart';
+
 /// 原生（iOS / Android）：用 WebView 直接 [WebViewController.loadHtmlString]
 /// 渲染后端返回的完整 HTML 文档，保留其自带的 CSS 与轮播脚本。
 class SchoolWebsiteHtmlView extends StatefulWidget {
@@ -53,7 +55,9 @@ class _SchoolWebsiteHtmlViewState extends State<SchoolWebsiteHtmlView> {
 
   Future<void> _loadHtml() async {
     try {
-      await _controller.loadHtmlString(widget.html);
+      await _controller.loadHtmlString(
+        schoolWebsiteHtmlWithHiddenScrollbar(widget.html),
+      );
     } catch (_) {
       // WebView 已销毁等场景忽略。
     }

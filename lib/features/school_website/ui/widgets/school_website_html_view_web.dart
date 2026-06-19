@@ -3,6 +3,8 @@ import 'dart:ui_web' as ui_web;
 import 'package:flutter/widgets.dart';
 import 'package:web/web.dart' as web;
 
+import 'school_website_html_utils.dart';
+
 /// Web：用 `<iframe srcdoc>` 内联渲染完整 HTML 文档。srcdoc 内的 CSS /
 /// JS（轮播脚本）作为独立文档执行，样式与脚本都能完整生效。
 class SchoolWebsiteHtmlView extends StatefulWidget {
@@ -35,7 +37,7 @@ class _SchoolWebsiteHtmlViewState extends State<SchoolWebsiteHtmlView> {
   void _registerView() {
     _viewType =
         'school-website-iframe-${DateTime.now().millisecondsSinceEpoch}-${_seq++}';
-    final html = widget.html;
+    final html = schoolWebsiteHtmlWithHiddenScrollbar(widget.html);
     ui_web.platformViewRegistry.registerViewFactory(_viewType, (int viewId) {
       final iframe = web.HTMLIFrameElement()
         ..allowFullscreen = true

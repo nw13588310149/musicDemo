@@ -106,13 +106,9 @@ class TeacherDormitoryDynamicItem {
   factory TeacherDormitoryDynamicItem.fromJson(Map<String, dynamic> map) {
     return TeacherDormitoryDynamicItem(
       studentId: pickFirstSnowflakeId(map, ['studentId', 'userId']) ?? '',
-      studentName: _pickString(
-        map,
-        ['realname', 'nickname', 'studentName'],
-        '未命名学生',
-      ),
+      studentName: _pickStudentName(map),
       studentNo: _pickString(map, ['studentNo', 'no'], '--'),
-      avatarUrl: _pickString(map, ['headUrl', 'avatarUrl', 'avatar']),
+      avatarUrl: _pickStudentHeadUrl(map),
       dormName: _dormName(map),
       bedName: _pickString(map, ['bedName', 'bedInfo']),
       checkDate: _pickString(map, ['checkDate']),
@@ -154,7 +150,7 @@ class TeacherDormitoryHistoryItem {
     return TeacherDormitoryHistoryItem(
       id: pickFirstSnowflakeId(map, ['id']) ?? '',
       studentId: pickFirstSnowflakeId(map, ['userId', 'studentId']) ?? '',
-      studentName: _pickString(map, ['studentName', 'realname'], '未命名学生'),
+      studentName: _pickStudentName(map),
       studentNo: _pickString(map, ['studentNo'], '--'),
       dormName: _dormName(map),
       checkDate: _pickString(map, ['checkDate']),
@@ -170,6 +166,7 @@ class TeacherDormitoryMakeupItem {
     required this.id,
     required this.studentId,
     required this.studentName,
+    required this.avatarUrl,
     required this.checkDate,
     required this.checkType,
     required this.reason,
@@ -180,6 +177,7 @@ class TeacherDormitoryMakeupItem {
   final String id;
   final String studentId;
   final String studentName;
+  final String avatarUrl;
   final String checkDate;
   final String checkType;
   final String reason;
@@ -190,7 +188,8 @@ class TeacherDormitoryMakeupItem {
     return TeacherDormitoryMakeupItem(
       id: pickFirstSnowflakeId(map, ['id']) ?? '',
       studentId: pickFirstSnowflakeId(map, ['userId', 'studentId']) ?? '',
-      studentName: _pickString(map, ['studentName', 'realname'], '未命名学生'),
+      studentName: _pickStudentName(map),
+      avatarUrl: _pickStudentHeadUrl(map),
       checkDate: _pickString(map, ['checkDate']),
       checkType: _pickString(map, ['checkType'], '补卡'),
       reason: _pickString(map, ['reason'], '未填写原因'),
@@ -298,6 +297,22 @@ String _pickString(
   return fallback;
 }
 
+/// 学生展示名：`studentName` / `realname` 优先，`studentNickname` 备用。
+String _pickStudentName(
+  Map<String, dynamic> map, [
+  String fallback = '未命名学生',
+]) {
+  return _pickString(
+    map,
+    ['studentName', 'realname', 'studentNickname'],
+    fallback,
+  );
+}
+
+String _pickStudentHeadUrl(Map<String, dynamic> map) {
+  return _pickString(map, ['studentHeadUrl', 'headUrl', 'avatarUrl', 'avatar']);
+}
+
 String _clock(String value) {
   if (value.isEmpty || value == '--') return '--';
   final match = RegExp(r'(\d{1,2}):(\d{2})').firstMatch(value);
@@ -310,7 +325,7 @@ List<DormitoryDetailField> parseTeacherDormitoryCheckDetailFields(dynamic raw) {
   final status = TeacherDormitoryStatus.fromApi(map['status']);
   final handleStatus = _pickInt(map, ['handleStatus']);
   return [
-    DormitoryDetailField('学生', _pickString(map, ['studentName', 'realname'])),
+    DormitoryDetailField('学生', _pickStudentName(map, '')),
     DormitoryDetailField('学号', _pickString(map, ['studentNo'], '--')),
     DormitoryDetailField('查寝日期', _pickString(map, ['checkDate'])),
     DormitoryDetailField('打卡时间', _clock(_pickString(map, ['checkTime']))),
@@ -326,7 +341,7 @@ List<DormitoryDetailField> parseTeacherDormitoryMakeupDetailFields(dynamic raw) 
   final map = _unwrapMap(raw) ?? const <String, dynamic>{};
   final status = _pickInt(map, ['status']);
   return [
-    DormitoryDetailField('学生', _pickString(map, ['studentName', 'realname'])),
+    DormitoryDetailField('学生', _pickStudentName(map, '')),
     DormitoryDetailField('补卡场次', _pickString(map, ['checkType'], '补卡')),
     DormitoryDetailField('补卡日期', _pickString(map, ['checkDate'])),
     DormitoryDetailField('申请原因', _pickString(map, ['reason'], '未填写')),

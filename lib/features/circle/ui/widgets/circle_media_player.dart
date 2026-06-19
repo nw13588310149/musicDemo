@@ -6,6 +6,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../../shell/ui/shell_layout.dart';
+import '../../../../core/audio/mpv_player_smooth.dart';
 import '../../data/circle_video_cache.dart';
 import '../../state/circle_state.dart';
 import 'circle_video_play_button.dart';
@@ -32,6 +33,7 @@ class CircleMediaPlayer extends StatefulWidget {
     required this.post,
     this.autoPlay = true,
     this.isActive = true,
+    this.mediaStopEpoch = 0,
   });
 
   final CirclePost post;
@@ -39,6 +41,9 @@ class CircleMediaPlayer extends StatefulWidget {
 
   /// 仅当前可见帖创建/播放媒体，避免 PageView 邻页同时占用解码器。
   final bool isActive;
+
+  /// 与 [CircleController.stopMediaPlayback] 联动，退出页面时立刻停止。
+  final int mediaStopEpoch;
 
   @override
   State<CircleMediaPlayer> createState() => _CircleMediaPlayerState();
@@ -65,6 +70,10 @@ class _CircleMediaPlayerState extends State<CircleMediaPlayer> {
   @override
   void didUpdateWidget(covariant CircleMediaPlayer oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.mediaStopEpoch != widget.mediaStopEpoch) {
+      _teardownPlayer();
+      return;
+    }
     final postChanged = oldWidget.post.id != widget.post.id ||
         oldWidget.post.primaryMediaUrl != widget.post.primaryMediaUrl ||
         oldWidget.post.mediaKind != widget.post.mediaKind;
@@ -133,6 +142,13 @@ class _CircleMediaPlayerState extends State<CircleMediaPlayer> {
         } else {
           rethrow;
         }
+      }
+      if (!mounted ||
+          generation != _setupGeneration ||
+          !widget.isActive ||
+          _player != player) {
+        unawaited(_releasePlayer(player));
+        return;
       }
       if (opened &&
           widget.post.mediaKind == PostMediaKind.video &&
@@ -231,15 +247,36 @@ class _CircleMediaPlayerState extends State<CircleMediaPlayer> {
     _setupGeneration++;
     _detachVideoLayoutListener();
     final player = _player;
-    if (player != null) {
-      try {
-        unawaited(player.pause());
-      } catch (_) {}
-      unawaited(player.dispose());
-    }
     _player = null;
     _videoController = null;
     _loadingMedia = false;
+    if (player != null) {
+      unawaited(_releasePlayer(player));
+    }
+  }
+
+  Future<void> _releasePlayer(Player player) async {
+    try {
+      await MpvPlayerSmooth.setVolumeSafe(player, 0);
+    } catch (_) {}
+    try {
+      await MpvPlayerSmooth.pauseSmooth(player);
+    } catch (_) {}
+    if (MpvPlayerSmooth.isIosNative) {
+      await Future<void>.delayed(const Duration(milliseconds: 48));
+    }
+    try {
+      await player.stop();
+    } catch (_) {}
+    try {
+      await player.dispose();
+    } catch (_) {}
+  }
+
+  @override
+  void deactivate() {
+    _teardownPlayer();
+    super.deactivate();
   }
 
   @override

@@ -396,9 +396,8 @@ class _SmartCampusPageBody extends ConsumerWidget {
         onOpenDormDynamic: controller.openDormDynamic,
         onOpenDormHistory: controller.openDormHistory,
         onOpenHomeSchool: controller.openHomeSchoolCommunication,
-        // 把任课老师 / 班主任 tab 切换持久化到 controller：
-        // admin 切到「班主任」后进子页再返回仍保持班主任视图；普通教师
-        // 因为 availableRoles 锁死，selectRole 会被 ignore，不影响。
+        // 把任课老师 / 班主任 tab 切换持久化到 controller，并在进入子页前
+        // 再次同步当前 tab，避免子页返回后 dashboard 被默认班主任覆盖。
         onSelectRole: controller.selectRole,
       );
     }

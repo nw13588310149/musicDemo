@@ -275,6 +275,7 @@ class CircleState {
     required this.sortType,
     this.typeFilter,
     this.commentsLoadingPostId,
+    this.mediaStopEpoch = 0,
   });
 
   factory CircleState.initial() {
@@ -312,6 +313,9 @@ class CircleState {
 
   /// 非 null 表示正在为该 `postsId` 拉取评论列表（评论面板内展示 loading）。
   final String? commentsLoadingPostId;
+
+  /// 递增后通知沉浸播放器立即停止（退出页面 / 离开沉浸模式）。
+  final int mediaStopEpoch;
 
   /// 搜索关键字过滤后的帖子（列表 / 沉浸共用）。
   List<CirclePost> get visiblePosts {
@@ -355,6 +359,7 @@ class CircleState {
     bool clearTypeFilter = false,
     String? commentsLoadingPostId,
     bool clearCommentsLoading = false,
+    int? mediaStopEpoch,
   }) {
     return CircleState(
       mode: mode ?? this.mode,
@@ -370,6 +375,7 @@ class CircleState {
       commentsLoadingPostId: clearCommentsLoading
           ? null
           : (commentsLoadingPostId ?? this.commentsLoadingPostId),
+      mediaStopEpoch: mediaStopEpoch ?? this.mediaStopEpoch,
     );
   }
 }

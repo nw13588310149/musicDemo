@@ -18,6 +18,9 @@ import '../../shell/ui/shell_layout.dart';
 import '../../smart_campus/state/smart_campus_controller.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
+const _homeWeekCardWidth = 64.0;
+const _homeWeekCardGap = 8.0;
+
 class HomePage extends ConsumerWidget {
   const HomePage({super.key});
 
@@ -40,6 +43,62 @@ class _HomePageView extends ConsumerStatefulWidget {
 
 class _HomePageViewState extends ConsumerState<_HomePageView> {
   int _bannerIndex = 0;
+  bool _weekScrollDefaultApplied = false;
+  late final ScrollController _weekScrollController = ScrollController();
+
+  /// 周一~周四默认显示前四天；周五及之后默认滚动到周四~周日。
+  static double _homeWeekScheduleInitialOffset() {
+    final weekday = DateTime.now().weekday;
+    if (weekday >= DateTime.friday) {
+      return 3 * (_homeWeekCardWidth + _homeWeekCardGap);
+    }
+    return 0;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _applyDefaultWeekScroll());
+  }
+
+  @override
+  void didUpdateWidget(covariant _HomePageView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.state.weekItems.length != widget.state.weekItems.length) {
+      _weekScrollDefaultApplied = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _applyDefaultWeekScroll());
+    }
+  }
+
+  void _applyDefaultWeekScroll() {
+    if (_weekScrollDefaultApplied) {
+      return;
+    }
+    if (widget.state.weekItems.length < 4) {
+      return;
+    }
+    if (!_weekScrollController.hasClients) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _applyDefaultWeekScroll());
+      return;
+    }
+
+    final target = _homeWeekScheduleInitialOffset();
+    if (target > 0) {
+      final maxExtent = _weekScrollController.position.maxScrollExtent;
+      if (maxExtent <= 0) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _applyDefaultWeekScroll());
+        return;
+      }
+      _weekScrollController.jumpTo(target.clamp(0.0, maxExtent));
+    }
+    _weekScrollDefaultApplied = true;
+  }
+
+  @override
+  void dispose() {
+    _weekScrollController.dispose();
+    super.dispose();
+  }
 
   /// 跳转到智慧校园课表：按 `/myInfo` 真实身份进入「授课课表」或「我的课表」，
   /// 避免 admin / 校长视角占位页拦截。
@@ -321,18 +380,19 @@ class _HomePageViewState extends ConsumerState<_HomePageView> {
           // box 仍是 1.4× fontSize，下方有 ~6px 不可见 descender padding，
           // 所以 SizedBox 取 12-6=6 才能视觉对齐 Figma。
           const SizedBox(height: 6),
-          // 周一~周日，横向可滑动，无滚动条
+          // 周一~周日横向可滑动；默认视窗为周一~周四，周五起默认滚到周四~周日。
           SizedBox(
             height: 88,
             child: ScrollConfiguration(
               behavior: const _NoScrollbarBehavior(),
               child: SingleChildScrollView(
+                controller: _weekScrollController,
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: List.generate(weekItems.length, (index) {
                     return Padding(
                       padding: EdgeInsets.only(
-                        right: index == weekItems.length - 1 ? 0 : 8,
+                        right: index == weekItems.length - 1 ? 0 : _homeWeekCardGap,
                       ),
                       child: GestureDetector(
                         onTap: _openMySchedule,
@@ -582,7 +642,7 @@ class _WeekCard extends StatelessWidget {
     final active = item.isToday;
 
     return Container(
-      width: 64,
+      width: _homeWeekCardWidth,
       height: 88,
       decoration: BoxDecoration(
         // 「今日」高亮背景：从代码渐变改为预设 PNG（[AppAssets.homeWeekTodayBg]

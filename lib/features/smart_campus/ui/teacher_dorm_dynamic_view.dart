@@ -175,6 +175,7 @@ class _PunchAuditRecord {
     required this.id,
     required this.studentName,
     required this.studentNo,
+    required this.avatarUrl,
     required this.dormName,
     required this.date,
     required this.reason,
@@ -184,6 +185,7 @@ class _PunchAuditRecord {
   final String id;
   final String studentName;
   final String studentNo;
+  final String avatarUrl;
   final String dormName;
   final String date;
   final String reason;
@@ -433,6 +435,7 @@ List<_PunchAuditRecord> _punchAuditRecords(
         id: item.id,
         studentName: item.studentName,
         studentNo: '--',
+        avatarUrl: item.avatarUrl,
         dormName: item.checkType,
         date: item.checkDate,
         reason: item.reason,
@@ -1583,19 +1586,10 @@ class _PunchAuditCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Container(
-                width: ui(40),
-                height: ui(40),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(ui(8)),
-                  image: const DecorationImage(
-                    image: AssetImage(
-                      'assets/images/smartCampus/home_actions/dorm_manager/punch_management.png',
-                    ),
-                    fit: BoxFit.cover,
-                  ),
-                ),
+              _DormStudentAvatar(
+                rawHeadUrl: record.avatarUrl,
+                name: record.studentName,
+                size: ui(40),
               ),
               SizedBox(width: ui(8)),
               Expanded(
@@ -1896,6 +1890,7 @@ List<_PunchAuditRecord> _demoPunchAudits() => const [
     id: 'demo-1',
     studentName: '王晴',
     studentNo: 'G3030201',
+    avatarUrl: '',
     dormName: '男生公寓 B-310',
     date: '2026-04-02',
     reason: '当晚在艺术楼排练至22:40，手机没电未能扫脸，回寝后已找宿管登记。',
@@ -1905,6 +1900,7 @@ List<_PunchAuditRecord> _demoPunchAudits() => const [
     id: 'demo-2',
     studentName: '王晴',
     studentNo: 'G3030201',
+    avatarUrl: '',
     dormName: '男生公寓 B-310',
     date: '2026-04-02',
     reason: '当晚在艺术楼排练至22:40，手机没电未能扫脸，回寝后已找宿管登记。',
@@ -1914,6 +1910,7 @@ List<_PunchAuditRecord> _demoPunchAudits() => const [
     id: 'demo-3',
     studentName: '王晴',
     studentNo: 'G3030201',
+    avatarUrl: '',
     dormName: '男生公寓 B-310',
     date: '2026-04-02',
     reason: '当晚在艺术楼排练至22:40，手机没电未能扫脸，回寝后已找宿管登记。',

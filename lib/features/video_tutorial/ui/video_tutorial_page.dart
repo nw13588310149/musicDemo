@@ -9,7 +9,6 @@ import 'dart:math' as math;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:chinese_font_library/chinese_font_library.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -305,7 +304,7 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
                   key: const PageStorageKey<String>('video_tutorial_scroll'),
                   controller: _scrollController,
                   physics: const AlwaysScrollableScrollPhysics(),
-                  scrollCacheExtent: ScrollCacheExtent.pixels(ui(420)),
+                  cacheExtent: ui(420),
                   slivers: [
                     // Banner + 最新视频：并入滚动区域
                     SliverToBoxAdapter(

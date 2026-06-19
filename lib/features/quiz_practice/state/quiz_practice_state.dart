@@ -93,6 +93,9 @@ class QuizPracticeSummary {
 
   int get progressPercent => (progress * 100).round();
 
+  /// 当前轮次已全部做完（随机练习完成后需重新 create 生成新题库）。
+  bool get isRoundCompleted => allCount > 0 && doneCount >= allCount;
+
   double get accuracy {
     if (doneCount <= 0) return 0;
     return ((doneCount - errorCount) / doneCount).clamp(0.0, 1.0);

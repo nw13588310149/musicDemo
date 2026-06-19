@@ -38,6 +38,7 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
   Future<void> _bootstrap() async {
     final args = state.args;
     int? practiceId = args.practiceId;
+    var startIndex = args.startIndex;
 
     // 1.0 行为：camp_over 进入直接拉 summary 弹窗，不需要题目列表。
     if (args.openCompletionDialog) {
@@ -55,7 +56,27 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
       );
       if (!mounted) return;
       if (created.isSuccess && created.data is Map) {
-        practiceId = _toInt((created.data as Map)['practiceId']);
+        final data = created.data as Map;
+        practiceId = _toInt(data['practiceId']);
+        startIndex = _toInt(data['doneCount']) ?? 0;
+      }
+    }
+
+    // 随机练习已做完一轮：重新 create 生成新题库（1.0 行为）。
+    if (args.practiceType == QuizPracticeType.random &&
+        args.allCount > 0 &&
+        startIndex >= args.allCount &&
+        practiceId != null &&
+        practiceId > 0) {
+      final created = await _repository.createPractice(
+        schoolId: args.schoolId,
+        practiceType: args.practiceType.apiKey,
+      );
+      if (!mounted) return;
+      if (created.isSuccess && created.data is Map) {
+        final data = created.data as Map;
+        practiceId = _toInt(data['practiceId']);
+        startIndex = _toInt(data['doneCount']) ?? 0;
       }
     }
 
@@ -84,7 +105,7 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
     final total = questions.isEmpty ? args.allCount : questions.length;
 
     // 起始题号取传入 num，但若已超过题量则从最后一题开始（与 1.0 一致）。
-    var startIndex = args.startIndex;
+    // 随机练习刚生成新题库时 startIndex 已重置为 0，不会触发此分支。
     if (total > 0 && startIndex >= total) {
       startIndex = total - 1;
     }
@@ -233,7 +254,12 @@ class QuizSessionController extends StateNotifier<QuizSessionState> {
     var startIndex = target.doneCount;
     var allCount = target.allCount;
 
-    if (practiceId == null || practiceId <= 0) {
+    final needsCreate =
+        practiceId == null ||
+        practiceId <= 0 ||
+        (targetType == QuizPracticeType.random && target.isRoundCompleted);
+
+    if (needsCreate) {
       final created = await _repository.createPractice(
         schoolId: state.args.schoolId,
         practiceType: targetType.apiKey,

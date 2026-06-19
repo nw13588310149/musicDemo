@@ -6,12 +6,28 @@ import '../../features/shell/ui/shell_layout.dart';
 import '../constants/app_assets.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-/// `showDialog` 的封装：在打开对话框前先从 [context] 中读取
-/// [DashboardScaleScope]，再把同一份 [DashboardScaleData] 重新注入到弹窗子树。
+/// 与管理员「教师档案」等 [showScaledDialog] 弹窗一致的入场时长（对齐
+/// Material [DialogRoute] 默认 150ms）。
+const Duration kAppDialogTransitionDuration = Duration(milliseconds: 150);
+
+/// 统一居中弹窗过渡：渐显 + [Curves.easeOut]（与教师档案弹窗一致）。
+Widget appDialogTransitionBuilder(
+  BuildContext context,
+  Animation<double> animation,
+  Animation<double> secondaryAnimation,
+  Widget child,
+) {
+  return FadeTransition(
+    opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+    child: child,
+  );
+}
+
+/// 全局统一弹窗入口：在打开前先从 [context] 读取 [DashboardScaleScope]，
+/// 再把同一份 [DashboardScaleData] 注入弹窗子树，并使用 [appDialogTransitionBuilder]。
 ///
-/// 这样从 Dashboard 内层页面里直接 `showDialog` 时，弹窗 builder 收到的
-/// `dialogContext` 即便走的是 root Overlay，也能让 `DashboardScaleScope.of(...)`
-/// 正常工作，避免出现 `scope != null` 的断言异常。
+/// 这样从 Dashboard 内层页面弹出 [GradientHeaderDialog] 等统一弹窗时，
+/// `DashboardScaleScope.of(...)` 在 root Overlay 子树中仍可正常工作。
 Future<T?> showScaledDialog<T>({
   required BuildContext context,
   required WidgetBuilder builder,
@@ -23,24 +39,33 @@ Future<T?> showScaledDialog<T>({
   RouteSettings? routeSettings,
 }) {
   final scale = DashboardScaleScope.of(context);
-  return showDialog<T>(
+  final resolvedBarrierLabel = barrierDismissible
+      ? (barrierLabel ??
+          MaterialLocalizations.of(context).modalBarrierDismissLabel)
+      : null;
+  return showGeneralDialog<T>(
     context: context,
     barrierDismissible: barrierDismissible,
     barrierColor: barrierColor ?? Colors.black54,
-    barrierLabel: barrierLabel,
+    barrierLabel: resolvedBarrierLabel,
     useRootNavigator: useRootNavigator,
-    useSafeArea: useSafeArea,
     routeSettings: routeSettings,
-    builder: (dialogContext) {
-      return DashboardScaleScope(
+    transitionDuration: kAppDialogTransitionDuration,
+    pageBuilder: (dialogContext, animation, secondaryAnimation) {
+      Widget child = DashboardScaleScope(
         data: scale,
         child: Builder(builder: builder),
       );
+      if (useSafeArea) {
+        child = SafeArea(child: child);
+      }
+      return child;
     },
+    transitionBuilder: appDialogTransitionBuilder,
   );
 }
 
-/// 通知详情弹窗：无进入/退出动画，点击后立即展示。
+/// 通知详情弹窗：复用 [showScaledDialog] 动画，遮罩略浅（18% 黑）。
 Future<T?> showNoticeDetailDialog<T>({
   required BuildContext context,
   required WidgetBuilder builder,
@@ -48,23 +73,12 @@ Future<T?> showNoticeDetailDialog<T>({
   String? barrierLabel,
   bool barrierDismissible = true,
 }) {
-  final scale = DashboardScaleScope.of(context);
-  return showGeneralDialog<T>(
+  return showScaledDialog<T>(
     context: context,
     barrierDismissible: barrierDismissible,
-    barrierLabel: barrierDismissible
-        ? (barrierLabel ??
-            MaterialLocalizations.of(context).modalBarrierDismissLabel)
-        : null,
     barrierColor: barrierColor ?? Colors.black.withValues(alpha: 0.18),
-    transitionDuration: Duration.zero,
-    pageBuilder: (dialogContext, animation, secondaryAnimation) {
-      return DashboardScaleScope(
-        data: scale,
-        child: Builder(builder: builder),
-      );
-    },
-    transitionBuilder: (context, animation, secondaryAnimation, child) => child,
+    barrierLabel: barrierLabel,
+    builder: builder,
   );
 }
 

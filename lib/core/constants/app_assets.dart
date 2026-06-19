@@ -484,6 +484,28 @@ abstract final class AppAssets {
   /// 校圈右下角悬浮发布按钮（48×48 紫色「+」）。
   static const schoolFabAdd = 'assets/images/home/add.png';
 
+  /// 校圈「发布动态」弹窗：类型 Tab 图标（未选中 / 选中）。
+  static const circlePublishTabImage =
+      'assets/images/new/校圈/3Frame.png';
+  static const circlePublishTabImageSelected =
+      'assets/images/new/校圈/Fra00me.png';
+  static const circlePublishTabVideo =
+      'assets/images/new/校圈/1Frame.png';
+  static const circlePublishTabVideoSelected =
+      'assets/images/new/校圈/Frame.png';
+  static const circlePublishTabAudio =
+      'assets/images/new/校圈/2Frame.png';
+  static const circlePublishTabAudioSelected =
+      'assets/images/new/校圈/Fra1me.png';
+
+  /// 校圈「发布动态」弹窗：上传占位 / 缩略图兜底图标。
+  static const circlePublishPickImage =
+      'assets/images/new/校圈/图片.png';
+  static const circlePublishPickVideo =
+      'assets/images/new/校圈/视频.png';
+  static const circlePublishPickAudio =
+      'assets/images/new/校圈/音频.png';
+
   /// 录音系统 2.0 资产
   /// 1.png 列表页右下角 FAB（新建录音）图标
   /// 2.png 录音文件占位图（卡片中央 cassette/折角图）

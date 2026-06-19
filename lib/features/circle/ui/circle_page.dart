@@ -22,13 +22,20 @@ class CirclePage extends ConsumerWidget {
 
     // 顶部标题栏与下方内容区是两个独立的 16 圆角面板，
     // 中间留 16px 透明间距让 Dashboard 的 #EFF3FC 背景透出来。
-    return Column(
-      children: [
-        _CircleHeader(
-          mode: state.mode,
-          onBack: () => Navigator.of(context).maybePop(),
-          onModeChanged: controller.setMode,
-        ),
+    return PopScope(
+      onPopInvokedWithResult: (didPop, _) {
+        controller.stopMediaPlayback();
+      },
+      child: Column(
+        children: [
+          _CircleHeader(
+            mode: state.mode,
+            onBack: () {
+              controller.stopMediaPlayback();
+              Navigator.of(context).maybePop();
+            },
+            onModeChanged: controller.setMode,
+          ),
         SizedBox(height: ui(16)),
         Expanded(
           child: ClipRRect(
@@ -56,6 +63,7 @@ class CirclePage extends ConsumerWidget {
           ),
         ),
       ],
+      ),
     );
   }
 }
@@ -279,6 +287,7 @@ class _CircleBody extends StatelessWidget {
               state: state,
               controller: controller,
               permissions: permissions,
+              mediaStopEpoch: state.mediaStopEpoch,
             )
           : CircleListView(
               key: const ValueKey('list'),

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'admin_notice_data.dart';
 
 class AdminHomeSummary {
@@ -145,6 +147,31 @@ double adminHomeLoginChartMaxY(List<double> values) {
   final max = values.reduce((a, b) => a > b ? a : b);
   if (max <= 0) return 10;
   return ((max / 5).ceil() * 5).toDouble();
+}
+
+/// 数据看板折线图：将数值映射到画布 Y（与 [_LineChartPainter] 共用）。
+double adminHomeLoginChartYForValue({
+  required double value,
+  required double height,
+  required double topPadding,
+  required double maxY,
+}) {
+  final maxV = maxY <= 0 ? 10.0 : maxY;
+  final plotHeight = math.max(height - topPadding, 1.0);
+  final ratio = maxV == 0 ? 0.0 : (value.clamp(0.0, maxV) / maxV);
+  return height - ratio * plotHeight;
+}
+
+/// 数据看板折线图：第 [index] 个数据点 X，与下方等分 weekday 标签中线对齐。
+double adminHomeLoginChartXForIndex({
+  required int index,
+  required int count,
+  required double plotLeft,
+  required double plotWidth,
+}) {
+  if (count <= 0) return plotLeft;
+  if (count == 1) return plotLeft + plotWidth / 2;
+  return plotLeft + (index + 0.5) * plotWidth / count;
 }
 
 List<String> buildAdminHomeLoginChartYLabels(double maxY) {
