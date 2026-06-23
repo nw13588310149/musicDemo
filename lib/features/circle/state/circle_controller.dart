@@ -1,8 +1,9 @@
-import 'dart:async' show Timer;
+import 'dart:async' show Timer, unawaited;
 import 'dart:convert' show jsonEncode;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/audio/page_audio_lifecycle.dart';
 import '../data/circle_api_mapper.dart';
 import '../data/circle_repository.dart';
 import 'circle_state.dart';
@@ -40,11 +41,19 @@ class CircleController extends StateNotifier<CircleState> {
           ? state.mediaStopEpoch + 1
           : state.mediaStopEpoch,
     );
+    if (leavingImmersive) {
+      _reconcileAfterMediaStop();
+    }
   }
 
   /// 退出校圈或路由 pop 前调用，让沉浸播放器在页面动画结束前立刻静音并释放。
   void stopMediaPlayback() {
     state = state.copyWith(mediaStopEpoch: state.mediaStopEpoch + 1);
+    _reconcileAfterMediaStop();
+  }
+
+  void _reconcileAfterMediaStop() {
+    unawaited(PageAudioLifecycle.primeMediaKitPlaybackSession());
   }
 
   // ── 搜索框：300ms 防抖后向后端发起 keyword 查询 ───────────────────

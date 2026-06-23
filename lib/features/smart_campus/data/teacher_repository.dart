@@ -80,6 +80,61 @@ class TeacherRepository {
     );
   }
 
+  /// 班主任 · 寝室考勤每日正常人数统计（班级工作台「七日查寝」）。
+  ///
+  /// `beginDate` / `endDate` 格式 `yyyy-MM-dd`。
+  Future<ApiResponse> dormNormalStat({
+    required String beginDate,
+    required String endDate,
+  }) {
+    return client.post(
+      '$_base/dormNormalStat',
+      data: <String, dynamic>{
+        'beginDate': beginDate,
+        'endDate': endDate,
+      },
+    );
+  }
+
+  /// 添加重点关注学生。
+  Future<ApiResponse> focusStudentAdd({
+    required String studentId,
+    required String classId,
+    required String tag,
+    required String reason,
+  }) {
+    final body = encodeNumericIdRequestBody(
+      <String, dynamic>{
+        'studentId': studentId,
+        'classId': classId,
+        'tag': tag,
+        'reason': reason,
+      },
+      numericIdKeys: const {'studentId', 'classId'},
+    );
+    if (body == null) {
+      return Future.value(ApiResponse.failure('学生或班级 id 格式错误'));
+    }
+    return client.post('$_base/focusStudentAdd', data: body);
+  }
+
+  /// 取消重点关注。`id` 为学生 id（studentId）。
+  Future<ApiResponse> focusStudentRemove({required String id}) {
+    final body = encodeNumericIdRequestBody(
+      <String, dynamic>{'id': id},
+      numericIdKeys: const {'id'},
+    );
+    if (body == null) {
+      return Future.value(ApiResponse.failure('学生 id 格式错误'));
+    }
+    return client.post('$_base/focusStudentRemove', data: body);
+  }
+
+  /// 当前老师的重点关注学生列表。
+  Future<ApiResponse> focusStudentList() {
+    return client.post('$_base/focusStudentList');
+  }
+
   // ============== 班主任 · 宿舍动态 / 历史 ==============
 
   /// 班级学生最新查寝状态。

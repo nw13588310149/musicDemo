@@ -1943,11 +1943,7 @@ class _SearchableOptionPickerDialogState
                                   ),
                                 ),
                                 if (item.id == widget.value.id)
-                                  Icon(
-                                    Icons.check_rounded,
-                                    size: ui(16),
-                                    color: _kPurple,
-                                  ),
+                                  AppDropdownSelectedMark(size: ui(16)),
                               ],
                             ),
                           ),

@@ -2619,7 +2619,15 @@ class _DetailAnnouncementCard extends StatelessWidget {
               color: Colors.white.withValues(alpha: 0.6),
               borderRadius: BorderRadius.circular(ui(8)),
             ),
-            child: Icon(Icons.campaign_outlined, size: ui(16), color: _kPurple),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(ui(8)),
+              child: AppAssetGraphic(
+                AppAssets.groupChatInfo,
+                width: ui(28),
+                height: ui(28),
+                fit: BoxFit.cover,
+              ),
+            ),
           ),
           SizedBox(width: ui(10)),
           // 标题 + 正文（或空状态提示）
@@ -2720,15 +2728,6 @@ class _DetailSectionCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Container(
-                width: ui(3),
-                height: ui(12),
-                decoration: BoxDecoration(
-                  color: _kPurple,
-                  borderRadius: BorderRadius.circular(ui(4)),
-                ),
-              ),
-              SizedBox(width: ui(6)),
               Text(
                 title,
                 style: TextStyle(
@@ -4113,13 +4112,14 @@ class _AnnouncementBar extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Padding(
-                padding: EdgeInsets.only(top: ui(2)),
+              SizedBox(
+                width: ui(20),
+                height: ui(20),
                 child: AppAssetGraphic(
                   AppAssets.groupChatInfo,
-                  width: ui(12),
-                  height: ui(12),
-                  fit: BoxFit.contain,
+                  width: ui(20),
+                  height: ui(20),
+                  fit: BoxFit.cover,
                 ),
               ),
               SizedBox(width: ui(12)),

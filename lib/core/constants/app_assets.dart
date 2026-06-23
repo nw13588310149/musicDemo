@@ -163,6 +163,18 @@ abstract final class AppAssets {
   /// 日期选择器输入模式下「切回日历」按钮图标。
   static const homeRili = 'assets/images/home/rili.png';
 
+  /// 课表页控制条 · 日期选择 pill 日历图标。
+  static const iconScheduleCalendar =
+      'assets/images/new/0图标/课表-日历.png';
+
+  /// 学生列表 · 性别图标（男 / 女）。个人信息页性别选择仍用 [infoGenderMale] 等。
+  static const iconGenderMale = 'assets/images/new/0图标/男生.png';
+  static const iconGenderFemale = 'assets/images/new/0图标/女生.png';
+
+  /// 下拉选择弹层 · 当前选中项右侧标记。
+  static const iconDropdownSelected =
+      'assets/images/new/0图标/Frame 1912057260.png';
+
   /// 「绑定学校」弹窗左上角徽章背景图（紫色渐变气泡）。
   /// 用于 initial（同学你还没）/ pending（同学您当前）两种状态。
   static const homeTipsBadge = 'assets/images/home/ts.png';
@@ -749,7 +761,7 @@ abstract final class AppAssets {
   static const groupChatPinAction = 'assets/images/groupChat/zd.png';
   static const groupChatPinActionOn = 'assets/images/groupChat/yzd.png';
   static const groupChatSet = 'assets/images/groupChat/set.png';
-  static const groupChatInfo = 'assets/images/groupChat/info.png';
+  static const groupChatInfo = 'assets/images/new/群聊/群聊-群公告.png';
   static const groupChatVoice = 'assets/images/groupChat/voice.png';
   static const groupChatVoiceMode = 'assets/images/groupChat/voice1.png';
   static const groupChatMsg = 'assets/images/groupChat/msg.png';

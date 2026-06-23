@@ -1,7 +1,25 @@
 import 'package:flutter/material.dart';
 
 import '../../features/shell/ui/shell_layout.dart';
+import '../constants/app_assets.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
+
+/// 下拉弹层选中行右侧标记（班级选择等场景）。
+class AppDropdownSelectedMark extends StatelessWidget {
+  const AppDropdownSelectedMark({super.key, required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Image.asset(
+      AppAssets.iconDropdownSelected,
+      width: size,
+      height: size,
+      fit: BoxFit.contain,
+    );
+  }
+}
 
 const Color _kFieldBorder = Color(0xFFF5F6FA);
 const Color _kPanelBorder = Color(0xFFF3F2F3);
@@ -293,8 +311,7 @@ class _PopupSelectorRow<T> extends StatelessWidget {
                 ),
               ),
             ),
-            if (selected)
-              Icon(Icons.check_rounded, size: ui(16), color: _kPurple),
+            if (selected) AppDropdownSelectedMark(size: ui(16)),
           ],
         ),
       ),

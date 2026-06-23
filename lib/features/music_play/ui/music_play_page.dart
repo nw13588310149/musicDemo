@@ -11,6 +11,7 @@ import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/class_share_drawer.dart';
 import '../../../core/widgets/image_gallery_viewer.dart';
+import '../../../core/widgets/popup_selector_field.dart';
 import '../../piano/ui/piano_keyboard.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../../smart_campus/navigation/group_chat_return.dart';
@@ -2152,12 +2153,7 @@ class _SpeedMenuItemState extends State<_SpeedMenuItem> {
                   ),
                 ),
               ),
-              if (selected)
-                Icon(
-                  Icons.check_rounded,
-                  size: ui(14),
-                  color: const Color(0xFF8741FF),
-                ),
+              if (selected) AppDropdownSelectedMark(size: ui(14)),
             ],
           ),
         ),

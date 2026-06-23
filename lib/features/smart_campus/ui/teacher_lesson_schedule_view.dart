@@ -1393,7 +1393,7 @@ class _TeacherScheduleControlBar extends StatelessWidget {
                 ),
                 SizedBox(width: ui(8)),
                 AppPickerAssetIcon(
-                  AppAssets.homeRili,
+                  AppAssets.iconScheduleCalendar,
                   imageSize: ui(14),
                 ),
               ],

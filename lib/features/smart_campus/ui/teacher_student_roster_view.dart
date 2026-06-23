@@ -22,6 +22,7 @@ import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_assets.dart';
+import '../../../core/widgets/popup_selector_field.dart';
 import '../../../core/network/media_url.dart';
 import '../../../core/network/snowflake_id.dart';
 import '../../../core/widgets/app_asset_graphic.dart';
@@ -46,7 +47,6 @@ const Color _kPurpleSoft = Color(0xFFDAD2FF);
 const Color _kPageBgChip = Color(0xFFF5F6FA);
 const Color _kTextSecondary = Color(0xFF6D6B75);
 const Color _kPurpleTag = Color(0xFFA773FF);
-const Color _kMsgBlue = Color(0xFF325BFF);
 
 // ---- 学籍状态 ---------------------------------------------------------------
 
@@ -834,8 +834,7 @@ class _ClassFilterMenuRow extends StatelessWidget {
                 ),
               ),
             ),
-            if (selected)
-              Icon(Icons.check_rounded, size: ui(16), color: _kPurple),
+            if (selected) AppDropdownSelectedMark(size: ui(16)),
           ],
         ),
       ),
@@ -1154,7 +1153,14 @@ class _StudentCard extends StatelessWidget {
                               ),
                             ),
                             SizedBox(width: ui(4)),
-                            _MessageIcon(size: ui(14), color: _kMsgBlue),
+                            Image.asset(
+                              student.isMale
+                                  ? AppAssets.iconGenderMale
+                                  : AppAssets.iconGenderFemale,
+                              width: ui(14),
+                              height: ui(14),
+                              fit: BoxFit.contain,
+                            ),
                           ],
                         ),
                       ),
@@ -1322,57 +1328,6 @@ class _Avatar extends StatelessWidget {
       ),
     );
   }
-}
-
-/// 姓名右侧「发消息」图标：两枚描边气泡（右上小 + 左下主），对齐设计
-/// 14×14 #325BFF outline 结构。用 CustomPaint 还原，避免引入新资源。
-class _MessageIcon extends StatelessWidget {
-  const _MessageIcon({required this.size, required this.color});
-
-  final double size;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: size,
-      height: size,
-      child: CustomPaint(painter: _MessageIconPainter(color: color)),
-    );
-  }
-}
-
-class _MessageIconPainter extends CustomPainter {
-  _MessageIconPainter({required this.color});
-
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    // 设计坐标基于 14×14，按实际尺寸缩放后绘制。
-    final s = size.width / 14.0;
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2 * s
-      ..strokeJoin = StrokeJoin.round
-      ..strokeCap = StrokeCap.round;
-
-    final small = RRect.fromRectAndRadius(
-      Rect.fromLTWH(8.4 * s, 1.6 * s, 4.0 * s, 3.1 * s),
-      Radius.circular(1.4 * s),
-    );
-    final big = RRect.fromRectAndRadius(
-      Rect.fromLTWH(1.7 * s, 4.4 * s, 7.6 * s, 6.4 * s),
-      Radius.circular(2.1 * s),
-    );
-    canvas.drawRRect(small, paint);
-    canvas.drawRRect(big, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _MessageIconPainter oldDelegate) =>
-      oldDelegate.color != color;
 }
 
 // =============================================================================

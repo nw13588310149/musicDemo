@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'app_text_field.dart';
+import 'popup_selector_field.dart';
 import '../../features/shell/ui/shell_layout.dart';
 import '../constants/app_assets.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -63,6 +64,44 @@ Future<T?> showScaledDialog<T>({
     },
     transitionBuilder: appDialogTransitionBuilder,
   );
+}
+
+/// 通知详情弹窗正文相对默认表单弹窗上移的设计基准（px）。
+/// 标题距顶不变，仅缩小标题与正文间距，并等量加大底部内边距以保持容器高度。
+const double kNoticeDetailDialogContentShiftUp = 16;
+
+/// 通知详情专用弹窗：标题位置不变，正文上移 [kNoticeDetailDialogContentShiftUp]，
+/// 底部留白等量增大以维持弹窗总高度。
+class NoticeDetailGradientDialog extends StatelessWidget {
+  const NoticeDetailGradientDialog({
+    super.key,
+    required this.title,
+    required this.child,
+    this.width = 460,
+  });
+
+  final String title;
+  final Widget child;
+  final double width;
+
+  @override
+  Widget build(BuildContext context) {
+    final defaultGap = appDialogGapBeforeFirstInput(
+      topInset: kAppDialogTitlePaddingTop,
+    );
+    return GradientHeaderDialog(
+      title: title,
+      width: width,
+      gapBeforeChild: defaultGap - kNoticeDetailDialogContentShiftUp,
+      contentPadding: const EdgeInsets.fromLTRB(
+        20,
+        kAppDialogTitlePaddingTop,
+        20,
+        20 + kNoticeDetailDialogContentShiftUp,
+      ),
+      child: child,
+    );
+  }
 }
 
 /// 通知详情弹窗：复用 [showScaledDialog] 动画，遮罩略浅（18% 黑）。
@@ -148,6 +187,7 @@ class GradientHeaderDialog extends StatelessWidget {
     this.titleFontSize = kAppDialogTitleFontSize,
     this.titlePaddingTop = kAppDialogTitlePaddingTop,
     this.contentPadding,
+    this.gapBeforeChild,
     this.headerAsset = AppAssets.coursewareUploadHeader,
     this.headerHeight,
     this.gradientMidStop = 0.21,
@@ -175,6 +215,9 @@ class GradientHeaderDialog extends StatelessWidget {
   /// content 内边距（默认左右 20、底部 20、顶部由 [titlePaddingTop] 决定）。
   final EdgeInsets? contentPadding;
 
+  /// 标题与 [child] 之间的间距；为 null 时按 [appDialogGapBeforeFirstInput] 计算。
+  final double? gapBeforeChild;
+
   /// 顶部装饰位图资源；传 `null` 则不画装饰图。
   final String? headerAsset;
 
@@ -199,10 +242,11 @@ class GradientHeaderDialog extends StatelessWidget {
           ui(20),
         );
     final topInset = contentPadding?.top ?? titlePaddingTop;
-    final gapBeforeChild = appDialogGapBeforeFirstInput(
-      topInset: topInset,
-      titleFontSize: titleFontSize,
-    );
+    final resolvedGapBeforeChild = gapBeforeChild ??
+        appDialogGapBeforeFirstInput(
+          topInset: topInset,
+          titleFontSize: titleFontSize,
+        );
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: EdgeInsets.symmetric(horizontal: ui(32), vertical: ui(24)),
@@ -248,7 +292,7 @@ class GradientHeaderDialog extends StatelessWidget {
                       ),
                     ),
                   ),
-                  SizedBox(height: ui(gapBeforeChild)),
+                  SizedBox(height: ui(resolvedGapBeforeChild)),
                   Flexible(child: SingleChildScrollView(child: child)),
                   if (actionBar != null) ...[
                     SizedBox(height: ui(actionBarSpacing)),
@@ -641,11 +685,7 @@ Future<String?> showOptionsDialog({
                               ),
                             ),
                             if (isActive)
-                              Icon(
-                                Icons.check_rounded,
-                                size: ui(18),
-                                color: const Color(0xFF8741FF),
-                              ),
+                              AppDropdownSelectedMark(size: ui(18)),
                           ],
                         ),
                       ),

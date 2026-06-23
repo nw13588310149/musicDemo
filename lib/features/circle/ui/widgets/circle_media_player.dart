@@ -6,7 +6,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../../shell/ui/shell_layout.dart';
-import '../../../../core/audio/mpv_player_smooth.dart';
+import '../../../../core/audio/mpv_player_release.dart';
 import '../../data/circle_video_cache.dart';
 import '../../state/circle_state.dart';
 import 'circle_video_play_button.dart';
@@ -124,6 +124,14 @@ class _CircleMediaPlayerState extends State<CircleMediaPlayer> {
       return;
     }
 
+    await MpvPlayerRelease.awaitPending();
+    if (!mounted ||
+        generation != _setupGeneration ||
+        !widget.isActive ||
+        widget.post.primaryMediaUrl != url) {
+      return;
+    }
+
     final player = Player();
     _player = player;
     if (widget.post.mediaKind == PostMediaKind.video) {
@@ -147,7 +155,7 @@ class _CircleMediaPlayerState extends State<CircleMediaPlayer> {
           generation != _setupGeneration ||
           !widget.isActive ||
           _player != player) {
-        unawaited(_releasePlayer(player));
+        unawaited(MpvPlayerRelease.release(player));
         return;
       }
       if (opened &&
@@ -251,26 +259,8 @@ class _CircleMediaPlayerState extends State<CircleMediaPlayer> {
     _videoController = null;
     _loadingMedia = false;
     if (player != null) {
-      unawaited(_releasePlayer(player));
+      unawaited(MpvPlayerRelease.release(player));
     }
-  }
-
-  Future<void> _releasePlayer(Player player) async {
-    try {
-      await MpvPlayerSmooth.setVolumeSafe(player, 0);
-    } catch (_) {}
-    try {
-      await MpvPlayerSmooth.pauseSmooth(player);
-    } catch (_) {}
-    if (MpvPlayerSmooth.isIosNative) {
-      await Future<void>.delayed(const Duration(milliseconds: 48));
-    }
-    try {
-      await player.stop();
-    } catch (_) {}
-    try {
-      await player.dispose();
-    } catch (_) {}
   }
 
   @override
@@ -281,7 +271,9 @@ class _CircleMediaPlayerState extends State<CircleMediaPlayer> {
 
   @override
   void dispose() {
-    _teardownPlayer();
+    if (_player != null) {
+      _teardownPlayer();
+    }
     super.dispose();
   }
 

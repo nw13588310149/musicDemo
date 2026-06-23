@@ -138,9 +138,8 @@ class _AdminHomeViewState extends ConsumerState<AdminHomeView> {
     }
     await showNoticeDetailDialog<void>(
       context: context,
-      builder: (ctx) => GradientHeaderDialog(
+      builder: (ctx) => NoticeDetailGradientDialog(
         title: '通知详情',
-        width: 460,
         child: _AdminNoticeDetailBody(notice: detail),
       ),
     );

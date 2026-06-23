@@ -4,7 +4,7 @@
 // 入口：班主任 dashboard 顶部「班级工作台」按钮 / 「班务 → 班级工作台 >」。
 // 三个 Tab：
 //   1. 概况   _OverviewTab   顶部「班级通知」(与学生「我的班级」共享 provider，
-//      可发布/删除) + 双列布局：我的班级 + 待批请假 / 班级捷径 / 本周出勤 +
+//      可发布/删除) + 双列布局：我的班级 + 待批请假 / 班级捷径 / 七日查寝 +
 //      重点关注
 //   2. 学生管理 _StudentsTab  标题副标题 + 搜索框 + 学生卡 3 列网格
 //   3. 成绩   _GradesTab     班级成绩变化折线图 + 考试记录（分数+点评） + 学生分数变化卡
@@ -32,6 +32,7 @@ import '../../shell/state/shell_controller.dart';
 import '../../shell/state/shell_state.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/head_teacher_index_data.dart';
+import '../data/head_teacher_workbench_data.dart';
 import '../data/student_leave_data.dart';
 import '../data/teacher_repository.dart';
 import 'widgets/smart_campus_page_banner.dart';
@@ -623,11 +624,14 @@ class _OverviewTab extends StatelessWidget {
       ),
       SizedBox(height: ui(20)),
       section(
-        leftTitle: const _SectionTitle('本周出勤'),
+        leftTitle: const _SectionTitle('七日查寝'),
         rightTitle: const _SectionTitle('重点关注'),
         bodyHeight: 312,
-        leftBody: const _AttendanceBarCard(fillHeight: true),
-        rightBody: const _AttentionListCard(fillHeight: true),
+        leftBody: _DormNormalStatCard(fillHeight: true),
+        rightBody: _AttentionListCard(
+          classId: classId,
+          fillHeight: true,
+        ),
       ),
     ];
   }
@@ -652,9 +656,9 @@ class _OverviewTab extends StatelessWidget {
         onOpenHomeSchool: onOpenHomeSchool,
       ),
       SizedBox(height: ui(20)),
-      const _SectionTitle('本周出勤'),
+      const _SectionTitle('七日查寝'),
       SizedBox(height: ui(12)),
-      const _AttendanceBarCard(),
+      const _DormNormalStatCard(),
     ];
   }
 
@@ -681,7 +685,7 @@ class _OverviewTab extends StatelessWidget {
       SizedBox(height: ui(20)),
       const _SectionTitle('重点关注'),
       SizedBox(height: ui(12)),
-      const _AttentionListCard(),
+      _AttentionListCard(classId: classId),
     ];
   }
 }
@@ -2353,136 +2357,193 @@ class _QuickActionTile extends StatelessWidget {
   }
 }
 
-// ----- 本周出勤 柱状图 -----
+// ----- 七日查寝 柱状图 -----
 
-class _AttendanceBarCard extends StatelessWidget {
-  const _AttendanceBarCard({this.fillHeight = false});
+class _DormNormalStatCard extends ConsumerStatefulWidget {
+  const _DormNormalStatCard({this.fillHeight = false});
 
   final bool fillHeight;
 
-  static const List<int> _values = [92, 92, 92, 92, 92, 92, 92];
-  static const List<String> _labels = [
-    '周一',
-    '周二',
-    '周三',
-    '周四',
-    '周五',
-    '周六',
-    '周日',
-  ];
-  static const List<int> _ticks = [100, 95, 90, 85, 80, 0];
+  @override
+  ConsumerState<_DormNormalStatCard> createState() => _DormNormalStatCardState();
+}
+
+class _DormNormalStatCardState extends ConsumerState<_DormNormalStatCard> {
+  List<DormNormalStatDay> _days = const [];
+  List<int> _ticks = const [10, 8, 6, 4, 2, 0];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStat();
+  }
+
+  Future<void> _loadStat() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    final (beginDate, endDate) = headTeacherWorkbenchLastSevenDaysRange();
+    final resp = await ref.read(teacherRepositoryProvider).dormNormalStat(
+      beginDate: beginDate,
+      endDate: endDate,
+    );
+    if (!mounted) return;
+    if (!resp.isSuccess) {
+      setState(() {
+        _days = const [];
+        _loading = false;
+        _error = resp.displayMsg.isNotEmpty ? resp.displayMsg : '加载七日查寝失败';
+      });
+      return;
+    }
+    final days = parseDormNormalStat(
+      resp.data,
+      beginDate: beginDate,
+      endDate: endDate,
+    );
+    final maxCount = days.fold<int>(
+      0,
+      (max, day) => day.normalCount > max ? day.normalCount : max,
+    );
+    setState(() {
+      _days = days;
+      _ticks = buildDormNormalStatAxisTicks(maxCount);
+      _loading = false;
+      _error = null;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final maxValue = _ticks.first;
+
     return Container(
       width: double.infinity,
-      height: fillHeight ? double.infinity : null,
+      height: widget.fillHeight ? double.infinity : null,
       padding: EdgeInsets.all(ui(12)),
       decoration: BoxDecoration(
         color: _kPanelBg,
         borderRadius: BorderRadius.circular(ui(16)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            height: ui(21),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                '%',
-                style: TextStyle(
-                  fontSize: ui(12),
-                  color: _kTextHint,
-                  fontWeight: FontWeight.w400,
-                  height: 20 / 12,
-                ),
-              ),
-            ),
-          ),
-          SizedBox(height: ui(8)),
-          SizedBox(
-            height: ui(230),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SizedBox(width: ui(28), child: _AttendanceYAxis(ticks: _ticks)),
-                SizedBox(width: ui(8)),
-                Expanded(
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      return Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          CustomPaint(
-                            size: Size(
-                              constraints.maxWidth,
-                              constraints.maxHeight,
-                            ),
-                            painter: _AttendanceGridPainter(
-                              tickRowHeight: ui(20),
-                              tickGap: ui(22),
-                              tickCount: _ticks.length,
-                            ),
+      child: _loading
+          ? const SizedBox.shrink()
+          : _days.isEmpty
+              ? Center(
+                  child: Text(
+                    _error ?? '暂无查寝统计',
+                    style: TextStyle(fontSize: ui(12), color: _kTextHint),
+                  ),
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      height: ui(21),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          '人',
+                          style: TextStyle(
+                            fontSize: ui(12),
+                            color: _kTextHint,
+                            fontWeight: FontWeight.w400,
+                            height: 20 / 12,
                           ),
-                          Positioned(
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            height: ui(163),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                for (var i = 0; i < _values.length; i++) ...[
-                                  if (i > 0) SizedBox(width: ui(28)),
-                                  Expanded(
-                                    child: Align(
-                                      alignment: Alignment.bottomCenter,
-                                      child: _AttendanceBarColumn(
-                                        value: _values[i],
-                                        maxValue: 100,
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: ui(8)),
+                    SizedBox(
+                      height: ui(230),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          SizedBox(
+                            width: ui(28),
+                            child: _AttendanceYAxis(ticks: _ticks),
+                          ),
+                          SizedBox(width: ui(8)),
+                          Expanded(
+                            child: LayoutBuilder(
+                              builder: (context, constraints) {
+                                return Stack(
+                                  clipBehavior: Clip.none,
+                                  children: [
+                                    CustomPaint(
+                                      size: Size(
+                                        constraints.maxWidth,
+                                        constraints.maxHeight,
+                                      ),
+                                      painter: _AttendanceGridPainter(
+                                        tickRowHeight: ui(20),
+                                        tickGap: ui(22),
+                                        tickCount: _ticks.length,
                                       ),
                                     ),
-                                  ),
-                                ],
-                              ],
+                                    Positioned(
+                                      left: 0,
+                                      right: 0,
+                                      bottom: 0,
+                                      height: ui(163),
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.end,
+                                        children: [
+                                          for (var i = 0; i < _days.length; i++) ...[
+                                            if (i > 0) SizedBox(width: ui(28)),
+                                            Expanded(
+                                              child: Align(
+                                                alignment: Alignment.bottomCenter,
+                                                child: _AttendanceBarColumn(
+                                                  value: _days[i].normalCount,
+                                                  maxValue: maxValue <= 0
+                                                      ? 1
+                                                      : maxValue,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
                             ),
                           ),
                         ],
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-          SizedBox(height: ui(8)),
-          Padding(
-            padding: EdgeInsets.only(left: ui(36)),
-            child: Row(
-              children: [
-                for (var i = 0; i < _labels.length; i++) ...[
-                  if (i > 0) SizedBox(width: ui(28)),
-                  Expanded(
-                    child: Text(
-                      _labels[i],
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: ui(12),
-                        color: _kTextSecondary,
-                        fontWeight: FontWeight.w400,
-                        height: 20 / 12,
                       ),
                     ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
+                    SizedBox(height: ui(8)),
+                    Padding(
+                      padding: EdgeInsets.only(left: ui(36)),
+                      child: Row(
+                        children: [
+                          for (var i = 0; i < _days.length; i++) ...[
+                            if (i > 0) SizedBox(width: ui(28)),
+                            Expanded(
+                              child: Text(
+                                _days[i].weekdayLabel,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: ui(12),
+                                  color: _kTextSecondary,
+                                  fontWeight: FontWeight.w400,
+                                  height: 20 / 12,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
     );
   }
 }
@@ -2879,86 +2940,145 @@ class _LeaveItem {
 
 // ----- 重点关注 列表 -----
 
-class _AttentionListCard extends StatelessWidget {
-  const _AttentionListCard({this.fillHeight = false});
+class _AttentionListCard extends ConsumerStatefulWidget {
+  const _AttentionListCard({
+    required this.classId,
+    this.fillHeight = false,
+  });
 
+  final String classId;
   final bool fillHeight;
 
-  static const List<_AttentionItem> _items = [
-    _AttentionItem(
-      name: '王晴',
-      desc: '考前焦虑筛查跟进中',
-      time: '昨天 12:32',
-      tag: '心理关注',
-      tagColor: _kPurple,
-      tagTextColor: Colors.white,
-    ),
-    _AttentionItem(
-      name: '韩露',
-      desc: '考前焦虑筛查跟进中',
-      time: '昨天 12:32',
-      tag: '正常出勤',
-      tagColor: _kYellow,
-      tagTextColor: _kTextDark,
-    ),
-    _AttentionItem(
-      name: '黎芭乐',
-      desc: '考前焦虑筛查跟进中',
-      time: '昨天 12:32',
-      tag: '正常上课',
-      tagColor: _kYellow,
-      tagTextColor: _kTextDark,
-    ),
-  ];
+  @override
+  ConsumerState<_AttentionListCard> createState() => _AttentionListCardState();
+}
+
+class _AttentionListCardState extends ConsumerState<_AttentionListCard> {
+  List<FocusStudentItem> _items = const [];
+  bool _loading = true;
+  String? _error;
+  String? _loadedClassId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadItems();
+  }
+
+  @override
+  void didUpdateWidget(covariant _AttentionListCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.classId != widget.classId) {
+      _loadItems();
+    }
+  }
+
+  Future<void> _loadItems() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    final resp = await ref.read(teacherRepositoryProvider).focusStudentList();
+    if (!mounted) return;
+    if (!resp.isSuccess) {
+      setState(() {
+        _items = const [];
+        _loading = false;
+        _error = resp.displayMsg.isNotEmpty ? resp.displayMsg : '加载重点关注失败';
+        _loadedClassId = widget.classId;
+      });
+      return;
+    }
+    final all = parseFocusStudentList(resp.data);
+    final filtered = widget.classId.isEmpty
+        ? all
+        : all
+            .where((item) => item.classId.isEmpty || item.classId == widget.classId)
+            .toList();
+    setState(() {
+      _items = filtered;
+      _loading = false;
+      _error = null;
+      _loadedClassId = widget.classId;
+    });
+  }
+
+  Future<void> _confirmRemove(FocusStudentItem item) async {
+    final confirmed = await showConfirmDialog(
+      context: context,
+      title: '取消关注',
+      content: '确定取消对「${item.studentName}」的重点关注吗？',
+      confirmLabel: '取消关注',
+      cancelLabel: '保留',
+    );
+    if (confirmed != true || !mounted) return;
+
+    final resp = await ref.read(teacherRepositoryProvider).focusStudentRemove(
+      id: item.studentId,
+    );
+    if (!mounted) return;
+    if (resp.isSuccess) {
+      AppToast.show(context, '已取消关注');
+      await _loadItems();
+    } else {
+      AppToast.show(
+        context,
+        resp.displayMsg.isNotEmpty ? resp.displayMsg : '取消关注失败',
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final displayItems = _items.take(3).toList();
+
     return Container(
       width: double.infinity,
-      height: fillHeight ? double.infinity : null,
+      height: widget.fillHeight ? double.infinity : null,
       padding: EdgeInsets.all(ui(12)),
       decoration: BoxDecoration(
         color: _kPanelBg,
         borderRadius: BorderRadius.circular(ui(16)),
       ),
-      clipBehavior: fillHeight ? Clip.antiAlias : Clip.none,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (var i = 0; i < _items.length; i++) ...[
-            if (i > 0) SizedBox(height: ui(12)),
-            _PersonRowCard(
-              avatarSeed: _items[i].name.characters.first,
-              name: _items[i].name,
-              line2: _items[i].desc,
-              line3: _items[i].time,
-              tag: _items[i].tag,
-              tagColor: _items[i].tagColor,
-              tagTextColor: _items[i].tagTextColor,
-            ),
-          ],
-        ],
-      ),
+      clipBehavior: widget.fillHeight ? Clip.antiAlias : Clip.none,
+      child: _loading
+          ? const SizedBox.shrink()
+          : displayItems.isEmpty
+              ? Center(
+                  child: Text(
+                    _error ??
+                        (_loadedClassId == widget.classId
+                            ? '暂无重点关注学生'
+                            : '加载中…'),
+                    style: TextStyle(fontSize: ui(12), color: _kTextHint),
+                  ),
+                )
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (var i = 0; i < displayItems.length; i++) ...[
+                      if (i > 0) SizedBox(height: ui(12)),
+                      _PersonRowCard(
+                        avatarSeed: displayItems[i].avatarChar,
+                        name: displayItems[i].studentName,
+                        line2: displayItems[i].reason.isNotEmpty
+                            ? displayItems[i].reason
+                            : displayItems[i].className,
+                        line3: formatFocusStudentTime(displayItems[i].time),
+                        tag: displayItems[i].tag.isNotEmpty
+                            ? displayItems[i].tag
+                            : '重点关注',
+                        tagColor: focusStudentTagColors(displayItems[i].tag).$1,
+                        tagTextColor:
+                            focusStudentTagColors(displayItems[i].tag).$2,
+                        onTap: () => _confirmRemove(displayItems[i]),
+                      ),
+                    ],
+                  ],
+                ),
     );
   }
-}
-
-class _AttentionItem {
-  const _AttentionItem({
-    required this.name,
-    required this.desc,
-    required this.time,
-    required this.tag,
-    required this.tagColor,
-    required this.tagTextColor,
-  });
-  final String name;
-  final String desc;
-  final String time;
-  final String tag;
-  final Color tagColor;
-  final Color tagTextColor;
 }
 
 class _PersonRowCard extends StatelessWidget {
@@ -3156,7 +3276,11 @@ class _StudentsTabState extends ConsumerState<_StudentsTab> {
   }
 
   Future<void> _openStudentDetail(_StudentManageData student) async {
-    final saved = await _showStudentDetail(context, student);
+    final saved = await _showStudentDetail(
+      context,
+      student,
+      classId: widget.classId,
+    );
     if (saved == true) {
       await _loadStudents(silent: true);
     }
@@ -3367,14 +3491,13 @@ class _StudentManageCard extends StatelessWidget {
                                     ),
                                   ),
                                   SizedBox(width: ui(4)),
-                                  Icon(
+                                  Image.asset(
                                     data.gender == '男'
-                                        ? Icons.male_rounded
-                                        : Icons.female_rounded,
-                                    size: ui(14),
-                                    color: data.gender == '男'
-                                        ? _kBlue
-                                        : _kPurple,
+                                        ? AppAssets.iconGenderMale
+                                        : AppAssets.iconGenderFemale,
+                                    width: ui(14),
+                                    height: ui(14),
+                                    fit: BoxFit.contain,
                                   ),
                                   if (data.role != null) ...[
                                     SizedBox(width: ui(8)),
@@ -4449,7 +4572,11 @@ class _ScoreChangeCard extends StatelessWidget {
 // 学生档案详情面板（点击学生卡时从右侧滑出，20% 黑底蒙层覆盖左侧）
 // =============================================================================
 
-Future<bool?> _showStudentDetail(BuildContext context, _StudentManageData data) {
+Future<bool?> _showStudentDetail(
+  BuildContext context,
+  _StudentManageData data, {
+  required String classId,
+}) {
   // showGeneralDialog 会把内容挂到根 Navigator 的 overlay 上，那条 widget 树
   // 里没有 DashboardScaleScope；这里先把当前 scale 数据捕获下来，进 dialog
   // 后再用一个新的 DashboardScaleScope 包一层，保证面板里的 ui(...) 仍然可用。
@@ -4462,7 +4589,7 @@ Future<bool?> _showStudentDetail(BuildContext context, _StudentManageData data) 
     transitionDuration: const Duration(milliseconds: 280),
     pageBuilder: (_, _, _) => DashboardScaleScope(
       data: scaleData,
-      child: _StudentDetailPanel(data: data),
+      child: _StudentDetailPanel(data: data, classId: classId),
     ),
     transitionBuilder: (context, animation, _, child) {
       final t = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
@@ -4478,8 +4605,12 @@ Future<bool?> _showStudentDetail(BuildContext context, _StudentManageData data) 
 }
 
 class _StudentDetailPanel extends ConsumerStatefulWidget {
-  const _StudentDetailPanel({required this.data});
+  const _StudentDetailPanel({
+    required this.data,
+    required this.classId,
+  });
   final _StudentManageData data;
+  final String classId;
 
   @override
   ConsumerState<_StudentDetailPanel> createState() =>
@@ -4500,8 +4631,13 @@ class _StudentDetailPanelState extends ConsumerState<_StudentDetailPanel> {
   late List<String> _selectedTags;
   late final TextEditingController _remarkCtrl;
   late final TextEditingController _customTagCtrl;
+  late final TextEditingController _focusReasonCtrl;
   bool _saving = false;
   bool _loadingDetail = false;
+  bool _loadingFocus = false;
+  bool _focusSubmitting = false;
+  FocusStudentItem? _focusItem;
+  String _selectedFocusTag = kFocusStudentPresetTags.first;
 
   // 从 API 补充的详细信息（覆盖 widget.data 中的占位数据）
   Map<String, dynamic> _detailExtra = {};
@@ -4517,14 +4653,103 @@ class _StudentDetailPanelState extends ConsumerState<_StudentDetailPanel> {
         .toList();
     _remarkCtrl = TextEditingController(text: widget.data.remark ?? '');
     _customTagCtrl = TextEditingController();
-    if (widget.data.id.isNotEmpty) _loadDetail();
+    _focusReasonCtrl = TextEditingController();
+    if (widget.data.id.isNotEmpty) {
+      _loadDetail();
+      _loadFocusStatus();
+    }
   }
 
   @override
   void dispose() {
     _remarkCtrl.dispose();
     _customTagCtrl.dispose();
+    _focusReasonCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadFocusStatus() async {
+    setState(() => _loadingFocus = true);
+    final resp = await ref.read(teacherRepositoryProvider).focusStudentList();
+    if (!mounted) return;
+    FocusStudentItem? matched;
+    if (resp.isSuccess) {
+      final items = parseFocusStudentList(resp.data);
+      for (final item in items) {
+        if (item.studentId == widget.data.id) {
+          matched = item;
+          break;
+        }
+      }
+    }
+    setState(() {
+      _focusItem = matched;
+      _loadingFocus = false;
+      if (matched != null) {
+        _selectedFocusTag = matched.tag.isNotEmpty
+            ? matched.tag
+            : kFocusStudentPresetTags.first;
+        _focusReasonCtrl.text = matched.reason;
+      }
+    });
+  }
+
+  Future<void> _addFocusStudent() async {
+    if (widget.data.id.isEmpty || widget.classId.isEmpty) {
+      AppToast.show(context, '缺少学生或班级信息');
+      return;
+    }
+    final reason = _focusReasonCtrl.text.trim();
+    if (reason.isEmpty) {
+      AppToast.show(context, '请填写关注原因');
+      return;
+    }
+    setState(() => _focusSubmitting = true);
+    final resp = await ref.read(teacherRepositoryProvider).focusStudentAdd(
+      studentId: widget.data.id,
+      classId: widget.classId,
+      tag: _selectedFocusTag,
+      reason: reason,
+    );
+    if (!mounted) return;
+    setState(() => _focusSubmitting = false);
+    if (resp.isSuccess) {
+      AppToast.show(context, '已加入重点关注');
+      await _loadFocusStatus();
+    } else {
+      AppToast.show(
+        context,
+        resp.displayMsg.isNotEmpty ? resp.displayMsg : '加入重点关注失败',
+      );
+    }
+  }
+
+  Future<void> _removeFocusStudent() async {
+    if (_focusItem == null) return;
+    final confirmed = await showConfirmDialog(
+      context: context,
+      title: '取消关注',
+      content: '确定取消对「${widget.data.name}」的重点关注吗？',
+      confirmLabel: '取消关注',
+      cancelLabel: '保留',
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _focusSubmitting = true);
+    final resp = await ref.read(teacherRepositoryProvider).focusStudentRemove(
+      id: _focusItem!.studentId,
+    );
+    if (!mounted) return;
+    setState(() => _focusSubmitting = false);
+    if (resp.isSuccess) {
+      AppToast.show(context, '已取消关注');
+      _focusReasonCtrl.clear();
+      await _loadFocusStatus();
+    } else {
+      AppToast.show(
+        context,
+        resp.displayMsg.isNotEmpty ? resp.displayMsg : '取消关注失败',
+      );
+    }
   }
 
   Future<void> _loadDetail() async {
@@ -4925,6 +5150,20 @@ class _StudentDetailPanelState extends ConsumerState<_StudentDetailPanel> {
                               ),
                             ],
                             SizedBox(height: ui(16)),
+                            _detailLabel(context, '重点关注'),
+                            SizedBox(height: ui(8)),
+                            _FocusStudentSection(
+                              loading: _loadingFocus,
+                              submitting: _focusSubmitting,
+                              isFocused: _focusItem != null,
+                              selectedTag: _selectedFocusTag,
+                              reasonCtrl: _focusReasonCtrl,
+                              onTagChanged: (tag) =>
+                                  setState(() => _selectedFocusTag = tag),
+                              onAdd: _addFocusStudent,
+                              onRemove: _removeFocusStudent,
+                            ),
+                            SizedBox(height: ui(16)),
                             _StudentTagEditorPanel(
                               presetTags: _kPresetTags,
                               selectedTags: _selectedTags,
@@ -5111,6 +5350,175 @@ Widget _detailLabel(BuildContext context, String text) {
       height: 20 / 14,
     ),
   );
+}
+
+/// 班主任重点关注编辑区：标签 + 原因 + 加入/取消关注。
+class _FocusStudentSection extends StatelessWidget {
+  const _FocusStudentSection({
+    required this.loading,
+    required this.submitting,
+    required this.isFocused,
+    required this.selectedTag,
+    required this.reasonCtrl,
+    required this.onTagChanged,
+    required this.onAdd,
+    required this.onRemove,
+  });
+
+  final bool loading;
+  final bool submitting;
+  final bool isFocused;
+  final String selectedTag;
+  final TextEditingController reasonCtrl;
+  final ValueChanged<String> onTagChanged;
+  final VoidCallback onAdd;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    if (loading) {
+      return SizedBox(
+        height: ui(88),
+        child: Center(child: AppLoadingIndicator(size: ui(20))),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(ui(12)),
+      decoration: BoxDecoration(
+        color: _kInnerGray,
+        borderRadius: BorderRadius.circular(ui(8)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: ui(8),
+            runSpacing: ui(8),
+            children: [
+              for (final tag in kFocusStudentPresetTags)
+                _FocusTagChip(
+                  label: tag,
+                  selected: selectedTag == tag,
+                  onTap: submitting ? null : () => onTagChanged(tag),
+                ),
+            ],
+          ),
+          SizedBox(height: ui(12)),
+          Container(
+            constraints: BoxConstraints(minHeight: ui(48)),
+            padding: EdgeInsets.fromLTRB(ui(16), ui(12), ui(16), ui(12)),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(ui(8)),
+              border: Border.all(color: _kBorderSoft),
+            ),
+            child: AppTextField(
+              controller: reasonCtrl,
+              enabled: !submitting,
+              maxLines: null,
+              cursorColor: _kPurple,
+              cursorWidth: 1.5,
+              cursorHeight: ui(16),
+              style: TextStyle(
+                fontSize: ui(14),
+                color: _kTextDark,
+                fontWeight: FontWeight.w400,
+                height: 20 / 14,
+              ),
+              decoration: InputDecoration(
+                hintText: '填写关注原因，如考前焦虑筛查跟进中…',
+                hintStyle: TextStyle(
+                  fontSize: ui(14),
+                  color: _kTextHint,
+                  fontWeight: FontWeight.w400,
+                ),
+                border: InputBorder.none,
+                isCollapsed: true,
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+          ),
+          SizedBox(height: ui(12)),
+          InkWell(
+            onTap: submitting
+                ? null
+                : (isFocused ? onRemove : onAdd),
+            borderRadius: BorderRadius.circular(ui(8)),
+            child: Container(
+              width: double.infinity,
+              height: ui(40),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(ui(8)),
+                color: isFocused ? Colors.white : _kPurple,
+                border: Border.all(
+                  color: isFocused ? _kRed : _kPurple,
+                ),
+              ),
+              child: submitting
+                  ? AppLoadingIndicator(
+                      size: ui(16),
+                      color: isFocused ? _kRed : Colors.white,
+                    )
+                  : Text(
+                      isFocused ? '取消重点关注' : '加入重点关注',
+                      style: TextStyle(
+                        fontSize: ui(14),
+                        color: isFocused ? _kRed : Colors.white,
+                        fontWeight: FontWeight.w500,
+                        height: 1,
+                      ),
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FocusTagChip extends StatelessWidget {
+  const _FocusTagChip({
+    required this.label,
+    required this.selected,
+    this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final colors = focusStudentTagColors(label);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(ui(6)),
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: ui(10), vertical: ui(6)),
+        decoration: BoxDecoration(
+          color: selected ? colors.$1 : Colors.white,
+          borderRadius: BorderRadius.circular(ui(6)),
+          border: Border.all(
+            color: selected ? colors.$1 : _kBorderSoft,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: ui(12),
+            color: selected ? colors.$2 : _kTextSecondary,
+            fontWeight: FontWeight.w500,
+            height: 1,
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// 班主任标签编辑区：预设 + 自定义标签与输入框合并在同一边框容器内。

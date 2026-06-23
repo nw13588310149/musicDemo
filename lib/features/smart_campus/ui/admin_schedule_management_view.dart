@@ -1727,7 +1727,10 @@ class _ScheduleControlBar extends StatelessWidget {
                     ),
                   ),
                   SizedBox(width: ui(8)),
-                  AppPickerAssetIcon(AppAssets.homeRili, imageSize: ui(14)),
+                  AppPickerAssetIcon(
+                    AppAssets.iconScheduleCalendar,
+                    imageSize: ui(14),
+                  ),
                 ],
               ),
             ),
