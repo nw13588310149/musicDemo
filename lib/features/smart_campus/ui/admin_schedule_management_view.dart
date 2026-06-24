@@ -94,6 +94,126 @@ enum _AdminScheduleTab { schedule, applyAudit }
 /// 申请审核状态：与后端 `status` 字段双向映射 — 1 通过 / 2 驳回 / 0 / null 待审核。
 enum _ApplyStatus { pending, passed, rejected }
 
+enum _ApplyDateFilter { day, week, month }
+
+DateTime _applyFilterDateOnly(DateTime value) =>
+    DateTime(value.year, value.month, value.day);
+
+DateTime? _parseApplyRecordDate(String? raw) {
+  final text = raw?.trim() ?? '';
+  if (text.isEmpty) return null;
+  var parsed = DateTime.tryParse(text);
+  parsed ??= DateTime.tryParse(text.split('T').first);
+  if (parsed == null) return null;
+  return _applyFilterDateOnly(parsed);
+}
+
+({DateTime start, DateTime end}) _applyDateFilterRange(
+  _ApplyDateFilter filter,
+  DateTime now, {
+  required DateTime selectedDay,
+}) {
+  final today = _applyFilterDateOnly(now);
+  switch (filter) {
+    case _ApplyDateFilter.day:
+      final day = _applyFilterDateOnly(selectedDay);
+      return (start: day, end: day);
+    case _ApplyDateFilter.week:
+      final monday = today.subtract(Duration(days: now.weekday - 1));
+      return (start: monday, end: monday.add(const Duration(days: 6)));
+    case _ApplyDateFilter.month:
+      return (
+        start: DateTime(now.year, now.month, 1),
+        end: DateTime(now.year, now.month + 1, 0),
+      );
+  }
+}
+
+bool _applyDateInRange(DateTime date, DateTime start, DateTime end) {
+  final d = _applyFilterDateOnly(date);
+  return !d.isBefore(start) && !d.isAfter(end);
+}
+
+bool _applyIntervalsOverlap(
+  DateTime aStart,
+  DateTime aEnd,
+  DateTime bStart,
+  DateTime bEnd,
+) {
+  return !aStart.isAfter(bEnd) && !aEnd.isBefore(bStart);
+}
+
+List<DateTime> _parseCourseDataDates(dynamic raw) {
+  List<dynamic>? items;
+  if (raw is List) {
+    items = raw;
+  } else if (raw is String && raw.isNotEmpty) {
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) items = decoded;
+    } catch (_) {
+      /* swallow */
+    }
+  }
+  if (items == null || items.isEmpty) return const [];
+
+  final out = <DateTime>[];
+  for (final item in items) {
+    if (item is! Map) continue;
+    final parsed = _parseApplyRecordDate(item['date']?.toString());
+    if (parsed != null) out.add(parsed);
+  }
+  return out;
+}
+
+bool _applyRecordMatchesDateFilter(
+  _ApplyRecord record,
+  _ApplyDateFilter filter,
+  DateTime now, {
+  required DateTime selectedDay,
+}) {
+  final range = _applyDateFilterRange(
+    filter,
+    now,
+    selectedDay: selectedDay,
+  );
+  final hasAnyDate = record.applyAt != null ||
+      record.courseStart != null ||
+      record.courseEnd != null ||
+      record.courseDates.isNotEmpty;
+
+  if (!hasAnyDate) return true;
+
+  if (record.applyAt != null &&
+      _applyDateInRange(record.applyAt!, range.start, range.end)) {
+    return true;
+  }
+
+  for (final date in record.courseDates) {
+    if (_applyDateInRange(date, range.start, range.end)) return true;
+  }
+
+  if (record.courseStart != null && record.courseEnd != null) {
+    return _applyIntervalsOverlap(
+      record.courseStart!,
+      record.courseEnd!,
+      range.start,
+      range.end,
+    );
+  }
+
+  if (record.courseStart != null &&
+      _applyDateInRange(record.courseStart!, range.start, range.end)) {
+    return true;
+  }
+  if (record.courseEnd != null &&
+      _applyDateInRange(record.courseEnd!, range.start, range.end)) {
+    return true;
+  }
+
+  return false;
+}
+
 class AdminScheduleManagementView extends ConsumerStatefulWidget {
   const AdminScheduleManagementView({super.key, required this.onBack});
 
@@ -518,6 +638,8 @@ class _AdminScheduleManagementViewState
   // —— tab 2 状态 ————————————————————————————————————————————————
   List<_ApplyRecord> _applies = const [];
   String? _applyError;
+  _ApplyDateFilter _applyDateFilter = _ApplyDateFilter.month;
+  DateTime _applyFilterDay = _applyFilterDateOnly(DateTime.now());
 
   /// 全量「待审核」小课申请数量（角标）。来自 `schoolSmallCourseApplyList`
   /// `status=0` 的分页 total。
@@ -1265,8 +1387,57 @@ class _AdminScheduleManagementViewState
     );
   }
 
+  Future<void> _pickApplyFilterDay() async {
+    final picked = await showAppDatePicker(
+      context: context,
+      initialDate: _applyFilterDay,
+      firstDate: DateTime(2024),
+      lastDate: DateTime(2030),
+      helpText: '选择日期',
+      cancelText: '取消',
+      confirmText: '确定',
+    );
+    if (!mounted || picked == null) return;
+    setState(() {
+      _applyDateFilter = _ApplyDateFilter.day;
+      _applyFilterDay = _applyFilterDateOnly(picked);
+    });
+  }
+
+  Future<void> _onApplyDateFilterChanged(_ApplyDateFilter filter) async {
+    if (filter == _ApplyDateFilter.day) {
+      await _pickApplyFilterDay();
+      return;
+    }
+    setState(() => _applyDateFilter = filter);
+  }
+
+  String _applyDayFilterLabel() {
+    final d = _applyFilterDay;
+    return '${d.month.toString().padLeft(2, '0')}/'
+        '${d.day.toString().padLeft(2, '0')}';
+  }
+
   Widget _buildApplyTab(double Function(num) ui) {
     final list = _applies;
+    final now = DateTime.now();
+    final filtered = list
+        .where(
+          (r) => _applyRecordMatchesDateFilter(
+            r,
+            _applyDateFilter,
+            now,
+            selectedDay: _applyFilterDay,
+          ),
+        )
+        .toList(growable: false);
+    final emptyMessage = list.isEmpty
+        ? (_applyError ?? '暂无小课排班申请')
+        : switch (_applyDateFilter) {
+            _ApplyDateFilter.day => '${_applyDayFilterLabel()} 暂无小课排班申请',
+            _ApplyDateFilter.week => '本周暂无小课排班申请',
+            _ApplyDateFilter.month => '本月暂无小课排班申请',
+          };
     return Padding(
       padding: EdgeInsets.fromLTRB(ui(20), 0, ui(20), ui(20)),
       child: Column(
@@ -1274,22 +1445,19 @@ class _AdminScheduleManagementViewState
         children: [
           Padding(
             padding: EdgeInsets.symmetric(vertical: ui(12)),
-            child: Text(
-              '小课排班申请',
-              style: TextStyle(
-                fontSize: ui(18),
-                color: const Color(0xFF1A1A1A),
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w500,
-                height: 1.2,
-              ),
+            child: _ApplyListHeaderRow(
+              filter: _applyDateFilter,
+              dayChipLabel: _applyDayFilterLabel(),
+              onFilterChanged: (filter) {
+                unawaited(_onApplyDateFilterChanged(filter));
+              },
             ),
           ),
-          if (list.isEmpty)
-            _ApplyEmptyState(message: _applyError ?? '暂无小课排班申请')
+          if (filtered.isEmpty)
+            _ApplyEmptyState(message: emptyMessage)
           else
             _ApplyGrid(
-              records: list,
+              records: filtered,
               onApprove: _approve,
               onReject: _reject,
               onOpenDetail: _openApplyDetail,
@@ -3460,6 +3628,10 @@ class _ApplyRecord {
     required this.lineLabel,
     required this.note,
     required this.status,
+    this.applyAt,
+    this.courseStart,
+    this.courseEnd,
+    this.courseDates = const [],
   });
 
   final String id;
@@ -3471,6 +3643,10 @@ class _ApplyRecord {
   final String lineLabel;
   final String note;
   final _ApplyStatus status;
+  final DateTime? applyAt;
+  final DateTime? courseStart;
+  final DateTime? courseEnd;
+  final List<DateTime> courseDates;
 
   /// 后端响应结构（`schoolSmallCourseApplyList` 实测）：
   /// ```
@@ -3608,6 +3784,10 @@ class _ApplyRecord {
       lineLabel: lineLabel,
       note: note.isEmpty ? '无' : note,
       status: status,
+      applyAt: _parseApplyRecordDate(applyTime),
+      courseStart: _parseApplyRecordDate(startDate),
+      courseEnd: _parseApplyRecordDate(endDate),
+      courseDates: _parseCourseDataDates(json['courseData']),
     );
   }
 
@@ -3632,6 +3812,131 @@ class _ApplyRecord {
     if (teacher.isNotEmpty) parts.add(teacher);
     if (location.isNotEmpty) parts.add(location);
     return parts.join(' · ');
+  }
+}
+
+class _ApplyListHeaderRow extends StatelessWidget {
+  const _ApplyListHeaderRow({
+    required this.filter,
+    required this.dayChipLabel,
+    required this.onFilterChanged,
+  });
+
+  final _ApplyDateFilter filter;
+  final String dayChipLabel;
+  final ValueChanged<_ApplyDateFilter> onFilterChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            '小课排班申请',
+            style: TextStyle(
+              fontSize: ui(18),
+              color: const Color(0xFF1A1A1A),
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w500,
+              height: 1.2,
+            ),
+          ),
+        ),
+        _ApplyDateFilterToggle(
+          filter: filter,
+          dayChipLabel: dayChipLabel,
+          onChanged: onFilterChanged,
+        ),
+      ],
+    );
+  }
+}
+
+class _ApplyDateFilterToggle extends StatelessWidget {
+  const _ApplyDateFilterToggle({
+    required this.filter,
+    required this.dayChipLabel,
+    required this.onChanged,
+  });
+
+  final _ApplyDateFilter filter;
+  final String dayChipLabel;
+  final ValueChanged<_ApplyDateFilter> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    const labels = ['天', '周', '月'];
+    const filters = [
+      _ApplyDateFilter.day,
+      _ApplyDateFilter.week,
+      _ApplyDateFilter.month,
+    ];
+    return Container(
+      height: ui(44),
+      padding: EdgeInsets.all(ui(4)),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(ui(8)),
+        border: Border.all(color: _kBorderSoft),
+      ),
+      child: Row(
+        children: [
+          for (var i = 0; i < labels.length; i++) ...[
+            if (i > 0) SizedBox(width: ui(4)),
+            _ApplyDateFilterChip(
+              label: filters[i] == _ApplyDateFilter.day &&
+                      filter == _ApplyDateFilter.day
+                  ? dayChipLabel
+                  : labels[i],
+              selected: filter == filters[i],
+              onTap: () => onChanged(filters[i]),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ApplyDateFilterChip extends StatelessWidget {
+  const _ApplyDateFilterChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(ui(6)),
+      child: Container(
+        height: ui(36),
+        padding: EdgeInsets.symmetric(horizontal: ui(16)),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF0B081A) : Colors.transparent,
+          borderRadius: BorderRadius.circular(ui(6)),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: ui(14),
+            color: selected ? Colors.white : _kTextSecondary,
+            fontFamily: 'PingFang SC',
+            fontWeight: AppFont.w500,
+            height: 1,
+          ),
+        ),
+      ),
+    );
   }
 }
 

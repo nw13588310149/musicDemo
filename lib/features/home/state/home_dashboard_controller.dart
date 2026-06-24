@@ -229,6 +229,11 @@ class HomeDashboardController extends StateNotifier<HomeDashboardState> {
 
       // 接口 color 字段作为卡片彩色标记（如 "#fed7aa"）
       final colorHex = item['color']?.toString();
+      final typeRaw = item['type'] ?? item['courseType'] ?? item['classType'];
+      final type = typeRaw is int
+          ? typeRaw
+          : (int.tryParse(typeRaw?.toString() ?? '') ?? 0);
+      final isSmallCourse = type == 1;
       final avatarRaw = teacher['headUrl']?.toString().trim() ?? '';
       final logoRaw = item['logo']?.toString().trim().isNotEmpty == true
           ? item['logo'].toString().trim()
@@ -247,6 +252,7 @@ class HomeDashboardController extends StateNotifier<HomeDashboardState> {
           status: _isEnded(item)
               ? HomeCourseStatus.ended
               : HomeCourseStatus.upcoming,
+          isSmallCourse: isSmallCourse,
           cardColorHex:
               (colorHex != null &&
                   colorHex.isNotEmpty &&

@@ -1854,7 +1854,7 @@ class _TeacherSchoolNoticeDetailBody extends StatelessWidget {
         ),
         SizedBox(height: ui(12)),
         Text(
-          '内容',
+          '内容：',
           style: TextStyle(
             fontSize: ui(13),
             color: const Color(0xFF6D6B75),
@@ -1909,7 +1909,7 @@ class _TeacherNoticeDetailRow extends StatelessWidget {
           SizedBox(
             width: ui(64),
             child: Text(
-              label,
+              '$label：',
               style: TextStyle(
                 fontSize: ui(13),
                 color: const Color(0xFFB6B5BB),

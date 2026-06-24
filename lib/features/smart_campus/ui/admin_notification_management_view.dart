@@ -1378,7 +1378,7 @@ class _NotificationDetailBody extends StatelessWidget {
         _DetailRow(label: '时间', value: record.time, isLast: true),
         SizedBox(height: ui(12)),
         Text(
-          '内容',
+          '内容：',
           style: TextStyle(
             fontSize: ui(13),
             color: _kTextSecondary,
@@ -1431,7 +1431,7 @@ class _DetailPriorityRow extends StatelessWidget {
           SizedBox(
             width: ui(72),
             child: Text(
-              '优先级',
+              '优先级：',
               style: TextStyle(
                 fontSize: ui(13),
                 color: _kTextSecondary,
@@ -1497,7 +1497,7 @@ class _DetailRow extends StatelessWidget {
           SizedBox(
             width: ui(72),
             child: Text(
-              label,
+              '$label：',
               style: TextStyle(
                 fontSize: ui(13),
                 color: _kTextSecondary,

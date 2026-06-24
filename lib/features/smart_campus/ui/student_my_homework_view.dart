@@ -112,6 +112,50 @@ List<Map<dynamic, dynamic>> _extractStudentHomeworkRows(dynamic data) {
   return [];
 }
 
+String _pickNonEmptyString(dynamic value) {
+  return value?.toString().trim() ?? '';
+}
+
+String _nameFromTeacherObject(dynamic raw) {
+  if (raw is! Map) return '';
+  final m = Map<dynamic, dynamic>.from(raw);
+  for (final key in [
+    'teacherName',
+    'teacherRealname',
+    'realname',
+    'realName',
+    'name',
+    'nickname',
+  ]) {
+    final text = _pickNonEmptyString(m[key]);
+    if (text.isNotEmpty) return text;
+  }
+  return '';
+}
+
+/// 列表 / 详情中的发布老师姓名。优先读顶层 `teacherName`（studentHomeworkList 新增字段），
+/// 再兼容嵌套 `homework` 与教师对象。
+String _resolvePublishTeacherName(
+  Map<dynamic, dynamic> m, {
+  Map<dynamic, dynamic>? homework,
+  String fallback = '—',
+}) {
+  for (final key in ['teacherName', 'teacherRealname', 'publishTeacherName']) {
+    final text = _pickNonEmptyString(m[key]);
+    if (text.isNotEmpty) return text;
+  }
+  final teacherRaw = m['teacher'];
+  if (teacherRaw is Map) {
+    final fromObj = _nameFromTeacherObject(teacherRaw);
+    if (fromObj.isNotEmpty) return fromObj;
+  }
+  if (homework != null) {
+    final nested = _resolvePublishTeacherName(homework, fallback: '');
+    if (nested.isNotEmpty) return nested;
+  }
+  return fallback;
+}
+
 /// 学生作业行状态：`homeworkStudentStatus` 或嵌套 `homeworkStudent.status` 优先，
 /// 否则回退顶层 `status`。
 int _homeworkStudentRowStatus(Map<dynamic, dynamic> m) {
@@ -1609,9 +1653,7 @@ class _HomeworkData {
     final description = pick('description');
     final endRaw = pick('endTime');
     final deadline = _studentHwDeadlineLabel(endRaw.isNotEmpty ? endRaw : null);
-    final teacher = pick('teacherName').isNotEmpty
-        ? pick('teacherName')
-        : (pick('teacher').isNotEmpty ? pick('teacher') : '—');
+    final teacher = _resolvePublishTeacherName(m, homework: hwm);
 
     final rowStatus = _homeworkStudentRowStatus(m);
     final submitTime = m['submitTime']?.toString().trim() ?? '';
@@ -1708,9 +1750,8 @@ class _HomeworkData {
     final deadline = endRaw.isNotEmpty
         ? _studentHwDeadlineLabel(endRaw)
         : base.deadline;
-    final teacher = pick('teacherName').isNotEmpty
-        ? pick('teacherName')
-        : (pick('teacher').isNotEmpty ? pick('teacher') : base.teacher);
+    final resolvedTeacher = _resolvePublishTeacherName(m, fallback: '');
+    final teacher = resolvedTeacher.isNotEmpty ? resolvedTeacher : base.teacher;
 
     final rowStatus = _homeworkStudentRowStatus(m);
     final hasSubmitTime = submitTime.isNotEmpty;
@@ -2123,10 +2164,20 @@ class _CardMetaRow extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              teacher,
+              '发布老师：',
               style: TextStyle(
                 fontSize: ui(12),
                 color: _kTextDark,
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w400,
+                height: 1,
+              ),
+            ),
+            Text(
+              teacher,
+              style: TextStyle(
+                fontSize: ui(12),
+                color: _kTextSecondary,
                 fontFamily: 'PingFang SC',
                 fontWeight: AppFont.w400,
                 height: 1,

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../../core/widgets/app_loading_indicator.dart';
+import '../../../core/widgets/course_class_kind_tag.dart';
 import '../../../core/widgets/course_subject_tag.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -729,6 +730,20 @@ class _WeekCard extends StatelessWidget {
   }
 }
 
+Color? _homeCourseTagDotColor(HomeCourseNotice notice) {
+  if (notice.status == HomeCourseStatus.ended) return null;
+  final hex = notice.cardColorHex?.trim();
+  if (hex == null || hex.isEmpty) return null;
+  final normalized = hex.startsWith('#') ? hex.substring(1) : hex;
+  if (normalized.length != 6 && normalized.length != 8) return null;
+  final value = int.tryParse(normalized, radix: 16);
+  if (value == null) return null;
+  if (normalized.length == 8) {
+    return Color(value);
+  }
+  return Color(0xFF000000 | value);
+}
+
 class _CourseNoticeCard extends StatelessWidget {
   const _CourseNoticeCard({required this.notice});
 
@@ -745,6 +760,8 @@ class _CourseNoticeCard extends StatelessWidget {
     final timeTextColor = notice.status == HomeCourseStatus.upcoming
         ? const Color(0xFF0B081A)
         : const Color(0xFF1A1A1A);
+    final muted = notice.status == HomeCourseStatus.ended;
+    final tagDotColor = _homeCourseTagDotColor(notice);
 
     return Container(
       width: double.infinity,
@@ -785,7 +802,13 @@ class _CourseNoticeCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 6),
-                CourseSubjectTag(name: notice.subjectName),
+                CourseSubjectTag(name: notice.subjectName, muted: muted),
+                const SizedBox(width: 4),
+                CourseClassKindTag(
+                  isSmall: notice.isSmallCourse,
+                  muted: muted,
+                  dotColor: tagDotColor,
+                ),
               ],
             ),
           ),

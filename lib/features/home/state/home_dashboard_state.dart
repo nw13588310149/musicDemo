@@ -66,6 +66,7 @@ class HomeCourseNotice {
     required this.teacherAvatar,
     required this.description,
     required this.status,
+    this.isSmallCourse = false,
     this.cardColorHex,
   });
 
@@ -76,6 +77,9 @@ class HomeCourseNotice {
   final String teacherAvatar;
   final String description;
   final HomeCourseStatus status;
+
+  /// 课程类型：false = 大课（type 0），true = 小课（type 1）。
+  final bool isSmallCourse;
   // 接口 `color` 字段，如 "#fed7aa"，用于卡片左侧彩色条
   final String? cardColorHex;
 

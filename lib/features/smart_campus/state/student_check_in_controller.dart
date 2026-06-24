@@ -355,10 +355,17 @@ class StudentCheckInController extends StateNotifier<StudentCheckInState> {
   Future<void> loadHistory({
     required StudentCheckInHistoryRange range,
     int? status,
+    String? date,
   }) async {
     if (state.loadingHistory) return;
     state = state.copyWith(loadingHistory: true, historyError: '');
-    final dates = range.dates(DateTime.now());
+    final trimmedDate = date?.trim() ?? '';
+    final ({String beginDate, String endDate}) dates;
+    if (trimmedDate.isNotEmpty) {
+      dates = (beginDate: trimmedDate, endDate: trimmedDate);
+    } else {
+      dates = range.dates(DateTime.now());
+    }
     final response = await _studentRepository.courseSignHistory(
       beginDate: dates.beginDate,
       endDate: dates.endDate,

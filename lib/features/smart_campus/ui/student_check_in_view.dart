@@ -31,10 +31,12 @@ import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dar
 
 import '../../../core/constants/app_assets.dart';
 import '../../../core/network/media_url.dart';
+import '../../../core/widgets/app_date_time_pickers.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/course_subject_tag.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
+import '../data/course_sign_data.dart';
 import '../data/student_check_in_data.dart';
 import '../state/student_check_in_controller.dart';
 import '../state/student_check_in_state.dart';
@@ -1916,6 +1918,8 @@ class _SectionTitle extends StatelessWidget {
 //   - 顶部 62 高 _HistoryDrawerHeader（3×15 紫竖条 + 标题 + 关闭 X）
 //   - 筛选区：
 //       · 时间范围 pill 组：本周 / 本月 / 本学期（选中态 = 紫底白字）
+//       · 日期筛选：日历 picker（选中后按单日调历史接口；可清除恢复范围）
+//       · 大小课 pill 组：全部 / 大课 / 小课（前端过滤，不调接口）
 //       · 状态 tabs：全部 / 正常 / 缺勤（选中态 = 白底加粗 + 紫色文字）
 //   - 汇总条：「共 N 条 · 正常 m · 缺勤 k」，缺勤用红色突出
 //   - 列表区：垂直列出 _RecentRecordCard，每张卡之间 12 间距
@@ -1944,6 +1948,8 @@ StudentCheckInHistoryRange _apiRangeOf(_HistoryTimeRange range) {
 
 enum _HistoryStatusFilter { all, normal, absent }
 
+enum _HistoryCourseKindFilter { all, big, small }
+
 enum _MakeupStatusFilter { all, pending, approved, rejected }
 
 class _CheckInHistoryDrawer extends ConsumerStatefulWidget {
@@ -1963,6 +1969,8 @@ class _CheckInHistoryDrawer extends ConsumerStatefulWidget {
 class _CheckInHistoryDrawerState extends ConsumerState<_CheckInHistoryDrawer> {
   _HistoryDrawerTab _tab = _HistoryDrawerTab.signHistory;
   StudentCheckInHistoryRange _range = StudentCheckInHistoryRange.month;
+  String? _selectedDate;
+  _HistoryCourseKindFilter _courseKind = _HistoryCourseKindFilter.all;
   _HistoryStatusFilter _status = _HistoryStatusFilter.all;
   _MakeupStatusFilter _makeupStatus = _MakeupStatusFilter.all;
 
@@ -1986,9 +1994,39 @@ class _CheckInHistoryDrawerState extends ConsumerState<_CheckInHistoryDrawer> {
   };
 
   Future<void> _reloadSignHistory() {
-    return ref
-        .read(studentCheckInControllerProvider.notifier)
-        .loadHistory(range: _range, status: _apiStatusFilter);
+    return ref.read(studentCheckInControllerProvider.notifier).loadHistory(
+      range: _range,
+      status: _apiStatusFilter,
+      date: _selectedDate,
+    );
+  }
+
+  bool _matchCourseKind(StudentSignRecordItem item) {
+    return switch (_courseKind) {
+      _HistoryCourseKindFilter.big => isBigCourseType(item.courseType),
+      _HistoryCourseKindFilter.small => isSmallCourseType(item.courseType),
+      _HistoryCourseKindFilter.all => true,
+    };
+  }
+
+  List<({StudentSignRecordItem item, _RecentRecordData card})>
+  _filteredHistoryEntries(StudentCheckInState checkIn) {
+    final headById = _teacherHeadById(checkIn);
+    final entries = <({StudentSignRecordItem item, _RecentRecordData card})>[];
+    var cardIndex = 0;
+    for (final item in checkIn.historyRecords) {
+      if (!_matchCourseKind(item)) continue;
+      entries.add((
+        item: item,
+        card: _recentRecordFromItem(
+          item,
+          cardIndex,
+          headFallback: headById[item.teacherId] ?? '',
+        ),
+      ));
+      cardIndex++;
+    }
+    return entries;
   }
 
   Future<void> _reloadMakeupList() {
@@ -2009,35 +2047,24 @@ class _CheckInHistoryDrawerState extends ConsumerState<_CheckInHistoryDrawer> {
     );
   }
 
-  List<_RecentRecordData> _mapRecords(
-    List<StudentSignRecordItem> items,
-    Map<String, String> headById,
-  ) {
-    return items
-        .asMap()
-        .entries
-        .map(
-          (entry) => _recentRecordFromItem(
-            entry.value,
-            entry.key,
-            headFallback: headById[entry.value.teacherId] ?? '',
-          ),
-        )
-        .toList(growable: false);
-  }
-
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final checkIn = ref.watch(studentCheckInControllerProvider);
-    final filtered = _mapRecords(
-      checkIn.historyRecords,
-      _teacherHeadById(checkIn),
-    );
+    final filteredEntries = _filteredHistoryEntries(checkIn);
+    final filtered = filteredEntries.map((e) => e.card).toList(growable: false);
     final normalCount = filtered
         .where((r) => r.status == _AttendanceStatus.normal)
         .length;
     final absentCount = filtered.length - normalCount;
+    final hasCourseKindFilter = _courseKind != _HistoryCourseKindFilter.all;
+    final emptyMessage = checkIn.historyError.isNotEmpty
+        ? checkIn.historyError
+        : checkIn.historyRecords.isEmpty
+        ? '暂无签到记录'
+        : hasCourseKindFilter
+        ? '没有符合条件的大小课记录'
+        : '暂无签到记录';
     final makeupItems = checkIn.makeupRecords;
     return Container(
       width: ui(520),
@@ -2065,10 +2092,22 @@ class _CheckInHistoryDrawerState extends ConsumerState<_CheckInHistoryDrawer> {
           if (_tab == _HistoryDrawerTab.signHistory) ...[
             _HistoryFilterBar(
               range: _historyRangeOf(_range),
+              selectedDate: _selectedDate,
+              courseKind: _courseKind,
               status: _status,
               onRangeChanged: (r) {
-                setState(() => _range = _apiRangeOf(r));
+                setState(() {
+                  _range = _apiRangeOf(r);
+                  _selectedDate = null;
+                });
                 unawaited(_reloadSignHistory());
+              },
+              onDateChanged: (date) {
+                setState(() => _selectedDate = date);
+                unawaited(_reloadSignHistory());
+              },
+              onCourseKindChanged: (kind) {
+                setState(() => _courseKind = kind);
               },
               onStatusChanged: (s) {
                 setState(() => _status = s);
@@ -2086,11 +2125,7 @@ class _CheckInHistoryDrawerState extends ConsumerState<_CheckInHistoryDrawer> {
                 child: checkIn.loadingHistory && filtered.isEmpty
                     ? const SizedBox.shrink()
                     : filtered.isEmpty
-                  ? _HistoryEmpty(
-                      message: checkIn.historyError.isNotEmpty
-                          ? checkIn.historyError
-                          : '暂无签到记录',
-                    )
+                  ? _HistoryEmpty(message: emptyMessage)
                   : ListView.separated(
                       padding: EdgeInsets.fromLTRB(
                         ui(16),
@@ -2098,11 +2133,12 @@ class _CheckInHistoryDrawerState extends ConsumerState<_CheckInHistoryDrawer> {
                         ui(16),
                         ui(20),
                       ),
-                      itemCount: filtered.length,
+                      itemCount: filteredEntries.length,
                       separatorBuilder: (_, _) => SizedBox(height: ui(12)),
                       itemBuilder: (ctx, i) {
-                        final card = filtered[i];
-                        final item = checkIn.historyRecords[i];
+                        final entry = filteredEntries[i];
+                        final card = entry.card;
+                        final item = entry.item;
                         return _RecentRecordCard(
                           data: card,
                           onApplyMakeup:
@@ -2302,14 +2338,22 @@ class _HistoryDrawerTabButton extends StatelessWidget {
 class _HistoryFilterBar extends StatelessWidget {
   const _HistoryFilterBar({
     required this.range,
+    required this.selectedDate,
+    required this.courseKind,
     required this.status,
     required this.onRangeChanged,
+    required this.onDateChanged,
+    required this.onCourseKindChanged,
     required this.onStatusChanged,
   });
 
   final _HistoryTimeRange range;
+  final String? selectedDate;
+  final _HistoryCourseKindFilter courseKind;
   final _HistoryStatusFilter status;
   final ValueChanged<_HistoryTimeRange> onRangeChanged;
+  final ValueChanged<String?> onDateChanged;
+  final ValueChanged<_HistoryCourseKindFilter> onCourseKindChanged;
   final ValueChanged<_HistoryStatusFilter> onStatusChanged;
 
   @override
@@ -2353,6 +2397,56 @@ class _HistoryFilterBar extends StatelessWidget {
             ],
           ),
           SizedBox(height: ui(14)),
+          Text(
+            '日期筛选',
+            style: TextStyle(
+              fontSize: ui(12),
+              color: _kTextSecondary,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w400,
+              height: 1,
+            ),
+          ),
+          SizedBox(height: ui(8)),
+          _HistoryDatePickerField(
+            selectedDate: selectedDate,
+            onDateChanged: onDateChanged,
+          ),
+          SizedBox(height: ui(14)),
+          Text(
+            '大小课',
+            style: TextStyle(
+              fontSize: ui(12),
+              color: _kTextSecondary,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w400,
+              height: 1,
+            ),
+          ),
+          SizedBox(height: ui(8)),
+          Row(
+            children: [
+              _HistoryRangePill(
+                label: '全部',
+                selected: courseKind == _HistoryCourseKindFilter.all,
+                onTap: () => onCourseKindChanged(_HistoryCourseKindFilter.all),
+              ),
+              SizedBox(width: ui(8)),
+              _HistoryRangePill(
+                label: '大课',
+                selected: courseKind == _HistoryCourseKindFilter.big,
+                onTap: () => onCourseKindChanged(_HistoryCourseKindFilter.big),
+              ),
+              SizedBox(width: ui(8)),
+              _HistoryRangePill(
+                label: '小课',
+                selected: courseKind == _HistoryCourseKindFilter.small,
+                onTap: () =>
+                    onCourseKindChanged(_HistoryCourseKindFilter.small),
+              ),
+            ],
+          ),
+          SizedBox(height: ui(14)),
           Container(
             height: ui(34),
             decoration: BoxDecoration(
@@ -2381,6 +2475,90 @@ class _HistoryFilterBar extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _HistoryDatePickerField extends StatelessWidget {
+  const _HistoryDatePickerField({
+    required this.selectedDate,
+    required this.onDateChanged,
+  });
+
+  final String? selectedDate;
+  final ValueChanged<String?> onDateChanged;
+
+  String _isoDate(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final trimmed = selectedDate?.trim() ?? '';
+    final hasDate = trimmed.isNotEmpty;
+    return InkWell(
+      onTap: () async {
+        final picked = await showAppDatePicker(
+          context: context,
+          initialDate: hasDate
+              ? (DateTime.tryParse(trimmed) ?? DateTime.now())
+              : DateTime.now(),
+          firstDate: DateTime(2024),
+          lastDate: DateTime(2030),
+          helpText: '选择日期',
+          cancelText: '取消',
+          confirmText: '确定',
+        );
+        if (picked != null) {
+          onDateChanged(_isoDate(picked));
+        }
+      },
+      borderRadius: BorderRadius.circular(ui(8)),
+      child: Container(
+        height: ui(36),
+        padding: EdgeInsets.symmetric(horizontal: ui(12)),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(ui(8)),
+          border: Border.all(color: _kBorderSoft),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.calendar_today_outlined,
+              size: ui(16),
+              color: _kPurple,
+            ),
+            SizedBox(width: ui(8)),
+            Expanded(
+              child: Text(
+                hasDate ? trimmed : '选择日期',
+                style: TextStyle(
+                  fontSize: ui(13),
+                  color: hasDate ? _kTextDark : _kTextSecondary,
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w400,
+                  height: 1,
+                ),
+              ),
+            ),
+            if (hasDate)
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => onDateChanged(null),
+                child: Padding(
+                  padding: EdgeInsets.all(ui(4)),
+                  child: Icon(
+                    Icons.close_rounded,
+                    size: ui(16),
+                    color: _kTextSecondary,
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
