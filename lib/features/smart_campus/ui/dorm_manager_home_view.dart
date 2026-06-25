@@ -1268,10 +1268,8 @@ class _DormNoticeDetailBody extends StatelessWidget {
         ),
         SizedBox(height: ui(16)),
         _DormNoticeDetailRow(label: '类型', value: notice.type),
-        if (notice.priority.isNotEmpty)
-          _DormNoticeDetailRow(label: '优先级', value: notice.priority),
-        if (notice.scopeLabel.isNotEmpty && notice.scopeLabel != '—')
-          _DormNoticeDetailRow(label: '推送范围', value: notice.scopeLabel),
+        _DormNoticeDetailRow(label: '级别', value: notice.priority),
+        _DormNoticeDetailRow(label: '推送', value: notice.scopeLabel),
         _DormNoticeDetailRow(
           label: '时间',
           value: notice.publishedAt.isNotEmpty

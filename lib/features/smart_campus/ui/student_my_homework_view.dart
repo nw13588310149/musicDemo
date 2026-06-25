@@ -62,7 +62,9 @@ import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 import '../data/student_repository.dart';
 import '../data/student_academic_data.dart';
+import 'widgets/smart_campus_equal_height_grid.dart';
 import 'widgets/smart_campus_page_banner.dart';
+import 'widgets/smart_campus_stripe_bar_chart.dart';
 import 'widgets/homework_voice_comment.dart';
 
 const Color _kCardBg = Colors.white;
@@ -634,7 +636,6 @@ class _AverageScoreCard extends StatelessWidget {
     final valueLabel = hasData
         ? (avg % 1 == 0 ? avg.toStringAsFixed(0) : avg.toStringAsFixed(1))
         : '—';
-    final widthFactor = (avg / 100).clamp(0.0, 1.0);
     return _HomeworkStatCardShell(
       backgroundAsset: AppAssets.studentHomeworkStatCard1,
       child: Padding(
@@ -668,7 +669,7 @@ class _AverageScoreCard extends StatelessWidget {
               top: ui(36),
               right: 0,
               child: Text(
-                '各科作业得分平均',
+                '各科作业平均得分',
                 textAlign: TextAlign.right,
                 style: TextStyle(
                   fontSize: ui(11),
@@ -676,23 +677,6 @@ class _AverageScoreCard extends StatelessWidget {
                   fontFamily: 'PingFang SC',
                   fontWeight: AppFont.w400,
                   height: 1,
-                ),
-              ),
-            ),
-            Positioned(
-              left: ui(70),
-              right: 0,
-              bottom: ui(2),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(ui(20)),
-                child: Stack(
-                  children: [
-                    Container(height: ui(8), color: const Color(0xFFF4F4FF)),
-                    FractionallySizedBox(
-                      widthFactor: widthFactor,
-                      child: Container(height: ui(8), color: _kPurpleLight),
-                    ),
-                  ],
                 ),
               ),
             ),
@@ -887,8 +871,30 @@ class _AverageBarChartCard extends StatelessWidget {
             ],
             onChanged: onGroupChanged,
           ),
-          SizedBox(height: ui(12)),
-          Expanded(child: _BarChart(bars: bars)),
+          SizedBox(height: ui(24)),
+          Expanded(
+            child: SmartCampusStripeBarChart(
+              ticks: const [100, 95, 90, 85, 80, 0],
+              tickGap: 28,
+              yAxisWidth: 20,
+              yAxisToPlotGap: 22,
+              barWidth: 35,
+              columnGap: 28,
+              bottomInset: 20,
+              valueLabelGap: 24,
+              plotTopInset: 0,
+              chartHeight: 270,
+              entries: bars
+                  .map(
+                    (b) => SmartCampusBarChartEntry(
+                      label: b.label,
+                      value: b.value,
+                      labelIsHint: b.label == '暂无' && b.value == 0,
+                    ),
+                  )
+                  .toList(),
+            ),
+          ),
         ],
       ),
     );
@@ -900,214 +906,6 @@ class _BarItem {
 
   final String label;
   final double value;
-}
-
-class _BarChart extends StatelessWidget {
-  const _BarChart({required this.bars});
-
-  final List<_BarItem> bars;
-
-  /// Y 轴刻度（自上而下）
-  static const _ticks = <int>[100, 95, 90, 85, 80, 0];
-
-  bool get _isEmptyState =>
-      bars.length == 1 &&
-      bars.first.label == '暂无' &&
-      bars.first.value == 0;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    const minVal = 73.0;
-    const maxVal = 100.0;
-    return LayoutBuilder(
-      builder: (context, c) {
-        final w = c.maxWidth;
-        final h = c.maxHeight;
-        // Y 轴左侧 28 宽，下方 X 轴 28 高。
-        final chartLeft = ui(28);
-        final chartBottom = ui(28);
-        final chartW = w - chartLeft;
-        final chartH = (h - chartBottom).clamp(0.0, double.infinity);
-        // 刻度位置：100 在最上，80 在 (5/6)*chartH，0 在底；
-        // 80→0 用最后 1/6 高度压缩。
-        const tickCount = 6;
-        final tickGap = chartH / (tickCount - 1);
-
-        double yForValue(double v) {
-          if (v >= 80) {
-            // 80→100 映射到 0→ (5/6)*chartH（实际是 5 个 tick 间）
-            final ratio = (100 - v) / 20.0;
-            return ratio * (chartH * 5 / (tickCount - 1));
-          }
-          return chartH;
-        }
-
-        final barW = ui(35);
-        final cellW = chartW / bars.length;
-
-        return Stack(
-          clipBehavior: Clip.none,
-          children: [
-            // 坐标轴 + 横向刻度线
-            Positioned(
-              left: chartLeft,
-              top: 0,
-              width: chartW,
-              height: chartH,
-              child: CustomPaint(
-                painter: _BarChartAxesPainter(
-                  tickCount: tickCount,
-                  tickGap: tickGap,
-                  axisColor: _kBorderHair,
-                  gridColor: _kBorderSoft,
-                ),
-              ),
-            ),
-            // Y 轴标签
-            for (var i = 0; i < tickCount; i++)
-              Positioned(
-                left: 0,
-                top: i * tickGap - ui(10),
-                width: ui(20),
-                child: Text(
-                  '${_ticks[i]}',
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                    fontSize: ui(12),
-                    color: _kTextHint,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w400,
-                    height: 1.6,
-                  ),
-                ),
-              ),
-            // 柱子（值为 0 时不绘制柱体，仅保留 X 轴占位）
-            for (var i = 0; i < bars.length; i++)
-              if (bars[i].value > 0)
-                Positioned(
-                  left: chartLeft + cellW * i + (cellW - barW) / 2,
-                  top: yForValue(bars[i].value),
-                  width: barW,
-                  height: (chartH - yForValue(bars[i].value)).clamp(
-                    0.0,
-                    double.infinity,
-                  ),
-                  child: _Bar(
-                    value: bars[i].value,
-                    valueRange: (minVal, maxVal),
-                  ),
-                ),
-            // 柱顶数值
-            for (var i = 0; i < bars.length; i++)
-              if (bars[i].value > 0)
-                Positioned(
-                  left: chartLeft + cellW * i + (cellW - barW) / 2,
-                  top: yForValue(bars[i].value) - ui(20),
-                  width: barW,
-                  child: Text(
-                    '${bars[i].value.toInt()}',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: ui(12),
-                      color: _kTextSecondary,
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w500,
-                      height: 1,
-                    ),
-                  ),
-                ),
-            // X 轴标签
-            for (var i = 0; i < bars.length; i++)
-              Positioned(
-                left: chartLeft + cellW * i,
-                bottom: 0,
-                width: cellW,
-                child: Text(
-                  bars[i].label,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: ui(12),
-                    color: _isEmptyState ? _kTextHint : _kTextSecondary,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w400,
-                    height: 1,
-                  ),
-                ),
-              ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _BarChartAxesPainter extends CustomPainter {
-  const _BarChartAxesPainter({
-    required this.tickCount,
-    required this.tickGap,
-    required this.axisColor,
-    required this.gridColor,
-  });
-
-  final int tickCount;
-  final double tickGap;
-  final Color axisColor;
-  final Color gridColor;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final axisPaint = Paint()
-      ..color = axisColor
-      ..strokeWidth = 1;
-    final gridPaint = Paint()
-      ..color = gridColor
-      ..strokeWidth = 1;
-
-    for (var i = 0; i < tickCount; i++) {
-      final y = i * tickGap;
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
-    }
-
-    canvas.drawLine(Offset.zero, Offset(0, size.height), axisPaint);
-    canvas.drawLine(
-      Offset(0, size.height),
-      Offset(size.width, size.height),
-      axisPaint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_BarChartAxesPainter oldDelegate) =>
-      tickCount != oldDelegate.tickCount ||
-      tickGap != oldDelegate.tickGap ||
-      axisColor != oldDelegate.axisColor ||
-      gridColor != oldDelegate.gridColor;
-}
-
-class _Bar extends StatelessWidget {
-  const _Bar({required this.value, required this.valueRange});
-
-  final double value;
-  final (double, double) valueRange;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [_kPurpleLight, Color(0x66A773FF)],
-        ),
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(ui(8)),
-          topRight: Radius.circular(ui(8)),
-        ),
-      ),
-    );
-  }
 }
 
 class _ScoreDistributionCard extends StatelessWidget {
@@ -1478,9 +1276,44 @@ class _SegmentedControl<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    Widget pill(T tab, String label) {
+      final active = tab == value;
+      return GestureDetector(
+        onTap: () => onChanged(tab),
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          height: ui(36),
+          padding: EdgeInsets.symmetric(horizontal: ui(16)),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: active ? Colors.white : Colors.transparent,
+            borderRadius: BorderRadius.circular(ui(active ? 6 : 8)),
+            boxShadow: active
+                ? [
+                    BoxShadow(
+                      color: const Color(0xFFB5B5B5).withValues(alpha: 0.35),
+                      offset: Offset(0, ui(8)),
+                      blurRadius: ui(20),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: ui(14),
+              color: active ? _kTextDark : _kTextSecondary,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w500,
+              height: 1,
+            ),
+          ),
+        ),
+      );
+    }
+
     return Container(
-      height: ui(44),
-      padding: EdgeInsets.symmetric(horizontal: ui(4), vertical: ui(4)),
+      padding: EdgeInsets.fromLTRB(ui(4), ui(4), ui(3), ui(4)),
       decoration: BoxDecoration(
         color: _kInnerGray,
         borderRadius: BorderRadius.circular(ui(8)),
@@ -1489,39 +1322,9 @@ class _SegmentedControl<T> extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          for (final (tab, label) in options) ...[
-            InkWell(
-              onTap: () => onChanged(tab),
-              borderRadius: BorderRadius.circular(ui(6)),
-              child: Container(
-                height: ui(32),
-                padding: EdgeInsets.symmetric(horizontal: ui(16)),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: tab == value ? Colors.white : null,
-                  borderRadius: BorderRadius.circular(ui(6)),
-                  boxShadow: tab == value
-                      ? [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.06),
-                            blurRadius: ui(20),
-                            offset: Offset(0, ui(8)),
-                          ),
-                        ]
-                      : null,
-                ),
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: ui(14),
-                    color: tab == value ? _kTextDark : _kTextSecondary,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w500,
-                  ),
-                ),
-              ),
-            ),
-            SizedBox(width: ui(8)),
+          for (var i = 0; i < options.length; i++) ...[
+            if (i > 0) SizedBox(width: ui(16)),
+            pill(options[i].$1, options[i].$2),
           ],
         ],
       ),
@@ -1910,27 +1713,15 @@ class _HomeworkGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return LayoutBuilder(
-      builder: (context, c) {
-        final isCompact = c.maxWidth < ui(720);
-        final cols = isCompact ? 1 : 2;
-        final gap = ui(10);
-        final cardW = (c.maxWidth - gap * (cols - 1)) / cols;
-        return Wrap(
-          spacing: gap,
-          runSpacing: gap,
-          children: [
-            for (final r in records)
-              SizedBox(
-                width: cardW,
-                child: _HomeworkCard(
-                  data: r,
-                  onSubmit: () => onSubmit(r),
-                  onDetail: () => onDetail(r),
-                ),
-              ),
-          ],
+    return SmartCampusEqualHeightGrid(
+      itemCount: records.length,
+      spacing: 10,
+      itemBuilder: (context, index) {
+        final r = records[index];
+        return _HomeworkCard(
+          data: r,
+          onSubmit: () => onSubmit(r),
+          onDetail: () => onDetail(r),
         );
       },
     );
@@ -1948,49 +1739,67 @@ class _HomeworkCard extends StatelessWidget {
   final VoidCallback onSubmit;
   final VoidCallback onDetail;
 
+  static const _cardBgGradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [Color(0xFFFAF0FF), Colors.white],
+  );
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      padding: EdgeInsets.all(ui(12)),
-      decoration: BoxDecoration(
-        // 设计稿里 #FAF0FF 只是右上角的一点淡紫，整张卡其余部分都是白色，
-        // 所以用从右上角发散的径向渐变（小半径）做角落点缀，而不是铺满全卡的
-        // 线性渐变。radius 以卡片短边为基准，可按需微调。
-        gradient: const RadialGradient(
-          center: Alignment.topRight,
-          radius: 0.9,
-          colors: [Color(0xFFFAF0FF), Colors.white],
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(ui(12)),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: _cardBgGradient,
+          borderRadius: BorderRadius.circular(ui(12)),
+          border: Border.all(color: Colors.white),
         ),
-        color: _kCardBg,
-        borderRadius: BorderRadius.circular(ui(12)),
-        border: Border.all(color: Colors.white),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _CardHeaderRow(data: data),
-          SizedBox(height: ui(8)),
-          _CardMetaRow(
-            teacher: data.teacher,
-            deadline: data.deadline,
-            mediumLabel: data.mediumLabel,
-            deadlineHighlight:
-                data.status == _HomeworkStatus.pending ||
-                data.status == _HomeworkStatus.overdue,
-          ),
-          SizedBox(height: ui(8)),
-          _CardBody(data: data),
-          SizedBox(height: ui(8)),
-          _CardActionRow(
-            showSubmit:
-                data.status == _HomeworkStatus.pending ||
-                data.status == _HomeworkStatus.overdue,
-            onSubmit: onSubmit,
-            onDetail: onDetail,
-          ),
-        ],
+        child: Stack(
+          fit: StackFit.passthrough,
+          children: [
+            Positioned.fill(
+              child: Transform.scale(
+                scale: 1.14,
+                child: Image.asset(
+                  AppAssets.studentHomeworkCardBg,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                ),
+              ),
+            ),
+            Padding(
+              padding: EdgeInsets.all(ui(12)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _CardHeaderRow(data: data),
+                  SizedBox(height: ui(8)),
+                  _CardMetaRow(
+                    teacher: data.teacher,
+                    deadline: data.deadline,
+                    mediumLabel: data.mediumLabel,
+                    deadlineHighlight:
+                        data.status == _HomeworkStatus.pending ||
+                        data.status == _HomeworkStatus.overdue,
+                  ),
+                  SizedBox(height: ui(8)),
+                  _CardBody(data: data),
+                  SizedBox(height: ui(8)),
+                  _CardActionRow(
+                    showSubmit:
+                        data.status == _HomeworkStatus.pending ||
+                        data.status == _HomeworkStatus.overdue,
+                    onSubmit: onSubmit,
+                    onDetail: onDetail,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

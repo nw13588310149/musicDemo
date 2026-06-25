@@ -632,6 +632,10 @@ abstract final class AppAssets {
   static const scheduleApplyCourse =
       'assets/images/smartCampus/schedule_edit/apply_course.png';
 
+  /// 管理员 · 排课与课表 · 小课申请审核列表卡片 · 班级图标。
+  static const adminSmallCourseApplyCardClass =
+      'assets/images/new/01/xk.png';
+
   /// 宿管 · 查寝（按宿舍 / 历史）· 顶部统计卡背景（从左到右）。
   static const dormCheckStatCard1 =
       'assets/images/smartCampus/dorm_check/stat_card_1.png';
@@ -732,11 +736,13 @@ abstract final class AppAssets {
 
   /// 学生 · 我的作业 · 顶部统计卡背景（从左到右）。
   static const studentHomeworkStatCard1 =
-      'assets/images/smartCampus/student/homework/stat_card_1.png';
+      'assets/images/new/我的作业.png';
   static const studentHomeworkStatCard2 =
       'assets/images/smartCampus/student/homework/stat_card_2.png';
   static const studentHomeworkStatCard3 =
       'assets/images/smartCampus/student/homework/stat_card_3.png';
+  static const studentHomeworkCardBg =
+      'assets/images/new/a11e2b3687735e14c212067024e694f9.png';
 
   /// 学生 · 我的请假 · 顶部统计卡背景（从左到右）。
   static const studentLeaveStatCard1 =

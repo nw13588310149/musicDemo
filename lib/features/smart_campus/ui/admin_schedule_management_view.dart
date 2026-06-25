@@ -4041,10 +4041,11 @@ class _ApplyCard extends StatelessWidget {
                           borderRadius: BorderRadius.circular(ui(8)),
                         ),
                         alignment: Alignment.center,
-                        child: Icon(
-                          Icons.event_note_rounded,
-                          size: ui(20),
-                          color: _kPurple,
+                        child: Image.asset(
+                          AppAssets.adminSmallCourseApplyCardClass,
+                          width: ui(20),
+                          height: ui(20),
+                          fit: BoxFit.contain,
                         ),
                       ),
                       SizedBox(width: ui(8)),

@@ -383,6 +383,7 @@ class _SemesterTabs extends StatelessWidget {
   Widget build(BuildContext context) {
     return SegmentToggle(
       selectedIndex: selected == _SemesterTab.current ? 0 : 1,
+      thumbColor: _kTextDark,
       options: const [
         SegmentToggleOption(label: '本学期'),
         SegmentToggleOption(label: '上学期'),

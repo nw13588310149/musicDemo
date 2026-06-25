@@ -317,7 +317,6 @@ class _DormBanner extends StatelessWidget {
       width: double.infinity,
       height: ui(62),
       clipBehavior: Clip.antiAlias,
-      padding: EdgeInsets.symmetric(horizontal: ui(12)),
       decoration: smartCampusPageBannerDecoration(ui),
       child: Stack(
         children: [
@@ -337,30 +336,29 @@ class _DormBanner extends StatelessWidget {
                 _MainSectionHeader(
                   section: section,
                   onSection: onSection,
-                  compact: true,
                 ),
               ],
             ),
           ),
-          Positioned.fill(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  '查寝管理',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: ui(16),
-                    color: _kTextDark,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w600,
-                    height: 1.1,
+          Center(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: ui(56)),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    '查寝管理',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: ui(16),
+                      color: _kTextDark,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w600,
+                      height: 1.1,
+                    ),
                   ),
-                ),
-                SizedBox(height: ui(4)),
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: ui(280)),
-                  child: RichText(
+                  SizedBox(height: ui(4)),
+                  RichText(
                     textAlign: TextAlign.center,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -382,8 +380,8 @@ class _DormBanner extends StatelessWidget {
                       ],
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],
@@ -635,46 +633,74 @@ class _MainSectionHeader extends StatelessWidget {
   const _MainSectionHeader({
     required this.section,
     required this.onSection,
-    this.compact = false,
   });
 
   final StudentDormitoryListSection section;
   final ValueChanged<StudentDormitoryListSection> onSection;
-  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final outerHeight = ui(compact ? _kBannerControlHeight : 44);
-    final outerRadius = ui(compact ? 8 : 8);
-    final inset = ui(compact ? 4 : 4);
     return Container(
-      height: outerHeight,
-      padding: EdgeInsets.all(inset),
+      constraints: BoxConstraints(minHeight: ui(_kBannerControlHeight)),
+      padding: EdgeInsets.all(ui(2)),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(outerRadius),
-        border: Border.all(color: _kBorderSoft),
+        color: _kBoardBg,
+        borderRadius: BorderRadius.circular(ui(8)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _TabPill(
+          _MainSectionTabItem(
             label: '查寝记录',
-            active: section == StudentDormitoryListSection.checkRecords,
+            selected: section == StudentDormitoryListSection.checkRecords,
             onTap: () => onSection(StudentDormitoryListSection.checkRecords),
-            compact: compact,
           ),
-          SizedBox(width: ui(compact ? 4 : 4)),
-          _TabPill(
+          _MainSectionTabItem(
             label: '补卡申请',
-            active: section == StudentDormitoryListSection.makeupApplications,
+            selected: section == StudentDormitoryListSection.makeupApplications,
             onTap: () =>
                 onSection(StudentDormitoryListSection.makeupApplications),
-            compact: compact,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _MainSectionTabItem extends StatelessWidget {
+  const _MainSectionTabItem({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(ui(6)),
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(7)),
+        decoration: BoxDecoration(
+          color: selected ? _kTextDark : Colors.transparent,
+          borderRadius: BorderRadius.circular(ui(6)),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: ui(12),
+            color: selected ? Colors.white : _kTextHint,
+            fontFamily: 'PingFang SC',
+            fontWeight: selected ? AppFont.w500 : AppFont.w400,
+            height: 1.2,
+          ),
+        ),
       ),
     );
   }
@@ -737,33 +763,30 @@ class _TabPill extends StatelessWidget {
     required this.label,
     required this.active,
     required this.onTap,
-    this.compact = false,
   });
 
   final String label;
   final bool active;
   final VoidCallback onTap;
-  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final pillRadius = ui(compact ? 6 : 6);
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(pillRadius),
+      borderRadius: BorderRadius.circular(ui(6)),
       child: Container(
-        height: compact ? null : ui(36),
-        padding: EdgeInsets.symmetric(horizontal: ui(compact ? 10 : 16)),
+        height: ui(36),
+        padding: EdgeInsets.symmetric(horizontal: ui(16)),
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: active ? _kTextDark : Colors.transparent,
-          borderRadius: BorderRadius.circular(pillRadius),
+          borderRadius: BorderRadius.circular(ui(6)),
         ),
         child: Text(
           label,
           style: TextStyle(
-            fontSize: ui(compact ? 12 : 14),
+            fontSize: ui(14),
             color: active ? Colors.white : _kTextSecondary,
             fontFamily: 'PingFang SC',
             fontWeight: AppFont.w500,

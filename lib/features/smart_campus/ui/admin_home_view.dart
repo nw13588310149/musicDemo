@@ -1669,6 +1669,8 @@ class _AdminNoticeDetailBody extends StatelessWidget {
                   fontSize: ui(12),
                   color: tagStyle.foreground,
                   fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w400,
+                  height: 1.2,
                 ),
               ),
             ),
@@ -1683,6 +1685,8 @@ class _AdminNoticeDetailBody extends StatelessWidget {
                     fontSize: ui(12),
                     color: const Color(0xFF6D6B75),
                     fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w400,
+                    height: 1.4,
                   ),
                 ),
               ),
@@ -1691,10 +1695,8 @@ class _AdminNoticeDetailBody extends StatelessWidget {
         ),
         SizedBox(height: ui(16)),
         _AdminNoticeDetailRow(label: '类型', value: notice.type),
-        if (notice.priority.isNotEmpty)
-          _AdminNoticeDetailRow(label: '优先级', value: notice.priority),
-        if (notice.scopeLabel.isNotEmpty && notice.scopeLabel != '—')
-          _AdminNoticeDetailRow(label: '推送范围', value: notice.scopeLabel),
+        _AdminNoticeDetailRow(label: '级别', value: notice.priority),
+        _AdminNoticeDetailRow(label: '推送', value: notice.scopeLabel),
         _AdminNoticeDetailRow(
           label: '时间',
           value: notice.publishedAt.isNotEmpty
@@ -1709,16 +1711,27 @@ class _AdminNoticeDetailBody extends StatelessWidget {
             fontSize: ui(13),
             color: const Color(0xFF6D6B75),
             fontFamily: 'PingFang SC',
+            fontWeight: AppFont.w400,
+            height: 1.4,
           ),
         ),
-        SizedBox(height: ui(8)),
-        Text(
-          notice.content.isEmpty ? '—' : notice.content,
-          style: TextStyle(
-            fontSize: ui(14),
-            color: const Color(0xFF0B081A),
-            fontFamily: 'PingFang SC',
-            height: 1.6,
+        SizedBox(height: ui(6)),
+        Container(
+          width: double.infinity,
+          padding: EdgeInsets.all(ui(12)),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF5F6FA),
+            borderRadius: BorderRadius.circular(ui(10)),
+          ),
+          child: Text(
+            notice.content.isEmpty ? '（暂无正文）' : notice.content,
+            style: TextStyle(
+              fontSize: ui(13),
+              color: const Color(0xFF0B081A),
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w400,
+              height: 22 / 13,
+            ),
           ),
         ),
       ],
@@ -1741,18 +1754,20 @@ class _AdminNoticeDetailRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Padding(
-      padding: EdgeInsets.only(bottom: isLast ? 0 : ui(8)),
+      padding: EdgeInsets.only(bottom: isLast ? 0 : ui(10)),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: ui(72),
+            width: ui(64),
             child: Text(
               '$label：',
               style: TextStyle(
                 fontSize: ui(13),
-                color: const Color(0xFF6D6B75),
+                color: const Color(0xFFB6B5BB),
                 fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w400,
+                height: 20 / 13,
               ),
             ),
           ),
@@ -1763,6 +1778,8 @@ class _AdminNoticeDetailRow extends StatelessWidget {
                 fontSize: ui(13),
                 color: const Color(0xFF0B081A),
                 fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w500,
+                height: 20 / 13,
               ),
             ),
           ),

@@ -21,13 +21,10 @@ class StudentDormitoryInfo {
   final String bedName;
 
   String get displayLabel {
-    final parts = [
-      buildingName,
-      floorName,
-      roomName,
-      bedName,
-    ].where((v) => v.isNotEmpty).toList();
-    return parts.isEmpty ? '未分配宿舍' : parts.join(' ');
+    if (roomName.isEmpty && bedName.isEmpty) return '未分配宿舍';
+    if (roomName.isEmpty) return bedName;
+    if (bedName.isEmpty) return roomName;
+    return '$roomName-$bedName';
   }
 
   factory StudentDormitoryInfo.fromJson(dynamic raw) {

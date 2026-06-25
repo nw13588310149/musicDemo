@@ -51,6 +51,7 @@ import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/student_leave_data.dart';
 import '../data/student_repository.dart';
+import 'widgets/smart_campus_equal_height_grid.dart';
 import 'widgets/smart_campus_page_banner.dart';
 import 'widgets/smart_campus_stat_card.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -667,28 +668,17 @@ class _LeaveCardsGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
     if (records.isEmpty) {
       return _EmptyState();
     }
-    return LayoutBuilder(
-      builder: (context, c) {
-        final gap = ui(16);
-        final twoCol = c.maxWidth >= ui(720);
-        final cardWidth = twoCol ? (c.maxWidth - gap) / 2 : c.maxWidth;
-        return Wrap(
-          spacing: gap,
-          runSpacing: gap,
-          children: [
-            for (final r in records)
-              SizedBox(
-                width: cardWidth,
-                child: _LeaveCard(
-                  record: r,
-                  onTap: () => onTap(r.id),
-                ),
-              ),
-          ],
+    return SmartCampusEqualHeightGrid(
+      itemCount: records.length,
+      spacing: 16,
+      itemBuilder: (context, index) {
+        final r = records[index];
+        return _LeaveCard(
+          record: r,
+          onTap: () => onTap(r.id),
         );
       },
     );
@@ -782,7 +772,7 @@ class _LeaveCard extends StatelessWidget {
                   children: [
                     _CardHeaderRow(record: record),
                     SizedBox(height: ui(8)),
-                    _CardBoardBody(record: record),
+                    Expanded(child: _CardBoardBody(record: record)),
                   ],
                 ),
               ),
@@ -876,6 +866,7 @@ class _CardBoardBody extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
       width: double.infinity,
+      height: double.infinity,
       padding: EdgeInsets.all(ui(16)),
       decoration: BoxDecoration(
         color: _kBoardBg,
@@ -895,6 +886,7 @@ class _CardBoardBody extends StatelessWidget {
           _ApprovalStepper(steps: record.steps),
           SizedBox(height: ui(8)),
           _LabelRow(label: '备注：', value: record.note),
+          const Spacer(),
         ],
       ),
     );
@@ -929,6 +921,8 @@ class _LabelRow extends StatelessWidget {
         Expanded(
           child: Text(
             value,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: ui(12),
               color: _kTextDark,

@@ -95,6 +95,7 @@ dependencies:
   webview_flutter_wkwebview: ^3.25.1
   xml: ^6.6.1
   connectivity_plus: ^7.1.1
+  video_thumbnail: ^0.5.6
   # 截屏防护改由原生层实现（iOS SceneDelegate / Android MainActivity）。
   # screen_protector 与显式 FlutterEngine + SceneDelegate 不兼容，会导致 iOS 启动黑屏。
   # ───────────────────────────────────────────────────────────────────────
@@ -213,7 +214,10 @@ flutter:
     - assets/images/smartCampus/home_actions/dorm_manager/
     - assets/images/smartCampus/home_actions/admin/
     - assets/images/smartCampus/home_actions/shared/
+    - assets/images/new/a11e2b3687735e14c212067024e694f9.png
+    - assets/images/new/我的作业.png
     - assets/images/new/0图标/
+    - assets/images/new/01/xk.png
     - assets/images/new/01/001/
     - assets/images/new/智慧校园/学生端/
     - assets/images/new/智慧校园/任课老师/

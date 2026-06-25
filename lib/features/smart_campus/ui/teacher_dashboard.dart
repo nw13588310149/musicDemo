@@ -1835,13 +1835,13 @@ class _TeacherSchoolNoticeDetailBody extends StatelessWidget {
         ),
         SizedBox(height: ui(16)),
         _TeacherNoticeDetailRow(label: '类型', value: notice.type),
-        if (notice.priority.isNotEmpty)
-          _TeacherNoticeDetailRow(label: '优先级', value: notice.priority),
-        if (notice.scopeLabel.isNotEmpty && notice.scopeLabel != '—')
-          _TeacherNoticeDetailRow(label: '推送范围', value: notice.scopeLabel),
+        _TeacherNoticeDetailRow(label: '级别', value: notice.priority),
+        _TeacherNoticeDetailRow(label: '推送', value: notice.scopeLabel),
         _TeacherNoticeDetailRow(
           label: '时间',
-          value: notice.publishedAt.isNotEmpty ? notice.publishedAt : notice.time,
+          value: notice.publishedAt.isNotEmpty
+              ? notice.publishedAt
+              : notice.time,
           isLast: true,
         ),
         SizedBox(height: ui(12)),
@@ -1899,7 +1899,7 @@ class _TeacherNoticeDetailRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: ui(64),
+            width: ui(50),
             child: Text(
               '$label：',
               style: TextStyle(

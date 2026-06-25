@@ -23,9 +23,11 @@ import '../../../core/network/api_response.dart';
 import '../../../core/widgets/app_date_time_pickers.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/popup_selector_field.dart';
+import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/teacher_leave_data.dart';
 import '../data/teacher_repository.dart';
+import 'widgets/smart_campus_equal_height_grid.dart';
 import 'widgets/smart_campus_page_banner.dart';
 import 'widgets/smart_campus_stat_card.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -214,17 +216,39 @@ class _TeacherMyLeaveViewState extends ConsumerState<TeacherMyLeaveView> {
       return;
     }
     final detail = parseTeacherLeaveDetail(response.data) ?? record;
-    await showDialog<void>(
+    final ui = DashboardScaleScope.of(context).ui;
+    await showScaledDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('请假详情'),
-        content: SizedBox(width: 560, child: _LeaveCard(record: detail)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).maybePop(),
-            child: const Text('关闭'),
-          ),
-        ],
+      barrierColor: Colors.black.withValues(alpha: 0.18),
+      builder: (ctx) => GradientHeaderDialog(
+        title: '${detail.leaveType} · ${detail.status.label}',
+        width: 460,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _InfoLine(label: '请假时间：', value: detail.timeRange),
+            SizedBox(height: ui(6)),
+            _InfoLine(label: '请假时长：', value: detail.durationLabel),
+            SizedBox(height: ui(6)),
+            _InfoLine(label: '请假事由：', value: detail.reason),
+            SizedBox(height: ui(6)),
+            _InfoLine(label: '申请时间：', value: detail.appliedAt),
+            SizedBox(height: ui(6)),
+            _InfoLine(label: '交接说明：', value: detail.handoff),
+            if (detail.status != TeacherLeaveStatus.pending) ...[
+              if (detail.auditTime.isNotEmpty) ...[
+                SizedBox(height: ui(6)),
+                _InfoLine(label: '审批时间：', value: detail.auditTime),
+              ],
+              if (detail.auditReason != null &&
+                  detail.auditReason!.isNotEmpty) ...[
+                SizedBox(height: ui(6)),
+                _InfoLine(label: '审批意见：', value: detail.auditReason!),
+              ],
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -561,22 +585,12 @@ class _CardsGrid extends StatelessWidget {
         ),
       );
     }
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final w = constraints.maxWidth;
-        final gap = ui(16);
-        final cardWidth = (w - gap) / 2;
-        return Wrap(
-          spacing: gap,
-          runSpacing: gap,
-          children: [
-            for (final r in records)
-              SizedBox(
-                width: cardWidth,
-                child: _LeaveCard(record: r, onTap: () => onOpen(r)),
-              ),
-          ],
-        );
+    return SmartCampusEqualHeightGrid(
+      itemCount: records.length,
+      spacing: 16,
+      itemBuilder: (context, index) {
+        final r = records[index];
+        return _LeaveCard(record: r, onTap: () => onOpen(r));
       },
     );
   }
@@ -663,41 +677,58 @@ class _LeaveCard extends StatelessWidget {
                       ],
                     ),
                     SizedBox(height: ui(8)),
-                    Container(
-                      width: double.infinity,
-                      padding: EdgeInsets.all(ui(16)),
-                      decoration: BoxDecoration(
-                        color: _kBoardBg,
-                        borderRadius: BorderRadius.circular(ui(12)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _InfoLine(label: '请假时间：', value: record.timeRange),
-                          SizedBox(height: ui(6)),
-                          _InfoLine(label: '请假事由：', value: record.reason),
-                          SizedBox(height: ui(6)),
-                          _InfoLine(label: '申请时间：', value: record.appliedAt),
-                          SizedBox(height: ui(6)),
-                          _InfoLine(label: '交接说明：', value: record.handoff),
-                          if (record.status != TeacherLeaveStatus.pending) ...[
-                            if (record.auditTime.isNotEmpty) ...[
-                              SizedBox(height: ui(6)),
-                              _InfoLine(
-                                label: '审批时间：',
-                                value: record.auditTime,
-                              ),
+                    Expanded(
+                      child: Container(
+                        width: double.infinity,
+                        height: double.infinity,
+                        padding: EdgeInsets.all(ui(16)),
+                        decoration: BoxDecoration(
+                          color: _kBoardBg,
+                          borderRadius: BorderRadius.circular(ui(12)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _InfoLine(
+                              label: '请假时间：',
+                              value: record.timeRange,
+                            ),
+                            SizedBox(height: ui(6)),
+                            _InfoLine(
+                              label: '请假事由：',
+                              value: record.reason,
+                            ),
+                            SizedBox(height: ui(6)),
+                            _InfoLine(
+                              label: '申请时间：',
+                              value: record.appliedAt,
+                            ),
+                            SizedBox(height: ui(6)),
+                            _InfoLine(
+                              label: '交接说明：',
+                              value: record.handoff,
+                            ),
+                            if (record.status !=
+                                TeacherLeaveStatus.pending) ...[
+                              if (record.auditTime.isNotEmpty) ...[
+                                SizedBox(height: ui(6)),
+                                _InfoLine(
+                                  label: '审批时间：',
+                                  value: record.auditTime,
+                                ),
+                              ],
+                              if (record.auditReason != null &&
+                                  record.auditReason!.isNotEmpty) ...[
+                                SizedBox(height: ui(6)),
+                                _InfoLine(
+                                  label: '审批意见：',
+                                  value: record.auditReason!,
+                                ),
+                              ],
                             ],
-                            if (record.auditReason != null &&
-                                record.auditReason!.isNotEmpty) ...[
-                              SizedBox(height: ui(6)),
-                              _InfoLine(
-                                label: '审批意见：',
-                                value: record.auditReason!,
-                              ),
-                            ],
+                            const Spacer(),
                           ],
-                        ],
+                        ),
                       ),
                     ),
                   ],
@@ -764,6 +795,8 @@ class _InfoLine extends StatelessWidget {
         Expanded(
           child: Text(
             value,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: ui(12),
               color: _kTextDark,

@@ -480,7 +480,7 @@ class _CheckInBanner extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.history_rounded, size: ui(16), color: _kPurple),
+                    Icon(Icons.history_rounded, size: ui(18), color: _kPurple),
                     SizedBox(width: ui(4)),
                     Text(
                       '历史记录',

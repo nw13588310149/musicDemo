@@ -13,6 +13,7 @@ import '../../../courseware/ui/courseware_file_picker.dart';
 import '../../../shell/ui/shell_layout.dart';
 import '../../state/circle_controller.dart';
 import '../../state/circle_state.dart';
+import '../../util/video_cover_frame_extractor.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 const Color _kPurple = Color(0xFF8741FF);
@@ -220,6 +221,9 @@ class _CirclePublishDialogState extends ConsumerState<_CirclePublishDialog> {
     }
     setState(() {
       _resetFile();
+      if (_kind == PostMediaKind.video) {
+        _resetCover();
+      }
       _fileName = f.name;
       _fileBytes = f.bytes;
       _filePath = f.path;
@@ -272,6 +276,9 @@ class _CirclePublishDialogState extends ConsumerState<_CirclePublishDialog> {
         _uploadProgress = 1.0;
         _uploading = false;
       });
+      if (_kind == PostMediaKind.video) {
+        unawaited(_maybeAutoExtractVideoCover());
+      }
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -284,6 +291,32 @@ class _CirclePublishDialogState extends ConsumerState<_CirclePublishDialog> {
 
   void _removeFile() {
     setState(_resetFile);
+  }
+
+  /// 视频上传完成后，若用户未手动选封面，则抽取第 10 帧并自动上传。
+  Future<void> _maybeAutoExtractVideoCover() async {
+    if (!mounted || _kind != PostMediaKind.video) return;
+    if (_coverFileName != null || _coverUploading) return;
+
+    final bytes = await extractVideoCoverFrame(
+      filePath: _filePath,
+      fileBytes: _fileBytes,
+      frameIndex: 10,
+    );
+    if (!mounted || bytes == null || bytes.isEmpty) return;
+    if (_coverFileName != null) return;
+
+    final baseName = _fileName ?? 'video';
+    final dot = baseName.lastIndexOf('.');
+    final stem = dot > 0 ? baseName.substring(0, dot) : baseName;
+
+    setState(() {
+      _coverFileName = '${stem}_cover.jpg';
+      _coverFileBytes = bytes;
+      _coverFilePath = null;
+      _coverFileSize = bytes.length;
+    });
+    await _startCoverUpload();
   }
 
   // ─── 封面图：仅图片格式；上传走与主资源相同的 cloudDrive 通道。
