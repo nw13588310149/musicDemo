@@ -41,7 +41,9 @@ class CourseClassKindTag extends StatelessWidget {
     final label = isSmall ? '小课' : '大课';
 
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: ui(4), vertical: ui(2)),
+      height: ui(19),
+      padding: EdgeInsets.symmetric(horizontal: ui(4)),
+      alignment: Alignment.center,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(ui(4)),

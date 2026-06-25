@@ -35,7 +35,9 @@ class MyCollectionPage extends ConsumerWidget {
     final state = ref.watch(myCollectionControllerProvider);
     final controller = ref.read(myCollectionControllerProvider.notifier);
     final ui = DashboardScaleScope.of(context).ui;
-    final showPageEmpty = !state.loading && state.items.isEmpty;
+    final showPageEmpty =
+        !state.loading && !state.fetchingItems && state.items.isEmpty;
+    final showContentLoading = state.fetchingItems && state.items.isEmpty;
 
     return Stack(
       children: [
@@ -68,8 +70,10 @@ class MyCollectionPage extends ConsumerWidget {
                 Positioned.fill(
                   child: Padding(
                     padding: EdgeInsets.fromLTRB(ui(20), ui(82), ui(20), ui(20)),
-                    child: showPageEmpty || (state.loading && state.items.isEmpty)
+                    child: showPageEmpty
                         ? const SizedBox.shrink()
+                        : showContentLoading
+                        ? const Center(child: AppLoadingIndicator())
                         : _CollectionGrid(
                             state: state,
                             onOpenItem: (item) => _openItem(context, item),

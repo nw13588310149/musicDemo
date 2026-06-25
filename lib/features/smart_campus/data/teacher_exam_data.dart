@@ -458,6 +458,70 @@ class TeacherExamSeatEntry {
   bool get arranged => classroomName.isNotEmpty && seatNo != null;
 }
 
+/// 同一考场内合并后的考生座位（同一考生多科目聚合为一条）。
+class TeacherExamSeatGroupEntry {
+  const TeacherExamSeatGroupEntry({
+    required this.studentId,
+    required this.studentNo,
+    required this.studentName,
+    required this.className,
+    required this.subjectNames,
+    required this.classroomName,
+    required this.seatNo,
+  });
+
+  final String studentId;
+  final String studentNo;
+  final String studentName;
+  final String className;
+  final List<String> subjectNames;
+  final String classroomName;
+  final int? seatNo;
+
+  bool get arranged => classroomName.isNotEmpty && seatNo != null;
+}
+
+/// 同一考场内按考生合并重复座位，科目名称去重保序。
+List<TeacherExamSeatGroupEntry> groupTeacherExamSeatsByStudent(
+  List<TeacherExamSeatEntry> seats,
+) {
+  final map = <String, TeacherExamSeatGroupEntry>{};
+  final order = <String>[];
+  for (final s in seats) {
+    final key = s.studentId.isNotEmpty
+        ? s.studentId
+        : '${s.studentNo}|${s.studentName}';
+    final existing = map[key];
+    if (existing == null) {
+      order.add(key);
+      map[key] = TeacherExamSeatGroupEntry(
+        studentId: s.studentId,
+        studentNo: s.studentNo,
+        studentName: s.studentName,
+        className: s.className,
+        subjectNames: s.subjectName.isNotEmpty ? [s.subjectName] : const [],
+        classroomName: s.classroomName,
+        seatNo: s.seatNo,
+      );
+      continue;
+    }
+    final subjects = [...existing.subjectNames];
+    if (s.subjectName.isNotEmpty && !subjects.contains(s.subjectName)) {
+      subjects.add(s.subjectName);
+    }
+    map[key] = TeacherExamSeatGroupEntry(
+      studentId: existing.studentId,
+      studentNo: existing.studentNo,
+      studentName: existing.studentName,
+      className: existing.className,
+      subjectNames: subjects,
+      classroomName: existing.classroomName,
+      seatNo: existing.seatNo ?? s.seatNo,
+    );
+  }
+  return [for (final k in order) map[k]!];
+}
+
 /// 解析 `examFullDetail` 响应中的 `data.seats` 列表为座位记录。
 List<TeacherExamSeatEntry> parseTeacherExamSeats(dynamic raw) {
   final map = _unwrapApiMap(raw);
@@ -663,10 +727,20 @@ String _mediumFromPath(String path) {
       lower.endsWith('.m4a')) {
     return '音频';
   }
-  if (lower.endsWith('.mp4') || lower.endsWith('.mov')) return '视频';
+  if (lower.endsWith('.mp4') ||
+      lower.endsWith('.mov') ||
+      lower.endsWith('.webm') ||
+      lower.endsWith('.m4v')) {
+    return '视频';
+  }
   if (lower.endsWith('.jpg') ||
       lower.endsWith('.jpeg') ||
-      lower.endsWith('.png')) {
+      lower.endsWith('.png') ||
+      lower.endsWith('.webp') ||
+      lower.endsWith('.gif') ||
+      lower.endsWith('.bmp') ||
+      lower.endsWith('.heic') ||
+      lower.endsWith('.heif')) {
     return '图片';
   }
   return path.isEmpty ? '—' : '文件';

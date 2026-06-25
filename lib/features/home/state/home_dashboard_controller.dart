@@ -264,11 +264,7 @@ class HomeDashboardController extends StateNotifier<HomeDashboardState> {
       );
     }
 
-    if (result.isEmpty) {
-      return const [];
-    }
-
-    return result.take(3).toList();
+    return result;
   }
 
   bool _isEnded(Map<String, dynamic> item) {

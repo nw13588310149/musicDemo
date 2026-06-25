@@ -603,11 +603,11 @@ class _CreateApplyButton extends StatelessWidget {
               Text(
                 '发起申请',
                 style: TextStyle(
-                  fontSize: ui(16),
+                  fontSize: ui(14),
                   color: _kTextDark,
                   fontFamily: 'PingFang SC',
                   fontWeight: AppFont.w500,
-                  height: 12 / 16,
+                  height: 1,
                 ),
               ),
             ],

@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
+import '../../shell/state/shell_controller.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/admin_home_data.dart';
 import '../data/teacher_notice_data.dart';
@@ -154,7 +155,7 @@ class _AdminHomeViewState extends ConsumerState<AdminHomeView> {
 
   List<_StatItem> _statsRow2(AdminHomeSummary summary) => [
     _StatItem('${summary.leaveStatus0Count}', '教职工待审批请假'),
-    _StatItem('${summary.smallCourseSignStatus5Count}', '小班课待审核'),
+    _StatItem('${summary.smallCourseSignStatus5Count}', '小课待审核'),
     _StatItem('${summary.userFaceNotRecordedCount}', '人脸待补录'),
     _StatItem('${summary.postStatus0Count}', '今日校圈'),
   ];
@@ -220,11 +221,16 @@ class _AdminHomeViewState extends ConsumerState<AdminHomeView> {
     );
   }
 
-  Widget _buildSidePanel(AdminHomeState homeState, {required bool fillHeight}) {
+  Widget _buildSidePanel(
+    AdminHomeState homeState, {
+    required bool fillHeight,
+    required String institutionName,
+  }) {
     return _AdminSidePanel(
       fillHeight: fillHeight,
       displayName: widget.shellDisplayName,
       avatarUrl: widget.avatarUrl,
+      institutionName: institutionName,
       availableRoles: widget.availableRoles,
       selectedRole: widget.selectedRole,
       onSelectRole: widget.onSelectRole,
@@ -241,6 +247,7 @@ class _AdminHomeViewState extends ConsumerState<AdminHomeView> {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final homeState = ref.watch(adminHomeControllerProvider);
+    final institutionName = ref.watch(shellControllerProvider).schoolName;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -269,7 +276,11 @@ class _AdminHomeViewState extends ConsumerState<AdminHomeView> {
                 children: [
                   _buildMainColumn(homeState, ui),
                   SizedBox(height: contentGap),
-                  _buildSidePanel(homeState, fillHeight: false),
+                  _buildSidePanel(
+                    homeState,
+                    fillHeight: false,
+                    institutionName: institutionName,
+                  ),
                 ],
               ),
             ),
@@ -295,7 +306,11 @@ class _AdminHomeViewState extends ConsumerState<AdminHomeView> {
                   SizedBox(width: contentGap),
                   SizedBox(
                     width: sidebarWidth,
-                    child: _buildSidePanel(homeState, fillHeight: true),
+                    child: _buildSidePanel(
+                      homeState,
+                      fillHeight: true,
+                      institutionName: institutionName,
+                    ),
                   ),
                 ],
               ),
@@ -731,27 +746,44 @@ class _LineChartPainter extends CustomPainter {
     final maxV = maxY <= 0 ? 10.0 : maxY;
     final tickStep = maxV / 5;
     final gridPaint = Paint()
-      ..color = const Color(0xFFF1ECFF)
+      ..color = const Color(0xFFE6E9F1)
       ..strokeWidth = 1;
 
     for (var i = 5; i >= 0; i--) {
       final tickValue = i == 0 ? 0.0 : tickStep * i;
       final y = _yForValue(tickValue, size.height);
+      final start = Offset(plotLeft, y);
+      final end = Offset(size.width, y);
 
+      // 与班级工作台七日查寝一致：Y=0 实线基线，其余刻度虚线。
       if (i == 0) {
-        final dash = 4.0;
-        var x = plotLeft;
-        while (x < size.width) {
-          canvas.drawLine(
-            Offset(x, y),
-            Offset(math.min(x + dash, size.width), y),
-            gridPaint,
-          );
-          x += dash * 2;
-        }
+        canvas.drawLine(start, end, gridPaint);
       } else {
-        canvas.drawLine(Offset(plotLeft, y), Offset(size.width, y), gridPaint);
+        _paintDashedGridLine(canvas, start, end, gridPaint);
       }
+    }
+  }
+
+  static void _paintDashedGridLine(
+    Canvas canvas,
+    Offset start,
+    Offset end,
+    Paint paint,
+  ) {
+    const dashWidth = 4.0;
+    const dashSpace = 4.0;
+    final total = (end - start).distance;
+    if (total <= 0) return;
+    final direction = (end - start) / total;
+    var drawn = 0.0;
+    while (drawn < total) {
+      final segEnd = math.min(drawn + dashWidth, total);
+      canvas.drawLine(
+        start + direction * drawn,
+        start + direction * segEnd,
+        paint,
+      );
+      drawn += dashWidth + dashSpace;
     }
   }
 
@@ -1113,6 +1145,7 @@ class _AdminSidePanel extends StatelessWidget {
     required this.fillHeight,
     required this.displayName,
     required this.avatarUrl,
+    this.institutionName = '',
     required this.availableRoles,
     required this.selectedRole,
     required this.onSelectRole,
@@ -1127,6 +1160,7 @@ class _AdminSidePanel extends StatelessWidget {
   final bool fillHeight;
   final String displayName;
   final String avatarUrl;
+  final String institutionName;
   final List<SmartCampusRole> availableRoles;
   final SmartCampusRole selectedRole;
   final ValueChanged<SmartCampusRole>? onSelectRole;
@@ -1152,7 +1186,9 @@ class _AdminSidePanel extends StatelessWidget {
         _ProfileHeader(
           displayName: displayName,
           avatarUrl: avatarUrl,
+          institutionName: institutionName,
           roleBadge: selectedRole == SmartCampusRole.principal ? '校长' : '管理员',
+          role: selectedRole,
         ),
         SizedBox(height: ui(20)),
         const _ProfileInfoRows(),
@@ -1314,12 +1350,16 @@ class _ProfileHeader extends StatelessWidget {
   const _ProfileHeader({
     required this.displayName,
     required this.avatarUrl,
+    this.institutionName = '',
     this.roleBadge = '管理员',
+    this.role = SmartCampusRole.admin,
   });
 
   final String displayName;
   final String avatarUrl;
+  final String institutionName;
   final String roleBadge;
+  final SmartCampusRole role;
 
   @override
   Widget build(BuildContext context) {
@@ -1423,12 +1463,27 @@ class _ProfileHeader extends StatelessWidget {
                       ),
                     ],
                   ),
+                  if (institutionName.trim().isNotEmpty) ...[
+                    SizedBox(height: ui(4)),
+                    Text(
+                      institutionName.trim(),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: ui(12),
+                        height: 1.2,
+                        color: const Color(0xFF6D6B75),
+                        fontFamily: 'Source Han Sans SC',
+                        fontWeight: AppFont.w400,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
           ],
         ),
-        SmartCampusAvatarRoleBadge(label: roleBadge),
+        SmartCampusAvatarRoleBadge(label: roleBadge, role: role),
       ],
     );
   }

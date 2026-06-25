@@ -2153,7 +2153,7 @@ class _SpeedMenuItemState extends State<_SpeedMenuItem> {
                   ),
                 ),
               ),
-              if (selected) AppDropdownSelectedMark(size: ui(14)),
+              AppDropdownSelectedMark(size: ui(14), selected: selected),
             ],
           ),
         ),

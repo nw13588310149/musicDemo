@@ -28,6 +28,7 @@ import 'widgets/smart_campus_home_card.dart';
 import 'widgets/smart_campus_quick_action_icon.dart';
 import 'widgets/smart_campus_quick_actions_card.dart';
 import 'widgets/smart_campus_stat_card.dart';
+import 'widgets/teacher_today_course_card.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 part 'student_dashboard.dart';
@@ -445,6 +446,7 @@ class _TeacherDashboardLayoutState
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final data = smartCampusDashboardDataForRole(_localTab);
+    final institutionName = ref.watch(shellControllerProvider).schoolName;
     final onOpenPrincipalMailbox = _guardedNav(widget.onOpenPrincipalMailbox);
     final onOpenMyClass = _guardedNav(widget.onOpenMyClass);
     final onOpenClassWorkbench = _guardedNav(widget.onOpenClassWorkbench);
@@ -546,6 +548,7 @@ class _TeacherDashboardLayoutState
                   availableRoles: widget.availableRoles,
                   shellDisplayName: widget.shellDisplayName,
                   avatarUrl: widget.avatarUrl,
+                  institutionName: institutionName,
                   fillHeight: false,
                 ),
               ],
@@ -604,6 +607,7 @@ class _TeacherDashboardLayoutState
                 availableRoles: widget.availableRoles,
                 shellDisplayName: widget.shellDisplayName,
                 avatarUrl: widget.avatarUrl,
+                institutionName: institutionName,
                 fillHeight: true,
               ),
             ),
@@ -809,23 +813,10 @@ class _TeacherStatCard extends StatelessWidget {
     final valueColor = isNextLesson
         ? const Color(0xFF8741FF)
         : const Color(0xFF0B081A);
-    // 含中文的值（如「周三」「今天」「已过」）回退到系统字体后，同字号下视觉
-    // 比 Barlow 数字大很多；改用 PingFang SC 并下调字号，使其与数字视觉接近。
-    final isTextValue = RegExp(r'[\u4e00-\u9fff]').hasMatch(item.value);
-    final value = Text(
-      item.value,
-      textAlign: TextAlign.center,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: isTextValue
-          ? TextStyle(
-              fontSize: ui(18),
-              color: valueColor,
-              fontFamily: 'PingFang SC',
-              fontWeight: AppFont.w600,
-              height: 1.0,
-            )
-          : smartCampusStatValueTextStyle(ui, color: valueColor),
+    final value = smartCampusHomeStatValue(
+      value: item.value,
+      ui: ui,
+      color: valueColor,
     );
 
     return SmartCampusHomeCard(
@@ -1060,7 +1051,7 @@ class _TeacherSidebar extends StatelessWidget {
   /// 学生端侧栏「宿舍」文案；`null` 表示尚未加载。
   final String? studentDormBedLabel;
 
-  /// 学生端当前绑定机构名称（`schoolList.name`）。
+  /// 当前绑定学校名称（`schoolList.name`）。
   final String institutionName;
   final bool fillHeight;
 
@@ -1252,7 +1243,7 @@ class _TeacherProfileHeader extends StatelessWidget {
                       ),
                     ],
                   ),
-                  if (isStudent && institutionName.trim().isNotEmpty) ...[
+                  if (institutionName.trim().isNotEmpty) ...[
                     SizedBox(height: ui(4)),
                     Text(
                       institutionName.trim(),
@@ -1274,6 +1265,7 @@ class _TeacherProfileHeader extends StatelessWidget {
         ),
         SmartCampusAvatarRoleBadge(
           label: profile.badgeLabel.isNotEmpty ? profile.badgeLabel : roleFallback,
+          role: data.role,
         ),
       ],
     );
@@ -2034,9 +2026,8 @@ class _TeacherNoticeCard extends StatelessWidget {
 //   - 顶部 ui(12) 间距 + 标题→白卡 ui(20)
 //   - 数据来自 `/app/school/v2/teacher/courseList`（当日）+ `schoolTimeConfigList`（节次时间）
 //   - 白卡 padding 12 / radius 16 / 浅阴影
-//   - 白卡内部为灰底（#F5F6FA, radius 12）子卡，子卡右上 L 型角标承载状态色
-//   - 子卡时段用 Text.rich 三段式（起 #1A1A1A 600 / "- " #B6B5BB 600 / 止 #0B081A 600）
-//   - 老师行：渐变首字头像 + 姓名 14 600 + 课程标签（颜色背景）+ 圆点+大小课白底标签
+//   - 白卡内部子卡与签课管理「今日课程」一致：104 高 / radius 12 / 右上 68×22 状态角标
+//   - 时段 Barlow 18；头像 40 + 姓名 + 科目标签 + 大小课标签；副行提示文案
 //   - 数据为空时白卡保留，并展示占位文案
 // =============================================================================
 
@@ -2051,6 +2042,7 @@ class _LessonRowData {
     required this.tag,
     required this.tagDotColor,
     required this.hint,
+    required this.isSmallCourse,
     this.avatarUrl = '',
     this.preferLogoOverAvatar = false,
   });
@@ -2068,24 +2060,31 @@ class _LessonRowData {
   final String tag;
   final Color tagDotColor;
   final String hint;
+  final bool isSmallCourse;
 }
 
 class _LessonScheduleData {
   const _LessonScheduleData({
     required this.time,
-    required this.status,
-    required this.statusColor,
-    required this.statusBg,
+    required this.startTime,
+    required this.endTime,
+    required this.phase,
     required this.teachers,
-    this.isPast = false,
   });
 
   final String time;
-  final String status;
-  final Color statusColor;
-  final Color statusBg;
+  final String startTime;
+  final String endTime;
+  final _LessonSlotPhase phase;
   final List<_LessonRowData> teachers;
-  final bool isPast;
+
+  bool get isPast => phase == _LessonSlotPhase.ended;
+
+  TeacherTodayCourseRunState get runState => switch (phase) {
+    _LessonSlotPhase.ended => TeacherTodayCourseRunState.ended,
+    _LessonSlotPhase.inProgress => TeacherTodayCourseRunState.inProgress,
+    _LessonSlotPhase.upcoming => TeacherTodayCourseRunState.upcoming,
+  };
 }
 
 class _DashboardTimeConfig {
@@ -2321,15 +2320,13 @@ _BuiltDashboardSchedule _buildDashboardScheduleFromIndex({
     _LessonSlotPhase phase,
   ) {
     final times = _resolveRowTimes(row, timeConfigs);
-    final style = _statusStyle(phase);
     final start = times.start;
     final end = times.end;
     return _LessonScheduleData(
       time: start.isNotEmpty && end.isNotEmpty ? '$start - $end' : '—',
-      status: style.label,
-      statusColor: style.foreground,
-      statusBg: style.background,
-      isPast: phase == _LessonSlotPhase.ended,
+      startTime: start,
+      endTime: end,
+      phase: phase,
       teachers: [_lessonRowFromCourse(row, start, end)],
     );
   }
@@ -2524,6 +2521,7 @@ _LessonRowData _lessonRowFromCourse(
     tag: isSmall ? '小课' : '大课',
     tagDotColor: tagDotColor,
     hint: hint,
+    isSmallCourse: isSmall,
   );
 }
 
@@ -2634,31 +2632,6 @@ _LessonSlotPhase _slotPhase(DateTime now, String startHm, String endHm) {
   if (now.isBefore(start)) return _LessonSlotPhase.upcoming;
   if (now.isAfter(end)) return _LessonSlotPhase.ended;
   return _LessonSlotPhase.inProgress;
-}
-
-({String label, Color foreground, Color background}) _statusStyle(
-  _LessonSlotPhase phase,
-) {
-  switch (phase) {
-    case _LessonSlotPhase.inProgress:
-      return (
-        label: '正在进行',
-        foreground: const Color(0xFF0B081A),
-        background: const Color(0xFFEAE5FF),
-      );
-    case _LessonSlotPhase.upcoming:
-      return (
-        label: '即将开始',
-        foreground: const Color(0xFF0B081A),
-        background: const Color(0xFFEAE5FF),
-      );
-    case _LessonSlotPhase.ended:
-      return (
-        label: '已结束',
-        foreground: const Color(0xFFB6B5BB),
-        background: const Color(0xFFE6E9F1),
-      );
-  }
 }
 
 Color? _parseDashboardHexColor(String hex) {
@@ -2822,10 +2795,8 @@ class _LessonEmptyHint extends StatelessWidget {
   }
 }
 
-/// 与 [_LessonScheduleCard] 单条教师行时的外框高度一致。
-double _lessonScheduleCardOuterHeight(double Function(double) ui) {
-  return ui(14 + 18 + 14 + 40 + 16);
-}
+/// 与 [_LessonScheduleCard] / 签课管理「今日课程」单卡高度一致。
+double _lessonScheduleCardOuterHeight(double Function(double) ui) => ui(104);
 
 class _LessonScheduleCard extends StatelessWidget {
   const _LessonScheduleCard({required this.data});
@@ -2835,223 +2806,26 @@ class _LessonScheduleCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final radius = ui(12);
-    final cardBg = data.isPast
-        ? const Color(0xFFE6E9F1)
-        : const Color(0xFFF5F6FA);
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Container(
-          width: double.infinity,
-          padding: EdgeInsets.fromLTRB(ui(16), ui(14), ui(16), ui(16)),
-          decoration: BoxDecoration(
-            color: cardBg,
-            borderRadius: BorderRadius.circular(radius),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text.rich(
-                TextSpan(children: _splitTime(data.time, ui, muted: data.isPast)),
-              ),
-              SizedBox(height: ui(14)),
-              for (var i = 0; i < data.teachers.length; i++) ...[
-                _LessonTeacherRow(data: data.teachers[i], muted: data.isPast),
-                if (i != data.teachers.length - 1) SizedBox(height: ui(14)),
-              ],
-            ],
-          ),
-        ),
-        Positioned(
-          top: 0,
-          right: 0,
-          child: Container(
-            height: ui(22),
-            padding: EdgeInsets.symmetric(horizontal: ui(10), vertical: ui(2)),
-            decoration: BoxDecoration(
-              color: data.statusBg,
-              borderRadius: BorderRadius.only(
-                topRight: Radius.circular(radius),
-                bottomLeft: Radius.circular(radius),
-              ),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              data.status,
-              style: TextStyle(
-                fontSize: ui(12),
-                color: data.statusColor,
-                fontWeight: FontWeight.w400,
-                height: 1,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  List<InlineSpan> _splitTime(
-    String time,
-    double Function(double) ui, {
-    bool muted = false,
-  }) {
-    final primary = muted ? const Color(0xFFB6B5BB) : const Color(0xFF1A1A1A);
-    final secondary = muted ? const Color(0xFFB6B5BB) : const Color(0xFF0B081A);
-    final parts = time.split('-');
-    if (parts.length != 2) {
-      return [
-        TextSpan(
-          text: time,
-          style: TextStyle(
-            fontSize: ui(18),
-            color: primary,
-            fontWeight: FontWeight.w600,
-            height: 1,
-          ),
-        ),
-      ];
-    }
-    final start = parts[0].trim();
-    final end = parts[1].trim();
-    return [
-      TextSpan(
-        text: '$start ',
-        style: TextStyle(
-          fontSize: ui(18),
-          color: primary,
-          fontWeight: FontWeight.w600,
-          height: 1,
+    final row = data.teachers.first;
+    return TeacherTodayCourseCard(
+      startTime: data.startTime,
+      endTime: data.endTime,
+      runState: data.runState,
+      displayName: row.teacherName,
+      courseName: row.courseName,
+      isSmallCourse: row.isSmallCourse,
+      subtitle: row.hint,
+      muted: data.isPast,
+      avatar: Opacity(
+        opacity: data.isPast ? 0.72 : 1,
+        child: _LessonSeedAvatar(
+          seed: row.avatarSeed,
+          logoUrl: row.logoUrl,
+          avatarUrl: row.avatarUrl,
+          preferLogoOverAvatar: row.preferLogoOverAvatar,
+          size: ui(40),
         ),
       ),
-      TextSpan(
-        text: '- ',
-        style: TextStyle(
-          fontSize: ui(18),
-          color: const Color(0xFFB6B5BB),
-          fontWeight: FontWeight.w600,
-          height: 1,
-        ),
-      ),
-      TextSpan(
-        text: end,
-        style: TextStyle(
-          fontSize: ui(18),
-          color: secondary,
-          fontWeight: FontWeight.w600,
-          height: 1,
-        ),
-      ),
-    ];
-  }
-}
-
-class _LessonTeacherRow extends StatelessWidget {
-  const _LessonTeacherRow({required this.data, this.muted = false});
-
-  final _LessonRowData data;
-  final bool muted;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    const mutedColor = Color(0xFFB6B5BB);
-    final nameColor = muted ? mutedColor : const Color(0xFF0B081A);
-    final tagDotColor = muted ? mutedColor : data.tagDotColor;
-    final tagTextColor = muted ? mutedColor : const Color(0xFF0B081A);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Opacity(
-          opacity: muted ? 0.72 : 1,
-          child: _LessonSeedAvatar(
-            seed: data.avatarSeed,
-            logoUrl: data.logoUrl,
-            avatarUrl: data.avatarUrl,
-            preferLogoOverAvatar: data.preferLogoOverAvatar,
-            size: ui(40),
-          ),
-        ),
-        SizedBox(width: ui(8)),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Flexible(
-                    child: Text(
-                      data.teacherName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: ui(14),
-                        color: nameColor,
-                        fontWeight: FontWeight.w600,
-                        height: 1,
-                      ),
-                    ),
-                  ),
-                  SizedBox(width: ui(6)),
-                  CourseSubjectTag(name: data.courseName, muted: muted),
-                  SizedBox(width: ui(4)),
-                  Container(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: ui(4),
-                      vertical: ui(2),
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(ui(4)),
-                      border: Border.all(color: const Color(0xFFF3F2F3)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: ui(6),
-                          height: ui(6),
-                          decoration: BoxDecoration(
-                            color: tagDotColor,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        SizedBox(width: ui(4)),
-                        Text(
-                          data.tag,
-                          style: TextStyle(
-                            fontSize: ui(12),
-                            color: tagTextColor,
-                            fontFamily: 'PingFang SC',
-                            fontWeight: AppFont.w400,
-                            height: 15.24 / 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: ui(6)),
-              Text(
-                data.hint,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: ui(12),
-                  color: const Color(0xFFB6B5BB),
-                  fontWeight: FontWeight.w400,
-                  height: 1,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }

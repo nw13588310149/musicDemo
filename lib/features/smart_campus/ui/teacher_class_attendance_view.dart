@@ -53,6 +53,8 @@ import '../data/teacher_attendance_data.dart';
 import '../state/teacher_attendance_controller.dart';
 import 'course_sign_countdown.dart';
 import 'widgets/course_sign_status_picker.dart';
+import 'widgets/smart_campus_stat_card.dart';
+import 'widgets/teacher_today_course_card.dart';
 import '../../shell/ui/shell_layout.dart';
 import 'widgets/smart_campus_page_banner.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -69,8 +71,6 @@ const Color _kTextSecondary = Color(0xFF6D6B75);
 const Color _kTextHint = Color(0xFFB6B5BB);
 const Color _kPurple = Color(0xFF8741FF);
 const Color _kPurpleSoftHint = Color(0xFFF0E8FC); // 大班签到提示带 bg
-const Color _kPurpleSoftBg = Color(0xFFEAE5FF); // "进行中"角标 bg
-const Color _kInProgressCardBg = Color(0xFFF4F4FF); // 今日课程"进行中"卡 bg
 const Color _kEndedTagBg = Color(0xFFE6E9F1);
 const Color _kStatusGreen = Color(0xFF0CAC40);
 const Color _kStatusPresent = Color(0xFF0CAC40); // 实到
@@ -838,12 +838,9 @@ class _StatCard extends StatelessWidget {
               ),
               Text(
                 item.value,
-                style: TextStyle(
-                  fontSize: ui(32),
+                style: smartCampusStatValueTextStyle(
+                  ui,
                   color: item.valueColor,
-                  fontFamily: 'Barlow',
-                  fontWeight: AppFont.w500,
-                  height: 1,
                 ),
               ),
             ],
@@ -1524,42 +1521,6 @@ class _TodayClassesPanel extends StatelessWidget {
   }
 }
 
-class _CourseTimeLabel extends StatelessWidget {
-  const _CourseTimeLabel({required this.startTime, required this.endTime});
-
-  final String startTime;
-  final String endTime;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    final hasEnd = endTime.isNotEmpty && endTime != '--:--';
-    final baseStyle = TextStyle(
-      fontSize: ui(18),
-      fontFamily: 'Barlow',
-      fontWeight: FontWeight.w600,
-      height: 1.2,
-      color: _kTextSection,
-    );
-    if (!hasEnd) {
-      return Text(startTime, style: baseStyle);
-    }
-    return RichText(
-      text: TextSpan(
-        style: baseStyle,
-        children: [
-          TextSpan(text: '$startTime '),
-          const TextSpan(
-            text: '- ',
-            style: TextStyle(color: _kTextHint),
-          ),
-          TextSpan(text: endTime),
-        ],
-      ),
-    );
-  }
-}
-
 class _TodayClassCard extends StatelessWidget {
   const _TodayClassCard({
     required this.data,
@@ -1571,139 +1532,35 @@ class _TodayClassCard extends StatelessWidget {
   final bool isActive;
   final VoidCallback onTap;
 
+  TeacherTodayCourseRunState _runState() => switch (data.runState) {
+    _ClassRunState.ended => TeacherTodayCourseRunState.ended,
+    _ClassRunState.inProgress => TeacherTodayCourseRunState.inProgress,
+    _ClassRunState.upcoming => TeacherTodayCourseRunState.upcoming,
+  };
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final isEnded = data.runState == _ClassRunState.ended;
-    final isInProgress = data.runState == _ClassRunState.inProgress;
     final mainStudent =
         data.singleStudent ??
         (data.students.isNotEmpty ? data.students.first.name : '');
     final displayName = data.className.isNotEmpty
         ? data.className
         : (mainStudent.isNotEmpty ? mainStudent : data.courseName);
-    final avatarSeed = data.cardAvatarSeed;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(ui(12)),
-        child: Container(
-          width: double.infinity,
-          height: ui(104),
-          decoration: BoxDecoration(
-            color: isEnded ? _kInnerGray : _kInProgressCardBg,
-            borderRadius: BorderRadius.circular(ui(12)),
-            boxShadow: isActive
-                ? [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.12),
-                      blurRadius: ui(6),
-                      offset: Offset(0, ui(2)),
-                    ),
-                  ]
-                : null,
-          ),
-          child: Stack(
-            children: [
-              Positioned(
-                right: 0,
-                top: 0,
-                child: Container(
-                  width: ui(68),
-                  height: ui(22),
-                  decoration: BoxDecoration(
-                    color: isEnded
-                        ? _kEndedTagBg
-                        : (isInProgress ? _kPurpleSoftBg : _kEndedTagBg),
-                    borderRadius: BorderRadius.only(
-                      topRight: Radius.circular(ui(12)),
-                      bottomLeft: Radius.circular(ui(12)),
-                    ),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    isEnded
-                        ? '已结束'
-                        : (isInProgress ? '进行中' : '待开始'),
-                    style: TextStyle(
-                      fontSize: ui(12),
-                      color: isEnded ? _kTextHint : _kTextDark,
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w400,
-                      height: 1,
-                    ),
-                  ),
-                ),
-              ),
-              Positioned(
-                left: ui(16),
-                top: ui(12),
-                child: _CourseTimeLabel(
-                  startTime: data.startTime,
-                  endTime: data.endTime,
-                ),
-              ),
-              Positioned(
-                left: ui(16),
-                top: ui(48),
-                child: _Avatar(
-                  seed: avatarSeed,
-                  size: ui(40),
-                  imageUrl: data.cardAvatarUrl,
-                ),
-              ),
-              Positioned(
-                left: ui(62),
-                top: ui(50),
-                right: ui(8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            displayName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: ui(14),
-                              color: _kTextDark,
-                              fontFamily: 'PingFang SC',
-                              fontWeight: AppFont.w600,
-                              height: 1,
-                            ),
-                          ),
-                        ),
-                        SizedBox(width: ui(4)),
-                        _AttendanceInlineTagPair(
-                          courseName: data.courseName,
-                          kind: data.kind,
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: ui(4)),
-                    Text(
-                      '${data.signStatusLabel}·${data.location}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: ui(12),
-                        color: _kTextHint,
-                        fontFamily: 'PingFang SC',
-                        fontWeight: AppFont.w400,
-                        height: 1,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
+    return TeacherTodayCourseCard(
+      startTime: data.startTime,
+      endTime: data.endTime,
+      runState: _runState(),
+      displayName: displayName,
+      courseName: data.courseName,
+      isSmallCourse: data.kind == _ClassKind.small,
+      subtitle: '${data.signStatusLabel}·${data.location}',
+      isActive: isActive,
+      onTap: onTap,
+      avatar: _Avatar(
+        seed: data.cardAvatarSeed,
+        size: ui(40),
+        imageUrl: data.cardAvatarUrl,
       ),
     );
   }

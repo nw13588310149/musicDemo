@@ -11,6 +11,7 @@ import '../../../core/widgets/popup_selector_field.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/admin_repository.dart';
+import '../data/smart_campus_role_theme.dart';
 import 'widgets/smart_campus_page_banner.dart';
 import 'widgets/smart_campus_stat_card.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -327,23 +328,9 @@ List<String> _parseTeacherRoles(dynamic raw) {
   return labels;
 }
 
-/// 教师身份标签配色（与页面统计卡渐变色系一致）。
-({Color bg, Color fg}) _teacherRoleColors(String label) {
-  switch (label) {
-    case '班主任':
-      return (bg: const Color(0xFFFFF0DC), fg: const Color(0xFFE8913A));
-    case '任课老师':
-      return (bg: const Color(0xFFE7DCFF), fg: const Color(0xFF8741FF));
-    case '教务管理员':
-      return (bg: const Color(0xFFDCE8FF), fg: const Color(0xFF4A7FD4));
-    case '宿管':
-      return (bg: const Color(0xFFDFFCF0), fg: const Color(0xFF0CAC40));
-    case '校长':
-      return (bg: const Color(0xFFFFE2DC), fg: const Color(0xFFE85D4A));
-    default:
-      return (bg: const Color(0xFFF3F2F3), fg: const Color(0xFF6D6B75));
-  }
-}
+/// 教师身份标签配色（五身份主题色）。
+({Color bg, Color fg}) _teacherRoleColors(String label) =>
+    smartCampusRoleTagColors(label);
 
 Map<String, dynamic> _pickNestedMap(
   Map<String, dynamic> json,
@@ -431,9 +418,9 @@ const _kFallbackClassOptions = <_ClassFilterOption>[_ClassFilterOption.all];
 /// 3. **筛选行**：[PopupSelectorField]「全部班级」+ 324×44 搜索框
 ///    （占位 "搜索姓名、工号、任课方向"），不带状态 tab。
 /// 4. **结果条**：「当前结果 X 人」12 #0B081A。
-/// 5. **教师卡 3 列网格**（315×88 白卡，12 gap）：左 40 头像 + 右上工号 +
+/// 5. **教师卡 3 列网格**（315×98 白卡，12 gap）：左 40 头像 + 右上工号 +
 ///    名字 + 一句话部门·学科 + 灰色「任课·班主任·班级」/「任课」。
-///    左下「班主任」黄色徽章 (#DBEE49)；右上 cut-corner 状态徽章
+///    左下身份标签（统一紫色 #EAE5FF / #8741FF，高 17）；右上 cut-corner 状态徽章
 ///    （在岗 #DFFCF0 + #0CAC40，请假/产假 #F3F2F3 + #B6B5BB），
 ///    徽章内有一个圆点 + 状态文字。
 ///
@@ -600,7 +587,7 @@ class _AdminTeacherManagementViewState
                 _loadTeachers();
               },
             ),
-            SizedBox(height: ui(20)),
+            SizedBox(height: ui(10)),
             Text(
               '当前结果 ${list.length}人',
               style: TextStyle(
@@ -838,7 +825,7 @@ class _ClassFilterFieldState extends State<_ClassFilterField> {
               duration: const Duration(milliseconds: 160),
               child: Icon(
                 Icons.keyboard_arrow_down_rounded,
-                size: ui(18),
+                size: ui(22),
                 color: const Color(0xFFC6C6C6),
               ),
             ),
@@ -1006,7 +993,7 @@ class _TeacherCard extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
-        height: ui(88),
+        height: ui(98),
         decoration: BoxDecoration(
           color: _kCardBg,
           borderRadius: BorderRadius.circular(ui(12)),
@@ -1087,7 +1074,7 @@ class _TeacherCard extends StatelessWidget {
                           ),
                         ),
                         if (teacher.roleLabels.isNotEmpty) ...[
-                          SizedBox(height: ui(6)),
+                          SizedBox(height: ui(10)),
                           // 标签滚动区使用内容列整宽，右边界距卡片右边框 ui(12)
                           SingleChildScrollView(
                             scrollDirection: Axis.horizontal,
@@ -1172,39 +1159,23 @@ class _RoleTagChip extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     final colors = _teacherRoleColors(label);
     return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: ui(compact ? 6 : 10),
-        vertical: ui(compact ? 2 : 4),
-      ),
+      height: ui(17),
+      padding: EdgeInsets.symmetric(horizontal: ui(compact ? 6 : 8)),
+      alignment: Alignment.center,
       decoration: BoxDecoration(
         color: colors.bg,
-        borderRadius: BorderRadius.circular(ui(compact ? 4 : 6)),
-        border: Border.all(
-          color: colors.fg.withValues(alpha: 0.12),
-          width: 1,
-        ),
+        borderRadius: BorderRadius.circular(ui(4)),
       ),
       child: Text(
         label,
-        strutStyle: compact
-            ? StrutStyle(
-                fontSize: ui(10),
-                height: 1,
-                forceStrutHeight: true,
-              )
-            : null,
-        textHeightBehavior: compact
-            ? const TextHeightBehavior(
-                applyHeightToFirstAscent: false,
-                applyHeightToLastDescent: false,
-              )
-            : null,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: TextStyle(
-          fontSize: ui(compact ? 10 : 12),
-          height: compact ? 1.0 : 1.2,
+          fontSize: ui(12),
+          height: 15.24 / 12,
           color: colors.fg,
           fontFamily: 'PingFang SC',
-          fontWeight: AppFont.w500,
+          fontWeight: AppFont.w400,
         ),
       ),
     );

@@ -1005,6 +1005,7 @@ class _AdminFaceLibraryViewState extends ConsumerState<AdminFaceLibraryView> {
     final ui = DashboardScaleScope.of(context).ui;
     return SmartCampusSecondaryPageShell(
       backgroundColor: _kPageBg,
+      bodyScrollable: false,
       header: _Banner(
         onBack: widget.onBack,
         currentTab: _tab,
@@ -1020,57 +1021,68 @@ class _AdminFaceLibraryViewState extends ConsumerState<AdminFaceLibraryView> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _StatsRow(
-              effective: _sumEffective,
-              reviewing: _sumPending,
-              notRecorded: _sumNotRecorded,
-              total: _sumTotal,
+            effective: _sumEffective,
+            reviewing: _sumPending,
+            notRecorded: _sumNotRecorded,
+            total: _sumTotal,
+          ),
+          SizedBox(height: ui(16)),
+          if (_tab == _FaceTab.enroll)
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '录入人脸',
+                    style: TextStyle(
+                      fontSize: ui(18),
+                      color: const Color(0xFF1A1A1A),
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w500,
+                      height: 1.2,
+                    ),
+                  ),
+                  SizedBox(height: ui(12)),
+                  Expanded(
+                    child: _EnrollCard(
+                      classOptions: _classes,
+                      selectedClass: _selectedClass,
+                      personType: _enrollPersonType,
+                      personOptions: _personOptions,
+                      selectedPerson: _selectedPerson,
+                      confirmed: _confirmed,
+                      submitting: _submitting,
+                      photoBytes: _photoBytes,
+                      photoName: _photoName,
+                      picking: _picking,
+                      onSelectClass: _onSelectClass,
+                      onSelectPersonType: _onSelectPersonType,
+                      onSelectPerson: _onSelectPerson,
+                      onToggleConfirm: () =>
+                          setState(() => _confirmed = !_confirmed),
+                      onUploadPhoto: _onUploadPhoto,
+                      onOpenCamera: _onOpenCamera,
+                      onClearPhoto: _onClearPhoto,
+                      onSubmit: _onSubmit,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else ...[
+            _LibraryControlBar(
+              filter: _filter,
+              onSelectFilter: (f) {
+                setState(() => _filter = f);
+                unawaited(_loadFaceList());
+              },
+              searchCtrl: _searchCtrl,
             ),
-            SizedBox(height: ui(24)),
-            if (_tab == _FaceTab.enroll) ...[
-              Text(
-                '录入人脸',
-                style: TextStyle(
-                  fontSize: ui(18),
-                  color: const Color(0xFF1A1A1A),
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w500,
-                  height: 1.2,
-                ),
-              ),
-              SizedBox(height: ui(12)),
-              _EnrollCard(
-                classOptions: _classes,
-                selectedClass: _selectedClass,
-                personType: _enrollPersonType,
-                personOptions: _personOptions,
-                selectedPerson: _selectedPerson,
-                confirmed: _confirmed,
-                submitting: _submitting,
-                photoBytes: _photoBytes,
-                photoName: _photoName,
-                picking: _picking,
-                onSelectClass: _onSelectClass,
-                onSelectPersonType: _onSelectPersonType,
-                onSelectPerson: _onSelectPerson,
-                onToggleConfirm: () =>
-                    setState(() => _confirmed = !_confirmed),
-                onUploadPhoto: _onUploadPhoto,
-                onOpenCamera: _onOpenCamera,
-                onClearPhoto: _onClearPhoto,
-                onSubmit: _onSubmit,
-              ),
-            ] else ...[
-              _LibraryControlBar(
-                filter: _filter,
-                onSelectFilter: (f) {
-                  setState(() => _filter = f);
-                  unawaited(_loadFaceList());
-                },
-                searchCtrl: _searchCtrl,
-              ),
-              SizedBox(height: ui(12)),
-              MainContentLoadingShell(
+            SizedBox(height: ui(12)),
+            Expanded(
+              child: MainContentLoadingShell(
                 loading: _loadingLibrary && _libraryRecords.isEmpty,
+                minHeight: ui(200),
                 child: _LibraryTable(
                   records: _libraryRecords,
                   loading: false,
@@ -1079,7 +1091,8 @@ class _AdminFaceLibraryViewState extends ConsumerState<AdminFaceLibraryView> {
                   onReject: _onRejectRecord,
                 ),
               ),
-            ],
+            ),
+          ],
         ],
       ),
     );
@@ -1424,7 +1437,7 @@ class _EnrollCard extends StatelessWidget {
             onSelectPerson: onSelectPerson,
           ),
           SizedBox(height: ui(8)),
-          IntrinsicHeight(
+          Expanded(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -1942,8 +1955,10 @@ class _SearchableOptionPickerDialogState
                                     ),
                                   ),
                                 ),
-                                if (item.id == widget.value.id)
-                                  AppDropdownSelectedMark(size: ui(16)),
+                                AppDropdownSelectedMark(
+                                  size: ui(16),
+                                  selected: item.id == widget.value.id,
+                                ),
                               ],
                             ),
                           ),
@@ -2060,29 +2075,30 @@ class _UploadPanel extends StatelessWidget {
           ),
         ),
         SizedBox(height: ui(4)),
-        Container(
-          height: ui(232),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(ui(8)),
-            border: Border.all(color: _kPanelBg, width: 1),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              SizedBox(height: ui(20)),
-              hasPhoto
-                  ? _PhotoPreview(
-                      bytes: photoBytes!,
-                      name: photoName,
-                      onClear: busy ? null : onClearPhoto,
-                    )
-                  : Image.asset(
-                      'assets/images/face/4.png',
-                      width: ui(100),
-                      height: ui(100),
-                      fit: BoxFit.contain,
-                    ),
+        Expanded(
+          child: Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(ui(8)),
+              border: Border.all(color: _kPanelBg, width: 1),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(height: ui(20)),
+                hasPhoto
+                    ? _PhotoPreview(
+                        bytes: photoBytes!,
+                        name: photoName,
+                        onClear: busy ? null : onClearPhoto,
+                      )
+                    : Image.asset(
+                        'assets/images/face/4.png',
+                        width: ui(100),
+                        height: ui(100),
+                        fit: BoxFit.contain,
+                      ),
               SizedBox(height: ui(8)),
               if (!hasPhoto)
                 RichText(
@@ -2135,6 +2151,7 @@ class _UploadPanel extends StatelessWidget {
               ),
             ],
           ),
+        ),
         ),
       ],
     );
@@ -2283,57 +2300,59 @@ class _StandardPanel extends StatelessWidget {
           ),
         ),
         SizedBox(height: ui(4)),
-        Container(
-          height: ui(232),
-          padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(14)),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(ui(8)),
-            border: Border.all(color: _kPanelBg, width: 1),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: _SampleThumb(
-                      asset: 'assets/images/face/7.png',
-                      caption: '背景过于复杂',
-                      ok: false,
+        Expanded(
+          child: Container(
+            width: double.infinity,
+            padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(14)),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(ui(8)),
+              border: Border.all(color: _kPanelBg, width: 1),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: _SampleThumb(
+                        asset: AppAssets.adminFaceLibraryStandardSample1,
+                        caption: '背景过于复杂',
+                        ok: false,
+                      ),
                     ),
-                  ),
-                  SizedBox(width: ui(10)),
-                  Expanded(
-                    child: _SampleThumb(
-                      asset: 'assets/images/face/8.png',
-                      caption: '光线不足/过曝',
-                      ok: false,
+                    SizedBox(width: ui(10)),
+                    Expanded(
+                      child: _SampleThumb(
+                        asset: AppAssets.adminFaceLibraryStandardSample2,
+                        caption: '光线不足/过曝',
+                        ok: false,
+                      ),
                     ),
-                  ),
-                  SizedBox(width: ui(10)),
-                  Expanded(
-                    child: _SampleThumb(
-                      asset: 'assets/images/face/9.png',
-                      caption: '双眼平视，双耳可见',
-                      ok: true,
+                    SizedBox(width: ui(10)),
+                    Expanded(
+                      child: _SampleThumb(
+                        asset: AppAssets.adminFaceLibraryStandardSample3,
+                        caption: '双眼平视，双耳可见',
+                        ok: true,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              SizedBox(height: ui(10)),
-              Text(
-                '背景尽量简洁，避免强逆光或过暗。\n双眼平视镜头，双耳可见为宜。\n手机拍摄建议与他人协助，保持手臂稳定。',
-                style: TextStyle(
-                  fontSize: ui(14),
-                  color: _kTextDark,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w400,
-                  height: 32 / 14,
+                  ],
                 ),
-              ),
-            ],
+                SizedBox(height: ui(10)),
+                Text(
+                  '背景尽量简洁，避免强逆光或过暗。\n双眼平视镜头，双耳可见为宜。\n手机拍摄建议与他人协助，保持手臂稳定。',
+                  style: TextStyle(
+                    fontSize: ui(14),
+                    color: _kTextDark,
+                    fontFamily: 'PingFang SC',
+                    fontWeight: AppFont.w400,
+                    height: 32 / 14,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ],
@@ -2724,6 +2743,7 @@ class _LibraryTable extends StatelessWidget {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
       width: double.infinity,
+      height: double.infinity,
       padding: EdgeInsets.all(ui(12)),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -2734,15 +2754,14 @@ class _LibraryTable extends StatelessWidget {
         children: [
           const _LibraryTableHeader(),
           if (loading)
-            Padding(
-              padding: EdgeInsets.symmetric(vertical: ui(48)),
-              child: const Center(child: AppLoadingIndicator()),
+            Expanded(
+              child: Center(child: AppLoadingIndicator()),
             )
           else if (records.isEmpty)
-            Padding(
-              padding: EdgeInsets.symmetric(vertical: ui(60)),
+            Expanded(
               child: Center(
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
                       Icons.inbox_outlined,
@@ -2765,13 +2784,21 @@ class _LibraryTable extends StatelessWidget {
               ),
             )
           else
-            for (final r in records)
-              _LibraryRow(
-                record: r,
-                onTap: () => onTapRecord(r),
-                onApprove: () => onApprove(r),
-                onReject: () => onReject(r),
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    for (final r in records)
+                      _LibraryRow(
+                        record: r,
+                        onTap: () => onTapRecord(r),
+                        onApprove: () => onApprove(r),
+                        onReject: () => onReject(r),
+                      ),
+                  ],
+                ),
               ),
+            ),
         ],
       ),
     );

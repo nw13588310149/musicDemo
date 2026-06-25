@@ -57,6 +57,7 @@ import 'student_homework_submission_preview.dart';
 import '../../courseware/state/cloud_drive_controller.dart';
 import '../../courseware/ui/courseware_file_picker.dart';
 import '../../shell/ui/shell_layout.dart';
+import 'widgets/smart_campus_stat_card.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
 import '../data/student_repository.dart';
@@ -659,13 +660,7 @@ class _AverageScoreCard extends StatelessWidget {
               top: ui(28),
               child: Text(
                 valueLabel,
-                style: TextStyle(
-                  fontSize: ui(32),
-                  color: _kTextDark,
-                  fontFamily: 'Barlow',
-                  fontWeight: FontWeight.w500,
-                  height: 1,
-                ),
+                style: smartCampusStatValueTextStyle(ui),
               ),
             ),
             Positioned(
@@ -750,13 +745,7 @@ class _HomeworkCountCard extends StatelessWidget {
             top: ui(44),
             child: Text(
               value,
-              style: TextStyle(
-                fontSize: ui(32),
-                color: _kTextDark,
-                fontFamily: 'Barlow',
-                fontWeight: FontWeight.w500,
-                height: 1,
-              ),
+              style: smartCampusStatValueTextStyle(ui),
             ),
           ),
           Positioned(

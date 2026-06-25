@@ -36,6 +36,7 @@ import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/course_subject_tag.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
+import 'widgets/smart_campus_stat_card.dart';
 import '../data/course_sign_data.dart';
 import '../data/student_check_in_data.dart';
 import '../state/student_check_in_controller.dart';
@@ -556,12 +557,9 @@ class _StatCard extends StatelessWidget {
           Text(
             item.value,
             textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: ui(24),
+            style: smartCampusStatValueTextStyle(
+              ui,
               color: item.valueColor,
-              fontFamily: 'PingFang SC',
-              fontWeight: AppFont.w500,
-              height: 1.2,
             ),
           ),
           SizedBox(height: ui(4)),

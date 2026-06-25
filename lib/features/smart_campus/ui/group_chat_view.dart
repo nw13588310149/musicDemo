@@ -2399,31 +2399,38 @@ class _DetailSummaryCard extends StatelessWidget {
                     Row(
                       children: [
                         Expanded(
-                          child: Text(
-                            className,
-                            style: TextStyle(
-                              fontSize: ui(15),
-                              color: _kTextDark,
-                              fontFamily: 'PingFang SC',
-                              fontWeight: AppFont.w600,
-                              height: 1.3,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  className,
+                                  style: TextStyle(
+                                    fontSize: ui(15),
+                                    color: _kTextDark,
+                                    fontFamily: 'PingFang SC',
+                                    fontWeight: AppFont.w600,
+                                    height: 1.3,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (canEditProfile) ...[
+                                SizedBox(width: ui(6)),
+                                GestureDetector(
+                                  onTap: onEditProfile,
+                                  child: AppAssetGraphic(
+                                    AppAssets.groupChatSet,
+                                    width: ui(14),
+                                    height: ui(14),
+                                    fit: BoxFit.contain,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ),
-                        if (canEditProfile) ...[
-                          SizedBox(width: ui(6)),
-                          GestureDetector(
-                            onTap: onEditProfile,
-                            child: AppAssetGraphic(
-                              AppAssets.groupChatSet,
-                              width: ui(14),
-                              height: ui(14),
-                              fit: BoxFit.contain,
-                            ),
-                          ),
-                        ],
                       ],
                     ),
                     SizedBox(height: ui(4)),
@@ -2458,12 +2465,13 @@ class _DetailSummaryCard extends StatelessWidget {
           SizedBox(height: ui(10)),
           Row(
             children: [
-              Icon(
+              AppAssetGraphic(
                 muted
-                    ? Icons.notifications_off_rounded
-                    : Icons.notifications_active_rounded,
-                size: ui(16),
-                color: muted ? _kPurple : _kTextSecondary,
+                    ? AppAssets.groupChatMessageMuted
+                    : AppAssets.groupChatMessage,
+                width: ui(32),
+                height: ui(32),
+                fit: BoxFit.fill,
               ),
               SizedBox(width: ui(8)),
               Expanded(
@@ -2612,8 +2620,8 @@ class _DetailAnnouncementCard extends StatelessWidget {
         children: [
           // 喇叭图标
           Container(
-            width: ui(28),
-            height: ui(28),
+            width: ui(32),
+            height: ui(32),
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.6),
@@ -2623,9 +2631,9 @@ class _DetailAnnouncementCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(ui(8)),
               child: AppAssetGraphic(
                 AppAssets.groupChatInfo,
-                width: ui(28),
-                height: ui(28),
-                fit: BoxFit.cover,
+                width: ui(32),
+                height: ui(32),
+                fit: BoxFit.fill,
               ),
             ),
           ),
@@ -2677,15 +2685,11 @@ class _DetailAnnouncementCard extends StatelessWidget {
             SizedBox(width: ui(8)),
             GestureDetector(
               onTap: onEdit,
-              child: Container(
-                width: ui(28),
-                height: ui(28),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: _kPurple.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(ui(8)),
-                ),
-                child: Icon(Icons.edit_outlined, size: ui(15), color: _kPurple),
+              child: AppAssetGraphic(
+                AppAssets.groupChatSet,
+                width: ui(14),
+                height: ui(14),
+                fit: BoxFit.contain,
               ),
             ),
           ],
@@ -3805,10 +3809,9 @@ class _ChatHeaderBar extends StatelessWidget {
                   ),
                   SizedBox(width: ui(8)),
                   _HeaderIconButton(
-                    icon: muted
-                        ? Icons.notifications_off_rounded
-                        : Icons.notifications_active_rounded,
-                    iconColor: muted ? _kPurple : const Color(0xFF1C274C),
+                    asset: muted
+                        ? AppAssets.groupChatMessageMuted
+                        : AppAssets.groupChatMessage,
                     onTap: onToggleMute,
                   ),
                   SizedBox(width: ui(8)),
@@ -4864,21 +4867,15 @@ class _ImageBubbleView extends StatelessWidget {
     final url = _resolveMediaUrl(bubble.url);
     final radius = BorderRadius.circular(ui(8));
 
-    Widget loadingBox({Widget? child, double? progress}) {
-      return Container(
+    Widget imagePlaceholder({Widget? child}) {
+      return SizedBox(
         width: size,
         height: size,
-        decoration: BoxDecoration(color: _kBoardBg, borderRadius: radius),
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            ?child,
-            ColoredBox(
-              color: Colors.black.withValues(alpha: child == null ? 0 : 0.18),
-            ),
-            Center(child: AppLoadingIndicator(value: progress)),
-          ],
+        child: Container(
+          decoration: BoxDecoration(color: _kBoardBg, borderRadius: radius),
+          clipBehavior: Clip.antiAlias,
+          alignment: Alignment.center,
+          child: child ?? const AppLoadingIndicator(),
         ),
       );
     }
@@ -4892,7 +4889,22 @@ class _ImageBubbleView extends StatelessWidget {
               fit: BoxFit.cover,
             )
           : null;
-      return loadingBox(child: preview);
+      if (preview == null) return imagePlaceholder();
+      return SizedBox(
+        width: size,
+        height: size,
+        child: ClipRRect(
+          borderRadius: radius,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              preview,
+              ColoredBox(color: Colors.black.withValues(alpha: 0.18)),
+              const Center(child: AppLoadingIndicator()),
+            ],
+          ),
+        ),
+      );
     }
 
     // hero tag 需与 showImageGallery 内部 tag 格式一致
@@ -4923,12 +4935,7 @@ class _ImageBubbleView extends StatelessWidget {
             ),
             loadingBuilder: (ctx, child, progress) {
               if (progress == null) return child;
-              return loadingBox(
-                progress: progress.expectedTotalBytes != null
-                    ? progress.cumulativeBytesLoaded /
-                          progress.expectedTotalBytes!
-                    : null,
-              );
+              return imagePlaceholder();
             },
           ),
         ),

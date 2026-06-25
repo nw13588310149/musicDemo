@@ -59,6 +59,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shell/ui/shell_layout.dart';
+import 'widgets/smart_campus_stat_card.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/network/media_url.dart';
@@ -482,13 +483,7 @@ class _AverageCard extends StatelessWidget {
             top: ui(28),
             child: Text(
               _scoreLabel(score),
-              style: TextStyle(
-                fontSize: ui(32),
-                color: _kTextDark,
-                fontFamily: 'Barlow',
-                fontWeight: FontWeight.w500,
-                height: 1,
-              ),
+              style: smartCampusStatValueTextStyle(ui),
             ),
           ),
           Positioned(
@@ -630,13 +625,7 @@ class _RankCard extends StatelessWidget {
               children: [
                 Text(
                   value,
-                  style: TextStyle(
-                    fontSize: ui(32),
-                    color: _kTextDark,
-                    fontFamily: 'Barlow',
-                    fontWeight: FontWeight.w500,
-                    height: 1,
-                  ),
+                  style: smartCampusStatValueTextStyle(ui),
                 ),
                 SizedBox(width: ui(2)),
                 Padding(
@@ -2302,13 +2291,24 @@ String _scoreLabel(double score) => score == score.roundToDouble()
     ? '${score.round()}'
     : score.toStringAsFixed(1);
 
-/// 按文件名扩展名识别在线考评可提交的媒体类型；非视频 / 音频返回 null。
+/// 按文件名扩展名识别在线考评可提交的媒体类型；非视频 / 音频 / 图片返回 null。
 StudentExamMediaKind? _examMediaKindFromName(String name) {
   final lower = name.toLowerCase();
   const videoExt = ['.mp4', '.mov', '.webm', '.avi', '.mkv', '.m4v', '.3gp'];
   const audioExt = ['.mp3', '.wav', '.m4a', '.aac', '.flac', '.ogg', '.amr'];
+  const imageExt = [
+    '.png',
+    '.jpg',
+    '.jpeg',
+    '.webp',
+    '.gif',
+    '.bmp',
+    '.heic',
+    '.heif',
+  ];
   if (videoExt.any(lower.endsWith)) return StudentExamMediaKind.video;
   if (audioExt.any(lower.endsWith)) return StudentExamMediaKind.audio;
+  if (imageExt.any(lower.endsWith)) return StudentExamMediaKind.image;
   return null;
 }
 
@@ -3424,8 +3424,8 @@ class _ExamDetailDrawerState extends ConsumerState<_ExamDetailDrawer> {
     });
   }
 
-  /// 在线科目：选文件（视频/音频）→ 上传文件服务器（带进度）→ 调 examSubmit → 刷新。
-  /// 单个「上传文件」按钮：系统选择器选任意文件，按扩展名识别视频 / 音频。
+  /// 在线科目：选文件（视频/音频/图片）→ 上传文件服务器（带进度）→ 调 examSubmit → 刷新。
+  /// 单个「上传文件」按钮：系统选择器选任意文件，按扩展名识别视频 / 音频 / 图片。
   Future<void> _upload(StudentExamSubjectPlan subject) async {
     if (_busy || !subject.serverCanSubmit) return;
     setState(() {
@@ -3453,7 +3453,7 @@ class _ExamDetailDrawerState extends ConsumerState<_ExamDetailDrawer> {
       final kind = _examMediaKindFromName(picked.name);
       if (kind == null) {
         _resetUpload();
-        AppToast.show(context, '仅支持上传视频或音频文件', type: AppToastType.error);
+        AppToast.show(context, '仅支持上传视频、音频或图片文件', type: AppToastType.error);
         return;
       }
       final uploader = ref.read(cloudDriveControllerProvider.notifier);
@@ -3489,7 +3489,7 @@ class _ExamDetailDrawerState extends ConsumerState<_ExamDetailDrawer> {
             examId: _exam.examId,
             subjectId: subject.subjectId,
             filePath: path,
-            fileType: kind == StudentExamMediaKind.video ? 'video' : 'audio',
+            fileType: kind.fileType,
           );
       if (!mounted) return;
       if (res.isSuccess) {
@@ -4190,7 +4190,7 @@ class _ExamSubjectSubmitCard extends StatelessWidget {
                     ),
                     SizedBox(height: ui(8)),
                     Text(
-                      '支持视频或音频文件，最多 ${subject.maxUploads} 次，以最后一次为准。',
+                      '支持视频、音频或图片文件，最多 ${subject.maxUploads} 次，以最后一次为准。',
                       style: TextStyle(
                         fontSize: ui(11),
                         color: _kTextHint,
@@ -4417,7 +4417,7 @@ class _UploadEmptyHint extends StatelessWidget {
           Icon(Icons.cloud_off_outlined, size: ui(26), color: _kTextDivider),
           SizedBox(height: ui(6)),
           Text(
-            open ? '尚未上传，点击下方按钮上传录制文件' : '尚未上传任何文件',
+            open ? '尚未上传，点击下方按钮上传文件' : '尚未上传任何文件',
             style: TextStyle(
               fontSize: ui(12),
               color: _kTextHint,
@@ -4432,38 +4432,63 @@ class _UploadEmptyHint extends StatelessWidget {
   }
 }
 
-class _UploadedFileTile extends StatelessWidget {
+class _UploadedFileTile extends ConsumerWidget {
   const _UploadedFileTile({required this.upload, required this.index});
 
   final StudentExamUpload upload;
   final int index;
 
+  void _preview(BuildContext context, WidgetRef ref) {
+    final url = MediaUrl.resolve(upload.path);
+    if (url.isEmpty) return;
+    showStudentHomeworkSubmissionPreview(
+      context,
+      ref: ref,
+      fileUrl: url,
+      title: upload.fileName,
+      typeTag: upload.kind.label,
+      mediumLabel: upload.kind.label,
+      attachmentName: upload.fileName,
+    );
+  }
+
+  IconData _iconForKind() => switch (upload.kind) {
+    StudentExamMediaKind.video => Icons.videocam_rounded,
+    StudentExamMediaKind.image => Icons.image_rounded,
+    StudentExamMediaKind.audio => Icons.audiotrack_rounded,
+  };
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final ui = DashboardScaleScope.of(context).ui;
-    final isVideo = upload.kind == StudentExamMediaKind.video;
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(10)),
-      decoration: BoxDecoration(
-        color: _kInnerGray,
+    final canPreview = upload.path.trim().isNotEmpty;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: canPreview ? () => _preview(context, ref) : null,
         borderRadius: BorderRadius.circular(ui(10)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: ui(34),
-            height: ui(34),
-            decoration: BoxDecoration(
-              color: _kPurpleSoftBg,
-              borderRadius: BorderRadius.circular(ui(8)),
-            ),
-            alignment: Alignment.center,
-            child: Icon(
-              isVideo ? Icons.videocam_rounded : Icons.audiotrack_rounded,
-              size: ui(18),
-              color: _kPurple,
-            ),
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: ui(12), vertical: ui(10)),
+          decoration: BoxDecoration(
+            color: _kInnerGray,
+            borderRadius: BorderRadius.circular(ui(10)),
           ),
+          child: Row(
+            children: [
+              Container(
+                width: ui(34),
+                height: ui(34),
+                decoration: BoxDecoration(
+                  color: _kPurpleSoftBg,
+                  borderRadius: BorderRadius.circular(ui(8)),
+                ),
+                alignment: Alignment.center,
+                child: Icon(
+                  _iconForKind(),
+                  size: ui(18),
+                  color: _kPurple,
+                ),
+              ),
           SizedBox(width: ui(10)),
           Expanded(
             child: Column(
@@ -4516,7 +4541,9 @@ class _UploadedFileTile extends StatelessWidget {
               ),
             ),
           ),
-        ],
+            ],
+          ),
+        ),
       ),
     );
   }

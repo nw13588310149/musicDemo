@@ -68,6 +68,7 @@ class CollectionShareClass {
 class MyCollectionState {
   const MyCollectionState({
     this.loading = false,
+    this.fetchingItems = false,
     this.busy = false,
     this.errorMessage,
     this.tabs = const <CollectionTabItem>[],
@@ -78,6 +79,8 @@ class MyCollectionState {
   });
 
   final bool loading;
+  /// Tab 切换拉取列表时为 true；不使用 [loading]，避免触发全页白色蒙层。
+  final bool fetchingItems;
   final bool busy;
   final String? errorMessage;
   final List<CollectionTabItem> tabs;
@@ -88,6 +91,7 @@ class MyCollectionState {
 
   MyCollectionState copyWith({
     bool? loading,
+    bool? fetchingItems,
     bool? busy,
     String? errorMessage,
     bool clearError = false,
@@ -100,6 +104,7 @@ class MyCollectionState {
   }) {
     return MyCollectionState(
       loading: loading ?? this.loading,
+      fetchingItems: fetchingItems ?? this.fetchingItems,
       busy: busy ?? this.busy,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       tabs: tabs ?? this.tabs,

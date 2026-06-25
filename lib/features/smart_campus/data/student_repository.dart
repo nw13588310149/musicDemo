@@ -74,7 +74,7 @@ class StudentRepository {
   }
 
   /// 提交在线考评文件。`filePath` 为 `/app/common/v2/fileUpload` 返回的相对路径；
-  /// `fileType`：`video` / `audio`。后端校验：在线科目（evaluateType=1）、考试
+  /// `fileType`：`video` / `audio` / `image`。后端校验：在线科目（evaluateType=1）、考试
   /// 时间内、未超过 `maxSubmitCount` 次。
   Future<ApiResponse> examSubmit({
     required String examId,

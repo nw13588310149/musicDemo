@@ -171,9 +171,13 @@ abstract final class AppAssets {
   static const iconGenderMale = 'assets/images/new/0图标/男生.png';
   static const iconGenderFemale = 'assets/images/new/0图标/女生.png';
 
-  /// 下拉选择弹层 · 当前选中项右侧标记。
+  /// 下拉选择弹层 · 选中项右侧标记。
   static const iconDropdownSelected =
       'assets/images/new/0图标/Frame 1912057260.png';
+
+  /// 下拉选择弹层 · 未选中项右侧标记。
+  static const iconDropdownUnselected =
+      'assets/images/new/0图标/Frame 1912057261.png';
 
   /// 「绑定学校」弹窗左上角徽章背景图（紫色渐变气泡）。
   /// 用于 initial（同学你还没）/ pending（同学您当前）两种状态。
@@ -688,6 +692,14 @@ abstract final class AppAssets {
   static const adminFaceLibraryEntryCardBg =
       'assets/images/smartCampus/admin/face_library/entry_card_bg.png';
 
+  /// 管理员 · 人脸库 · 采集规范示例图（左→右：❌ ❌ ✅）。
+  static const adminFaceLibraryStandardSample1 =
+      'assets/images/new/01/001/Frame 1912057041.png';
+  static const adminFaceLibraryStandardSample2 =
+      'assets/images/new/01/001/Frame 1912057042.png';
+  static const adminFaceLibraryStandardSample3 =
+      'assets/images/new/01/001/Frame 1912057044.png';
+
   /// 管理员 · 通知管理 · 顶部统计卡背景（从左到右）。
   static const adminNotificationStatCard1 =
       'assets/images/smartCampus/admin/notification/stat_card_1.png';
@@ -754,6 +766,10 @@ abstract final class AppAssets {
   static const teacherHomeworkPublishIcon =
       'assets/images/smartCampus/teacher/homework/publish_icon.png';
 
+  /// 任课老师 · 考评管理 · banner 右上角「历史月考」图标。
+  static const teacherExamHistoryIcon =
+      'assets/images/smartCampus/teacher/exam/history_icon.png';
+
   // 智慧校园群聊
   static const groupChatBg = 'assets/images/groupChat/bg.png';
   static const groupChatPin = 'assets/images/groupChat/Pin.png';
@@ -762,6 +778,9 @@ abstract final class AppAssets {
   static const groupChatPinActionOn = 'assets/images/groupChat/yzd.png';
   static const groupChatSet = 'assets/images/groupChat/set.png';
   static const groupChatInfo = 'assets/images/new/群聊/群聊-群公告.png';
+  static const groupChatMessage = 'assets/images/new/群聊/群聊-消息.png';
+  static const groupChatMessageMuted =
+      'assets/images/new/群聊/群聊-消息免打扰0.png';
   static const groupChatVoice = 'assets/images/groupChat/voice.png';
   static const groupChatVoiceMode = 'assets/images/groupChat/voice1.png';
   static const groupChatMsg = 'assets/images/groupChat/msg.png';

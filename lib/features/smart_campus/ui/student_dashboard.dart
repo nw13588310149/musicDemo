@@ -646,14 +646,12 @@ _BuiltDashboardSchedule _buildStudentDashboardSchedule({
 
   for (final group in sorted) {
     final phase = _slotPhase(now, group.start, group.end);
-    final style = _statusStyle(phase);
     allLessons.add(
       _LessonScheduleData(
         time: '${group.start} - ${group.end}',
-        status: style.label,
-        statusColor: style.foreground,
-        statusBg: style.background,
-        isPast: phase == _LessonSlotPhase.ended,
+        startTime: group.start,
+        endTime: group.end,
+        phase: phase,
         teachers: [
           for (final row in group.rows)
             _lessonRowFromStudentCourse(row, group.start, group.end),
@@ -767,5 +765,6 @@ _LessonRowData _lessonRowFromStudentCourse(
     tag: isSmall ? '小课' : '大课',
     tagDotColor: tagDotColor,
     hint: hint,
+    isSmallCourse: isSmall,
   );
 }

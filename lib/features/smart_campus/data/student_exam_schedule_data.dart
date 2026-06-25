@@ -173,10 +173,21 @@ extension StudentExamModeX on StudentExamMode {
 }
 
 /// 在线提交的媒体类型。
-enum StudentExamMediaKind { audio, video }
+enum StudentExamMediaKind { audio, video, image }
 
 extension StudentExamMediaKindX on StudentExamMediaKind {
-  String get label => this == StudentExamMediaKind.video ? '视频' : '音频';
+  String get label => switch (this) {
+    StudentExamMediaKind.video => '视频',
+    StudentExamMediaKind.audio => '音频',
+    StudentExamMediaKind.image => '图片',
+  };
+
+  /// 提交接口 `fileType` 字段。
+  String get fileType => switch (this) {
+    StudentExamMediaKind.video => 'video',
+    StudentExamMediaKind.audio => 'audio',
+    StudentExamMediaKind.image => 'image',
+  };
 }
 
 /// 在线科目的提交状态（用于状态徽章）。
@@ -219,11 +230,12 @@ class StudentExamUpload {
   factory StudentExamUpload.fromMap(Map<dynamic, dynamic> map) {
     final path = _strOf(map['path'] ?? map['filePath']);
     final type = _strOf(map['fileType']).toLowerCase();
-    final kind = type == 'video'
-        ? StudentExamMediaKind.video
-        : type == 'audio'
-        ? StudentExamMediaKind.audio
-        : _kindFromPath(path);
+    final kind = switch (type) {
+      'video' => StudentExamMediaKind.video,
+      'audio' => StudentExamMediaKind.audio,
+      'image' => StudentExamMediaKind.image,
+      _ => _kindFromPath(path),
+    };
     final name = _strOf(map['fileName']);
     return StudentExamUpload(
       kind: kind,
@@ -247,8 +259,21 @@ StudentExamMediaKind _kindFromPath(String path) {
   final lower = path.toLowerCase();
   if (lower.endsWith('.mp4') ||
       lower.endsWith('.mov') ||
-      lower.endsWith('.webm')) {
+      lower.endsWith('.webm') ||
+      lower.endsWith('.m4v') ||
+      lower.endsWith('.avi') ||
+      lower.endsWith('.mkv')) {
     return StudentExamMediaKind.video;
+  }
+  if (lower.endsWith('.png') ||
+      lower.endsWith('.jpg') ||
+      lower.endsWith('.jpeg') ||
+      lower.endsWith('.webp') ||
+      lower.endsWith('.gif') ||
+      lower.endsWith('.bmp') ||
+      lower.endsWith('.heic') ||
+      lower.endsWith('.heif')) {
+    return StudentExamMediaKind.image;
   }
   return StudentExamMediaKind.audio;
 }

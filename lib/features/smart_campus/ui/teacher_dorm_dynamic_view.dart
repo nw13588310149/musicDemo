@@ -39,6 +39,7 @@ import '../../../core/widgets/app_asset_graphic.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/app_text_field.dart';
 import '../../shell/ui/shell_layout.dart';
+import 'widgets/smart_campus_stat_card.dart';
 import '../data/teacher_dormitory_data.dart';
 import '../state/teacher_dormitory_controller.dart';
 import 'widgets/dormitory_detail_dialog.dart';
@@ -638,13 +639,7 @@ class _StatCard extends StatelessWidget {
                 children: [
                   Text(
                     '$value',
-                    style: TextStyle(
-                      fontSize: ui(32),
-                      color: _kTextDark,
-                      fontFamily: 'Barlow',
-                      fontWeight: FontWeight.w500,
-                      height: 1.0,
-                    ),
+                    style: smartCampusStatValueTextStyle(ui),
                   ),
                   if (subtitle != null) ...[
                     SizedBox(width: ui(8)),

@@ -56,7 +56,7 @@ class MyCollectionController extends StateNotifier<MyCollectionState> {
     try {
       state = state.copyWith(
         activeType: type,
-        loading: true,
+        fetchingItems: true,
         clearError: true,
         items: const <CollectionEntry>[],
         shareClasses: const <CollectionShareClass>[],
@@ -64,14 +64,14 @@ class MyCollectionController extends StateNotifier<MyCollectionState> {
       );
       final response = await _repository.getItems(type: type);
       state = state.copyWith(
-        loading: false,
+        fetchingItems: false,
         items: _parseItems(response.data, type),
         errorMessage: response.isSuccess
             ? null
             : _apiError(response),
       );
     } catch (_) {
-      state = state.copyWith(loading: false, errorMessage: '');
+      state = state.copyWith(fetchingItems: false, errorMessage: '');
     }
   }
 

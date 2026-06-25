@@ -444,12 +444,12 @@ class _NicknameColumn extends StatelessWidget {
               onTap: onEdit,
               behavior: HitTestBehavior.opaque,
               child: SizedBox(
-                width: 16,
-                height: 16,
+                width: 18,
+                height: 18,
                 child: Image.asset(
                   AppAssets.homeRename,
-                  width: 16,
-                  height: 16,
+                  width: 18,
+                  height: 18,
                   fit: BoxFit.contain,
                 ),
               ),

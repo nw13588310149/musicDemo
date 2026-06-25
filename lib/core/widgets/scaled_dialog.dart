@@ -684,8 +684,10 @@ Future<String?> showOptionsDialog({
                                 ),
                               ),
                             ),
-                            if (isActive)
-                              AppDropdownSelectedMark(size: ui(18)),
+                            AppDropdownSelectedMark(
+                              size: ui(18),
+                              selected: isActive,
+                            ),
                           ],
                         ),
                       ),

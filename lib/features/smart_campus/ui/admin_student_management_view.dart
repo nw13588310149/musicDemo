@@ -76,7 +76,7 @@ extension on _StudentStatus {
       case _StudentStatus.suspended:
         return '休学';
       case _StudentStatus.transferring:
-        return '转学';
+        return '退学';
       case _StudentStatus.graduated:
         return '毕业';
     }
@@ -1075,7 +1075,7 @@ class _ClassFilterFieldState extends State<_ClassFilterField> {
               duration: const Duration(milliseconds: 160),
               child: Icon(
                 Icons.keyboard_arrow_down_rounded,
-                size: ui(18),
+                size: ui(22),
                 color: const Color(0xFFC6C6C6),
               ),
             ),
@@ -1104,7 +1104,8 @@ class _StatusPill extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(8)),
+        height: ui(36),
+        padding: EdgeInsets.symmetric(horizontal: ui(16)),
         margin: EdgeInsets.symmetric(horizontal: ui(2)),
         alignment: Alignment.center,
         decoration: BoxDecoration(
@@ -1115,7 +1116,7 @@ class _StatusPill extends StatelessWidget {
           label,
           style: TextStyle(
             fontSize: ui(14),
-            height: 1.2,
+            height: 1,
             fontWeight: AppFont.w500,
             color: active ? Colors.white : _kTextSub,
             fontFamily: 'PingFang SC',

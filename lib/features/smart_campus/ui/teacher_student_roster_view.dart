@@ -744,7 +744,7 @@ class _ClassFilterButtonState extends State<_ClassFilterButton> {
               duration: const Duration(milliseconds: 160),
               child: Icon(
                 Icons.keyboard_arrow_down_rounded,
-                size: ui(16),
+                size: ui(22),
                 color: _kTextDark,
               ),
             ),
@@ -786,12 +786,21 @@ class _ClassFilterMenuPanel extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          for (final opt in options)
+          for (var i = 0; i < options.length; i++) ...[
             _ClassFilterMenuRow(
-              label: opt.label,
-              selected: opt.label == value,
-              onTap: () => onPick(opt),
+              label: options[i].label,
+              selected: options[i].label == value,
+              onTap: () => onPick(options[i]),
             ),
+            if (i < options.length - 1)
+              Divider(
+                height: 1,
+                thickness: 1,
+                color: _kBorderSoft,
+                indent: ui(14),
+                endIndent: ui(14),
+              ),
+          ],
         ],
       ),
     );
@@ -834,7 +843,7 @@ class _ClassFilterMenuRow extends StatelessWidget {
                 ),
               ),
             ),
-            if (selected) AppDropdownSelectedMark(size: ui(16)),
+            AppDropdownSelectedMark(size: ui(16), selected: selected),
           ],
         ),
       ),

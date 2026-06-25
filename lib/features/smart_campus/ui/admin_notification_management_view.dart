@@ -668,8 +668,8 @@ class _CreateButton extends StatelessWidget {
           children: [
             Image.asset(
               AppAssets.adminNotificationCreateNoticeIcon,
-              width: ui(20),
-              height: ui(20),
+              width: ui(18),
+              height: ui(18),
               fit: BoxFit.contain,
             ),
             SizedBox(width: ui(4)),

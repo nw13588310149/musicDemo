@@ -1756,7 +1756,7 @@ class _ScheduleClassFilterFieldState extends State<_ScheduleClassFilterField> {
               duration: const Duration(milliseconds: 160),
               child: Icon(
                 Icons.keyboard_arrow_down_rounded,
-                size: ui(18),
+                size: ui(22),
                 color: const Color(0xFFC6C6C6),
               ),
             ),

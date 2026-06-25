@@ -3014,7 +3014,7 @@ class _ClassFilterFieldState extends State<_ClassFilterField> {
               duration: const Duration(milliseconds: 160),
               child: Icon(
                 Icons.keyboard_arrow_down_rounded,
-                size: ui(18),
+                size: ui(22),
                 color: const Color(0xFFC6C6C6),
               ),
             ),
@@ -3083,10 +3083,9 @@ class _FilterBar extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  Icons.calendar_today_rounded,
-                  size: ui(16),
-                  color: _kPurple,
+                AppPickerAssetIcon(
+                  AppAssets.iconScheduleCalendar,
+                  imageSize: ui(14),
                 ),
                 SizedBox(width: ui(10)),
                 Text(
@@ -3189,40 +3188,48 @@ class _SignStatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final borderRadius = BorderRadius.circular(ui(12));
     return Expanded(
-      child: Container(
-        height: ui(100),
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(ui(12)),
-          image: DecorationImage(
-            image: AssetImage(backgroundAsset),
-            fit: BoxFit.cover,
-          ),
-        ),
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(ui(16), ui(14), ui(56), ui(14)),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
+      child: ClipRRect(
+        borderRadius: borderRadius,
+        child: SizedBox(
+          height: ui(100),
+          width: double.infinity,
+          child: Stack(
+            fit: StackFit.expand,
             children: [
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: ui(14),
-                  color: const Color(0xFF0B081A),
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w500,
-                  height: 1.0,
-                ),
+              Image.asset(
+                backgroundAsset,
+                fit: BoxFit.cover,
+                width: double.infinity,
+                height: double.infinity,
               ),
-              SizedBox(height: ui(8)),
-              Text(
-                value,
-                style: smartCampusStatValueTextStyle(ui),
+              Padding(
+                padding: EdgeInsets.fromLTRB(ui(16), ui(14), ui(56), ui(14)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: ui(14),
+                        color: const Color(0xFF0B081A),
+                        fontFamily: 'PingFang SC',
+                        fontWeight: AppFont.w500,
+                        height: 1.0,
+                      ),
+                    ),
+                    SizedBox(height: ui(8)),
+                    Text(
+                      value,
+                      style: smartCampusStatValueTextStyle(ui),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),

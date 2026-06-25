@@ -4,16 +4,23 @@ import '../../features/shell/ui/shell_layout.dart';
 import '../constants/app_assets.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
-/// 下拉弹层选中行右侧标记（班级选择等场景）。
+/// 下拉弹层行右侧选中/未选中标记（班级选择等场景）。
 class AppDropdownSelectedMark extends StatelessWidget {
-  const AppDropdownSelectedMark({super.key, required this.size});
+  const AppDropdownSelectedMark({
+    super.key,
+    required this.size,
+    required this.selected,
+  });
 
   final double size;
+  final bool selected;
 
   @override
   Widget build(BuildContext context) {
     return Image.asset(
-      AppAssets.iconDropdownSelected,
+      selected
+          ? AppAssets.iconDropdownSelected
+          : AppAssets.iconDropdownUnselected,
       width: size,
       height: size,
       fit: BoxFit.contain,
@@ -228,14 +235,20 @@ class PopupSelectorPanel<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final rows = <Widget>[
-      for (final item in items)
+    final rows = <Widget>[];
+    for (var i = 0; i < items.length; i++) {
+      final item = items[i];
+      rows.add(
         _PopupSelectorRow<T>(
           label: itemLabel(item),
           selected: item == value,
           onTap: () => onSelected(item),
         ),
-    ];
+      );
+      if (i < items.length - 1) {
+        rows.add(const _PopupSelectorDivider());
+      }
+    }
     final listBody = maxHeight == null
         ? Column(mainAxisSize: MainAxisSize.min, children: rows)
         : ConstrainedBox(
@@ -271,6 +284,22 @@ class PopupSelectorPanel<T> extends StatelessWidget {
           SizedBox(height: ui(6)),
         ],
       ),
+    );
+  }
+}
+
+class _PopupSelectorDivider extends StatelessWidget {
+  const _PopupSelectorDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Divider(
+      height: 1,
+      thickness: 1,
+      color: _kPanelBorder,
+      indent: ui(14),
+      endIndent: ui(14),
     );
   }
 }
@@ -311,7 +340,7 @@ class _PopupSelectorRow<T> extends StatelessWidget {
                 ),
               ),
             ),
-            if (selected) AppDropdownSelectedMark(size: ui(16)),
+            AppDropdownSelectedMark(size: ui(16), selected: selected),
           ],
         ),
       ),

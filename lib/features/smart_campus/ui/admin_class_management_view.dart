@@ -1507,8 +1507,8 @@ class _BannerActionButton extends StatelessWidget {
           children: [
             Image.asset(
               iconAsset,
-              width: ui(20),
-              height: ui(20),
+              width: ui(18),
+              height: ui(18),
               fit: BoxFit.contain,
             ),
             SizedBox(width: ui(4)),

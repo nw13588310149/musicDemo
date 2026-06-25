@@ -24,6 +24,7 @@ import '../../../core/widgets/app_asset_graphic.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
+import 'widgets/smart_campus_stat_card.dart';
 import '../data/student_leave_data.dart';
 import '../data/teacher_repository.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -531,13 +532,7 @@ class _StatCard extends StatelessWidget {
             SizedBox(height: ui(12)),
             Text(
               '$value',
-              style: TextStyle(
-                fontSize: ui(32),
-                color: _kTextDark,
-                fontFamily: 'Barlow',
-                fontWeight: FontWeight.w500,
-                height: 1.0,
-              ),
+              style: smartCampusStatValueTextStyle(ui),
             ),
           ],
         ),

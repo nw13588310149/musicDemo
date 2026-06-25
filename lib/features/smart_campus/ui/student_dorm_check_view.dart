@@ -41,6 +41,7 @@ import '../../../core/widgets/app_date_time_pickers.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
+import 'widgets/smart_campus_stat_card.dart';
 import '../data/student_dormitory_data.dart';
 import '../state/student_dormitory_controller.dart';
 import '../state/student_dormitory_state.dart';
@@ -595,13 +596,7 @@ class _DormStatCard extends StatelessWidget {
                         children: [
                           Text(
                             value,
-                            style: TextStyle(
-                              fontSize: ui(32),
-                              color: _kTextDark,
-                              fontFamily: 'Barlow',
-                              fontWeight: FontWeight.w500,
-                              height: 1,
-                            ),
+                            style: smartCampusStatValueTextStyle(ui),
                           ),
                           if (sublabel != null) ...[
                             SizedBox(width: ui(8)),

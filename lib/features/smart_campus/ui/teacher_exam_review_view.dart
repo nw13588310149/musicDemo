@@ -40,6 +40,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 
+import '../../../core/constants/app_assets.dart';
+import '../../../core/widgets/app_asset_graphic.dart';
 import '../../../core/network/media_url.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/popup_selector_field.dart';
@@ -48,6 +50,7 @@ import '../data/teacher_exam_data.dart';
 import '../data/teacher_repository.dart';
 import '../state/teacher_exam_controller.dart';
 import '../../shell/ui/shell_layout.dart';
+import 'widgets/smart_campus_stat_card.dart';
 import 'student_homework_submission_preview.dart';
 import 'widgets/smart_campus_page_banner.dart';
 import 'widgets/smart_campus_empty_state.dart';
@@ -400,7 +403,7 @@ class _ExamBanner extends StatelessWidget {
             right: ui(12),
             top: ui(15),
             child: _BannerActionButton(
-              icon: Icons.notifications_none_rounded,
+              assetIcon: AppAssets.teacherExamHistoryIcon,
               label: '历史月考',
               onTap: onOpenHistory,
             ),
@@ -413,12 +416,14 @@ class _ExamBanner extends StatelessWidget {
 
 class _BannerActionButton extends StatelessWidget {
   const _BannerActionButton({
-    required this.icon,
+    this.icon,
+    this.assetIcon,
     required this.label,
     required this.onTap,
-  });
+  }) : assert(icon != null || assetIcon != null);
 
-  final IconData icon;
+  final IconData? icon;
+  final String? assetIcon;
   final String label;
   final VoidCallback onTap;
 
@@ -439,7 +444,15 @@ class _BannerActionButton extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: ui(16), color: _kPurple),
+            if (assetIcon != null)
+              AppAssetGraphic(
+                assetIcon!,
+                width: ui(16),
+                height: ui(16),
+                fit: BoxFit.contain,
+              )
+            else
+              Icon(icon, size: ui(16), color: _kPurple),
             SizedBox(width: ui(4)),
             Text(
               label,
@@ -651,13 +664,7 @@ class _StatCell extends StatelessWidget {
           Text(
             value,
             textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: ui(24),
-              color: _kTextDark,
-              fontFamily: 'PingFang SC',
-              fontWeight: AppFont.w500,
-              height: 1.2,
-            ),
+            style: smartCampusStatValueTextStyle(ui),
           ),
           SizedBox(height: ui(2)),
           Text(
@@ -1398,8 +1405,9 @@ class _SeatPlanDrawerState extends ConsumerState<_SeatPlanDrawer> {
     });
   }
 
-  /// 按教室分组：已编排教室在前（按名称），未编排归入末尾「待编排」。
-  List<({String room, List<TeacherExamSeatEntry> students})> _grouped() {
+  /// 按教室分组：已编排教室在前（按名称），未编排归入末尾「待编排」；
+  /// 同一考场内同一考生多科目座位合并为一条。
+  List<({String room, List<TeacherExamSeatGroupEntry> students})> _grouped() {
     final map = <String, List<TeacherExamSeatEntry>>{};
     for (final s in _seats) {
       final key = s.classroomName.isNotEmpty ? s.classroomName : '';
@@ -1415,13 +1423,16 @@ class _SeatPlanDrawerState extends ConsumerState<_SeatPlanDrawer> {
       for (final k in keys)
         (
           room: k.isEmpty ? '待编排考场' : k,
-          students: map[k]!
-            ..sort((a, b) {
+          students: () {
+            final grouped = groupTeacherExamSeatsByStudent(map[k]!);
+            grouped.sort((a, b) {
               final sa = a.seatNo ?? 1 << 30;
               final sb = b.seatNo ?? 1 << 30;
               if (sa != sb) return sa.compareTo(sb);
               return a.studentNo.compareTo(b.studentNo);
-            }),
+            });
+            return grouped;
+          }(),
         ),
     ];
   }
@@ -1502,7 +1513,7 @@ class _SeatRoomGroup extends StatelessWidget {
   const _SeatRoomGroup({required this.room, required this.students});
 
   final String room;
-  final List<TeacherExamSeatEntry> students;
+  final List<TeacherExamSeatGroupEntry> students;
 
   @override
   Widget build(BuildContext context) {
@@ -1561,7 +1572,7 @@ class _SeatRoomGroup extends StatelessWidget {
 class _SeatStudentRow extends StatelessWidget {
   const _SeatStudentRow({required this.entry});
 
-  final TeacherExamSeatEntry entry;
+  final TeacherExamSeatGroupEntry entry;
 
   @override
   Widget build(BuildContext context) {
@@ -1610,6 +1621,21 @@ class _SeatStudentRow extends StatelessWidget {
                     style: TextStyle(
                       fontSize: ui(11),
                       color: _kTextHint,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w400,
+                      height: 1.2,
+                    ),
+                  ),
+                ],
+                if (entry.subjectNames.isNotEmpty) ...[
+                  SizedBox(height: ui(2)),
+                  Text(
+                    '科目 ${entry.subjectNames.join('、')}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: ui(11),
+                      color: _kPurple,
                       fontFamily: 'PingFang SC',
                       fontWeight: AppFont.w400,
                       height: 1.2,

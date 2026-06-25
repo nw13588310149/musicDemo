@@ -148,6 +148,32 @@ List<DormNormalStatDay> parseDormNormalStat(
   return days;
 }
 
+/// 七日查寝 UI 预览用模拟数据（按最近 7 个自然日顺序）。
+const List<int> kDormNormalStatMockCounts = [1, 55, 0, 231, 75, 16, 33];
+
+List<DormNormalStatDay> mockDormNormalStatDays([DateTime? anchor]) {
+  final (beginDate, endDate) = headTeacherWorkbenchLastSevenDaysRange(anchor);
+  final begin = headTeacherWorkbenchParseIsoDate(beginDate);
+  final end = headTeacherWorkbenchParseIsoDate(endDate);
+  if (begin == null || end == null) return const [];
+
+  final days = <DormNormalStatDay>[];
+  for (var i = 0; i < 7; i++) {
+    final date = begin.add(Duration(days: i));
+    if (date.isAfter(end)) break;
+    days.add(
+      DormNormalStatDay(
+        date: headTeacherWorkbenchIsoDate(date),
+        normalCount: i < kDormNormalStatMockCounts.length
+            ? kDormNormalStatMockCounts[i]
+            : 0,
+        weekdayLabel: headTeacherWorkbenchWeekdayLabel(date),
+      ),
+    );
+  }
+  return days;
+}
+
 List<int> buildDormNormalStatAxisTicks(int maxCount) {
   if (maxCount <= 0) {
     return const [10, 8, 6, 4, 2, 0];

@@ -205,6 +205,7 @@ flutter:
     - assets/images/smartCampus/student/my_class/
     - assets/images/smartCampus/teacher/student_roster/
     - assets/images/smartCampus/teacher/homework/
+    - assets/images/smartCampus/teacher/exam/
     - assets/images/smartCampus/home_actions/
     - assets/images/smartCampus/home_actions/student/
     - assets/images/smartCampus/home_actions/teacher/
@@ -213,6 +214,7 @@ flutter:
     - assets/images/smartCampus/home_actions/admin/
     - assets/images/smartCampus/home_actions/shared/
     - assets/images/new/0图标/
+    - assets/images/new/01/001/
     - assets/images/new/智慧校园/学生端/
     - assets/images/new/智慧校园/任课老师/
     - assets/images/new/智慧校园/班主任/

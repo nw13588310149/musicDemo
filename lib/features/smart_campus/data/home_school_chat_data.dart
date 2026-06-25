@@ -1,6 +1,7 @@
 /// 班主任端「家校沟通」API 数据模型与 JSON 解析。
 library;
 
+import '../../../core/network/media_url.dart';
 import '../../../core/network/snowflake_id.dart';
 
 class HomeSchoolChatStat {
@@ -28,7 +29,10 @@ class HomeSchoolConversation {
     required this.parentId,
     required this.studentName,
     required this.studentNo,
+    required this.studentHeadUrl,
     required this.parentName,
+    required this.parentMobile,
+    required this.parentHeadUrl,
     required this.parentRelation,
     required this.tags,
     required this.lastSpeaker,
@@ -43,7 +47,10 @@ class HomeSchoolConversation {
   final String parentId;
   final String studentName;
   final String studentNo;
+  final String? studentHeadUrl;
   final String parentName;
+  final String parentMobile;
+  final String? parentHeadUrl;
   final String parentRelation;
   final List<String> tags;
   final String lastSpeaker;
@@ -51,6 +58,23 @@ class HomeSchoolConversation {
   final String timeText;
   final int unreadCount;
   final bool replyPending;
+
+  /// 展示用学生名：优先 [studentName]，否则 [studentNo]。
+  String get displayStudentName {
+    if (studentName.isNotEmpty) return studentName;
+    if (studentNo.isNotEmpty && studentNo != '—') return studentNo;
+    return '未命名学生';
+  }
+
+  /// 展示用家长名：优先 [parentName]，否则 [parentMobile]。
+  String get displayParentName {
+    if (parentName.isNotEmpty) return parentName;
+    if (parentMobile.isNotEmpty) return parentMobile;
+    return '家长';
+  }
+
+  bool get hasStudentName => studentName.isNotEmpty;
+  bool get hasParentName => parentName.isNotEmpty;
 }
 
 class HomeSchoolChatMessage {
@@ -99,14 +123,21 @@ List<HomeSchoolConversation> parseHomeSchoolConversationList(dynamic raw) {
             .where((s) => s.isNotEmpty)
             .toList();
     final senderType = _pickString(m, ['lastSenderType'], '');
+    final studentNoRaw = _pickString(m, ['studentNo'], '');
+    final studentName = _pickString(m, ['studentName'], '');
+    final parentMobile = _pickString(m, ['parentMobile'], '');
+    final parentName = _pickString(m, ['parentName'], '');
     parsed.add(
       HomeSchoolConversation(
         id: id,
         studentId: studentId,
         parentId: parentId,
-        studentName: _pickString(m, ['studentName'], '未命名学生'),
-        studentNo: _pickString(m, ['studentNo'], '—'),
-        parentName: _pickString(m, ['parentName'], '家长'),
+        studentName: studentName,
+        studentNo: studentNoRaw.isNotEmpty ? studentNoRaw : '—',
+        studentHeadUrl: _resolveOptionalUrl(m['studentHeadUrl']),
+        parentName: parentName,
+        parentMobile: parentMobile,
+        parentHeadUrl: _resolveOptionalUrl(m['parentHeadUrl']),
         parentRelation: _pickString(m, ['parentRelation'], '家长'),
         tags: tags,
         lastSpeaker: senderType == 'teacher' ? '老师' : '家长',
@@ -164,6 +195,13 @@ List<Map<String, dynamic>> _extractRecordMaps(dynamic raw) {
     }
   }
   return const [];
+}
+
+String? _resolveOptionalUrl(dynamic raw) {
+  if (raw == null) return null;
+  final s = raw.toString().trim();
+  if (s.isEmpty || s == 'null') return null;
+  return MediaUrl.resolve(s);
 }
 
 String _pickString(

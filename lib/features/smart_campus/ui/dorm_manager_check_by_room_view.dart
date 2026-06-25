@@ -461,7 +461,7 @@ class _DormitorySelectFieldState<T> extends State<_DormitorySelectField<T>> {
               duration: const Duration(milliseconds: 160),
               child: Icon(
                 Icons.keyboard_arrow_down_rounded,
-                size: ui(18),
+                size: ui(22),
                 color: const Color(0xFFC6C6C6),
               ),
             ),
@@ -992,7 +992,7 @@ class _StatusDropdownState extends State<_StatusDropdown> {
               duration: const Duration(milliseconds: 160),
               child: Icon(
                 Icons.keyboard_arrow_down_rounded,
-                size: ui(16),
+                size: ui(22),
                 color: _kTextDark,
               ),
             ),

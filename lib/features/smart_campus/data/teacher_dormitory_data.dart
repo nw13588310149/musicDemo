@@ -124,6 +124,7 @@ class TeacherDormitoryHistoryItem {
     required this.studentId,
     required this.studentName,
     required this.studentNo,
+    required this.avatarUrl,
     required this.dormName,
     required this.checkDate,
     required this.checkTime,
@@ -135,6 +136,7 @@ class TeacherDormitoryHistoryItem {
   final String studentId;
   final String studentName;
   final String studentNo;
+  final String avatarUrl;
   final String dormName;
   final String checkDate;
   final String checkTime;
@@ -152,6 +154,7 @@ class TeacherDormitoryHistoryItem {
       studentId: pickFirstSnowflakeId(map, ['userId', 'studentId']) ?? '',
       studentName: _pickStudentName(map),
       studentNo: _pickString(map, ['studentNo'], '--'),
+      avatarUrl: _pickStudentHeadUrl(map),
       dormName: _dormName(map),
       checkDate: _pickString(map, ['checkDate']),
       checkTime: _clock(_pickString(map, ['checkTime'])),
@@ -310,7 +313,21 @@ String _pickStudentName(
 }
 
 String _pickStudentHeadUrl(Map<String, dynamic> map) {
-  return _pickString(map, ['studentHeadUrl', 'headUrl', 'avatarUrl', 'avatar']);
+  final raw = _pickString(
+    map,
+    ['studentHeadUrl', 'headUrl', 'avatarUrl', 'avatar', 'headImg'],
+  );
+  if (raw.isNotEmpty) return raw;
+  for (final key in ['user', 'student']) {
+    final nested = _asMap(map[key]);
+    if (nested == null) continue;
+    final fromNested = _pickString(
+      nested,
+      ['headUrl', 'avatar', 'avatarUrl', 'headImg', 'studentHeadUrl'],
+    );
+    if (fromNested.isNotEmpty) return fromNested;
+  }
+  return '';
 }
 
 String _clock(String value) {

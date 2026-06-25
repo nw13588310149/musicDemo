@@ -31,8 +31,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/network/media_url.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../shell/ui/shell_layout.dart';
+import 'widgets/smart_campus_stat_card.dart';
 import '../data/teacher_dormitory_data.dart';
 import '../state/teacher_dormitory_controller.dart';
 import 'widgets/dormitory_detail_dialog.dart';
@@ -106,6 +108,7 @@ class _StudentRecord {
     required this.session,
     required this.studentName,
     required this.studentNo,
+    required this.headUrl,
     required this.status,
     required this.dormName,
     required this.date,
@@ -118,6 +121,7 @@ class _StudentRecord {
   final _Session session;
   final String studentName;
   final String studentNo;
+  final String headUrl;
   final _StudentStatus status;
   final String dormName;
   final String date;
@@ -257,6 +261,7 @@ List<_StudentRecord> _historyStudentRecords(
         session: item.isMorning ? _Session.morning : _Session.evening,
         studentName: item.studentName,
         studentNo: item.studentNo,
+        headUrl: item.avatarUrl,
         status: item.status == TeacherDormitoryStatus.normal
             ? _StudentStatus.normal
             : _StudentStatus.absent,
@@ -579,31 +584,27 @@ class _StatCard extends StatelessWidget {
           ),
           const Spacer(),
           Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
                 '$value',
-                style: TextStyle(
-                  fontSize: ui(32),
-                  color: _kTextDark,
-                  fontFamily: 'Barlow',
-                  fontWeight: FontWeight.w500,
-                  height: 1.0,
-                ),
+                style: smartCampusStatValueTextStyle(ui),
               ),
               SizedBox(width: ui(8)),
               Expanded(
-                child: Text(
-                  subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: ui(12),
-                    color: _kTextHint,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w400,
-                    height: 1.2,
+                child: Padding(
+                  padding: EdgeInsets.only(bottom: ui(2)),
+                  child: Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: ui(12),
+                      color: _kTextHint,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w400,
+                      height: 1.0,
+                    ),
                   ),
                 ),
               ),
@@ -804,6 +805,69 @@ class _DormStatusBadge extends StatelessWidget {
 
 // —— 学生口径卡 ————————————————————————————————————————————————
 
+/// 查寝历史学生头像：相对路径经 [MediaUrl.resolve] 补全后加载。
+class _DormStudentAvatar extends StatelessWidget {
+  const _DormStudentAvatar({
+    required this.rawHeadUrl,
+    required this.name,
+    required this.size,
+  });
+
+  final String rawHeadUrl;
+  final String name;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final radius = ui(8);
+    final raw = rawHeadUrl.trim();
+    final url = raw.isNotEmpty ? MediaUrl.resolve(raw) : '';
+    final initial = name.trim().isNotEmpty ? name.characters.first : '';
+
+    Widget child;
+    if (url.isNotEmpty) {
+      child = ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: Image.network(
+          url,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => _fallback(ui, radius, initial),
+        ),
+      );
+    } else {
+      child = _fallback(ui, radius, initial);
+    }
+    return SizedBox(width: size, height: size, child: child);
+  }
+
+  Widget _fallback(double Function(double) ui, double radius, String initial) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: const Color(0xFFA773FF),
+        borderRadius: BorderRadius.circular(radius),
+      ),
+      alignment: Alignment.center,
+      child: initial.isNotEmpty
+          ? Text(
+              initial,
+              style: TextStyle(
+                fontSize: ui(size * 0.38),
+                color: Colors.white,
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w500,
+                height: 1,
+              ),
+            )
+          : Icon(Icons.person_rounded, size: ui(size * 0.5), color: Colors.white),
+    );
+  }
+}
+
 class _StudentCard extends StatelessWidget {
   const _StudentCard({required this.record, this.onTap});
 
@@ -828,19 +892,10 @@ class _StudentCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: ui(40),
-                height: ui(40),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(ui(8)),
-                ),
-                alignment: Alignment.center,
-                child: Icon(
-                  Icons.person_rounded,
-                  size: ui(24),
-                  color: _kTextHint,
-                ),
+              _DormStudentAvatar(
+                rawHeadUrl: record.headUrl,
+                name: record.studentName,
+                size: ui(40),
               ),
               SizedBox(width: ui(8)),
               Expanded(
@@ -1092,6 +1147,7 @@ List<_StudentRecord> _demoStudents() => const [
     session: _Session.evening,
     studentName: '王晴',
     studentNo: 'G3030201',
+    headUrl: '',
     status: _StudentStatus.normal,
     dormName: '男生公寓 B-310',
     date: '2026-04-02',
@@ -1104,6 +1160,7 @@ List<_StudentRecord> _demoStudents() => const [
     session: _Session.evening,
     studentName: '王晴',
     studentNo: 'G3030201',
+    headUrl: '',
     status: _StudentStatus.absent,
     dormName: '男生公寓 B-310',
     date: '2026-04-02',
@@ -1116,6 +1173,7 @@ List<_StudentRecord> _demoStudents() => const [
     session: _Session.evening,
     studentName: '王晴',
     studentNo: 'G3030201',
+    headUrl: '',
     status: _StudentStatus.normal,
     dormName: '男生公寓 B-310',
     date: '2026-04-02',
@@ -1128,6 +1186,7 @@ List<_StudentRecord> _demoStudents() => const [
     session: _Session.evening,
     studentName: '王晴',
     studentNo: 'G3030201',
+    headUrl: '',
     status: _StudentStatus.normal,
     dormName: '男生公寓 B-310',
     date: '2026-04-02',
@@ -1140,6 +1199,7 @@ List<_StudentRecord> _demoStudents() => const [
     session: _Session.evening,
     studentName: '王晴',
     studentNo: 'G3030201',
+    headUrl: '',
     status: _StudentStatus.absent,
     dormName: '男生公寓 B-310',
     date: '2026-04-02',
@@ -1152,6 +1212,7 @@ List<_StudentRecord> _demoStudents() => const [
     session: _Session.evening,
     studentName: '王晴',
     studentNo: 'G3030201',
+    headUrl: '',
     status: _StudentStatus.normal,
     dormName: '男生公寓 B-310',
     date: '2026-04-02',
@@ -1165,6 +1226,7 @@ List<_StudentRecord> _demoStudents() => const [
     session: _Session.morning,
     studentName: '王晴',
     studentNo: 'G3030201',
+    headUrl: '',
     status: _StudentStatus.normal,
     dormName: '男生公寓 B-310',
     date: '2026-04-02',
@@ -1177,6 +1239,7 @@ List<_StudentRecord> _demoStudents() => const [
     session: _Session.morning,
     studentName: '王晴',
     studentNo: 'G3030201',
+    headUrl: '',
     status: _StudentStatus.absent,
     dormName: '男生公寓 B-310',
     date: '2026-04-02',
@@ -1189,6 +1252,7 @@ List<_StudentRecord> _demoStudents() => const [
     session: _Session.morning,
     studentName: '王晴',
     studentNo: 'G3030201',
+    headUrl: '',
     status: _StudentStatus.normal,
     dormName: '男生公寓 B-310',
     date: '2026-04-02',

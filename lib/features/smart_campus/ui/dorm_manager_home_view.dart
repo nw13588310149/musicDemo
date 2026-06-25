@@ -7,6 +7,7 @@ import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dar
 
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
+import '../../shell/state/shell_controller.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../data/dormitory_check_data.dart';
 import '../state/dormitory_manager_controller.dart';
@@ -38,9 +39,8 @@ import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 ///      紫色「晨检 / 晚查」徽标 + Barlow 时间段 + 14/600 标题。
 ///
 /// 右栏（256 宽）固定单张白卡：
-/// - 顶部 72 圆形头像 + 「Grey黎」16/500 + 绿点「在岗」+
-///   「生活辅导员·宿管值班」+ 蓝底「宿管老师」徽章；
-/// - 「区域：男生公寓1-3号楼 / 女生公寓A区」两行；
+/// - 顶部 72 圆形头像 + 「Grey黎」16/500 + 绿点「在岗」+ 蓝底「宿管老师」徽章；
+/// - 「区域：男生公寓1-3号楼 / 女生公寓A区」+「职责：生活辅导员·宿管值班」；
 /// - 「通知」title + 滚动通知列表（后勤 / 联动 / 制度 / 大师课 等）。
 ///
 /// 不带 `onBack` —— 这就是 dormManager 角色下 `mainView == dashboard` 的根
@@ -112,6 +112,7 @@ class _DormManagerHomeViewState extends ConsumerState<DormManagerHomeView> {
     final ui = DashboardScaleScope.of(context).ui;
     final managerState = ref.watch(dormitoryManagerControllerProvider);
     final index = managerState.index;
+    final institutionName = ref.watch(shellControllerProvider).schoolName;
 
     return PageInitLoadingShell(
       loading: managerState.loadingHome,
@@ -149,6 +150,7 @@ class _DormManagerHomeViewState extends ConsumerState<DormManagerHomeView> {
             fillHeight: !isCompact,
             displayName: widget.shellDisplayName,
             avatarUrl: widget.avatarUrl,
+            institutionName: institutionName,
             availableRoles: widget.availableRoles,
             selectedRole: widget.selectedRole,
             onSelectRole: widget.onSelectRole,
@@ -799,7 +801,7 @@ class _DutyTaskTile extends StatelessWidget {
                 style: TextStyle(
                   fontSize: ui(12),
                   height: 1.27,
-                  color: const Color(0xFF8741FF),
+                          color: const Color(0xFF8741FF),
                   fontFamily: 'PingFang SC',
                 ),
               ),
@@ -851,6 +853,7 @@ class _DormManagerSidePanel extends StatelessWidget {
     required this.fillHeight,
     required this.displayName,
     required this.avatarUrl,
+    this.institutionName = '',
     required this.availableRoles,
     required this.selectedRole,
     required this.onSelectRole,
@@ -860,6 +863,7 @@ class _DormManagerSidePanel extends StatelessWidget {
   final bool fillHeight;
   final String displayName;
   final String avatarUrl;
+  final String institutionName;
   final List<SmartCampusRole> availableRoles;
   final SmartCampusRole selectedRole;
   final ValueChanged<SmartCampusRole>? onSelectRole;
@@ -874,9 +878,13 @@ class _DormManagerSidePanel extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: fillHeight ? MainAxisSize.max : MainAxisSize.min,
       children: [
-        _ProfileHeader(displayName: displayName, avatarUrl: avatarUrl),
+        _ProfileHeader(
+          displayName: displayName,
+          avatarUrl: avatarUrl,
+          institutionName: institutionName,
+        ),
         SizedBox(height: ui(16)),
-        _ProfileAreaRows(areas: managedAreas),
+        _ProfileDetailRows(areas: managedAreas),
         if (showRoleSwitcher) ...[
           SizedBox(height: ui(20)),
           Text(
@@ -924,10 +932,15 @@ class _DormManagerSidePanel extends StatelessWidget {
 }
 
 class _ProfileHeader extends StatelessWidget {
-  const _ProfileHeader({required this.displayName, required this.avatarUrl});
+  const _ProfileHeader({
+    required this.displayName,
+    required this.avatarUrl,
+    this.institutionName = '',
+  });
 
   final String displayName;
   final String avatarUrl;
+  final String institutionName;
 
   @override
   Widget build(BuildContext context) {
@@ -1031,31 +1044,41 @@ class _ProfileHeader extends StatelessWidget {
                       ),
                     ],
                   ),
-                  SizedBox(height: ui(6)),
-                  Text(
-                    '生活辅导员·宿管值班',
-                    style: TextStyle(
-                      fontSize: ui(12),
-                      height: 1.2,
-                      color: const Color(0xFF6D6B75),
-                      fontFamily: 'PingFang SC',
+                  if (institutionName.trim().isNotEmpty) ...[
+                    SizedBox(height: ui(4)),
+                    Text(
+                      institutionName.trim(),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: ui(12),
+                        height: 1.2,
+                        color: const Color(0xFF6D6B75),
+                        fontFamily: 'Source Han Sans SC',
+                        fontWeight: AppFont.w400,
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
           ],
         ),
-        const SmartCampusAvatarRoleBadge(label: '宿管老师'),
+        const SmartCampusAvatarRoleBadge(
+          label: '宿管老师',
+          role: SmartCampusRole.dormManager,
+        ),
       ],
     );
   }
 }
 
-class _ProfileAreaRows extends StatelessWidget {
-  const _ProfileAreaRows({this.areas = const []});
+class _ProfileDetailRows extends StatelessWidget {
+  const _ProfileDetailRows({this.areas = const []});
 
   final List<String> areas;
+
+  static const _duty = '生活辅导员·宿管值班';
 
   @override
   Widget build(BuildContext context) {
@@ -1067,6 +1090,8 @@ class _ProfileAreaRows extends StatelessWidget {
           if (i > 0) const SizedBox(height: 4),
           _AreaLine(label: '区域：', value: rows[i]),
         ],
+        const SizedBox(height: 4),
+        _AreaLine(label: '职责：', value: _duty),
       ],
     );
   }

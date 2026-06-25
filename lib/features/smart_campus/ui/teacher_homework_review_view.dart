@@ -67,6 +67,7 @@ import '../../../core/widgets/popup_selector_field.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../school/data/school_repository.dart';
 import '../../shell/ui/shell_layout.dart';
+import 'widgets/smart_campus_stat_card.dart';
 import '../data/teacher_repository.dart';
 import 'widgets/schedule_course_card.dart';
 import 'widgets/smart_campus_page_banner.dart';
@@ -1357,13 +1358,7 @@ class _StatCell extends StatelessWidget {
           Text(
             value,
             textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: ui(24),
-              color: _kTextDark,
-              fontFamily: 'PingFang SC',
-              fontWeight: AppFont.w500,
-              height: 1.2,
-            ),
+            style: smartCampusStatValueTextStyle(ui),
           ),
           SizedBox(height: ui(2)),
           Text(

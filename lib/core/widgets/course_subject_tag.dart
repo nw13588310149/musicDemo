@@ -57,7 +57,9 @@ class CourseSubjectTag extends StatelessWidget {
         : (isInstrument ? const Color(0xFF0CAC40) : const Color(0xFF8741FF));
 
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: ui(4), vertical: ui(2)),
+      height: ui(17),
+      padding: EdgeInsets.symmetric(horizontal: ui(4)),
+      alignment: Alignment.center,
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(ui(4)),

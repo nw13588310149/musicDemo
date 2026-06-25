@@ -29,6 +29,7 @@
 
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
@@ -39,6 +40,7 @@ import '../../../core/widgets/app_refresh_indicator.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
+import 'widgets/smart_campus_stat_card.dart';
 import '../data/home_school_chat_data.dart';
 import '../data/teacher_repository.dart';
 import 'widgets/smart_campus_page_banner.dart';
@@ -407,13 +409,7 @@ class _StatCard extends StatelessWidget {
                 SizedBox(height: ui(8)),
                 Text(
                   '$value',
-                  style: TextStyle(
-                    fontSize: ui(32),
-                    color: _kTextDark,
-                    fontFamily: 'Barlow',
-                    fontWeight: FontWeight.w500,
-                    height: 1.0,
-                  ),
+                  style: smartCampusStatValueTextStyle(ui),
                 ),
               ],
             ),
@@ -767,7 +763,8 @@ class _ConversationCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _AvatarWithBadge(
-                    studentName: conversation.studentName,
+                    headUrl: conversation.studentHeadUrl,
+                    fallbackInitial: conversation.displayStudentName,
                     unreadCount: conversation.unreadCount,
                   ),
                   SizedBox(width: ui(8)),
@@ -776,7 +773,7 @@ class _ConversationCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          conversation.studentName,
+                          conversation.displayStudentName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -789,7 +786,7 @@ class _ConversationCard extends StatelessWidget {
                         ),
                         SizedBox(height: ui(4)),
                         Text(
-                          '${conversation.parentName}（${conversation.parentRelation}）',
+                          '${conversation.displayParentName}（${conversation.parentRelation}）',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -800,19 +797,22 @@ class _ConversationCard extends StatelessWidget {
                             height: 1.2,
                           ),
                         ),
-                        SizedBox(height: ui(4)),
-                        Text(
-                          conversation.studentNo,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: ui(12),
-                            color: _kTextHint,
-                            fontFamily: 'PingFang SC',
-                            fontWeight: AppFont.w400,
-                            height: 1.2,
+                        if (conversation.hasStudentName &&
+                            conversation.studentNo != '—') ...[
+                          SizedBox(height: ui(4)),
+                          Text(
+                            conversation.studentNo,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: ui(12),
+                              color: _kTextHint,
+                              fontFamily: 'PingFang SC',
+                              fontWeight: AppFont.w400,
+                              height: 1.2,
+                            ),
                           ),
-                        ),
+                        ],
                       ],
                     ),
                   ),
@@ -862,8 +862,20 @@ class _ConversationCard extends StatelessWidget {
                             ),
                           ),
                           Expanded(
-                            child: Text(
-                              conversation.lastMessage,
+                            child: Text.rich(
+                              TextSpan(
+                                children: _homeSchoolChatTextSpans(
+                                  conversation.lastMessage,
+                                  TextStyle(
+                                    fontSize: ui(12),
+                                    color: _kTextSecondary,
+                                    fontFamily: 'PingFang SC',
+                                    fontWeight: AppFont.w400,
+                                    height: 1.4,
+                                  ),
+                                  ui,
+                                ),
+                              ),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
@@ -872,6 +884,10 @@ class _ConversationCard extends StatelessWidget {
                                 fontFamily: 'PingFang SC',
                                 fontWeight: AppFont.w400,
                                 height: 1.4,
+                              ),
+                              textHeightBehavior: const TextHeightBehavior(
+                                applyHeightToFirstAscent: false,
+                                applyHeightToLastDescent: false,
                               ),
                             ),
                           ),
@@ -905,41 +921,31 @@ class _ConversationCard extends StatelessWidget {
 
 class _AvatarWithBadge extends StatelessWidget {
   const _AvatarWithBadge({
-    required this.studentName,
+    required this.headUrl,
+    required this.fallbackInitial,
     required this.unreadCount,
   });
 
-  final String studentName;
+  final String? headUrl;
+  final String fallbackInitial;
   final int unreadCount;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final initial = studentName.isNotEmpty ? studentName.characters.first : '?';
+    final initial =
+        fallbackInitial.isNotEmpty ? fallbackInitial.characters.first : '?';
     return SizedBox(
       width: ui(46),
       height: ui(40),
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          Container(
-            width: ui(40),
-            height: ui(40),
-            decoration: BoxDecoration(
-              color: const Color(0xFFEFE5FF),
-              borderRadius: BorderRadius.circular(ui(8)),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              initial,
-              style: TextStyle(
-                fontSize: ui(16),
-                color: _kPurple,
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w600,
-                height: 1.0,
-              ),
-            ),
+          _HomeSchoolAvatar(
+            size: ui(40),
+            headUrl: headUrl,
+            fallbackInitial: initial,
+            borderRadius: ui(8),
           ),
           if (unreadCount > 0)
             Positioned(
@@ -967,6 +973,58 @@ class _AvatarWithBadge extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _HomeSchoolAvatar extends StatelessWidget {
+  const _HomeSchoolAvatar({
+    required this.size,
+    required this.headUrl,
+    required this.fallbackInitial,
+    required this.borderRadius,
+  });
+
+  final double size;
+  final String? headUrl;
+  final String fallbackInitial;
+  final double borderRadius;
+
+  @override
+  Widget build(BuildContext context) {
+    final placeholder = Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFE5FF),
+        borderRadius: BorderRadius.circular(borderRadius),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        fallbackInitial,
+        style: TextStyle(
+          fontSize: size * 0.4,
+          color: _kPurple,
+          fontFamily: 'PingFang SC',
+          fontWeight: AppFont.w600,
+          height: 1.0,
+        ),
+      ),
+    );
+    final url = headUrl?.trim() ?? '';
+    if (url.isEmpty) return placeholder;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(borderRadius),
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: CachedNetworkImage(
+          imageUrl: url,
+          fit: BoxFit.cover,
+          placeholder: (_, _) => placeholder,
+          errorWidget: (_, _, _) => placeholder,
+        ),
       ),
     );
   }
@@ -1197,8 +1255,8 @@ class _DialogHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final initial = conversation.studentName.isNotEmpty
-        ? conversation.studentName.characters.first
+    final initial = conversation.displayStudentName.isNotEmpty
+        ? conversation.displayStudentName.characters.first
         : '?';
     return Container(
       width: double.infinity,
@@ -1234,16 +1292,12 @@ class _DialogHeader extends StatelessWidget {
                           ),
                         ],
                       ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        initial,
-                        style: TextStyle(
-                          fontSize: ui(22),
-                          color: _kPurple,
-                          fontFamily: 'PingFang SC',
-                          fontWeight: AppFont.w600,
-                          height: 1.0,
-                        ),
+                      clipBehavior: Clip.antiAlias,
+                      child: _HomeSchoolAvatar(
+                        size: ui(56),
+                        headUrl: conversation.studentHeadUrl,
+                        fallbackInitial: initial,
+                        borderRadius: ui(12),
                       ),
                     ),
                     SizedBox(width: ui(12)),
@@ -1252,7 +1306,7 @@ class _DialogHeader extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            conversation.studentName,
+                            conversation.displayStudentName,
                             style: TextStyle(
                               fontSize: ui(16),
                               color: Colors.black,
@@ -1261,17 +1315,20 @@ class _DialogHeader extends StatelessWidget {
                               height: 1.2,
                             ),
                           ),
-                          SizedBox(height: ui(4)),
-                          Text(
-                            conversation.studentNo,
-                            style: TextStyle(
-                              fontSize: ui(12),
-                              color: _kTextHint,
-                              fontFamily: 'PingFang SC',
-                              fontWeight: AppFont.w400,
-                              height: 1.2,
+                          if (conversation.hasStudentName &&
+                              conversation.studentNo != '—') ...[
+                            SizedBox(height: ui(4)),
+                            Text(
+                              conversation.studentNo,
+                              style: TextStyle(
+                                fontSize: ui(12),
+                                color: _kTextHint,
+                                fontFamily: 'PingFang SC',
+                                fontWeight: AppFont.w400,
+                                height: 1.2,
+                              ),
                             ),
-                          ),
+                          ],
                         ],
                       ),
                     ),
@@ -1301,24 +1358,18 @@ class _DialogHeader extends StatelessWidget {
           SizedBox(height: ui(12)),
           Row(
             children: [
-              Container(
-                width: ui(40),
-                height: ui(40),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(ui(8)),
-                ),
-                alignment: Alignment.center,
-                child: Icon(
-                  Icons.person_rounded,
-                  size: ui(24),
-                  color: _kTextSecondary,
-                ),
+              _HomeSchoolAvatar(
+                size: ui(40),
+                headUrl: conversation.parentHeadUrl,
+                fallbackInitial: conversation.parentRelation.isNotEmpty
+                    ? conversation.parentRelation.characters.first
+                    : '家',
+                borderRadius: ui(8),
               ),
               SizedBox(width: ui(8)),
               Expanded(
                 child: Text(
-                  '${conversation.parentRelation}-${conversation.parentName}',
+                  '${conversation.parentRelation}-${conversation.displayParentName}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -1338,6 +1389,38 @@ class _DialogHeader extends StatelessWidget {
   }
 }
 
+// =============================================================================
+// 聊天气泡文字：emoji 与中文混排时 iPad 上需单独放大 emoji，避免行高错位。
+// =============================================================================
+
+bool _isHomeSchoolEmojiCluster(String cluster) {
+  for (final rune in cluster.runes) {
+    if ((rune >= 0x1F000 && rune <= 0x1FAFF) ||
+        (rune >= 0x2600 && rune <= 0x27BF) ||
+        (rune >= 0xFE00 && rune <= 0xFE0F) ||
+        rune == 0x200D) {
+      return true;
+    }
+  }
+  return false;
+}
+
+List<InlineSpan> _homeSchoolChatTextSpans(
+  String text,
+  TextStyle baseStyle,
+  double Function(double) ui,
+) {
+  return [
+    for (final cluster in text.characters)
+      TextSpan(
+        text: cluster,
+        style: _isHomeSchoolEmojiCluster(cluster)
+            ? TextStyle(fontSize: ui(18), height: 1.1)
+            : null,
+      ),
+  ];
+}
+
 class _ChatBubble extends StatelessWidget {
   const _ChatBubble({required this.message});
 
@@ -1347,6 +1430,13 @@ class _ChatBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final fromTeacher = message.fromTeacher;
+    final baseStyle = TextStyle(
+      fontSize: ui(13),
+      color: fromTeacher ? Colors.white : _kTextDark,
+      fontFamily: 'PingFang SC',
+      fontWeight: AppFont.w400,
+      height: 1.7,
+    );
     return Align(
       alignment: fromTeacher ? Alignment.centerRight : Alignment.centerLeft,
       child: ConstrainedBox(
@@ -1365,14 +1455,18 @@ class _ChatBubble extends StatelessWidget {
                 color: fromTeacher ? _kPurple : _kCardGreyBg,
                 borderRadius: BorderRadius.circular(ui(8)),
               ),
-              child: Text(
-                message.content,
-                style: TextStyle(
-                  fontSize: ui(13),
-                  color: fromTeacher ? Colors.white : _kTextDark,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w400,
-                  height: 24 / 13,
+              child: Text.rich(
+                TextSpan(
+                  children: _homeSchoolChatTextSpans(
+                    message.content,
+                    baseStyle,
+                    ui,
+                  ),
+                ),
+                style: baseStyle,
+                textHeightBehavior: const TextHeightBehavior(
+                  applyHeightToFirstAscent: false,
+                  applyHeightToLastDescent: false,
                 ),
               ),
             ),

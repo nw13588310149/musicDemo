@@ -429,7 +429,8 @@ class _WorkbenchTabSegmented extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
-      height: ui(32),
+      // minHeight 而不是 fixed height：避免中文字 height:1 被切顶（与人脸库 banner tab 一致）。
+      constraints: BoxConstraints(minHeight: ui(32)),
       padding: EdgeInsets.all(ui(2)),
       decoration: BoxDecoration(
         color: _kInnerGray,
@@ -478,8 +479,9 @@ class _SegmentItem extends StatelessWidget {
           style: TextStyle(
             fontSize: ui(12),
             color: selected ? Colors.white : _kTextHint,
-            fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
-            height: 1,
+            fontFamily: 'PingFang SC',
+            fontWeight: selected ? AppFont.w500 : AppFont.w400,
+            height: 1.2,
           ),
         ),
       ),
@@ -2442,82 +2444,110 @@ class _DormNormalStatCardState extends ConsumerState<_DormNormalStatCard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    SizedBox(
-                      height: ui(21),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          '人',
-                          style: TextStyle(
-                            fontSize: ui(12),
-                            color: _kTextHint,
-                            fontWeight: FontWeight.w400,
-                            height: 20 / 12,
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: ui(28),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              SizedBox(
+                                height: ui(21),
+                                child: Align(
+                                  alignment: Alignment.centerRight,
+                                  child: Text(
+                                    '人',
+                                    style: _AttendanceYAxis.labelStyle(ui),
+                                  ),
+                                ),
+                              ),
+                              SizedBox(height: ui(8)),
+                              SizedBox(
+                                height: ui(230),
+                                child: _AttendanceYAxis(ticks: _ticks),
+                              ),
+                            ],
                           ),
                         ),
-                      ),
-                    ),
-                    SizedBox(height: ui(8)),
-                    SizedBox(
-                      height: ui(230),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          SizedBox(
-                            width: ui(28),
-                            child: _AttendanceYAxis(ticks: _ticks),
-                          ),
-                          SizedBox(width: ui(8)),
-                          Expanded(
-                            child: LayoutBuilder(
-                              builder: (context, constraints) {
-                                return Stack(
-                                  clipBehavior: Clip.none,
-                                  children: [
-                                    CustomPaint(
-                                      size: Size(
-                                        constraints.maxWidth,
-                                        constraints.maxHeight,
-                                      ),
-                                      painter: _AttendanceGridPainter(
-                                        tickRowHeight: ui(20),
-                                        tickGap: ui(22),
-                                        tickCount: _ticks.length,
-                                      ),
-                                    ),
-                                    Positioned(
-                                      left: 0,
-                                      right: 0,
-                                      bottom: 0,
-                                      height: ui(163),
-                                      child: Row(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.end,
-                                        children: [
-                                          for (var i = 0; i < _days.length; i++) ...[
-                                            if (i > 0) SizedBox(width: ui(28)),
-                                            Expanded(
-                                              child: Align(
-                                                alignment: Alignment.bottomCenter,
-                                                child: _AttendanceBarColumn(
-                                                  value: _days[i].normalCount,
-                                                  maxValue: maxValue <= 0
-                                                      ? 1
-                                                      : maxValue,
+                        SizedBox(width: ui(8)),
+                        Expanded(
+                          child: Column(
+                            children: [
+                              SizedBox(height: ui(29)),
+                              SizedBox(
+                                height: ui(230),
+                                child: LayoutBuilder(
+                                  builder: (context, constraints) {
+                                    final tickRowHeight = ui(20);
+                                    final tickGap = ui(22);
+                                    final tickCount = _ticks.length;
+                                    final chartHeight = ui(230);
+                                    final baselineY =
+                                        _AttendanceGridPainter.baselineY(
+                                      tickRowHeight: tickRowHeight,
+                                      tickGap: tickGap,
+                                      tickCount: tickCount,
+                                    );
+                                    final barBottomInset =
+                                        chartHeight - baselineY;
+
+                                    return Stack(
+                                      clipBehavior: Clip.none,
+                                      children: [
+                                        CustomPaint(
+                                          size: Size(
+                                            constraints.maxWidth,
+                                            constraints.maxHeight,
+                                          ),
+                                          painter: _AttendanceGridPainter(
+                                            tickRowHeight: tickRowHeight,
+                                            tickGap: tickGap,
+                                            tickCount: tickCount,
+                                          ),
+                                        ),
+                                        Positioned(
+                                          left: 0,
+                                          right: 0,
+                                          bottom: barBottomInset,
+                                          height: ui(
+                                            _AttendanceBarColumn.designBarHeight,
+                                          ),
+                                          child: Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.end,
+                                            children: [
+                                              for (var i = 0;
+                                                  i < _days.length;
+                                                  i++) ...[
+                                                if (i > 0)
+                                                  SizedBox(width: ui(28)),
+                                                Expanded(
+                                                  child: Align(
+                                                    alignment:
+                                                        Alignment.bottomCenter,
+                                                    child: _AttendanceBarColumn(
+                                                      value: _days[i]
+                                                          .normalCount,
+                                                      maxValue: maxValue <= 0
+                                                          ? 1
+                                                          : maxValue,
+                                                    ),
+                                                  ),
                                                 ),
-                                              ),
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              },
-                            ),
+                                              ],
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                     SizedBox(height: ui(8)),
                     Padding(
@@ -2553,9 +2583,19 @@ class _AttendanceYAxis extends StatelessWidget {
 
   final List<int> ticks;
 
+  static TextStyle labelStyle(double Function(double) ui) {
+    return TextStyle(
+      fontSize: ui(12),
+      color: _kTextHint,
+      fontWeight: FontWeight.w400,
+      height: 20 / 12,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final style = labelStyle(ui);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
@@ -2568,12 +2608,8 @@ class _AttendanceYAxis extends StatelessWidget {
                 ticks[i].toString(),
                 maxLines: 1,
                 softWrap: false,
-                style: TextStyle(
-                  fontSize: ui(12),
-                  color: _kTextHint,
-                  fontWeight: FontWeight.w400,
-                  height: 20 / 12,
-                ),
+                textAlign: TextAlign.right,
+                style: style,
               ),
             ),
           ),
@@ -2593,12 +2629,12 @@ class _AttendanceBarColumn extends StatelessWidget {
   final int value;
   final int maxValue;
 
-  static const double _designBarH = 163;
+  static const double designBarHeight = 163;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final maxBarH = ui(_designBarH);
+    final maxBarH = ui(designBarHeight);
     final ratio = (value / maxValue).clamp(0.0, 1.0);
     final barH = maxBarH * ratio;
 
@@ -2708,6 +2744,16 @@ class _AttendanceGridPainter extends CustomPainter {
   final double tickGap;
   final int tickCount;
 
+  /// Y=0 基线距绘图区顶部的 Y 坐标，与 [_AttendanceYAxis] 刻度中心对齐。
+  static double baselineY({
+    required double tickRowHeight,
+    required double tickGap,
+    required int tickCount,
+  }) {
+    return tickRowHeight / 2 +
+        (tickCount - 1) * (tickRowHeight + tickGap);
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
@@ -2724,6 +2770,17 @@ class _AttendanceGridPainter extends CustomPainter {
       );
       y += tickRowHeight + tickGap;
     }
+    // Y=0 刻度处绘制实线基线（其余刻度为虚线）。
+    final baseline = baselineY(
+      tickRowHeight: tickRowHeight,
+      tickGap: tickGap,
+      tickCount: tickCount,
+    );
+    canvas.drawLine(
+      Offset(0, baseline),
+      Offset(size.width, baseline),
+      paint,
+    );
   }
 
   static void _paintDashedLine(

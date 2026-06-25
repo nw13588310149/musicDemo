@@ -11,6 +11,20 @@ import '../../data/circle_video_cache.dart';
 import '../../state/circle_state.dart';
 import 'circle_video_play_button.dart';
 
+/// 沉浸媒体 contain 尺寸：在可用区域内等比缩放至最大，与 [_ImmersiveDouyinVideoFrame] 一致。
+Size _immersiveContainSize({
+  required double maxWidth,
+  required double maxHeight,
+  required double aspectRatio,
+}) {
+  if (maxWidth <= 0 || maxHeight <= 0 || aspectRatio <= 0) {
+    return Size.zero;
+  }
+  final byHeight = Size(maxHeight * aspectRatio, maxHeight);
+  if (byHeight.width <= maxWidth) return byHeight;
+  return Size(maxWidth, maxWidth / aspectRatio);
+}
+
 /// 从 [VideoParams] 读取显示宽高（含 90° / 270° 旋转）。
 (double, double)? _displaySizeFromVideoParams(VideoParams params) {
   final dw = params.dw;
@@ -365,7 +379,7 @@ class _ImmersiveDouyinVideoFrame extends StatelessWidget {
       builder: (context, constraints) {
         final maxW = constraints.maxWidth;
         final maxH = constraints.maxHeight;
-        final fittedSize = _containSize(
+        final fittedSize = _immersiveContainSize(
           maxWidth: maxW,
           maxHeight: maxH,
           aspectRatio: aspectRatio,
@@ -417,19 +431,6 @@ class _ImmersiveDouyinVideoFrame extends StatelessWidget {
         );
       },
     );
-  }
-
-  Size _containSize({
-    required double maxWidth,
-    required double maxHeight,
-    required double aspectRatio,
-  }) {
-    if (maxWidth <= 0 || maxHeight <= 0 || aspectRatio <= 0) {
-      return Size.zero;
-    }
-    final byHeight = Size(maxHeight * aspectRatio, maxHeight);
-    if (byHeight.width <= maxWidth) return byHeight;
-    return Size(maxWidth, maxWidth / aspectRatio);
   }
 }
 
@@ -698,8 +699,8 @@ class _DouyinMediaControlsState extends State<_DouyinMediaControls>
 
 /// 沉浸模式图片底图：
 /// - `adaptOrientation == false`（视频/音频封面兜底）：始终 cover 铺满。
-/// - `adaptOrientation == true`（图片帖）：与横/竖版视频一致自动适配——
-///   竖图 cover 铺满；横图纯黑底 + contain 居中留黑边。
+/// - `adaptOrientation == true`（图片帖）：与沉浸视频同一套 contain 布局——
+///   纯黑底 + 等比居中，竖图 / 横图均完整展示并留黑边。
 ///   真实比例以解码后的图片尺寸为准，解码完成前用接口给出的比例兜底。
 class _ImageBackdrop extends StatefulWidget {
   const _ImageBackdrop({
@@ -786,33 +787,54 @@ class _ImageBackdropState extends State<_ImageBackdrop> {
       return const ColoredBox(color: Color(0xFF1B1530));
     }
 
-    final aspect = _resolvedAspectRatio ?? widget.aspectRatioHint;
-    // 仅图片帖适配方向；比例未知时先按竖图 cover 兜底，避免黑边闪烁。
-    final isLandscape =
-        widget.adaptOrientation && aspect != null && aspect > 1;
+    final imageProvider = _provider ?? NetworkImage(widget.url);
+    final imageError = const ColoredBox(color: Color(0xFF1B1530));
 
-    final image = Image(
-      image: _provider ?? NetworkImage(widget.url),
-      fit: isLandscape ? BoxFit.contain : BoxFit.cover,
-      errorBuilder: (context, error, stack) =>
-          const ColoredBox(color: Color(0xFF1B1530)),
-      loadingBuilder: (context, child, progress) {
-        if (progress == null) return child;
-        return const SizedBox.expand();
-      },
-    );
-
-    if (!isLandscape) {
-      return image;
+    if (!widget.adaptOrientation) {
+      return Image(
+        image: imageProvider,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stack) => imageError,
+        loadingBuilder: (context, child, progress) {
+          if (progress == null) return child;
+          return const SizedBox.expand();
+        },
+      );
     }
 
-    // 横图：纯黑底 + contain 居中留黑边，与横版视频保持一致。
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        const ColoredBox(color: Color(0xFF000000)),
-        image,
-      ],
+    // 与沉浸视频 [_ImmersiveDouyinVideoFrame] 同一套 contain 居中布局。
+    final aspect = _resolvedAspectRatio ?? widget.aspectRatioHint ?? 9 / 16;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final fittedSize = _immersiveContainSize(
+          maxWidth: constraints.maxWidth,
+          maxHeight: constraints.maxHeight,
+          aspectRatio: aspect,
+        );
+
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            const ColoredBox(color: Color(0xFF000000)),
+            Center(
+              child: SizedBox(
+                width: fittedSize.width,
+                height: fittedSize.height,
+                child: Image(
+                  image: imageProvider,
+                  fit: BoxFit.fill,
+                  errorBuilder: (context, error, stack) => imageError,
+                  loadingBuilder: (context, child, progress) {
+                    if (progress == null) return child;
+                    return const SizedBox.expand();
+                  },
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

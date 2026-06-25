@@ -137,14 +137,17 @@ class _CardAuthor extends StatelessWidget {
           ),
         ),
         if (onDeletePost != null)
-          GestureDetector(
-            onTap: onDeletePost,
-            behavior: HitTestBehavior.opaque,
-            child: Image.asset(
-              AppAssets.circleDel1,
-              width: ui(32),
-              height: ui(32),
-              fit: BoxFit.contain,
+          Transform.translate(
+            offset: Offset(0, -ui(4)),
+            child: GestureDetector(
+              onTap: onDeletePost,
+              behavior: HitTestBehavior.opaque,
+              child: Image.asset(
+                AppAssets.circleDel1,
+                width: ui(32),
+                height: ui(32),
+                fit: BoxFit.contain,
+              ),
             ),
           ),
       ],
