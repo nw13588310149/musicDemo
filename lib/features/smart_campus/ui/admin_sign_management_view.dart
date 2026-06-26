@@ -41,6 +41,7 @@ import '../../../core/constants/app_assets.dart';
 import '../../../core/network/media_url.dart';
 import '../../../core/widgets/app_date_time_pickers.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/segment_toggle.dart';
 import '../../../core/widgets/popup_selector_field.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../../core/widgets/smooth_circle_network_avatar.dart';
@@ -280,69 +281,16 @@ class _SegmentControl extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      height: ui(32),
-      padding: EdgeInsets.all(ui(3)),
-      decoration: BoxDecoration(
-        color: _kPageBg,
-        borderRadius: BorderRadius.circular(ui(8)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _SegBtn(
-            label: '大课管理',
-            active: selected == _SignTab.large,
-            onTap: () => onSelect(_SignTab.large),
-          ),
-          SizedBox(width: ui(2)),
-          _SegBtn(
-            label: '小课管理',
-            active: selected == _SignTab.small,
-            onTap: () => onSelect(_SignTab.small),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SegBtn extends StatelessWidget {
-  const _SegBtn({
-    required this.label,
-    required this.active,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        padding: EdgeInsets.symmetric(horizontal: ui(14)),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: active ? _kTextDark : Colors.transparent,
-          borderRadius: BorderRadius.circular(ui(6)),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: ui(12),
-            fontFamily: 'PingFang SC',
-            fontWeight: active ? AppFont.w600 : AppFont.w400,
-            color: active ? Colors.white : _kTextSecondary,
-            height: 1,
-          ),
-        ),
-      ),
+    return SegmentToggle(
+      selectedIndex: selected == _SignTab.large ? 0 : 1,
+      fontSize: 12,
+      trackColor: _kPageBg,
+      thumbColor: _kTextDark,
+      options: const [
+        SegmentToggleOption(label: '大课管理'),
+        SegmentToggleOption(label: '小课管理'),
+      ],
+      onChanged: (i) => onSelect(i == 0 ? _SignTab.large : _SignTab.small),
     );
   }
 }

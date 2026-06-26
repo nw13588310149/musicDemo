@@ -154,6 +154,7 @@ class _TeacherExamReviewViewState extends ConsumerState<TeacherExamReviewView> {
     return SmartCampusSecondaryPageShell(
       backgroundColor: _kPageBg,
       bodyScrollable: false,
+      bodyBorderRadius: 8,
       header: _ExamBanner(
         onBack: widget.onBack,
         onOpenHistory: _openHistoryDrawer,
@@ -492,6 +493,7 @@ class _StatusTabsRow extends StatelessWidget {
     return Container(
       height: ui(44),
       padding: EdgeInsets.all(ui(4)),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(ui(8)),
@@ -505,6 +507,8 @@ class _StatusTabsRow extends StatelessWidget {
               label: tabs[i],
               active: i == activeIdx,
               onTap: () => onTap(i),
+              isFirst: i == 0,
+              isLast: i == tabs.length - 1,
             ),
           ],
         ],
@@ -518,25 +522,43 @@ class _SegmentChip extends StatelessWidget {
     required this.label,
     required this.active,
     required this.onTap,
+    this.isFirst = false,
+    this.isLast = false,
   });
 
   final String label;
   final bool active;
   final VoidCallback onTap;
+  final bool isFirst;
+  final bool isLast;
+
+  /// 外层容器 8 圆角 + 4 内边距 → 首尾选中态贴边圆角应为 4。
+  BorderRadius _chipRadius(double Function(double) ui) {
+    final inner = ui(6);
+    if (!active) return BorderRadius.circular(inner);
+    final edge = ui(4);
+    return BorderRadius.only(
+      topLeft: Radius.circular(isFirst ? edge : inner),
+      bottomLeft: Radius.circular(isFirst ? edge : inner),
+      topRight: Radius.circular(isLast ? edge : inner),
+      bottomRight: Radius.circular(isLast ? edge : inner),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final radius = _chipRadius(ui);
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(ui(6)),
+      borderRadius: radius,
       child: Container(
         height: ui(36),
         padding: EdgeInsets.symmetric(horizontal: ui(16)),
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: active ? _kTextDark : Colors.transparent,
-          borderRadius: BorderRadius.circular(ui(6)),
+          borderRadius: radius,
         ),
         child: Text(
           label,

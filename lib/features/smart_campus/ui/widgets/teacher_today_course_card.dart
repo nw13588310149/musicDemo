@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
 
+import '../../../../core/widgets/course_class_kind_tag.dart';
 import '../../../../core/widgets/course_subject_tag.dart';
 import '../../../shell/ui/shell_layout.dart';
 
@@ -21,6 +22,7 @@ class TeacherTodayCourseCard extends StatelessWidget {
     this.isActive = false,
     this.onTap,
     this.muted = false,
+    this.tagDotColor,
   });
 
   final String startTime;
@@ -34,6 +36,7 @@ class TeacherTodayCourseCard extends StatelessWidget {
   final bool isActive;
   final VoidCallback? onTap;
   final bool muted;
+  final Color? tagDotColor;
 
   static const Color _kInnerGray = Color(0xFFF5F6FA);
   static const Color _kInProgressCardBg = Color(0xFFF4F4FF);
@@ -42,9 +45,6 @@ class TeacherTodayCourseCard extends StatelessWidget {
   static const Color _kTextDark = Color(0xFF0B081A);
   static const Color _kTextSection = Color(0xFF1A1A1A);
   static const Color _kTextHint = Color(0xFFB6B5BB);
-  static const Color _kBorderHair = Color(0xFFE6E9F1);
-  static const Color _kStatusPresent = Color(0xFF0CAC40);
-  static const Color _kBigClassDot = Color(0xFFA773FF);
 
   @override
   Widget build(BuildContext context) {
@@ -151,6 +151,7 @@ class TeacherTodayCourseCard extends StatelessWidget {
                       courseName: courseName,
                       isSmallCourse: isSmallCourse,
                       muted: muted,
+                      tagDotColor: tagDotColor,
                     ),
                   ],
                 ),
@@ -201,7 +202,9 @@ class _CourseTimeLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final hasEnd = endTime.isNotEmpty && endTime != '--:--';
-    final textColor = muted ? TeacherTodayCourseCard._kTextHint : TeacherTodayCourseCard._kTextSection;
+    final textColor = muted
+        ? TeacherTodayCourseCard._kTextHint
+        : TeacherTodayCourseCard._kTextSection;
     final baseStyle = TextStyle(
       fontSize: ui(18),
       fontFamily: 'Barlow',
@@ -233,16 +236,13 @@ class _CourseTagPair extends StatelessWidget {
     required this.courseName,
     required this.isSmallCourse,
     this.muted = false,
+    this.tagDotColor,
   });
 
   final String courseName;
   final bool isSmallCourse;
   final bool muted;
-
-  static const double _kClassKindTagHeight = 18;
-  static const double _kClassKindTagHPad = 4;
-  static const double _kClassKindTagRadius = 4;
-  static const double _kClassKindTagFontSize = 11;
+  final Color? tagDotColor;
 
   @override
   Widget build(BuildContext context) {
@@ -253,52 +253,10 @@ class _CourseTagPair extends StatelessWidget {
       children: [
         CourseSubjectTag(name: courseName, muted: muted),
         SizedBox(width: ui(4)),
-        Container(
-          height: ui(_kClassKindTagHeight),
-          padding: EdgeInsets.symmetric(horizontal: ui(_kClassKindTagHPad)),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(ui(_kClassKindTagRadius)),
-            border: Border.all(
-              color: TeacherTodayCourseCard._kBorderHair,
-              width: 1,
-            ),
-          ),
-          alignment: Alignment.center,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Container(
-                width: ui(6),
-                height: ui(6),
-                decoration: BoxDecoration(
-                  color: muted
-                      ? TeacherTodayCourseCard._kTextHint
-                      : (isSmallCourse
-                            ? TeacherTodayCourseCard._kStatusPresent
-                            : TeacherTodayCourseCard._kBigClassDot),
-                  shape: BoxShape.circle,
-                ),
-              ),
-              SizedBox(width: ui(4)),
-              Text(
-                isSmallCourse ? '小课' : '大课',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: ui(_kClassKindTagFontSize),
-                  color: muted
-                      ? TeacherTodayCourseCard._kTextHint
-                      : TeacherTodayCourseCard._kTextDark,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w400,
-                  leadingDistribution: TextLeadingDistribution.even,
-                ),
-              ),
-            ],
-          ),
+        CourseClassKindTag(
+          isSmall: isSmallCourse,
+          muted: muted,
+          dotColor: tagDotColor,
         ),
       ],
     );

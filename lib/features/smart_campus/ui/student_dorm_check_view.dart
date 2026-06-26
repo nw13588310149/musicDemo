@@ -14,7 +14,7 @@
 //      …
 //   3. 标题栏右侧缩小版「查寝记录 / 补卡申请」切换；列表区距统计卡 20：
 //      "我的查寝记录" 18/500 + 右侧白底 全部/异常 双 tab，距下方卡片 20。
-//   4. 卡片网格（3 列，每张 312 宽，padding 12，gradient 207deg #FAF0FF→white）：
+//   4. 卡片网格（3 列，每张 312 宽，padding 12，白底 + 浅灰描边）：
 //      - 头部：场次（晚查寝/晨查寝） 18/600 + 状态徽章
 //        正常 #A773FF / 未打卡 #FF323C / 迟到 #325BFF。
 //      - 副标题：宿舍 + 日期。
@@ -25,7 +25,7 @@
 //      `GradientHeaderDialog` 表单（日期 / 补卡说明 + 取消/确认；场次默认晚打卡）。
 //
 // 颜色 / 字体：
-//   主紫 #8741FF / Banner 渐变 white → #F9EEFF / 卡片 gradient #FAF0FF→white；
+//   主紫 #8741FF / Banner 渐变 white → #F9EEFF / 卡片白底；
 //   字体 PingFang SC，数字 32 用 Barlow（与 Figma 一致）。
 // =============================================================================
 
@@ -61,6 +61,9 @@ const Color _kPurple = Color(0xFF8741FF);
 const Color _kPurpleStatus = Color(0xFFA773FF);
 const Color _kRed = Color(0xFFFF323C);
 const Color _kBlue = Color(0xFF325BFF);
+
+/// 标题栏与统计块、统计块与补卡列表之间的统一间距（与 [SmartCampusSecondaryPageShell.headerGap] 一致）。
+const double _kStatsBlockGap = 16;
 
 /// 标题栏右侧「申请补卡 / 查寝记录·补卡申请」控件统一高度。
 const double _kBannerControlHeight = 32;
@@ -226,6 +229,7 @@ class _StudentDormCheckViewState extends ConsumerState<StudentDormCheckView> {
     final displayName = widget.studentName.isEmpty ? '我' : widget.studentName;
     return SmartCampusSecondaryPageShell(
       backgroundColor: _kPageBg,
+      headerGap: _kStatsBlockGap,
       header: _DormBanner(
         onBack: widget.onBack,
         studentName: displayName,
@@ -260,7 +264,6 @@ class _StudentDormCheckViewState extends ConsumerState<StudentDormCheckView> {
             abnormal: abnormalCount,
             pendingResubmits: pendingMakeups,
           ),
-          SizedBox(height: ui(8)),
           if (state.loading &&
               ((state.listSection ==
                           StudentDormitoryListSection.checkRecords &&
@@ -271,6 +274,7 @@ class _StudentDormCheckViewState extends ConsumerState<StudentDormCheckView> {
             const SizedBox.shrink()
           else if (state.listSection ==
               StudentDormitoryListSection.checkRecords) ...[
+            SizedBox(height: ui(8)),
             _SectionHeader(tab: _tab, onTab: (t) => setState(() => _tab = t)),
             SizedBox(height: ui(8)),
             _DormCardsGrid(
@@ -279,11 +283,13 @@ class _StudentDormCheckViewState extends ConsumerState<StudentDormCheckView> {
                 _showCheckDetail(record.id, '${record.session} · 查寝详情'),
               ),
             ),
-          ] else
+          ] else ...[
+            SizedBox(height: ui(_kStatsBlockGap)),
             _MakeupCardsGrid(
               items: state.makeupItems,
               onTap: (item) => unawaited(_showMakeupDetail(item)),
             ),
+          ],
         ],
       ),
       ),
@@ -1024,13 +1030,9 @@ class _MakeupCard extends StatelessWidget {
       child: Container(
         padding: EdgeInsets.all(ui(12)),
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topRight,
-            end: Alignment.bottomLeft,
-            colors: [Color(0xFFFAF0FF), Colors.white],
-          ),
+          color: Colors.white,
           borderRadius: BorderRadius.circular(ui(16)),
-          border: Border.all(color: Colors.white),
+          border: Border.all(color: _kBorderSoft),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

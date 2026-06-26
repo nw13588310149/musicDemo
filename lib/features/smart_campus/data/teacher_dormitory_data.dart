@@ -342,15 +342,15 @@ List<DormitoryDetailField> parseTeacherDormitoryCheckDetailFields(dynamic raw) {
   final status = TeacherDormitoryStatus.fromApi(map['status']);
   final handleStatus = _pickInt(map, ['handleStatus']);
   return [
-    DormitoryDetailField('学生', _pickStudentName(map, '')),
-    DormitoryDetailField('学号', _pickString(map, ['studentNo'], '--')),
+    DormitoryDetailField('学生姓名', _pickStudentName(map, '')),
+    DormitoryDetailField('学生学号', _pickString(map, ['studentNo'], '--')),
     DormitoryDetailField('查寝日期', _pickString(map, ['checkDate'])),
     DormitoryDetailField('打卡时间', _clock(_pickString(map, ['checkTime']))),
-    DormitoryDetailField('宿舍', _dormName(map)),
+    DormitoryDetailField('所在宿舍', _dormName(map)),
     DormitoryDetailField('查寝状态', _teacherStatusLabel(status)),
     if (handleStatus > 0)
       DormitoryDetailField('处理状态', '$handleStatus'),
-    DormitoryDetailField('备注', _pickString(map, ['remark', 'note'], '无')),
+    DormitoryDetailField('宿管备注', _pickString(map, ['remark', 'note'], '无')),
   ];
 }
 

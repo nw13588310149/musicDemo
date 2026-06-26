@@ -7,10 +7,10 @@ import '../state/smart_campus_state.dart';
 /// 仅用于：① 各端首页右侧栏头像下方身份徽章；
 /// ② 管理员「教师管理」卡片左下身份标签。
 const Color kSmartCampusStudentColor = Color(0xFF8741FF);
-const Color kSmartCampusTeacherColor = Color(0xFF6AC3FF);
-const Color kSmartCampusHeadTeacherColor = Color(0xFFDA639F);
-const Color kSmartCampusDormManagerColor = Color(0xFF74D2AB);
-const Color kSmartCampusAdminColor = Color(0xFFEFB065);
+const Color kSmartCampusTeacherColor = Color(0xFF26D7CD);
+const Color kSmartCampusHeadTeacherColor = Color(0xFFFD9929);
+const Color kSmartCampusDormManagerColor = Color(0xFF077E8C);
+const Color kSmartCampusAdminColor = Color(0xFF8CB837);
 
 extension SmartCampusRoleThemeX on SmartCampusRole {
   Color get accentColor {

@@ -1015,9 +1015,13 @@ class _LineChartArea extends StatelessWidget {
       builder: (context, c) {
         final w = c.maxWidth;
         final h = c.maxHeight;
-        final axisLabelW = ui(28);
+        const yAxisWidth = 32.0;
+        const yAxisToPlotGap = 8.0;
+        final yAxisWidthPx = ui(yAxisWidth);
+        final yAxisToPlotGapPx = ui(yAxisToPlotGap);
         final xLabelH = ui(20);
-        final chartW = (w - axisLabelW).clamp(0.0, double.infinity);
+        final chartW =
+            (w - yAxisWidthPx - yAxisToPlotGapPx).clamp(0.0, double.infinity);
         final chartH = (h - xLabelH).clamp(0.0, double.infinity);
         const tickCount = 6;
         final tickGap = chartH / (tickCount - 1);
@@ -1029,6 +1033,14 @@ class _LineChartArea extends StatelessWidget {
           (index) =>
               (axisMax * (tickCount - 1 - index) / (tickCount - 1)).round(),
         );
+        final gridLineYs = List.generate(tickCount, (index) => index * tickGap);
+        final axisLabelStyle = TextStyle(
+          fontSize: ui(12),
+          color: _kAxisLabel,
+          fontFamily: 'PingFang SC',
+          fontWeight: AppFont.w400,
+          height: 20 / 12,
+        );
 
         double yForValue(double value) =>
             chartH * (1 - (value / axisMax).clamp(0.0, 1.0));
@@ -1037,87 +1049,105 @@ class _LineChartArea extends StatelessWidget {
         final cellW = chartW / n;
         final points = <Offset>[
           for (var i = 0; i < n; i++)
-            Offset(axisLabelW + cellW * (i + 0.5), yForValue(values[i])),
+            Offset(cellW * (i + 0.5), yForValue(values[i])),
         ];
 
-        return Stack(
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Y 轴标签
-            for (var i = 0; i < tickCount; i++)
-              Positioned(
-                left: 0,
-                top: i * tickGap - ui(10),
-                width: ui(20),
-                child: Text(
-                  '${ticks[i]}',
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                    fontSize: ui(12),
-                    color: _kAxisLabel,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w400,
-                    height: 20 / 12,
-                  ),
-                ),
-              ),
-            // 折线 + 渐变填充
-            Positioned.fill(
-              bottom: xLabelH,
-              child: CustomPaint(
-                painter: _LinePainter(
-                  points: points,
-                  chartHeight: chartH,
-                  gridLineYs: List.generate(
-                    tickCount,
-                    (index) => index * tickGap,
-                  ),
-                ),
-              ),
-            ),
-            // 数值标签（紫色 12px）位于点上方
-            for (var i = 0; i < points.length; i++)
-              Positioned(
-                left: points[i].dx - ui(20),
-                top: (points[i].dy - ui(22)).clamp(0.0, chartH - ui(18)),
-                width: ui(40),
-                child: Text(
-                  values[i] == values[i].roundToDouble()
-                      ? values[i].toInt().toString()
-                      : values[i].toString(),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: ui(12),
-                    color: _kTextSecondary,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w500,
-                    height: 20 / 12,
-                  ),
-                ),
-              ),
-            // X 轴月份标签
-            Positioned(
-              left: axisLabelW,
-              right: 0,
-              bottom: 0,
-              height: xLabelH,
-              child: Row(
+            SizedBox(
+              width: yAxisWidthPx,
+              height: chartH,
+              child: Stack(
+                clipBehavior: Clip.none,
                 children: [
-                  for (var i = 0; i < n; i++)
-                    Expanded(
-                      child: Center(
+                  for (var i = 0; i < tickCount; i++)
+                    Positioned(
+                      top: gridLineYs[i] - ui(10),
+                      left: 0,
+                      right: 0,
+                      height: ui(20),
+                      child: Align(
+                        alignment: Alignment.centerRight,
                         child: Text(
-                          months[i],
-                          style: TextStyle(
-                            fontSize: ui(12),
-                            color: _kTextSecondary,
-                            fontFamily: 'PingFang SC',
-                            fontWeight: AppFont.w400,
-                            height: 20 / 12,
-                          ),
+                          '${ticks[i]}',
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.visible,
+                          textAlign: TextAlign.right,
+                          style: axisLabelStyle,
                         ),
                       ),
                     ),
                 ],
+              ),
+            ),
+            SizedBox(width: yAxisToPlotGapPx),
+            Expanded(
+              child: SizedBox(
+                height: h,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      top: 0,
+                      height: chartH,
+                      child: CustomPaint(
+                        painter: _LinePainter(
+                          points: points,
+                          chartHeight: chartH,
+                          gridLineYs: gridLineYs,
+                        ),
+                      ),
+                    ),
+                    for (var i = 0; i < points.length; i++)
+                      Positioned(
+                        left: points[i].dx - ui(20),
+                        top: (points[i].dy - ui(22)).clamp(0.0, chartH - ui(18)),
+                        width: ui(40),
+                        child: Text(
+                          values[i] == values[i].roundToDouble()
+                              ? values[i].toInt().toString()
+                              : values[i].toString(),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: ui(12),
+                            color: _kTextSecondary,
+                            fontFamily: 'PingFang SC',
+                            fontWeight: AppFont.w500,
+                            height: 20 / 12,
+                          ),
+                        ),
+                      ),
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      height: xLabelH,
+                      child: Row(
+                        children: [
+                          for (var i = 0; i < n; i++)
+                            Expanded(
+                              child: Center(
+                                child: Text(
+                                  months[i],
+                                  style: TextStyle(
+                                    fontSize: ui(12),
+                                    color: _kTextSecondary,
+                                    fontFamily: 'PingFang SC',
+                                    fontWeight: AppFont.w400,
+                                    height: 20 / 12,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],

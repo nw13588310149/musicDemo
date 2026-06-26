@@ -2465,15 +2465,12 @@ class _DetailSummaryCard extends StatelessWidget {
           SizedBox(height: ui(10)),
           Row(
             children: [
-              AppAssetGraphic(
-                muted
+              _DetailCardLeadingIcon(
+                asset: muted
                     ? AppAssets.groupChatMessageMuted
                     : AppAssets.groupChatMessage,
-                width: ui(32),
-                height: ui(32),
-                fit: BoxFit.fill,
               ),
-              SizedBox(width: ui(8)),
+              SizedBox(width: ui(10)),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -2593,6 +2590,36 @@ class _MuteSwitch extends StatelessWidget {
   }
 }
 
+/// 班级详情抽屉内行首图标（与群公告卡喇叭 icon 同尺寸）。
+class _DetailCardLeadingIcon extends StatelessWidget {
+  const _DetailCardLeadingIcon({required this.asset});
+
+  final String asset;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      width: ui(32),
+      height: ui(32),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(ui(8)),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(ui(8)),
+        child: AppAssetGraphic(
+          asset,
+          width: ui(32),
+          height: ui(32),
+          fit: BoxFit.fill,
+        ),
+      ),
+    );
+  }
+}
+
 /// 公告卡：浅紫底铃铛 icon + 公告内容。
 class _DetailAnnouncementCard extends StatelessWidget {
   const _DetailAnnouncementCard({
@@ -2618,25 +2645,7 @@ class _DetailAnnouncementCard extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 喇叭图标
-          Container(
-            width: ui(32),
-            height: ui(32),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.6),
-              borderRadius: BorderRadius.circular(ui(8)),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(ui(8)),
-              child: AppAssetGraphic(
-                AppAssets.groupChatInfo,
-                width: ui(32),
-                height: ui(32),
-                fit: BoxFit.fill,
-              ),
-            ),
-          ),
+          _DetailCardLeadingIcon(asset: AppAssets.groupChatInfo),
           SizedBox(width: ui(10)),
           // 标题 + 正文（或空状态提示）
           Expanded(

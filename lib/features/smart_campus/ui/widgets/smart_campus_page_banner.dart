@@ -79,6 +79,7 @@ class SmartCampusSecondaryPageShell extends StatelessWidget {
     required this.body,
     this.backgroundColor = const Color(0xFFEFF3FC),
     this.headerGap = 16,
+    this.bodyBorderRadius = 16,
     this.bodyScrollable = true,
   });
 
@@ -88,6 +89,9 @@ class SmartCampusSecondaryPageShell extends StatelessWidget {
 
   /// banner 与主内容容器之间的固定间距。
   final double headerGap;
+
+  /// 主内容滚动容器的四角圆角（设计稿默认 16；贴边子卡为 8 时可下调以避免裁切冲突）。
+  final double bodyBorderRadius;
 
   /// 为 `true` 时 [body] 自动包进无底部 padding 的 [SingleChildScrollView]；
   /// 为 `false` 时由调用方自行提供滚动（如下拉刷新场景）。
@@ -107,7 +111,7 @@ class SmartCampusSecondaryPageShell extends StatelessWidget {
             clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
               color: backgroundColor,
-              borderRadius: BorderRadius.circular(ui(16)),
+              borderRadius: BorderRadius.circular(ui(bodyBorderRadius)),
             ),
             child: bodyScrollable
                 ? SingleChildScrollView(child: body)

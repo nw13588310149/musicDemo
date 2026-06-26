@@ -160,52 +160,51 @@ class AuthFigmaInputField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppTextField(
-      keyboardType: keyboardType,
-      obscureText: obscureText,
-      autocorrect: false,
-      enableSuggestions: !obscureText,
-      inputFormatters: inputFormatters,
-      cursorColor: const Color(0xFF8741FF),
-      cursorHeight: _s(16),
-      style: TextStyle(
-        color: const Color(0xFF0B081A),
-        fontSize: _s(14),
-        fontFamily: 'PingFang SC',
-        fontFamilyFallback: const ['Harmony'],
-        fontWeight: AppFont.w400,
-        height: 12 / 14,
-      ),
-      decoration: InputDecoration(
-        isDense: true,
-        hintText: hintText,
-        hintStyle: TextStyle(
-          color: const Color(0xFFB6B5BB),
+    // 外层固定高度 + contentPadding 置零，让 Material 自带的
+    // textAlignVertical=center 接管垂直居中，避免 iOS iPad 上 PingFang
+    // 字形 line metrics 与 isDense/手动 padding 叠加导致文字偏上/偏下。
+    return SizedBox(
+      height: _s(45),
+      child: AppTextField(
+        keyboardType: keyboardType,
+        obscureText: obscureText,
+        autocorrect: false,
+        enableSuggestions: !obscureText,
+        inputFormatters: inputFormatters,
+        textAlignVertical: TextAlignVertical.center,
+        cursorColor: const Color(0xFF8741FF),
+        cursorHeight: _s(16),
+        style: TextStyle(
+          color: const Color(0xFF0B081A),
           fontSize: _s(14),
           fontFamily: 'PingFang SC',
           fontFamilyFallback: const ['Harmony'],
           fontWeight: AppFont.w400,
-          height: 12 / 14,
         ),
-        filled: true,
-        fillColor: Colors.white,
-        contentPadding: EdgeInsets.fromLTRB(_s(0), _s(17), _s(14), _s(16)),
-        prefixIconConstraints: BoxConstraints(
-          minWidth: _s(42),
-          maxWidth: _s(42),
-          minHeight: _s(45),
-          maxHeight: _s(45),
+        decoration: InputDecoration(
+          hintText: hintText,
+          hintStyle: TextStyle(
+            color: const Color(0xFFB6B5BB),
+            fontSize: _s(14),
+            fontFamily: 'PingFang SC',
+            fontFamilyFallback: const ['Harmony'],
+            fontWeight: AppFont.w400,
+            height: 12 / 14,
+          ),
+          filled: true,
+          fillColor: Colors.white,
+          contentPadding: EdgeInsets.only(right: _s(14)),
+          prefixIconConstraints: BoxConstraints(minWidth: _s(42)),
+          prefixIcon: SizedBox(
+            width: _s(42),
+            child: Align(alignment: Alignment.centerLeft, child: prefixIcon),
+          ),
+          border: _border,
+          enabledBorder: _border,
+          focusedBorder: _border,
         ),
-        prefixIcon: SizedBox(
-          width: _s(42),
-          height: _s(45),
-          child: Align(alignment: Alignment.centerLeft, child: prefixIcon),
-        ),
-        border: _border,
-        enabledBorder: _border,
-        focusedBorder: _border,
+        onChanged: onChanged,
       ),
-      onChanged: onChanged,
     );
   }
 

@@ -728,7 +728,7 @@ class _ClassInfoCard extends StatelessWidget {
               ),
             ),
           ),
-          // 三列信息（班主任 / 辅导员 / 教室）
+          // 三列信息（班主任 / 宿管老师 / 教室）
           // 不再外包 SizedBox(height: 40)：固定 40 在系统 textScaler > 1.0
           // 时（label 14 + gap 8 + value 14 都按比例放大）会触发
           // "BOTTOM OVERFLOWED BY 8.0 PIXELS"。
@@ -743,7 +743,7 @@ class _ClassInfoCard extends StatelessWidget {
                 SizedBox(width: ui(12)),
                 _VDivider(),
                 SizedBox(width: ui(12)),
-                _InfoPair(label: '辅导员', value: data.counselor),
+                _InfoPair(label: '宿管老师', value: data.counselor),
                 SizedBox(width: ui(12)),
                 _VDivider(),
                 SizedBox(width: ui(12)),

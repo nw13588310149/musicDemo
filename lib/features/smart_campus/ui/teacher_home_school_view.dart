@@ -848,50 +848,46 @@ class _ConversationCard extends StatelessWidget {
                           height: 1.4,
                         ),
                       )
-                    : Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${conversation.lastSpeaker}：',
-                            style: TextStyle(
-                              fontSize: ui(12),
-                              color: _kTextHint,
-                              fontFamily: 'PingFang SC',
-                              fontWeight: AppFont.w400,
-                              height: 1.4,
-                            ),
-                          ),
-                          Expanded(
-                            child: Text.rich(
-                              TextSpan(
-                                children: _homeSchoolChatTextSpans(
-                                  conversation.lastMessage,
-                                  TextStyle(
-                                    fontSize: ui(12),
-                                    color: _kTextSecondary,
-                                    fontFamily: 'PingFang SC',
-                                    fontWeight: AppFont.w400,
-                                    height: 1.4,
-                                  ),
-                                  ui,
-                                ),
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
+                    : Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: '${conversation.lastSpeaker}：',
                               style: TextStyle(
+                                fontSize: ui(12),
+                                color: _kTextHint,
+                                fontFamily: 'PingFang SC',
+                                fontWeight: AppFont.w400,
+                                height: 1.4,
+                              ),
+                            ),
+                            ..._homeSchoolChatTextSpans(
+                              conversation.lastMessage,
+                              TextStyle(
                                 fontSize: ui(12),
                                 color: _kTextSecondary,
                                 fontFamily: 'PingFang SC',
                                 fontWeight: AppFont.w400,
                                 height: 1.4,
                               ),
-                              textHeightBehavior: const TextHeightBehavior(
-                                applyHeightToFirstAscent: false,
-                                applyHeightToLastDescent: false,
-                              ),
+                              ui,
                             ),
+                          ],
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        strutStyle: _homeSchoolChatStrutStyle(
+                          TextStyle(
+                            fontSize: ui(12),
+                            fontFamily: 'PingFang SC',
+                            fontWeight: AppFont.w400,
+                            height: 1.4,
                           ),
-                        ],
+                        ),
+                        textHeightBehavior: const TextHeightBehavior(
+                          applyHeightToFirstAscent: false,
+                          applyHeightToLastDescent: false,
+                        ),
                       ),
               ),
               SizedBox(height: ui(8)),
@@ -1390,7 +1386,8 @@ class _DialogHeader extends StatelessWidget {
 }
 
 // =============================================================================
-// 聊天气泡文字：emoji 与中文混排时 iPad 上需单独放大 emoji，避免行高错位。
+// 聊天气泡文字：emoji 与中文混排时 iPad 上需走系统 emoji 字体 + 固定 strut，
+// 避免发言人前缀与正文分行布局时整体下沉、无法中线对齐。
 // =============================================================================
 
 bool _isHomeSchoolEmojiCluster(String cluster) {
@@ -1405,17 +1402,35 @@ bool _isHomeSchoolEmojiCluster(String cluster) {
   return false;
 }
 
+StrutStyle _homeSchoolChatStrutStyle(TextStyle baseStyle) {
+  return StrutStyle(
+    fontSize: baseStyle.fontSize,
+    height: baseStyle.height,
+    forceStrutHeight: true,
+    fontFamily: baseStyle.fontFamily,
+    fontWeight: baseStyle.fontWeight,
+  );
+}
+
 List<InlineSpan> _homeSchoolChatTextSpans(
   String text,
   TextStyle baseStyle,
   double Function(double) ui,
 ) {
+  final baseSize = baseStyle.fontSize ?? ui(12);
   return [
     for (final cluster in text.characters)
       TextSpan(
         text: cluster,
         style: _isHomeSchoolEmojiCluster(cluster)
-            ? TextStyle(fontSize: ui(18), height: 1.1)
+            ? TextStyle(
+                inherit: false,
+                // 系统 emoji 同字号视觉上偏大，缩小 2px 与正文对齐。
+                fontSize: baseSize - ui(2),
+                height: baseStyle.height,
+                color: baseStyle.color,
+                leadingDistribution: TextLeadingDistribution.even,
+              )
             : null,
       ),
   ];
@@ -1457,13 +1472,14 @@ class _ChatBubble extends StatelessWidget {
               ),
               child: Text.rich(
                 TextSpan(
+                  style: baseStyle,
                   children: _homeSchoolChatTextSpans(
                     message.content,
                     baseStyle,
                     ui,
                   ),
                 ),
-                style: baseStyle,
+                strutStyle: _homeSchoolChatStrutStyle(baseStyle),
                 textHeightBehavior: const TextHeightBehavior(
                   applyHeightToFirstAscent: false,
                   applyHeightToLastDescent: false,

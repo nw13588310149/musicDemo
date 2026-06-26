@@ -33,6 +33,7 @@ import '../../../core/constants/app_assets.dart';
 import '../../../core/network/media_url.dart';
 import '../../../core/widgets/app_date_time_pickers.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/course_class_kind_tag.dart';
 import '../../../core/widgets/course_subject_tag.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
@@ -60,7 +61,6 @@ const Color _kPurpleLight = Color(0xFFA773FF);
 const Color _kPurpleSoftBg = Color(0xFFEAE5FF);
 const Color _kPurpleSoftRing = Color(0xFFF7F2FF);
 const Color _kStatusGreen = Color(0xFF0CAC40);
-const Color _kStatusYellow = Color(0xFFDBEE49);
 const Color _kAttendRed = Color(0xFFFF323C);
 const Color _kEndedTagBg = Color(0xFFE6E9F1);
 
@@ -197,9 +197,7 @@ class _StudentCheckInViewState extends ConsumerState<StudentCheckInView>
     final checkIn = ref.watch(studentCheckInControllerProvider);
     final selected = checkIn.selectedCourse;
     final recentRecords = checkIn.recentRecords
-        .asMap()
-        .entries
-        .map((entry) => _recentRecordFromItem(entry.value, entry.key))
+        .map(_recentRecordFromItem)
         .toList(growable: false);
 
     return SmartCampusSecondaryPageShell(
@@ -1375,7 +1373,7 @@ class _ActionButton extends StatelessWidget {
 
 enum _AttendanceStatus { normal, absent }
 
-enum _TagPalette { green, yellow }
+enum _TagPalette { green }
 
 class _RecentRecordData {
   const _RecentRecordData({
@@ -1385,8 +1383,6 @@ class _RecentRecordData {
     required this.studentName,
     required this.duration,
     required this.location,
-    required this.tagPalette,
-    required this.tagInline,
     required this.startCard,
     required this.endCard,
     required this.method,
@@ -1403,12 +1399,6 @@ class _RecentRecordData {
   final String studentName;
   final String duration;
   final String location;
-
-  /// tag 颜色：前 3 张走绿、后 3 张走黄
-  final _TagPalette tagPalette;
-
-  /// tag 是否与姓名同行（true）或独立一行（false）
-  final bool tagInline;
 
   /// 上课卡时间。null = "-"，"/" 这种特殊值原样展示
   final String? startCard;
@@ -1529,20 +1519,7 @@ class _RecentRecordCard extends StatelessWidget {
             ],
           ),
           SizedBox(height: ui(12)),
-          // tag 行（仅 tagInline == false 时单独占一行；否则与姓名同行）
-          if (!data.tagInline) ...[
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _SmallClassTag(
-                  palette: data.tagPalette,
-                  label: data.isSmallCourse ? '小课' : '大课',
-                ),
-              ],
-            ),
-            SizedBox(height: ui(12)),
-          ],
-          // 学生 + 头像
+          // 头像 + 科目与大小课标签同行
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1557,14 +1534,14 @@ class _RecentRecordCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (data.tagInline)
-                      Wrap(
-                        spacing: ui(4),
-                        runSpacing: ui(4),
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Text(
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
                             data.studentName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: ui(14),
                               color: _kTextDark,
@@ -1573,23 +1550,11 @@ class _RecentRecordCard extends StatelessWidget {
                               height: 1,
                             ),
                           ),
-                          _SmallClassTag(
-                            palette: data.tagPalette,
-                            label: data.isSmallCourse ? '小课' : '大课',
-                          ),
-                        ],
-                      )
-                    else
-                      Text(
-                        data.studentName,
-                        style: TextStyle(
-                          fontSize: ui(14),
-                          color: _kTextDark,
-                          fontFamily: 'PingFang SC',
-                          fontWeight: AppFont.w600,
-                          height: 1,
                         ),
-                      ),
+                        SizedBox(width: ui(4)),
+                        CourseClassKindTag(isSmall: data.isSmallCourse),
+                      ],
+                    ),
                     SizedBox(height: ui(4)),
                     Text(
                       data.metaLine,
@@ -1789,17 +1754,14 @@ class _StatColumn extends StatelessWidget {
 // =============================================================================
 
 class _SmallClassTag extends StatelessWidget {
-  const _SmallClassTag({required this.palette, this.label = '小课'});
+  const _SmallClassTag({required this.palette});
 
   final _TagPalette palette;
-  final String label;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final dotColor = palette == _TagPalette.green
-        ? _kStatusGreen
-        : _kStatusYellow;
+    final dotColor = _kStatusGreen;
     return Container(
       padding: EdgeInsets.symmetric(horizontal: ui(4), vertical: ui(2)),
       decoration: BoxDecoration(
@@ -1817,7 +1779,7 @@ class _SmallClassTag extends StatelessWidget {
           ),
           SizedBox(width: ui(4)),
           Text(
-            label,
+            '小课',
             style: TextStyle(
               fontSize: ui(11),
               color: _kTextDark,
@@ -2011,18 +1973,15 @@ class _CheckInHistoryDrawerState extends ConsumerState<_CheckInHistoryDrawer> {
   _filteredHistoryEntries(StudentCheckInState checkIn) {
     final headById = _teacherHeadById(checkIn);
     final entries = <({StudentSignRecordItem item, _RecentRecordData card})>[];
-    var cardIndex = 0;
     for (final item in checkIn.historyRecords) {
       if (!_matchCourseKind(item)) continue;
       entries.add((
         item: item,
         card: _recentRecordFromItem(
           item,
-          cardIndex,
           headFallback: headById[item.teacherId] ?? '',
         ),
       ));
-      cardIndex++;
     }
     return entries;
   }
@@ -3250,8 +3209,7 @@ String? _timeOnly(String? raw) {
 }
 
 _RecentRecordData _recentRecordFromItem(
-  StudentSignRecordItem item,
-  int index, {
+  StudentSignRecordItem item, {
   String headFallback = '',
 }) {
   final start = _timeOnly(item.studentSignInTime);
@@ -3266,8 +3224,6 @@ _RecentRecordData _recentRecordFromItem(
     studentName: item.subjectName,
     duration: item.durationLabel,
     location: item.location,
-    tagPalette: index < 3 ? _TagPalette.green : _TagPalette.yellow,
-    tagInline: index < 3,
     startCard: item.isAbsent
         ? null
         : (start == null || start.isEmpty ? '-' : start),

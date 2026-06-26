@@ -508,7 +508,7 @@ class _LatestBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: ui(6), vertical: ui(4)),
+      padding: EdgeInsets.symmetric(horizontal: ui(4), vertical: ui(2)),
       decoration: BoxDecoration(
         color: const Color(0xFF8741FF),
         borderRadius: BorderRadius.circular(ui(4)),

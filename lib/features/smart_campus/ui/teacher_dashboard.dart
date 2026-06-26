@@ -5,8 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_response.dart';
 import '../../../core/widgets/app_toast.dart';
-import '../../../core/widgets/course_subject_tag.dart';
 import '../../../core/widgets/scaled_dialog.dart';
+import '../../../core/widgets/dashboard_course_notice_card.dart';
 import '../../../core/widgets/smooth_circle_network_avatar.dart';
 import '../../school/data/school_repository.dart';
 import '../../shell/state/shell_controller.dart';
@@ -1894,7 +1894,7 @@ class _TeacherNoticeDetailRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Padding(
-      padding: EdgeInsets.only(bottom: isLast ? 0 : ui(10)),
+      padding: EdgeInsets.only(bottom: isLast ? 0 : ui(8)),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1903,11 +1903,11 @@ class _TeacherNoticeDetailRow extends StatelessWidget {
             child: Text(
               '$label：',
               style: TextStyle(
-                fontSize: ui(13),
+                fontSize: ui(12),
                 color: const Color(0xFFB6B5BB),
                 fontFamily: 'PingFang SC',
                 fontWeight: AppFont.w400,
-                height: 20 / 13,
+                height: 1.4,
               ),
             ),
           ),
@@ -1915,11 +1915,11 @@ class _TeacherNoticeDetailRow extends StatelessWidget {
             child: Text(
               value.isEmpty ? '—' : value,
               style: TextStyle(
-                fontSize: ui(13),
+                fontSize: ui(12),
                 color: const Color(0xFF0B081A),
                 fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w500,
-                height: 20 / 13,
+                fontWeight: AppFont.w400,
+                height: 1.4,
               ),
             ),
           ),
@@ -2650,11 +2650,13 @@ class _CurrentLessonPanel extends StatelessWidget {
     this.lesson,
     this.fillHeight = false,
     this.onTap,
+    this.tagsBesideTime = false,
   });
 
   final _LessonScheduleData? lesson;
   final bool fillHeight;
   final VoidCallback? onTap;
+  final bool tagsBesideTime;
 
   @override
   Widget build(BuildContext context) {
@@ -2675,7 +2677,10 @@ class _CurrentLessonPanel extends StatelessWidget {
                 text: '暂无当前课程',
                 matchLessonCardHeight: true,
               )
-            : _LessonScheduleCard(data: lesson!),
+            : _LessonScheduleCard(
+                data: lesson!,
+                tagsBesideTime: tagsBesideTime,
+              ),
       ),
     );
     final wrapped = onTap == null
@@ -2694,11 +2699,13 @@ class _TodaySchedulePanel extends StatelessWidget {
     required this.lessons,
     this.fillHeight = false,
     this.onTap,
+    this.tagsBesideTime = false,
   });
 
   final List<_LessonScheduleData> lessons;
   final bool fillHeight;
   final VoidCallback? onTap;
+  final bool tagsBesideTime;
 
   @override
   Widget build(BuildContext context) {
@@ -2725,7 +2732,10 @@ class _TodaySchedulePanel extends StatelessWidget {
                 children: [
                   for (var i = 0; i < lessons.length; i++) ...[
                     if (i > 0) SizedBox(height: ui(8)),
-                    _LessonScheduleCard(data: lessons[i]),
+                    _LessonScheduleCard(
+                      data: lessons[i],
+                      tagsBesideTime: tagsBesideTime,
+                    ),
                   ],
                 ],
               ),
@@ -2799,14 +2809,42 @@ class _LessonEmptyHint extends StatelessWidget {
 double _lessonScheduleCardOuterHeight(double Function(double) ui) => ui(104);
 
 class _LessonScheduleCard extends StatelessWidget {
-  const _LessonScheduleCard({required this.data});
+  const _LessonScheduleCard({
+    required this.data,
+    this.tagsBesideTime = false,
+  });
 
   final _LessonScheduleData data;
+  final bool tagsBesideTime;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final row = data.teachers.first;
+    if (tagsBesideTime) {
+      return DashboardCourseNoticeCard(
+        startTime: data.startTime,
+        endTime: data.endTime,
+        subjectName: row.courseName,
+        isSmallCourse: row.isSmallCourse,
+        displayName: row.teacherName,
+        subtitle: row.hint,
+        runState: switch (data.runState) {
+          TeacherTodayCourseRunState.ended => DashboardCourseRunState.ended,
+          TeacherTodayCourseRunState.inProgress =>
+            DashboardCourseRunState.inProgress,
+          TeacherTodayCourseRunState.upcoming => DashboardCourseRunState.upcoming,
+        },
+        tagDotColor: data.isPast ? null : row.tagDotColor,
+        avatar: _LessonSeedAvatar(
+          seed: row.avatarSeed,
+          logoUrl: row.logoUrl,
+          avatarUrl: row.avatarUrl,
+          preferLogoOverAvatar: row.preferLogoOverAvatar,
+          size: ui(40),
+        ),
+      );
+    }
     return TeacherTodayCourseCard(
       startTime: data.startTime,
       endTime: data.endTime,
@@ -2816,6 +2854,7 @@ class _LessonScheduleCard extends StatelessWidget {
       isSmallCourse: row.isSmallCourse,
       subtitle: row.hint,
       muted: data.isPast,
+      tagDotColor: data.isPast ? null : row.tagDotColor,
       avatar: Opacity(
         opacity: data.isPast ? 0.72 : 1,
         child: _LessonSeedAvatar(

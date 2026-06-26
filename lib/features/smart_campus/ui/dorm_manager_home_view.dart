@@ -1332,7 +1332,7 @@ class _DormNoticeDetailRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: ui(64),
+            width: ui(50),
             child: Text(
               '$label：',
               style: TextStyle(

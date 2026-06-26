@@ -1754,20 +1754,20 @@ class _AdminNoticeDetailRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Padding(
-      padding: EdgeInsets.only(bottom: isLast ? 0 : ui(10)),
+      padding: EdgeInsets.only(bottom: isLast ? 0 : ui(8)),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: ui(64),
+            width: ui(50),
             child: Text(
               '$label：',
               style: TextStyle(
-                fontSize: ui(13),
+                fontSize: ui(12),
                 color: const Color(0xFFB6B5BB),
                 fontFamily: 'PingFang SC',
                 fontWeight: AppFont.w400,
-                height: 20 / 13,
+                height: 1.4,
               ),
             ),
           ),
@@ -1775,11 +1775,11 @@ class _AdminNoticeDetailRow extends StatelessWidget {
             child: Text(
               value.isEmpty ? '—' : value,
               style: TextStyle(
-                fontSize: ui(13),
+                fontSize: ui(12),
                 color: const Color(0xFF0B081A),
                 fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w500,
-                height: 20 / 13,
+                fontWeight: AppFont.w400,
+                height: 1.4,
               ),
             ),
           ),

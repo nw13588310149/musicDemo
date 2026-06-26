@@ -516,8 +516,9 @@ const _kFallbackClassOptions = <_ClassFilterOption>[_ClassFilterOption.all];
 ///    （cut-corner 形状，根据状态着色）。
 ///
 /// 卡片整体可点 → 「学籍档案」`GradientHeaderDialog`：
-/// 顶部 #D2C6FF→白渐变 + 头像 / 姓名 / 专业 / 学号；7 行键值（行政班 /
-/// 专业方向 / 住宿 / 本人手机 / 家长手机 / 最近异动 / 备注）；
+/// 顶部 #D2C6FF→白渐变 + 头像 / 姓名 / 专业 / 学号；键值区紧贴头像下方
+///（所在班级 / 学生性别 / 专业方向 / 所在宿舍 / 本人手机 / 家长手机 /
+/// 最近异动 / 备注）；
 /// 底部「导出学籍 / 取消」`AppDialogActionBar`。
 ///
 /// 数据接入：进入页面立刻并发请求三条 v2 教务管理端接口
@@ -1444,55 +1445,87 @@ class _StudentProfileDialogState extends ConsumerState<_StudentProfileDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    _Avatar(name: s.name, avatarUrl: s.avatarUrl, size: 56),
-                    SizedBox(width: ui(12)),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Row(
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        _Avatar(
+                          name: s.name,
+                          avatarUrl: s.avatarUrl,
+                          size: 56,
+                        ),
+                        SizedBox(width: ui(12)),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Expanded(
-                                child: Text(
-                                  s.name,
-                                  style: TextStyle(
-                                    fontSize: ui(16),
-                                    height: 1.2,
-                                    fontWeight: AppFont.w600,
-                                    color: Colors.black,
-                                    fontFamily: 'PingFang SC',
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      s.name,
+                                      style: TextStyle(
+                                        fontSize: ui(16),
+                                        height: 1.2,
+                                        fontWeight: AppFont.w600,
+                                        color: Colors.black,
+                                        fontFamily: 'PingFang SC',
+                                      ),
+                                    ),
                                   ),
+                                  if (_loadingDetail)
+                                    const AppLoadingIndicator(),
+                                ],
+                              ),
+                              SizedBox(height: ui(4)),
+                              Text(
+                                s.adminClass != '—'
+                                    ? s.adminClass
+                                    : s.classInfo,
+                                style: TextStyle(
+                                  fontSize: ui(12),
+                                  height: 1.2,
+                                  color: _kTextSub,
+                                  fontFamily: 'PingFang SC',
                                 ),
                               ),
-                              if (_loadingDetail) const AppLoadingIndicator(),
+                              SizedBox(height: ui(2)),
+                              Text(
+                                s.studentId,
+                                style: TextStyle(
+                                  fontSize: ui(12),
+                                  height: 1.2,
+                                  color: _kTextHint,
+                                  fontFamily: 'PingFang SC',
+                                ),
+                              ),
                             ],
                           ),
-                          SizedBox(height: ui(4)),
-                          Text(
-                            s.adminClass != '—' ? s.adminClass : s.classInfo,
-                            style: TextStyle(
-                              fontSize: ui(12),
-                              height: 1.2,
-                              color: _kTextSub,
-                              fontFamily: 'PingFang SC',
-                            ),
-                          ),
-                          SizedBox(height: ui(2)),
-                          Text(
-                            s.studentId,
-                            style: TextStyle(
-                              fontSize: ui(12),
-                              height: 1.2,
-                              color: _kTextHint,
-                              fontFamily: 'PingFang SC',
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: ui(10)),
+                    _ProfileRow(label: '所在班级：', value: s.adminClass),
+                    _ProfileRow(
+                      label: '学生性别：',
+                      value: s.gender.isEmpty ? '—' : s.gender,
+                    ),
+                    _ProfileRow(
+                      label: '专业方向：',
+                      value: s.direction != '—' ? s.direction : '—',
+                    ),
+                    _ProfileRow(label: '所在宿舍：', value: s.dorm),
+                    _ProfileRow(label: '本人手机：', value: s.phone),
+                    _ProfileRow(label: '家长手机：', value: s.parentPhone),
+                    _ProfileRow(label: '最近异动：', value: s.recentChange),
+                    _ProfileRow(
+                      label: '备注：',
+                      value: s.remark,
+                      multiline: true,
                     ),
                   ],
                 ),
@@ -1505,18 +1538,6 @@ class _StudentProfileDialogState extends ConsumerState<_StudentProfileDialog> {
               ),
             ],
           ),
-          SizedBox(height: ui(20)),
-          _ProfileRow(label: '行政班：', value: s.adminClass),
-          _ProfileRow(label: '性别：', value: s.gender.isEmpty ? '—' : s.gender),
-          _ProfileRow(
-            label: '专业方向：',
-            value: s.direction != '—' ? s.direction : '—',
-          ),
-          _ProfileRow(label: '住宿：', value: s.dorm),
-          _ProfileRow(label: '本人手机：', value: s.phone),
-          _ProfileRow(label: '家长手机：', value: s.parentPhone),
-          _ProfileRow(label: '最近异动：', value: s.recentChange),
-          _ProfileRow(label: '备注：', value: s.remark, multiline: true),
           SizedBox(height: ui(8)),
           _StudentTagsSection(tags: s.tags),
           SizedBox(height: ui(16)),

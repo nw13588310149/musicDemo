@@ -383,11 +383,13 @@ class _StudentDashboardScheduleSectionState
       lesson: _currentLesson,
       fillHeight: widget.fillRemaining,
       onTap: widget.onOpenCheckIn,
+      tagsBesideTime: true,
     );
     final todayPanel = _TodaySchedulePanel(
       lessons: _todayLessons,
       fillHeight: widget.fillRemaining,
       onTap: widget.onOpenMySchedule,
+      tagsBesideTime: true,
     );
 
     return LayoutBuilder(

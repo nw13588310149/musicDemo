@@ -3,8 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../../core/widgets/app_loading_indicator.dart';
-import '../../../core/widgets/course_class_kind_tag.dart';
-import '../../../core/widgets/course_subject_tag.dart';
+import '../../../core/widgets/dashboard_course_notice_card.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/route_paths.dart';
@@ -427,9 +426,28 @@ class _HomePageViewState extends ConsumerState<_HomePageView> {
                     separatorBuilder: (context, index) =>
                         const SizedBox(height: 11),
                     itemBuilder: (context, index) {
+                      final notice = notices[index];
                       return GestureDetector(
                         onTap: _openMySchedule,
-                        child: _CourseNoticeCard(notice: notices[index]),
+                        child: DashboardCourseNoticeCard(
+                          startTime: notice.startTime,
+                          endTime: notice.endTime,
+                          subjectName: notice.subjectName,
+                          isSmallCourse: notice.isSmallCourse,
+                          displayName: notice.teacherName,
+                          subtitle: notice.description,
+                          runState: notice.status == HomeCourseStatus.ended
+                              ? DashboardCourseRunState.ended
+                              : DashboardCourseRunState.upcoming,
+                          tagDotColor: DashboardCourseNoticeCard.dotColorFromHex(
+                            notice.cardColorHex,
+                            ended: notice.status == HomeCourseStatus.ended,
+                          ),
+                          avatar: _NoticeAvatar(
+                            primaryUrl: notice.teacherAvatar,
+                            size: 40,
+                          ),
+                        ),
                       );
                     },
                   ),
@@ -722,162 +740,6 @@ class _WeekCard extends StatelessWidget {
                   height: 1.43,
                 ),
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-Color? _homeCourseTagDotColor(HomeCourseNotice notice) {
-  if (notice.status == HomeCourseStatus.ended) return null;
-  final hex = notice.cardColorHex?.trim();
-  if (hex == null || hex.isEmpty) return null;
-  final normalized = hex.startsWith('#') ? hex.substring(1) : hex;
-  if (normalized.length != 6 && normalized.length != 8) return null;
-  final value = int.tryParse(normalized, radix: 16);
-  if (value == null) return null;
-  if (normalized.length == 8) {
-    return Color(value);
-  }
-  return Color(0xFF000000 | value);
-}
-
-class _CourseNoticeCard extends StatelessWidget {
-  const _CourseNoticeCard({required this.notice});
-
-  final HomeCourseNotice notice;
-
-  @override
-  Widget build(BuildContext context) {
-    final statusColor = notice.status == HomeCourseStatus.ended
-        ? const Color(0xFFE6E9F1)
-        : const Color(0xFFEAE5FF);
-    final statusTextColor = notice.status == HomeCourseStatus.ended
-        ? const Color(0xFFB6B5BB)
-        : const Color(0xFF0B081A);
-    final timeTextColor = notice.status == HomeCourseStatus.upcoming
-        ? const Color(0xFF0B081A)
-        : const Color(0xFF1A1A1A);
-    final muted = notice.status == HomeCourseStatus.ended;
-    final tagDotColor = _homeCourseTagDotColor(notice);
-
-    return Container(
-      width: double.infinity,
-      height: 104,
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: const Color(0xFFF5F6FA),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Stack(
-        children: [
-          // 时间 + 科目标签：单行排列，CrossAxis center 中线对齐，6px 间距
-          // 给状态标签留出 76px 右侧空间（68w + 8 间距）
-          Positioned(
-            left: 16,
-            top: 14,
-            right: 76,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                RichText(
-                  text: TextSpan(
-                    style: TextStyle(
-                      fontSize: 18,
-                      color: timeTextColor,
-                      fontFamily: 'Barlow',
-                      fontWeight: FontWeight.w600,
-                      height: 1,
-                    ),
-                    children: [
-                      TextSpan(text: '${notice.startTime} '),
-                      const TextSpan(
-                        text: '- ',
-                        style: TextStyle(color: Color(0xFFB6B5BB)),
-                      ),
-                      TextSpan(text: notice.endTime),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 6),
-                CourseSubjectTag(name: notice.subjectName, muted: muted),
-                const SizedBox(width: 4),
-                CourseClassKindTag(
-                  isSmall: notice.isSmallCourse,
-                  muted: muted,
-                  dotColor: tagDotColor,
-                ),
-              ],
-            ),
-          ),
-          // 状态标签：68×22，左下/右上圆角 12
-          Positioned(
-            right: 0,
-            top: 0,
-            child: Container(
-              width: 68,
-              height: 22,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: statusColor,
-                borderRadius: const BorderRadius.only(
-                  topRight: Radius.circular(12),
-                  bottomLeft: Radius.circular(12),
-                ),
-              ),
-              child: Text(
-                notice.statusText,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: statusTextColor,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w400,
-                  height: 1,
-                ),
-              ),
-            ),
-          ),
-          // 教师头像：40×40 圆形
-          Positioned(
-            left: 16,
-            top: 48,
-            child: _NoticeAvatar(primaryUrl: notice.teacherAvatar, size: 40),
-          ),
-          // 教师姓名 + 课时描述
-          Positioned(
-            left: 64,
-            top: 50,
-            right: 12,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  notice.teacherName,
-                  style: TextStyle(
-                    fontSize: 14,
-                    height: 22 / 14,
-                    color: Color(0xFF0B081A),
-                    fontWeight: AppFont.w600,
-                    fontFamily: 'PingFang SC',
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  notice.description,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFFB6B5BB),
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w400,
-                    height: 1,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
             ),
           ),
         ],

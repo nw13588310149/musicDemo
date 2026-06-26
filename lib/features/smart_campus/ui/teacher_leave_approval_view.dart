@@ -1011,7 +1011,7 @@ class _CardBody extends StatelessWidget {
           SizedBox(height: ui(6)),
           _InfoLine(label: '申请时间：', value: record.appliedAt),
           SizedBox(height: ui(6)),
-          _InfoLine(label: '路径：', value: record.path),
+          _InfoLine(label: '申请路径：', value: record.path),
           SizedBox(height: ui(8)),
           _StepperBar(
             parent: record.parentStep,

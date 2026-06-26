@@ -1689,22 +1689,16 @@ class _PunchAuditCard extends StatelessWidget {
               _DetailLink(onTap: onDetail),
               const Spacer(),
               if (isPending) ...[
-                SizedBox(
-                  width: ui(72),
-                  child: _PunchActionButton(
-                    label: '驳回',
-                    isPrimary: false,
-                    onTap: onReject,
-                  ),
+                _PunchActionButton(
+                  label: '驳回',
+                  isPrimary: false,
+                  onTap: onReject,
                 ),
                 SizedBox(width: ui(12)),
-                SizedBox(
-                  width: ui(72),
-                  child: _PunchActionButton(
-                    label: '通过',
-                    isPrimary: true,
-                    onTap: onApprove,
-                  ),
+                _PunchActionButton(
+                  label: '通过',
+                  isPrimary: true,
+                  onTap: onApprove,
                 ),
               ],
             ],
@@ -1829,7 +1823,7 @@ class _PunchAuditStatusBadge extends StatelessWidget {
   }
 }
 
-// 通过/驳回按钮：通过为紫渐变实底白字，驳回为白底次级字 + 浅边框。
+// 通过/驳回按钮：与学生端「我的作业」卡 _SmallButton 一致。
 class _PunchActionButton extends StatelessWidget {
   const _PunchActionButton({
     required this.label,
@@ -1848,9 +1842,11 @@ class _PunchActionButton extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(ui(8)),
       child: Container(
-        height: ui(36),
+        width: ui(80),
+        height: ui(32),
         alignment: Alignment.center,
         decoration: BoxDecoration(
+          color: isPrimary ? null : _kCardGreyBg,
           gradient: isPrimary
               ? const LinearGradient(
                   begin: Alignment.centerRight,
@@ -1858,18 +1854,16 @@ class _PunchActionButton extends StatelessWidget {
                   colors: [Color(0xFFB68EFF), Color(0xFF8640FF)],
                 )
               : null,
-          color: isPrimary ? null : Colors.white,
           borderRadius: BorderRadius.circular(ui(8)),
-          border: isPrimary ? null : Border.all(color: _kBorderSoft, width: 1),
         ),
         child: Text(
           label,
           style: TextStyle(
-            fontSize: ui(13),
-            color: isPrimary ? Colors.white : _kTextSecondary,
+            fontSize: ui(12),
+            color: isPrimary ? Colors.white : _kTextDark,
             fontFamily: 'PingFang SC',
-            fontWeight: AppFont.w500,
-            height: 1.2,
+            fontWeight: isPrimary ? AppFont.w600 : AppFont.w500,
+            height: 16 / 12,
           ),
         ),
       ),

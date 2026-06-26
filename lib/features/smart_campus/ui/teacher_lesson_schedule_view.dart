@@ -1256,7 +1256,7 @@ class _ApplyRecordsButton extends StatelessWidget {
           children: [
             Icon(
               Icons.assignment_outlined,
-              size: ui(14),
+              size: ui(18),
               color: const Color(0xFF1C274C),
             ),
             SizedBox(width: ui(6)),
