@@ -41,6 +41,8 @@ import '../../../core/widgets/app_text_field.dart';
 import '../../shell/ui/shell_layout.dart';
 import 'widgets/smart_campus_stat_card.dart';
 import '../data/teacher_dormitory_data.dart';
+import '../state/smart_campus_controller.dart';
+import '../state/smart_campus_state.dart';
 import '../state/teacher_dormitory_controller.dart';
 import 'widgets/dormitory_detail_dialog.dart';
 import 'widgets/smart_campus_page_banner.dart';
@@ -214,6 +216,16 @@ class _TeacherDormDynamicViewState
   @override
   void initState() {
     super.initState();
+    final initialTab =
+        ref.read(smartCampusControllerProvider).teacherDormDynamicInitialTab;
+    if (initialTab == TeacherDormDynamicInitialTab.punchAudit) {
+      _topTab = _TopTab.punchAudit;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref
+          .read(smartCampusControllerProvider.notifier)
+          .clearTeacherDormDynamicInitialTab();
+    });
     Future.microtask(
       () => ref.read(teacherDormitoryControllerProvider.notifier).initialize(),
     );

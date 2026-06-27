@@ -1759,7 +1759,7 @@ class _AdminNoticeDetailRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: ui(50),
+            width: ui(44),
             child: Text(
               '$label：',
               style: TextStyle(

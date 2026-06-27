@@ -929,7 +929,7 @@ class _FilterRowState extends State<_FilterRow> {
           padding: EdgeInsets.all(ui(4)),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(ui(12)),
+            borderRadius: BorderRadius.circular(ui(8)),
             border: Border.all(color: _kBorder, width: 1),
           ),
           child: Row(

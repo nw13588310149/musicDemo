@@ -158,7 +158,7 @@ class DashboardCourseNoticeCard extends StatelessWidget {
             right: 0,
             top: 0,
             child: Container(
-              width: ui(68),
+              width: ui(60),
               height: ui(22),
               alignment: Alignment.center,
               decoration: BoxDecoration(

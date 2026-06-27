@@ -21,6 +21,7 @@ import '../data/student_dormitory_data.dart';
 import '../data/student_repository.dart';
 import '../data/teacher_notice_data.dart';
 import '../data/teacher_repository.dart';
+import '../state/smart_campus_controller.dart';
 import '../state/smart_campus_state.dart';
 import 'widgets/role_switcher_buttons.dart';
 import 'widgets/smart_campus_avatar_role_badge.dart';
@@ -441,6 +442,25 @@ class _TeacherDashboardLayoutState
     ];
   }
 
+  void _handleHeadTeacherTodoTap(String tag) {
+    _persistLocalTabToGlobal();
+    final controller = ref.read(smartCampusControllerProvider.notifier);
+    switch (tag) {
+      case '请假':
+        widget.onOpenLeaveApproval?.call();
+      case '补卡':
+        controller.openDormDynamic(
+          initialTab: TeacherDormDynamicInitialTab.punchAudit,
+        );
+      case '查寝':
+        controller.openDormDynamic(
+          initialTab: TeacherDormDynamicInitialTab.classRoster,
+        );
+      case '班级':
+        widget.onOpenClassWorkbench();
+    }
+  }
+
   (String, String) _currentWeekDateRange(DateTime now) {
     final monday = DateTime(now.year, now.month, now.day)
         .subtract(Duration(days: now.weekday - DateTime.monday));
@@ -548,6 +568,7 @@ class _TeacherDashboardLayoutState
                   onOpenDormDynamic: onOpenDormDynamic,
                   onOpenDormHistory: onOpenDormHistory,
                   onOpenHomeSchool: onOpenHomeSchool,
+                  onHeadTeacherTodoTap: _handleHeadTeacherTodoTap,
                 ),
                 SizedBox(height: ui(16)),
                 _TeacherSidebar(
@@ -602,6 +623,7 @@ class _TeacherDashboardLayoutState
                 onOpenDormDynamic: onOpenDormDynamic,
                 onOpenDormHistory: onOpenDormHistory,
                 onOpenHomeSchool: onOpenHomeSchool,
+                onHeadTeacherTodoTap: _handleHeadTeacherTodoTap,
               ),
             ),
             Positioned(
@@ -667,6 +689,7 @@ class _TeacherMainColumn extends StatelessWidget {
     this.onOpenDormDynamic,
     this.onOpenDormHistory,
     this.onOpenHomeSchool,
+    this.onHeadTeacherTodoTap,
   });
 
   final SmartCampusDashboardData data;
@@ -697,6 +720,7 @@ class _TeacherMainColumn extends StatelessWidget {
   final VoidCallback? onOpenDormDynamic;
   final VoidCallback? onOpenDormHistory;
   final VoidCallback? onOpenHomeSchool;
+  final void Function(String tag)? onHeadTeacherTodoTap;
 
   @override
   Widget build(BuildContext context) {
@@ -734,6 +758,7 @@ class _TeacherMainColumn extends StatelessWidget {
           fillRemaining: fill,
           todoItems: headTeacherTodos,
           recentItems: headTeacherRecent,
+          onTodoItemTap: onHeadTeacherTodoTap,
         );
       }
       return _TeacherScheduleSection(
@@ -819,6 +844,7 @@ class _TeacherStatCard extends StatelessWidget {
 
   // 紫色「下一节 15:30」卡 / 班主任端「待办 9」卡：紫字在上、灰色标签在下。
     final isNextLesson = item.label == '下一节' || item.label == '待办';
+    final isUnifiedExamCountdown = item.label == '距离省统考';
     final valueColor = isNextLesson
         ? const Color(0xFF8741FF)
         : const Color(0xFF0B081A);
@@ -826,6 +852,10 @@ class _TeacherStatCard extends StatelessWidget {
       value: item.value,
       ui: ui,
       color: valueColor,
+      numberColor: isUnifiedExamCountdown ? const Color(0xFF8741FF) : null,
+      suffixFontSize: isUnifiedExamCountdown
+          ? smartCampusHomeStatChineseFontSize - 4
+          : null,
     );
 
     return SmartCampusHomeCard(
@@ -1906,7 +1936,7 @@ class _TeacherNoticeDetailRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: ui(50),
+            width: ui(44),
             child: Text(
               '$label：',
               style: TextStyle(
@@ -3032,12 +3062,14 @@ class _HeadTeacherBoardSection extends StatelessWidget {
     this.fillRemaining = false,
     this.todoItems = const [],
     this.recentItems = const [],
+    this.onTodoItemTap,
   });
 
   /// true：父级提供有界高度，宽屏下双卡通过 `Expanded(cardsRow)` 撑满剩余高度。
   final bool fillRemaining;
   final List<_BoardItemData> todoItems;
   final List<_BoardItemData> recentItems;
+  final void Function(String tag)? onTodoItemTap;
 
   @override
   Widget build(BuildContext context) {
@@ -3069,6 +3101,7 @@ class _HeadTeacherBoardSection extends StatelessWidget {
               _BoardPanel(
                 items: todoItems,
                 emptyHint: '暂无待办',
+                onItemTap: onTodoItemTap,
               ),
               SizedBox(height: ui(16)),
               sectionTitle('近期动态'),
@@ -3088,6 +3121,7 @@ class _HeadTeacherBoardSection extends StatelessWidget {
               child: _BoardPanel(
                 items: todoItems,
                 emptyHint: '暂无待办',
+                onItemTap: onTodoItemTap,
               ),
             ),
             SizedBox(width: ui(16)),
@@ -3125,10 +3159,15 @@ class _HeadTeacherBoardSection extends StatelessWidget {
 }
 
 class _BoardPanel extends StatelessWidget {
-  const _BoardPanel({required this.items, this.emptyHint = '暂无事项'});
+  const _BoardPanel({
+    required this.items,
+    this.emptyHint = '暂无事项',
+    this.onItemTap,
+  });
 
   final List<_BoardItemData> items;
   final String emptyHint;
+  final void Function(String tag)? onItemTap;
 
   @override
   Widget build(BuildContext context) {
@@ -3150,7 +3189,12 @@ class _BoardPanel extends StatelessWidget {
               children: [
                 for (var i = 0; i < items.length; i++) ...[
                   if (i > 0) SizedBox(height: ui(8)),
-                  _BoardItemCard(data: items[i]),
+                  _BoardItemCard(
+                    data: items[i],
+                    onTap: onItemTap == null
+                        ? null
+                        : () => onItemTap!(items[i].tag),
+                  ),
                 ],
               ],
             ),
@@ -3159,14 +3203,15 @@ class _BoardPanel extends StatelessWidget {
 }
 
 class _BoardItemCard extends StatelessWidget {
-  const _BoardItemCard({required this.data});
+  const _BoardItemCard({required this.data, this.onTap});
 
   final _BoardItemData data;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return Container(
+    final card = Container(
       width: double.infinity,
       padding: EdgeInsets.fromLTRB(ui(16), ui(14), ui(16), ui(16)),
       decoration: BoxDecoration(
@@ -3218,6 +3263,19 @@ class _BoardItemCard extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+
+    if (onTap == null) {
+      return card;
+    }
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(ui(12)),
+        child: card,
       ),
     );
   }

@@ -47,9 +47,10 @@ TextStyle smartCampusHomeStatValueTextStyle(
 TextStyle _smartCampusHomeStatChineseSuffixTextStyle(
   double Function(double) ui, {
   Color color = const Color(0xFF0B081A),
+  double? fontSize,
 }) {
   return TextStyle(
-    fontSize: ui(smartCampusHomeStatChineseFontSize),
+    fontSize: ui(fontSize ?? smartCampusHomeStatChineseFontSize),
     color: color,
     fontFamily: 'PingFang SC',
     fontWeight: AppFont.w600,
@@ -62,26 +63,55 @@ Widget smartCampusHomeStatValue({
   required String value,
   required double Function(double) ui,
   Color color = const Color(0xFF0B081A),
+  Color? numberColor,
+  double? suffixFontSize,
   TextAlign textAlign = TextAlign.center,
 }) {
   final daysMatch = _smartCampusHomeStatDaysValuePattern.firstMatch(value);
   if (daysMatch != null) {
-    return Text.rich(
-      TextSpan(
-        children: [
-          TextSpan(
-            text: daysMatch.group(1),
-            style: smartCampusStatValueTextStyle(ui, color: color),
-          ),
-          TextSpan(
-            text: '天',
-            style: _smartCampusHomeStatChineseSuffixTextStyle(ui, color: color),
-          ),
-        ],
-      ),
-      textAlign: textAlign,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
+    const textHeightBehavior = TextHeightBehavior(
+      applyHeightToFirstAscent: false,
+      applyHeightToLastDescent: false,
+    );
+    final numberStyle = smartCampusStatValueTextStyle(
+      ui,
+      color: numberColor ?? color,
+    );
+    final suffixStyle = _smartCampusHomeStatChineseSuffixTextStyle(
+      ui,
+      color: color,
+      fontSize: suffixFontSize,
+    );
+    final content = Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.baseline,
+      textBaseline: TextBaseline.alphabetic,
+      children: [
+        Text(
+          daysMatch.group(1)!,
+          style: numberStyle,
+          textHeightBehavior: textHeightBehavior,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        Text(
+          '天',
+          style: suffixStyle,
+          textHeightBehavior: textHeightBehavior,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+
+    if (textAlign == TextAlign.center) {
+      return content;
+    }
+    return Align(
+      alignment: textAlign == TextAlign.end
+          ? Alignment.centerRight
+          : Alignment.centerLeft,
+      child: content,
     );
   }
 

@@ -508,13 +508,20 @@ class _MetronomeHeaderCard extends StatelessWidget {
                   ),
                 ],
               ),
-              child: Icon(
-                state.metronomePlaying
-                    ? Icons.pause_rounded
-                    : Icons.play_arrow_rounded,
-                size: ui(32),
-                color: Colors.white,
-              ),
+              child: state.metronomePlaying
+                  ? Icon(
+                      Icons.pause_rounded,
+                      size: ui(32),
+                      color: Colors.white,
+                    )
+                  : Transform.scale(
+                      scale: 1.19,
+                      child: Icon(
+                        Icons.play_arrow_rounded,
+                        size: ui(32),
+                        color: Colors.white,
+                      ),
+                    ),
             ),
           ),
         ],

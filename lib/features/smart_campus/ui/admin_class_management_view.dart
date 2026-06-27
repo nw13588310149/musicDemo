@@ -13,6 +13,7 @@ import '../../../core/network/media_url.dart';
 import '../../../core/network/snowflake_id.dart';
 import '../../../core/widgets/app_asset_graphic.dart';
 import '../../../core/widgets/app_toast.dart';
+import '../../../core/widgets/course_class_kind_tag.dart';
 import '../../../core/widgets/popup_selector_field.dart';
 import '../../../core/widgets/scaled_dialog.dart';
 import '../../shell/ui/shell_layout.dart';
@@ -39,7 +40,6 @@ const Color _kPurpleLightTag = Color(0xFFDAD2FF);
 const Color _kPurpleAvatarBg = Color(0xFFE7D9FF);
 const Color _kBorder = Color(0xFFF3F2F3);
 const Color _kFieldBorder = Color(0xFFF5F6FA);
-const Color _kGreen = Color(0xFF0CAC40);
 const Color _kCheckboxBorder = Color(0xFFCECED1);
 const Color _kCancelBg = Color(0xFFE6E9F1);
 
@@ -50,10 +50,6 @@ const Color _kCancelBg = Color(0xFFE6E9F1);
 enum _ClassKind { largeClass, smallClass }
 
 extension on _ClassKind {
-  String get label => this == _ClassKind.largeClass ? '大课' : '小课';
-  Color get dotColor =>
-      this == _ClassKind.largeClass ? const Color(0xFFA773FF) : _kGreen;
-
   /// 与后端 `ClassSaveReq.type` 字段的双向映射：0 = 大班，1 = 小班。
   /// 之前误写为 1 / 2 会让后端把"大班"识别为未知，导致 classSave / classList
   /// 行为对不上号。
@@ -1740,7 +1736,9 @@ class _ClassHeader extends StatelessWidget {
                         ),
                       ),
                       SizedBox(width: ui(4)),
-                      _KindPill(kind: entry.kind),
+                      CourseClassKindTag(
+                        isSmall: entry.kind == _ClassKind.smallClass,
+                      ),
                     ],
                   ),
                   SizedBox(height: ui(6)),
@@ -1852,50 +1850,6 @@ class _ClassLogoBox extends StatelessWidget {
           size: size * 0.56,
           color: Colors.white,
         ),
-      ),
-    );
-  }
-}
-
-class _KindPill extends StatelessWidget {
-  const _KindPill({required this.kind});
-
-  final _ClassKind kind;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    // 不写死 height —— 12px PingFang SC 字形高度本身 ≈ 17px，
-    // 再叠加 2px vertical padding 会被原来的 16 高度截掉「小课/大课」下半截。
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: ui(6), vertical: ui(3)),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(ui(4)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Container(
-            width: ui(6),
-            height: ui(6),
-            decoration: BoxDecoration(
-              color: kind.dotColor,
-              shape: BoxShape.circle,
-            ),
-          ),
-          SizedBox(width: ui(4)),
-          Text(
-            kind.label,
-            style: TextStyle(
-              fontSize: ui(12),
-              height: 1.2,
-              color: _kTextPrimary,
-              fontFamily: 'PingFang SC',
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -4061,7 +4015,9 @@ class _ClassDetailHero extends StatelessWidget {
                       ),
                     ),
                     SizedBox(width: ui(8)),
-                    _KindPill(kind: entry.kind),
+                    CourseClassKindTag(
+                      isSmall: entry.kind == _ClassKind.smallClass,
+                    ),
                   ],
                 ),
                 SizedBox(height: ui(6)),

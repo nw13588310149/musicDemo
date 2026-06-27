@@ -51,6 +51,12 @@ class TeacherScheduleFocusTarget {
   final int lineNum;
 }
 
+/// 班主任首页待办点击「补卡 / 查寝」进入查寝动态页时的初始 tab。
+enum TeacherDormDynamicInitialTab {
+  classRoster,
+  punchAudit,
+}
+
 enum PrincipalMailboxMessageType { report, suggestion, other }
 
 extension SmartCampusRoleX on SmartCampusRole {
@@ -184,6 +190,7 @@ class SmartCampusState {
     this.isMailboxAnonymous = true,
     this.teacherScheduleMode = TeacherScheduleMode.view,
     this.teacherScheduleFocus,
+    this.teacherDormDynamicInitialTab,
     this.availableRoles = const [
       SmartCampusRole.student,
       SmartCampusRole.teacher,
@@ -223,6 +230,10 @@ class SmartCampusState {
   /// 定位完成后由 controller 清空。
   final TeacherScheduleFocusTarget? teacherScheduleFocus;
 
+  /// 进入 [SmartCampusMainView.dormDynamic] 后切换到指定 tab；
+  /// 应用完成后由 controller 清空。
+  final TeacherDormDynamicInitialTab? teacherDormDynamicInitialTab;
+
   final List<SmartCampusRole> availableRoles;
 
   SmartCampusState copyWith({
@@ -237,6 +248,8 @@ class SmartCampusState {
     TeacherScheduleMode? teacherScheduleMode,
     TeacherScheduleFocusTarget? teacherScheduleFocus,
     bool clearTeacherScheduleFocus = false,
+    TeacherDormDynamicInitialTab? teacherDormDynamicInitialTab,
+    bool clearTeacherDormDynamicInitialTab = false,
     List<SmartCampusRole>? availableRoles,
   }) {
     return SmartCampusState(
@@ -253,6 +266,9 @@ class SmartCampusState {
       teacherScheduleFocus: clearTeacherScheduleFocus
           ? null
           : (teacherScheduleFocus ?? this.teacherScheduleFocus),
+      teacherDormDynamicInitialTab: clearTeacherDormDynamicInitialTab
+          ? null
+          : (teacherDormDynamicInitialTab ?? this.teacherDormDynamicInitialTab),
       availableRoles: availableRoles ?? this.availableRoles,
     );
   }

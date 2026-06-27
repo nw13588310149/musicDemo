@@ -3609,16 +3609,17 @@ class _LegendItem extends StatelessWidget {
 
 /// 折线图 plot 区坐标。布局样式对齐 roster [_ScoreLineChart]；
 /// 班级均分跨度较大，Y 轴采用 0~100 线性映射（非 roster 单科的 78~100 压缩）。
+/// 刻度须与线性映射一致（等距 20 分），勿复用 roster 的 100/95/90/85/80 压缩刻度。
 class _GradesChartPlotMetrics {
   static const double innerLeftRatio = 0.04;
   static const double innerRightRatio = 0.96;
   static const double plotTopRatio = 0.05;
-  static const double plotBottomRatio = 0.78;
-  static const List<int> yTicks = [100, 95, 90, 85, 80, 0];
+  static const List<int> yTicks = [100, 80, 60, 40, 20, 0];
 
   static double plotTop(double height) => height * plotTopRatio;
 
-  static double plotBottom(double height) => height * plotBottomRatio;
+  /// 线性 0~100 映射时 plot 区底 = canvas 底（与 Y 轴 "0" 对齐）。
+  static double plotBottom(double height) => height;
 
   static double plotHeight(double height) => plotBottom(height) - plotTop(height);
 
@@ -3635,15 +3636,14 @@ class _GradesChartPlotMetrics {
     return -1 + 2 * x / width;
   }
 
-  /// 分数 → plot 区 Y（0 在 plotBottom，100 在 plotTop）。
+  /// 分数 → Y（100 在 plotTop，0 在 canvas 底，与 Y 轴刻度一致）。
   static double yForScore(double score, double height) {
     final t = (score / 100).clamp(0.0, 1.0);
     return plotTop(height) + plotHeight(height) * (1 - t);
   }
 
-  /// 刻度线 Y：100~80 线性分布；0 基线贴 canvas 最底（roster 样式）。
+  /// 刻度线 Y：与 [yForScore] 相同映射。
   static double yForTick(int tick, double height) {
-    if (tick == 0) return height;
     return yForScore(tick.toDouble(), height);
   }
 

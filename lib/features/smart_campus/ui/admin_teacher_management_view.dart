@@ -1147,13 +1147,9 @@ class _TeacherCard extends StatelessWidget {
 }
 
 class _RoleTagChip extends StatelessWidget {
-  const _RoleTagChip({
-    required this.label,
-    this.compact = true,
-  });
+  const _RoleTagChip({required this.label});
 
   final String label;
-  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -1161,7 +1157,7 @@ class _RoleTagChip extends StatelessWidget {
     final colors = _teacherRoleColors(label);
     return Container(
       height: ui(17),
-      padding: EdgeInsets.symmetric(horizontal: ui(compact ? 6 : 8)),
+      padding: EdgeInsets.symmetric(horizontal: ui(6)),
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: colors.bg,
@@ -1298,71 +1294,102 @@ class _TeacherProfileDialogState extends ConsumerState<_TeacherProfileDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Row(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    _Avatar(
-                      name: t.name,
-                      avatarUrl: t.avatarUrl,
-                      size: 56,
-                    ),
-                    SizedBox(width: ui(12)),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Row(
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        _Avatar(
+                          name: t.name,
+                          avatarUrl: t.avatarUrl,
+                          size: 56,
+                        ),
+                        SizedBox(width: ui(12)),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Expanded(
-                                child: Text(
-                                  t.name,
-                                  style: TextStyle(
-                                    fontSize: ui(16),
-                                    height: 1.2,
-                                    fontWeight: AppFont.w600,
-                                    color: Colors.black,
-                                    fontFamily: 'PingFang SC',
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      t.name,
+                                      style: TextStyle(
+                                        fontSize: ui(16),
+                                        height: 1.2,
+                                        fontWeight: AppFont.w600,
+                                        color: Colors.black,
+                                        fontFamily: 'PingFang SC',
+                                      ),
+                                    ),
                                   ),
+                                  if (_loadingDetail)
+                                    Text(
+                                      '加载中…',
+                                      style: TextStyle(
+                                        fontSize: ui(12),
+                                        color: _kTextHint,
+                                        fontFamily: 'PingFang SC',
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              SizedBox(height: ui(4)),
+                              Text(
+                                t.summaryInfo != '—'
+                                    ? t.summaryInfo
+                                    : t.campusName,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: ui(12),
+                                  height: 1.2,
+                                  color: _kTextSub,
+                                  fontFamily: 'PingFang SC',
                                 ),
                               ),
-                              if (_loadingDetail)
-                                Text(
-                                  '加载中…',
-                                  style: TextStyle(
-                                    fontSize: ui(12),
-                                    color: _kTextHint,
-                                    fontFamily: 'PingFang SC',
-                                  ),
+                              SizedBox(height: ui(2)),
+                              Text(
+                                t.teacherId.isEmpty ? '—' : t.teacherId,
+                                style: TextStyle(
+                                  fontSize: ui(12),
+                                  height: 1.2,
+                                  color: _kTextHint,
+                                  fontFamily: 'PingFang SC',
                                 ),
+                              ),
                             ],
                           ),
-                          SizedBox(height: ui(4)),
-                          Text(
-                            t.summaryInfo != '—'
-                                ? t.summaryInfo
-                                : t.campusName,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: ui(12),
-                              height: 1.2,
-                              color: _kTextSub,
-                              fontFamily: 'PingFang SC',
-                            ),
-                          ),
-                          SizedBox(height: ui(2)),
-                          Text(
-                            t.teacherId.isEmpty ? '—' : t.teacherId,
-                            style: TextStyle(
-                              fontSize: ui(12),
-                              height: 1.2,
-                              color: _kTextHint,
-                              fontFamily: 'PingFang SC',
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: ui(10)),
+                    _ProfileRow(
+                      label: '教师工号：',
+                      value: t.teacherId.isEmpty ? '—' : t.teacherId,
+                    ),
+                    _ProfileRow(
+                      label: '教师性别：',
+                      value: t.gender.isEmpty ? '—' : t.gender,
+                    ),
+                    _ProfileRow(label: '教师状态：', value: t.status.label),
+                    _ProfileRow(label: '联系电话：', value: phone),
+                    _ProfileRow(
+                      label: '所在校区：',
+                      value: t.campusName.isEmpty ? '—' : t.campusName,
+                    ),
+                    _ProfileRow(
+                      label: '个人简介：',
+                      value: t.introduce.isEmpty ? '—' : t.introduce,
+                      multiline: true,
+                    ),
+                    _ProfileRow(
+                      label: '教师备注：',
+                      value: t.remark.isEmpty ? '—' : t.remark,
+                      multiline: true,
                     ),
                   ],
                 ),
@@ -1374,31 +1401,6 @@ class _TeacherProfileDialogState extends ConsumerState<_TeacherProfileDialog> {
                 heroTag: 'teacher_face_${t.userId}',
               ),
             ],
-          ),
-          SizedBox(height: ui(20)),
-          _ProfileRow(
-            label: '工号：',
-            value: t.teacherId.isEmpty ? '—' : t.teacherId,
-          ),
-          _ProfileRow(
-            label: '性别：',
-            value: t.gender.isEmpty ? '—' : t.gender,
-          ),
-          _ProfileRow(label: '状态：', value: t.status.label),
-          _ProfileRow(label: '联系电话：', value: phone),
-          _ProfileRow(
-            label: '校区：',
-            value: t.campusName.isEmpty ? '—' : t.campusName,
-          ),
-          _ProfileRow(
-            label: '个人简介：',
-            value: t.introduce.isEmpty ? '—' : t.introduce,
-            multiline: true,
-          ),
-          _ProfileRow(
-            label: '备注：',
-            value: t.remark.isEmpty ? '—' : t.remark,
-            multiline: true,
           ),
           SizedBox(height: ui(8)),
           _TeacherRolesSection(roleLabels: t.roleLabels),
@@ -1516,7 +1518,7 @@ class _TeacherRolesSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '身份',
+          '教师身份',
           style: TextStyle(
             fontSize: ui(14),
             height: 1.4,
@@ -1536,13 +1538,17 @@ class _TeacherRolesSection extends StatelessWidget {
             ),
           )
         else
-          Wrap(
-            spacing: ui(8),
-            runSpacing: ui(8),
-            children: [
-              for (final role in roleLabels)
-                _RoleTagChip(label: role, compact: false),
-            ],
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            child: Row(
+              children: [
+                for (var i = 0; i < roleLabels.length; i++) ...[
+                  if (i > 0) SizedBox(width: ui(4)),
+                  _RoleTagChip(label: roleLabels[i]),
+                ],
+              ],
+            ),
           ),
       ],
     );

@@ -538,8 +538,29 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
   ///   - 卡片网格 3 列：学生口径卡（头像 + 学号 + 状态徽章 + 宿舍 + 灰底
   ///     规定/打卡时间双列 + 备注）+ 宿舍口径卡（晨查寝/晚查寝 18 Barlow
   ///     标题 + 大色块状态徽章 正常/未打卡/迟到 + 灰底时间双列 + 备注）。
-  void openDormDynamic() {
-    _openWithReturn(SmartCampusMainView.dormDynamic);
+  void openDormDynamic({TeacherDormDynamicInitialTab? initialTab}) {
+    final alreadyOpen = state.mainView == SmartCampusMainView.dormDynamic;
+    if (alreadyOpen && initialTab == null) {
+      return;
+    }
+    final SmartCampusMainView? returnTo =
+        state.mainView == SmartCampusMainView.dashboard
+            ? null
+            : state.mainView;
+    state = state.copyWith(
+      mainView: SmartCampusMainView.dormDynamic,
+      returnMainView: returnTo,
+      clearReturnMainView: returnTo == null,
+      teacherDormDynamicInitialTab: initialTab,
+      clearTeacherDormDynamicInitialTab: initialTab == null,
+    );
+  }
+
+  void clearTeacherDormDynamicInitialTab() {
+    if (state.teacherDormDynamicInitialTab == null) {
+      return;
+    }
+    state = state.copyWith(clearTeacherDormDynamicInitialTab: true);
   }
 
   /// 班主任端「查寝历史」入口：按自然日查看本班住宿生晚查寝、晨查寝
