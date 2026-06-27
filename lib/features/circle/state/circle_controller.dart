@@ -3,6 +3,7 @@ import 'dart:convert' show jsonEncode;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/audio/mpv_player_release.dart';
 import '../../../core/audio/page_audio_lifecycle.dart';
 import '../data/circle_api_mapper.dart';
 import '../data/circle_repository.dart';
@@ -32,18 +33,26 @@ class CircleController extends StateNotifier<CircleState> {
   // ── 模式切换 ────────────────────────────────────────────────────────
   void setMode(CircleMode mode) {
     if (state.mode == mode) return;
-    final leavingImmersive =
-        state.mode == CircleMode.immersive && mode == CircleMode.list;
+    if (state.mode == CircleMode.immersive && mode == CircleMode.list) {
+      unawaited(_leaveImmersiveForList());
+      return;
+    }
     state = state.copyWith(
       mode: mode,
       commentPanelOpen: mode == CircleMode.list ? false : state.commentPanelOpen,
-      mediaStopEpoch: leavingImmersive
-          ? state.mediaStopEpoch + 1
-          : state.mediaStopEpoch,
     );
-    if (leavingImmersive) {
-      _reconcileAfterMediaStop();
-    }
+  }
+
+  /// 沉浸 → 列表：先在同帧仍挂载沉浸视图时停止媒体（与退出页一致），
+  /// 等 mpv 有序释放完成后再切换，避免 AnimatedSwitcher 退场动画期间漏音/咔哒。
+  Future<void> _leaveImmersiveForList() async {
+    stopMediaPlayback();
+    await MpvPlayerRelease.awaitPending();
+    if (!mounted || state.mode != CircleMode.immersive) return;
+    state = state.copyWith(
+      mode: CircleMode.list,
+      commentPanelOpen: false,
+    );
   }
 
   /// 退出校圈或路由 pop 前调用，让沉浸播放器在页面动画结束前立刻静音并释放。

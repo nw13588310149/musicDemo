@@ -279,14 +279,14 @@ class ShellTopBar extends StatelessWidget {
           RoutePaths.login,
           (route) => false,
         );
-        return;
-      }
-      final rootContext = rootNavigatorKey.currentContext;
-      if (rootContext != null && rootContext.mounted) {
-        Navigator.of(rootContext, rootNavigator: true).pushNamedAndRemoveUntil(
-          RoutePaths.login,
-          (route) => false,
-        );
+      } else {
+        final rootContext = rootNavigatorKey.currentContext;
+        if (rootContext != null && rootContext.mounted) {
+          Navigator.of(rootContext, rootNavigator: true).pushNamedAndRemoveUntil(
+            RoutePaths.login,
+            (route) => false,
+          );
+        }
       }
     }
   }

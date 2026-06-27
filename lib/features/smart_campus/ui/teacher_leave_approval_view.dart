@@ -455,88 +455,37 @@ class _StatsRow extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: _StatCard(
+          child: SmartCampusStatCard(
+            backgroundAsset: AppAssets.headTeacherLeaveApprovalStatPending,
             label: '待审批',
             value: pendingCount,
-            backgroundAsset: AppAssets.headTeacherLeaveApprovalStatPending,
           ),
         ),
         SizedBox(width: ui(12)),
         Expanded(
-          child: _StatCard(
+          child: SmartCampusStatCard(
+            backgroundAsset: AppAssets.headTeacherLeaveApprovalStatReviewing,
             label: '审批中',
             value: reviewingCount,
-            backgroundAsset: AppAssets.headTeacherLeaveApprovalStatReviewing,
           ),
         ),
         SizedBox(width: ui(12)),
         Expanded(
-          child: _StatCard(
+          child: SmartCampusStatCard(
+            backgroundAsset: AppAssets.headTeacherLeaveApprovalStatApproved,
             label: '已通过',
             value: approvedCount,
-            backgroundAsset: AppAssets.headTeacherLeaveApprovalStatApproved,
           ),
         ),
         SizedBox(width: ui(12)),
         Expanded(
-          child: _StatCard(
+          child: SmartCampusStatCard(
+            backgroundAsset: AppAssets.headTeacherLeaveApprovalStatRejected,
             label: '已拒绝',
             value: rejectedCount,
-            backgroundAsset: AppAssets.headTeacherLeaveApprovalStatRejected,
           ),
         ),
       ],
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.label,
-    required this.value,
-    required this.backgroundAsset,
-  });
-
-  final String label;
-  final int value;
-  final String backgroundAsset;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      height: ui(100),
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(ui(12)),
-        image: DecorationImage(
-          image: AssetImage(backgroundAsset),
-          fit: BoxFit.cover,
-        ),
-      ),
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(ui(16), ui(16), ui(16), ui(0)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: ui(14),
-                color: Colors.black,
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w500,
-                height: 1.0,
-              ),
-            ),
-            SizedBox(height: ui(12)),
-            Text(
-              '$value',
-              style: smartCampusStatValueTextStyle(ui),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

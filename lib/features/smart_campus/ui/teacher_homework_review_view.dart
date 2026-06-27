@@ -3403,7 +3403,7 @@ class _ReviewDrawerState extends ConsumerState<_ReviewDrawer> {
 // 语音点评录制区（教师批改抽屉内）
 //
 // 交互与群聊「按住说话」一致：长按录制、松手上传、上滑取消；
-// 录制中显示浮层波形 + 「松开发送 上滑取消」提示。
+// 右侧固定 48×48 麦克风按钮；录制中左侧同高条展示波形与提示文案。
 // 已有语音（teacherParam1/2）回显为可播放气泡，可重录 / 删除。
 // =============================================================================
 
@@ -3660,53 +3660,76 @@ class _VoiceCommentFieldState extends State<_VoiceCommentField> {
         return _buildReady(ui);
       case _VoicePhase.recording:
       case _VoicePhase.idle:
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (_phase == _VoicePhase.recording) ...[
-              _HomeworkRecordingHintCard(
-                waveform: _liveWaveform,
+        return SizedBox(
+          height: ui(48),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_phase == _VoicePhase.recording)
+                Expanded(
+                  child: _HomeworkRecordingHintCard(
+                    waveform: _liveWaveform,
+                    willCancel: _willCancel,
+                  ),
+                )
+              else
+                const Spacer(),
+              if (_phase == _VoicePhase.recording) SizedBox(width: ui(8)),
+              _HomeworkVoiceHoldBar(
+                recording: _phase == _VoicePhase.recording,
                 willCancel: _willCancel,
+                onPressStart: _onRecordPressStart,
+                onPressMove: _onRecordPressMove,
+                onPressEnd: _onRecordPressEnd,
               ),
-              SizedBox(height: ui(12)),
             ],
-            _HomeworkVoiceHoldBar(
-              recording: _phase == _VoicePhase.recording,
-              willCancel: _willCancel,
-              onPressStart: _onRecordPressStart,
-              onPressMove: _onRecordPressMove,
-              onPressEnd: _onRecordPressEnd,
-            ),
-          ],
+          ),
         );
     }
   }
 
   Widget _buildUploading(double Function(double) ui) {
-    return Container(
+    return SizedBox(
       height: ui(48),
-      decoration: BoxDecoration(
-        color: _kPageGrey,
-        borderRadius: BorderRadius.circular(ui(10)),
-      ),
-      alignment: Alignment.center,
       child: Row(
-        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SizedBox(
-            width: ui(16),
-            height: ui(16),
-            child: const CircularProgressIndicator(strokeWidth: 2),
-          ),
-          SizedBox(width: ui(10)),
-          Text(
-            '语音上传中…',
-            style: TextStyle(
-              fontSize: ui(13),
-              color: _kTextMuted,
-              fontFamily: 'PingFang SC',
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: _kPageGrey,
+                borderRadius: BorderRadius.circular(ui(10)),
+              ),
+              alignment: Alignment.centerLeft,
+              padding: EdgeInsets.symmetric(horizontal: ui(12)),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: ui(16),
+                    height: ui(16),
+                    child: const CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  SizedBox(width: ui(10)),
+                  Text(
+                    '语音上传中…',
+                    style: TextStyle(
+                      fontSize: ui(13),
+                      color: _kTextMuted,
+                      fontFamily: 'PingFang SC',
+                    ),
+                  ),
+                ],
+              ),
             ),
+          ),
+          SizedBox(width: ui(8)),
+          _HomeworkVoiceHoldBar(
+            recording: false,
+            willCancel: false,
+            enabled: false,
+            onPressStart: () {},
+            onPressMove: (_) {},
+            onPressEnd: () {},
           ),
         ],
       ),
@@ -3741,7 +3764,7 @@ class _VoiceCommentFieldState extends State<_VoiceCommentField> {
   }
 }
 
-/// 作业点评抽屉内「按住说话」按钮（视觉与群聊 [_VoiceHoldBar] 一致）。
+/// 作业点评抽屉内「按住说话」按钮（固定 48×48，靠右；视觉与群聊 [_VoiceHoldBar] 一致）。
 class _HomeworkVoiceHoldBar extends StatelessWidget {
   const _HomeworkVoiceHoldBar({
     required this.recording,
@@ -3749,6 +3772,7 @@ class _HomeworkVoiceHoldBar extends StatelessWidget {
     required this.onPressStart,
     required this.onPressMove,
     required this.onPressEnd,
+    this.enabled = true,
   });
 
   final bool recording;
@@ -3756,6 +3780,9 @@ class _HomeworkVoiceHoldBar extends StatelessWidget {
   final VoidCallback onPressStart;
   final ValueChanged<double> onPressMove;
   final VoidCallback onPressEnd;
+  final bool enabled;
+
+  static const double _kButtonSize = 48;
 
   @override
   Widget build(BuildContext context) {
@@ -3764,39 +3791,39 @@ class _HomeworkVoiceHoldBar extends StatelessWidget {
     final gradColors = useRed
         ? const [_kRecordRed, _kRecordRedLight]
         : const [_kPurple, _kPurpleLight];
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onLongPressStart: (_) => onPressStart(),
-      onLongPressMoveUpdate: (d) => onPressMove(d.localOffsetFromOrigin.dy),
-      onLongPressEnd: (_) => onPressEnd(),
-      onLongPressCancel: onPressEnd,
-      child: Container(
-        height: ui(48),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.centerLeft,
-            end: Alignment.centerRight,
-            colors: gradColors,
-          ),
-          borderRadius: BorderRadius.circular(ui(10)),
-          boxShadow: [
-            BoxShadow(
-              color: (useRed ? _kRecordRed : _kPurple).withValues(alpha: 0.18),
-              blurRadius: ui(8),
-              offset: Offset(0, ui(2)),
+    return Opacity(
+      opacity: enabled ? 1 : 0.45,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onLongPressStart: enabled ? (_) => onPressStart() : null,
+        onLongPressMoveUpdate: enabled
+            ? (d) => onPressMove(d.localOffsetFromOrigin.dy)
+            : null,
+        onLongPressEnd: enabled ? (_) => onPressEnd() : null,
+        onLongPressCancel: enabled ? onPressEnd : null,
+        child: Container(
+          width: ui(_kButtonSize),
+          height: ui(_kButtonSize),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+              colors: gradColors,
             ),
-          ],
-        ),
-        child: Text(
-          '按住说话',
-          style: TextStyle(
-            fontSize: ui(14),
+            borderRadius: BorderRadius.circular(ui(10)),
+            boxShadow: [
+              BoxShadow(
+                color: (useRed ? _kRecordRed : _kPurple).withValues(alpha: 0.18),
+                blurRadius: ui(8),
+                offset: Offset(0, ui(2)),
+              ),
+            ],
+          ),
+          child: Icon(
+            Icons.mic_rounded,
             color: Colors.white,
-            fontFamily: 'PingFang SC',
-            fontWeight: AppFont.w500,
-            height: 1,
-            letterSpacing: 0.4,
+            size: ui(22),
           ),
         ),
       ),
@@ -3804,7 +3831,7 @@ class _HomeworkVoiceHoldBar extends StatelessWidget {
   }
 }
 
-/// 录音中浮层：实时波形 + 「松开发送 上滑取消」提示（同群聊 [_RecordingHintCard]）。
+/// 录音中左侧条：实时波形 + 提示文案，与右侧语音按钮等高（48）。
 class _HomeworkRecordingHintCard extends StatelessWidget {
   const _HomeworkRecordingHintCard({
     required this.waveform,
@@ -3818,48 +3845,58 @@ class _HomeworkRecordingHintCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     final color = willCancel ? _kRecordRed : _kPurple;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: double.infinity,
-          height: ui(74),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(ui(12)),
-            border: Border.all(color: _kBorderSoft),
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: ui(12)),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(ui(10)),
+        border: Border.all(color: _kBorderSoft),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _HomeworkLiveBigWaveform(
+              heights: waveform,
+              color: color,
+              maxHeight: 28,
+              barCount: 28,
+            ),
           ),
-          child: _HomeworkLiveBigWaveform(heights: waveform, color: color),
-        ),
-        SizedBox(height: ui(12)),
-        Text(
-          willCancel ? '松开取消' : '松开发送 上滑取消',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: ui(13),
-            color: _kTextDark,
-            fontFamily: 'PingFang SC',
-            fontWeight: AppFont.w400,
-            height: 24 / 13,
+          SizedBox(width: ui(8)),
+          Text(
+            willCancel ? '松开取消' : '松开发送 上滑取消',
+            style: TextStyle(
+              fontSize: ui(12),
+              color: _kTextDark,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w400,
+              height: 1,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
 
 class _HomeworkLiveBigWaveform extends StatelessWidget {
-  const _HomeworkLiveBigWaveform({required this.heights, required this.color});
+  const _HomeworkLiveBigWaveform({
+    required this.heights,
+    required this.color,
+    this.maxHeight = 36,
+    this.barCount = 34,
+  });
 
   final List<double> heights;
   final Color color;
+  final double maxHeight;
+  final int barCount;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final bars = _sampleBars(heights, 34);
-    final maxHeight = ui(36);
+    final bars = _sampleBars(heights, barCount);
+    final maxBarHeight = ui(maxHeight);
     final base = ui(3);
     final barW = ui(2);
     final gap = ui(2);
@@ -3871,7 +3908,7 @@ class _HomeworkLiveBigWaveform extends StatelessWidget {
         for (var i = 0; i < bars.length; i++) ...[
           Container(
             width: barW,
-            height: base + bars[i] * (maxHeight - base),
+            height: base + bars[i] * (maxBarHeight - base),
             decoration: BoxDecoration(
               color: color,
               borderRadius: BorderRadius.circular(barW),

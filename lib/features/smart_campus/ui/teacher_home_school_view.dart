@@ -329,93 +329,32 @@ class _StatsRow extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: _StatCard(
-            title: '未读消息',
-            value: unread,
+          child: SmartCampusStatCard(
             backgroundAsset: AppAssets.headTeacherHomeSchoolStatUnread,
+            label: '未读消息',
+            value: unread,
             onTap: () => onTabChanged(_TopTab.unread),
           ),
         ),
         SizedBox(width: ui(12)),
         Expanded(
-          child: _StatCard(
-            title: '待回复',
-            value: pending,
+          child: SmartCampusStatCard(
             backgroundAsset: AppAssets.headTeacherHomeSchoolStatPendingReply,
+            label: '待回复',
+            value: pending,
             onTap: () => onTabChanged(_TopTab.pending),
           ),
         ),
         SizedBox(width: ui(12)),
         Expanded(
-          child: _StatCard(
-            title: '会话总数',
-            value: total,
+          child: SmartCampusStatCard(
             backgroundAsset: AppAssets.headTeacherHomeSchoolStatTotal,
+            label: '会话总数',
+            value: total,
             onTap: () => onTabChanged(_TopTab.all),
           ),
         ),
       ],
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.title,
-    required this.value,
-    required this.backgroundAsset,
-    this.onTap,
-  });
-
-  final String title;
-  final int value;
-  final String backgroundAsset;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(ui(12)),
-        child: Ink(
-          height: ui(100),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(ui(12)),
-            image: DecorationImage(
-              image: AssetImage(backgroundAsset),
-              fit: BoxFit.cover,
-            ),
-          ),
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(ui(16), ui(16), ui(76), ui(0)),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: ui(14),
-                    color: _kTextDark,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w500,
-                    height: 1.2,
-                  ),
-                ),
-                SizedBox(height: ui(8)),
-                Text(
-                  '$value',
-                  style: smartCampusStatValueTextStyle(ui),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }
@@ -853,22 +792,16 @@ class _ConversationCard extends StatelessWidget {
                           children: [
                             TextSpan(
                               text: '${conversation.lastSpeaker}：',
-                              style: TextStyle(
-                                fontSize: ui(12),
+                              style: _homeSchoolChatLineStyle(
+                                ui,
                                 color: _kTextHint,
-                                fontFamily: 'PingFang SC',
-                                fontWeight: AppFont.w400,
-                                height: 1.4,
                               ),
                             ),
                             ..._homeSchoolChatTextSpans(
                               conversation.lastMessage,
-                              TextStyle(
-                                fontSize: ui(12),
+                              _homeSchoolChatLineStyle(
+                                ui,
                                 color: _kTextSecondary,
-                                fontFamily: 'PingFang SC',
-                                fontWeight: AppFont.w400,
-                                height: 1.4,
                               ),
                               ui,
                             ),
@@ -877,12 +810,7 @@ class _ConversationCard extends StatelessWidget {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         strutStyle: _homeSchoolChatStrutStyle(
-                          TextStyle(
-                            fontSize: ui(12),
-                            fontFamily: 'PingFang SC',
-                            fontWeight: AppFont.w400,
-                            height: 1.4,
-                          ),
+                          _homeSchoolChatLineStyle(ui),
                         ),
                         textHeightBehavior: const TextHeightBehavior(
                           applyHeightToFirstAscent: false,
@@ -1386,9 +1314,23 @@ class _DialogHeader extends StatelessWidget {
 }
 
 // =============================================================================
-// 聊天气泡文字：emoji 与中文混排时 iPad 上需走系统 emoji 字体 + 固定 strut，
-// 避免发言人前缀与正文分行布局时整体下沉、无法中线对齐。
+// 聊天气泡文字：emoji 与中文混排时用 WidgetSpan.middle + 均匀 leading，
+// 保证「老师：」前缀、正文与 emoji 同一条水平中线对齐。
 // =============================================================================
+
+TextStyle _homeSchoolChatLineStyle(
+  double Function(double) ui, {
+  Color? color,
+}) {
+  return TextStyle(
+    fontSize: ui(12),
+    color: color,
+    fontFamily: 'PingFang SC',
+    fontWeight: AppFont.w400,
+    height: 1.4,
+    leadingDistribution: TextLeadingDistribution.even,
+  );
+}
 
 bool _isHomeSchoolEmojiCluster(String cluster) {
   for (final rune in cluster.runes) {
@@ -1409,6 +1351,7 @@ StrutStyle _homeSchoolChatStrutStyle(TextStyle baseStyle) {
     forceStrutHeight: true,
     fontFamily: baseStyle.fontFamily,
     fontWeight: baseStyle.fontWeight,
+    leadingDistribution: baseStyle.leadingDistribution,
   );
 }
 
@@ -1417,22 +1360,31 @@ List<InlineSpan> _homeSchoolChatTextSpans(
   TextStyle baseStyle,
   double Function(double) ui,
 ) {
-  final baseSize = baseStyle.fontSize ?? ui(12);
+  final evenStyle = baseStyle.copyWith(
+    leadingDistribution: TextLeadingDistribution.even,
+  );
+  final baseSize = evenStyle.fontSize ?? ui(12);
   return [
     for (final cluster in text.characters)
-      TextSpan(
-        text: cluster,
-        style: _isHomeSchoolEmojiCluster(cluster)
-            ? TextStyle(
-                inherit: false,
-                // 系统 emoji 同字号视觉上偏大，缩小 2px 与正文对齐。
-                fontSize: baseSize - ui(2),
-                height: baseStyle.height,
-                color: baseStyle.color,
-                leadingDistribution: TextLeadingDistribution.even,
-              )
-            : null,
-      ),
+      if (_isHomeSchoolEmojiCluster(cluster))
+        WidgetSpan(
+          alignment: PlaceholderAlignment.middle,
+          style: evenStyle,
+          child: Text(
+            cluster,
+            style: TextStyle(
+              inherit: false,
+              fontSize: baseSize,
+              height: evenStyle.height,
+              leadingDistribution: TextLeadingDistribution.even,
+            ),
+          ),
+        )
+      else
+        TextSpan(
+          text: cluster,
+          style: evenStyle,
+        ),
   ];
 }
 
@@ -1451,6 +1403,7 @@ class _ChatBubble extends StatelessWidget {
       fontFamily: 'PingFang SC',
       fontWeight: AppFont.w400,
       height: 1.7,
+      leadingDistribution: TextLeadingDistribution.even,
     );
     return Align(
       alignment: fromTeacher ? Alignment.centerRight : Alignment.centerLeft,

@@ -80,6 +80,28 @@ class TeacherRepository {
     );
   }
 
+  /// 班主任班级工作台 · 成绩页聚合（折线趋势 / 考试 tab / 学生卡片分页）。
+  Future<ApiResponse> headTeacherClassScoreOverview({
+    required String classId,
+    String? examId,
+    int? subjectId,
+    String keyword = '',
+    int pageNum = 1,
+    int pageSize = 10,
+  }) {
+    final body = <String, dynamic>{
+      'classId': readSnowflakeId(classId) ?? classId,
+      'pageNum': pageNum,
+      'pageSize': pageSize,
+    };
+    if (examId != null && examId.isNotEmpty) {
+      body['examId'] = readSnowflakeId(examId) ?? examId;
+    }
+    if (subjectId != null) body['subjectId'] = subjectId;
+    if (keyword.trim().isNotEmpty) body['keyword'] = keyword.trim();
+    return client.post('$_base/headTeacherClassScoreOverview', data: body);
+  }
+
   /// 班主任 · 寝室考勤每日正常人数统计（班级工作台「七日查寝」）。
   ///
   /// `beginDate` / `endDate` 格式 `yyyy-MM-dd`。

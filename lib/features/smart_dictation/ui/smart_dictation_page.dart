@@ -2010,7 +2010,7 @@ class _PracticeResultDialog extends StatelessWidget {
                   ),
                   Positioned(
                     left: ui(rx(504.43)),
-                    top: ui(ry(330)),
+                    top: ui(ry(336)),
                     child: _ResultStatCard(
                       ui: ui,
                       title: '答对数量',
@@ -2019,7 +2019,7 @@ class _PracticeResultDialog extends StatelessWidget {
                   ),
                   Positioned(
                     left: ui(rx(622.43)),
-                    top: ui(ry(330)),
+                    top: ui(ry(336)),
                     child: _ResultStatCard(
                       ui: ui,
                       title: '错误数量',
@@ -2029,7 +2029,7 @@ class _PracticeResultDialog extends StatelessWidget {
                   ),
                   Positioned(
                     left: ui(rx(740.43)),
-                    top: ui(ry(330)),
+                    top: ui(ry(336)),
                     child: _ResultStatCard(
                       ui: ui,
                       title: '正确率',

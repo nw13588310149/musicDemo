@@ -10,9 +10,9 @@
 //   2. 班级信息卡（高 163）：背景图 class_info_bg + 左上 班级名 + 副标题 + 三列信息
 //      + 底部"教务与艺术实践办公室·列表展示12/42人"；右上 全班 / 男生 / 女生 三个
 //      100×100 紫色数字统计盒
-//   3. 班级通知：标题行（"班级通知" + "查看全部 >"）+ 白卡内一行多个紧凑通知预览
-//      （数据来自 `POST /app/school/v2/student/schoolClassNotice/list`，
-//      传参 `{ "current": 1, "size": 10 }`，点击弹窗展示全文）
+//   3. 班级通知：标题行（"班级通知" + "查看全部 >"）+ 白卡内响应式 Wrap 通知卡
+//      （列表 `POST /app/school/v2/student/schoolClassNotice/list`；
+//      点击查看 `POST /app/school/v2/student/schoolClassNotice/detail`）
 //   4. 师资：三段（教务老师 / 班主任 / 任课老师），每段一张白卡内若干 308×171 灰底
 //      老师卡（任课卡右上多一个粉色课程标签）
 //   5. 同班同学：标题行（"同班同学" + 搜索框）+ 白卡内 124×124 学生卡 7 列网格，
@@ -50,7 +50,6 @@ const Color _kBorderSoft = Color(0xFFF3F2F3);
 const Color _kPurple = Color(0xFF8741FF);
 const Color _kPurpleAvatar = Color(0xFFB98FFF);
 const Color _kAnnounceBg = Color(0xFFF0E8FC);
-const Color _kAnnouncementBg = Color(0xBDEFE5FF);
 const Color _kCoursePink = Color(0xFFFFC8D9);
 const Color _kSelfTagBg = Color(0xFFF7F2FF);
 const Color _kPlaceholder = Color(0xFFD1D1D1);
@@ -221,20 +220,36 @@ class _StudentMyClassViewState extends ConsumerState<StudentMyClassView> {
     );
   }
 
-  void _showNoticeDetail(_ClassNoticeItem item) {
+  Future<void> _showNoticeDetail(_ClassNoticeItem item) async {
+    if (item.id.isEmpty) {
+      AppToast.show(context, '通知 id 无效');
+      return;
+    }
+    final resp = await ref
+        .read(studentRepositoryProvider)
+        .schoolClassNoticeDetail(id: item.id);
+    if (!mounted) return;
+    if (!resp.isSuccess) {
+      AppToast.show(
+        context,
+        resp.msg.isNotEmpty ? resp.msg : '通知详情加载失败',
+      );
+      return;
+    }
+    final detail = _parseClassNoticeDetail(resp.data) ?? item;
     final ui = DashboardScaleScope.of(context).ui;
-    showNoticeDetailDialog<void>(
+    await showNoticeDetailDialog<void>(
       context: context,
       builder: (ctx) => GradientHeaderDialog(
-        title: item.title.isNotEmpty ? item.title : '班级通知',
+        title: detail.title.isNotEmpty ? detail.title : '班级通知',
         width: 460,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (item.content.isNotEmpty)
+            if (detail.content.isNotEmpty)
               Text(
-                item.content,
+                detail.content,
                 style: TextStyle(
                   fontSize: ui(13),
                   color: _kTextDark,
@@ -243,9 +258,9 @@ class _StudentMyClassViewState extends ConsumerState<StudentMyClassView> {
                   height: 22 / 13,
                 ),
               )
-            else
+            else if (detail.title.isNotEmpty)
               Text(
-                item.title,
+                detail.title,
                 style: TextStyle(
                   fontSize: ui(13),
                   color: _kTextDark,
@@ -254,10 +269,10 @@ class _StudentMyClassViewState extends ConsumerState<StudentMyClassView> {
                   height: 22 / 13,
                 ),
               ),
-            if (item.fullDate.isNotEmpty) ...[
+            if (detail.fullDate.isNotEmpty) ...[
               SizedBox(height: ui(12)),
               Text(
-                item.fullDate,
+                detail.fullDate,
                 style: TextStyle(
                   fontSize: ui(12),
                   color: _kTextHint,
@@ -318,14 +333,6 @@ class _ClassNoticeItem {
   final String date;
   final String fullDate;
   final bool highlighted;
-
-  String get text {
-    if (title.isEmpty) return content;
-    if (content.isEmpty) return title;
-    return '$title：$content';
-  }
-
-  String get previewText => content.isNotEmpty ? content : title;
 }
 
 class _ParsedMySchoolClass {
@@ -581,6 +588,25 @@ List<_ClassNoticeItem> _parseClassNotices(dynamic raw) {
     );
   }
   return items;
+}
+
+_ClassNoticeItem? _parseClassNoticeDetail(dynamic raw) {
+  final map = _asMap(raw);
+  if (map == null) return null;
+  final title = _pickString(map, ['title'], '');
+  final content = _pickString(map, ['content'], '');
+  if (title.isEmpty && content.isEmpty) return null;
+  final createTime = _pickString(map, ['createTime'], '');
+  final date = createTime.length >= 10
+      ? createTime.substring(5, 10)
+      : createTime;
+  return _ClassNoticeItem(
+    id: _pickString(map, ['id'], ''),
+    title: title,
+    content: content,
+    date: date.isEmpty ? '—' : date,
+    fullDate: createTime,
+  );
 }
 
 // =============================================================================
@@ -902,7 +928,6 @@ class _AnnouncementSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final preview = notices.take(2).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -915,7 +940,7 @@ class _AnnouncementSection extends StatelessWidget {
             color: _kCardBg,
             borderRadius: BorderRadius.circular(ui(16)),
           ),
-          child: preview.isEmpty
+          child: notices.isEmpty
               ? Padding(
                   padding: EdgeInsets.symmetric(vertical: ui(20)),
                   child: Center(
@@ -931,21 +956,27 @@ class _AnnouncementSection extends StatelessWidget {
                     ),
                   ),
                 )
-              : IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      for (var i = 0; i < preview.length; i++) ...[
-                        if (i > 0) SizedBox(width: ui(8)),
-                        Expanded(
-                          child: _AnnouncementCard(
-                            item: preview[i],
-                            onTap: () => onNoticeTap(preview[i]),
+              : LayoutBuilder(
+                  builder: (ctx, c) {
+                    final w = c.maxWidth;
+                    final cols = w >= ui(820) ? 3 : w >= ui(560) ? 2 : 1;
+                    final gap = ui(8);
+                    final cardWidth = (w - gap * (cols - 1)) / cols;
+                    return Wrap(
+                      spacing: gap,
+                      runSpacing: gap,
+                      children: [
+                        for (final item in notices)
+                          SizedBox(
+                            width: cardWidth,
+                            child: _ClassNoticeCard(
+                              item: item,
+                              onTap: () => onNoticeTap(item),
+                            ),
                           ),
-                        ),
                       ],
-                    ],
-                  ),
+                    );
+                  },
                 ),
         ),
       ],
@@ -953,8 +984,9 @@ class _AnnouncementSection extends StatelessWidget {
   }
 }
 
-class _AnnouncementCard extends StatelessWidget {
-  const _AnnouncementCard({required this.item, required this.onTap});
+/// 与班主任端「班级工作台 → 班级通知」卡片样式一致（学生端可点击查看详情）。
+class _ClassNoticeCard extends StatelessWidget {
+  const _ClassNoticeCard({required this.item, required this.onTap});
 
   final _ClassNoticeItem item;
   final VoidCallback onTap;
@@ -980,21 +1012,24 @@ class _AnnouncementCard extends StatelessWidget {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Padding(
-                    padding: EdgeInsets.only(top: ui(2)),
-                    child: AppAssetGraphic(
-                      AppAssets.groupChatInfo,
-                      width: ui(12),
-                      height: ui(12),
-                      fit: BoxFit.contain,
+                  SizedBox(
+                    width: ui(12),
+                    height: ui(20),
+                    child: Center(
+                      child: Container(
+                        width: ui(8),
+                        height: ui(8),
+                        decoration: const BoxDecoration(
+                          color: _kPurple,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
                     ),
                   ),
-                  SizedBox(width: ui(8)),
+                  SizedBox(width: ui(6)),
                   Expanded(
                     child: Text(
-                      item.text,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                      item.title.isNotEmpty ? item.title : item.content,
                       style: TextStyle(
                         fontSize: ui(13),
                         color: _kTextDark,
@@ -1006,9 +1041,27 @@ class _AnnouncementCard extends StatelessWidget {
                   ),
                 ],
               ),
+              if (item.title.isNotEmpty && item.content.isNotEmpty) ...[
+                SizedBox(height: ui(4)),
+                Padding(
+                  padding: EdgeInsets.only(left: ui(18)),
+                  child: Text(
+                    item.content,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: ui(12),
+                      color: _kTextSecondary,
+                      fontFamily: 'PingFang SC',
+                      fontWeight: AppFont.w400,
+                      height: 16 / 12,
+                    ),
+                  ),
+                ),
+              ],
               SizedBox(height: ui(4)),
               Padding(
-                padding: EdgeInsets.only(left: ui(20)),
+                padding: EdgeInsets.only(left: ui(18)),
                 child: Text(
                   item.date,
                   style: TextStyle(
@@ -1018,100 +1071,6 @@ class _AnnouncementCard extends StatelessWidget {
                     fontWeight: AppFont.w400,
                     height: 12 / 11,
                   ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// 与群聊 `_DetailAnnouncementCard` 一致的班级通知卡（用于「查看全部」抽屉）。
-class _ClassNoticeAnnouncementCard extends StatelessWidget {
-  const _ClassNoticeAnnouncementCard({
-    required this.item,
-    required this.onTap,
-  });
-
-  final _ClassNoticeItem item;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(ui(12)),
-        child: Container(
-          padding: EdgeInsets.all(ui(14)),
-          decoration: BoxDecoration(
-            color: _kAnnouncementBg,
-            borderRadius: BorderRadius.circular(ui(12)),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: ui(28),
-                height: ui(28),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.6),
-                  borderRadius: BorderRadius.circular(ui(8)),
-                ),
-                child: AppAssetGraphic(
-                  AppAssets.groupChatInfo,
-                  width: ui(16),
-                  height: ui(16),
-                  fit: BoxFit.contain,
-                ),
-              ),
-              SizedBox(width: ui(10)),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '班级通知',
-                      style: TextStyle(
-                        fontSize: ui(12),
-                        color: _kPurple,
-                        fontFamily: 'PingFang SC',
-                        fontWeight: AppFont.w600,
-                        height: 1.2,
-                      ),
-                    ),
-                    SizedBox(height: ui(6)),
-                    Text(
-                      item.previewText,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: ui(13),
-                        color: _kTextDark,
-                        fontFamily: 'PingFang SC',
-                        fontWeight: AppFont.w400,
-                        height: 1.6,
-                      ),
-                    ),
-                    if (item.date.isNotEmpty && item.date != '—') ...[
-                      SizedBox(height: ui(6)),
-                      Text(
-                        item.date,
-                        style: TextStyle(
-                          fontSize: ui(11),
-                          color: _kTextSecondary,
-                          fontFamily: 'PingFang SC',
-                          fontWeight: AppFont.w400,
-                          height: 12 / 11,
-                        ),
-                      ),
-                    ],
-                  ],
                 ),
               ),
             ],
@@ -1220,7 +1179,7 @@ class _ClassNoticeListDrawerState
                     separatorBuilder: (_, _) => SizedBox(height: ui(12)),
                     itemBuilder: (context, index) {
                       final item = _notices[index];
-                      return _ClassNoticeAnnouncementCard(
+                      return _ClassNoticeCard(
                         item: item,
                         onTap: () => widget.onNoticeTap(item),
                       );

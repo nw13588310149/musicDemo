@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/route_paths.dart';
@@ -193,28 +192,26 @@ class _ContentPanel extends StatelessWidget {
     final hasChildren =
         state.config.allowSecondMenu && state.selectedChildren.isNotEmpty;
 
-    return PageInitLoadingShell(
-      loading: state.loading && state.lessonGroups.isEmpty,
-      child: Container(
-        color: Colors.white,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (hasChildren)
-              Padding(
-                padding: EdgeInsets.fromLTRB(ui(20), ui(20), ui(20), ui(4)),
-                child: _ChildSegmented(
-                  items: state.selectedChildren,
-                  selectedId: state.selectedChildId,
-                  onSelect: onSelectChild,
-                ),
+    return Container(
+      color: Colors.white,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (hasChildren)
+            Padding(
+              padding: EdgeInsets.fromLTRB(ui(20), ui(20), ui(20), ui(4)),
+              child: _ChildSegmented(
+                items: state.selectedChildren,
+                selectedId: state.selectedChildId,
+                onSelect: onSelectChild,
               ),
-            Expanded(
-              child: state.loading && state.lessonGroups.isEmpty
-                  ? const SizedBox.shrink()
-                  : state.lessonGroups.isEmpty
-                  ? CourseEmptyPlaceholder(schoolMode: state.schoolMode)
-                  : Padding(
+            ),
+          Expanded(
+            child: state.lessonGroups.isEmpty
+                ? (state.loading
+                      ? const SizedBox.shrink()
+                      : CourseEmptyPlaceholder(schoolMode: state.schoolMode))
+                : Padding(
                     padding: EdgeInsets.fromLTRB(
                       0,
                       ui(state.config.contentTopPadding),
@@ -269,9 +266,8 @@ class _ContentPanel extends StatelessWidget {
                       ),
                     ),
                   ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

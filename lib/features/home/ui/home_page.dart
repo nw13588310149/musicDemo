@@ -436,9 +436,14 @@ class _HomePageViewState extends ConsumerState<_HomePageView> {
                           isSmallCourse: notice.isSmallCourse,
                           displayName: notice.teacherName,
                           subtitle: notice.description,
-                          runState: notice.status == HomeCourseStatus.ended
-                              ? DashboardCourseRunState.ended
-                              : DashboardCourseRunState.upcoming,
+                          runState: switch (notice.status) {
+                            HomeCourseStatus.ended =>
+                              DashboardCourseRunState.ended,
+                            HomeCourseStatus.inProgress =>
+                              DashboardCourseRunState.inProgress,
+                            HomeCourseStatus.upcoming =>
+                              DashboardCourseRunState.upcoming,
+                          },
                           tagDotColor: DashboardCourseNoticeCard.dotColorFromHex(
                             notice.cardColorHex,
                             ended: notice.status == HomeCourseStatus.ended,

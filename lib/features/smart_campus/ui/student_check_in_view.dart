@@ -202,19 +202,24 @@ class _StudentCheckInViewState extends ConsumerState<StudentCheckInView>
 
     return SmartCampusSecondaryPageShell(
       backgroundColor: _kPageBg,
+      bodyTopClipRadius: 8,
+      bodyScrollable: false,
       header: _CheckInBanner(
         onBack: widget.onBack,
         onOpenHistory: _openHistoryDrawer,
       ),
       body: PageInitLoadingShell(
         loading: checkIn.loading,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-                _StatsRow(stats: _statsFromSummary(checkIn.stats)),
-                SizedBox(height: ui(24)),
-                // 双列：今日课程 + 签到操作
-                LayoutBuilder(
+        child: SingleChildScrollView(
+          primary: false,
+          physics: const ClampingScrollPhysics(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _StatsRow(stats: _statsFromSummary(checkIn.stats)),
+              SizedBox(height: ui(24)),
+              // 双列：今日课程 + 签到操作
+              LayoutBuilder(
                   builder: (context, c) {
                     final isCompact = c.maxWidth < ui(720);
                     if (isCompact) {
@@ -345,8 +350,9 @@ class _StudentCheckInViewState extends ConsumerState<StudentCheckInView>
                           }
                         : null,
                   ),
-              ],
-            ),
+            ],
+          ),
+        ),
       ),
     );
   }

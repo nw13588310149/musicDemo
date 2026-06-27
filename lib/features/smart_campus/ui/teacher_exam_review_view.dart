@@ -1795,6 +1795,7 @@ class _SubmissionRow extends ConsumerWidget {
                 _AvatarCircle(
                   name: item.studentName,
                   seed: _avatarSeedFor(item.studentId, item.studentName),
+                  imageUrl: item.avatarUrl,
                 ),
                 SizedBox(width: ui(4)),
                 Flexible(
@@ -1918,21 +1919,62 @@ class _StatusPill extends StatelessWidget {
 }
 
 class _AvatarCircle extends StatelessWidget {
-  const _AvatarCircle({required this.name, required this.seed, this.size = 32});
+  const _AvatarCircle({
+    required this.name,
+    required this.seed,
+    this.size = 32,
+    this.imageUrl,
+  });
 
   final String name;
   final int seed;
   final double size;
+  final String? imageUrl;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final resolved = _resolveMediaUrl(imageUrl);
     final palettes = const [
       [Color(0xFFB68EFF), Color(0xFF8741FF)],
       [Color(0xFFFFB68E), Color(0xFFFF8741)],
       [Color(0xFF8EE0FF), Color(0xFF418EFF)],
     ];
     final palette = palettes[seed.abs() % palettes.length];
+    final initial = name.isNotEmpty ? name.characters.first : '?';
+    if (resolved != null) {
+      return ClipOval(
+        child: Image.network(
+          resolved,
+          width: ui(size),
+          height: ui(size),
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => Container(
+            width: ui(size),
+            height: ui(size),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: palette,
+              ),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              initial,
+              style: TextStyle(
+                fontSize: ui(13),
+                color: Colors.white,
+                fontFamily: 'PingFang SC',
+                fontWeight: AppFont.w500,
+                height: 1,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     return Container(
       width: ui(size),
       height: ui(size),
@@ -1946,7 +1988,7 @@ class _AvatarCircle extends StatelessWidget {
       ),
       alignment: Alignment.center,
       child: Text(
-        name.characters.first,
+        initial,
         style: TextStyle(
           fontSize: ui(13),
           color: Colors.white,
@@ -2389,6 +2431,7 @@ class _ScoreProfileRow extends StatelessWidget {
           name: submission.studentName,
           seed: _avatarSeedFor(submission.studentId, submission.studentName),
           size: 40,
+          imageUrl: submission.avatarUrl,
         ),
         SizedBox(width: ui(12)),
         Expanded(

@@ -128,10 +128,10 @@ void main() {
       },
     });
     final fieldMap = {for (final field in fields) field.label: field.value};
-    expect(fieldMap['学生'], '宁为学生');
+    expect(fieldMap['学生姓名'], '宁为学生');
     expect(fieldMap['手机号'], '173******91');
-    expect(fieldMap['宿舍'], '宿舍1号楼 · 1层 · 101');
-    expect(fieldMap['床位'], '2床');
+    expect(fieldMap['所在宿舍'], '宿舍1号楼 · 1层 · 101');
+    expect(fieldMap['所在床位'], '2床');
   });
 
   test('calculates selected history result statistics', () {
@@ -180,7 +180,7 @@ void main() {
     final checkMap = {
       for (final field in checkFields) field.label: field.value,
     };
-    expect(checkMap['备注'], '排练晚归');
+    expect(checkMap['查寝备注'], '排练晚归');
     expect(checkMap['处理状态'], '已处理');
 
     final makeupFields = parseDormitoryMakeupDetailFields({

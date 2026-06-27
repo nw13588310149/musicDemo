@@ -1,7 +1,6 @@
 ﻿import 'package:flutter/material.dart';
-import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
-import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_text_field.dart';
 
 import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_refresh_indicator.dart';
@@ -52,42 +51,39 @@ class _VoicePageState extends ConsumerState<VoicePage> {
       borderRadius: BorderRadius.circular(ui(16)),
       child: ColoredBox(
         color: Colors.white,
-        child: PageInitLoadingShell(
-          loading: state.loading && state.flatLessons.isEmpty,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _VoiceHeader(
-                menus: state.menus,
-                selectedId: state.selectedMenuId,
-                onSelect: (id) {
-                  if (id == state.selectedMenuId) return;
-                  _resetSearch();
-                  controller.selectMenu(id);
-                },
-                searchController: _searchController,
-                query: _query,
-                onQueryChanged: (value) => setState(() => _query = value),
-                onClearQuery: _resetSearch,
-              ),
-              Expanded(
-                child: state.loading && state.flatLessons.isEmpty
-                    ? const SizedBox.shrink()
-                    : _VoiceBody(
-                  hasAnyLessons: state.flatLessons.isNotEmpty,
-                  lessons: filteredLessons,
-                  query: _query,
-                  errorMessage: state.errorMessage,
-                  schoolMode: state.schoolMode,
-                  onOpenLesson: (lesson) => _openLesson(state, lesson),
-                  onRefresh: controller.refreshLessons,
-                  coverAsset: state.config.key == 'instrumental'
-                      ? AppAssets.homeFm2Cover
-                      : AppAssets.homeFmCover,
-                ),
-              ),
-            ],
-          ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _VoiceHeader(
+              menus: state.menus,
+              selectedId: state.selectedMenuId,
+              onSelect: (id) {
+                if (id == state.selectedMenuId) return;
+                _resetSearch();
+                controller.selectMenu(id);
+              },
+              searchController: _searchController,
+              query: _query,
+              onQueryChanged: (value) => setState(() => _query = value),
+              onClearQuery: _resetSearch,
+            ),
+            Expanded(
+              child: state.flatLessons.isEmpty && state.loading
+                  ? const SizedBox.shrink()
+                  : _VoiceBody(
+                      hasAnyLessons: state.flatLessons.isNotEmpty,
+                      lessons: filteredLessons,
+                      query: _query,
+                      errorMessage: state.errorMessage,
+                      schoolMode: state.schoolMode,
+                      onOpenLesson: (lesson) => _openLesson(state, lesson),
+                      onRefresh: controller.refreshLessons,
+                      coverAsset: state.config.key == 'instrumental'
+                          ? AppAssets.homeFm2Cover
+                          : AppAssets.homeFmCover,
+                    ),
+            ),
+          ],
         ),
       ),
     );

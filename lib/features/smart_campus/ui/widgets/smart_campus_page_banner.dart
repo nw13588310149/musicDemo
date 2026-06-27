@@ -43,20 +43,19 @@ class SmartCampusScheduleTopBar extends StatelessWidget {
           topLeft: Radius.circular(ui(borderRadius)),
           topRight: Radius.circular(ui(borderRadius)),
         ),
+        // 底图 [authBgTop] 顶部圆角带透明像素；先铺渐变再 cover，避免拉伸后右上角露白。
+        gradient: const LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [Colors.white, Color(0xFFF9EDFF)],
+        ),
+        image: const DecorationImage(
+          image: AssetImage(AppAssets.authBgTop),
+          fit: BoxFit.cover,
+          alignment: Alignment.centerRight,
+        ),
       ),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Image.asset(
-            AppAssets.authBgTop,
-            width: double.infinity,
-            height: double.infinity,
-            fit: BoxFit.fill,
-            alignment: Alignment.centerRight,
-          ),
-          child,
-        ],
-      ),
+      child: child,
     );
   }
 }
@@ -80,6 +79,7 @@ class SmartCampusSecondaryPageShell extends StatelessWidget {
     this.backgroundColor = const Color(0xFFEFF3FC),
     this.headerGap = 16,
     this.bodyBorderRadius = 16,
+    this.bodyTopClipRadius,
     this.bodyScrollable = true,
   });
 
@@ -93,6 +93,10 @@ class SmartCampusSecondaryPageShell extends StatelessWidget {
   /// 主内容滚动容器的四角圆角（设计稿默认 16；贴边子卡为 8 时可下调以避免裁切冲突）。
   final double bodyBorderRadius;
 
+  /// Optional top clip radius for edge-to-edge children that own their corners.
+  /// This changes only clipping and never inserts layout padding.
+  final double? bodyTopClipRadius;
+
   /// 为 `true` 时 [body] 自动包进无底部 padding 的 [SingleChildScrollView]；
   /// 为 `false` 时由调用方自行提供滚动（如下拉刷新场景）。
   final bool bodyScrollable;
@@ -100,6 +104,8 @@ class SmartCampusSecondaryPageShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final topClipRadius = ui(bodyTopClipRadius ?? bodyBorderRadius);
+    final bottomClipRadius = ui(bodyBorderRadius);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -108,14 +114,22 @@ class SmartCampusSecondaryPageShell extends StatelessWidget {
         Expanded(
           child: Container(
             width: double.infinity,
-            clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
               color: backgroundColor,
               borderRadius: BorderRadius.circular(ui(bodyBorderRadius)),
             ),
-            child: bodyScrollable
-                ? SingleChildScrollView(child: body)
-                : body,
+            child: ClipRRect(
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(topClipRadius),
+                topRight: Radius.circular(topClipRadius),
+                bottomLeft: Radius.circular(bottomClipRadius),
+                bottomRight: Radius.circular(bottomClipRadius),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: bodyScrollable
+                  ? SingleChildScrollView(child: body)
+                  : body,
+            ),
           ),
         ),
       ],

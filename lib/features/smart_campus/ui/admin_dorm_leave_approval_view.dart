@@ -187,6 +187,7 @@ class _AdminDormLeaveApprovalViewState
     final ui = DashboardScaleScope.of(context).ui;
     return SmartCampusSecondaryPageShell(
       backgroundColor: _kPageBg,
+      bodyTopClipRadius: 8,
       header: _Banner(onBack: widget.onBack),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

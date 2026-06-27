@@ -7,11 +7,10 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 
 import '../../../app/router/route_paths.dart';
-import '../../../core/widgets/app_toast.dart';
 import '../../../core/providers/app_providers.dart';
+import '../../../core/widgets/app_toast.dart';
 import '../../school/state/school_page_controller.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../../quiz_practice/state/quiz_practice_controller.dart';
@@ -46,28 +45,25 @@ class SchoolQuizPracticePage extends ConsumerWidget {
       AppToast.show(context, msg);
     });
 
-    return PageInitLoadingShell(
-      loading: state.loading && state.summaries.isEmpty,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SizedBox(height: ui(240), child: const _CampBanner()),
-          SizedBox(height: ui(12)),
-          Expanded(
-            child: ShellPageSurface(
-              padding: EdgeInsets.symmetric(horizontal: ui(25)),
-              child: state.loading && state.summaries.isEmpty
-                  ? const SizedBox.shrink()
-                  : _PracticeRingRow(
-                      summaries: state.summaries,
-                      onSelect: (summary) =>
-                          _openSession(context, controller, schoolId, summary),
-                      onRefresh: controller.refresh,
-                    ),
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(height: ui(240), child: const _CampBanner()),
+        SizedBox(height: ui(12)),
+        Expanded(
+          child: ShellPageSurface(
+            padding: EdgeInsets.symmetric(horizontal: ui(25)),
+            child: state.loading && state.summaries.isEmpty
+                ? const SizedBox.shrink()
+                : _PracticeRingRow(
+                    summaries: state.summaries,
+                    onSelect: (summary) =>
+                        _openSession(context, controller, schoolId, summary),
+                    onRefresh: controller.refresh,
+                  ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 

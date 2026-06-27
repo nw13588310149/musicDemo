@@ -89,9 +89,14 @@ String _formatYmdHms(DateTime d) {
 // —— 顶级视图 ——————————————————————————————————————————————————————
 
 class TeacherMyLeaveView extends ConsumerStatefulWidget {
-  const TeacherMyLeaveView({super.key, required this.onBack});
+  const TeacherMyLeaveView({
+    super.key,
+    required this.onBack,
+    this.title = '我的请假',
+  });
 
   final VoidCallback onBack;
+  final String title;
 
   @override
   ConsumerState<TeacherMyLeaveView> createState() => _TeacherMyLeaveViewState();
@@ -258,7 +263,8 @@ class _TeacherMyLeaveViewState extends ConsumerState<TeacherMyLeaveView> {
     final ui = DashboardScaleScope.of(context).ui;
     return SmartCampusSecondaryPageShell(
       backgroundColor: _kPageBg,
-      header: _Banner(onBack: widget.onBack),
+      bodyTopClipRadius: 8,
+      header: _Banner(onBack: widget.onBack, title: widget.title),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -306,9 +312,10 @@ class _TeacherMyLeaveViewState extends ConsumerState<TeacherMyLeaveView> {
 // —— Banner ————————————————————————————————————————————————————————
 
 class _Banner extends StatelessWidget {
-  const _Banner({required this.onBack});
+  const _Banner({required this.onBack, required this.title});
 
   final VoidCallback onBack;
+  final String title;
 
   @override
   Widget build(BuildContext context) {
@@ -355,7 +362,7 @@ class _Banner extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  '我的请假',
+                  title,
                   style: TextStyle(
                     fontSize: ui(16),
                     color: _kTextDark,

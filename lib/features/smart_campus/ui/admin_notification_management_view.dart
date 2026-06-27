@@ -514,6 +514,7 @@ class _AdminNotificationManagementViewState
     final list = _filtered;
     return SmartCampusSecondaryPageShell(
       backgroundColor: _kPageBg,
+      bodyTopClipRadius: 8,
       header: _Banner(onBack: widget.onBack, onCreate: _openCreateDrawer),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

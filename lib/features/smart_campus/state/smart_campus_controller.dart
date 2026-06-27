@@ -387,11 +387,23 @@ class SmartCampusController extends StateNotifier<SmartCampusState> {
     state = state.copyWith(mainView: SmartCampusMainView.classWorkbench);
   }
 
-  void openMySchedule() {
-    if (state.mainView == SmartCampusMainView.mySchedule) {
+  void openMySchedule({TeacherScheduleFocusTarget? focus}) {
+    final alreadyOpen = state.mainView == SmartCampusMainView.mySchedule;
+    if (alreadyOpen && focus == null) {
       return;
     }
-    state = state.copyWith(mainView: SmartCampusMainView.mySchedule);
+    state = state.copyWith(
+      mainView: SmartCampusMainView.mySchedule,
+      teacherScheduleFocus: focus,
+      clearTeacherScheduleFocus: focus == null,
+    );
+  }
+
+  void clearTeacherScheduleFocus() {
+    if (state.teacherScheduleFocus == null) {
+      return;
+    }
+    state = state.copyWith(clearTeacherScheduleFocus: true);
   }
 
   /// 首页课表 / 课程卡片入口：按 `/myInfo` 真实身份切到对应角色的

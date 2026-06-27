@@ -94,87 +94,242 @@ Widget smartCampusHomeStatValue({
   );
 }
 
+/// 统计卡 1px 白边：Canvas 描边，绘制在背景与文字之上。
+class _SmartCampusStatCardBorderPainter extends CustomPainter {
+  const _SmartCampusStatCardBorderPainter({
+    required this.borderRadius,
+    required this.strokeWidth,
+  });
+
+  final BorderRadius borderRadius;
+  final double strokeWidth;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) {
+      return;
+    }
+    final half = strokeWidth / 2;
+    final rrect = borderRadius.toRRect(
+      Rect.fromLTWH(
+        half,
+        half,
+        size.width - strokeWidth,
+        size.height - strokeWidth,
+      ),
+    );
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth
+        ..isAntiAlias = true,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _SmartCampusStatCardBorderPainter oldDelegate) {
+    return oldDelegate.borderRadius != borderRadius ||
+        oldDelegate.strokeWidth != strokeWidth;
+  }
+}
+
 /// 智慧校园二级页顶部统计卡（背景图 + 标题 + 数值）。
+///
+/// 背景图统一：高度撑满卡片，宽度按素材比例自适应，右上对齐；
+/// 左侧留白由白底填充（素材左侧一般为白底，文字叠在上方）。
 class SmartCampusStatCard extends StatelessWidget {
   const SmartCampusStatCard({
     super.key,
     required this.backgroundAsset,
     required this.label,
-    required this.value,
+    this.value = 0,
+    this.valueLabel,
+    this.valueSuffix,
+    this.valueIsText = false,
+    this.valueColor = const Color(0xFF0B081A),
     this.rightPadding = 56,
-  });
+    this.onTap,
+  }) : child = null;
+
+  /// 自定义内容区（提供时忽略 [label]/[value] 默认排版）。
+  const SmartCampusStatCard.custom({
+    super.key,
+    required this.backgroundAsset,
+    required this.child,
+    this.rightPadding = 56,
+    this.onTap,
+  }) : label = '',
+       value = 0,
+       valueLabel = null,
+       valueSuffix = null,
+       valueIsText = false,
+       valueColor = const Color(0xFF0B081A);
 
   final String backgroundAsset;
   final String label;
   final int value;
+  final String? valueLabel;
+  final String? valueSuffix;
+  final bool valueIsText;
+  final Color valueColor;
   final double rightPadding;
+  final VoidCallback? onTap;
+  final Widget? child;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    final borderRadius = BorderRadius.circular(ui(12));
+    final radius = ui(12);
+    final strokeWidth = ui(1);
+    final borderRadius = BorderRadius.circular(radius);
+    // 背景图圆角略小于外框，避免右缘/右上角抗锯齿溢出盖白边。
+    final contentRadius = BorderRadius.circular(
+      (radius - strokeWidth).clamp(0.0, radius),
+    );
 
-    // Container.clipBehavior 只裁剪 child，不会裁剪 BoxDecoration 里的背景图；
-    // 第 4 张卡右上角渐变更饱和，容易在圆角处溢出白边，因此外层 ClipRRect 硬裁切。
-    return ClipRRect(
-      borderRadius: borderRadius,
-      child: SizedBox(
-        height: ui(100),
-        width: double.infinity,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Image.asset(
-              backgroundAsset,
-              fit: BoxFit.cover,
-              width: double.infinity,
-              height: double.infinity,
+    final card = SizedBox(
+      height: ui(100),
+      width: double.infinity,
+      child: Stack(
+        clipBehavior: Clip.none,
+        fit: StackFit.expand,
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: borderRadius,
             ),
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                ui(16),
-                ui(14),
-                ui(rightPadding),
-                ui(14),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: ui(14),
-                      color: const Color(0xFF0B081A),
-                      fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w500,
-                      height: 1.0,
-                    ),
-                  ),
-                  SizedBox(height: ui(8)),
-                  Text(
-                    '$value',
-                    style: smartCampusStatValueTextStyle(ui),
-                  ),
-                ],
+          ),
+          ClipRRect(
+            borderRadius: contentRadius,
+            clipBehavior: Clip.hardEdge,
+            child: Align(
+              alignment: Alignment.topRight,
+              child: Image.asset(
+                backgroundAsset,
+                height: double.infinity,
+                fit: BoxFit.fitHeight,
+                filterQuality: FilterQuality.low,
               ),
             ),
-            Positioned.fill(
-              child: IgnorePointer(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    borderRadius: borderRadius,
-                    border: Border.all(color: Colors.white, width: 1),
-                  ),
+          ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              ui(16),
+              ui(14),
+              ui(rightPadding),
+              ui(14),
+            ),
+            child: child ?? _DefaultStatContent(this, ui),
+          ),
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: _SmartCampusStatCardBorderPainter(
+                  borderRadius: borderRadius,
+                  strokeWidth: strokeWidth,
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
+    );
+
+    if (onTap == null) {
+      return card;
+    }
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: borderRadius,
+        child: card,
+      ),
+    );
+  }
+}
+
+class _DefaultStatContent extends StatelessWidget {
+  const _DefaultStatContent(this.card, this.ui);
+
+  final SmartCampusStatCard card;
+  final double Function(double) ui;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          card.label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: ui(14),
+            color: const Color(0xFF0B081A),
+            fontFamily: 'PingFang SC',
+            fontWeight: AppFont.w500,
+            height: 1.0,
+          ),
+        ),
+        SizedBox(height: ui(8)),
+        _buildValueRow(),
+      ],
+    );
+  }
+
+  Widget _buildValueRow() {
+    final display = card.valueLabel ?? '${card.value}';
+    final valueWidget = card.valueIsText
+        ? Text(
+            display,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: ui(18),
+              color: card.valueColor,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w500,
+              height: 1.0,
+            ),
+          )
+        : Text(
+            display,
+            style: smartCampusStatValueTextStyle(ui, color: card.valueColor),
+          );
+
+    final suffix = card.valueSuffix;
+    if (suffix == null || suffix.isEmpty) {
+      return valueWidget;
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Flexible(child: valueWidget),
+        SizedBox(width: ui(8)),
+        Padding(
+          padding: EdgeInsets.only(bottom: ui(2)),
+          child: Text(
+            suffix,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: ui(12),
+              color: const Color(0xFFB6B5BB),
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w400,
+              height: 1.0,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

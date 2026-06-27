@@ -54,9 +54,8 @@ class TeacherTodayCourseCard extends StatelessWidget {
     final cardBg = isEnded
         ? _kInnerGray
         : (isInProgress ? _kInProgressCardBg : _kEndedTagBg);
-    final statusBg = isEnded
-        ? _kEndedTagBg
-        : (isInProgress ? _kPurpleSoftBg : _kEndedTagBg);
+    // 角标与首页 [DashboardCourseNoticeCard] 一致：非已结束均为淡紫底。
+    final statusBg = isEnded ? _kEndedTagBg : _kPurpleSoftBg;
     final statusLabel = isEnded
         ? '已结束'
         : (isInProgress ? '进行中' : '待开始');

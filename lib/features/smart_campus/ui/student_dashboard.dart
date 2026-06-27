@@ -231,7 +231,8 @@ class _StudentMainColumn extends StatelessWidget {
       onOpenPrincipalMailbox: onOpenPrincipalMailbox,
       onOpenMyClass: onOpenMyClass,
       onOpenClassWorkbench: () {},
-      onOpenMySchedule: onOpenMySchedule,
+      onOpenMySchedule: ({TeacherScheduleFocusTarget? focus}) =>
+          onOpenMySchedule(),
       onOpenCheckIn: onOpenCheckIn,
       onOpenMyHomework: onOpenMyHomework,
       onOpenMyGrades: onOpenMyGrades,
@@ -382,13 +383,15 @@ class _StudentDashboardScheduleSectionState
     final currentPanel = _CurrentLessonPanel(
       lesson: _currentLesson,
       fillHeight: widget.fillRemaining,
-      onTap: widget.onOpenCheckIn,
+      onOpenSchedule: ({TeacherScheduleFocusTarget? focus}) =>
+          widget.onOpenCheckIn(),
       tagsBesideTime: true,
     );
     final todayPanel = _TodaySchedulePanel(
       lessons: _todayLessons,
       fillHeight: widget.fillRemaining,
-      onTap: widget.onOpenMySchedule,
+      onOpenSchedule: ({TeacherScheduleFocusTarget? focus}) =>
+          widget.onOpenMySchedule(),
       tagsBesideTime: true,
     );
 
@@ -658,6 +661,8 @@ _BuiltDashboardSchedule _buildStudentDashboardSchedule({
           for (final row in group.rows)
             _lessonRowFromStudentCourse(row, group.start, group.end),
         ],
+        courseDate: DateTime(now.year, now.month, now.day),
+        lineNum: group.lineNum,
       ),
     );
     phases.add(phase);

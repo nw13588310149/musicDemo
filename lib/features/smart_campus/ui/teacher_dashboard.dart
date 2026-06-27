@@ -107,7 +107,7 @@ class TeacherDashboardLayout extends ConsumerStatefulWidget {
 
   /// 班主任专属：进入「班级工作台」三 Tab 页面（与学生「我的班级」分开）。
   final VoidCallback onOpenClassWorkbench;
-  final VoidCallback onOpenMySchedule;
+  final void Function({TeacherScheduleFocusTarget? focus}) onOpenMySchedule;
 
   /// 学生端「课堂签到」入口；老师端没这个按钮，传 null 即可，
   /// `_TeacherActionPanel` 会在 label 命中但回调为空时走兜底 SnackBar。
@@ -271,6 +271,15 @@ class _TeacherDashboardLayoutState
     return () {
       _persistLocalTabToGlobal();
       action();
+    };
+  }
+
+  void Function({TeacherScheduleFocusTarget? focus}) _guardedScheduleNav(
+    void Function({TeacherScheduleFocusTarget? focus}) action,
+  ) {
+    return ({TeacherScheduleFocusTarget? focus}) {
+      _persistLocalTabToGlobal();
+      action(focus: focus);
     };
   }
 
@@ -450,7 +459,7 @@ class _TeacherDashboardLayoutState
     final onOpenPrincipalMailbox = _guardedNav(widget.onOpenPrincipalMailbox);
     final onOpenMyClass = _guardedNav(widget.onOpenMyClass);
     final onOpenClassWorkbench = _guardedNav(widget.onOpenClassWorkbench);
-    final onOpenMySchedule = _guardedNav(widget.onOpenMySchedule);
+    final onOpenMySchedule = _guardedScheduleNav(widget.onOpenMySchedule);
     final onOpenCheckIn = _guardedNavOptional(widget.onOpenCheckIn);
     final onOpenMyHomework = _guardedNavOptional(widget.onOpenMyHomework);
     final onOpenMyGrades = _guardedNavOptional(widget.onOpenMyGrades);
@@ -671,7 +680,7 @@ class _TeacherMainColumn extends StatelessWidget {
   final VoidCallback onOpenPrincipalMailbox;
   final VoidCallback onOpenMyClass;
   final VoidCallback onOpenClassWorkbench;
-  final VoidCallback onOpenMySchedule;
+  final void Function({TeacherScheduleFocusTarget? focus}) onOpenMySchedule;
   final VoidCallback? onOpenCheckIn;
   final VoidCallback? onOpenMyHomework;
   final VoidCallback? onOpenMyGrades;
@@ -876,7 +885,6 @@ class _TeacherActionPanel extends StatelessWidget {
     this.onOpenDormDynamic,
     this.onOpenDormHistory,
     this.onOpenHomeSchool,
-    this.iconSize = kSmartCampusQuickActionIconSize,
   });
 
   final SmartCampusDashboardData data;
@@ -884,7 +892,7 @@ class _TeacherActionPanel extends StatelessWidget {
   final VoidCallback onOpenPrincipalMailbox;
   final VoidCallback onOpenMyClass;
   final VoidCallback onOpenClassWorkbench;
-  final VoidCallback onOpenMySchedule;
+  final void Function({TeacherScheduleFocusTarget? focus}) onOpenMySchedule;
   final VoidCallback? onOpenCheckIn;
   final VoidCallback? onOpenMyHomework;
   final VoidCallback? onOpenMyGrades;
@@ -901,7 +909,6 @@ class _TeacherActionPanel extends StatelessWidget {
   final VoidCallback? onOpenDormDynamic;
   final VoidCallback? onOpenDormHistory;
   final VoidCallback? onOpenHomeSchool;
-  final double iconSize;
 
   VoidCallback? _onTapForLabel(String label) {
     switch (label) {
@@ -917,7 +924,7 @@ class _TeacherActionPanel extends StatelessWidget {
       // 但都对应同一个 mainView 切换 (`openMySchedule`)。
       case '授课课表':
       case '我的课表':
-        return onOpenMySchedule;
+        return () => onOpenMySchedule();
       // 学生端独有：课堂签到。老师端没这个按钮，回调可能为 null，由
       // 未配置路由的按钮由 [SmartCampusQuickActionsCard] 兜底弹"页面迁移中"SnackBar。
       case '课堂签到':
@@ -997,7 +1004,7 @@ class _TeacherActionPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SmartCampusQuickActionsCard(
-      iconSize: iconSize,
+      iconSize: kSmartCampusQuickActionIconSize,
       items: [
         for (final item in actions)
           SmartCampusQuickActionItem(
@@ -2070,6 +2077,8 @@ class _LessonScheduleData {
     required this.endTime,
     required this.phase,
     required this.teachers,
+    this.courseDate,
+    this.lineNum = 0,
   });
 
   final String time;
@@ -2077,6 +2086,17 @@ class _LessonScheduleData {
   final String endTime;
   final _LessonSlotPhase phase;
   final List<_LessonRowData> teachers;
+  final DateTime? courseDate;
+  final int lineNum;
+
+  TeacherScheduleFocusTarget? get scheduleFocus {
+    final date = courseDate;
+    if (date == null || lineNum <= 0) return null;
+    return TeacherScheduleFocusTarget(
+      courseDate: DateTime(date.year, date.month, date.day),
+      lineNum: lineNum,
+    );
+  }
 
   bool get isPast => phase == _LessonSlotPhase.ended;
 
@@ -2118,7 +2138,7 @@ class _TeacherScheduleSection extends ConsumerStatefulWidget {
 
   /// true：父级提供有界高度，宽屏下双卡通过 `Expanded(cardsRow)` 撑满剩余高度。
   final bool fillRemaining;
-  final VoidCallback? onOpenSchedule;
+  final void Function({TeacherScheduleFocusTarget? focus})? onOpenSchedule;
   final CourseTeacherIndexRes? courseTeacherIndex;
 
   @override
@@ -2199,7 +2219,7 @@ class _TeacherScheduleSectionState extends ConsumerState<_TeacherScheduleSection
       if (onTap == null) return child;
       return GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: onTap,
+        onTap: () => onTap(),
         child: child,
       );
     }
@@ -2207,12 +2227,12 @@ class _TeacherScheduleSectionState extends ConsumerState<_TeacherScheduleSection
     final currentPanel = _CurrentLessonPanel(
       lesson: _currentLesson,
       fillHeight: widget.fillRemaining,
-      onTap: widget.onOpenSchedule,
+      onOpenSchedule: widget.onOpenSchedule,
     );
     final todayPanel = _TodaySchedulePanel(
       lessons: _todayLessons,
       fillHeight: widget.fillRemaining,
-      onTap: widget.onOpenSchedule,
+      onOpenSchedule: widget.onOpenSchedule,
     );
 
     return LayoutBuilder(
@@ -2328,6 +2348,8 @@ _BuiltDashboardSchedule _buildDashboardScheduleFromIndex({
       endTime: end,
       phase: phase,
       teachers: [_lessonRowFromCourse(row, start, end)],
+      courseDate: _courseDateFromRow(row, now),
+      lineNum: times.lineNum,
     );
   }
 
@@ -2378,14 +2400,6 @@ class _DashboardSlotGroup {
   final String end;
   final int sortKey;
   final List<Map<String, dynamic>> rows = <Map<String, dynamic>>[];
-}
-
-int _dashboardCourseSortKey(Map<String, dynamic> row, String startHm) {
-  final startDt = parseCourseDateTime(
-    _schedulePickString(row, ['courseStartTime'], ''),
-  );
-  if (startDt != null) return startDt.millisecondsSinceEpoch;
-  return _hmSortKey(startHm);
 }
 
 _ResolvedRowTimes _resolveRowTimes(
@@ -2448,6 +2462,33 @@ _ResolvedRowTimes _resolveRowTimes(
     start: _trimDashboardHm(start),
     end: _trimDashboardHm(end),
   );
+}
+
+DateTime? _courseDateFromRow(Map<String, dynamic> row, DateTime reference) {
+  final startDt = parseCourseDateTime(
+    _schedulePickString(row, ['courseStartTime'], ''),
+    reference: reference,
+  );
+  if (startDt != null) {
+    return DateTime(startDt.year, startDt.month, startDt.day);
+  }
+  for (final key in ['date', 'classDate', 'courseDate']) {
+    final raw = _schedulePickString(row, [key], '');
+    if (raw.isEmpty) continue;
+    final parsed = DateTime.tryParse(raw.split('T').first);
+    if (parsed != null) {
+      return DateTime(parsed.year, parsed.month, parsed.day);
+    }
+  }
+  return null;
+}
+
+int _dashboardCourseSortKey(Map<String, dynamic> row, String startHm) {
+  final startDt = parseCourseDateTime(
+    _schedulePickString(row, ['courseStartTime'], ''),
+  );
+  if (startDt != null) return startDt.millisecondsSinceEpoch;
+  return _hmSortKey(startHm);
 }
 
 _LessonRowData _lessonRowFromCourse(
@@ -2626,12 +2667,11 @@ int _minutesBetweenHm(String start, String end) {
 }
 
 _LessonSlotPhase _slotPhase(DateTime now, String startHm, String endHm) {
-  final start = _parseTodayHm(startHm);
-  final end = _parseTodayHm(endHm);
-  if (start == null || end == null) return _LessonSlotPhase.upcoming;
-  if (now.isBefore(start)) return _LessonSlotPhase.upcoming;
-  if (now.isAfter(end)) return _LessonSlotPhase.ended;
-  return _LessonSlotPhase.inProgress;
+  return switch (resolveDashboardCourseRunState(now, startHm, endHm)) {
+    DashboardCourseRunState.ended => _LessonSlotPhase.ended,
+    DashboardCourseRunState.inProgress => _LessonSlotPhase.inProgress,
+    DashboardCourseRunState.upcoming => _LessonSlotPhase.upcoming,
+  };
 }
 
 Color? _parseDashboardHexColor(String hex) {
@@ -2649,18 +2689,22 @@ class _CurrentLessonPanel extends StatelessWidget {
   const _CurrentLessonPanel({
     this.lesson,
     this.fillHeight = false,
-    this.onTap,
+    this.onOpenSchedule,
     this.tagsBesideTime = false,
   });
 
   final _LessonScheduleData? lesson;
   final bool fillHeight;
-  final VoidCallback? onTap;
+  final void Function({TeacherScheduleFocusTarget? focus})? onOpenSchedule;
   final bool tagsBesideTime;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final focus = lesson?.scheduleFocus;
+    final onTap = onOpenSchedule == null || focus == null
+        ? null
+        : () => onOpenSchedule!(focus: focus);
     final panel = SmartCampusHomeCard(
       padding: EdgeInsets.fromLTRB(ui(12), ui(12), ui(12), ui(12)),
       boxShadow: [
@@ -2677,20 +2721,14 @@ class _CurrentLessonPanel extends StatelessWidget {
                 text: '暂无当前课程',
                 matchLessonCardHeight: true,
               )
-            : _LessonScheduleCard(
+            : _TappableLessonCard(
                 data: lesson!,
                 tagsBesideTime: tagsBesideTime,
+                onTap: onTap,
               ),
       ),
     );
-    final wrapped = onTap == null
-        ? panel
-        : GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: onTap,
-            child: panel,
-          );
-    return fillHeight ? SizedBox.expand(child: wrapped) : wrapped;
+    return fillHeight ? SizedBox.expand(child: panel) : panel;
   }
 }
 
@@ -2698,13 +2736,13 @@ class _TodaySchedulePanel extends StatelessWidget {
   const _TodaySchedulePanel({
     required this.lessons,
     this.fillHeight = false,
-    this.onTap,
+    this.onOpenSchedule,
     this.tagsBesideTime = false,
   });
 
   final List<_LessonScheduleData> lessons;
   final bool fillHeight;
-  final VoidCallback? onTap;
+  final void Function({TeacherScheduleFocusTarget? focus})? onOpenSchedule;
   final bool tagsBesideTime;
 
   @override
@@ -2732,23 +2770,52 @@ class _TodaySchedulePanel extends StatelessWidget {
                 children: [
                   for (var i = 0; i < lessons.length; i++) ...[
                     if (i > 0) SizedBox(height: ui(8)),
-                    _LessonScheduleCard(
+                    _TappableLessonCard(
                       data: lessons[i],
                       tagsBesideTime: tagsBesideTime,
+                      onTap: onOpenSchedule == null
+                          ? null
+                          : () {
+                              final focus = lessons[i].scheduleFocus;
+                              if (focus != null) {
+                                onOpenSchedule!(focus: focus);
+                              } else {
+                                onOpenSchedule!();
+                              }
+                            },
                     ),
                   ],
                 ],
               ),
       ),
     );
-    final wrapped = onTap == null
-        ? panel
-        : GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: onTap,
-            child: panel,
-          );
-    return fillHeight ? SizedBox.expand(child: wrapped) : wrapped;
+    return fillHeight ? SizedBox.expand(child: panel) : panel;
+  }
+}
+
+class _TappableLessonCard extends StatelessWidget {
+  const _TappableLessonCard({
+    required this.data,
+    this.tagsBesideTime = false,
+    this.onTap,
+  });
+
+  final _LessonScheduleData data;
+  final bool tagsBesideTime;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final card = _LessonScheduleCard(
+      data: data,
+      tagsBesideTime: tagsBesideTime,
+    );
+    if (onTap == null) return card;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: card,
+    );
   }
 }
 

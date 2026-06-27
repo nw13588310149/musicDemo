@@ -94,6 +94,7 @@ class _AdminSignManagementViewState extends State<AdminSignManagementView> {
   Widget build(BuildContext context) {
     return SmartCampusSecondaryPageShell(
       backgroundColor: Colors.transparent,
+      bodyTopClipRadius: 8,
       header: _SignBanner(
         onBack: widget.onBack,
         selectedTab: _tab,
@@ -616,30 +617,38 @@ class _LargeClassStatsRow extends StatelessWidget {
     final totalStudents = stats.studentShouldCount;
     return Row(
       children: [
-        _SignStatCard(
-          value: '$total',
-          label: '今日大课节数',
-          backgroundAsset: AppAssets.adminSignManagementStatCard1,
+        Expanded(
+          child: SmartCampusStatCard(
+            valueLabel: '$total',
+            label: '今日大课节数',
+            backgroundAsset: AppAssets.adminSignManagementStatCard1,
+          ),
         ),
         SizedBox(width: ui(12)),
-        _SignStatCard(
-          value: '$signed',
-          label: '已完成签到',
-          backgroundAsset: AppAssets.adminSignManagementStatCard2,
+        Expanded(
+          child: SmartCampusStatCard(
+            valueLabel: '$signed',
+            label: '已完成签到',
+            backgroundAsset: AppAssets.adminSignManagementStatCard2,
+          ),
         ),
         SizedBox(width: ui(12)),
-        _SignStatCard(
-          value: totalStudents > 0
-              ? '$signedStudents/$totalStudents'
-              : '$signedStudents',
-          label: '学生已签/应签',
-          backgroundAsset: AppAssets.adminSignManagementStatCard3,
+        Expanded(
+          child: SmartCampusStatCard(
+            valueLabel: totalStudents > 0
+                ? '$signedStudents/$totalStudents'
+                : '$signedStudents',
+            label: '学生已签/应签',
+            backgroundAsset: AppAssets.adminSignManagementStatCard3,
+          ),
         ),
         SizedBox(width: ui(12)),
-        _SignStatCard(
-          value: '$pendingMakeupCount',
-          label: '待处理补签',
-          backgroundAsset: AppAssets.adminSignManagementStatCard4,
+        Expanded(
+          child: SmartCampusStatCard(
+            valueLabel: '$pendingMakeupCount',
+            label: '待处理补签',
+            backgroundAsset: AppAssets.adminSignManagementStatCard4,
+          ),
         ),
       ],
     );
@@ -1428,28 +1437,36 @@ class _SmallClassStatsRow extends StatelessWidget {
         : (total - completed - pendingAdmin).clamp(0, total);
     return Row(
       children: [
-        _SignStatCard(
-          value: '$total',
-          label: '今日小课总数',
-          backgroundAsset: AppAssets.adminSignManagementStatCard1,
+        Expanded(
+          child: SmartCampusStatCard(
+            valueLabel: '$total',
+            label: '今日小课总数',
+            backgroundAsset: AppAssets.adminSignManagementStatCard1,
+          ),
         ),
         SizedBox(width: ui(12)),
-        _SignStatCard(
-          value: '$inProgress',
-          label: '进行中',
-          backgroundAsset: AppAssets.adminSignManagementStatCard2,
+        Expanded(
+          child: SmartCampusStatCard(
+            valueLabel: '$inProgress',
+            label: '进行中',
+            backgroundAsset: AppAssets.adminSignManagementStatCard2,
+          ),
         ),
         SizedBox(width: ui(12)),
-        _SignStatCard(
-          value: '$pendingAdmin',
-          label: '待管理员确认',
-          backgroundAsset: AppAssets.adminSignManagementStatCard3,
+        Expanded(
+          child: SmartCampusStatCard(
+            valueLabel: '$pendingAdmin',
+            label: '待管理员确认',
+            backgroundAsset: AppAssets.adminSignManagementStatCard3,
+          ),
         ),
         SizedBox(width: ui(12)),
-        _SignStatCard(
-          value: '$completed',
-          label: '已完成',
-          backgroundAsset: AppAssets.adminSignManagementStatCard4,
+        Expanded(
+          child: SmartCampusStatCard(
+            valueLabel: '$completed',
+            label: '已完成',
+            backgroundAsset: AppAssets.adminSignManagementStatCard4,
+          ),
         ),
       ],
     );
@@ -3033,7 +3050,7 @@ class _FilterBar extends StatelessWidget {
               children: [
                 AppPickerAssetIcon(
                   AppAssets.iconScheduleCalendar,
-                  imageSize: ui(14),
+                  imageSize: ui(18),
                 ),
                 SizedBox(width: ui(10)),
                 Text(
@@ -3116,71 +3133,6 @@ class _PendingMakeupRow extends StatelessWidget {
             const Spacer(),
             Icon(Icons.chevron_right_rounded, size: ui(18), color: _kOrange),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SignStatCard extends StatelessWidget {
-  const _SignStatCard({
-    required this.value,
-    required this.label,
-    required this.backgroundAsset,
-  });
-
-  final String value;
-  final String label;
-  final String backgroundAsset;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    final borderRadius = BorderRadius.circular(ui(12));
-    return Expanded(
-      child: ClipRRect(
-        borderRadius: borderRadius,
-        child: SizedBox(
-          height: ui(100),
-          width: double.infinity,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Image.asset(
-                backgroundAsset,
-                fit: BoxFit.cover,
-                width: double.infinity,
-                height: double.infinity,
-              ),
-              Padding(
-                padding: EdgeInsets.fromLTRB(ui(16), ui(14), ui(56), ui(14)),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: ui(14),
-                        color: const Color(0xFF0B081A),
-                        fontFamily: 'PingFang SC',
-                        fontWeight: AppFont.w500,
-                        height: 1.0,
-                      ),
-                    ),
-                    SizedBox(height: ui(8)),
-                    Text(
-                      value,
-                      style: smartCampusStatValueTextStyle(ui),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );

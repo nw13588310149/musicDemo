@@ -7,7 +7,7 @@ import '../../state/smart_campus_state.dart';
 
 /// 智慧校园各端首页右侧栏：头像下方身份徽章（仅此块使用五身份主题色）。
 ///
-/// 标签左缘对齐头像竖向中线；配色与教师管理身份标签一致（浅底 + 主色字）+ 白描边。
+/// 标签左缘对齐头像竖向中线；配色与教师管理身份标签一致（设计稿实色浅底 + 深色字）+ 白描边。
 class SmartCampusAvatarRoleBadge extends StatelessWidget {
   const SmartCampusAvatarRoleBadge({
     super.key,

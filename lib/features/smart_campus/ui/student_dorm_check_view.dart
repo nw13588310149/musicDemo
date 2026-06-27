@@ -229,6 +229,7 @@ class _StudentDormCheckViewState extends ConsumerState<StudentDormCheckView> {
     final displayName = widget.studentName.isEmpty ? '我' : widget.studentName;
     return SmartCampusSecondaryPageShell(
       backgroundColor: _kPageBg,
+      bodyTopClipRadius: 8,
       headerGap: _kStatsBlockGap,
       header: _DormBanner(
         onBack: widget.onBack,
@@ -499,131 +500,40 @@ class _DormStatsRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
-            child: _DormStatCard(
+            child: SmartCampusStatCard(
               backgroundAsset: AppAssets.dormCheckStatCard1,
               label: '宿舍床位',
-              value: dorm,
+              value: 0,
+              valueLabel: dorm,
               valueIsText: true,
             ),
           ),
           SizedBox(width: ui(12)),
           Expanded(
-            child: _DormStatCard(
+            child: SmartCampusStatCard(
               backgroundAsset: AppAssets.dormCheckStatCard2,
               label: '正常打卡',
-              value: '$normal',
+              value: normal,
             ),
           ),
           SizedBox(width: ui(12)),
           Expanded(
-            child: _DormStatCard(
+            child: SmartCampusStatCard(
               backgroundAsset: AppAssets.dormCheckStatCard3,
               label: '异常（未打/晚归）',
-              value: '$abnormal',
+              value: abnormal,
             ),
           ),
           SizedBox(width: ui(12)),
           Expanded(
-            child: _DormStatCard(
+            child: SmartCampusStatCard(
               backgroundAsset: AppAssets.dormCheckStatCard4,
               label: '补卡待审',
-              value: '$pendingResubmits',
-              sublabel: '共$pendingResubmits条申请',
+              value: pendingResubmits,
+              valueSuffix: '共$pendingResubmits条申请',
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _DormStatCard extends StatelessWidget {
-  const _DormStatCard({
-    required this.backgroundAsset,
-    required this.label,
-    required this.value,
-    this.sublabel,
-    this.valueIsText = false,
-  });
-
-  final String backgroundAsset;
-  final String label;
-  final String value;
-  final String? sublabel;
-  final bool valueIsText;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(ui(12)),
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: ui(16), vertical: ui(14)),
-        decoration: BoxDecoration(
-          image: DecorationImage(
-            image: AssetImage(backgroundAsset),
-            fit: BoxFit.cover,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: ui(14),
-                color: _kTextDark,
-                fontFamily: 'PingFang SC',
-                fontWeight: AppFont.w500,
-                height: 1,
-              ),
-            ),
-            SizedBox(height: ui(8)),
-            Expanded(
-              child: Align(
-                alignment: Alignment.bottomLeft,
-                child: valueIsText
-                    ? Text(
-                        value,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: ui(18),
-                          color: _kTextDark,
-                          fontFamily: 'PingFang SC',
-                          fontWeight: AppFont.w500,
-                          height: 1,
-                        ),
-                      )
-                    : Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            value,
-                            style: smartCampusStatValueTextStyle(ui),
-                          ),
-                          if (sublabel != null) ...[
-                            SizedBox(width: ui(8)),
-                            Padding(
-                              padding: EdgeInsets.only(bottom: ui(2)),
-                              child: Text(
-                                sublabel!,
-                                style: TextStyle(
-                                  fontSize: ui(12),
-                                  color: _kTextHint,
-                                  fontFamily: 'PingFang SC',
-                                  fontWeight: AppFont.w400,
-                                  height: 1,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

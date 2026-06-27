@@ -2,41 +2,38 @@ import 'package:flutter/material.dart';
 
 import '../state/smart_campus_state.dart';
 
-/// 智慧校园五身份主题色。
+/// 智慧校园身份标签色（产品稿）。
 ///
 /// 仅用于：① 各端首页右侧栏头像下方身份徽章；
 /// ② 管理员「教师管理」卡片左下身份标签。
-const Color kSmartCampusStudentColor = Color(0xFF8741FF);
-const Color kSmartCampusTeacherColor = Color(0xFF26D7CD);
-const Color kSmartCampusHeadTeacherColor = Color(0xFFFD9929);
-const Color kSmartCampusDormManagerColor = Color(0xFF077E8C);
-const Color kSmartCampusAdminColor = Color(0xFF8CB837);
+const Color kSmartCampusRoleTagFg = Color(0xFF0B081A);
 
-extension SmartCampusRoleThemeX on SmartCampusRole {
-  Color get accentColor {
-    switch (this) {
-      case SmartCampusRole.student:
-      case SmartCampusRole.principal:
-        return kSmartCampusStudentColor;
-      case SmartCampusRole.teacher:
-        return kSmartCampusTeacherColor;
-      case SmartCampusRole.headTeacher:
-        return kSmartCampusHeadTeacherColor;
-      case SmartCampusRole.dormManager:
-        return kSmartCampusDormManagerColor;
-      case SmartCampusRole.admin:
-        return kSmartCampusAdminColor;
-    }
-  }
+const Color kSmartCampusPrincipalTagBg = Color(0xFFE2D1FF);
+const Color kSmartCampusAdminTagBg = Color(0xFFCBF5F3);
+const Color kSmartCampusHeadTeacherTagBg = Color(0xFFFFE7CC);
+const Color kSmartCampusTeacherTagBg = Color(0xFFFFD9F6);
+const Color kSmartCampusDormManagerTagBg = Color(0xFFD1EA65);
 
-  /// 身份标签浅底：主色 40% 叠在白底上的不透明色（与设计稿一致，避免透底）。
-  Color get accentSoftColor =>
-      Color.lerp(Colors.white, accentColor, 0.4) ?? accentColor;
-}
+/// 学生端未出现在五身份色板中，沿用科目标签紫系。
+const Color kSmartCampusStudentTagBg = Color(0xFFEAE5FF);
+const Color kSmartCampusStudentTagFg = Color(0xFF8741FF);
 
-/// 身份标签统一配色：浅底 [accentSoftColor] + 主色字 [accentColor]。
+/// 身份标签统一配色（设计稿：实色浅底 + 深色字）。
 ({Color bg, Color fg}) smartCampusRoleTagStyle(SmartCampusRole role) {
-  return (bg: role.accentSoftColor, fg: role.accentColor);
+  switch (role) {
+    case SmartCampusRole.principal:
+      return (bg: kSmartCampusPrincipalTagBg, fg: kSmartCampusRoleTagFg);
+    case SmartCampusRole.admin:
+      return (bg: kSmartCampusAdminTagBg, fg: kSmartCampusRoleTagFg);
+    case SmartCampusRole.headTeacher:
+      return (bg: kSmartCampusHeadTeacherTagBg, fg: kSmartCampusRoleTagFg);
+    case SmartCampusRole.teacher:
+      return (bg: kSmartCampusTeacherTagBg, fg: kSmartCampusRoleTagFg);
+    case SmartCampusRole.dormManager:
+      return (bg: kSmartCampusDormManagerTagBg, fg: kSmartCampusRoleTagFg);
+    case SmartCampusRole.student:
+      return (bg: kSmartCampusStudentTagBg, fg: kSmartCampusStudentTagFg);
+  }
 }
 
 SmartCampusRole smartCampusRoleFromLabel(String label) {
@@ -61,6 +58,6 @@ SmartCampusRole smartCampusRoleFromLabel(String label) {
   return SmartCampusRole.teacher;
 }
 
-/// 教师管理页等中文身份标签 → 主题色（含 soft 底）。
+/// 教师管理页等中文身份标签 → 主题色。
 ({Color bg, Color fg}) smartCampusRoleTagColors(String label) =>
     smartCampusRoleTagStyle(smartCampusRoleFromLabel(label));

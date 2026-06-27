@@ -189,11 +189,11 @@ List<DormitoryDetailField> parseStudentDormitoryCheckDetailFields(dynamic raw) {
   return [
     DormitoryDetailField('查寝场次', _pickString(map, ['checkType', 'scene'], '查寝')),
     DormitoryDetailField('查寝日期', _pickString(map, ['checkDate', 'date'])),
-    DormitoryDetailField('宿舍', _dormName(map)),
+    DormitoryDetailField('学生宿舍', _dormName(map)),
     DormitoryDetailField('规定时间', _pickString(map, ['checkDeadline', 'deadline'])),
     DormitoryDetailField('打卡时间', _clock(_pickString(map, ['checkTime', 'stampTime']))),
     DormitoryDetailField('查寝状态', status.isEmpty ? '—' : status),
-    DormitoryDetailField('备注', _pickString(map, ['remark', 'note'], '无')),
+    DormitoryDetailField('查寝备注', _pickString(map, ['remark', 'note'], '无')),
     if (handleStatus > 0)
       DormitoryDetailField('处理状态', _pickString(map, ['handleStatusText'], '$handleStatus')),
     DormitoryDetailField(

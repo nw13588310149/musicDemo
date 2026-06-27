@@ -1288,6 +1288,7 @@ class _AdminClassManagementViewState
 
     return SmartCampusSecondaryPageShell(
       backgroundColor: _kBg,
+      bodyTopClipRadius: 8,
       header: _Banner(
         onBack: widget.onBack,
         onCreateClass: _openCreateClassDrawer,

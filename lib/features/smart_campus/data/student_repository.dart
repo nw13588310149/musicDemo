@@ -133,6 +133,18 @@ class StudentRepository {
     );
   }
 
+  /// 班级公告详情。
+  Future<ApiResponse> schoolClassNoticeDetail({required String id}) {
+    final body = encodeNumericIdRequestBody(
+      <String, dynamic>{'id': id},
+      numericIdKeys: const {'id'},
+    );
+    if (body == null) {
+      return Future.value(ApiResponse.failure('通知 id 格式错误'));
+    }
+    return client.post('$_base/schoolClassNotice/detail', data: body);
+  }
+
   /// 我的作业列表（分页）。
   ///
   /// - [status]：`0` 待提交、`1` 已提交、`2` 已评分；不传则不限状态（全部）。

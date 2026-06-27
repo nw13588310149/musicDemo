@@ -111,21 +111,31 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
     )];
     // ⚠️ "全部" tab 的 id 是 null，但 copyWith(selectedMenuId: null) 会被当成
     // "未传"而保留旧值。必须用 clearSelectedMenuId 显式清空，UI 才能切回"全部"。
+    if (cached != null) {
+      state = state.copyWith(
+        selectedMenuId: menuId,
+        clearSelectedMenuId: menuId == null,
+        clearSelectedChildId: true,
+        videoList: cached.items,
+        currentPage: cached.currentPage,
+        hasMore: cached.hasMore,
+        loading: false,
+        loadingMore: false,
+        errorMessage: '',
+      );
+      return;
+    }
+
     state = state.copyWith(
       selectedMenuId: menuId,
       clearSelectedMenuId: menuId == null,
       clearSelectedChildId: true,
-      videoList: cached?.items ?? const [],
-      currentPage: cached?.currentPage ?? 1,
-      hasMore: cached?.hasMore ?? true,
-      loading: cached == null,
+      loading: true,
       loadingMore: false,
       errorMessage: '',
     );
 
-    if (cached == null) {
-      await _loadVideoList(reset: true);
-    }
+    await _loadVideoList(reset: true);
   }
 
   Future<void> selectChildMenu(String? childId) async {
@@ -138,19 +148,27 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
       childId,
       state.searchKeyword,
     )];
+    if (cached != null) {
+      state = state.copyWith(
+        selectedChildId: childId,
+        videoList: cached.items,
+        currentPage: cached.currentPage,
+        hasMore: cached.hasMore,
+        loading: false,
+        loadingMore: false,
+        errorMessage: '',
+      );
+      return;
+    }
+
     state = state.copyWith(
       selectedChildId: childId,
-      videoList: cached?.items ?? const [],
-      currentPage: cached?.currentPage ?? 1,
-      hasMore: cached?.hasMore ?? true,
-      loading: cached == null,
+      loading: true,
       loadingMore: false,
       errorMessage: '',
     );
 
-    if (cached == null) {
-      await _loadVideoList(reset: true);
-    }
+    await _loadVideoList(reset: true);
   }
 
   Future<void> loadMore() async {
@@ -187,19 +205,27 @@ class VideoTutorialController extends StateNotifier<VideoTutorialState> {
       state.selectedChildId,
       keyword,
     )];
+    if (cached != null) {
+      state = state.copyWith(
+        searchKeyword: keyword,
+        videoList: cached.items,
+        currentPage: cached.currentPage,
+        hasMore: cached.hasMore,
+        loading: false,
+        loadingMore: false,
+        errorMessage: '',
+      );
+      return;
+    }
+
     state = state.copyWith(
       searchKeyword: keyword,
-      videoList: cached?.items ?? const [],
-      currentPage: cached?.currentPage ?? 1,
-      hasMore: cached?.hasMore ?? true,
-      loading: cached == null,
+      loading: true,
       loadingMore: false,
       errorMessage: '',
     );
 
-    if (cached == null) {
-      await _loadVideoList(reset: true);
-    }
+    await _loadVideoList(reset: true);
   }
 
   @override

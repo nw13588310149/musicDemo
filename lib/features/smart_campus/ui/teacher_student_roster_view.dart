@@ -15,6 +15,7 @@
 // =============================================================================
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -28,6 +29,7 @@ import '../../../core/network/snowflake_id.dart';
 import '../../../core/widgets/app_asset_graphic.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/scaled_dialog.dart';
+import '../data/admin_student_exam_data.dart';
 import '../data/teacher_repository.dart';
 import '../../shell/ui/shell_layout.dart';
 import 'widgets/smart_campus_page_banner.dart';
@@ -1281,12 +1283,25 @@ class _RosterTag extends StatelessWidget {
       child: Text(
         spec.label,
         maxLines: 1,
+        textHeightBehavior: const TextHeightBehavior(
+          applyHeightToFirstAscent: false,
+          applyHeightToLastDescent: false,
+        ),
+        strutStyle: StrutStyle(
+          fontSize: ui(11),
+          height: 1,
+          forceStrutHeight: true,
+          leadingDistribution: TextLeadingDistribution.even,
+          fontFamily: 'PingFang SC',
+          fontWeight: AppFont.w400,
+        ),
         style: TextStyle(
           fontSize: ui(11),
           height: 1.0,
           color: spec.fg,
           fontFamily: 'PingFang SC',
           fontWeight: AppFont.w400,
+          leadingDistribution: TextLeadingDistribution.even,
         ),
       ),
     );
@@ -1347,7 +1362,7 @@ class _Avatar extends StatelessWidget {
 //   2. Profile：avatar 40 + 姓名 16/600 + 学号 12/400 #B6B5BB + 主项 "声乐 ·
 //      民族唱法" 12/400 #6D6B75
 //   3. 信息列表（每行 14/400 标签 #B6B5BB + 14/400 值 #0B081A）：
-//      性别 / 住宿 / 本人手机 / 家长手机 / 所在班级（灰底 tag）/ 标签（紫底 badge）
+//      学生性别 / 学生宿舍 / 本人手机 / 家长手机 / 所在班级（灰底 tag）/ 标签（紫底 badge）
 //   4. "教师备注" 灰底卡（16/600 标题 + 14/400 备注）
 //   5. "我教科目 · 分数走势" 灰底卡（顶部副标 + 科目切换 [声乐/乐理] +
 //      6 期 X 轴（2-6月+期中）+ Y 轴 100/95/90/85/80/0 + 紫色 outline
@@ -1426,23 +1441,29 @@ class _StudentDetailDrawerState extends ConsumerState<_StudentDetailDrawer> {
     final scoreData = scoreRes.isSuccess
         ? _parseStudentScoreSeries(scoreRes.data)
         : const _StudentScoreSeries();
-    if (res.isSuccess && res.data is Map) {
-      setState(() {
+    setState(() {
+      if (res.isSuccess && res.data is Map) {
         _detail = _mapDataToStringKeyed(res.data);
-        _scoreSubjects = scoreData.subjects;
-        _scoresBySubject = scoreData.scores;
-        _periodsBySubject = scoreData.periods;
-        _subjectIdx = 0;
-      });
-    } else {
-      if (!res.isSuccess) {
-        AppToast.show(
-          context,
-          res.msg.isNotEmpty ? res.msg : '加载学生详情失败',
-        );
       }
+      _scoreSubjects = scoreData.subjects;
+      _scoresBySubject = scoreData.scores;
+      _periodsBySubject = scoreData.periods;
+      _subjectIdx = 0;
+    });
+    if (!res.isSuccess) {
+      AppToast.show(
+        context,
+        res.msg.isNotEmpty ? res.msg : '加载学生详情失败',
+      );
     }
   }
+
+  /// 接口返回的科目分数序列；无数据时返回空序列。
+  _StudentScoreSeries get _scoreSeries => _StudentScoreSeries(
+        subjects: _scoreSubjects,
+        scores: _scoresBySubject,
+        periods: _periodsBySubject,
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -1485,20 +1506,29 @@ class _StudentDetailDrawerState extends ConsumerState<_StudentDetailDrawer> {
                           ),
                         ),
                         SizedBox(height: ui(12)),
-                        if (_scoreSubjects.isNotEmpty)
-                          Padding(
-                            padding: EdgeInsets.symmetric(horizontal: ui(20)),
-                            child: _ScoreChartBlock(
-                              subjects: _scoreSubjects,
-                              subjectIdx: _subjectIdx,
-                              onSubjectChanged: (i) =>
-                                  setState(() => _subjectIdx = i),
-                              values:
-                                  _scoresBySubject[_scoreSubjects[_subjectIdx]]!,
-                              periods:
-                                  _periodsBySubject[_scoreSubjects[_subjectIdx]]!,
-                            ),
-                          ),
+                        Padding(
+                          padding: EdgeInsets.symmetric(horizontal: ui(20)),
+                          child: _scoreSubjects.isEmpty
+                              ? const _ScoreChartEmptyBlock()
+                              : Builder(
+                                  builder: (context) {
+                                    final series = _scoreSeries;
+                                    final idx = _subjectIdx.clamp(
+                                      0,
+                                      series.subjects.length - 1,
+                                    );
+                                    final subject = series.subjects[idx];
+                                    return _ScoreChartBlock(
+                                      subjects: series.subjects,
+                                      subjectIdx: idx,
+                                      onSubjectChanged: (i) =>
+                                          setState(() => _subjectIdx = i),
+                                      values: series.scores[subject] ?? const [],
+                                      periods: series.periods[subject] ?? const [],
+                                    );
+                                  },
+                                ),
+                        ),
                         SizedBox(height: ui(20)),
                         Padding(
                           padding: EdgeInsets.symmetric(horizontal: ui(20)),
@@ -1702,9 +1732,9 @@ class _InfoList extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _InfoRow(label: '性别：', value: _genderLine()),
+        _InfoRow(label: '学生性别：', value: _genderLine()),
         SizedBox(height: ui(8)),
-        _InfoRow(label: '住宿：', value: _dormLine()),
+        _InfoRow(label: '学生宿舍：', value: _dormLine()),
         SizedBox(height: ui(8)),
         _InfoRow(label: '本人手机：', value: mobile.isEmpty ? '—' : mobile),
         SizedBox(height: ui(8)),
@@ -1835,12 +1865,26 @@ class _DrawerTagPill extends StatelessWidget {
       ),
       child: Text(
         label,
+        maxLines: 1,
+        textHeightBehavior: const TextHeightBehavior(
+          applyHeightToFirstAscent: false,
+          applyHeightToLastDescent: false,
+        ),
+        strutStyle: StrutStyle(
+          fontSize: ui(12),
+          height: 1,
+          forceStrutHeight: true,
+          leadingDistribution: TextLeadingDistribution.even,
+          fontFamily: 'PingFang SC',
+          fontWeight: AppFont.w400,
+        ),
         style: TextStyle(
           fontSize: ui(12),
+          height: 1.0,
           color: isAccent ? Colors.white : _kTextSecondary,
           fontFamily: 'PingFang SC',
           fontWeight: AppFont.w400,
-          height: 1.27,
+          leadingDistribution: TextLeadingDistribution.even,
         ),
       ),
     );
@@ -1911,50 +1955,86 @@ class _StudentScoreSeries {
 }
 
 _StudentScoreSeries _parseStudentScoreSeries(dynamic raw) {
-  dynamic value = raw;
-  if (value is Map) {
-    value = value['records'] ?? value['list'] ?? value['rows'] ?? value['data'];
-  }
-  if (value is! List) return const _StudentScoreSeries();
+  final records = parseAdminStudentExamRecords(raw);
+  if (records.isEmpty) return const _StudentScoreSeries();
+
+  final sorted = [...records]
+    ..sort((a, b) => a.examDate.compareTo(b.examDate));
+
   final scores = <String, List<double>>{};
   final periods = <String, List<String>>{};
-  for (final item in value.whereType<Map>()) {
-    final subject = _firstScoreString(item, const [
-      'subjectName',
-      'subject',
-      'courseName',
-    ]);
-    final score = double.tryParse(
-      _firstScoreString(item, const ['score', 'studentScore', 'examScore']),
-    );
-    if (subject.isEmpty || score == null) continue;
-    scores.putIfAbsent(subject, () => <double>[]).add(score);
-    periods.putIfAbsent(subject, () => <String>[]).add(
-          _firstScoreString(
-            item,
-            const ['examName', 'name', 'examDate', 'createTime'],
-            fallback: '考试${scores[subject]!.length}',
-          ),
-        );
+  for (final record in sorted) {
+    final period = record.examName.trim().isNotEmpty
+        ? record.examName.trim()
+        : record.examDate.trim();
+    for (final item in record.subjectScores) {
+      final subject = item.subjectName.trim();
+      final score = item.score;
+      if (subject.isEmpty || score == null) continue;
+      scores.putIfAbsent(subject, () => <double>[]).add(score.toDouble());
+      periods.putIfAbsent(subject, () => <String>[]).add(
+            period.isNotEmpty ? period : '考试${scores[subject]!.length}',
+          );
+    }
   }
-  final subjects = scores.keys.where((key) => scores[key]!.isNotEmpty).toList();
+
+  final subjects = scores.keys
+      .where((key) => scores[key]?.isNotEmpty ?? false)
+      .toList(growable: false);
   return _StudentScoreSeries(
     subjects: subjects,
-    scores: scores,
-    periods: periods,
+    scores: {for (final subject in subjects) subject: scores[subject]!},
+    periods: {for (final subject in subjects) subject: periods[subject]!},
   );
 }
 
-String _firstScoreString(
-  Map<dynamic, dynamic> map,
-  List<String> keys, {
-  String fallback = '',
-}) {
-  for (final key in keys) {
-    final value = map[key]?.toString().trim() ?? '';
-    if (value.isNotEmpty && value != 'null') return value;
+class _ScoreChartEmptyBlock extends StatelessWidget {
+  const _ScoreChartEmptyBlock();
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.fromLTRB(ui(12), ui(14), ui(12), ui(12)),
+      decoration: BoxDecoration(
+        color: _kPageBgChip,
+        borderRadius: BorderRadius.circular(ui(12)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '我教科目 · 分数走势',
+            style: TextStyle(
+              fontSize: ui(16),
+              color: _kTextDark,
+              fontFamily: 'PingFang SC',
+              fontWeight: AppFont.w600,
+              height: 1.2,
+            ),
+          ),
+          SizedBox(height: ui(12)),
+          SizedBox(
+            height: ui(220),
+            child: Center(
+              child: Text(
+                '暂无分数走势数据',
+                style: TextStyle(
+                  fontSize: ui(14),
+                  color: _kTextHint,
+                  fontFamily: 'PingFang SC',
+                  fontWeight: AppFont.w400,
+                  height: 1.2,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
-  return fallback;
 }
 
 class _ScoreChartBlock extends StatelessWidget {
@@ -2006,7 +2086,7 @@ class _ScoreChartBlock extends StatelessWidget {
                     ),
                     SizedBox(height: ui(2)),
                     Text(
-                      '${subjects[subjectIdx]} · 考试成绩',
+                      '${subjects[subjectIdx]} · 周测均分',
                       style: TextStyle(
                         fontSize: ui(12),
                         color: _kTextSecondary,
@@ -2183,67 +2263,126 @@ class _ScoreLinePainter extends CustomPainter {
   final List<double> values;
   final double Function(num) ui;
 
+  static const List<int> kYTicks = [100, 95, 90, 85, 80, 0];
+
   // 数值映射：80~100 区间映射到 plot 高度的上半部分，下半留给 0 缓冲。
   static const double _kVMin = 78;
   static const double _kVMax = 100;
 
+  double _yForScore(double score, double plotTop, double plotHeight) {
+    final t = ((score - _kVMin) / (_kVMax - _kVMin)).clamp(0.0, 1.0);
+    return plotTop + plotHeight * (1 - t);
+  }
+
   double _normalize(double v) {
     final t = ((v - _kVMin) / (_kVMax - _kVMin)).clamp(0.0, 1.0);
-    return 1 - t; // 顶部对应高分，所以反转。
+    return 1 - t;
+  }
+
+  static void _paintDashedLine(
+    Canvas canvas,
+    Offset start,
+    Offset end,
+    Paint paint,
+  ) {
+    const dashWidth = 4.0;
+    const dashSpace = 4.0;
+    final total = (end - start).distance;
+    if (total <= 0) return;
+    final direction = (end - start) / total;
+    var drawn = 0.0;
+    while (drawn < total) {
+      final segEnd = math.min(drawn + dashWidth, total);
+      canvas.drawLine(
+        start + direction * drawn,
+        start + direction * segEnd,
+        paint,
+      );
+      drawn += dashWidth + dashSpace;
+    }
+  }
+
+  void _paintYAxisGrid(
+    Canvas canvas,
+    Size size,
+    double plotTop,
+    double plotHeight,
+  ) {
+    final innerLeft = size.width * 0.04;
+    final innerRight = size.width * 0.96;
+    final gridPaint = Paint()
+      ..color = const Color(0xFFE6E9F1)
+      ..strokeWidth = 1;
+
+    for (final tick in kYTicks) {
+      // 100~80 与分数映射一致；0 基线贴 plot 区域最底部，对齐左侧 Y 轴 "0" 标签。
+      final y = tick == 0
+          ? size.height
+          : _yForScore(tick.toDouble(), plotTop, plotHeight);
+      final start = Offset(innerLeft, y);
+      final end = Offset(innerRight, y);
+      if (tick == 0) {
+        canvas.drawLine(start, end, gridPaint);
+      } else {
+        _paintDashedLine(canvas, start, end, gridPaint);
+      }
+    }
   }
 
   @override
   void paint(Canvas canvas, Size size) {
-    final n = values.length;
-    if (n < 2) return;
-
-    // X 等距分布；首尾留 8% 内缩，避免圆点贴边。
-    final innerLeft = size.width * 0.04;
-    final innerRight = size.width * 0.96;
-    final innerWidth = innerRight - innerLeft;
-    final xs = List<double>.generate(
-      n,
-      (i) => innerLeft + innerWidth * (i / (n - 1)),
-    );
-    // Y 区间使用整个 plot 高度的 75% 上半部分；底部 25% 视觉留白。
     final plotTop = size.height * 0.05;
     final plotBottom = size.height * 0.78;
     final plotHeight = plotBottom - plotTop;
+
+    _paintYAxisGrid(canvas, size, plotTop, plotHeight);
+
+    final n = values.length;
+    if (n < 1) return;
+
+    final innerLeft = size.width * 0.04;
+    final innerRight = size.width * 0.96;
+    final innerWidth = innerRight - innerLeft;
+    final xs = n == 1
+        ? <double>[size.width / 2]
+        : List<double>.generate(
+            n,
+            (i) => innerLeft + innerWidth * (i / (n - 1)),
+          );
     final ys = values.map((v) => plotTop + plotHeight * _normalize(v)).toList();
 
-    // 1. 渐变填充：从 polyline 到 plotBottom。
-    final fillPath = Path()..moveTo(xs[0], plotBottom);
-    for (var i = 0; i < n; i++) {
-      fillPath.lineTo(xs[i], ys[i]);
-    }
-    fillPath
-      ..lineTo(xs.last, plotBottom)
-      ..close();
-    final fillPaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          const Color(0xFFE7D9FF),
-          const Color(0xFFE7D9FF).withValues(alpha: 0),
-        ],
-      ).createShader(Rect.fromLTWH(0, plotTop, size.width, plotHeight));
-    canvas.drawPath(fillPath, fillPaint);
+    if (n >= 2) {
+      final fillPath = Path()..moveTo(xs[0], plotBottom);
+      for (var i = 0; i < n; i++) {
+        fillPath.lineTo(xs[i], ys[i]);
+      }
+      fillPath
+        ..lineTo(xs.last, plotBottom)
+        ..close();
+      final fillPaint = Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            const Color(0xFFE7D9FF),
+            const Color(0xFFE7D9FF).withValues(alpha: 0),
+          ],
+        ).createShader(Rect.fromLTWH(0, plotTop, size.width, plotHeight));
+      canvas.drawPath(fillPath, fillPaint);
 
-    // 2. polyline outline：圆角 cap + 2px 紫色描边。
-    final linePath = Path()..moveTo(xs[0], ys[0]);
-    for (var i = 1; i < n; i++) {
-      linePath.lineTo(xs[i], ys[i]);
+      final linePath = Path()..moveTo(xs[0], ys[0]);
+      for (var i = 1; i < n; i++) {
+        linePath.lineTo(xs[i], ys[i]);
+      }
+      final linePaint = Paint()
+        ..color = _kPurple
+        ..strokeWidth = ui(2)
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round;
+      canvas.drawPath(linePath, linePaint);
     }
-    final linePaint = Paint()
-      ..color = _kPurple
-      ..strokeWidth = ui(2)
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-    canvas.drawPath(linePath, linePaint);
 
-    // 3. 6 个圆点：白底 + 1px 紫边。
     final dotFill = Paint()..color = Colors.white;
     final dotBorder = Paint()
       ..color = _kPurple
@@ -2255,7 +2394,6 @@ class _ScoreLinePainter extends CustomPainter {
       canvas.drawCircle(Offset(xs[i], ys[i]), dotR, dotBorder);
     }
 
-    // 4. 圆点上方数值标签（12/500 #6D6B75，距点 14px）。
     for (var i = 0; i < n; i++) {
       final v = values[i];
       final label = v == v.roundToDouble() ? v.toInt().toString() : '$v';

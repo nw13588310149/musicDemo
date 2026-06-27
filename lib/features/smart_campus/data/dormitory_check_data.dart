@@ -720,17 +720,17 @@ List<DormitoryDetailField> parseDormitoryCheckDetailFields(dynamic raw) {
   final studentNo = _historyStudentNo(map, user);
   final mobile = _pickString(user, ['mobile', 'phone']);
   return [
-    DormitoryDetailField('学生', studentDisplay),
+    DormitoryDetailField('学生姓名', studentDisplay),
     DormitoryDetailField(
-      '学号',
+      '学生学号',
       studentNo != '—' ? studentNo : '—',
     ),
     if (studentNo == '—' && mobile.isNotEmpty)
       DormitoryDetailField('手机号', mobile),
     DormitoryDetailField('查寝日期', _pickString(map, ['checkDate', 'date'])),
-    DormitoryDetailField('宿舍', _historyDormName(map)),
+    DormitoryDetailField('我的宿舍', _historyDormName(map)),
     DormitoryDetailField(
-      '床位',
+      '我的床位',
       bedName.isEmpty ? '—' : _formatBedLabel(bedName),
     ),
     DormitoryDetailField(
@@ -743,7 +743,7 @@ List<DormitoryDetailField> parseDormitoryCheckDetailFields(dynamic raw) {
     ),
     if (_pickString(map, ['anomalyReason', 'remark', 'note']).isNotEmpty)
       DormitoryDetailField(
-        '备注',
+        '查寝备注',
         _pickString(map, ['anomalyReason', 'remark', 'note']),
       ),
     if (handleStatus > 0)

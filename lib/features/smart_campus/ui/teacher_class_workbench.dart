@@ -7,7 +7,7 @@
 //      可发布/删除) + 双列布局：我的班级 + 待批请假 / 班级捷径 / 七日查寝 +
 //      重点关注
 //   2. 学生管理 _StudentsTab  标题副标题 + 搜索框 + 学生卡 3 列网格
-//   3. 成绩   _GradesTab     班级成绩变化折线图 + 考试记录（分数+点评） + 学生分数变化卡
+//   3. 成绩   _GradesTab     班级成绩变化折线图 + 考试记录（分数+点评）
 //
 // 视觉：970 设计宽度自适应到容器宽度，左列约 0.5918，右列约 0.3959，gap 12。
 // 颜色：白卡 #FFFFFF / 浅灰底 #F5F6FA / 紫色主色 #8741FF / 蓝色 #325BFF / 红色 #FF323C
@@ -31,10 +31,13 @@ import '../../shell/data/shell_repository.dart';
 import '../../shell/state/shell_controller.dart';
 import '../../shell/state/shell_state.dart';
 import '../../shell/ui/shell_layout.dart';
+import '../data/head_teacher_class_score_data.dart';
 import '../data/head_teacher_index_data.dart';
+import '../data/student_academic_data.dart';
 import '../data/head_teacher_workbench_data.dart';
 import '../data/student_leave_data.dart';
 import '../data/teacher_repository.dart';
+import 'student_homework_submission_preview.dart';
 import 'widgets/smart_campus_page_banner.dart';
 import 'widgets/smart_campus_stripe_bar_chart.dart';
 import 'package:the_road_of_music_flutter/core/theme/app_font.dart';
@@ -340,7 +343,7 @@ class _TeacherClassWorkbenchViewState
                     onOpenPrincipalMailbox: widget.onOpenPrincipalMailbox,
                   ),
               _WorkbenchTab.students => _StudentsTab(classId: _classId),
-              _WorkbenchTab.grades => const _GradesTab(),
+              _WorkbenchTab.grades => _GradesTab(classId: _classId),
             },
         ],
       ),
@@ -2457,37 +2460,6 @@ class _DormNormalStatCardState extends ConsumerState<_DormNormalStatCard> {
   }
 }
 
-/// 成绩折线图等场景：Y 轴刻度纵向均分。
-class _AxisTicksColumn extends StatelessWidget {
-  const _AxisTicksColumn({required this.ticks});
-  final List<int> ticks;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return SizedBox(
-      width: ui(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          for (int i = 0; i < ticks.length; i++) ...[
-            Text(
-              ticks[i].toString(),
-              style: TextStyle(
-                fontSize: ui(12),
-                color: _kTextHint,
-                fontWeight: FontWeight.w400,
-                height: 1,
-              ),
-            ),
-            if (i < ticks.length - 1) const Spacer(),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
 // ----- 待批请假 列表 -----
 
 class _LeaveListCard extends ConsumerStatefulWidget {
@@ -3339,36 +3311,178 @@ class _StudentManageCard extends StatelessWidget {
 // 成绩 Tab
 // =============================================================================
 
-class _GradesTab extends StatefulWidget {
-  const _GradesTab();
+class _GradesTab extends ConsumerStatefulWidget {
+  const _GradesTab({required this.classId});
+
+  final String classId;
 
   @override
-  State<_GradesTab> createState() => _GradesTabState();
+  ConsumerState<_GradesTab> createState() => _GradesTabState();
 }
 
-class _GradesTabState extends State<_GradesTab> {
+class _GradesTabState extends ConsumerState<_GradesTab> {
+  HeadTeacherClassScoreOverview _overview = HeadTeacherClassScoreOverview.zero;
   int _examIdx = 0;
+  String? _selectedExamId;
+  bool _loading = true;
+  bool _loadingMore = false;
+  String _error = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadOverview();
+  }
+
+  @override
+  void didUpdateWidget(covariant _GradesTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.classId != widget.classId) {
+      _loadOverview();
+    }
+  }
+
+  Future<void> _loadOverview({
+    String? examId,
+    int pageNum = 1,
+    bool append = false,
+  }) async {
+    if (widget.classId.isEmpty || widget.classId == '0') {
+      setState(() {
+        _loading = false;
+        _overview = HeadTeacherClassScoreOverview.zero;
+        _error = '暂无绑定班级';
+      });
+      return;
+    }
+
+    if (append) {
+      setState(() => _loadingMore = true);
+    } else {
+      setState(() {
+        _loading = true;
+        _error = '';
+      });
+    }
+
+    final res = await ref.read(teacherRepositoryProvider).headTeacherClassScoreOverview(
+      classId: widget.classId,
+      examId: examId ?? _selectedExamId,
+      pageNum: pageNum,
+      pageSize: 10,
+    );
+    if (!mounted) return;
+
+    if (!res.isSuccess) {
+      setState(() {
+        _loading = false;
+        _loadingMore = false;
+        if (!append) {
+          _overview = HeadTeacherClassScoreOverview.zero;
+          _error = res.msg.isNotEmpty ? res.msg : '加载成绩数据失败';
+        }
+      });
+      return;
+    }
+
+    final parsed = HeadTeacherClassScoreOverview.fromData(res.data);
+    setState(() {
+      if (append) {
+        final merged = [
+          ..._overview.studentScores.records,
+          ...parsed.studentScores.records,
+        ];
+        _overview = HeadTeacherClassScoreOverview(
+          examAxis: parsed.examAxis,
+          trendLines: parsed.trendLines,
+          examTabs: parsed.examTabs,
+          currentExamId: parsed.currentExamId,
+          studentScores: HeadTeacherStudentScoresPage(
+            records: merged,
+            total: parsed.studentScores.total,
+            pageNum: parsed.studentScores.pageNum,
+            pageSize: parsed.studentScores.pageSize,
+          ),
+        );
+      } else {
+        _overview = parsed;
+        _examIdx = parsed.indexOfCurrentExam();
+        _selectedExamId = parsed.examTabs.isNotEmpty
+            ? parsed.examTabs[_examIdx].examId
+            : parsed.currentExamId;
+      }
+      _loading = false;
+      _loadingMore = false;
+      _error = '';
+    });
+  }
+
+  void _onExamSelected(int index) {
+    if (index < 0 || index >= _overview.examTabs.length) return;
+    final examId = _overview.examTabs[index].examId;
+    setState(() => _examIdx = index);
+    _selectedExamId = examId;
+    _loadOverview(examId: examId);
+  }
+
+  Future<void> _loadMoreScores() async {
+    if (_loadingMore || !_overview.studentScores.hasMore) return;
+    await _loadOverview(
+      examId: _selectedExamId,
+      pageNum: _overview.studentScores.pageNum + 1,
+      append: true,
+    );
+  }
+
+  void _openScoreDetail(HeadTeacherStudentScoreRecord record) {
+    if (_overview.examTabs.isEmpty) return;
+    final exam =
+        _overview.examTabs[_examIdx.clamp(0, _overview.examTabs.length - 1)];
+    _showScoreDetail(context, record: record, exam: exam);
+  }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+
+    if (_loading && _overview.examTabs.isEmpty) {
+      return Padding(
+        padding: EdgeInsets.only(top: ui(40)),
+        child: const Center(child: AppLoadingIndicator()),
+      );
+    }
+
+    if (_error.isNotEmpty) {
+      return Center(
+        child: Padding(
+          padding: EdgeInsets.only(top: ui(40)),
+          child: Text(
+            _error,
+            style: TextStyle(fontSize: ui(14), color: _kTextHint),
+          ),
+        ),
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const _SectionTitle('班级成绩变化'),
         SizedBox(height: ui(12)),
-        const _GradesLineChartCard(),
+        _GradesLineChartCard(overview: _overview),
         SizedBox(height: ui(20)),
         const _SectionTitle('考试记录'),
         SizedBox(height: ui(12)),
         _GradesExamRecordCard(
+          examTabs: _overview.examTabs,
+          records: _overview.studentScores.records,
           selectedIdx: _examIdx,
-          onSelect: (i) => setState(() => _examIdx = i),
+          loadingMore: _loadingMore,
+          hasMore: _overview.studentScores.hasMore,
+          onSelect: _onExamSelected,
+          onLoadMore: _loadMoreScores,
+          onOpenScoreDetail: _openScoreDetail,
         ),
-        SizedBox(height: ui(20)),
-        const _SectionTitle('学生分数变化'),
-        SizedBox(height: ui(12)),
-        const _GradesScoreChangeCard(),
       ],
     );
   }
@@ -3377,30 +3491,28 @@ class _GradesTabState extends State<_GradesTab> {
 // ----- 班级成绩变化（折线图） -----
 
 class _GradesLineChartCard extends StatelessWidget {
-  const _GradesLineChartCard();
+  const _GradesLineChartCard({required this.overview});
 
-  static const List<String> _months = [
-    '8月',
-    '9月',
-    '10月',
-    '11月',
-    '12月',
-    '1月',
-    '2月',
-  ];
-
-  // 三条折线（取值百分比，0~100）。Mock 数据。
-  static const List<List<double>> _series = [
-    [60, 73, 64, 88, 64, 96, 56], // 音乐专业
-    [88, 73, 64, 88, 64, 96, 56], // 乐理/视唱
-    [56, 96, 64, 88, 64, 73, 60], // 文化课
-  ];
-  static const List<Color> _seriesColors = [_kPurple, _kBlue, _kRed];
-  static const List<String> _seriesLabels = ['音乐专业', '乐理/视唱', '文化课'];
+  final HeadTeacherClassScoreOverview overview;
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final axisLabels = overview.examAxis.map((item) => item.axisLabel).toList();
+    final series = overview.trendLines
+        .map((line) => line.avgScores)
+        .where((scores) => scores.isNotEmpty)
+        .toList();
+    final labels = overview.trendLines
+        .where((line) => line.avgScores.isNotEmpty)
+        .map((line) => line.subjectName.isNotEmpty ? line.subjectName : '科目')
+        .toList();
+    final colors = [
+      for (var i = 0; i < series.length; i++)
+        kHeadTeacherScoreTrendColors[i % kHeadTeacherScoreTrendColors.length],
+    ];
+    final hasChart = overview.hasChartData && series.isNotEmpty;
+
     return Container(
       padding: EdgeInsets.all(ui(12)),
       decoration: BoxDecoration(
@@ -3410,22 +3522,11 @@ class _GradesLineChartCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 顶栏：% / 得分率 / 图例
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Text(
-                '%',
-                style: TextStyle(
-                  fontSize: ui(12),
-                  color: _kTextHint,
-                  fontWeight: FontWeight.w400,
-                  height: 1,
-                ),
-              ),
-              SizedBox(width: ui(8)),
-              Text(
-                '得分率',
+                '平均分',
                 style: TextStyle(
                   fontSize: ui(12),
                   color: _kTextHint,
@@ -3434,57 +3535,33 @@ class _GradesLineChartCard extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              for (var i = 0; i < _seriesLabels.length; i++) ...[
+              for (var i = 0; i < labels.length; i++) ...[
                 if (i > 0) SizedBox(width: ui(20)),
-                _LegendItem(color: _seriesColors[i], label: _seriesLabels[i]),
+                _LegendItem(color: colors[i], label: labels[i]),
               ],
             ],
           ),
           SizedBox(height: ui(8)),
-          // 图表区
-          SizedBox(
-            height: ui(180),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _AxisTicksColumn(ticks: const [100, 80, 60, 40, 20, 0]),
-                SizedBox(width: ui(8)),
-                Expanded(
-                  child: LayoutBuilder(
-                    builder: (context, c) => CustomPaint(
-                      size: Size(c.maxWidth, c.maxHeight),
-                      painter: _MultiLineChartPainter(
-                        series: _series,
-                        colors: _seriesColors,
-                      ),
-                    ),
-                  ),
+          if (!hasChart)
+            SizedBox(
+              height: ui(180),
+              child: Center(
+                child: Text(
+                  '暂无足够考试数据生成趋势图',
+                  style: TextStyle(fontSize: ui(12), color: _kTextHint),
                 ),
-              ],
+              ),
+            )
+          else ...[
+            SizedBox(
+              height: ui(220),
+              child: _GradesMultiLineChart(
+                series: series,
+                colors: colors,
+                periods: axisLabels,
+              ),
             ),
-          ),
-          SizedBox(height: ui(8)),
-          // X 轴月份
-          Padding(
-            padding: EdgeInsets.only(left: ui(28)),
-            child: Row(
-              children: [
-                for (final m in _months)
-                  Expanded(
-                    child: Text(
-                      m,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: ui(12),
-                        color: _kTextSecondary,
-                        fontWeight: FontWeight.w400,
-                        height: 20 / 12,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
+          ],
         ],
       ),
     );
@@ -3530,152 +3607,302 @@ class _LegendItem extends StatelessWidget {
   }
 }
 
-class _MultiLineChartPainter extends CustomPainter {
-  _MultiLineChartPainter({required this.series, required this.colors});
+/// 折线图 plot 区坐标。布局样式对齐 roster [_ScoreLineChart]；
+/// 班级均分跨度较大，Y 轴采用 0~100 线性映射（非 roster 单科的 78~100 压缩）。
+class _GradesChartPlotMetrics {
+  static const double innerLeftRatio = 0.04;
+  static const double innerRightRatio = 0.96;
+  static const double plotTopRatio = 0.05;
+  static const double plotBottomRatio = 0.78;
+  static const List<int> yTicks = [100, 95, 90, 85, 80, 0];
+
+  static double plotTop(double height) => height * plotTopRatio;
+
+  static double plotBottom(double height) => height * plotBottomRatio;
+
+  static double plotHeight(double height) => plotBottom(height) - plotTop(height);
+
+  static double pointX(int index, int count, double width) {
+    if (count <= 0) return width / 2;
+    if (count == 1) return width / 2;
+    final innerLeft = width * innerLeftRatio;
+    final innerWidth = width * (innerRightRatio - innerLeftRatio);
+    return innerLeft + innerWidth * (index / (count - 1));
+  }
+
+  static double labelAlignmentX(int index, int count, double width) {
+    final x = pointX(index, count, width);
+    return -1 + 2 * x / width;
+  }
+
+  /// 分数 → plot 区 Y（0 在 plotBottom，100 在 plotTop）。
+  static double yForScore(double score, double height) {
+    final t = (score / 100).clamp(0.0, 1.0);
+    return plotTop(height) + plotHeight(height) * (1 - t);
+  }
+
+  /// 刻度线 Y：100~80 线性分布；0 基线贴 canvas 最底（roster 样式）。
+  static double yForTick(int tick, double height) {
+    if (tick == 0) return height;
+    return yForScore(tick.toDouble(), height);
+  }
+
+  static double normalizeScore(double value) {
+    return 1 - (value / 100).clamp(0.0, 1.0);
+  }
+}
+
+/// 班级成绩折线图：Y 轴 / X 轴布局与任课老师学生名册档案弹窗中的分数走势折线图一致。
+class _GradesMultiLineChart extends StatelessWidget {
+  const _GradesMultiLineChart({
+    required this.series,
+    required this.colors,
+    required this.periods,
+  });
 
   final List<List<double>> series;
   final List<Color> colors;
+  final List<String> periods;
+
+  static const List<int> _kYLabels = _GradesChartPlotMetrics.yTicks;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    if (series.isEmpty) return;
-    final n = series.first.length;
-    if (n < 2) return;
-    final stepX = size.width / (n - 1);
-    Offset point(double v, int i) {
-      final clamped = v.clamp(0.0, 100.0);
-      final y = size.height * (1 - clamped / 100);
-      return Offset(stepX * i, y);
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          width: ui(28),
+          child: Padding(
+            padding: EdgeInsets.only(bottom: ui(28)),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final height = constraints.maxHeight;
+                final labelH = ui(12);
+                return Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    for (final tick in _kYLabels)
+                      Positioned(
+                        right: 0,
+                        top: (_GradesChartPlotMetrics.yForTick(tick, height) -
+                                labelH / 2)
+                            .clamp(0.0, math.max(0.0, height - labelH)),
+                        child: Text(
+                          '$tick',
+                          style: TextStyle(
+                            fontSize: labelH,
+                            color: _kTextHint,
+                            fontFamily: 'PingFang SC',
+                            fontWeight: FontWeight.w400,
+                            height: 1,
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+        SizedBox(width: ui(8)),
+        Expanded(
+          child: Column(
+            children: [
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, c) => CustomPaint(
+                    size: Size(c.maxWidth, c.maxHeight),
+                    painter: _GradesMultiLineChartPainter(
+                      series: series,
+                      colors: colors,
+                      ui: ui,
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(height: ui(8)),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final width = constraints.maxWidth;
+                  final count = periods.length;
+                  return SizedBox(
+                    height: ui(20),
+                    width: width,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        for (var i = 0; i < count; i++)
+                          Align(
+                            alignment: Alignment(
+                              _GradesChartPlotMetrics.labelAlignmentX(
+                                i,
+                                count,
+                                width,
+                              ),
+                              0,
+                            ),
+                            child: Text(
+                              periods[i],
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: ui(12),
+                                color: _kTextSecondary,
+                                fontFamily: 'PingFang SC',
+                                fontWeight: FontWeight.w400,
+                                height: 1,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _GradesMultiLineChartPainter extends CustomPainter {
+  _GradesMultiLineChartPainter({
+    required this.series,
+    required this.colors,
+    required this.ui,
+  });
+
+  final List<List<double>> series;
+  final List<Color> colors;
+  final double Function(num) ui;
+
+  static void _paintDashedLine(
+    Canvas canvas,
+    Offset start,
+    Offset end,
+    Paint paint,
+  ) {
+    const dashWidth = 4.0;
+    const dashSpace = 4.0;
+    final total = (end - start).distance;
+    if (total <= 0) return;
+    final direction = (end - start) / total;
+    var drawn = 0.0;
+    while (drawn < total) {
+      final segEnd = math.min(drawn + dashWidth, total);
+      canvas.drawLine(
+        start + direction * drawn,
+        start + direction * segEnd,
+        paint,
+      );
+      drawn += dashWidth + dashSpace;
     }
+  }
 
-    for (var s = 0; s < series.length; s++) {
-      final color = colors[s];
-      final linePaint = Paint()
-        ..color = color
-        ..strokeWidth = 2
-        ..style = PaintingStyle.stroke
-        ..strokeJoin = StrokeJoin.round;
+  void _paintYAxisGrid(Canvas canvas, Size size) {
+    final innerLeft = size.width * _GradesChartPlotMetrics.innerLeftRatio;
+    final innerRight = size.width * _GradesChartPlotMetrics.innerRightRatio;
+    final gridPaint = Paint()
+      ..color = const Color(0xFFE6E9F1)
+      ..strokeWidth = 1;
 
-      final path = Path();
-      for (var i = 0; i < n; i++) {
-        final p = point(series[s][i], i);
-        if (i == 0) {
-          path.moveTo(p.dx, p.dy);
-        } else {
-          path.lineTo(p.dx, p.dy);
-        }
-      }
-      canvas.drawPath(path, linePaint);
-
-      // 数据点
-      final dotFill = Paint()..color = Colors.white;
-      final dotStroke = Paint()
-        ..color = color
-        ..strokeWidth = 1
-        ..style = PaintingStyle.stroke;
-      for (var i = 0; i < n; i++) {
-        final p = point(series[s][i], i);
-        canvas.drawCircle(p, 4, dotFill);
-        canvas.drawCircle(p, 4, dotStroke);
+    for (final tick in _GradesChartPlotMetrics.yTicks) {
+      final y = _GradesChartPlotMetrics.yForTick(tick, size.height);
+      final start = Offset(innerLeft, y);
+      final end = Offset(innerRight, y);
+      if (tick == 0) {
+        canvas.drawLine(start, end, gridPaint);
+      } else {
+        _paintDashedLine(canvas, start, end, gridPaint);
       }
     }
   }
 
   @override
-  bool shouldRepaint(covariant _MultiLineChartPainter old) {
-    return old.series != series || old.colors != colors;
+  void paint(Canvas canvas, Size size) {
+    if (series.isEmpty) return;
+
+    _paintYAxisGrid(canvas, size);
+
+    final pointCount = series.map((s) => s.length).fold<int>(0, math.max);
+    if (pointCount < 2) return;
+
+    final plotTop = _GradesChartPlotMetrics.plotTop(size.height);
+    final plotHeight = _GradesChartPlotMetrics.plotHeight(size.height);
+
+    for (var s = 0; s < series.length; s++) {
+      final values = series[s];
+      if (values.length < 2) continue;
+
+      final color = colors[s % colors.length];
+      final xs = List<double>.generate(
+        values.length,
+        (i) => _GradesChartPlotMetrics.pointX(i, values.length, size.width),
+      );
+      final ys = values
+          .map(
+            (v) =>
+                plotTop + plotHeight * _GradesChartPlotMetrics.normalizeScore(v),
+          )
+          .toList();
+
+      final linePath = Path()..moveTo(xs[0], ys[0]);
+      for (var i = 1; i < values.length; i++) {
+        linePath.lineTo(xs[i], ys[i]);
+      }
+      final linePaint = Paint()
+        ..color = color
+        ..strokeWidth = ui(2)
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round;
+      canvas.drawPath(linePath, linePaint);
+
+      final dotFill = Paint()..color = Colors.white;
+      final dotBorder = Paint()
+        ..color = color
+        ..strokeWidth = ui(1)
+        ..style = PaintingStyle.stroke;
+      final dotR = ui(4);
+      for (var i = 0; i < values.length; i++) {
+        canvas.drawCircle(Offset(xs[i], ys[i]), dotR, dotFill);
+        canvas.drawCircle(Offset(xs[i], ys[i]), dotR, dotBorder);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _GradesMultiLineChartPainter oldDelegate) {
+    return oldDelegate.series != series || oldDelegate.colors != colors;
   }
 }
 
 // ----- 考试记录卡（含日期 Tab + 学生分数+点评） -----
 
-class _ExamSession {
-  const _ExamSession({required this.title, required this.date});
-  final String title;
-  final String date;
-}
-
-const List<_ExamSession> _kExamSessions = [
-  _ExamSession(title: '高三年级三月月考', date: '2026-03-18'),
-  _ExamSession(title: '高三年级三月月考', date: '2026-03-18'),
-  _ExamSession(title: '高三年级三月月考', date: '2026-03-18'),
-];
-
-class _ExamScoreItem {
-  const _ExamScoreItem({
-    required this.name,
-    required this.studentId,
-    required this.teacher,
-    required this.comment,
-    required this.score,
-    required this.subject,
-  });
-  final String name;
-  final String studentId;
-  final String teacher;
-  final String comment;
-  final int score;
-  final String subject;
-}
-
-const List<_ExamScoreItem> _kExamScores = [
-  _ExamScoreItem(
-    name: '李铮辉',
-    studentId: 'G3030201',
-    teacher: '李牧茵',
-    comment: '舞台表现有进步，下周重点抠作品高潮处的气息与咬字。',
-    score: 86,
-    subject: '音乐专业',
-  ),
-  _ExamScoreItem(
-    name: '李铮辉',
-    studentId: 'G3030201',
-    teacher: '李牧茵',
-    comment: '舞台表现有进步，下周重点抠作品高潮处的气息与咬字。',
-    score: 86,
-    subject: '音乐专业',
-  ),
-  _ExamScoreItem(
-    name: '李铮辉',
-    studentId: 'G3030201',
-    teacher: '李牧茵',
-    comment: '舞台表现有进步，下周重点抠作品高潮处的气息与咬字。',
-    score: 86,
-    subject: '音乐专业',
-  ),
-  _ExamScoreItem(
-    name: '李铮辉',
-    studentId: 'G3030201',
-    teacher: '李牧茵',
-    comment: '舞台表现有进步，下周重点抠作品高潮处的气息与咬字。',
-    score: 86,
-    subject: '音乐专业',
-  ),
-  _ExamScoreItem(
-    name: '李铮辉',
-    studentId: 'G3030201',
-    teacher: '李牧茵',
-    comment: '舞台表现有进步，下周重点抠作品高潮处的气息与咬字。',
-    score: 86,
-    subject: '音乐专业',
-  ),
-  _ExamScoreItem(
-    name: '李铮辉',
-    studentId: 'G3030201',
-    teacher: '李牧茵',
-    comment: '舞台表现有进步，下周重点抠作品高潮处的气息与咬字。',
-    score: 86,
-    subject: '音乐专业',
-  ),
-];
-
 class _GradesExamRecordCard extends StatelessWidget {
   const _GradesExamRecordCard({
+    required this.examTabs,
+    required this.records,
     required this.selectedIdx,
     required this.onSelect,
+    required this.onLoadMore,
+    required this.onOpenScoreDetail,
+    this.loadingMore = false,
+    this.hasMore = false,
   });
+
+  final List<HeadTeacherScoreExamTab> examTabs;
+  final List<HeadTeacherStudentScoreRecord> records;
   final int selectedIdx;
   final ValueChanged<int> onSelect;
+  final VoidCallback onLoadMore;
+  final ValueChanged<HeadTeacherStudentScoreRecord> onOpenScoreDetail;
+  final bool loadingMore;
+  final bool hasMore;
 
   @override
   Widget build(BuildContext context) {
@@ -3689,47 +3916,90 @@ class _GradesExamRecordCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 考试日期 Tab
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                for (var i = 0; i < _kExamSessions.length; i++) ...[
-                  if (i > 0) SizedBox(width: ui(11)),
-                  _ExamSessionChip(
-                    session: _kExamSessions[i],
-                    selected: i == selectedIdx,
-                    onTap: () => onSelect(i),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          SizedBox(height: ui(12)),
-          // 学生分数 + 点评 网格：按最小卡宽自适应列数（≥ ~360 即 2 列），
-          // 不再用固定阈值 960，避免 DashboardScale 把阈值放大后被迫单列。
-          LayoutBuilder(
-            builder: (context, c) {
-              final gap = ui(12);
-              final minCardW = ui(360);
-              final cols = math.max(
-                1,
-                ((c.maxWidth + gap) / (minCardW + gap)).floor(),
-              );
-              final cardW = (c.maxWidth - gap * (cols - 1)) / cols;
-              return Wrap(
-                spacing: gap,
-                runSpacing: gap,
+          if (examTabs.isEmpty)
+            Text(
+              '暂无考试记录',
+              style: TextStyle(fontSize: ui(12), color: _kTextHint),
+            )
+          else
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
                 children: [
-                  for (final item in _kExamScores)
-                    SizedBox(
-                      width: cardW,
-                      child: _ExamScoreCard(item: item),
+                  for (var i = 0; i < examTabs.length; i++) ...[
+                    if (i > 0) SizedBox(width: ui(11)),
+                    _ExamSessionChip(
+                      session: examTabs[i],
+                      selected: i == selectedIdx,
+                      onTap: () => onSelect(i),
                     ),
+                  ],
                 ],
-              );
-            },
-          ),
+              ),
+            ),
+          SizedBox(height: ui(12)),
+          if (records.isEmpty)
+            Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: ui(24)),
+                child: Text(
+                  '本场考试暂无学生成绩',
+                  style: TextStyle(fontSize: ui(12), color: _kTextHint),
+                ),
+              ),
+            )
+          else
+            LayoutBuilder(
+              builder: (context, c) {
+                final gap = ui(12);
+                final minCardW = ui(360);
+                final cols = math.max(
+                  1,
+                  ((c.maxWidth + gap) / (minCardW + gap)).floor(),
+                );
+                final cardW = (c.maxWidth - gap * (cols - 1)) / cols;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: gap,
+                      runSpacing: gap,
+                      children: [
+                        for (final item in records)
+                          SizedBox(
+                            width: cardW,
+                            child: _ExamScoreCard(
+                              item: item,
+                              onOpenDetail: () => onOpenScoreDetail(item),
+                            ),
+                          ),
+                      ],
+                    ),
+                    if (hasMore) ...[
+                      SizedBox(height: ui(12)),
+                      Center(
+                        child: TextButton(
+                          onPressed: loadingMore ? null : onLoadMore,
+                          child: loadingMore
+                              ? SizedBox(
+                                  width: ui(18),
+                                  height: ui(18),
+                                  child: const AppLoadingIndicator(),
+                                )
+                              : Text(
+                                  '加载更多',
+                                  style: TextStyle(
+                                    fontSize: ui(14),
+                                    color: _kBlue,
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ],
+                  ],
+                );
+              },
+            ),
         ],
       ),
     );
@@ -3742,7 +4012,7 @@ class _ExamSessionChip extends StatelessWidget {
     required this.selected,
     required this.onTap,
   });
-  final _ExamSession session;
+  final HeadTeacherScoreExamTab session;
   final bool selected;
   final VoidCallback onTap;
 
@@ -3764,7 +4034,7 @@ class _ExamSessionChip extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              session.title,
+              session.name.isNotEmpty ? session.name : '考试',
               style: TextStyle(
                 fontSize: ui(14),
                 color: _kTextDark,
@@ -3772,16 +4042,18 @@ class _ExamSessionChip extends StatelessWidget {
                 height: 1.2,
               ),
             ),
-            SizedBox(height: ui(2)),
-            Text(
-              session.date,
-              style: TextStyle(
-                fontSize: ui(12),
-                color: _kTextHint,
-                fontWeight: FontWeight.w400,
-                height: 1.2,
+            if (session.examDate.isNotEmpty) ...[
+              SizedBox(height: ui(2)),
+              Text(
+                session.examDate,
+                style: TextStyle(
+                  fontSize: ui(12),
+                  color: _kTextHint,
+                  fontWeight: FontWeight.w400,
+                  height: 1.2,
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),
@@ -3790,12 +4062,42 @@ class _ExamSessionChip extends StatelessWidget {
 }
 
 class _ExamScoreCard extends StatelessWidget {
-  const _ExamScoreCard({required this.item});
-  final _ExamScoreItem item;
+  const _ExamScoreCard({
+    required this.item,
+    required this.onOpenDetail,
+  });
+  final HeadTeacherStudentScoreRecord item;
+  final VoidCallback onOpenDetail;
+
+  List<Widget> _buildTags() {
+    final tags = <Widget>[];
+    void addTag(String text, Color color, Color textColor) {
+      tags.add(_MiniTag(text: text, color: color, textColor: textColor));
+    }
+
+    if (item.hasStudentAudio) {
+      addTag('学生录音', const Color(0xFFE6E9F1), _kTextSecondary);
+    }
+    if (item.hasStudentVideo) {
+      addTag('学生录像', const Color(0xFFE6E9F1), _kTextSecondary);
+    }
+    if (item.hasVideoComment) {
+      addTag('视频点评', _kPurpleSoft, Colors.white);
+    }
+    if (item.hasAudioComment) {
+      addTag('语音点评', _kPurpleSoft, Colors.white);
+    }
+    return tags;
+  }
 
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
+    final avatarUrl = item.headUrl.isNotEmpty
+        ? MediaUrl.resolve(item.headUrl)
+        : '';
+    final tags = _buildTags();
+
     return Container(
       decoration: BoxDecoration(
         color: _kInnerGray,
@@ -3806,7 +4108,6 @@ class _ExamScoreCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // 头像 + 姓名/学号 + 标签 + 右上角「详情」
           Stack(
             clipBehavior: Clip.none,
             children: [
@@ -3815,23 +4116,23 @@ class _ExamScoreCard extends StatelessWidget {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      width: ui(40),
-                      height: ui(40),
-                      decoration: BoxDecoration(
-                        color: _kPurpleSoft,
-                        borderRadius: BorderRadius.circular(ui(8)),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        item.name.characters.first,
-                        style: TextStyle(
-                          fontSize: ui(15),
-                          color: Colors.white,
-                          fontWeight: FontWeight.w500,
-                          height: 1,
-                        ),
-                      ),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(ui(8)),
+                      child: avatarUrl.isNotEmpty
+                          ? Image.network(
+                              avatarUrl,
+                              width: ui(40),
+                              height: ui(40),
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) => _ScoreAvatarFallback(
+                                label: item.avatarChar,
+                                size: ui(40),
+                              ),
+                            )
+                          : _ScoreAvatarFallback(
+                              label: item.avatarChar,
+                              size: ui(40),
+                            ),
                     ),
                     SizedBox(width: ui(8)),
                     Expanded(
@@ -3842,7 +4143,7 @@ class _ExamScoreCard extends StatelessWidget {
                           Row(
                             children: [
                               Text(
-                                item.name,
+                                item.displayName,
                                 style: TextStyle(
                                   fontSize: ui(14),
                                   color: _kTextDark,
@@ -3853,7 +4154,7 @@ class _ExamScoreCard extends StatelessWidget {
                               SizedBox(width: ui(8)),
                               Expanded(
                                 child: Text(
-                                  item.studentId,
+                                  item.no,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
@@ -3866,46 +4167,28 @@ class _ExamScoreCard extends StatelessWidget {
                               ),
                             ],
                           ),
-                          SizedBox(height: ui(4)),
-                          // 4 个标签：录音/录像（灰底深字）+ 视频/语音点评（紫底白字）
-                          Wrap(
-                            spacing: ui(4),
-                            runSpacing: ui(4),
-                            children: const [
-                              _MiniTag(
-                                text: '学生录音',
-                                color: Color(0xFFE6E9F1),
-                                textColor: _kTextSecondary,
-                              ),
-                              _MiniTag(
-                                text: '学生录像',
-                                color: Color(0xFFE6E9F1),
-                                textColor: _kTextSecondary,
-                              ),
-                              _MiniTag(
-                                text: '视频点评',
-                                color: _kPurpleSoft,
-                                textColor: Colors.white,
-                              ),
-                              _MiniTag(
-                                text: '语音点评',
-                                color: _kPurpleSoft,
-                                textColor: Colors.white,
-                              ),
-                            ],
-                          ),
+                          if (tags.isNotEmpty) ...[
+                            SizedBox(height: ui(4)),
+                            Wrap(
+                              spacing: ui(4),
+                              runSpacing: ui(4),
+                              children: tags,
+                            ),
+                          ],
                         ],
                       ),
                     ),
                   ],
                 ),
               ),
-              // 「详情 >」固定在右上角，与头像顶端对齐
-              Positioned(right: 0, top: ui(2), child: _DetailLink()),
+              Positioned(
+                right: 0,
+                top: ui(2),
+                child: _DetailLink(onTap: onOpenDetail),
+              ),
             ],
           ),
           SizedBox(height: ui(8)),
-          // 任课点评 + 分数（右侧 Barlow 20 + 音乐专业 12 灰）
           Container(
             height: ui(45),
             padding: EdgeInsets.symmetric(horizontal: ui(8)),
@@ -3922,7 +4205,9 @@ class _ExamScoreCard extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        '任课 ${item.teacher}:',
+                        item.teacherName.isNotEmpty
+                            ? '任课 ${item.teacherName}:'
+                            : '任课点评:',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -3934,7 +4219,7 @@ class _ExamScoreCard extends StatelessWidget {
                       ),
                       SizedBox(height: ui(6)),
                       Text(
-                        item.comment,
+                        item.comment.isNotEmpty ? item.comment : '暂无评语',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -3965,7 +4250,7 @@ class _ExamScoreCard extends StatelessWidget {
                     ),
                     SizedBox(height: ui(4)),
                     Text(
-                      item.subject,
+                      item.subjectName.isNotEmpty ? item.subjectName : '—',
                       style: TextStyle(
                         fontSize: ui(12),
                         color: _kTextHint,
@@ -3979,6 +4264,36 @@ class _ExamScoreCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ScoreAvatarFallback extends StatelessWidget {
+  const _ScoreAvatarFallback({required this.label, required this.size});
+
+  final String label;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: _kPurpleSoft,
+        borderRadius: BorderRadius.circular(ui(8)),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: ui(15),
+          color: Colors.white,
+          fontWeight: FontWeight.w500,
+          height: 1,
+        ),
       ),
     );
   }
@@ -4017,6 +4332,628 @@ class _MiniTag extends StatelessWidget {
 }
 
 class _DetailLink extends StatelessWidget {
+  const _DetailLink({this.onTap});
+
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(ui(4)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '详情',
+            style: TextStyle(
+              fontSize: ui(14),
+              color: _kBlue,
+              fontWeight: FontWeight.w400,
+              height: 1,
+            ),
+          ),
+          Icon(Icons.chevron_right_rounded, size: ui(16), color: _kBlue),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// 成绩详情面板（点击成绩卡「详情」时从右侧滑出）
+// =============================================================================
+
+List<StudentExamRecord> _parseStudentExamRecords(dynamic raw) {
+  if (raw is List) {
+    return raw
+        .whereType<Map>()
+        .map((item) => StudentExamRecord.fromMap(item))
+        .toList();
+  }
+  if (raw is Map) {
+    for (final key in ['records', 'list', 'data', 'rows']) {
+      final nested = raw[key];
+      if (nested is List) {
+        return nested
+            .whereType<Map>()
+            .map((item) => StudentExamRecord.fromMap(item))
+            .toList();
+      }
+    }
+  }
+  return const [];
+}
+
+StudentExamSubjectScore? _matchSubjectScore(
+  StudentExamRecord exam,
+  HeadTeacherStudentScoreRecord record,
+) {
+  for (final subject in exam.subjectScores) {
+    if (record.subjectId > 0 && subject.subjectId == record.subjectId) {
+      return subject;
+    }
+  }
+  for (final subject in exam.subjectScores) {
+    if (record.subjectName.isNotEmpty &&
+        subject.subjectName == record.subjectName) {
+      return subject;
+    }
+  }
+  return exam.subjectScores.isEmpty ? null : exam.subjectScores.first;
+}
+
+String _scoreResourceMediumLabel(String path) {
+  final lower = path.toLowerCase();
+  if (lower.endsWith('.mp3') ||
+      lower.endsWith('.wav') ||
+      lower.endsWith('.m4a') ||
+      lower.endsWith('.aac')) {
+    return '音频';
+  }
+  if (lower.endsWith('.mp4') ||
+      lower.endsWith('.mov') ||
+      lower.endsWith('.webm')) {
+    return '视频';
+  }
+  if (lower.endsWith('.png') ||
+      lower.endsWith('.jpg') ||
+      lower.endsWith('.jpeg') ||
+      lower.endsWith('.webp')) {
+    return '图片';
+  }
+  return '文档';
+}
+
+Future<void> _showScoreDetail(
+  BuildContext context, {
+  required HeadTeacherStudentScoreRecord record,
+  required HeadTeacherScoreExamTab exam,
+}) {
+  final scaleData = DashboardScaleScope.of(context);
+  return showGeneralDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    barrierLabel: '关闭成绩详情',
+    barrierColor: const Color(0x33000000),
+    transitionDuration: const Duration(milliseconds: 280),
+    pageBuilder: (_, _, _) => DashboardScaleScope(
+      data: scaleData,
+      child: _ScoreDetailPanel(record: record, exam: exam),
+    ),
+    transitionBuilder: (context, animation, _, child) {
+      final t = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+      return SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(1, 0),
+          end: Offset.zero,
+        ).animate(t),
+        child: child,
+      );
+    },
+  );
+}
+
+class _ScoreDetailPanel extends ConsumerStatefulWidget {
+  const _ScoreDetailPanel({
+    required this.record,
+    required this.exam,
+  });
+
+  final HeadTeacherStudentScoreRecord record;
+  final HeadTeacherScoreExamTab exam;
+
+  @override
+  ConsumerState<_ScoreDetailPanel> createState() => _ScoreDetailPanelState();
+}
+
+class _ScoreDetailPanelState extends ConsumerState<_ScoreDetailPanel> {
+  bool _loading = true;
+  StudentExamRecord? _examRecord;
+  StudentExamSubjectScore? _subjectDetail;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDetail();
+  }
+
+  Future<void> _loadDetail() async {
+    if (widget.record.studentId.isEmpty) {
+      setState(() => _loading = false);
+      return;
+    }
+    final resp = await ref.read(teacherRepositoryProvider).studentExamRecordList(
+      studentId: widget.record.studentId,
+    );
+    if (!mounted) return;
+    StudentExamRecord? matchedExam;
+    StudentExamSubjectScore? matchedSubject;
+    if (resp.isSuccess) {
+      final records = _parseStudentExamRecords(resp.data);
+      for (final item in records) {
+        if (widget.exam.examId.isNotEmpty && item.examId == widget.exam.examId) {
+          matchedExam = item;
+          matchedSubject = _matchSubjectScore(item, widget.record);
+          break;
+        }
+      }
+      matchedExam ??= records.isNotEmpty ? records.first : null;
+      if (matchedExam != null && matchedSubject == null) {
+        matchedSubject = _matchSubjectScore(matchedExam, widget.record);
+      }
+    }
+    setState(() {
+      _examRecord = matchedExam;
+      _subjectDetail = matchedSubject;
+      _loading = false;
+    });
+  }
+
+  String get _teacherName {
+    if (widget.record.teacherName.isNotEmpty) return widget.record.teacherName;
+    final nickname = _subjectDetail?.nickname.trim() ?? '';
+    return nickname.isNotEmpty ? nickname : '任课老师';
+  }
+
+  String get _teacherHeadUrl {
+    final fromSubject = _subjectDetail?.headUrl.trim() ?? '';
+    return fromSubject;
+  }
+
+  String get _comment {
+    final fromSubject = _subjectDetail?.comment.trim() ?? '';
+    if (fromSubject.isNotEmpty) return fromSubject;
+    return widget.record.comment.isNotEmpty ? widget.record.comment : '暂无评语';
+  }
+
+  int? get _scoreValue {
+    final fromSubject = _subjectDetail?.score;
+    if (fromSubject != null) return fromSubject.round();
+    return widget.record.score;
+  }
+
+  void _previewResource() {
+    final path = _subjectDetail?.path.trim() ?? '';
+    if (path.isEmpty) return;
+    final url = MediaUrl.resolve(path);
+    if (url.isEmpty) return;
+    showStudentHomeworkSubmissionPreview(
+      context,
+      ref: ref,
+      fileUrl: url,
+      title: '${widget.record.subjectName}考试资源',
+      typeTag: _scoreResourceMediumLabel(path),
+      mediumLabel: _scoreResourceMediumLabel(path),
+      attachmentName: '${widget.record.subjectName}考试资源',
+    );
+  }
+
+  List<Widget> _buildMediaTags() {
+    final tags = <Widget>[];
+    void add(String text, Color bg, Color fg) {
+      tags.add(_MiniTag(text: text, color: bg, textColor: fg));
+    }
+
+    if (widget.record.hasStudentAudio) {
+      add('学生录音', const Color(0xFFE6E9F1), _kTextSecondary);
+    }
+    if (widget.record.hasStudentVideo) {
+      add('学生录像', const Color(0xFFE6E9F1), _kTextSecondary);
+    }
+    if (widget.record.hasVideoComment) {
+      add('视频点评', _kPurpleSoft, Colors.white);
+    }
+    if (widget.record.hasAudioComment) {
+      add('语音点评', _kPurpleSoft, Colors.white);
+    }
+    return tags;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    final mq = MediaQuery.sizeOf(context);
+    final panelW = math.min(ui(600), mq.width);
+    final record = widget.record;
+    final exam = widget.exam;
+    final avatarUrl = record.headUrl.isNotEmpty
+        ? MediaUrl.resolve(record.headUrl)
+        : '';
+    final teacherAvatarUrl = _teacherHeadUrl.isNotEmpty
+        ? MediaUrl.resolve(_teacherHeadUrl)
+        : '';
+    final resourcePath = _subjectDetail?.path.trim() ?? '';
+    final mediaTags = _buildMediaTags();
+
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Material(
+        color: Colors.white,
+        child: SizedBox(
+          width: panelW,
+          height: mq.height,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                height: ui(62),
+                child: Stack(
+                  children: [
+                    Positioned(
+                      left: ui(12),
+                      top: ui(20),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: ui(3.25),
+                            height: ui(14.85),
+                            decoration: BoxDecoration(
+                              color: _kPurple,
+                              borderRadius: BorderRadius.circular(ui(6)),
+                            ),
+                          ),
+                          SizedBox(width: ui(4)),
+                          Text(
+                            '成绩详情',
+                            style: TextStyle(
+                              fontSize: ui(18),
+                              color: _kTextDark,
+                              fontWeight: FontWeight.w600,
+                              height: 1,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Positioned(
+                      right: ui(12),
+                      top: ui(12),
+                      child: IconButton(
+                        onPressed: () => Navigator.of(context).maybePop(),
+                        icon: Icon(Icons.close_rounded, size: ui(22)),
+                        color: _kTextSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: _loading
+                    ? const Center(child: AppLoadingIndicator())
+                    : SingleChildScrollView(
+                        padding: EdgeInsets.fromLTRB(ui(20), 0, ui(20), ui(24)),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(ui(12)),
+                                  child: avatarUrl.isNotEmpty
+                                      ? Image.network(
+                                          avatarUrl,
+                                          width: ui(56),
+                                          height: ui(56),
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, _, _) =>
+                                              _ScoreAvatarFallback(
+                                            label: record.avatarChar,
+                                            size: ui(56),
+                                          ),
+                                        )
+                                      : _ScoreAvatarFallback(
+                                          label: record.avatarChar,
+                                          size: ui(56),
+                                        ),
+                                ),
+                                SizedBox(width: ui(12)),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        record.displayName,
+                                        style: TextStyle(
+                                          fontSize: ui(18),
+                                          color: _kTextDark,
+                                          fontWeight: FontWeight.w600,
+                                          height: 1.2,
+                                        ),
+                                      ),
+                                      SizedBox(height: ui(6)),
+                                      Text(
+                                        record.no.isNotEmpty
+                                            ? '学号 ${record.no}'
+                                            : '学号 —',
+                                        style: TextStyle(
+                                          fontSize: ui(12),
+                                          color: _kTextHint,
+                                          height: 1.2,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: ui(20)),
+                            _ScoreDetailSection(
+                              title: '考试信息',
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    exam.name.isNotEmpty ? exam.name : '考试',
+                                    style: TextStyle(
+                                      fontSize: ui(14),
+                                      color: _kTextDark,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  if (exam.examDate.isNotEmpty) ...[
+                                    SizedBox(height: ui(6)),
+                                    Text(
+                                      exam.examDate,
+                                      style: TextStyle(
+                                        fontSize: ui(12),
+                                        color: _kTextHint,
+                                      ),
+                                    ),
+                                  ],
+                                  if (_examRecord != null) ...[
+                                    SizedBox(height: ui(10)),
+                                    Wrap(
+                                      spacing: ui(12),
+                                      runSpacing: ui(6),
+                                      children: [
+                                        _ScoreDetailMeta(
+                                          label: '总均分',
+                                          value: _examRecord!.totalScore
+                                                  .roundToDouble() ==
+                                              _examRecord!.totalScore
+                                              ? '${_examRecord!.totalScore.round()}'
+                                              : _examRecord!.totalScore
+                                                  .toStringAsFixed(1),
+                                        ),
+                                        _ScoreDetailMeta(
+                                          label: '班级排名',
+                                          value: _examRecord!.classRank > 0
+                                              ? '${_examRecord!.classRank}'
+                                              : '—',
+                                        ),
+                                        _ScoreDetailMeta(
+                                          label: '全校排名',
+                                          value: _examRecord!.schoolRank > 0
+                                              ? '${_examRecord!.schoolRank}'
+                                              : '—',
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            SizedBox(height: ui(16)),
+                            _ScoreDetailSection(
+                              title: '科目成绩',
+                              child: Container(
+                                width: double.infinity,
+                                padding: EdgeInsets.all(ui(12)),
+                                decoration: BoxDecoration(
+                                  color: _kInnerGray,
+                                  borderRadius: BorderRadius.circular(ui(12)),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        ClipRRect(
+                                          borderRadius:
+                                              BorderRadius.circular(ui(8)),
+                                          child: teacherAvatarUrl.isNotEmpty
+                                              ? Image.network(
+                                                  teacherAvatarUrl,
+                                                  width: ui(40),
+                                                  height: ui(40),
+                                                  fit: BoxFit.cover,
+                                                  errorBuilder: (_, _, _) =>
+                                                      _ScoreAvatarFallback(
+                                                    label: _teacherName
+                                                            .characters
+                                                            .isNotEmpty
+                                                        ? _teacherName
+                                                            .characters.first
+                                                        : '师',
+                                                    size: ui(40),
+                                                  ),
+                                                )
+                                              : _ScoreAvatarFallback(
+                                                  label: _teacherName
+                                                          .characters
+                                                          .isNotEmpty
+                                                      ? _teacherName
+                                                          .characters.first
+                                                      : '师',
+                                                  size: ui(40),
+                                                ),
+                                        ),
+                                        SizedBox(width: ui(8)),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                _teacherName,
+                                                style: TextStyle(
+                                                  fontSize: ui(14),
+                                                  color: _kTextDark,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                              SizedBox(height: ui(4)),
+                                              Text(
+                                                record.subjectName.isNotEmpty
+                                                    ? record.subjectName
+                                                    : '—',
+                                                style: TextStyle(
+                                                  fontSize: ui(12),
+                                                  color: _kTextHint,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        Text(
+                                          '${_scoreValue ?? '--'}',
+                                          style: TextStyle(
+                                            fontSize: ui(24),
+                                            color: _kTextDark,
+                                            fontWeight: FontWeight.w600,
+                                            fontFamily: 'Barlow',
+                                            height: 1,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    if (_subjectDetail != null &&
+                                        (_subjectDetail!.classRank > 0 ||
+                                            _subjectDetail!.schoolRank > 0)) ...[
+                                      SizedBox(height: ui(10)),
+                                      Row(
+                                        children: [
+                                          if (_subjectDetail!.classRank > 0)
+                                            Text(
+                                              '班级排名：${_subjectDetail!.classRank}',
+                                              style: TextStyle(
+                                                fontSize: ui(12),
+                                                color: _kTextSecondary,
+                                              ),
+                                            ),
+                                          if (_subjectDetail!.classRank > 0 &&
+                                              _subjectDetail!.schoolRank > 0)
+                                            SizedBox(width: ui(12)),
+                                          if (_subjectDetail!.schoolRank > 0)
+                                            Text(
+                                              '全校排名：${_subjectDetail!.schoolRank}',
+                                              style: TextStyle(
+                                                fontSize: ui(12),
+                                                color: _kTextSecondary,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ],
+                                    SizedBox(height: ui(10)),
+                                    Text(
+                                      _comment,
+                                      style: TextStyle(
+                                        fontSize: ui(12),
+                                        color: _kTextDark,
+                                        height: 1.5,
+                                      ),
+                                    ),
+                                    if (mediaTags.isNotEmpty) ...[
+                                      SizedBox(height: ui(10)),
+                                      Wrap(
+                                        spacing: ui(4),
+                                        runSpacing: ui(4),
+                                        children: mediaTags,
+                                      ),
+                                    ],
+                                    if (resourcePath.isNotEmpty) ...[
+                                      SizedBox(height: ui(12)),
+                                      Align(
+                                        alignment: Alignment.centerRight,
+                                        child: TextButton(
+                                          onPressed: _previewResource,
+                                          child: Text(
+                                            '查看考试资源',
+                                            style: TextStyle(
+                                              fontSize: ui(14),
+                                              color: _kBlue,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ScoreDetailSection extends StatelessWidget {
+  const _ScoreDetailSection({required this.title, required this.child});
+
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = DashboardScaleScope.of(context).ui;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: ui(14),
+            color: _kTextSection,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        SizedBox(height: ui(10)),
+        child,
+      ],
+    );
+  }
+}
+
+class _ScoreDetailMeta extends StatelessWidget {
+  const _ScoreDetailMeta({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
@@ -4024,246 +4961,18 @@ class _DetailLink extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          '详情',
+          '$label：',
+          style: TextStyle(fontSize: ui(12), color: _kTextSecondary),
+        ),
+        Text(
+          value,
           style: TextStyle(
-            fontSize: ui(14),
-            color: _kBlue,
-            fontWeight: FontWeight.w400,
-            height: 1,
+            fontSize: ui(12),
+            color: _kPurple,
+            fontWeight: FontWeight.w500,
           ),
         ),
-        Icon(Icons.chevron_right_rounded, size: ui(16), color: _kBlue),
       ],
-    );
-  }
-}
-
-// ----- 学生分数变化 卡 -----
-
-class _ScoreChangeItem {
-  const _ScoreChangeItem({
-    required this.name,
-    required this.studentId,
-    required this.recentScore,
-    required this.delta,
-  });
-  final String name;
-  final String studentId;
-  final int recentScore;
-  final String delta;
-}
-
-const List<_ScoreChangeItem> _kScoreChanges = [
-  _ScoreChangeItem(
-    name: '李铮辉',
-    studentId: 'G3030201',
-    recentScore: 86,
-    delta: '+2',
-  ),
-  _ScoreChangeItem(
-    name: '李铮辉',
-    studentId: 'G3030201',
-    recentScore: 86,
-    delta: '+2',
-  ),
-  _ScoreChangeItem(
-    name: '李铮辉',
-    studentId: 'G3030201',
-    recentScore: 86,
-    delta: '+2',
-  ),
-  _ScoreChangeItem(
-    name: '李铮辉',
-    studentId: 'G3030201',
-    recentScore: 86,
-    delta: '+2',
-  ),
-  _ScoreChangeItem(
-    name: '李铮辉',
-    studentId: 'G3030201',
-    recentScore: 86,
-    delta: '+2',
-  ),
-  _ScoreChangeItem(
-    name: '李铮辉',
-    studentId: 'G3030201',
-    recentScore: 86,
-    delta: '+2',
-  ),
-];
-
-class _GradesScoreChangeCard extends StatelessWidget {
-  const _GradesScoreChangeCard();
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      padding: EdgeInsets.all(ui(12)),
-      decoration: BoxDecoration(
-        color: _kPanelBg,
-        borderRadius: BorderRadius.circular(ui(16)),
-      ),
-      child: LayoutBuilder(
-        builder: (context, c) {
-          final gap = ui(12);
-          final minCardW = ui(360);
-          final cols = math.max(
-            1,
-            ((c.maxWidth + gap) / (minCardW + gap)).floor(),
-          );
-          final cardW = (c.maxWidth - gap * (cols - 1)) / cols;
-          return Wrap(
-            spacing: gap,
-            runSpacing: gap,
-            children: [
-              for (final item in _kScoreChanges)
-                SizedBox(
-                  width: cardW,
-                  child: _ScoreChangeCard(item: item),
-                ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _ScoreChangeCard extends StatelessWidget {
-  const _ScoreChangeCard({required this.item});
-  final _ScoreChangeItem item;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return Container(
-      decoration: BoxDecoration(
-        color: _kInnerGray,
-        borderRadius: BorderRadius.circular(ui(12)),
-      ),
-      padding: EdgeInsets.all(ui(12)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: ui(40),
-                height: ui(40),
-                decoration: BoxDecoration(
-                  color: _kPurpleSoft,
-                  borderRadius: BorderRadius.circular(ui(8)),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  item.name.characters.first,
-                  style: TextStyle(
-                    fontSize: ui(15),
-                    color: Colors.white,
-                    fontWeight: FontWeight.w500,
-                    height: 1,
-                  ),
-                ),
-              ),
-              SizedBox(width: ui(8)),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      item.name,
-                      style: TextStyle(
-                        fontSize: ui(14),
-                        color: _kTextDark,
-                        fontWeight: FontWeight.w500,
-                        height: 1,
-                      ),
-                    ),
-                    SizedBox(height: ui(8)),
-                    Text(
-                      item.studentId,
-                      style: TextStyle(
-                        fontSize: ui(12),
-                        color: _kTextHint,
-                        fontWeight: FontWeight.w400,
-                        height: 1,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              _DetailLink(),
-            ],
-          ),
-          SizedBox(height: ui(8)),
-          Container(
-            height: ui(45),
-            padding: EdgeInsets.symmetric(horizontal: ui(8)),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(ui(8)),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Row(
-                    children: [
-                      Text(
-                        '音乐专业最近分数:',
-                        style: TextStyle(
-                          fontSize: ui(12),
-                          color: _kTextSecondary,
-                          fontWeight: FontWeight.w400,
-                          height: 1,
-                        ),
-                      ),
-                      SizedBox(width: ui(8)),
-                      Text(
-                        item.recentScore.toString(),
-                        style: TextStyle(
-                          fontSize: ui(20),
-                          color: _kTextDark,
-                          fontWeight: FontWeight.w600,
-                          fontFamily: 'Barlow',
-                          height: 1,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Row(
-                  children: [
-                    Text(
-                      '较上一轮:',
-                      style: TextStyle(
-                        fontSize: ui(12),
-                        color: _kTextSecondary,
-                        fontWeight: FontWeight.w400,
-                        height: 1,
-                      ),
-                    ),
-                    SizedBox(width: ui(8)),
-                    Text(
-                      item.delta,
-                      style: TextStyle(
-                        fontSize: ui(20),
-                        color: item.delta.startsWith('-') ? _kRed : _kTextDark,
-                        fontWeight: FontWeight.w600,
-                        fontFamily: 'Barlow',
-                        height: 1,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

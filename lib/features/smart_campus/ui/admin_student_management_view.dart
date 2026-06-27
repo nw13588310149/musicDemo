@@ -691,6 +691,7 @@ class _AdminStudentManagementViewState
 
     return SmartCampusSecondaryPageShell(
       backgroundColor: _kBg,
+      bodyTopClipRadius: 8,
       header: _Banner(onBack: widget.onBack),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1523,7 +1524,7 @@ class _StudentProfileDialogState extends ConsumerState<_StudentProfileDialog> {
                     _ProfileRow(label: '家长手机：', value: s.parentPhone),
                     _ProfileRow(label: '最近异动：', value: s.recentChange),
                     _ProfileRow(
-                      label: '备注：',
+                      label: '学生备注：',
                       value: s.remark,
                       multiline: true,
                     ),
@@ -1799,7 +1800,7 @@ class _StudentTagsSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '标签',
+          '学生标签',
           style: TextStyle(
             fontSize: ui(14),
             height: 1.4,

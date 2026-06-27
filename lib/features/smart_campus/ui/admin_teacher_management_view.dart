@@ -564,6 +564,7 @@ class _AdminTeacherManagementViewState
 
     return SmartCampusSecondaryPageShell(
       backgroundColor: _kBg,
+      bodyTopClipRadius: 8,
       header: _Banner(onBack: widget.onBack),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

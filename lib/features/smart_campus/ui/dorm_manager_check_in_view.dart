@@ -18,7 +18,7 @@
 //      - 背景：柔和雷达圆（径向渐变 #D9D9D9→透明）做空间感，无需地图占位图。
 //   3. 「我的打卡记录」18/500 大标题（左对齐）。
 //   4. 477 宽双列卡片 Wrap（左右各 1，垂直 gap 12 + 横向 16）：
-//      - 卡片 210° #F9EEFF→white 渐变 + 12 圆角 + 1px white outline。
+//      - 卡片背景图 punch_record_card_bg + 12 圆角。
 //      - 头：16/500 黑标题（"早晨上班卡 / 中午下班卡" 等）+ 右侧 "正常" 徽章
 //        （#E4FFED bg / #12CE51 字 / 4 圆角 / 12/400）。
 //      - 体：#F5F6FA 12 圆角块 padding 16，两行 12 文字 "打卡时间：YYYY-MM-DD
@@ -30,6 +30,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 
+import '../../../core/constants/app_assets.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../shell/ui/shell_layout.dart';
 import '../services/baidu_geo_service.dart';
@@ -830,13 +831,12 @@ class _RecordCard extends StatelessWidget {
       padding: EdgeInsets.all(ui(12)),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-          colors: [Color(0xFFF9EEFF), Colors.white],
-        ),
         borderRadius: BorderRadius.circular(ui(12)),
-        border: Border.all(color: Colors.white, width: 1),
+        image: DecorationImage(
+          image: AssetImage(AppAssets.dormCheckPunchRecordCardBg),
+          fit: BoxFit.fill,
+          alignment: Alignment.centerRight,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

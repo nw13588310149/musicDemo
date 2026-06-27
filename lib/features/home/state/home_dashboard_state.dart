@@ -55,7 +55,7 @@ class HomeWeekDayItem {
   final bool isToday;
 }
 
-enum HomeCourseStatus { ended, upcoming }
+enum HomeCourseStatus { ended, inProgress, upcoming }
 
 class HomeCourseNotice {
   const HomeCourseNotice({
@@ -83,7 +83,11 @@ class HomeCourseNotice {
   // 接口 `color` 字段，如 "#fed7aa"，用于卡片左侧彩色条
   final String? cardColorHex;
 
-  String get statusText => status == HomeCourseStatus.ended ? '已结束' : '即将开始';
+  String get statusText => switch (status) {
+    HomeCourseStatus.ended => '已结束',
+    HomeCourseStatus.inProgress => '进行中',
+    HomeCourseStatus.upcoming => '待开始',
+  };
 }
 
 class HomeDashboardState {

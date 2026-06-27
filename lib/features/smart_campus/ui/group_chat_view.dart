@@ -1867,26 +1867,14 @@ class _EmptyConversationsHint extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.chat_bubble_outline_rounded,
-            size: ui(36),
-            color: _kTextHint,
-          ),
-          SizedBox(height: ui(8)),
-          Text(
-            '暂无班级',
-            style: TextStyle(
-              color: _kTextSecondary,
-              fontSize: ui(13),
-              fontFamily: 'PingFang SC',
-              fontWeight: AppFont.w500,
-            ),
-          ),
-        ],
+      child: Text(
+        '暂无班级',
+        style: TextStyle(
+          color: _kTextSecondary,
+          fontSize: ui(13),
+          fontFamily: 'PingFang SC',
+          fontWeight: AppFont.w500,
+        ),
       ),
     );
   }
@@ -3842,13 +3830,11 @@ class _HeaderIconButton extends StatelessWidget {
   const _HeaderIconButton({
     this.asset,
     this.icon,
-    this.iconColor = const Color(0xFF1C274C),
     required this.onTap,
   });
 
   final String? asset;
   final IconData? icon;
-  final Color iconColor;
   final VoidCallback onTap;
 
   @override
@@ -3873,7 +3859,7 @@ class _HeaderIconButton extends StatelessWidget {
           color: Colors.white.withValues(alpha: 0.8),
           borderRadius: BorderRadius.circular(ui(8)),
         ),
-        child: Icon(icon, size: ui(18), color: iconColor),
+        child: Icon(icon, size: ui(18), color: const Color(0xFF1C274C)),
       ),
     );
   }

@@ -647,6 +647,9 @@ abstract final class AppAssets {
       'assets/images/smartCampus/dorm_check/stat_card_4.png';
   static const dormCheckApplyMakeupIcon =
       'assets/images/smartCampus/dorm_check/apply_makeup_icon.png';
+  /// 宿管 · 打卡管理 · 「我的打卡记录」卡片背景。
+  static const dormCheckPunchRecordCardBg =
+      'assets/images/smartCampus/dorm_check/punch_record_card_bg.png';
 
   /// 管理员 · 班级编组 · 顶部统计卡背景（从左到右）。
   static const adminClassManagementStatCard1 =

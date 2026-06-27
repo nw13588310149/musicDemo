@@ -8,6 +8,49 @@ import 'course_subject_tag.dart';
 /// 首页右侧 / 智慧校园学生端课表共用的 104 高课程卡。
 enum DashboardCourseRunState { ended, inProgress, upcoming }
 
+DateTime? dateTimeAtCourseHm(DateTime day, String hm) {
+  var clock = hm.trim();
+  if (clock.length >= 5 && clock.contains(':')) {
+    clock = clock.substring(0, 5);
+  }
+  if (clock.isEmpty) return null;
+  final parts = clock.split(':');
+  if (parts.length < 2) return null;
+  final hour = int.tryParse(parts[0]);
+  final minute = int.tryParse(parts[1]);
+  if (hour == null || minute == null) return null;
+  return DateTime(day.year, day.month, day.day, hour, minute);
+}
+
+/// 按当日 `HH:mm` 起止判断课程阶段（首页 / 智慧校园课表共用）。
+DashboardCourseRunState resolveDashboardCourseRunState(
+  DateTime now,
+  String startHm,
+  String endHm, {
+  DateTime? day,
+}) {
+  final base = day ?? now;
+  final start = dateTimeAtCourseHm(base, startHm);
+  final end = dateTimeAtCourseHm(base, endHm);
+  if (start == null || end == null) return DashboardCourseRunState.upcoming;
+  if (now.isBefore(start)) return DashboardCourseRunState.upcoming;
+  if (now.isAfter(end)) return DashboardCourseRunState.ended;
+  return DashboardCourseRunState.inProgress;
+}
+
+DashboardCourseRunState resolveDashboardCourseRunStateFromIsoDate(
+  DateTime now,
+  String isoDate,
+  String startHm,
+  String endHm,
+) {
+  final day = DateTime.tryParse(isoDate);
+  if (day == null) {
+    return resolveDashboardCourseRunState(now, startHm, endHm);
+  }
+  return resolveDashboardCourseRunState(now, startHm, endHm, day: day);
+}
+
 class DashboardCourseNoticeCard extends StatelessWidget {
   const DashboardCourseNoticeCard({
     super.key,

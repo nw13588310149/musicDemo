@@ -410,6 +410,7 @@ class _StudentMyHomeworkViewState extends ConsumerState<StudentMyHomeworkView> {
     final pageLoading = _initialLoad && _loadingList;
     return SmartCampusSecondaryPageShell(
       backgroundColor: _kPageBg,
+      bodyTopClipRadius: 8,
       bodyScrollable: false,
       header: _HomeworkBanner(onBack: widget.onBack),
       body: AppRefreshIndicator(
@@ -585,44 +586,6 @@ class _OverviewStatsRow extends StatelessWidget {
   }
 }
 
-class _HomeworkStatCardShell extends StatelessWidget {
-  const _HomeworkStatCardShell({
-    required this.backgroundAsset,
-    required this.child,
-  });
-
-  final String backgroundAsset;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(ui(12)),
-      child: SizedBox(
-        height: ui(100),
-        width: double.infinity,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // 背景 PNG 自带圆角留白，放大裁切避免容器边缘露白。
-            Transform.scale(
-              scale: 1.14,
-              child: Image.asset(
-                backgroundAsset,
-                fit: BoxFit.cover,
-                width: double.infinity,
-                height: double.infinity,
-              ),
-            ),
-            child,
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _AverageScoreCard extends StatelessWidget {
   const _AverageScoreCard({required this.avg});
 
@@ -636,7 +599,7 @@ class _AverageScoreCard extends StatelessWidget {
     final valueLabel = hasData
         ? (avg % 1 == 0 ? avg.toStringAsFixed(0) : avg.toStringAsFixed(1))
         : '—';
-    return _HomeworkStatCardShell(
+    return SmartCampusStatCard.custom(
       backgroundAsset: AppAssets.studentHomeworkStatCard1,
       child: Padding(
         padding: EdgeInsets.fromLTRB(ui(16), ui(16), ui(16), ui(12)),
@@ -706,7 +669,7 @@ class _HomeworkCountCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
-    return _HomeworkStatCardShell(
+    return SmartCampusStatCard.custom(
       backgroundAsset: backgroundAsset,
       child: Stack(
         children: [

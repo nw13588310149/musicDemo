@@ -93,21 +93,22 @@ const _Option _kClassLoading = (id: '', name: '加载中…');
 const _Option _kClassEmpty = (id: '', name: '暂无班级');
 const _Option _kPersonLoading = (id: '', name: '加载中…');
 
+/// 录入行「行政班 / 身份 / 人员」下拉触发器高度（设计宽逻辑像素）。
+const _kPickerRowFieldHeight = 44.0;
+
 // —— 录入对象：学生 / 老师 ——————————————————————————————————————————
 enum _EnrollPersonType { student, teacher }
 
 extension _EnrollPersonTypeX on _EnrollPersonType {
   String get label => this == _EnrollPersonType.student ? '学生' : '老师';
 
-  String get emptyHint =>
-      this == _EnrollPersonType.student ? '暂无学生' : '暂无老师';
+  String get emptyHint => this == _EnrollPersonType.student ? '暂无学生' : '暂无老师';
 
   String get searchHint =>
       this == _EnrollPersonType.student ? '搜索学生姓名' : '搜索老师姓名';
 
-  String get stepLabel => this == _EnrollPersonType.student
-      ? '选择在籍学生'
-      : '选择任课教师';
+  String get stepLabel =>
+      this == _EnrollPersonType.student ? '选择在籍学生' : '选择任课教师';
 
   String get loadFailPrefix =>
       this == _EnrollPersonType.student ? '学生加载失败' : '老师加载失败';
@@ -262,7 +263,9 @@ String _formatApiDateTime(dynamic raw) {
   final s = raw.toString().trim();
   if (s.isEmpty) return '—';
   final dt = DateTime.tryParse(s);
-  if (dt == null) return s.length > 16 ? s.substring(0, 16).replaceFirst('T', ' ') : s;
+  if (dt == null) {
+    return s.length > 16 ? s.substring(0, 16).replaceFirst('T', ' ') : s;
+  }
   String pad(int x) => x.toString().padLeft(2, '0');
   return '${dt.year}-${pad(dt.month)}-${pad(dt.day)} '
       '${pad(dt.hour)}:${pad(dt.minute)}';
@@ -318,7 +321,9 @@ class _StudentProfile {
     final genderRaw = _pickString(json, ['gender', 'sex'], '');
     final gender = genderRaw == '1' || genderRaw == '男'
         ? '男'
-        : (genderRaw == '2' || genderRaw == '女' ? '女' : (genderRaw.isEmpty ? '—' : genderRaw));
+        : (genderRaw == '2' || genderRaw == '女'
+              ? '女'
+              : (genderRaw.isEmpty ? '—' : genderRaw));
     final dorm = _pickString(json, [
       'dorm',
       'dormName',
@@ -438,16 +443,28 @@ class _LibraryRecord {
         auditTime.toString().trim().isNotEmpty &&
         auditTime.toString().toLowerCase() != 'null';
     final realname = _pickNullableString(json, ['realname', 'realName']);
-    final name = realname ??
+    final name =
+        realname ??
         profile?.name ??
         _pickNullableString(json, ['nickname', 'name', 'studentName']) ??
         '未命名';
-    final studentNo = _pickString(json, ['no', 'studentNo', 'stuNo'], profile?.studentNo ?? '');
-    final className = _pickString(json, ['className', 'class'], profile?.className ?? '—');
+    final studentNo = _pickString(json, [
+      'no',
+      'studentNo',
+      'stuNo',
+    ], profile?.studentNo ?? '');
+    final className = _pickString(json, [
+      'className',
+      'class',
+    ], profile?.className ?? '—');
     final studentStatus = _pickString(json, ['studentStatus', 'stuStatus'], '');
     final source = studentStatus.isNotEmpty
         ? studentStatus
-        : (_pickString(json, ['majorName', 'major', 'source'], profile?.source ?? '—'));
+        : (_pickString(json, [
+            'majorName',
+            'major',
+            'source',
+          ], profile?.source ?? '—'));
     return _LibraryRecord(
       id: id,
       userId: userId,
@@ -463,7 +480,11 @@ class _LibraryRecord {
       submittedAt: _formatApiDateTime(json['updateTime'] ?? json['createTime']),
       auditedAt: hasAudit ? _formatApiDateTime(auditTime) : null,
       auditedBy: hasAudit
-          ? _pickString(json, ['auditUserName', 'auditUserId', 'auditUser'], '管理员')
+          ? _pickString(json, [
+              'auditUserName',
+              'auditUserId',
+              'auditUser',
+            ], '管理员')
           : null,
       headUrl: headUrl,
       faceImgUrl: faceImg,
@@ -494,6 +515,7 @@ class _AdminFaceLibraryViewState extends ConsumerState<AdminFaceLibraryView> {
 
   // —— 录入对象（学生 / 老师）————————————————————————————————————————
   _EnrollPersonType _enrollPersonType = _EnrollPersonType.student;
+
   /// `null` = 尚未拉取（包含切换班级 / 身份的 inflight 中间态）；空 List = 已拉取且空。
   List<_Option>? _personOptions;
   _Option? _selectedPerson;
@@ -593,6 +615,7 @@ class _AdminFaceLibraryViewState extends ConsumerState<AdminFaceLibraryView> {
         if (v is num) return v.toInt();
         return int.tryParse(v?.toString() ?? '') ?? 0;
       }
+
       var pending = 0;
       var effective = 0;
       var rejectedRecords = 0;
@@ -604,8 +627,9 @@ class _AdminFaceLibraryViewState extends ConsumerState<AdminFaceLibraryView> {
         rejectedRecords = n(m['status2Count']);
       }
       if (indexSumResp.isSuccess) {
-        notRecorded = AdminHomeSummary.fromJson(indexSumResp.data)
-            .userFaceNotRecordedCount;
+        notRecorded = AdminHomeSummary.fromJson(
+          indexSumResp.data,
+        ).userFaceNotRecordedCount;
       }
       setState(() {
         _sumPending = pending;
@@ -646,9 +670,7 @@ class _AdminFaceLibraryViewState extends ConsumerState<AdminFaceLibraryView> {
       final parsed = <_LibraryRecord>[];
       for (final item in list) {
         try {
-          parsed.add(
-            _LibraryRecord.fromJson(item, profiles: _studentProfiles),
-          );
+          parsed.add(_LibraryRecord.fromJson(item, profiles: _studentProfiles));
         } catch (_) {}
       }
       setState(() {
@@ -1005,6 +1027,7 @@ class _AdminFaceLibraryViewState extends ConsumerState<AdminFaceLibraryView> {
     final ui = DashboardScaleScope.of(context).ui;
     return SmartCampusSecondaryPageShell(
       backgroundColor: _kPageBg,
+      bodyTopClipRadius: 8,
       bodyScrollable: false,
       header: _Banner(
         onBack: widget.onBack,
@@ -1142,10 +1165,7 @@ class _AdminFaceLibraryViewState extends ConsumerState<AdminFaceLibraryView> {
         _photoName = null;
         _confirmed = true;
       });
-      AppToast.show(
-        context,
-        '已提交「${_selectedPerson!.name}」的人脸录入，进入待审核',
-      );
+      AppToast.show(context, '已提交「${_selectedPerson!.name}」的人脸录入，进入待审核');
       await _refreshFacePageData();
     } catch (e) {
       if (mounted) AppToast.show(context, '提交失败：$e');
@@ -1294,9 +1314,7 @@ class _BannerSegment extends StatelessWidget {
                     fontSize: ui(12),
                     color: t == currentTab ? Colors.white : _kTextHint,
                     fontFamily: 'PingFang SC',
-                    fontWeight: t == currentTab
-                        ? AppFont.w500
-                        : AppFont.w400,
+                    fontWeight: t == currentTab ? AppFont.w500 : AppFont.w400,
                     height: 1.2,
                   ),
                 ),
@@ -1457,10 +1475,7 @@ class _EnrollCard extends StatelessWidget {
             ),
           ),
           SizedBox(height: ui(8)),
-          _ConfirmRow(
-            confirmed: confirmed,
-            onToggle: onToggleConfirm,
-          ),
+          _ConfirmRow(confirmed: confirmed, onToggle: onToggleConfirm),
           SizedBox(height: ui(8)),
           _SubmitButton(onTap: submitting ? null : onSubmit),
         ],
@@ -1650,10 +1665,7 @@ class _PickerRow extends StatelessWidget {
 }
 
 class _PersonTypePicker extends StatelessWidget {
-  const _PersonTypePicker({
-    required this.value,
-    required this.onChanged,
-  });
+  const _PersonTypePicker({required this.value, required this.onChanged});
 
   final _EnrollPersonType value;
   final ValueChanged<_EnrollPersonType> onChanged;
@@ -1664,6 +1676,7 @@ class _PersonTypePicker extends StatelessWidget {
       value: value,
       items: _EnrollPersonType.values,
       itemLabel: (type) => type.label,
+      fieldHeight: _kPickerRowFieldHeight,
       onChanged: onChanged,
     );
   }
@@ -1702,6 +1715,7 @@ class _OptionPicker extends StatelessWidget {
       value: current,
       items: list,
       itemLabel: (o) => o.name,
+      fieldHeight: _kPickerRowFieldHeight,
       onChanged: onChanged,
     );
   }
@@ -1755,7 +1769,7 @@ class _SearchableOptionPicker extends StatelessWidget {
       onTap: () => _openPicker(context, list),
       borderRadius: BorderRadius.circular(ui(8)),
       child: Container(
-        height: ui(48),
+        height: ui(_kPickerRowFieldHeight),
         padding: EdgeInsets.symmetric(horizontal: ui(16)),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(ui(8)),
@@ -1792,8 +1806,7 @@ class _SearchableOptionPicker extends StatelessWidget {
 bool _optionMatchesQuery(_Option option, String query) {
   final q = query.trim().toLowerCase();
   if (q.isEmpty) return true;
-  return option.name.toLowerCase().contains(q) ||
-      option.id.contains(q);
+  return option.name.toLowerCase().contains(q) || option.id.contains(q);
 }
 
 class _SearchableOptionPickerDialog extends StatefulWidget {
@@ -1983,7 +1996,7 @@ class _DisabledPickerField extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = DashboardScaleScope.of(context).ui;
     return Container(
-      height: ui(48),
+      height: ui(_kPickerRowFieldHeight),
       padding: EdgeInsets.symmetric(horizontal: ui(16)),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -2099,59 +2112,59 @@ class _UploadPanel extends StatelessWidget {
                         height: ui(100),
                         fit: BoxFit.contain,
                       ),
-              SizedBox(height: ui(8)),
-              if (!hasPhoto)
-                RichText(
-                  textAlign: TextAlign.center,
-                  text: TextSpan(
+                SizedBox(height: ui(8)),
+                if (!hasPhoto)
+                  RichText(
+                    textAlign: TextAlign.center,
+                    text: TextSpan(
+                      style: TextStyle(
+                        fontSize: ui(12),
+                        color: _kTextDark,
+                        fontFamily: 'PingFang SC',
+                        fontWeight: AppFont.w500,
+                        height: 20 / 12,
+                      ),
+                      children: const [
+                        TextSpan(text: '上传证件式'),
+                        TextSpan(
+                          text: '正面免冠',
+                          style: TextStyle(color: _kPurple),
+                        ),
+                        TextSpan(text: '照片'),
+                      ],
+                    ),
+                  )
+                else
+                  Text(
+                    busy ? '处理中…' : '已选择 ${_friendlyName(photoName)}',
                     style: TextStyle(
                       fontSize: ui(12),
-                      color: _kTextDark,
+                      color: busy ? _kTextHint : _kTextSecondary,
                       fontFamily: 'PingFang SC',
-                      fontWeight: AppFont.w500,
+                      fontWeight: AppFont.w400,
                       height: 20 / 12,
                     ),
-                    children: const [
-                      TextSpan(text: '上传证件式'),
-                      TextSpan(
-                        text: '正面免冠',
-                        style: TextStyle(color: _kPurple),
-                      ),
-                      TextSpan(text: '照片'),
-                    ],
                   ),
-                )
-              else
-                Text(
-                  busy ? '处理中…' : '已选择 ${_friendlyName(photoName)}',
-                  style: TextStyle(
-                    fontSize: ui(12),
-                    color: busy ? _kTextHint : _kTextSecondary,
-                    fontFamily: 'PingFang SC',
-                    fontWeight: AppFont.w400,
-                    height: 20 / 12,
-                  ),
+                SizedBox(height: ui(12)),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _UploadActionButton(
+                      iconAsset: 'assets/images/face/5.png',
+                      label: hasPhoto ? '重新上传' : '上传照片',
+                      onTap: busy ? null : onUploadPhoto,
+                    ),
+                    SizedBox(width: ui(12)),
+                    _UploadActionButton(
+                      iconAsset: 'assets/images/face/6.png',
+                      label: hasPhoto ? '重新拍摄' : '打开摄像头',
+                      onTap: busy ? null : onOpenCamera,
+                    ),
+                  ],
                 ),
-              SizedBox(height: ui(12)),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _UploadActionButton(
-                    iconAsset: 'assets/images/face/5.png',
-                    label: hasPhoto ? '重新上传' : '上传照片',
-                    onTap: busy ? null : onUploadPhoto,
-                  ),
-                  SizedBox(width: ui(12)),
-                  _UploadActionButton(
-                    iconAsset: 'assets/images/face/6.png',
-                    label: hasPhoto ? '重新拍摄' : '打开摄像头',
-                    onTap: busy ? null : onOpenCamera,
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
         ),
       ],
     );
@@ -2754,20 +2767,14 @@ class _LibraryTable extends StatelessWidget {
         children: [
           const _LibraryTableHeader(),
           if (loading)
-            Expanded(
-              child: Center(child: AppLoadingIndicator()),
-            )
+            Expanded(child: Center(child: AppLoadingIndicator()))
           else if (records.isEmpty)
             Expanded(
               child: Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      Icons.inbox_outlined,
-                      size: ui(40),
-                      color: _kTextHint,
-                    ),
+                    Icon(Icons.inbox_outlined, size: ui(40), color: _kTextHint),
                     SizedBox(height: ui(8)),
                     Text(
                       '暂无符合条件的记录',
@@ -3401,9 +3408,7 @@ class _DetailRow extends StatelessWidget {
       decoration: BoxDecoration(
         border: isLast
             ? null
-            : const Border(
-                bottom: BorderSide(color: _kBorderSoft, width: 1),
-              ),
+            : const Border(bottom: BorderSide(color: _kBorderSoft, width: 1)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3438,4 +3443,3 @@ class _DetailRow extends StatelessWidget {
     );
   }
 }
-

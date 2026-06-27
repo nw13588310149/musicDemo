@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/route_paths.dart';
@@ -55,15 +54,13 @@ class _SchoolView extends StatelessWidget {
     final learningItems = _resolveLearningItems(state.learningItems);
     final newsItems = _resolveNews(state.newsItems);
 
-    return Stack(
-      children: [
-        AppRefreshIndicator(
-          onRefresh: onRefresh,
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+    return AppRefreshIndicator(
+      onRefresh: onRefresh,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
                 // ── Main row — LayoutBuilder 精确对齐右侧底部 ────────────
                 LayoutBuilder(
                   builder: (ctx, bc) {
@@ -161,21 +158,9 @@ class _SchoolView extends StatelessWidget {
                       ),
                     ),
                   ),
-              ],
-            ),
-          ),
+          ],
         ),
-        if (state.loading)
-          Positioned.fill(
-            child: IgnorePointer(
-              child: Container(
-                color: Colors.white.withValues(alpha: 0.35),
-                alignment: Alignment.center,
-                child: const AppLoadingIndicator(),
-              ),
-            ),
-          ),
-      ],
+      ),
     );
   }
 

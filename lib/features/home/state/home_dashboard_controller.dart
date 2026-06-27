@@ -6,6 +6,7 @@ import '../../../core/network/api_response.dart';
 import '../../../core/network/media_url.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/storage/app_storage.dart';
+import '../../../core/widgets/dashboard_course_notice_card.dart';
 import '../data/home_repository.dart';
 import 'home_dashboard_state.dart';
 
@@ -249,9 +250,7 @@ class HomeDashboardController extends StateNotifier<HomeDashboardState> {
             avatarRaw.isNotEmpty ? avatarRaw : logoRaw,
           ),
           description: durationText,
-          status: _isEnded(item)
-              ? HomeCourseStatus.ended
-              : HomeCourseStatus.upcoming,
+          status: _resolveCourseStatus(item),
           isSmallCourse: isSmallCourse,
           cardColorHex:
               (colorHex != null &&
@@ -267,14 +266,20 @@ class HomeDashboardController extends StateNotifier<HomeDashboardState> {
     return result;
   }
 
-  bool _isEnded(Map<String, dynamic> item) {
+  HomeCourseStatus _resolveCourseStatus(Map<String, dynamic> item) {
     final date = item['date']?.toString() ?? '';
-    final endTime = item['timeEnd']?.toString() ?? '';
-    final dateTime = DateTime.tryParse('$date ${_toTimeText(endTime)}:00');
-    if (dateTime == null) {
-      return false;
-    }
-    return dateTime.isBefore(DateTime.now());
+    final beginTime = _toTimeText(item['timeBegin']?.toString() ?? '');
+    final endTime = _toTimeText(item['timeEnd']?.toString() ?? '');
+    return switch (resolveDashboardCourseRunStateFromIsoDate(
+      DateTime.now(),
+      date,
+      beginTime,
+      endTime,
+    )) {
+      DashboardCourseRunState.ended => HomeCourseStatus.ended,
+      DashboardCourseRunState.inProgress => HomeCourseStatus.inProgress,
+      DashboardCourseRunState.upcoming => HomeCourseStatus.upcoming,
+    };
   }
 
   String _toTimeText(String value) {

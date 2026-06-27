@@ -1,6 +1,7 @@
 /// 任课老师「考评管理」API 数据解析。
 library;
 
+import '../../../core/network/media_url.dart';
 import '../../../core/network/snowflake_id.dart';
 
 enum TeacherExamCornerKind { unpublished, published }
@@ -17,6 +18,7 @@ class TeacherExamSubmission {
     required this.uploadAt,
     required this.action,
     this.studentNo = '',
+    this.avatarUrl = '',
     this.score,
     this.comment = '',
     this.path = '',
@@ -28,6 +30,9 @@ class TeacherExamSubmission {
 
   /// 学号（接口 `no`），用于花名册定位。
   final String studentNo;
+
+  /// 学生头像（接口 `headUrl` 经 [MediaUrl.resolve] 解析）。
+  final String avatarUrl;
   final TeacherExamSubmissionState state;
   final String subject;
   final String medium;
@@ -594,6 +599,12 @@ TeacherExamSubmission _submissionFromRow(
     TeacherExamSubmissionState.pending => '评分',
     TeacherExamSubmissionState.passed => '查看',
   };
+  final rawHeadUrl = _pickString(row, [
+    'headUrl',
+    'avatarUrl',
+    'avatar',
+    'headImg',
+  ]);
   return TeacherExamSubmission(
     studentId:
         readSnowflakeId(row['studentId']) ?? _stringValue(row['studentId']),
@@ -603,6 +614,7 @@ TeacherExamSubmission _submissionFromRow(
       'realName',
       'studentName',
     ], '未命名学生'),
+    avatarUrl: rawHeadUrl.isEmpty ? '' : MediaUrl.resolve(rawHeadUrl),
     state: state,
     subject: subjectName,
     medium: _mediumFromPath(path),

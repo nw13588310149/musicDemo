@@ -9,11 +9,12 @@ import 'dart:math' as math;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:chinese_font_library/chinese_font_library.dart';
 import 'package:flutter/material.dart';
-import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:the_road_of_music_flutter/core/widgets/app_loading_indicator.dart';
 
 import '../../../core/audio/mpv_player_smooth.dart';
 import '../../../core/constants/app_assets.dart';
@@ -273,15 +274,13 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
     final ui = scale.ui;
     _preloadImages(state);
 
-    return PageInitLoadingShell(
-      loading: state.loading && state.videoList.isEmpty,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(ui(16)),
-        ),
-        child: Column(
-          children: [
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(ui(16)),
+      ),
+      child: Column(
+        children: [
             // ── 固定头部：仅一级分类（不随列表滚动）─────────────
             Padding(
               padding: EdgeInsets.fromLTRB(ui(16), ui(16), ui(16), ui(12)),
@@ -304,7 +303,7 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
                   key: const PageStorageKey<String>('video_tutorial_scroll'),
                   controller: _scrollController,
                   physics: const AlwaysScrollableScrollPhysics(),
-                  cacheExtent: ui(420),
+                  scrollCacheExtent: ScrollCacheExtent.pixels(ui(420)),
                   slivers: [
                     // Banner + 最新视频：并入滚动区域
                     SliverToBoxAdapter(
@@ -339,7 +338,7 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
                         ),
                       ),
                     ),
-                    if (state.loading && state.videoList.isEmpty)
+                    if (state.videoList.isEmpty && state.loading)
                       const SliverToBoxAdapter(child: SizedBox.shrink())
                     else if (state.videoList.isEmpty)
                     SliverFillRemaining(
@@ -422,7 +421,6 @@ class _VideoTutorialV2PageState extends ConsumerState<VideoTutorialV2Page> {
             ),
           ),
         ],
-      ),
       ),
     );
   }

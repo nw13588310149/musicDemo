@@ -57,6 +57,7 @@ import '../data/schedule_color_palette.dart';
 import '../data/schedule_course_card_builder.dart';
 import '../data/schedule_slot_time.dart';
 import '../data/schedule_teaching_week.dart';
+import '../state/smart_campus_controller.dart';
 import 'widgets/schedule_color_swatch_picker.dart';
 import 'widgets/schedule_course_card.dart';
 import 'widgets/schedule_idle_slot.dart';
@@ -227,6 +228,9 @@ class _TeacherLessonScheduleViewState
 
   _ScheduleMode _mode = _ScheduleMode.view;
 
+  final GlobalKey<_ScheduleGridState> _scheduleGridKey =
+      GlobalKey<_ScheduleGridState>();
+
   /// 班级列表第一项 id（来自 teacher `/teacher/classList`，已基于 token
   /// 过滤为「我教的班级」）。仅用于驱动 `schoolTimeConfigList` 拉对应班级
   /// 的节次时间表 + 抽屉默认班级回填。抽屉自身会再调一次 `classList`
@@ -317,6 +321,19 @@ class _TeacherLessonScheduleViewState
     _weekStart = anchor.monday;
     _currentWeek = anchor.week;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final focus = ref.read(smartCampusControllerProvider).teacherScheduleFocus;
+      DateTime weekStart = _weekStart;
+      var weekNumber = _currentWeek;
+      if (focus != null) {
+        weekStart = scheduleMondayOf(focus.courseDate);
+        weekNumber = scheduleTeachingWeekOf(weekStart);
+        if (mounted) {
+          setState(() {
+            _weekStart = weekStart;
+            _currentWeek = weekNumber;
+          });
+        }
+      }
       // 先拉班级列表（驱动 timeConfig 用），再并行拉时间表 + 字典
       // （教室 / 科目，给申请幽灵卡补名字），最后拉课表。字典失败不会
       // 阻断 schedule 渲染，只是申请卡上的字段会缺。
@@ -324,8 +341,43 @@ class _TeacherLessonScheduleViewState
       if (!mounted) return;
       await Future.wait([_loadTimeConfig(), _loadDirectories()]);
       if (!mounted) return;
-      _loadSchedule();
+      await _loadSchedule(weekStart: weekStart, weekNumber: weekNumber);
     });
+  }
+
+  Future<void> _applyScheduleFocus() async {
+    final focus = ref.read(smartCampusControllerProvider).teacherScheduleFocus;
+    if (focus == null || !mounted) return;
+
+    final dayIdx = _dayIndex(_isoDate(focus.courseDate), _weekStart);
+    if (dayIdx < 0) {
+      ref.read(smartCampusControllerProvider.notifier).clearTeacherScheduleFocus();
+      return;
+    }
+
+    final configs = _activeTimeConfigs;
+    var slotIdx = configs.indexWhere((c) => c.lineNum == focus.lineNum);
+    if (slotIdx < 0) {
+      slotIdx = (focus.lineNum - 1).clamp(0, configs.length - 1);
+    }
+
+    final cells = _normalizeCells(_serverCells);
+    final slots = _buildSlots(cells);
+
+    for (var attempt = 0; attempt < 4; attempt++) {
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+      final grid = _scheduleGridKey.currentState;
+      if (grid != null &&
+          grid.scrollToSlot(
+            dayIdx: dayIdx,
+            slotIdx: slotIdx,
+            slots: slots,
+          )) {
+        break;
+      }
+    }
+    ref.read(smartCampusControllerProvider.notifier).clearTeacherScheduleFocus();
   }
 
   // —— 数据加载 ————————————————————————————————————————————————
@@ -481,6 +533,7 @@ class _TeacherLessonScheduleViewState
         _currentWeek = targetWeekNumber;
         _serverCells = _emptyCells();
       });
+      ref.read(smartCampusControllerProvider.notifier).clearTeacherScheduleFocus();
       return;
     }
 
@@ -540,6 +593,7 @@ class _TeacherLessonScheduleViewState
       _currentWeek = targetWeekNumber;
       _serverCells = cells;
     });
+    await _applyScheduleFocus();
   }
 
   /// 解析「我的小课申请」分页响应，把待审核 / 已驳回的项以幽灵卡形式插入
@@ -1137,6 +1191,7 @@ class _TeacherLessonScheduleViewState
             child: Padding(
               padding: EdgeInsets.fromLTRB(ui(20), ui(0), ui(20), ui(20)),
               child: _ScheduleGrid(
+                key: _scheduleGridKey,
                 mode: _mode,
                 slots: slots,
                 days: days,
@@ -1394,7 +1449,7 @@ class _TeacherScheduleControlBar extends StatelessWidget {
                 SizedBox(width: ui(8)),
                 AppPickerAssetIcon(
                   AppAssets.iconScheduleCalendar,
-                  imageSize: ui(14),
+                  imageSize: ui(18),
                 ),
               ],
             ),
@@ -1573,6 +1628,7 @@ class _ChevronButton extends StatelessWidget {
 
 class _ScheduleGrid extends StatefulWidget {
   const _ScheduleGrid({
+    super.key,
     required this.mode,
     required this.slots,
     required this.days,
@@ -1616,6 +1672,32 @@ class _ScheduleGridState extends State<_ScheduleGrid> {
     _horizontalController.dispose();
     _headerHorizontalController.dispose();
     super.dispose();
+  }
+
+  bool scrollToSlot({
+    required int dayIdx,
+    required int slotIdx,
+    required List<_TimeSlotData> slots,
+  }) {
+    if (!_verticalController.hasClients || !_horizontalController.hasClients) {
+      return false;
+    }
+    final ui = DashboardScaleScope.of(context).ui;
+
+    var verticalOffset = 0.0;
+    for (var i = 0; i < slotIdx && i < slots.length; i++) {
+      verticalOffset += ui(slots[i].height);
+    }
+    final maxVertical = _verticalController.position.maxScrollExtent;
+    _verticalController.jumpTo(verticalOffset.clamp(0.0, maxVertical));
+
+    final dayOffset = ui(_kDayColWidth) * dayIdx;
+    final viewportWidth = _horizontalController.position.viewportDimension;
+    final maxHorizontal = _horizontalController.position.maxScrollExtent;
+    final centered = dayOffset - (viewportWidth - ui(_kDayColWidth)) / 2;
+    _horizontalController.jumpTo(centered.clamp(0.0, maxHorizontal));
+    _syncHeaderHorizontalScroll();
+    return true;
   }
 
   @override

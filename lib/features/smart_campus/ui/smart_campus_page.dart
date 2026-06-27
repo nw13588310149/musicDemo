@@ -497,7 +497,10 @@ class _SmartCampusPageBody extends ConsumerWidget {
         );
       }
       if (state.mainView == SmartCampusMainView.myTeacherLeave) {
-        return TeacherMyLeaveView(onBack: controller.backToDashboard);
+        return TeacherMyLeaveView(
+          onBack: controller.backToDashboard,
+          title: '宿管请假',
+        );
       }
       if (state.mainView == SmartCampusMainView.dashboard) {
         return DormManagerHomeView(

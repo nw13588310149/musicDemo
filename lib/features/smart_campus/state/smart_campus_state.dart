@@ -40,6 +40,17 @@ enum SmartCampusMainView {
 
 enum TeacherScheduleMode { view, edit }
 
+/// 任课老师首页「今日课表 / 当前课程」点击进入授课课表页时的定位目标。
+class TeacherScheduleFocusTarget {
+  const TeacherScheduleFocusTarget({
+    required this.courseDate,
+    required this.lineNum,
+  });
+
+  final DateTime courseDate;
+  final int lineNum;
+}
+
 enum PrincipalMailboxMessageType { report, suggestion, other }
 
 extension SmartCampusRoleX on SmartCampusRole {
@@ -172,6 +183,7 @@ class SmartCampusState {
     this.selectedMailboxMessageType = PrincipalMailboxMessageType.suggestion,
     this.isMailboxAnonymous = true,
     this.teacherScheduleMode = TeacherScheduleMode.view,
+    this.teacherScheduleFocus,
     this.availableRoles = const [
       SmartCampusRole.student,
       SmartCampusRole.teacher,
@@ -207,6 +219,10 @@ class SmartCampusState {
   final bool isMailboxAnonymous;
   final TeacherScheduleMode teacherScheduleMode;
 
+  /// 进入 [SmartCampusMainView.mySchedule] 后滚动定位到指定日期 / 节次；
+  /// 定位完成后由 controller 清空。
+  final TeacherScheduleFocusTarget? teacherScheduleFocus;
+
   final List<SmartCampusRole> availableRoles;
 
   SmartCampusState copyWith({
@@ -219,6 +235,8 @@ class SmartCampusState {
     PrincipalMailboxMessageType? selectedMailboxMessageType,
     bool? isMailboxAnonymous,
     TeacherScheduleMode? teacherScheduleMode,
+    TeacherScheduleFocusTarget? teacherScheduleFocus,
+    bool clearTeacherScheduleFocus = false,
     List<SmartCampusRole>? availableRoles,
   }) {
     return SmartCampusState(
@@ -232,6 +250,9 @@ class SmartCampusState {
           selectedMailboxMessageType ?? this.selectedMailboxMessageType,
       isMailboxAnonymous: isMailboxAnonymous ?? this.isMailboxAnonymous,
       teacherScheduleMode: teacherScheduleMode ?? this.teacherScheduleMode,
+      teacherScheduleFocus: clearTeacherScheduleFocus
+          ? null
+          : (teacherScheduleFocus ?? this.teacherScheduleFocus),
       availableRoles: availableRoles ?? this.availableRoles,
     );
   }

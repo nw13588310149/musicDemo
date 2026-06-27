@@ -551,117 +551,38 @@ class _StatsRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
-            child: _StatCard(
+            child: SmartCampusStatCard(
+              backgroundAsset: AppAssets.headTeacherDormDynamicStatResident,
               label: '住宿生',
               value: residentCount,
-              backgroundAsset: AppAssets.headTeacherDormDynamicStatResident,
             ),
           ),
           SizedBox(width: ui(12)),
           Expanded(
-            child: _StatCard(
+            child: SmartCampusStatCard(
+              backgroundAsset: AppAssets.headTeacherDormDynamicStatReturned,
               label: '今晚已归寝口径',
               value: returnedCount,
-              backgroundAsset: AppAssets.headTeacherDormDynamicStatReturned,
             ),
           ),
           SizedBox(width: ui(12)),
           Expanded(
-            child: _StatCard(
+            child: SmartCampusStatCard(
+              backgroundAsset: AppAssets.headTeacherDormDynamicStatException,
               label: '异常（未打/晚归）',
               value: exceptionCount,
-              backgroundAsset: AppAssets.headTeacherDormDynamicStatException,
             ),
           ),
           SizedBox(width: ui(12)),
           Expanded(
-            child: _StatCard(
+            child: SmartCampusStatCard(
+              backgroundAsset: AppAssets.headTeacherDormDynamicStatPunchAudit,
               label: '补卡待审',
               value: auditCount,
-              subtitle: '需协同审核',
-              backgroundAsset: AppAssets.headTeacherDormDynamicStatPunchAudit,
+              valueSuffix: '需协同审核',
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.label,
-    required this.value,
-    required this.backgroundAsset,
-    this.subtitle,
-  });
-
-  final String label;
-  final int value;
-  final String backgroundAsset;
-  final String? subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = DashboardScaleScope.of(context).ui;
-    return ConstrainedBox(
-      constraints: BoxConstraints(minHeight: ui(100)),
-      child: Container(
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(ui(12)),
-          image: DecorationImage(
-            image: AssetImage(backgroundAsset),
-            fit: BoxFit.cover,
-          ),
-        ),
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(ui(16), ui(14), ui(56), ui(14)),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: ui(14),
-                  color: _kTextDark,
-                  fontFamily: 'PingFang SC',
-                  fontWeight: AppFont.w500,
-                  height: 1.0,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              SizedBox(height: ui(8)),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    '$value',
-                    style: smartCampusStatValueTextStyle(ui),
-                  ),
-                  if (subtitle != null) ...[
-                    SizedBox(width: ui(8)),
-                    Padding(
-                      padding: EdgeInsets.only(bottom: ui(2)),
-                      child: Text(
-                        subtitle!,
-                        style: TextStyle(
-                          fontSize: ui(12),
-                          color: _kTextHint,
-                          fontFamily: 'PingFang SC',
-                          fontWeight: AppFont.w400,
-                          height: 1.0,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
